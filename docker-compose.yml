@@ -1,0 +1,61 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: acp-enterprise-postgres
+    environment:
+      POSTGRES_DB: acp_enterprise
+      POSTGRES_USER: acp_enterprise
+      POSTGRES_PASSWORD: acp_development_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - acp_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U acp_enterprise -d acp_enterprise"
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: acp-enterprise-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - acp_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+    container_name: acp-enterprise-backend
+    environment:
+      APP_NAME: ACP Enterprise
+      APP_VERSION: 0.1.0
+      ENVIRONMENT: development
+      DATABASE_URL: postgresql+asyncpg://acp_enterprise:acp_development_password@postgres:5432/acp_enterprise
+      REDIS_URL: redis://redis:6379/0
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/app:/app/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  acp_postgres_data:
+  acp_redis_data:
