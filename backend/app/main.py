@@ -3,6 +3,8 @@ from typing import AsyncIterator
 
 from fastapi import FastAPI
 
+from app.analytics.router import router as analytics_router
+
 from app.api.health import router as health_router
 from app.core.config import settings
 from app.database.session import AsyncSessionFactory, engine
@@ -45,6 +47,7 @@ app = FastAPI(
 
 app.include_router(health_router)
 app.include_router(events_router)
+app.include_router(analytics_router)
 
 
 @app.get("/", tags=["System"])

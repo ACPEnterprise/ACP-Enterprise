@@ -43,6 +43,7 @@ services:
       APP_NAME: ACP Enterprise
       APP_VERSION: 0.1.0
       ENVIRONMENT: development
+      BUSINESS_TIMEZONE: America/New_York
       DATABASE_URL: postgresql+asyncpg://acp_enterprise:acp_development_password@postgres:5432/acp_enterprise
       REDIS_URL: redis://redis:6379/0
     ports:

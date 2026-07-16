@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     app_name: str = "ACP Enterprise"
     app_version: str = "0.1.0"
     environment: str = "development"
+    business_timezone: str = "America/New_York"
 
     database_url: str = (
         "postgresql+asyncpg://acp_enterprise:"
