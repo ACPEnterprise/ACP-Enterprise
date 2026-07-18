@@ -22,3 +22,19 @@ export interface AnalyticsSummary {
   total_events: AnalyticsMetric;
   recent_activity: RecentActivity[];
 }
+
+export interface RevenueTrendPoint {
+  date: string;
+  booked_revenue: string;
+  cash_collected: string;
+  booked_event_count: number;
+  payment_event_count: number;
+}
+
+export interface RevenueTrend {
+  period_start: string;
+  period_end: string;
+  timezone: string;
+  days: number;
+  points: RevenueTrendPoint[];
+}
