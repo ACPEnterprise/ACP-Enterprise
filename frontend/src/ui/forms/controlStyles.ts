@@ -1,0 +1,2 @@
+export const controlClasses =
+  "min-h-11 w-full rounded-md border border-stroke bg-surface px-ui-3 py-ui-2 text-body text-content transition-colors [transition-duration:var(--duration-fast)] placeholder:text-content-muted hover:border-stroke-strong read-only:bg-surface-muted disabled:cursor-not-allowed disabled:bg-[var(--semantic-disabled-background)] disabled:text-[var(--semantic-disabled-content)] aria-invalid:border-status-danger";

@@ -1,0 +1,229 @@
+/*
+ * ACP Enterprise foundation tokens.
+ *
+ * Palette variables are implementation details. Application code consumes the
+ * semantic contract declared in themes.css or the semantic Tailwind aliases
+ * declared at the end of this file.
+ */
+
+:root {
+  /* ACP brand palette */
+  --acp-liberty-blue-50: oklch(0.97 0.018 252);
+  --acp-liberty-blue-100: oklch(0.93 0.04 252);
+  --acp-liberty-blue-200: oklch(0.86 0.078 251);
+  --acp-liberty-blue-300: oklch(0.77 0.126 250);
+  --acp-liberty-blue-400: oklch(0.66 0.17 250);
+  --acp-liberty-blue-500: oklch(0.56 0.2 252);
+  --acp-liberty-blue-600: oklch(0.48 0.2 255);
+  --acp-liberty-blue-700: oklch(0.41 0.17 256);
+  --acp-liberty-blue-800: oklch(0.35 0.135 256);
+  --acp-liberty-blue-900: oklch(0.29 0.1 257);
+  --acp-liberty-blue-950: oklch(0.2 0.07 258);
+
+  --acp-heritage-red-50: oklch(0.97 0.014 22);
+  --acp-heritage-red-100: oklch(0.93 0.035 22);
+  --acp-heritage-red-200: oklch(0.86 0.07 23);
+  --acp-heritage-red-300: oklch(0.75 0.13 24);
+  --acp-heritage-red-400: oklch(0.64 0.19 25);
+  --acp-heritage-red-500: oklch(0.55 0.215 27);
+  --acp-heritage-red-600: oklch(0.47 0.2 28);
+  --acp-heritage-red-700: oklch(0.4 0.17 28);
+  --acp-heritage-red-800: oklch(0.34 0.135 27);
+  --acp-heritage-red-900: oklch(0.29 0.105 26);
+  --acp-heritage-red-950: oklch(0.19 0.07 25);
+
+  --acp-white: oklch(1 0 0);
+  --acp-slate-50: oklch(0.98 0.004 255);
+  --acp-slate-100: oklch(0.95 0.008 255);
+  --acp-slate-200: oklch(0.9 0.014 255);
+  --acp-slate-300: oklch(0.82 0.022 255);
+  --acp-slate-400: oklch(0.68 0.03 255);
+  --acp-slate-500: oklch(0.55 0.034 255);
+  --acp-slate-600: oklch(0.44 0.035 255);
+  --acp-slate-700: oklch(0.35 0.034 255);
+  --acp-slate-800: oklch(0.27 0.03 255);
+  --acp-slate-900: oklch(0.2 0.027 255);
+  --acp-slate-950: oklch(0.14 0.022 255);
+
+  --acp-steel-50: oklch(0.98 0.003 240);
+  --acp-steel-100: oklch(0.95 0.007 240);
+  --acp-steel-200: oklch(0.89 0.012 240);
+  --acp-steel-300: oklch(0.8 0.018 240);
+  --acp-steel-400: oklch(0.66 0.024 240);
+  --acp-steel-500: oklch(0.53 0.027 240);
+  --acp-steel-600: oklch(0.43 0.027 240);
+  --acp-steel-700: oklch(0.35 0.025 240);
+  --acp-steel-800: oklch(0.27 0.022 240);
+  --acp-steel-900: oklch(0.2 0.018 240);
+  --acp-steel-950: oklch(0.14 0.014 240);
+
+  /* Supporting palettes */
+  --palette-success-100: oklch(0.94 0.05 155);
+  --palette-success-500: oklch(0.64 0.16 153);
+  --palette-success-700: oklch(0.43 0.12 153);
+  --palette-warning-100: oklch(0.96 0.06 88);
+  --palette-warning-500: oklch(0.75 0.16 76);
+  --palette-warning-700: oklch(0.49 0.12 65);
+  --palette-error-100: oklch(0.94 0.04 25);
+  --palette-error-500: oklch(0.6 0.2 27);
+  --palette-error-700: oklch(0.42 0.16 27);
+  --palette-information-100: oklch(0.94 0.04 230);
+  --palette-information-500: oklch(0.64 0.15 235);
+  --palette-information-700: oklch(0.43 0.13 240);
+
+  /* Foundation scales */
+  --font-family-sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", sans-serif;
+  --font-family-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+
+  --space-0: 0;
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+  --space-20: 5rem;
+  --space-24: 6rem;
+
+  --radius-none: 0;
+  --radius-small: 0.375rem;
+  --radius-medium: 0.625rem;
+  --radius-large: 0.875rem;
+  --radius-xlarge: 1.25rem;
+  --radius-round: 9999px;
+
+  --shadow-none: none;
+  --shadow-low: 0 1px 2px rgb(0 0 0 / 0.12), 0 1px 3px rgb(0 0 0 / 0.08);
+  --shadow-medium: 0 8px 24px rgb(0 0 0 / 0.18);
+  --shadow-high: 0 18px 48px rgb(0 0 0 / 0.24);
+
+  --duration-instant: 0ms;
+  --duration-fast: 120ms;
+  --duration-moderate: 200ms;
+  --duration-slow: 320ms;
+  --motion-ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --motion-ease-enter: cubic-bezier(0, 0, 0.2, 1);
+  --motion-ease-exit: cubic-bezier(0.4, 0, 1, 1);
+
+  --layer-base: 0;
+  --layer-raised: 10;
+  --layer-sticky: 100;
+  --layer-navigation: 200;
+  --layer-overlay: 400;
+  --layer-dialog: 500;
+  --layer-toast: 600;
+  --layer-tooltip: 700;
+
+  --icon-small: 1rem;
+  --icon-medium: 1.25rem;
+  --icon-large: 1.5rem;
+  --icon-xlarge: 2rem;
+
+  --content-compact: 40rem;
+  --content-standard: 72rem;
+  --content-wide: 90rem;
+  --content-full: 100%;
+
+}
+
+/* Tailwind aliases expose semantic, not palette, names to application code. */
+@theme inline {
+  --font-sans: var(--font-family-sans);
+  --font-mono: var(--font-family-mono);
+
+  --text-display: 3rem;
+  --text-display--line-height: 1.08;
+  --text-display--font-weight: var(--font-weight-bold);
+  --text-display--letter-spacing: -0.035em;
+  --text-heading-xl: 2.25rem;
+  --text-heading-xl--line-height: 1.15;
+  --text-heading-xl--font-weight: var(--font-weight-bold);
+  --text-heading-xl--letter-spacing: -0.025em;
+  --text-heading-l: 1.875rem;
+  --text-heading-l--line-height: 1.2;
+  --text-heading-l--font-weight: var(--font-weight-semibold);
+  --text-heading-l--letter-spacing: -0.02em;
+  --text-heading-m: 1.5rem;
+  --text-heading-m--line-height: 1.25;
+  --text-heading-m--font-weight: var(--font-weight-semibold);
+  --text-heading-s: 1.25rem;
+  --text-heading-s--line-height: 1.3;
+  --text-heading-s--font-weight: var(--font-weight-semibold);
+  --text-body-l: 1.125rem;
+  --text-body-l--line-height: 1.6;
+  --text-body: 1rem;
+  --text-body--line-height: 1.5;
+  --text-body-s: 0.875rem;
+  --text-body-s--line-height: 1.45;
+  --text-caption: 0.75rem;
+  --text-caption--line-height: 1.4;
+  --text-overline: 0.6875rem;
+  --text-overline--line-height: 1.3;
+  --text-overline--font-weight: var(--font-weight-semibold);
+  --text-overline--letter-spacing: 0.12em;
+  --text-monospace: 0.875rem;
+  --text-monospace--line-height: 1.5;
+
+  --color-app-background: var(--semantic-background);
+  --color-surface: var(--semantic-surface);
+  --color-surface-raised: var(--semantic-surface-raised);
+  --color-surface-muted: var(--semantic-surface-muted);
+  --color-content: var(--semantic-text-primary);
+  --color-content-secondary: var(--semantic-text-secondary);
+  --color-content-muted: var(--semantic-text-muted);
+  --color-content-inverse: var(--semantic-text-inverse);
+  --color-stroke: var(--semantic-border);
+  --color-stroke-strong: var(--semantic-border-strong);
+  --color-action-primary: var(--semantic-action-primary);
+  --color-action-primary-hover: var(--semantic-action-primary-hover);
+  --color-action-primary-active: var(--semantic-action-primary-active);
+  --color-action-secondary: var(--semantic-action-secondary);
+  --color-accent: var(--semantic-accent);
+  --color-focus: var(--semantic-focus-ring);
+  --color-status-success: var(--semantic-success);
+  --color-status-warning: var(--semantic-warning);
+  --color-status-danger: var(--semantic-danger);
+  --color-status-information: var(--semantic-information);
+  --color-navigation: var(--semantic-navigation-background);
+  --color-navigation-active: var(--semantic-navigation-active);
+  --color-navigation-content: var(--semantic-navigation-text);
+  --color-header: var(--semantic-header-background);
+
+  --spacing-ui-0: var(--space-0);
+  --spacing-ui-1: var(--space-1);
+  --spacing-ui-2: var(--space-2);
+  --spacing-ui-3: var(--space-3);
+  --spacing-ui-4: var(--space-4);
+  --spacing-ui-5: var(--space-5);
+  --spacing-ui-6: var(--space-6);
+  --spacing-ui-8: var(--space-8);
+  --spacing-ui-10: var(--space-10);
+  --spacing-ui-12: var(--space-12);
+
+  --radius-sm: var(--radius-small);
+  --radius-md: var(--radius-medium);
+  --radius-lg: var(--radius-large);
+  --radius-xl: var(--radius-xlarge);
+  --shadow-sm: var(--shadow-low);
+  --shadow-md: var(--shadow-medium);
+  --shadow-lg: var(--shadow-high);
+  --ease-standard: var(--motion-ease-standard);
+  --ease-enter: var(--motion-ease-enter);
+  --ease-exit: var(--motion-ease-exit);
+  /* Media-query values must be build-time constants, not CSS var() values. */
+  --breakpoint-sm: 40rem;
+  --breakpoint-md: 48rem;
+  --breakpoint-lg: 64rem;
+  --breakpoint-xl: 80rem;
+  --breakpoint-2xl: 96rem;
+}
