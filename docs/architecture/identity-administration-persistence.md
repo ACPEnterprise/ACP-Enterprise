@@ -223,12 +223,15 @@ Authentication-time enforcement of `password_change_required` remains future
 work. The existing `AuthenticationService` remains the owner of session-security
 mutation semantics; the identity service only invokes that boundary.
 
-### Delivery extension
+### Durable delivery extension
 
-No network delivery occurs in an identity transaction. A future outbox service
-will persist a delivery intent alongside the pending change, commit, and let a
-worker perform provider delivery and retries. The service constructor and result
-contract leave this integration point without making email delivery operational.
+No network delivery occurs in an identity transaction. Email-change requests now
+persist a `NotificationOutbox` intent alongside the pending change through the
+dedicated repository, then commit both atomically. The intent contains resource
+identifiers and normalized destination metadata but never the plaintext
+verification token. A future worker and reviewed secret-safe token handoff will
+perform provider delivery and retries after commit. See
+`notification-outbox.md`; persistence does not make email delivery operational.
 
 ## Identity administration API boundary
 

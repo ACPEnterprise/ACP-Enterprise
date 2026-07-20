@@ -12,6 +12,10 @@ from app.events.types import EventType
 from app.platform.audit.service import AuditEntry, AuditService, audit_service
 from app.platform.auth.services import AuthenticationService
 from app.platform.auth.tokens import SecurityTokenService
+from app.platform.notifications.repository import (
+    NotificationOutboxRepository,
+    notification_outbox_repository,
+)
 from app.platform.permissions.authorization import (
     AuthorizationContext,
     AuthorizationService,
@@ -79,12 +83,16 @@ class IdentityAdministrationService:
         token_service: SecurityTokenService | None = None,
         authorization: AuthorizationService = authorization_service,
         audit: AuditService = audit_service,
+        notification_outbox: NotificationOutboxRepository = (
+            notification_outbox_repository
+        ),
         configuration: Settings = settings,
     ) -> None:
         self.repository = repository
         self.token_service = token_service or SecurityTokenService(configuration)
         self.authorization = authorization
         self.audit = audit
+        self.notification_outbox = notification_outbox
         self.configuration = configuration
 
     async def is_email_available(
@@ -148,6 +156,20 @@ class IdentityAdministrationService:
                     + timedelta(
                         seconds=self.configuration.email_verification_lifetime_seconds
                     ),
+                    now=now,
+                )
+                await self.notification_outbox.enqueue(
+                    session,
+                    notification_type="identity.email_change_verification",
+                    template_identifier="identity-email-change-verification-v1",
+                    recipient=normalized_email,
+                    payload={
+                        "change_id": str(change.id),
+                        "user_id": str(target_user_id),
+                    },
+                    correlation_id=change.id,
+                    idempotency_key=f"identity.email_change:{change.id}",
+                    scheduled_at=now,
                     now=now,
                 )
                 self._stage_events(

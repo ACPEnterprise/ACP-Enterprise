@@ -23,6 +23,7 @@ from app.platform.company import membership_models  # noqa: F401
 from app.platform.company.membership_models import Membership
 from app.platform.company.models import Company
 from app.platform.employees import models as employee_models  # noqa: F401
+from app.platform.notifications.models import NotificationOutbox
 from app.platform.permissions.authorization import (
     AuthorizationContext,
     PermissionDeniedError,
@@ -208,12 +209,25 @@ async def test_email_change_happy_path_is_atomic_and_emits_committed_events(
                 )
             ).all()
         )
+        notification = await session.scalar(
+            select(NotificationOutbox).where(
+                NotificationOutbox.correlation_id == delivery.change.id
+            )
+        )
     assert credential is not None
     assert credential.credential_version == 2
     assert "identity.email_change_requested" in event_types
     assert "identity.email_changed" in event_types
     assert "identity.email_change_requested" in audit_actions
     assert "identity.email_changed" in audit_actions
+    assert notification is not None
+    assert notification.status == "pending"
+    assert notification.recipient == proposed
+    assert notification.payload == {
+        "change_id": str(delivery.change.id),
+        "user_id": str(target.id),
+    }
+    assert delivery.plaintext_token not in str(notification.payload)
 
 
 @pytest.mark.asyncio
@@ -248,7 +262,13 @@ async def test_duplicate_email_request_is_rejected_without_extra_event(
                 BusinessEvent.event_type == "identity.email_change_requested",
             )
         )
+        notification_count = await session.scalar(
+            select(func.count())
+            .select_from(NotificationOutbox)
+            .where(NotificationOutbox.recipient == proposed)
+        )
     assert count == 1
+    assert notification_count == 1
 
 
 @pytest.mark.asyncio
@@ -380,8 +400,14 @@ async def test_transaction_rolls_back_identity_and_business_event_on_failure(
             .select_from(BusinessEvent)
             .where(BusinessEvent.entity_id == target.id)
         )
+        notification_count = await session.scalar(
+            select(func.count())
+            .select_from(NotificationOutbox)
+            .where(NotificationOutbox.recipient == proposed)
+        )
     assert pending_count == 0
     assert event_count == 0
+    assert notification_count == 0
 
 
 @pytest.mark.asyncio
