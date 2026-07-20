@@ -69,6 +69,30 @@ The initial credential lockout policy applies a 15-minute temporary lock after f
 
 Authentication endpoints use focused Redis counters for login, refresh, password-reset, and email-verification abuse controls. Redis failure causes authentication safeguards to fail closed with a service-unavailable response. This is not a general API gateway or distributed policy engine.
 
+## Forced password reset enforcement
+
+`IdentityAdministrationService` owns creation and clearing of the explicit
+`password_change_required` credential state. `AuthenticationService` does not
+decide why the state exists and cannot clear it. After a submitted password has
+been successfully verified, login checks the persisted state before creating an
+`AuthenticationSession`, refresh token, or access token. A required change
+returns the controlled `PasswordChangeRequiredError`; the login API maps it to a
+generic `403` response that identifies the required remediation without exposing
+the administrator, Company, reason code, or credential internals.
+
+A successful current-password change or recovery-token password reset updates the
+Argon2id hash and `password_changed_at`, increments credential version, and then
+asks `IdentityAdministrationService` to validate and clear forced-reset state in
+the same transaction. The identity service verifies that the recorded password
+change is not older than the requirement. Session revocation and authentication
+audit/security records remain owned by the existing authentication and recovery
+services. Any clearing, hashing, audit, or revocation failure rolls back the whole
+password mutation. Repeated clearing is an idempotent no-op.
+
+This milestone does not add an API or browser password-change experience. It
+enforces the persistence state at login and completes the existing internal
+password-change and recovery orchestration boundaries.
+
 ## Transaction and locking strategy
 
 Credential mutation, login counters and Session creation, refresh rotation, token-reuse compromise handling, logout, password reset, and email verification execute in explicit transactions. Mutable credential, Session, and token rows use PostgreSQL `FOR UPDATE` locking. The refresh token row lock ensures concurrent rotation attempts cannot both succeed; a later attempt observes consumption and triggers family compromise handling.

@@ -219,9 +219,12 @@ when the requirement represents a real state change; an identical repeat is a
 no-op. Clearing the requirement is permitted only after the credential records a
 password change later than the requirement timestamp.
 
-Authentication-time enforcement of `password_change_required` remains future
-work. The existing `AuthenticationService` remains the owner of session-security
-mutation semantics; the identity service only invokes that boundary.
+`AuthenticationService` now enforces `password_change_required` after successful
+credential verification and before session issuance. Successful password changes
+and recovery resets call back into the identity service to validate and clear the
+requirement within the caller-owned transaction. The existing authentication
+boundary remains the owner of credential hashing, credential-version increments,
+and session-security mutation semantics.
 
 ### Durable delivery extension
 

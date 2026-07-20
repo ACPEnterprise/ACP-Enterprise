@@ -9,6 +9,7 @@ from app.platform.auth.dependencies import AuthenticatedIdentity
 from app.platform.auth.errors import (
     AuthenticationError,
     InvalidCredentialsError,
+    PasswordChangeRequiredError,
     PasswordPolicyError,
     RateLimitExceededError,
     RateLimitUnavailableError,
@@ -105,6 +106,11 @@ async def login(
             user_agent=user_agent,
             device_label=data.device_label,
         )
+    except PasswordChangeRequiredError as error:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Password change is required.",
+        ) from error
     except InvalidCredentialsError as error:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

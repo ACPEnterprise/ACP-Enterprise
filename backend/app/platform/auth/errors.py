@@ -6,6 +6,10 @@ class InvalidCredentialsError(AuthenticationError):
     pass
 
 
+class PasswordChangeRequiredError(AuthenticationError):
+    pass
+
+
 class InvalidTokenError(AuthenticationError):
     pass
 

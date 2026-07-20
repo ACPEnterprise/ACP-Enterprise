@@ -1,6 +1,6 @@
 import asyncio
 from collections.abc import AsyncIterator
-from datetime import timedelta
+from datetime import datetime, timedelta
 from uuid import UUID, uuid4
 
 import pytest
@@ -19,6 +19,7 @@ from app.platform.auth.errors import (
     AuthenticationError,
     InvalidCredentialsError,
     InvalidTokenError,
+    PasswordChangeRequiredError,
     RefreshTokenReuseError,
     SessionInvalidError,
     RateLimitExceededError,
@@ -143,6 +144,29 @@ async def set_password(
             user_id=user_id,
             password=password,
         )
+
+
+async def require_password_change(
+    session_factory: async_sessionmaker[AsyncSession], user_id: UUID
+) -> tuple[str, int]:
+    required_at = utc_now()
+    async with session_factory() as session, session.begin():
+        credential = await session.scalar(
+            select(UserCredential)
+            .where(UserCredential.user_id == user_id)
+            .with_for_update()
+        )
+        assert credential is not None
+        original_hash = credential.password_hash
+        original_version = credential.credential_version
+        credential.password_change_required = True
+        credential.password_change_required_at = required_at
+        credential.password_change_required_reason_code = "administrator_required"
+        credential.password_change_required_by_user_id = user_id
+        credential.password_change_required_company_id = None
+        credential.password_change_required_cleared_at = None
+        credential.updated_at = required_at
+    return original_hash, original_version
 
 
 @pytest.mark.asyncio
@@ -587,3 +611,184 @@ async def test_expired_revoked_refresh_and_rate_limit_enforcement(
             limit=1,
             window_seconds=30,
         )
+
+
+@pytest.mark.asyncio
+async def test_forced_password_reset_blocks_session_until_password_change(
+    service_stack: tuple[
+        AsyncEngine,
+        async_sessionmaker[AsyncSession],
+        PasswordService,
+        CredentialService,
+        AuthenticationService,
+        RecoveryService,
+    ],
+) -> None:
+    _, factory, _, credential_service, auth_service, _ = service_stack
+    email = "forced-reset-login@example.com"
+    user_id = await create_user(factory, email=email)
+    await set_password(factory, credential_service, user_id)
+    _, version_before_change = await require_password_change(factory, user_id)
+
+    async with factory() as session:
+        with pytest.raises(PasswordChangeRequiredError):
+            await auth_service.authenticate(
+                session,
+                email=email,
+                password="correct horse battery staple",
+            )
+
+    async with factory() as session:
+        issued_sessions = await session.scalar(
+            select(func.count())
+            .select_from(AuthenticationSession)
+            .where(AuthenticationSession.user_id == user_id)
+        )
+        denial = await session.scalar(
+            select(AuthenticationSecurityEvent)
+            .where(
+                AuthenticationSecurityEvent.user_id == user_id,
+                AuthenticationSecurityEvent.event_type == "login_failed",
+                AuthenticationSecurityEvent.failure_reason
+                == "password_change_required",
+            )
+            .order_by(AuthenticationSecurityEvent.occurred_at.desc())
+        )
+    assert issued_sessions == 0
+    assert denial is not None
+
+    async with factory() as session:
+        await credential_service.change_password(
+            session,
+            user_id=user_id,
+            current_password="correct horse battery staple",
+            new_password="updated horse battery staple",
+        )
+
+    async with factory() as session:
+        credential = await session.scalar(
+            select(UserCredential).where(UserCredential.user_id == user_id)
+        )
+        assert credential is not None
+        assert not credential.password_change_required
+        assert credential.password_change_required_cleared_at is not None
+        assert credential.password_change_required_at is not None
+        assert credential.password_changed_at >= credential.password_change_required_at
+        assert credential.credential_version == version_before_change + 1
+
+    from app.platform.users.identity_service import identity_administration_service
+
+    async with factory() as session, session.begin():
+        (
+            _,
+            repeated_change,
+        ) = await identity_administration_service.clear_forced_reset_after_verified_password_change(
+            session,
+            user_id=user_id,
+            changed_at=utc_now(),
+        )
+    assert not repeated_change
+
+    async with factory() as session:
+        login = await auth_service.authenticate(
+            session,
+            email=email,
+            password="updated horse battery staple",
+        )
+    assert login.user.id == user_id
+
+
+class FailingForcedResetClearer:
+    async def clear_forced_reset_after_verified_password_change(
+        self,
+        session: AsyncSession,
+        *,
+        user_id: UUID,
+        changed_at: datetime,
+    ) -> tuple[UserCredential, bool]:
+        raise RuntimeError("controlled forced-reset clearing failure")
+
+
+@pytest.mark.asyncio
+async def test_password_change_rollback_preserves_forced_reset_state(
+    service_stack: tuple[
+        AsyncEngine,
+        async_sessionmaker[AsyncSession],
+        PasswordService,
+        CredentialService,
+        AuthenticationService,
+        RecoveryService,
+    ],
+) -> None:
+    _, factory, password_service, _, _, _ = service_stack
+    user_id = await create_user(factory, email="forced-reset-rollback@example.com")
+    credential_service = CredentialService(
+        password_service,
+        service_settings(),
+        FailingForcedResetClearer(),
+    )
+    await set_password(factory, credential_service, user_id)
+    original_hash, original_version = await require_password_change(factory, user_id)
+
+    with pytest.raises(RuntimeError, match="controlled forced-reset clearing failure"):
+        async with factory() as session:
+            await credential_service.change_password(
+                session,
+                user_id=user_id,
+                current_password="correct horse battery staple",
+                new_password="replacement horse battery staple",
+            )
+
+    async with factory() as session:
+        credential = await session.scalar(
+            select(UserCredential).where(UserCredential.user_id == user_id)
+        )
+    assert credential is not None
+    assert credential.password_change_required
+    assert credential.password_hash == original_hash
+    assert credential.credential_version == original_version
+    assert password_service.verify_password(
+        credential.password_hash, "correct horse battery staple"
+    )
+
+
+@pytest.mark.asyncio
+async def test_password_recovery_clears_forced_reset_before_login(
+    service_stack: tuple[
+        AsyncEngine,
+        async_sessionmaker[AsyncSession],
+        PasswordService,
+        CredentialService,
+        AuthenticationService,
+        RecoveryService,
+    ],
+) -> None:
+    _, factory, _, credential_service, auth_service, recovery = service_stack
+    email = "forced-reset-recovery@example.com"
+    user_id = await create_user(factory, email=email)
+    await set_password(factory, credential_service, user_id)
+    await require_password_change(factory, user_id)
+
+    async with factory() as session:
+        delivery = await recovery.request_password_reset(session, email=email)
+    assert delivery.plaintext_token is not None
+    async with factory() as session:
+        await recovery.confirm_password_reset(
+            session,
+            plaintext_token=delivery.plaintext_token,
+            new_password="recovered horse battery staple",
+        )
+
+    async with factory() as session:
+        credential = await session.scalar(
+            select(UserCredential).where(UserCredential.user_id == user_id)
+        )
+        assert credential is not None
+        assert not credential.password_change_required
+    async with factory() as session:
+        login = await auth_service.authenticate(
+            session,
+            email=email,
+            password="recovered horse battery staple",
+        )
+    assert login.user.id == user_id

@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from typing import Protocol
 from uuid import UUID, uuid4
 
 from sqlalchemy import select, update
@@ -10,6 +11,7 @@ from app.platform.auth.access_tokens import AccessTokenClaims, AccessTokenServic
 from app.platform.auth.errors import (
     InvalidCredentialsError,
     InvalidTokenError,
+    PasswordChangeRequiredError,
     RefreshTokenReuseError,
     SessionInvalidError,
 )
@@ -68,14 +70,26 @@ class TokenDelivery:
     plaintext_token: str | None
 
 
+class ForcedPasswordResetClearer(Protocol):
+    async def clear_forced_reset_after_verified_password_change(
+        self,
+        session: AsyncSession,
+        *,
+        user_id: UUID,
+        changed_at: datetime,
+    ) -> tuple[UserCredential, bool]: ...
+
+
 class CredentialService:
     def __init__(
         self,
         password_service: PasswordService,
         configuration: Settings = settings,
+        forced_reset_clearer: ForcedPasswordResetClearer | None = None,
     ) -> None:
         self.password_service = password_service
         self.configuration = configuration
+        self.forced_reset_clearer = forced_reset_clearer
 
     async def set_initial_password(
         self,
@@ -130,6 +144,18 @@ class CredentialService:
             ):
                 raise InvalidCredentialsError("Credential operation failed.")
             self._apply_password_hash(credential, new_hash, now)
+            clearer = self.forced_reset_clearer
+            if clearer is None:
+                from app.platform.users.identity_service import (
+                    identity_administration_service,
+                )
+
+                clearer = identity_administration_service
+            await clearer.clear_forced_reset_after_verified_password_change(
+                session,
+                user_id=user_id,
+                changed_at=now,
+            )
             await AuthenticationService.revoke_user_sessions(
                 session,
                 user_id=user_id,
@@ -246,6 +272,7 @@ class AuthenticationService:
         normalized_email = normalize_email(email)
         now = utc_now()
         public_failure = False
+        password_change_required = False
         result: AuthenticationResult | None = None
 
         async with session.begin():
@@ -300,6 +327,8 @@ class AuthenticationService:
                         failure_reason = "credential_locked"
                     else:
                         failure_reason = "invalid_credentials"
+                elif credential.password_change_required:
+                    failure_reason = "password_change_required"
 
                 if failure_reason is not None:
                     self.stage_security_event(
@@ -318,6 +347,9 @@ class AuthenticationService:
                         occurred_at=now,
                     )
                     public_failure = True
+                    password_change_required = (
+                        failure_reason == "password_change_required"
+                    )
                 else:
                     assert credential is not None
                     credential.failed_login_count = 0
@@ -399,6 +431,8 @@ class AuthenticationService:
                         session_idle_expires_at=idle_expiration,
                     )
 
+        if password_change_required:
+            raise PasswordChangeRequiredError("Password change is required.")
         if public_failure or result is None:
             raise InvalidCredentialsError("Invalid email or password.")
         return result
@@ -737,10 +771,12 @@ class RecoveryService:
         password_service: PasswordService,
         token_service: SecurityTokenService,
         configuration: Settings = settings,
+        forced_reset_clearer: ForcedPasswordResetClearer | None = None,
     ) -> None:
         self.password_service = password_service
         self.token_service = token_service
         self.configuration = configuration
+        self.forced_reset_clearer = forced_reset_clearer
 
     async def request_password_reset(
         self,
@@ -829,6 +865,18 @@ class RecoveryService:
                 raise InvalidTokenError("Password reset token is invalid.")
             CredentialService(self.password_service)._apply_password_hash(
                 credential, encoded_hash, now
+            )
+            clearer = self.forced_reset_clearer
+            if clearer is None:
+                from app.platform.users.identity_service import (
+                    identity_administration_service,
+                )
+
+                clearer = identity_administration_service
+            await clearer.clear_forced_reset_after_verified_password_change(
+                session,
+                user_id=reset_token.user_id,
+                changed_at=now,
             )
             reset_token.consumed_at = now
             await session.execute(

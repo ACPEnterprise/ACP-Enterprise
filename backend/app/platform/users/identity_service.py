@@ -396,30 +396,13 @@ class IdentityAdministrationService:
                 context=context,
                 target_user_id=target_user_id,
             )
-            credential = await self.repository.get_credential_for_update(
-                session, target_user_id
-            )
-            if credential is None:
-                raise IdentityAdministrationNotFoundError(
-                    "Identity credential was not found."
-                )
-            if not credential.password_change_required:
-                return credential, False
-            if (
-                credential.password_change_required_at is None
-                or credential.password_changed_at
-                < credential.password_change_required_at
-            ):
-                raise IdentityAdministrationConflictError(
-                    "A successful password change is required."
-                )
             (
                 credential,
                 changed,
-            ) = await self.repository.clear_forced_password_reset_required(
+            ) = await self.clear_forced_reset_after_verified_password_change(
                 session,
                 user_id=target_user_id,
-                cleared_at=now,
+                changed_at=now,
             )
             if changed:
                 self._stage_events(
@@ -431,6 +414,34 @@ class IdentityAdministrationService:
                     payload={},
                 )
             return credential, changed
+
+    async def clear_forced_reset_after_verified_password_change(
+        self,
+        session: AsyncSession,
+        *,
+        user_id: UUID,
+        changed_at: datetime,
+    ) -> tuple[UserCredential, bool]:
+        """Clear forced-reset state inside the caller-owned password transaction."""
+        credential = await self.repository.get_credential_for_update(session, user_id)
+        if credential is None:
+            raise IdentityAdministrationNotFoundError(
+                "Identity credential was not found."
+            )
+        if not credential.password_change_required:
+            return credential, False
+        if (
+            credential.password_change_required_at is None
+            or credential.password_changed_at < credential.password_change_required_at
+        ):
+            raise IdentityAdministrationConflictError(
+                "A successful password change is required."
+            )
+        return await self.repository.clear_forced_password_reset_required(
+            session,
+            user_id=user_id,
+            cleared_at=changed_at,
+        )
 
     async def expire_pending_email_changes(
         self,
