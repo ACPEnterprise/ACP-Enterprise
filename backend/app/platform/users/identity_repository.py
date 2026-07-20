@@ -6,6 +6,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.platform.company.membership_models import Membership
 from app.platform.users.identity_models import PendingEmailChange
 from app.platform.users.models import User, UserCredential
 
@@ -57,6 +58,10 @@ class UserIdentityRepository:
         )
 
     @staticmethod
+    async def get_user_by_id(session: AsyncSession, user_id: UUID) -> User | None:
+        return await session.scalar(select(User).where(User.id == user_id))
+
+    @staticmethod
     async def get_user_by_normalized_email(
         session: AsyncSession,
         normalized_email: str,
@@ -68,6 +73,25 @@ class UserIdentityRepository:
         if for_update:
             statement = statement.with_for_update()
         return await session.scalar(statement)
+
+    @staticmethod
+    async def has_active_company_membership(
+        session: AsyncSession,
+        *,
+        user_id: UUID,
+        company_id: UUID,
+    ) -> bool:
+        return (
+            await session.scalar(
+                select(Membership.id)
+                .where(
+                    Membership.user_id == user_id,
+                    Membership.company_id == company_id,
+                    Membership.status == "active",
+                )
+                .limit(1)
+            )
+        ) is not None
 
     @staticmethod
     async def is_normalized_email_available(
@@ -102,6 +126,7 @@ class UserIdentityRepository:
         now: datetime,
         user_id: UUID | None = None,
         normalized_email: str | None = None,
+        initiating_company_id: UUID | None = None,
     ) -> int:
         filters = [
             PendingEmailChange.status == "pending",
@@ -113,6 +138,10 @@ class UserIdentityRepository:
             filters.append(
                 PendingEmailChange.proposed_normalized_email
                 == UserIdentityRepository.require_normalized_email(normalized_email)
+            )
+        if initiating_company_id is not None:
+            filters.append(
+                PendingEmailChange.initiating_company_id == initiating_company_id
             )
         result = await session.execute(
             update(PendingEmailChange)
@@ -160,6 +189,19 @@ class UserIdentityRepository:
             now=now,
         ):
             raise IdentityRepositoryConflictError("Email is unavailable.")
+        active_request = await UserIdentityRepository.get_active_pending_email_change(
+            session,
+            user_id=user_id,
+            now=now,
+            for_update=True,
+        )
+        if (
+            active_request is not None
+            and active_request.initiating_company_id != initiating_company_id
+        ):
+            raise IdentityRepositoryConflictError(
+                "Another identity workflow is already pending."
+            )
         await UserIdentityRepository.revoke_active_pending_email_changes(
             session,
             user_id=user_id,
@@ -194,6 +236,38 @@ class UserIdentityRepository:
             )
             .with_for_update()
         )
+
+    @staticmethod
+    async def get_pending_email_change_by_id_for_update(
+        session: AsyncSession, change_id: UUID
+    ) -> PendingEmailChange | None:
+        return await session.scalar(
+            select(PendingEmailChange)
+            .where(PendingEmailChange.id == change_id)
+            .with_for_update()
+        )
+
+    @staticmethod
+    async def get_active_pending_email_change(
+        session: AsyncSession,
+        *,
+        user_id: UUID,
+        now: datetime,
+        for_update: bool = False,
+        initiating_company_id: UUID | None = None,
+    ) -> PendingEmailChange | None:
+        statement = select(PendingEmailChange).where(
+            PendingEmailChange.user_id == user_id,
+            PendingEmailChange.status == "pending",
+            PendingEmailChange.expires_at > now,
+        )
+        if initiating_company_id is not None:
+            statement = statement.where(
+                PendingEmailChange.initiating_company_id == initiating_company_id
+            )
+        if for_update:
+            statement = statement.with_for_update()
+        return await session.scalar(statement)
 
     @staticmethod
     async def revoke_active_pending_email_changes(
@@ -277,6 +351,21 @@ class UserIdentityRepository:
             .where(UserCredential.user_id == user_id)
             .with_for_update()
         )
+
+    @staticmethod
+    async def get_credential(
+        session: AsyncSession, user_id: UUID
+    ) -> UserCredential | None:
+        return await session.scalar(
+            select(UserCredential).where(UserCredential.user_id == user_id)
+        )
+
+    @staticmethod
+    def increment_credential_version(
+        credential: UserCredential, *, updated_at: datetime
+    ) -> None:
+        credential.credential_version += 1
+        credential.updated_at = updated_at
 
     @staticmethod
     async def set_forced_password_reset_required(

@@ -161,3 +161,71 @@ forced reset, durable delivery/outbox processing, and frontend experiences. MFA,
 passkeys, SSO, SCIM, and directory synchronization remain separate future work.
 None of those capabilities is operational merely because this persistence schema
 exists.
+
+## Identity administration service layer
+
+`IdentityAdministrationService` is the transaction owner for identity mutation
+workflows. It accepts a resolved `AuthorizationContext`, calls the centralized
+`AuthorizationService` for administrative permission evaluation, validates that
+an administrative target has an active Membership in the context Company, and
+coordinates `UserIdentityRepository` with existing token, authentication,
+business-event, and audit services.
+
+The service supports administrative email-change requests, authenticated
+confirmation, revocation, expiration, forced-password-reset state, clearing that
+state after a successful password change, availability validation, and a typed
+identity-state projection for future APIs. No router or API contract is introduced
+by this layer.
+
+### Transaction lifecycle
+
+Each mutation follows this sequence:
+
+1. Validate centralized permission and canonical input before mutation.
+2. Begin one service-owned database transaction.
+3. Resolve and lock identity records through `UserIdentityRepository`.
+4. Apply uniqueness, lifecycle, and company-membership persistence checks.
+5. Coordinate credential-version changes and session revocation through the
+   existing authentication boundary where the mutation invalidates identity
+   security state.
+6. Stage Business Event and Audit records in the same transaction.
+7. Commit once, making the identity mutation and its event records visible
+   together; any exception rolls all of them back.
+
+“After successful transaction completion” therefore means staged records are not
+observable or publishable until PostgreSQL commits successfully. The repository
+never emits events and cannot leave an event behind after rollback.
+
+### Service and repository boundaries
+
+The service owns workflow decisions, authorization-service coordination,
+user-facing normalization, secure token generation, event selection, and the
+outer transaction. The repository owns SQL, row/advisory locks, availability
+queries, active-membership persistence facts, and state transitions. An active
+Membership lookup is a persistence fact used after centralized permission
+evaluation; it does not grant authorization or calculate permissions.
+
+The generated email-change token is returned once to the immediate caller and
+only its HMAC hash is passed to persistence. Repeating an identical active request
+is rejected because plaintext token recovery is intentionally impossible. Future
+delivery retry will use durable delivery state rather than returning stored token
+material.
+
+### Session and credential coordination
+
+A confirmed login-email change increments credential version and revokes active
+sessions in the same transaction. Requiring a password reset does the same only
+when the requirement represents a real state change; an identical repeat is a
+no-op. Clearing the requirement is permitted only after the credential records a
+password change later than the requirement timestamp.
+
+Authentication-time enforcement of `password_change_required` remains future
+work. The existing `AuthenticationService` remains the owner of session-security
+mutation semantics; the identity service only invokes that boundary.
+
+### Delivery extension
+
+No network delivery occurs in an identity transaction. A future outbox service
+will persist a delivery intent alongside the pending change, commit, and let a
+worker perform provider delivery and retries. The service constructor and result
+contract leave this integration point without making email delivery operational.

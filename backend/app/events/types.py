@@ -16,6 +16,11 @@ class EventType(str, Enum):
     ROLE_PERMISSIONS_CHANGED = "role_permissions.changed"
     USER_LOGIN = "user.login"
     USER_LOGOUT = "user.logout"
+    IDENTITY_EMAIL_CHANGE_REQUESTED = "identity.email_change_requested"
+    IDENTITY_EMAIL_CHANGED = "identity.email_changed"
+    IDENTITY_EMAIL_CHANGE_REVOKED = "identity.email_change_revoked"
+    IDENTITY_PASSWORD_RESET_REQUIRED = "identity.password_reset_required"
+    IDENTITY_PASSWORD_RESET_CLEARED = "identity.password_reset_cleared"
 
     # CRM
     CUSTOMER_CREATED = "customer.created"
