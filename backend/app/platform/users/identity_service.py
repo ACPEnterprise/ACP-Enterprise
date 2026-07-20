@@ -175,6 +175,35 @@ class IdentityAdministrationService:
         context: AuthorizationContext,
         plaintext_token: str,
     ) -> User:
+        return await self._confirm_email_change(
+            session,
+            context=context,
+            plaintext_token=plaintext_token,
+            self_service_only=False,
+        )
+
+    async def confirm_own_email_change(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        plaintext_token: str,
+    ) -> User:
+        return await self._confirm_email_change(
+            session,
+            context=context,
+            plaintext_token=plaintext_token,
+            self_service_only=True,
+        )
+
+    async def _confirm_email_change(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        plaintext_token: str,
+        self_service_only: bool,
+    ) -> User:
         token_hash = self.token_service.hash_token(plaintext_token)
         now = utc_now()
         try:
@@ -185,6 +214,10 @@ class IdentityAdministrationService:
                 if change is None:
                     raise IdentityAdministrationTokenError(
                         "Email-change token is invalid."
+                    )
+                if self_service_only and change.user_id != context.user.id:
+                    raise IdentityAdministrationNotFoundError(
+                        "Pending email change was not found."
                     )
                 await self._require_actor_can_mutate(
                     session,

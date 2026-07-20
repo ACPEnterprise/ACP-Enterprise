@@ -24,6 +24,10 @@ from app.platform.security.middleware import (
     SecurityHeadersMiddleware,
     TrustedProxyMiddleware,
 )
+from app.platform.users.identity_router import (
+    administration_router as identity_administration_router,
+    self_service_router as identity_self_service_router,
+)
 
 
 logging.basicConfig(
@@ -79,6 +83,8 @@ app.include_router(customers_router)
 app.include_router(auth_router)
 app.include_router(authorization_router)
 app.include_router(company_admin_router)
+app.include_router(identity_self_service_router)
+app.include_router(identity_administration_router)
 
 
 @app.get("/", tags=["System"])

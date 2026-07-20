@@ -229,3 +229,48 @@ No network delivery occurs in an identity transaction. A future outbox service
 will persist a delivery intent alongside the pending change, commit, and let a
 worker perform provider delivery and retries. The service constructor and result
 contract leave this integration point without making email delivery operational.
+
+## Identity administration API boundary
+
+The versioned HTTP foundation exposes the service layer through two route groups:
+
+- `/api/v1/identity` contains authenticated self-service operations. Routers pass
+  only the authenticated context User identifier, and service-owned ownership
+  checks prevent a token or path from selecting another identity.
+- `/api/v1/identity-admin` contains company-administration operations protected by
+  the centralized `COMPANY_ADMINISTER` dependency before router execution.
+
+Routers validate strict Pydantic schemas, obtain `AuthorizationContext`, call one
+service operation, translate controlled service exceptions, and serialize API
+responses. They do not query persistence, calculate authorization, generate
+tokens, revoke sessions, publish events, or enforce lifecycle rules.
+
+### Request lifecycle
+
+```text
+Bearer authentication
+→ tenant AuthorizationContext resolution
+→ centralized permission dependency when administrative
+→ strict request validation
+→ IdentityAdministrationService transaction
+→ response serialization
+```
+
+Self-service confirmation uses a dedicated service entry point that requires the
+pending request to belong to `context.user`. Administrative identity state and
+mutations retain company-origin and active-Membership concealment in the service
+and repository boundaries.
+
+### HTTP errors
+
+Authentication dependencies return `401`; centralized authorization dependencies
+return generic `403`; concealed or absent identity resources map to `404`;
+duplicate, expired, revoked, already-processed, and invalid lifecycle states map
+to generic `409`; malformed schema input maps to FastAPI `422`; and otherwise
+controlled identity failures map to `400`. Responses never expose repository,
+database, token-hash, session, or exception internals.
+
+The development/test response may return the newly generated plaintext email
+verification token once, matching the existing authentication delivery boundary.
+Preview and production responses always omit it. Durable outbox delivery remains
+future work and no API claims that email delivery is currently operational.
