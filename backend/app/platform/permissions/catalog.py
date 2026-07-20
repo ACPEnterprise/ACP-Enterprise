@@ -2,7 +2,11 @@ from dataclasses import dataclass
 from enum import StrEnum
 import re
 
-from app.platform.permissions.codes import AdministrationPermission, CustomerPermission
+from app.platform.permissions.codes import (
+    AdministrationPermission,
+    AnalyticsPermission,
+    CustomerPermission,
+)
 
 
 CODE_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]*$")
@@ -95,6 +99,17 @@ CUSTOMER_DEFINITIONS = tuple(
     for code in sorted(CustomerPermission.ALL)
 )
 
+ANALYTICS_DEFINITIONS = tuple(
+    PermissionDefinition(
+        code=code,
+        name="Company Analytics Read",
+        resource="analytics",
+        action="read",
+        scope=PermissionScope.COMPANY,
+    )
+    for code in sorted(AnalyticsPermission.ALL)
+)
+
 permission_catalog = PermissionCatalog(
-    ADMINISTRATION_DEFINITIONS + CUSTOMER_DEFINITIONS
+    ADMINISTRATION_DEFINITIONS + CUSTOMER_DEFINITIONS + ANALYTICS_DEFINITIONS
 )

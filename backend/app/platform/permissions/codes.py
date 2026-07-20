@@ -25,3 +25,9 @@ class CustomerPermission:
     MANAGE = "COMPANY_CUSTOMER_MANAGE"
 
     ALL = frozenset({READ, MANAGE})
+
+
+class AnalyticsPermission:
+    READ = "COMPANY_ANALYTICS_READ"
+
+    ALL = frozenset({READ})

@@ -1,6 +1,7 @@
 from datetime import datetime, time, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Any
+from uuid import UUID
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
@@ -66,6 +67,7 @@ class AnalyticsService:
     async def get_today_summary(
         cls,
         session: AsyncSession,
+        company_id: UUID,
         recent_limit: int = 10,
     ) -> AnalyticsSummaryResponse:
         period_start, period_end = cls._today_utc_range()
@@ -73,6 +75,7 @@ class AnalyticsService:
         statement = (
             select(BusinessEvent)
             .where(
+                BusinessEvent.company_id == company_id,
                 BusinessEvent.occurred_at >= period_start,
                 BusinessEvent.occurred_at <= period_end,
             )

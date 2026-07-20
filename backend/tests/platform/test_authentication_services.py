@@ -163,6 +163,13 @@ async def test_login_failure_lockout_and_authentication_boundary(
         permission_count_before = await session.scalar(
             select(func.count()).select_from(Permission)
         )
+        employee_count_before = await session.scalar(
+            select(func.count()).select_from(Employee)
+        )
+        role_count_before = await session.scalar(select(func.count()).select_from(Role))
+        membership_role_count_before = await session.scalar(
+            select(func.count()).select_from(MembershipRole)
+        )
 
     async with factory() as session:
         result = await auth_service.authenticate(
@@ -206,14 +213,21 @@ async def test_login_failure_lockout_and_authentication_boundary(
             )
             == 0
         )
-        assert await session.scalar(select(func.count()).select_from(Employee)) == 0
-        assert await session.scalar(select(func.count()).select_from(Role)) == 0
+        assert (
+            await session.scalar(select(func.count()).select_from(Employee))
+            == employee_count_before
+        )
+        assert (
+            await session.scalar(select(func.count()).select_from(Role))
+            == role_count_before
+        )
         assert (
             await session.scalar(select(func.count()).select_from(Permission))
             == permission_count_before
         )
         assert (
-            await session.scalar(select(func.count()).select_from(MembershipRole)) == 0
+            await session.scalar(select(func.count()).select_from(MembershipRole))
+            == membership_role_count_before
         )
 
     public_messages: list[str] = []
