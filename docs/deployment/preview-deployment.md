@@ -131,6 +131,14 @@ Confirm the migration is at head:
 docker compose --env-file .env.preview -f docker-compose.preview.yml run --rm migrate alembic current
 ```
 
+For a brand-new database, perform the one-time Platform Bootstrap only after
+the migration reaches head. Follow
+[`../architecture/platform-bootstrap.md`](../architecture/platform-bootstrap.md)
+and provide its required `BOOTSTRAP_` variables through the approved secret
+delivery process. Never add bootstrap to automatic container startup. A repeat
+invocation is a safe no-op, but bootstrap is not a repair or tenant-creation
+tool.
+
 Then start the application. Compose also refuses to start the backend unless its migration dependency succeeds:
 
 ```bash
