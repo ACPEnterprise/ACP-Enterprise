@@ -15,6 +15,7 @@ from app.platform.company import membership_models  # noqa: F401
 from app.platform.employees import models as employee_models  # noqa: F401
 from app.platform.permissions import models as permission_models  # noqa: F401
 from app.platform.users import models as user_models  # noqa: F401
+from app.platform.users import identity_models  # noqa: F401
 
 
 config = context.config
