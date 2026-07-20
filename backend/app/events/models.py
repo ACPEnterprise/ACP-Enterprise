@@ -1,17 +1,32 @@
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
-from sqlalchemy import DateTime, String
+from sqlalchemy import DateTime, Index, String, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID as PGUUID
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column
 
-
-class Base(DeclarativeBase):
-    pass
+from app.core.database import Base
 
 
 class BusinessEvent(Base):
     __tablename__ = "business_events"
+    __table_args__ = (
+        Index(
+            "ix_business_events_customer_timeline_entity",
+            "company_id",
+            "entity_type",
+            "entity_id",
+            "occurred_at",
+            "id",
+        ),
+        Index(
+            "ix_business_events_customer_timeline_payload",
+            "company_id",
+            text("(payload ->> 'customer_id')"),
+            "occurred_at",
+            "id",
+        ),
+    )
 
     id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),

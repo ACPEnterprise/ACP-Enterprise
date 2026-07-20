@@ -7,7 +7,6 @@ from sqlalchemy import text
 from app.core.config import settings
 from app.database.session import engine
 
-
 router = APIRouter(tags=["System"])
 
 
@@ -37,10 +36,7 @@ async def health_check() -> dict[str, Any]:
     finally:
         await redis_client.aclose()
 
-    healthy = (
-        database_status == "connected"
-        and redis_status == "connected"
-    )
+    healthy = database_status == "connected" and redis_status == "connected"
 
     return {
         "status": "healthy" if healthy else "degraded",

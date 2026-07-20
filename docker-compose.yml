@@ -46,6 +46,8 @@ services:
       BUSINESS_TIMEZONE: America/New_York
       DATABASE_URL: postgresql+asyncpg://acp_enterprise:acp_development_password@postgres:5432/acp_enterprise
       REDIS_URL: redis://redis:6379/0
+      ACCESS_TOKEN_SIGNING_KEY: local-development-signing-key-change-before-use
+      SECURITY_TOKEN_HMAC_KEY: local-development-hmac-key-change-before-use
     ports:
       - "8000:8000"
     volumes:

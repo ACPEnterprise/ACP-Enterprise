@@ -54,10 +54,7 @@ async def list_events(
         offset=offset,
     )
 
-    return [
-        BusinessEventResponse.model_validate(event)
-        for event in events
-    ]
+    return [BusinessEventResponse.model_validate(event) for event in events]
 
 
 @router.get(
@@ -73,7 +70,4 @@ async def latest_events(
         limit=limit,
     )
 
-    return [
-        BusinessEventResponse.model_validate(event)
-        for event in events
-    ]
+    return [BusinessEventResponse.model_validate(event) for event in events]

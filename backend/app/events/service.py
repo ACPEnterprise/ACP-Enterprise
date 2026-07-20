@@ -10,10 +10,11 @@ from app.events.schemas import BusinessEventCreate
 
 class BusinessEventService:
     @staticmethod
-    async def publish(
+    def stage(
         session: AsyncSession,
         event_data: BusinessEventCreate,
     ) -> BusinessEvent:
+        """Add an event to the current transaction without committing it."""
         event = BusinessEvent(
             event_type=event_data.event_type.value,
             entity_type=event_data.entity_type,
@@ -23,11 +24,17 @@ class BusinessEventService:
             user_id=event_data.user_id,
             payload=event_data.payload,
             correlation_id=event_data.correlation_id or uuid4(),
-            occurred_at=event_data.occurred_at
-            or datetime.now(timezone.utc),
+            occurred_at=event_data.occurred_at or datetime.now(timezone.utc),
         )
-
         session.add(event)
+        return event
+
+    @staticmethod
+    async def publish(
+        session: AsyncSession,
+        event_data: BusinessEventCreate,
+    ) -> BusinessEvent:
+        event = BusinessEventService.stage(session, event_data)
 
         try:
             await session.commit()

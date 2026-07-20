@@ -3,7 +3,18 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
-from app.events.models import Base
+from app.customers import models as customer_models  # noqa: F401
+from app.core.config import settings
+from app.core.database import Base
+from app.events import models as event_models  # noqa: F401
+from app.platform.auth import models as auth_models  # noqa: F401
+from app.platform.audit import models as audit_models  # noqa: F401
+from app.platform.branch import models as branch_models  # noqa: F401
+from app.platform.company import models as company_models  # noqa: F401
+from app.platform.company import membership_models  # noqa: F401
+from app.platform.employees import models as employee_models  # noqa: F401
+from app.platform.permissions import models as permission_models  # noqa: F401
+from app.platform.users import models as user_models  # noqa: F401
 
 
 config = context.config
@@ -12,6 +23,10 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 target_metadata = Base.metadata
+config.set_main_option(
+    "sqlalchemy.url",
+    settings.database_url.replace("+asyncpg", "+psycopg"),
+)
 
 
 def run_migrations_offline() -> None:
