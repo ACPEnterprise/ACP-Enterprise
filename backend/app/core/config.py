@@ -1,5 +1,6 @@
 from functools import lru_cache
 from ipaddress import ip_network
+from typing import Literal
 
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -16,6 +17,16 @@ class Settings(BaseSettings):
         "acp_development_password@postgres:5432/acp_enterprise"
     )
     redis_url: str = "redis://redis:6379/0"
+    cors_allowed_origins: list[str] = Field(
+        default_factory=lambda: [
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+        ]
+    )
+    allowed_hosts: list[str] = Field(
+        default_factory=lambda: ["localhost", "127.0.0.1", "test", "testserver"]
+    )
+    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
 
     password_min_length: int = 12
     password_max_length: int = 256
@@ -116,11 +127,12 @@ class Settings(BaseSettings):
             ) from error
         if self.hsts_max_age_seconds < 0:
             raise ValueError("HSTS_MAX_AGE_SECONDS cannot be negative")
-        if self.environment == "production":
+        if self.environment in {"preview", "production"}:
             insecure_markers = (
                 "development",
                 "not-for-production",
                 "change-before-use",
+                "replace",
             )
             secrets = [*self.access_token_keys.values(), self.security_token_hmac_key]
             if any(
@@ -131,7 +143,18 @@ class Settings(BaseSettings):
                 raise ValueError("Production security secrets are insecure")
             if not self.security_headers_enabled or not self.hsts_enabled:
                 raise ValueError(
-                    "Production requires security headers and HSTS to be enabled"
+                    "Secure environments require security headers and HSTS"
+                )
+            if not self.cors_allowed_origins or any(
+                origin == "*" or not origin.startswith("https://")
+                for origin in self.cors_allowed_origins
+            ):
+                raise ValueError(
+                    "Secure environments require explicit HTTPS CORS origins"
+                )
+            if not self.allowed_hosts or "*" in self.allowed_hosts:
+                raise ValueError(
+                    "Secure environments require explicit trusted host names"
                 )
         return self
 

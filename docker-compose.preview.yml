@@ -1,0 +1,117 @@
+x-backend-environment: &backend-environment
+  APP_NAME: ${APP_NAME:-ACP Enterprise}
+  APP_VERSION: ${APP_VERSION:-0.1.0}
+  ENVIRONMENT: preview
+  BUSINESS_TIMEZONE: ${BUSINESS_TIMEZONE:-America/New_York}
+  DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env.preview}
+  REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+  CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-["https://preview.allcountyhomeservices.com"]}
+  ALLOWED_HOSTS: ${ALLOWED_HOSTS:-["preview.allcountyhomeservices.com","backend","localhost","127.0.0.1"]}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  ACCESS_TOKEN_KEYS: ${ACCESS_TOKEN_KEYS:?Set ACCESS_TOKEN_KEYS in .env.preview}
+  ACCESS_TOKEN_ACTIVE_KID: ${ACCESS_TOKEN_ACTIVE_KID:-preview-2026-01}
+  ACCESS_TOKEN_ALGORITHM: ${ACCESS_TOKEN_ALGORITHM:-HS256}
+  ACCESS_TOKEN_ISSUER: ${ACCESS_TOKEN_ISSUER:-acp-enterprise-preview}
+  ACCESS_TOKEN_AUDIENCE: ${ACCESS_TOKEN_AUDIENCE:-acp-enterprise-preview-api}
+  SECURITY_TOKEN_HMAC_KEY: ${SECURITY_TOKEN_HMAC_KEY:?Set SECURITY_TOKEN_HMAC_KEY in .env.preview}
+  SECURITY_HEADERS_ENABLED: "true"
+  HSTS_ENABLED: "true"
+  TRUST_FORWARDED_HEADERS: "true"
+  TRUSTED_PROXY_CIDRS: ${TRUSTED_PROXY_CIDRS:-["172.30.0.0/24"]}
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-acp_enterprise_preview}
+      POSTGRES_USER: ${POSTGRES_USER:-acp_enterprise}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env.preview}
+    volumes:
+      - preview_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+    networks:
+      preview:
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - preview_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+    networks:
+      preview:
+
+  migrate:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.preview
+    environment: *backend-environment
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    networks:
+      preview:
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.preview
+    environment: *backend-environment
+    expose:
+      - "8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import json,urllib.request; data=json.load(urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)); assert data['status']=='healthy'"]
+      interval: 10s
+      timeout: 5s
+      start_period: 10s
+      retries: 12
+    restart: unless-stopped
+    networks:
+      preview:
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_BASE_URL: /
+    ports:
+      - "127.0.0.1:${PREVIEW_HTTP_PORT:-8080}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1/healthz"]
+      interval: 10s
+      timeout: 5s
+      start_period: 5s
+      retries: 12
+    restart: unless-stopped
+    networks:
+      preview:
+
+volumes:
+  preview_postgres_data:
+  preview_redis_data:
+
+networks:
+  preview:
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24

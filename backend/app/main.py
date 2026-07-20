@@ -1,8 +1,10 @@
 from contextlib import asynccontextmanager
+import logging
 from typing import AsyncIterator
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app.analytics.router import router as analytics_router
 
@@ -20,6 +22,12 @@ from app.platform.permissions.catalog import permission_catalog
 from app.platform.security.middleware import (
     SecurityHeadersMiddleware,
     TrustedProxyMiddleware,
+)
+
+
+logging.basicConfig(
+    level=getattr(logging, settings.log_level),
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
 )
 
 
@@ -54,14 +62,12 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-    ],
+    allow_origins=settings.cors_allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.allowed_hosts)
 app.add_middleware(TrustedProxyMiddleware, configuration=settings)
 app.add_middleware(SecurityHeadersMiddleware, configuration=settings)
 

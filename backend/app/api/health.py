@@ -1,6 +1,6 @@
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Response, status
 from redis.asyncio import Redis
 from sqlalchemy import text
 
@@ -10,8 +10,18 @@ from app.database.session import engine
 router = APIRouter(tags=["System"])
 
 
+@router.get("/health/live")
+async def liveness_check() -> dict[str, str]:
+    return {
+        "status": "alive",
+        "application": settings.app_name,
+        "version": settings.app_version,
+        "environment": settings.environment,
+    }
+
+
 @router.get("/health")
-async def health_check() -> dict[str, Any]:
+async def health_check(response: Response) -> dict[str, Any]:
     database_status = "disconnected"
     redis_status = "disconnected"
 
@@ -37,6 +47,8 @@ async def health_check() -> dict[str, Any]:
         await redis_client.aclose()
 
     healthy = database_status == "connected" and redis_status == "connected"
+    if not healthy:
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
 
     return {
         "status": "healthy" if healthy else "degraded",
