@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 
@@ -35,3 +35,19 @@ class AnalyticsSummaryResponse(BaseModel):
     total_events: CountMetric
 
     recent_activity: list[RecentActivityItem]
+
+
+class RevenueTrendPoint(BaseModel):
+    date: date
+    booked_revenue: Decimal = Decimal("0.00")
+    cash_collected: Decimal = Decimal("0.00")
+    booked_event_count: int = 0
+    payment_event_count: int = 0
+
+
+class RevenueTrendResponse(BaseModel):
+    period_start: datetime
+    period_end: datetime
+    timezone: str
+    days: int
+    points: list[RevenueTrendPoint]

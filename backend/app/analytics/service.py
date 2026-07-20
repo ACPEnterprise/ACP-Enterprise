@@ -1,6 +1,6 @@
-from datetime import datetime, time, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal, InvalidOperation
-from typing import Any
+from typing import Any, TypedDict
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
@@ -12,9 +12,18 @@ from app.analytics.schemas import (
     CountMetric,
     MetricValue,
     RecentActivityItem,
+    RevenueTrendPoint,
+    RevenueTrendResponse,
 )
 from app.core.config import settings
 from app.events.models import BusinessEvent
+
+
+class RevenueTrendDailyValues(TypedDict):
+    booked_revenue: Decimal
+    cash_collected: Decimal
+    booked_event_count: int
+    payment_event_count: int
 
 
 class AnalyticsService:
@@ -42,8 +51,12 @@ class AnalyticsService:
         return Decimal("0.00")
 
     @staticmethod
-    def _today_utc_range() -> tuple[datetime, datetime]:
-        business_zone = ZoneInfo(settings.business_timezone)
+    def _business_zone() -> ZoneInfo:
+        return ZoneInfo(settings.business_timezone)
+
+    @classmethod
+    def _today_utc_range(cls) -> tuple[datetime, datetime]:
+        business_zone = cls._business_zone()
         now_local = datetime.now(business_zone)
 
         start_local = datetime.combine(
@@ -61,6 +74,33 @@ class AnalyticsService:
         return (
             start_local.astimezone(timezone.utc),
             end_local.astimezone(timezone.utc),
+        )
+
+    @classmethod
+    def _trend_utc_range(
+        cls,
+        days: int,
+    ) -> tuple[datetime, datetime, date]:
+        business_zone = cls._business_zone()
+        today_local = datetime.now(business_zone).date()
+        first_date = today_local - timedelta(days=days - 1)
+
+        start_local = datetime.combine(
+            first_date,
+            time.min,
+            tzinfo=business_zone,
+        )
+
+        end_local = datetime.combine(
+            today_local,
+            time.max,
+            tzinfo=business_zone,
+        )
+
+        return (
+            start_local.astimezone(timezone.utc),
+            end_local.astimezone(timezone.utc),
+            first_date,
         )
 
     @classmethod
@@ -101,23 +141,14 @@ class AnalyticsService:
                 payment_count += 1
                 cash_collected += cls._decimal_from_payload(
                     event.payload,
-                    (
-                        "amount",
-                        "payment_amount",
-                        "total",
-                    ),
+                    ("amount", "payment_amount", "total"),
                 )
 
             elif event.event_type == cls.ESTIMATE_APPROVED:
                 estimate_count += 1
                 booked_revenue += cls._decimal_from_payload(
                     event.payload,
-                    (
-                        "amount",
-                        "approved_amount",
-                        "estimate_total",
-                        "total",
-                    ),
+                    ("amount", "approved_amount", "estimate_total", "total"),
                 )
 
             elif event.event_type == cls.CUSTOMER_CREATED:
@@ -163,4 +194,81 @@ class AnalyticsService:
                 value=len(events),
             ),
             recent_activity=recent_activity,
+        )
+
+    @classmethod
+    async def get_revenue_trend(
+        cls,
+        session: AsyncSession,
+        company_id: UUID,
+        days: int = 7,
+    ) -> RevenueTrendResponse:
+        period_start, period_end, first_date = cls._trend_utc_range(days)
+        business_zone = cls._business_zone()
+
+        statement = (
+            select(BusinessEvent)
+            .where(
+                BusinessEvent.company_id == company_id,
+                BusinessEvent.occurred_at >= period_start,
+                BusinessEvent.occurred_at <= period_end,
+                BusinessEvent.event_type.in_(
+                    [cls.PAYMENT_RECEIVED, cls.ESTIMATE_APPROVED]
+                ),
+            )
+            .order_by(BusinessEvent.occurred_at.asc())
+        )
+
+        result = await session.execute(statement)
+        events = list(result.scalars().all())
+
+        daily_values: dict[date, RevenueTrendDailyValues] = {}
+
+        for offset in range(days):
+            day = first_date + timedelta(days=offset)
+            daily_values[day] = {
+                "booked_revenue": Decimal("0.00"),
+                "cash_collected": Decimal("0.00"),
+                "booked_event_count": 0,
+                "payment_event_count": 0,
+            }
+
+        for event in events:
+            local_date = event.occurred_at.astimezone(business_zone).date()
+            values = daily_values.get(local_date)
+
+            if values is None:
+                continue
+
+            if event.event_type == cls.ESTIMATE_APPROVED:
+                values["booked_revenue"] += cls._decimal_from_payload(
+                    event.payload,
+                    ("amount", "approved_amount", "estimate_total", "total"),
+                )
+                values["booked_event_count"] += 1
+
+            elif event.event_type == cls.PAYMENT_RECEIVED:
+                values["cash_collected"] += cls._decimal_from_payload(
+                    event.payload,
+                    ("amount", "payment_amount", "total"),
+                )
+                values["payment_event_count"] += 1
+
+        points = [
+            RevenueTrendPoint(
+                date=day,
+                booked_revenue=values["booked_revenue"],
+                cash_collected=values["cash_collected"],
+                booked_event_count=values["booked_event_count"],
+                payment_event_count=values["payment_event_count"],
+            )
+            for day, values in daily_values.items()
+        ]
+
+        return RevenueTrendResponse(
+            period_start=period_start,
+            period_end=period_end,
+            timezone=settings.business_timezone,
+            days=days,
+            points=points,
         )

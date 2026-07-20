@@ -3,7 +3,10 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.analytics.schemas import AnalyticsSummaryResponse
+from app.analytics.schemas import (
+    AnalyticsSummaryResponse,
+    RevenueTrendResponse,
+)
 from app.analytics.service import AnalyticsService
 from app.database.session import get_database_session
 from app.platform.permissions.authorization import AuthorizationContext
@@ -39,4 +42,20 @@ async def get_analytics_summary(
         session=session,
         company_id=authorization.company.id,
         recent_limit=recent_limit,
+    )
+
+
+@router.get(
+    "/revenue-trend",
+    response_model=RevenueTrendResponse,
+)
+async def get_revenue_trend(
+    session: DatabaseSession,
+    authorization: AnalyticsReader,
+    days: Annotated[int, Query(ge=1, le=90)] = 7,
+) -> RevenueTrendResponse:
+    return await AnalyticsService.get_revenue_trend(
+        session=session,
+        company_id=authorization.company.id,
+        days=days,
     )
