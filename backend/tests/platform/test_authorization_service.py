@@ -36,6 +36,7 @@ from app.platform.permissions.models import (
     Role,
     RolePermission,
 )
+from app.platform.permissions.router import router as authorization_router
 from app.platform.users.models import User, UserCredential
 
 
@@ -248,6 +249,27 @@ async def test_permission_resolution_and_company_branch_isolation(
 
 
 @pytest.mark.asyncio
+async def test_accessible_companies_include_only_active_tenant_memberships(
+    authorization_database: tuple[AsyncEngine, async_sessionmaker[AsyncSession]],
+) -> None:
+    _, factory = authorization_database
+    fixture = await seed_authorization_fixture(factory, prefix="AUTHZACCESS")
+
+    async with factory() as session:
+        accessible = await AuthorizationService().list_accessible_companies(
+            session,
+            authenticated=fixture.authenticated,
+        )
+
+    assert len(accessible) == 1
+    assert accessible[0].company.id == fixture.company_id
+    assert accessible[0].membership.user_id == fixture.authenticated.user.id
+    assert tuple(branch.id for branch in accessible[0].authorized_branches) == (
+        fixture.authorized_branch_id,
+    )
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("prefix", "user_status", "membership_status", "company_archived"),
     [
@@ -383,3 +405,47 @@ async def test_router_dependency_enforces_permission_and_branch_scope(
 
         missing_company_response = await client.get("/allowed")
         assert missing_company_response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_accessible_companies_router_uses_authenticated_identity(
+    authorization_database: tuple[AsyncEngine, async_sessionmaker[AsyncSession]],
+) -> None:
+    _, factory = authorization_database
+    fixture = await seed_authorization_fixture(factory, prefix="AUTHZDISCOVERY")
+    app = FastAPI()
+    app.include_router(authorization_router)
+
+    async def database_override() -> AsyncIterator[AsyncSession]:
+        async with factory() as session:
+            yield session
+
+    async def identity_override() -> AuthenticatedContext:
+        return fixture.authenticated
+
+    app.dependency_overrides[get_database_session] = database_override
+    app.dependency_overrides[get_authenticated_context] = identity_override
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/api/v1/authorization/companies")
+
+    assert response.status_code == 200
+    assert response.json() == [
+        {
+            "id": str(fixture.company_id),
+            "code": "AUTHZDISCOVERYA",
+            "name": "AUTHZDISCOVERY Company",
+            "membership_id": response.json()[0]["membership_id"],
+            "default_branch_id": None,
+            "has_all_branch_access": False,
+            "branches": [
+                {
+                    "id": str(fixture.authorized_branch_id),
+                    "code": "AUTHZDISCOVERYBR1",
+                    "name": "Authorized Branch",
+                    "is_primary": True,
+                }
+            ],
+        }
+    ]

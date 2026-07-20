@@ -19,6 +19,7 @@ from app.events.types import EventType
 from app.platform.auth.router import router as auth_router
 from app.platform.company.admin_router import router as company_admin_router
 from app.platform.permissions.catalog import permission_catalog
+from app.platform.permissions.router import router as authorization_router
 from app.platform.security.middleware import (
     SecurityHeadersMiddleware,
     TrustedProxyMiddleware,
@@ -76,6 +77,7 @@ app.include_router(events_router)
 app.include_router(analytics_router)
 app.include_router(customers_router)
 app.include_router(auth_router)
+app.include_router(authorization_router)
 app.include_router(company_admin_router)
 
 

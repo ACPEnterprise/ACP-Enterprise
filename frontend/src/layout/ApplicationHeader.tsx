@@ -1,8 +1,9 @@
-import { Menu, Search } from "lucide-react";
+import { LogOut, Menu, Search } from "lucide-react";
 import type { RefObject } from "react";
 import { Link } from "react-router";
 
 import type { BrandConfiguration } from "../branding/types";
+import { useAuth } from "../auth";
 import { useTheme } from "../theme/useTheme";
 import { IconButton, Select, VisuallyHidden } from "../ui";
 import { NotificationCenterRegion } from "./NotificationCenterRegion";
@@ -17,6 +18,7 @@ interface ApplicationHeaderProps {
 
 export function ApplicationHeader({ brand, metadata, onOpenNavigation, navigationTriggerRef }: ApplicationHeaderProps) {
   const { preference, setPreference } = useTheme();
+  const { signOut, user } = useAuth();
 
   return (
     <header className="sticky top-0 z-[var(--layer-sticky)] border-b border-stroke bg-header px-ui-4 py-ui-3 md:px-ui-6">
@@ -71,7 +73,8 @@ export function ApplicationHeader({ brand, metadata, onOpenNavigation, navigatio
             </Select>
           </label>
           {brand.environment && <span className="hidden text-caption text-content-muted xl:inline">{brand.environment}</span>}
-          <span className="hidden text-body-s text-content-muted md:inline">Account unavailable</span>
+          {user && <span className="hidden text-body-s text-content-muted md:inline">{user.display_name}</span>}
+          <IconButton icon={<LogOut />} label="Sign out" variant="ghost" onClick={() => void signOut()} />
         </div>
       </div>
     </header>

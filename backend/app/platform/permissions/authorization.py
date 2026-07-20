@@ -60,6 +60,13 @@ class AuthorizationContext:
         return branch_id in self.authorized_branch_ids
 
 
+@dataclass(frozen=True)
+class AccessibleCompany:
+    company: Company
+    membership: Membership
+    authorized_branches: tuple[Branch, ...]
+
+
 class AuthorizationService:
     """The sole application boundary for tenant authorization decisions."""
 
@@ -188,6 +195,47 @@ class AuthorizationService:
             credential_version=credential.credential_version,
             authorization_version=user.authorization_version,
         )
+
+    async def list_accessible_companies(
+        self,
+        session: AsyncSession,
+        *,
+        authenticated: AuthenticatedContext,
+    ) -> tuple[AccessibleCompany, ...]:
+        memberships = tuple(
+            (
+                await session.scalars(
+                    select(Membership)
+                    .join(Company, Company.id == Membership.company_id)
+                    .where(
+                        Membership.user_id == authenticated.user.id,
+                        Membership.status == "active",
+                        Company.status == "active",
+                        Company.archived_at.is_(None),
+                    )
+                    .order_by(Company.name, Company.id)
+                )
+            )
+            .unique()
+            .all()
+        )
+        access: list[AccessibleCompany] = []
+        for membership in memberships:
+            company = await session.get(Company, membership.company_id)
+            if company is None:
+                continue
+            access.append(
+                AccessibleCompany(
+                    company=company,
+                    membership=membership,
+                    authorized_branches=await self._resolve_branches(
+                        session,
+                        membership=membership,
+                        company_id=company.id,
+                    ),
+                )
+            )
+        return tuple(access)
 
     async def _resolve_branches(
         self,

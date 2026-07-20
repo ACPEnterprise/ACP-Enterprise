@@ -1,4 +1,4 @@
-import axios from "axios";
+import axios, { type InternalAxiosRequestConfig } from "axios";
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim() || "/";
 
@@ -9,3 +9,53 @@ export const apiClient = axios.create({
     "Content-Type": "application/json",
   },
 });
+
+interface RetriableRequestConfig extends InternalAxiosRequestConfig {
+  authenticationRetry?: boolean;
+}
+
+interface AuthenticationHandlers {
+  getAccessToken: () => string | null;
+  getActiveCompanyId: () => string | null;
+  refresh: () => Promise<string | null>;
+  clear: () => void;
+}
+
+let authenticationHandlers: AuthenticationHandlers | null = null;
+
+export function configureAuthentication(handlers: AuthenticationHandlers | null): void {
+  authenticationHandlers = handlers;
+}
+
+apiClient.interceptors.request.use((config) => {
+  const accessToken = authenticationHandlers?.getAccessToken();
+  if (accessToken) config.headers.set("Authorization", `Bearer ${accessToken}`);
+  const companyId = authenticationHandlers?.getActiveCompanyId();
+  if (companyId) config.headers.set("X-Company-ID", companyId);
+  return config;
+});
+
+apiClient.interceptors.response.use(
+  (response) => response,
+  async (error: unknown) => {
+    if (!axios.isAxiosError(error) || error.response?.status !== 401 || !error.config) {
+      return Promise.reject(error);
+    }
+
+    const request = error.config as RetriableRequestConfig;
+    const isAuthenticationRequest = request.url?.includes("/api/v1/auth/") ?? false;
+    if (!authenticationHandlers || request.authenticationRetry || isAuthenticationRequest) {
+      return Promise.reject(error);
+    }
+
+    request.authenticationRetry = true;
+    const accessToken = await authenticationHandlers.refresh();
+    if (!accessToken) {
+      authenticationHandlers.clear();
+      return Promise.reject(error);
+    }
+
+    request.headers.set("Authorization", `Bearer ${accessToken}`);
+    return apiClient.request(request);
+  },
+);

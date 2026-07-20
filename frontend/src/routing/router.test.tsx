@@ -4,20 +4,43 @@ import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { describe, expect, it, vi } from "vitest";
 
+import { AuthenticationContext, type AuthenticationContextValue } from "../auth/AuthenticationContext";
 import { ThemeProvider } from "../theme/ThemeProvider";
 import { appRoutes } from "./router";
 
 vi.mock("../routes/MissionControlRoute", () => ({ MissionControlRoute: () => <div>Mission route content</div> }));
 vi.mock("../routes/CustomersRoute", () => ({ CustomersRoute: () => <div>Customer route content</div> }));
 
-function renderRoute(path: string) {
+const authenticatedContext: AuthenticationContextValue = {
+  status: "authenticated",
+  activeCompany: null,
+  user: {
+    id: "user-1",
+    normalized_email: "admin@example.com",
+    first_name: "Preview",
+    last_name: "Administrator",
+    display_name: "Preview Administrator",
+    email_verified_at: null,
+  },
+  signIn: vi.fn(),
+  signOut: vi.fn(),
+  signOutAll: vi.fn(),
+};
+
+function renderRoute(path: string, context: AuthenticationContextValue = authenticatedContext) {
   const router = createMemoryRouter(appRoutes, { initialEntries: [path] });
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  render(<ThemeProvider preference="dark"><QueryClientProvider client={queryClient}><RouterProvider router={router} /></QueryClientProvider></ThemeProvider>);
+  render(<ThemeProvider preference="dark"><AuthenticationContext.Provider value={context}><QueryClientProvider client={queryClient}><RouterProvider router={router} /></QueryClientProvider></AuthenticationContext.Provider></ThemeProvider>);
   return router;
 }
 
 describe("application routing", () => {
+  it("redirects an unauthenticated user to login without looping", async () => {
+    const router = renderRoute("/customers", { ...authenticatedContext, status: "unauthenticated", user: null });
+    expect(await screen.findByRole("heading", { name: "Sign in" })).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe("/login");
+  });
+
   it("redirects the root to Mission Control", async () => {
     const router = renderRoute("/");
     expect(await screen.findByText("Mission route content")).toBeInTheDocument();

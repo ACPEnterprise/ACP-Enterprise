@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import App from "./App";
+import { AuthProvider } from "./auth";
 import { brandConfig } from "./branding/brandConfig";
 import { applyBrandDocumentMetadata } from "./branding/documentMetadata";
 import { ThemeProvider } from "./theme/ThemeProvider";
@@ -30,7 +31,9 @@ createRoot(rootElement).render(
   <StrictMode>
     <ThemeProvider preference={brandConfig.defaultTheme}>
       <QueryClientProvider client={queryClient}>
-        <App />
+        <AuthProvider>
+          <App />
+        </AuthProvider>
       </QueryClientProvider>
     </ThemeProvider>
   </StrictMode>,
