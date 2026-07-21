@@ -17,6 +17,7 @@ from app.platform.notifications import models as notification_models  # noqa: F4
 from app.platform.permissions import models as permission_models  # noqa: F401
 from app.platform.users import models as user_models  # noqa: F401
 from app.platform.users import identity_models  # noqa: F401
+from app.scheduling import models as scheduling_models  # noqa: F401
 
 
 config = context.config
