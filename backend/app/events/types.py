@@ -46,6 +46,7 @@ class EventType(str, Enum):
     CALL_ANSWERED = "call.answered"
 
     # Scheduling
+    APPOINTMENT_CREATED = "appointment.created"
     APPOINTMENT_BOOKED = "appointment.booked"
     APPOINTMENT_RESCHEDULED = "appointment.rescheduled"
     APPOINTMENT_CANCELLED = "appointment.cancelled"

@@ -1,11 +1,14 @@
 from dataclasses import dataclass
 from datetime import date, datetime
+from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.customers.models import Customer, ServiceLocation
+from app.platform.branch.models import Branch
 from app.scheduling.models import (
     Appointment,
     AppointmentCapacityReservation,
@@ -130,6 +133,52 @@ class SchedulingRepository:
         )
 
     @staticmethod
+    async def get_schedulable_branch(
+        session: AsyncSession,
+        *,
+        company_id: UUID,
+        branch_id: UUID,
+    ) -> Branch | None:
+        """Load an active, unarchived Branch without taking ownership of it."""
+        return await session.scalar(
+            select(Branch).where(
+                Branch.id == branch_id,
+                Branch.company_id == company_id,
+                Branch.status == "active",
+                Branch.archived_at.is_(None),
+            )
+        )
+
+    @staticmethod
+    async def references_are_schedulable(
+        session: AsyncSession,
+        *,
+        company_id: UUID,
+        customer_id: UUID,
+        service_location_id: UUID,
+    ) -> bool:
+        """Validate active external references without mutating their domains."""
+        return bool(
+            await session.scalar(
+                select(
+                    select(ServiceLocation.id)
+                    .join(Customer, Customer.id == ServiceLocation.customer_id)
+                    .where(
+                        Customer.id == customer_id,
+                        Customer.company_id == company_id,
+                        Customer.status == "active",
+                        Customer.archived_at.is_(None),
+                        ServiceLocation.id == service_location_id,
+                        ServiceLocation.customer_id == customer_id,
+                        ServiceLocation.active.is_(True),
+                        ServiceLocation.archived_at.is_(None),
+                    )
+                    .exists()
+                )
+            )
+        )
+
+    @staticmethod
     async def create_capacity_reservation(
         session: AsyncSession,
         *,
@@ -160,6 +209,69 @@ class SchedulingRepository:
         if for_update:
             statement = statement.with_for_update()
         return await session.scalar(statement)
+
+    @staticmethod
+    def release_capacity_reservation(
+        reservation: AppointmentCapacityReservation,
+        *,
+        released_at: datetime,
+        reason_code: str,
+    ) -> None:
+        reservation.released_at = released_at
+        reservation.release_reason_code = reason_code
+        reservation.updated_at = released_at
+
+    @staticmethod
+    def move_capacity_reservation(
+        reservation: AppointmentCapacityReservation,
+        *,
+        reserved_start_at: datetime,
+        reserved_end_at: datetime,
+        capacity_units: Decimal,
+        updated_at: datetime,
+    ) -> None:
+        reservation.reserved_start_at = reserved_start_at
+        reservation.reserved_end_at = reserved_end_at
+        reservation.capacity_units = capacity_units
+        reservation.released_at = None
+        reservation.release_reason_code = None
+        reservation.updated_at = updated_at
+
+    @staticmethod
+    def cancel_appointment(
+        appointment: Appointment,
+        *,
+        cancelled_at: datetime,
+        reason_code: str,
+        actor_user_id: UUID,
+    ) -> None:
+        appointment.status = "cancelled"
+        appointment.cancelled_at = cancelled_at
+        appointment.cancellation_reason_code = reason_code
+        appointment.cancelled_by_user_id = actor_user_id
+        appointment.updated_by_user_id = actor_user_id
+        appointment.updated_at = cancelled_at
+        appointment.concurrency_version += 1
+
+    @staticmethod
+    def reschedule_appointment(
+        appointment: Appointment,
+        *,
+        arrival_window_start_at: datetime,
+        arrival_window_end_at: datetime,
+        expected_duration_minutes: int,
+        rescheduled_at: datetime,
+        actor_user_id: UUID,
+    ) -> None:
+        appointment.arrival_window_start_at = arrival_window_start_at
+        appointment.arrival_window_end_at = arrival_window_end_at
+        appointment.expected_duration_minutes = expected_duration_minutes
+        appointment.reschedule_count += 1
+        appointment.rescheduled_at = rescheduled_at
+        appointment.rescheduled_by_user_id = actor_user_id
+        appointment.updated_by_user_id = actor_user_id
+        appointment.updated_at = rescheduled_at
+        appointment.concurrency_version += 1
 
     @staticmethod
     async def get_overlapping_capacity_reservations(
