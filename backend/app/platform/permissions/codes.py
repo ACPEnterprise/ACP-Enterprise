@@ -31,3 +31,9 @@ class AnalyticsPermission:
     READ = "COMPANY_ANALYTICS_READ"
 
     ALL = frozenset({READ})
+
+
+class SchedulingPermission:
+    MANAGE = "COMPANY_SCHEDULING_MANAGE"
+
+    ALL = frozenset({MANAGE})

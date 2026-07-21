@@ -118,8 +118,8 @@ class SchedulingService:
                 customer_id=command.customer_id,
                 service_location_id=command.service_location_id,
             ):
-                raise SchedulingValidationError(
-                    "Customer and Service Location are not schedulable."
+                raise SchedulingNotFoundError(
+                    "Customer or Service Location", command.customer_id
                 )
             decision = await self._reserve_capacity(
                 session,
@@ -154,7 +154,7 @@ class SchedulingService:
                 updated_at=now,
             )
             await self._repository.create_appointment(session, appointment=appointment)
-            await self._repository.create_capacity_reservation(
+            reservation = await self._repository.create_capacity_reservation(
                 session,
                 capacity_context=decision.context,
                 reservation=AppointmentCapacityReservation(
@@ -168,6 +168,7 @@ class SchedulingService:
                     updated_at=now,
                 ),
             )
+            appointment.capacity_reservation = reservation
             self._stage_event(
                 session,
                 context=context,
@@ -243,6 +244,7 @@ class SchedulingService:
                 appointment_id=appointment.id,
                 for_update=True,
             )
+            appointment.capacity_reservation = reservation
             if reservation is not None and reservation.released_at is None:
                 self._repository.release_capacity_reservation(
                     reservation,
@@ -346,6 +348,7 @@ class SchedulingService:
                 raise SchedulingConflictError(
                     "Scheduled Appointment has no capacity reservation."
                 )
+            appointment.capacity_reservation = reservation
             previous_start = appointment.arrival_window_start_at
             previous_end = appointment.arrival_window_end_at
             self._repository.move_capacity_reservation(

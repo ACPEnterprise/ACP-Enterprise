@@ -33,6 +33,8 @@ from app.platform.company.membership_models import Membership
 from app.platform.company.models import Company
 from app.platform.permissions.authorization import AuthorizationService
 from app.platform.permissions.catalog import permission_catalog
+from app.platform.permissions.catalog_sync import PermissionCatalogSyncService
+from app.platform.permissions.codes import SchedulingPermission
 from app.platform.permissions.models import (
     MembershipRole,
     Permission,
@@ -180,6 +182,110 @@ async def test_first_bootstrap_creates_complete_authorization_graph(
     }
     assert role_permission_count == len(permission_catalog.definitions)
     assert membership_role_count == 1
+
+    async with bootstrap_database.sessions() as session:
+        scheduling_permission = await session.scalar(
+            select(Permission).where(Permission.code == SchedulingPermission.MANAGE)
+        )
+        administrator_role = await session.scalar(
+            select(Role).where(Role.code == "COMPANY_ADMINISTRATOR")
+        )
+        assert scheduling_permission is not None
+        assert administrator_role is not None
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(RolePermission)
+                .where(
+                    RolePermission.role_id == administrator_role.id,
+                    RolePermission.permission_id == scheduling_permission.id,
+                )
+            )
+            == 1
+        )
+
+
+@pytest.mark.asyncio
+async def test_catalog_sync_adds_only_missing_permissions_idempotently(
+    bootstrap_database: BootstrapDatabase,
+) -> None:
+    result = await run_bootstrap(
+        bootstrap_database,
+        service(bootstrap_settings(settings.database_url)),
+        configuration(suffix="SYNC"),
+    )
+    assert result.initialized
+
+    async with bootstrap_database.sessions() as session, session.begin():
+        scheduling_permission = await session.scalar(
+            select(Permission).where(Permission.code == SchedulingPermission.MANAGE)
+        )
+        assert scheduling_permission is not None
+        assignment = await session.scalar(
+            select(RolePermission).where(
+                RolePermission.permission_id == scheduling_permission.id
+            )
+        )
+        assert assignment is not None
+        await session.delete(assignment)
+        await session.flush()
+        await session.delete(scheduling_permission)
+        noncanonical = Permission(
+            code="COMPANY_LOCAL_EXTENSION",
+            name="Local Extension",
+            resource="local_extension",
+            action="read",
+            status="active",
+        )
+        session.add(noncanonical)
+
+    async with bootstrap_database.sessions() as session:
+        before = {
+            permission.code: permission.id
+            for permission in (
+                await session.scalars(
+                    select(Permission).where(
+                        Permission.code != "COMPANY_LOCAL_EXTENSION"
+                    )
+                )
+            ).all()
+        }
+        role_assignments_before = await session.scalar(
+            select(func.count()).select_from(RolePermission)
+        )
+        assert SchedulingPermission.MANAGE not in before
+
+    sync_service = PermissionCatalogSyncService()
+    async with bootstrap_database.sessions() as session:
+        first = await sync_service.synchronize(session)
+    async with bootstrap_database.sessions() as session:
+        second = await sync_service.synchronize(session)
+        after_records = tuple((await session.scalars(select(Permission))).all())
+        synchronized = await session.scalar(
+            select(Permission).where(Permission.code == SchedulingPermission.MANAGE)
+        )
+        role_assignments_after = await session.scalar(
+            select(func.count()).select_from(RolePermission)
+        )
+
+    after = {permission.code: permission.id for permission in after_records}
+    assert first.created_codes == (SchedulingPermission.MANAGE,)
+    assert SchedulingPermission.MANAGE not in first.existing_codes
+    assert second.created_codes == ()
+    assert SchedulingPermission.MANAGE in second.existing_codes
+    assert all(after[code] == permission_id for code, permission_id in before.items())
+    assert "COMPANY_LOCAL_EXTENSION" in after
+    assert role_assignments_after == role_assignments_before
+    assert synchronized is not None
+    async with bootstrap_database.sessions() as session:
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(RolePermission)
+                .where(RolePermission.permission_id == synchronized.id)
+            )
+            == 0
+        )
 
 
 @pytest.mark.asyncio

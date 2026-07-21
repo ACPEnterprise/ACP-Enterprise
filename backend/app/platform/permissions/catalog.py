@@ -6,6 +6,7 @@ from app.platform.permissions.codes import (
     AdministrationPermission,
     AnalyticsPermission,
     CustomerPermission,
+    SchedulingPermission,
 )
 
 
@@ -110,6 +111,20 @@ ANALYTICS_DEFINITIONS = tuple(
     for code in sorted(AnalyticsPermission.ALL)
 )
 
+SCHEDULING_DEFINITIONS = tuple(
+    PermissionDefinition(
+        code=code,
+        name="Company Scheduling Manage",
+        resource="scheduling",
+        action="manage",
+        scope=PermissionScope.COMPANY,
+    )
+    for code in sorted(SchedulingPermission.ALL)
+)
+
 permission_catalog = PermissionCatalog(
-    ADMINISTRATION_DEFINITIONS + CUSTOMER_DEFINITIONS + ANALYTICS_DEFINITIONS
+    ADMINISTRATION_DEFINITIONS
+    + CUSTOMER_DEFINITIONS
+    + ANALYTICS_DEFINITIONS
+    + SCHEDULING_DEFINITIONS
 )

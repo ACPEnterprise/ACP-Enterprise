@@ -37,7 +37,11 @@ from app.platform.permissions.authorization import (
     AuthorizationService,
     TenantAccessDeniedError,
 )
-from app.platform.permissions.codes import AdministrationPermission
+from app.platform.permissions.catalog_sync import PermissionCatalogSyncService
+from app.platform.permissions.codes import (
+    AdministrationPermission,
+    SchedulingPermission,
+)
 from app.platform.permissions.dependencies import get_authorization_context
 from app.platform.permissions.models import (
     MembershipRole,
@@ -801,3 +805,53 @@ async def test_authorized_router_enforces_context_and_rejects_unknown_fields(
         str(fixture.context.company.id)
     }
     assert invalid.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_synchronized_permission_is_assigned_through_admin_endpoint(
+    admin_database: tuple[AsyncEngine, async_sessionmaker[AsyncSession]],
+) -> None:
+    _, factory = admin_database
+    fixture = await seed_admin_fixture(factory, "ADMINI")
+    async with factory() as session:
+        await PermissionCatalogSyncService().synchronize(session)
+    async with factory() as session:
+        permission = await session.scalar(
+            select(Permission).where(Permission.code == SchedulingPermission.MANAGE)
+        )
+    assert permission is not None
+    version_before = await user_version(factory, fixture.context.user.id)
+    assert SchedulingPermission.MANAGE not in fixture.context.permission_codes
+
+    app = FastAPI()
+    app.include_router(admin_router)
+
+    async def database_override() -> AsyncIterator[AsyncSession]:
+        async with factory() as session:
+            yield session
+
+    async def authorization_override() -> AuthorizationContext:
+        return fixture.context
+
+    app.dependency_overrides[get_database_session] = database_override
+    app.dependency_overrides[get_authorization_context] = authorization_override
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.put(
+            f"/api/v1/company-admin/roles/{fixture.admin_role_id}"
+            f"/permissions/{permission.id}"
+        )
+
+    assert response.status_code == 200
+    assert await user_version(factory, fixture.context.user.id) == version_before + 1
+    assert SchedulingPermission.MANAGE not in fixture.context.permission_codes
+    async with factory() as session:
+        assignment_count = await session.scalar(
+            select(func.count())
+            .select_from(RolePermission)
+            .where(
+                RolePermission.role_id == fixture.admin_role_id,
+                RolePermission.permission_id == permission.id,
+            )
+        )
+    assert assignment_count == 1

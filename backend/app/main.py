@@ -28,6 +28,7 @@ from app.platform.users.identity_router import (
     administration_router as identity_administration_router,
     self_service_router as identity_self_service_router,
 )
+from app.scheduling.router import router as scheduling_router
 
 
 logging.basicConfig(
@@ -85,6 +86,7 @@ app.include_router(authorization_router)
 app.include_router(company_admin_router)
 app.include_router(identity_self_service_router)
 app.include_router(identity_administration_router)
+app.include_router(scheduling_router)
 
 
 @app.get("/", tags=["System"])

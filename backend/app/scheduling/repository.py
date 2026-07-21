@@ -6,6 +6,7 @@ from uuid import UUID
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.customers.models import Customer, ServiceLocation
 from app.platform.branch.models import Branch
@@ -105,6 +106,7 @@ class SchedulingRepository:
     ) -> Appointment | None:
         return await session.scalar(
             select(Appointment)
+            .options(selectinload(Appointment.capacity_reservation))
             .where(
                 Appointment.company_id == company_id,
                 Appointment.id == appointment_id,
