@@ -618,11 +618,13 @@ async def test_version_increment_invalidates_existing_authorization_context(
         )
     assert await user_version(factory, fixture.context.user.id) == admin_before + 1
     async with factory() as session:
+        authenticated_user = await session.get(User, old_context.user.id)
+        assert authenticated_user is not None
         with pytest.raises(TenantAccessDeniedError):
             await AuthorizationService().resolve(
                 session,
                 authenticated=AuthenticatedContext(
-                    old_context.user,
+                    authenticated_user,
                     AuthenticationSession(
                         id=old_context.membership.id,
                         user_id=old_context.user.id,

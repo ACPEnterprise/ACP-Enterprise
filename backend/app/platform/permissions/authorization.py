@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy import select
@@ -30,16 +31,145 @@ class PermissionDeniedError(AuthorizationError):
 
 
 @dataclass(frozen=True)
+class AuthorizedUser:
+    id: UUID
+    normalized_email: str
+    first_name: str
+    last_name: str
+    display_name: str
+    status: str
+    authorization_version: int
+    created_at: datetime
+    updated_at: datetime
+    disabled_at: datetime | None
+    email_verified_at: datetime | None
+    archived_at: datetime | None
+
+
+@dataclass(frozen=True)
+class AuthorizedCompany:
+    id: UUID
+    name: str
+    code: str
+    status: str
+    timezone: str
+    created_at: datetime
+    updated_at: datetime
+    archived_at: datetime | None
+
+
+@dataclass(frozen=True)
+class AuthorizedMembership:
+    id: UUID
+    user_id: UUID
+    company_id: UUID
+    status: str
+    default_branch_id: UUID | None
+    has_all_branch_access: bool
+    invited_at: datetime | None
+    accepted_at: datetime | None
+    revoked_at: datetime | None
+    revoked_by_user_id: UUID | None
+    created_at: datetime
+    updated_at: datetime
+
+
+@dataclass(frozen=True)
+class AuthorizedBranch:
+    id: UUID
+    company_id: UUID
+    name: str
+    code: str
+    status: str
+    timezone: str
+    is_primary: bool
+    created_at: datetime
+    updated_at: datetime
+    archived_at: datetime | None
+
+
+@dataclass(frozen=True)
+class AuthorizedRole:
+    id: UUID
+    company_id: UUID
+    code: str
+    name: str
+    description: str | None
+    status: str
+    is_system: bool
+    created_at: datetime
+    updated_at: datetime
+    archived_at: datetime | None
+    created_by_user_id: UUID | None
+    updated_by_user_id: UUID | None
+
+
+@dataclass(frozen=True)
+class AuthorizedPermission:
+    id: UUID
+    code: str
+    name: str
+    description: str | None
+    resource: str
+    action: str
+    status: str
+    created_at: datetime
+    updated_at: datetime
+    retired_at: datetime | None
+
+
+@dataclass(frozen=True, init=False)
 class AuthorizationContext:
-    user: User
-    company: Company
-    membership: Membership
-    authorized_branches: tuple[Branch, ...]
-    active_branch: Branch | None
-    effective_roles: tuple[Role, ...]
-    effective_permissions: tuple[Permission, ...]
+    user: AuthorizedUser
+    company: AuthorizedCompany
+    membership: AuthorizedMembership
+    authorized_branches: tuple[AuthorizedBranch, ...]
+    active_branch: AuthorizedBranch | None
+    effective_roles: tuple[AuthorizedRole, ...]
+    effective_permissions: tuple[AuthorizedPermission, ...]
     credential_version: int
     authorization_version: int
+
+    def __init__(
+        self,
+        user: User | AuthorizedUser,
+        company: Company | AuthorizedCompany,
+        membership: Membership | AuthorizedMembership,
+        authorized_branches: tuple[Branch | AuthorizedBranch, ...],
+        active_branch: Branch | AuthorizedBranch | None,
+        effective_roles: tuple[Role | AuthorizedRole, ...],
+        effective_permissions: tuple[Permission | AuthorizedPermission, ...],
+        credential_version: int,
+        authorization_version: int,
+    ) -> None:
+        object.__setattr__(self, "user", _authorized_user(user))
+        object.__setattr__(self, "company", _authorized_company(company))
+        object.__setattr__(self, "membership", _authorized_membership(membership))
+        object.__setattr__(
+            self,
+            "authorized_branches",
+            tuple(_authorized_branch(branch) for branch in authorized_branches),
+        )
+        object.__setattr__(
+            self,
+            "active_branch",
+            _authorized_branch(active_branch) if active_branch is not None else None,
+        )
+        object.__setattr__(
+            self,
+            "effective_roles",
+            tuple(_authorized_role(role) for role in effective_roles),
+        )
+        object.__setattr__(
+            self,
+            "effective_permissions",
+            tuple(
+                _authorized_permission(permission)
+                for permission in effective_permissions
+            ),
+        )
+        object.__setattr__(self, "credential_version", credential_version)
+        object.__setattr__(self, "authorization_version", authorization_version)
 
     @property
     def authorized_branch_ids(self) -> frozenset[UUID]:
@@ -58,6 +188,116 @@ class AuthorizationContext:
 
     def can_access_branch(self, branch_id: UUID) -> bool:
         return branch_id in self.authorized_branch_ids
+
+
+def _authorized_user(value: User | AuthorizedUser) -> AuthorizedUser:
+    if isinstance(value, AuthorizedUser):
+        return value
+    return AuthorizedUser(
+        id=value.id,
+        normalized_email=value.normalized_email,
+        first_name=value.first_name,
+        last_name=value.last_name,
+        display_name=value.display_name,
+        status=value.status,
+        authorization_version=value.authorization_version,
+        created_at=value.created_at,
+        updated_at=value.updated_at,
+        disabled_at=value.disabled_at,
+        email_verified_at=value.email_verified_at,
+        archived_at=value.archived_at,
+    )
+
+
+def _authorized_company(value: Company | AuthorizedCompany) -> AuthorizedCompany:
+    if isinstance(value, AuthorizedCompany):
+        return value
+    return AuthorizedCompany(
+        id=value.id,
+        name=value.name,
+        code=value.code,
+        status=value.status,
+        timezone=value.timezone,
+        created_at=value.created_at,
+        updated_at=value.updated_at,
+        archived_at=value.archived_at,
+    )
+
+
+def _authorized_membership(
+    value: Membership | AuthorizedMembership,
+) -> AuthorizedMembership:
+    if isinstance(value, AuthorizedMembership):
+        return value
+    return AuthorizedMembership(
+        id=value.id,
+        user_id=value.user_id,
+        company_id=value.company_id,
+        status=value.status,
+        default_branch_id=value.default_branch_id,
+        has_all_branch_access=value.has_all_branch_access,
+        invited_at=value.invited_at,
+        accepted_at=value.accepted_at,
+        revoked_at=value.revoked_at,
+        revoked_by_user_id=value.revoked_by_user_id,
+        created_at=value.created_at,
+        updated_at=value.updated_at,
+    )
+
+
+def _authorized_branch(value: Branch | AuthorizedBranch) -> AuthorizedBranch:
+    if isinstance(value, AuthorizedBranch):
+        return value
+    return AuthorizedBranch(
+        id=value.id,
+        company_id=value.company_id,
+        name=value.name,
+        code=value.code,
+        status=value.status,
+        timezone=value.timezone,
+        is_primary=value.is_primary,
+        created_at=value.created_at,
+        updated_at=value.updated_at,
+        archived_at=value.archived_at,
+    )
+
+
+def _authorized_role(value: Role | AuthorizedRole) -> AuthorizedRole:
+    if isinstance(value, AuthorizedRole):
+        return value
+    return AuthorizedRole(
+        id=value.id,
+        company_id=value.company_id,
+        code=value.code,
+        name=value.name,
+        description=value.description,
+        status=value.status,
+        is_system=value.is_system,
+        created_at=value.created_at,
+        updated_at=value.updated_at,
+        archived_at=value.archived_at,
+        created_by_user_id=value.created_by_user_id,
+        updated_by_user_id=value.updated_by_user_id,
+    )
+
+
+def _authorized_permission(
+    value: Permission | AuthorizedPermission,
+) -> AuthorizedPermission:
+    if isinstance(value, AuthorizedPermission):
+        return value
+    return AuthorizedPermission(
+        id=value.id,
+        code=value.code,
+        name=value.name,
+        description=value.description,
+        resource=value.resource,
+        action=value.action,
+        status=value.status,
+        created_at=value.created_at,
+        updated_at=value.updated_at,
+        retired_at=value.retired_at,
+    )
 
 
 @dataclass(frozen=True)

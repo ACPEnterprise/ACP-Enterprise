@@ -4,7 +4,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database.session import get_database_session
+from app.database.session import get_security_database_session
 from app.platform.auth.errors import AuthenticationError
 from app.platform.auth.services import (
     AuthenticatedContext,
@@ -14,11 +14,13 @@ from app.platform.auth.services import (
 
 
 bearer_scheme = HTTPBearer(auto_error=False)
-DatabaseSession = Annotated[AsyncSession, Depends(get_database_session)]
+SecurityDatabaseSession = Annotated[
+    AsyncSession, Depends(get_security_database_session)
+]
 
 
 async def get_authenticated_context(
-    session: DatabaseSession,
+    session: SecurityDatabaseSession,
     credentials: Annotated[
         HTTPAuthorizationCredentials | None,
         Depends(bearer_scheme),

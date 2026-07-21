@@ -5,7 +5,7 @@ from uuid import UUID
 from fastapi import Depends, Header, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database.session import get_database_session
+from app.database.session import get_security_database_session
 from app.platform.auth.dependencies import AuthenticatedIdentity
 from app.platform.permissions.authorization import (
     AuthorizationContext,
@@ -19,12 +19,14 @@ from app.platform.security.decisions import (
 )
 
 
-DatabaseSession = Annotated[AsyncSession, Depends(get_database_session)]
+SecurityDatabaseSession = Annotated[
+    AsyncSession, Depends(get_security_database_session)
+]
 
 
 async def get_authorization_context(
     authenticated: AuthenticatedIdentity,
-    session: DatabaseSession,
+    session: SecurityDatabaseSession,
     company_id: Annotated[UUID, Header(alias="X-Company-ID")],
     active_branch_id: Annotated[UUID | None, Header(alias="X-Branch-ID")] = None,
 ) -> AuthorizationContext:

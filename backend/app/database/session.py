@@ -23,5 +23,12 @@ AsyncSessionFactory = async_sessionmaker(
 
 
 async def get_database_session() -> AsyncGenerator[AsyncSession, None]:
+    """Provide the request's application session to routers and services."""
+    async with AsyncSessionFactory() as session:
+        yield session
+
+
+async def get_security_database_session() -> AsyncGenerator[AsyncSession, None]:
+    """Provide an isolated request-scoped session for authentication reads."""
     async with AsyncSessionFactory() as session:
         yield session

@@ -1,5 +1,5 @@
 from collections.abc import AsyncIterator
-from dataclasses import dataclass
+from dataclasses import FrozenInstanceError, dataclass
 from datetime import timedelta
 from uuid import UUID, uuid4
 
@@ -7,7 +7,7 @@ import httpx
 import pytest
 import pytest_asyncio
 from fastapi import Depends, FastAPI
-from sqlalchemy import update
+from sqlalchemy import func, inspect, select, update
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -16,11 +16,19 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from app.core.config import settings
-from app.database.session import get_database_session
+from app.database.session import get_database_session, get_security_database_session
+from app.events.models import BusinessEvent
+from app.events.schemas import BusinessEventCreate
+from app.events.service import BusinessEventService
+from app.events.types import EventType
 from app.platform.auth.access_tokens import AccessTokenClaims
 from app.platform.auth.dependencies import get_authenticated_context
 from app.platform.auth.models import AuthenticationSession
-from app.platform.auth.services import AuthenticatedContext, utc_now
+from app.platform.auth.services import (
+    AuthenticatedContext,
+    access_token_service,
+    utc_now,
+)
 from app.platform.branch.models import Branch
 from app.platform.company.membership_models import Membership, MembershipBranchAccess
 from app.platform.company.models import Company
@@ -47,6 +55,32 @@ class AuthorizationFixture:
     authorized_branch_id: UUID
     unauthorized_branch_id: UUID
     other_company_id: UUID
+
+
+class RequestMutationProbe:
+    """Exercise the canonical service-owned transaction contract."""
+
+    @staticmethod
+    async def execute(
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        fail_after_staging: bool = False,
+    ) -> None:
+        async with session.begin():
+            BusinessEventService.stage(
+                session,
+                BusinessEventCreate(
+                    event_type=EventType.CUSTOMER_CREATED,
+                    entity_type="transaction_contract_probe",
+                    entity_id=uuid4(),
+                    company_id=context.company.id,
+                    user_id=context.user.id,
+                    payload={"contract_version": 1},
+                ),
+            )
+            if fail_after_staging:
+                raise RuntimeError("controlled transaction rollback")
 
 
 @pytest_asyncio.fixture
@@ -230,6 +264,19 @@ async def test_permission_resolution_and_company_branch_isolation(
     assert context.permission_codes == {"AUTHZA_CUSTOMER_VIEW"}
     assert context.credential_version == 1
     assert context.authorization_version == 1
+    assert all(
+        inspect(value, raiseerr=False) is None
+        for value in (
+            context.user,
+            context.company,
+            context.membership,
+            *context.authorized_branches,
+            *context.effective_roles,
+            *context.effective_permissions,
+        )
+    )
+    with pytest.raises(FrozenInstanceError):
+        setattr(context.user, "display_name", "Changed")
 
     async with factory() as session:
         with pytest.raises(TenantAccessDeniedError):
@@ -449,3 +496,86 @@ async def test_accessible_companies_router_uses_authenticated_identity(
             ],
         }
     ]
+
+
+@pytest.mark.asyncio
+async def test_request_security_reads_do_not_conflict_with_service_transaction(
+    authorization_database: tuple[AsyncEngine, async_sessionmaker[AsyncSession]],
+) -> None:
+    _, factory = authorization_database
+    fixture = await seed_authorization_fixture(factory, prefix="REQUESTTX")
+    claims = fixture.authenticated.claims
+    token, _ = access_token_service.issue(
+        user_id=claims.user_id,
+        session_id=claims.session_id,
+        credential_version=claims.credential_version,
+        authorization_version=claims.authorization_version,
+    )
+    application_sessions: list[AsyncSession] = []
+    security_sessions: list[AsyncSession] = []
+    app = FastAPI()
+
+    async def application_session_override() -> AsyncIterator[AsyncSession]:
+        async with factory() as session:
+            application_sessions.append(session)
+            yield session
+
+    async def security_session_override() -> AsyncIterator[AsyncSession]:
+        async with factory() as session:
+            security_sessions.append(session)
+            yield session
+
+    app.dependency_overrides[get_database_session] = application_session_override
+    app.dependency_overrides[get_security_database_session] = security_session_override
+
+    @app.post("/mutate")
+    async def mutate(
+        context: AuthorizationContext = Depends(
+            require_permission("REQUESTTX_CUSTOMER_VIEW")
+        ),
+        session: AsyncSession = Depends(get_database_session),
+        fail_after_staging: bool = False,
+    ) -> dict[str, str]:
+        await RequestMutationProbe.execute(
+            session,
+            context=context,
+            fail_after_staging=fail_after_staging,
+        )
+        return {"status": "committed"}
+
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "X-Company-ID": str(fixture.company_id),
+    }
+    transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        committed = await client.post("/mutate", headers=headers)
+        rolled_back = await client.post(
+            "/mutate?fail_after_staging=true", headers=headers
+        )
+        unauthenticated = await client.post(
+            "/mutate", headers={"X-Company-ID": str(fixture.company_id)}
+        )
+
+    assert committed.status_code == 200
+    assert committed.json() == {"status": "committed"}
+    assert rolled_back.status_code == 500
+    assert unauthenticated.status_code == 401
+    assert len(application_sessions) == 2
+    assert len(security_sessions) == 3
+    assert all(
+        application is not security
+        for application, security in zip(
+            application_sessions, security_sessions[:2], strict=True
+        )
+    )
+    async with factory() as session:
+        event_count = await session.scalar(
+            select(func.count())
+            .select_from(BusinessEvent)
+            .where(
+                BusinessEvent.company_id == fixture.company_id,
+                BusinessEvent.entity_type == "transaction_contract_probe",
+            )
+        )
+    assert event_count == 1
