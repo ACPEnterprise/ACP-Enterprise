@@ -91,10 +91,16 @@ and `cancelled`. Dispatch states are excluded. Reopen is an operation, not a sta
 no reopen snapshot fields or lifecycle-history table are persisted initially.
 Durable future `job.reopened` events retain reopening facts.
 
-Pause, completion, and cancellation metadata must agree with the current state.
-Completion and cancellation preserve actor and timestamp attribution. Future
-services own transition rules, idempotency, row locking, and optimistic-version
-checks; models and repositories contain no lifecycle orchestration.
+`status` is the authoritative current lifecycle state. Completion and cancellation
+groups preserve the most recent corresponding terminal occurrence and may remain
+populated after reopening; historical terminal fields do not imply a current
+terminal status. A reopened `ready` Job may retain `started_at`. Pause fields describe
+only the active pause and are cleared on resume. Full lifecycle history remains a
+future Business Event or projection concern.
+
+Future services own transition rules, idempotency, row locking, and
+optimistic-version checks; models and repositories contain no lifecycle
+orchestration.
 
 ## Type and priority
 

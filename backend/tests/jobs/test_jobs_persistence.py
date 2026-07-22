@@ -531,6 +531,144 @@ async def test_incoherent_lifecycle_metadata_is_rejected(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("completed_at", "completed_by_user_id"),
+    [(None, "user"), ("timestamp", None)],
+)
+async def test_partial_completion_attribution_is_rejected(
+    jobs_database: tuple[AsyncEngine, async_sessionmaker[AsyncSession], JobsFixture],
+    completed_at: str | None,
+    completed_by_user_id: str | None,
+) -> None:
+    _, factory, fixture = jobs_database
+    now = utc_now()
+    job = build_job(fixture, status=JobStatus.READY)
+    job.completed_at = now if completed_at else None
+    job.completed_by_user_id = fixture.user_id if completed_by_user_id else None
+    async with factory() as session:
+        session.add(job)
+        with pytest.raises(IntegrityError):
+            await session.commit()
+
+
+@pytest.mark.asyncio
+async def test_completed_status_requires_complete_completion_attribution(
+    jobs_database: tuple[AsyncEngine, async_sessionmaker[AsyncSession], JobsFixture],
+) -> None:
+    _, factory, fixture = jobs_database
+    job = build_job(fixture, status=JobStatus.COMPLETED)
+    job.completed_at = None
+    job.completed_by_user_id = None
+    async with factory() as session:
+        session.add(job)
+        with pytest.raises(IntegrityError):
+            await session.commit()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("cancelled_at", "cancelled_by_user_id", "reason"),
+    [
+        ("timestamp", "user", None),
+        ("timestamp", None, "customer_cancelled"),
+        (None, "user", "customer_cancelled"),
+    ],
+)
+async def test_partial_cancellation_attribution_is_rejected(
+    jobs_database: tuple[AsyncEngine, async_sessionmaker[AsyncSession], JobsFixture],
+    cancelled_at: str | None,
+    cancelled_by_user_id: str | None,
+    reason: str | None,
+) -> None:
+    _, factory, fixture = jobs_database
+    job = build_job(fixture, status=JobStatus.READY)
+    job.cancelled_at = utc_now() if cancelled_at else None
+    job.cancelled_by_user_id = fixture.user_id if cancelled_by_user_id else None
+    job.cancellation_reason_code = reason
+    async with factory() as session:
+        session.add(job)
+        with pytest.raises(IntegrityError):
+            await session.commit()
+
+
+@pytest.mark.asyncio
+async def test_cancelled_status_requires_complete_cancellation_attribution(
+    jobs_database: tuple[AsyncEngine, async_sessionmaker[AsyncSession], JobsFixture],
+) -> None:
+    _, factory, fixture = jobs_database
+    job = build_job(fixture, status=JobStatus.CANCELLED)
+    job.cancelled_at = None
+    job.cancelled_by_user_id = None
+    job.cancellation_reason_code = None
+    async with factory() as session:
+        session.add(job)
+        with pytest.raises(IntegrityError):
+            await session.commit()
+
+
+@pytest.mark.asyncio
+async def test_ready_job_retains_historical_terminal_and_started_facts(
+    jobs_database: tuple[AsyncEngine, async_sessionmaker[AsyncSession], JobsFixture],
+) -> None:
+    _, factory, fixture = jobs_database
+    now = utc_now()
+    job = build_job(fixture, status=JobStatus.READY)
+    job.started_at = now
+    job.completed_at = now
+    job.completed_by_user_id = fixture.user_id
+    job.cancelled_at = now
+    job.cancelled_by_user_id = fixture.user_id
+    job.cancellation_reason_code = "customer_cancelled"
+
+    async with factory() as session, session.begin():
+        await JobRepository.create_job(session, job=job)
+
+    async with factory() as session:
+        persisted = await JobRepository.get_job(
+            session, company_id=fixture.company_id, job_id=job.id
+        )
+        assert persisted is not None
+        assert persisted.status == JobStatus.READY.value
+        assert persisted.started_at == now
+        assert persisted.completed_at == now
+        assert persisted.completed_by_user_id == fixture.user_id
+        assert persisted.cancelled_at == now
+        assert persisted.cancelled_by_user_id == fixture.user_id
+        assert persisted.cancellation_reason_code == "customer_cancelled"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "status",
+    [JobStatus.IN_PROGRESS, JobStatus.PAUSED, JobStatus.COMPLETED],
+)
+async def test_active_and_completed_states_require_started_at(
+    jobs_database: tuple[AsyncEngine, async_sessionmaker[AsyncSession], JobsFixture],
+    status: JobStatus,
+) -> None:
+    _, factory, fixture = jobs_database
+    job = build_job(fixture, status=status)
+    job.started_at = None
+    async with factory() as session:
+        session.add(job)
+        with pytest.raises(IntegrityError):
+            await session.commit()
+
+
+@pytest.mark.asyncio
+async def test_draft_rejects_historical_started_at(
+    jobs_database: tuple[AsyncEngine, async_sessionmaker[AsyncSession], JobsFixture],
+) -> None:
+    _, factory, fixture = jobs_database
+    job = build_job(fixture)
+    job.started_at = utc_now()
+    async with factory() as session:
+        session.add(job)
+        with pytest.raises(IntegrityError):
+            await session.commit()
+
+
+@pytest.mark.asyncio
 async def test_multiple_appointments_link_to_one_job_in_visit_order(
     jobs_database: tuple[AsyncEngine, async_sessionmaker[AsyncSession], JobsFixture],
 ) -> None:

@@ -25,8 +25,19 @@ reused. Numbers are allocated when a draft is created.
 The database constrains the six approved lifecycle values, canonical priority,
 positive concurrency versions, Job-number format, normalized Job-type-code shape,
 and coherent activation, start, pause, completion, cancellation, and timestamp
-metadata. Reopen is a future operation returning a terminal Job to `ready`; reopen
-snapshot fields and lifecycle/pause history tables are intentionally absent.
+metadata. `status` is the sole authority for the current lifecycle state.
+
+Completion and cancellation attribution groups retain the most recent corresponding
+terminal occurrence. Each group is either wholly populated or wholly null, and the
+matching terminal status requires its group. A later `ready` state may retain either
+or both complete groups after reopening; their presence does not imply that the Job
+is currently terminal. A reopened, previously started Job may likewise retain
+`started_at` while `ready`.
+
+Pause fields describe only an active pause and are cleared on resume. Reopen is a
+future operation returning a terminal Job to `ready`; reopen snapshot fields and
+lifecycle/pause history tables are intentionally absent. Full lifecycle history is
+deferred to durable Business Events or a future reviewed projection.
 
 Priority ordering is `low < normal < high < urgent < emergency`. Job type remains an
 extensible lowercase code rather than a fixed product enum.

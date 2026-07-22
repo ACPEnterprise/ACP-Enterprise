@@ -87,10 +87,9 @@ class Job(Base):
             name="ck_jobs_activation_state",
         ),
         CheckConstraint(
+            "(status = 'draft' AND started_at IS NULL) OR "
             "(status IN ('in_progress', 'paused', 'completed') "
-            "AND started_at IS NOT NULL) OR "
-            "(status IN ('draft', 'ready') AND started_at IS NULL) OR "
-            "status = 'cancelled'",
+            "AND started_at IS NOT NULL) OR status IN ('ready', 'cancelled')",
             name="ck_jobs_start_state",
         ),
         CheckConstraint(
@@ -105,19 +104,20 @@ class Job(Base):
             name="ck_jobs_pause_reason_not_blank",
         ),
         CheckConstraint(
-            "(status = 'completed' AND completed_at IS NOT NULL "
-            "AND completed_by_user_id IS NOT NULL) OR "
-            "(status <> 'completed' AND completed_at IS NULL "
-            "AND completed_by_user_id IS NULL)",
+            "((completed_at IS NULL AND completed_by_user_id IS NULL) OR "
+            "(completed_at IS NOT NULL AND completed_by_user_id IS NOT NULL)) AND "
+            "(status <> 'completed' OR (completed_at IS NOT NULL "
+            "AND completed_by_user_id IS NOT NULL))",
             name="ck_jobs_completion_state",
         ),
         CheckConstraint(
-            "(status = 'cancelled' AND cancelled_at IS NOT NULL "
+            "((cancelled_at IS NULL AND cancelled_by_user_id IS NULL "
+            "AND cancellation_reason_code IS NULL) OR "
+            "(cancelled_at IS NOT NULL AND cancelled_by_user_id IS NOT NULL "
+            "AND cancellation_reason_code IS NOT NULL)) AND "
+            "(status <> 'cancelled' OR (cancelled_at IS NOT NULL "
             "AND cancelled_by_user_id IS NOT NULL "
-            "AND cancellation_reason_code IS NOT NULL) OR "
-            "(status <> 'cancelled' AND cancelled_at IS NULL "
-            "AND cancelled_by_user_id IS NULL "
-            "AND cancellation_reason_code IS NULL)",
+            "AND cancellation_reason_code IS NOT NULL))",
             name="ck_jobs_cancellation_state",
         ),
         CheckConstraint(
