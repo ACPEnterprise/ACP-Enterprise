@@ -103,6 +103,9 @@ optimistic-version checks, extension guards, and transactional Business Event
 staging. Models and repositories contain no lifecycle orchestration. The detailed
 contract is documented in [Jobs Domain Services](domain-services.md).
 
+All Jobs read consumers share the immutable, tenant-scoped
+[Jobs Query Engine](query-engine.md); consumer-specific SQL paths are prohibited.
+
 ## Type and priority
 
 `job_type_code` is a nullable, normalized lowercase code up to 64 characters. The

@@ -35,6 +35,10 @@ class JobValidationError(JobError):
     pass
 
 
+class JobQueryValidationError(JobError):
+    pass
+
+
 class JobCompletionBlockedError(JobError):
     pass
 
