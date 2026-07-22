@@ -1,4 +1,16 @@
+from dataclasses import dataclass
 from enum import StrEnum
+from uuid import UUID
+
+
+@dataclass(frozen=True)
+class AppointmentReference:
+    id: UUID
+    company_id: UUID
+    branch_id: UUID
+    customer_id: UUID
+    service_location_id: UUID
+    status: "AppointmentStatus"
 
 
 class AppointmentStatus(StrEnum):

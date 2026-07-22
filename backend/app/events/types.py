@@ -63,8 +63,16 @@ class EventType(str, Enum):
     ESTIMATE_DECLINED = "estimate.declined"
 
     # Jobs
+    JOB_CREATED = "job.created"
+    JOB_UPDATED = "job.updated"
+    JOB_ACTIVATED = "job.activated"
+    JOB_APPOINTMENT_LINKED = "job.appointment_linked"
     JOB_STARTED = "job.started"
+    JOB_PAUSED = "job.paused"
+    JOB_RESUMED = "job.resumed"
     JOB_COMPLETED = "job.completed"
+    JOB_CANCELLED = "job.cancelled"
+    JOB_REOPENED = "job.reopened"
 
     # Financial
     INVOICE_CREATED = "invoice.created"

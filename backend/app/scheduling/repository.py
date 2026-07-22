@@ -20,7 +20,7 @@ from app.scheduling.models import (
     BranchSchedulingWeeklyInterval,
 )
 from app.scheduling.query import AppointmentQuery, AppointmentQueryRecord
-from app.scheduling.types import AppointmentStatus
+from app.scheduling.types import AppointmentReference, AppointmentStatus
 
 
 @dataclass(frozen=True)
@@ -344,6 +344,39 @@ class SchedulingRepository:
         if for_update:
             statement = statement.with_for_update()
         return await session.scalar(statement)
+
+    @staticmethod
+    async def get_appointment_reference(
+        session: AsyncSession,
+        *,
+        company_id: UUID,
+        appointment_id: UUID,
+        for_update: bool = False,
+    ) -> AppointmentReference | None:
+        statement = select(
+            Appointment.id,
+            Appointment.company_id,
+            Appointment.branch_id,
+            Appointment.customer_id,
+            Appointment.service_location_id,
+            Appointment.status,
+        ).where(
+            Appointment.company_id == company_id,
+            Appointment.id == appointment_id,
+        )
+        if for_update:
+            statement = statement.with_for_update()
+        row = (await session.execute(statement)).one_or_none()
+        if row is None:
+            return None
+        return AppointmentReference(
+            id=row.id,
+            company_id=row.company_id,
+            branch_id=row.branch_id,
+            customer_id=row.customer_id,
+            service_location_id=row.service_location_id,
+            status=AppointmentStatus(row.status),
+        )
 
     @staticmethod
     def release_capacity_reservation(

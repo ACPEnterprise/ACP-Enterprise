@@ -98,9 +98,10 @@ terminal status. A reopened `ready` Job may retain `started_at`. Pause fields de
 only the active pause and are cleared on resume. Full lifecycle history remains a
 future Business Event or projection concern.
 
-Future services own transition rules, idempotency, row locking, and
-optimistic-version checks; models and repositories contain no lifecycle
-orchestration.
+`JobService` owns transition rules, narrow retry behavior, row locking,
+optimistic-version checks, extension guards, and transactional Business Event
+staging. Models and repositories contain no lifecycle orchestration. The detailed
+contract is documented in [Jobs Domain Services](domain-services.md).
 
 ## Type and priority
 
