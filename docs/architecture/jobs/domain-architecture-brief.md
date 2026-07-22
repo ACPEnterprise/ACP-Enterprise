@@ -154,7 +154,8 @@ Appointment references, PostgreSQL, and the Business Event Engine. Stable APIs,
 immutable DTOs, identifiers, and events form seams for Dispatch, technician
 assignment, time tracking, labor, inventory, estimates, invoices, payments,
 attachments, forms, warranties, route optimization, GPS, reporting, and ACP-EIQ.
-No module may write another module's tables.
+No module may write another module's tables. The completed Jobs Query Engine and HTTP
+transport are documented in `query-engine.md` and `http-api.md` respectively.
 
 ## Risks and acceptance criteria
 

@@ -6,6 +6,7 @@ from app.platform.permissions.codes import (
     AdministrationPermission,
     AnalyticsPermission,
     CustomerPermission,
+    JobPermission,
     SchedulingPermission,
 )
 
@@ -122,9 +123,21 @@ SCHEDULING_DEFINITIONS = tuple(
     for code in sorted(SchedulingPermission.ALL)
 )
 
+JOB_DEFINITIONS = tuple(
+    PermissionDefinition(
+        code=code,
+        name=code.replace("_", " ").title(),
+        resource="job",
+        action=code.rsplit("_", 1)[-1].lower(),
+        scope=PermissionScope.COMPANY,
+    )
+    for code in sorted(JobPermission.ALL)
+)
+
 permission_catalog = PermissionCatalog(
     ADMINISTRATION_DEFINITIONS
     + CUSTOMER_DEFINITIONS
     + ANALYTICS_DEFINITIONS
     + SCHEDULING_DEFINITIONS
+    + JOB_DEFINITIONS
 )

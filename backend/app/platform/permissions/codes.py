@@ -38,3 +38,11 @@ class SchedulingPermission:
     MANAGE = "COMPANY_SCHEDULING_MANAGE"
 
     ALL = frozenset({READ, MANAGE})
+
+
+class JobPermission:
+    READ = "COMPANY_JOB_READ"
+    MANAGE = "COMPANY_JOB_MANAGE"
+    EXECUTE = "COMPANY_JOB_EXECUTE"
+
+    ALL = frozenset({READ, MANAGE, EXECUTE})
