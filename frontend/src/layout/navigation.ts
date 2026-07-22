@@ -19,7 +19,7 @@ export const navigationCatalog = [
   { id: "customers", label: "Customers", path: "/customers", icon: Users, availability: "available" },
   { id: "dispatch", label: "Dispatch", path: "/dispatch", icon: ClipboardList, availability: "hidden" },
   { id: "estimates", label: "Estimates", path: "/estimates", icon: FileChartColumn, availability: "hidden" },
-  { id: "jobs", label: "Jobs", path: "/jobs", icon: BriefcaseBusiness, availability: "hidden" },
+  { id: "jobs", label: "Jobs", path: "/jobs", icon: BriefcaseBusiness, availability: "available" },
   { id: "invoices", label: "Invoices", path: "/invoices", icon: FileText, availability: "hidden" },
   { id: "inventory", label: "Inventory", path: "/inventory", icon: Boxes, availability: "hidden" },
   { id: "fleet", label: "Fleet", path: "/fleet", icon: Building2, availability: "hidden" },

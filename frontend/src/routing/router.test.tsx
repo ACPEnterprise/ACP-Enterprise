@@ -10,6 +10,8 @@ import { appRoutes } from "./router";
 
 vi.mock("../routes/MissionControlRoute", () => ({ MissionControlRoute: () => <div>Mission route content</div> }));
 vi.mock("../routes/CustomersRoute", () => ({ CustomersRoute: () => <div>Customer route content</div> }));
+vi.mock("../routes/JobsRoute", () => ({ JobsRoute: () => <div>Jobs route content</div> }));
+vi.mock("../routes/JobDetailRoute", () => ({ JobDetailRoute: () => <div>Job detail route content</div> }));
 
 const authenticatedContext: AuthenticationContextValue = {
   status: "authenticated",
@@ -51,6 +53,14 @@ describe("application routing", () => {
     renderRoute("/customers");
     expect(await screen.findByText("Customer route content")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Customers" })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("routes Jobs list and detail through the application shell", async () => {
+    const router = renderRoute("/jobs");
+    expect(await screen.findByText("Jobs route content")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Jobs" })).toHaveAttribute("aria-current", "page");
+    await router.navigate("/jobs/job-1");
+    expect(await screen.findByText("Job detail route content")).toBeInTheDocument();
   });
 
   it("preserves browser-style back and forward navigation", async () => {

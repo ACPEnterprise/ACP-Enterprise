@@ -18,6 +18,10 @@ export const customersHandle = {
   },
 } as const satisfies ShellRouteHandle;
 
+export const jobsHandle = {
+  workspace: { pageTitle: "Jobs", breadcrumbs: [{ label: "Jobs" }], helpTopic: "jobs", aiContext: "jobs" },
+} as const satisfies ShellRouteHandle;
+
 export const notFoundHandle = {
   workspace: {
     pageTitle: "Page not found",
