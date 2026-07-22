@@ -5,6 +5,7 @@ from uuid import UUID
 
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.engine import RowMapping
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -18,6 +19,8 @@ from app.scheduling.models import (
     BranchSchedulingException,
     BranchSchedulingWeeklyInterval,
 )
+from app.scheduling.query import AppointmentQuery, AppointmentQueryRecord
+from app.scheduling.types import AppointmentStatus
 
 
 @dataclass(frozen=True)
@@ -82,6 +85,136 @@ class SchedulingRepository:
                 Appointment.id == appointment_id,
             )
         )
+
+    @staticmethod
+    def _query_record_statement():
+        return select(
+            Appointment.id,
+            Appointment.appointment_number,
+            Appointment.company_id,
+            Appointment.branch_id,
+            Appointment.customer_id,
+            Appointment.service_location_id,
+            Appointment.status,
+            Appointment.arrival_window_start_at,
+            Appointment.arrival_window_end_at,
+            Appointment.expected_duration_minutes,
+            AppointmentCapacityReservation.capacity_units,
+            Appointment.concurrency_version,
+            Appointment.reschedule_count,
+            Appointment.rescheduled_at,
+            Appointment.cancelled_at,
+            Appointment.cancellation_reason_code,
+            Appointment.created_at,
+            Appointment.updated_at,
+        ).outerjoin(
+            AppointmentCapacityReservation,
+            (AppointmentCapacityReservation.company_id == Appointment.company_id)
+            & (AppointmentCapacityReservation.branch_id == Appointment.branch_id)
+            & (AppointmentCapacityReservation.appointment_id == Appointment.id),
+        )
+
+    @staticmethod
+    def _query_record(values: RowMapping) -> AppointmentQueryRecord:
+        return AppointmentQueryRecord(
+            id=values["id"],
+            appointment_number=values["appointment_number"],
+            company_id=values["company_id"],
+            branch_id=values["branch_id"],
+            customer_id=values["customer_id"],
+            service_location_id=values["service_location_id"],
+            status=AppointmentStatus(values["status"]),
+            arrival_window_start_at=values["arrival_window_start_at"],
+            arrival_window_end_at=values["arrival_window_end_at"],
+            expected_duration_minutes=values["expected_duration_minutes"],
+            capacity_units=values["capacity_units"],
+            concurrency_version=values["concurrency_version"],
+            reschedule_count=values["reschedule_count"],
+            rescheduled_at=values["rescheduled_at"],
+            cancelled_at=values["cancelled_at"],
+            cancellation_reason_code=values["cancellation_reason_code"],
+            created_at=values["created_at"],
+            updated_at=values["updated_at"],
+        )
+
+    @classmethod
+    async def get_appointment_query_record(
+        cls,
+        session: AsyncSession,
+        *,
+        query: AppointmentQuery,
+    ) -> AppointmentQueryRecord | None:
+        if not query.authorized_branch_ids or query.appointment_id is None:
+            return None
+        row = (
+            (
+                await session.execute(
+                    cls._query_record_statement().where(
+                        Appointment.company_id == query.company_id,
+                        Appointment.branch_id.in_(query.authorized_branch_ids),
+                        Appointment.id == query.appointment_id,
+                    )
+                )
+            )
+            .mappings()
+            .one_or_none()
+        )
+        return cls._query_record(row) if row is not None else None
+
+    @classmethod
+    async def search_appointment_query_records(
+        cls,
+        session: AsyncSession,
+        *,
+        query: AppointmentQuery,
+    ) -> tuple[tuple[AppointmentQueryRecord, ...], int]:
+        if not query.authorized_branch_ids:
+            return (), 0
+        if query.start_at is None or query.end_at is None:
+            raise ValueError("Calendar query requires a range")
+        filters = [
+            Appointment.company_id == query.company_id,
+            Appointment.branch_id.in_(query.authorized_branch_ids),
+            Appointment.arrival_window_start_at.is_not(None),
+            Appointment.arrival_window_end_at.is_not(None),
+            Appointment.arrival_window_start_at < query.end_at,
+            Appointment.arrival_window_end_at > query.start_at,
+        ]
+        if query.branch_id is not None:
+            filters.append(Appointment.branch_id == query.branch_id)
+        if query.statuses:
+            filters.append(
+                Appointment.status.in_(status.value for status in query.statuses)
+            )
+        if query.customer_id is not None:
+            filters.append(Appointment.customer_id == query.customer_id)
+        if query.service_location_id is not None:
+            filters.append(Appointment.service_location_id == query.service_location_id)
+        total = int(
+            await session.scalar(
+                select(func.count()).select_from(Appointment).where(*filters)
+            )
+            or 0
+        )
+        rows = (
+            (
+                await session.execute(
+                    cls._query_record_statement()
+                    .where(*filters)
+                    .order_by(
+                        Appointment.arrival_window_start_at,
+                        Appointment.arrival_window_end_at,
+                        Appointment.appointment_number,
+                        Appointment.id,
+                    )
+                    .limit(query.page_size)
+                    .offset((query.page - 1) * query.page_size)
+                )
+            )
+            .mappings()
+            .all()
+        )
+        return tuple(cls._query_record(row) for row in rows), total
 
     @staticmethod
     async def get_appointment_by_number(

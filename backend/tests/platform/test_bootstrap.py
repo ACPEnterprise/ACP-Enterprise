@@ -184,25 +184,32 @@ async def test_first_bootstrap_creates_complete_authorization_graph(
     assert membership_role_count == 1
 
     async with bootstrap_database.sessions() as session:
-        scheduling_permission = await session.scalar(
-            select(Permission).where(Permission.code == SchedulingPermission.MANAGE)
+        scheduling_permissions = tuple(
+            (
+                await session.scalars(
+                    select(Permission).where(
+                        Permission.code.in_(SchedulingPermission.ALL)
+                    )
+                )
+            ).all()
         )
         administrator_role = await session.scalar(
             select(Role).where(Role.code == "COMPANY_ADMINISTRATOR")
         )
-        assert scheduling_permission is not None
-        assert administrator_role is not None
-        assert (
-            await session.scalar(
-                select(func.count())
-                .select_from(RolePermission)
-                .where(
-                    RolePermission.role_id == administrator_role.id,
-                    RolePermission.permission_id == scheduling_permission.id,
-                )
-            )
-            == 1
+        assert {permission.code for permission in scheduling_permissions} == set(
+            SchedulingPermission.ALL
         )
+        assert administrator_role is not None
+        assert await session.scalar(
+            select(func.count())
+            .select_from(RolePermission)
+            .where(
+                RolePermission.role_id == administrator_role.id,
+                RolePermission.permission_id.in_(
+                    permission.id for permission in scheduling_permissions
+                ),
+            )
+        ) == len(SchedulingPermission.ALL)
 
 
 @pytest.mark.asyncio

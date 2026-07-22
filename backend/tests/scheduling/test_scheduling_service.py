@@ -1,10 +1,11 @@
 import asyncio
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, time, timedelta, timezone
 from decimal import Decimal
 from typing import cast
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 import pytest
 import pytest_asyncio
@@ -53,8 +54,16 @@ from app.scheduling.types import (
 )
 
 
-FIXED_NOW = datetime(2026, 7, 21, 12, 0, tzinfo=timezone.utc)
-FIRST_START = datetime(2026, 7, 22, 14, 0, tzinfo=timezone.utc)
+BUSINESS_TIMEZONE = ZoneInfo("America/New_York")
+BUSINESS_TODAY = datetime.now(timezone.utc).astimezone(BUSINESS_TIMEZONE).date()
+FIXED_NOW = datetime.combine(
+    BUSINESS_TODAY, time(hour=8), tzinfo=BUSINESS_TIMEZONE
+).astimezone(timezone.utc)
+FIRST_START = datetime.combine(
+    BUSINESS_TODAY + timedelta(days=1),
+    time(hour=10),
+    tzinfo=BUSINESS_TIMEZONE,
+).astimezone(timezone.utc)
 
 
 @dataclass(frozen=True)

@@ -114,9 +114,9 @@ ANALYTICS_DEFINITIONS = tuple(
 SCHEDULING_DEFINITIONS = tuple(
     PermissionDefinition(
         code=code,
-        name="Company Scheduling Manage",
+        name=code.replace("_", " ").title(),
         resource="scheduling",
-        action="manage",
+        action=code.rsplit("_", 1)[-1].lower(),
         scope=PermissionScope.COMPANY,
     )
     for code in sorted(SchedulingPermission.ALL)

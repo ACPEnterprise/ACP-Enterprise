@@ -88,3 +88,20 @@ class AppointmentResponse(SchedulingApiSchema):
     cancellation_reason_code: AppointmentCancellationReason | None
     created_at: AwareDatetime
     updated_at: AwareDatetime
+
+
+class AppointmentSummary(AppointmentResponse):
+    """Stable calendar/list representation supplied by the Query Engine."""
+
+
+class AppointmentDetail(AppointmentResponse):
+    """Stable Appointment detail representation supplied by the Query Engine."""
+
+
+class CalendarQueryResult(SchedulingApiSchema):
+    items: tuple[AppointmentSummary, ...]
+    total_count: int = Field(ge=0)
+    page: int = Field(ge=1)
+    page_size: int = Field(ge=1, le=200)
+    start_at: AwareDatetime
+    end_at: AwareDatetime

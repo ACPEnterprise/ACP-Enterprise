@@ -817,11 +817,11 @@ async def test_synchronized_permission_is_assigned_through_admin_endpoint(
         await PermissionCatalogSyncService().synchronize(session)
     async with factory() as session:
         permission = await session.scalar(
-            select(Permission).where(Permission.code == SchedulingPermission.MANAGE)
+            select(Permission).where(Permission.code == SchedulingPermission.READ)
         )
     assert permission is not None
     version_before = await user_version(factory, fixture.context.user.id)
-    assert SchedulingPermission.MANAGE not in fixture.context.permission_codes
+    assert SchedulingPermission.READ not in fixture.context.permission_codes
 
     app = FastAPI()
     app.include_router(admin_router)
@@ -844,7 +844,7 @@ async def test_synchronized_permission_is_assigned_through_admin_endpoint(
 
     assert response.status_code == 200
     assert await user_version(factory, fixture.context.user.id) == version_before + 1
-    assert SchedulingPermission.MANAGE not in fixture.context.permission_codes
+    assert SchedulingPermission.READ not in fixture.context.permission_codes
     async with factory() as session:
         assignment_count = await session.scalar(
             select(func.count())

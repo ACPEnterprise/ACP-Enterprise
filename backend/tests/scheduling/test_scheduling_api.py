@@ -1,4 +1,4 @@
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
@@ -53,8 +53,10 @@ class SchedulingApiFixture:
     factory: async_sessionmaker[AsyncSession]
     app: FastAPI
     company_id: UUID
+    other_company_id: UUID
     branch_id: UUID
     unauthorized_branch_id: UUID
+    other_branch_id: UUID
     customer_id: UUID
     location_id: UUID
     other_customer_id: UUID
@@ -71,7 +73,7 @@ async def _add_actor(
     *,
     company: Company,
     branch: Branch,
-    permission: Permission,
+    permissions: tuple[Permission, ...],
     has_permission: bool,
     suffix: str,
 ) -> tuple[User, AuthenticationSession]:
@@ -135,16 +137,19 @@ async def _add_actor(
         await session.flush()
         session.add_all(
             [
-                RolePermission(
-                    role_id=role.id,
-                    permission_id=permission.id,
-                    assigned_by_user_id=user.id,
-                ),
                 MembershipRole(
                     company_id=company.id,
                     membership_id=membership.id,
                     role_id=role.id,
                     assigned_by_user_id=user.id,
+                ),
+                *(
+                    RolePermission(
+                        role_id=role.id,
+                        permission_id=permission.id,
+                        assigned_by_user_id=user.id,
+                    )
+                    for permission in permissions
                 ),
             ]
         )
@@ -187,6 +192,14 @@ async def scheduling_api() -> AsyncIterator[SchedulingApiFixture]:
             status="active",
             timezone="America/New_York",
             is_primary=False,
+        )
+        other_branch = Branch(
+            company=other_company,
+            name="Other Company Branch",
+            code=f"OB{suffix.upper()}",
+            status="active",
+            timezone="America/New_York",
+            is_primary=True,
         )
         customer = Customer(
             company=company,
@@ -232,6 +245,7 @@ async def scheduling_api() -> AsyncIterator[SchedulingApiFixture]:
                 other_company,
                 branch,
                 unauthorized_branch,
+                other_branch,
                 customer,
                 other_customer,
                 location,
@@ -239,15 +253,23 @@ async def scheduling_api() -> AsyncIterator[SchedulingApiFixture]:
             ]
         )
         await session.flush()
-        canonical_permission = await session.scalar(
-            select(Permission).where(Permission.code == SchedulingPermission.MANAGE)
+        canonical_permissions = tuple(
+            (
+                await session.scalars(
+                    select(Permission).where(
+                        Permission.code.in_(SchedulingPermission.ALL)
+                    )
+                )
+            ).all()
         )
-        assert canonical_permission is not None
+        assert {permission.code for permission in canonical_permissions} == set(
+            SchedulingPermission.ALL
+        )
         user, auth_session = await _add_actor(
             session,
             company=company,
             branch=branch,
-            permission=canonical_permission,
+            permissions=canonical_permissions,
             has_permission=True,
             suffix=f"allowed-{suffix}",
         )
@@ -255,7 +277,7 @@ async def scheduling_api() -> AsyncIterator[SchedulingApiFixture]:
             session,
             company=company,
             branch=branch,
-            permission=canonical_permission,
+            permissions=canonical_permissions,
             has_permission=False,
             suffix=f"denied-{suffix}",
         )
@@ -320,8 +342,10 @@ async def scheduling_api() -> AsyncIterator[SchedulingApiFixture]:
             factory=factory,
             app=app,
             company_id=company.id,
+            other_company_id=other_company.id,
             branch_id=branch.id,
             unauthorized_branch_id=unauthorized_branch.id,
+            other_branch_id=other_branch.id,
             customer_id=customer.id,
             location_id=location.id,
             other_customer_id=other_customer.id,
@@ -372,6 +396,8 @@ def test_scheduling_openapi_registers_versioned_authenticated_operations() -> No
     assert "/api/v1/scheduling/appointments/{appointment_id}/cancel" in paths
     assert "/api/v1/scheduling/appointments/{appointment_id}/reschedule" in paths
     for path, method in (
+        ("/api/v1/scheduling/appointments", "get"),
+        ("/api/v1/scheduling/appointments/{appointment_id}", "get"),
         ("/api/v1/scheduling/appointments", "post"),
         ("/api/v1/scheduling/appointments/{appointment_id}/cancel", "post"),
         ("/api/v1/scheduling/appointments/{appointment_id}/reschedule", "post"),
@@ -396,6 +422,275 @@ async def _post(
         return await client.post(
             path, json=payload, headers=_headers(fixture, token=token)
         )
+
+
+async def _get(
+    fixture: SchedulingApiFixture,
+    path: str,
+    *,
+    token: str | None,
+    params: Mapping[str, str | int] | None = None,
+) -> httpx.Response:
+    transport = httpx.ASGITransport(app=fixture.app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        return await client.get(
+            path,
+            params=params,
+            headers=_headers(fixture, token=token),
+        )
+
+
+async def _seed_query_appointment(
+    fixture: SchedulingApiFixture,
+    *,
+    company_id: UUID | None = None,
+    branch_id: UUID | None = None,
+    customer_id: UUID | None = None,
+    location_id: UUID | None = None,
+    start: datetime | None = None,
+    end: datetime | None = None,
+    status: str = "scheduled",
+    number: str | None = None,
+    with_reservation: bool = True,
+) -> UUID:
+    appointment_id = uuid4()
+    now = utc_now()
+    target_company_id = company_id or fixture.company_id
+    target_branch_id = branch_id or fixture.branch_id
+    appointment = Appointment(
+        id=appointment_id,
+        company_id=target_company_id,
+        branch_id=target_branch_id,
+        appointment_number=number or f"APT-{int(uuid4().hex[:6], 16):08d}",
+        customer_id=customer_id or fixture.customer_id,
+        service_location_id=location_id or fixture.location_id,
+        status=status,
+        arrival_window_start_at=start,
+        arrival_window_end_at=end,
+        expected_duration_minutes=60 if start is not None else None,
+        scheduling_timezone="America/New_York",
+        concurrency_version=1,
+        created_at=now,
+        updated_at=now,
+    )
+    async with fixture.factory() as session, session.begin():
+        session.add(appointment)
+        await session.flush()
+        if with_reservation and start is not None and end is not None:
+            session.add(
+                AppointmentCapacityReservation(
+                    company_id=target_company_id,
+                    branch_id=target_branch_id,
+                    appointment_id=appointment_id,
+                    reserved_start_at=start,
+                    reserved_end_at=end,
+                    capacity_units=Decimal("1.00"),
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+    return appointment_id
+
+
+@pytest.mark.asyncio
+async def test_query_detail_is_authenticated_scoped_and_read_only(
+    scheduling_api: SchedulingApiFixture,
+) -> None:
+    appointment_id = await _seed_query_appointment(
+        scheduling_api,
+        start=scheduling_api.start,
+        end=scheduling_api.start + timedelta(hours=1),
+        number="APT-900001",
+    )
+    unauthorized_id = await _seed_query_appointment(
+        scheduling_api,
+        branch_id=scheduling_api.unauthorized_branch_id,
+        start=scheduling_api.start,
+        end=scheduling_api.start + timedelta(hours=1),
+        number="APT-900002",
+    )
+    other_id = await _seed_query_appointment(
+        scheduling_api,
+        company_id=scheduling_api.other_company_id,
+        branch_id=scheduling_api.other_branch_id,
+        customer_id=scheduling_api.other_customer_id,
+        location_id=scheduling_api.other_location_id,
+        start=scheduling_api.start,
+        end=scheduling_api.start + timedelta(hours=1),
+        number="APT-900003",
+    )
+
+    path = f"/api/v1/scheduling/appointments/{appointment_id}"
+    response = await _get(scheduling_api, path, token=scheduling_api.token)
+    unauthenticated = await _get(scheduling_api, path, token=None)
+    denied = await _get(scheduling_api, path, token=scheduling_api.denied_token)
+    unauthorized = await _get(
+        scheduling_api,
+        f"/api/v1/scheduling/appointments/{unauthorized_id}",
+        token=scheduling_api.token,
+    )
+    cross_company = await _get(
+        scheduling_api,
+        f"/api/v1/scheduling/appointments/{other_id}",
+        token=scheduling_api.token,
+    )
+
+    assert response.status_code == 200
+    assert response.json()["appointment_number"] == "APT-900001"
+    assert Decimal(response.json()["capacity_units"]) == Decimal("1.00")
+    assert unauthenticated.status_code == 401
+    assert denied.status_code == 403
+    assert unauthorized.status_code == 404
+    assert cross_company.status_code == 404
+    assert (
+        scheduling_api.application_sessions[-1]
+        is not scheduling_api.security_sessions[-1]
+    )
+    async with scheduling_api.factory() as session:
+        persisted = await session.get(Appointment, appointment_id)
+    assert persisted is not None and persisted.concurrency_version == 1
+
+
+@pytest.mark.asyncio
+async def test_calendar_overlap_boundaries_draft_exclusion_and_ordering(
+    scheduling_api: SchedulingApiFixture,
+) -> None:
+    start = scheduling_api.start
+    await _seed_query_appointment(
+        scheduling_api,
+        start=start - timedelta(hours=1),
+        end=start,
+        number="APT-910001",
+    )
+    first_id = await _seed_query_appointment(
+        scheduling_api,
+        start=start - timedelta(minutes=30),
+        end=start + timedelta(minutes=30),
+        number="APT-910002",
+    )
+    later_number_id = await _seed_query_appointment(
+        scheduling_api,
+        start=start + timedelta(minutes=30),
+        end=start + timedelta(minutes=45),
+        number="APT-910007",
+    )
+    earlier_number_id = await _seed_query_appointment(
+        scheduling_api,
+        start=start + timedelta(minutes=30),
+        end=start + timedelta(minutes=45),
+        number="APT-910006",
+    )
+    second_id = await _seed_query_appointment(
+        scheduling_api,
+        start=start + timedelta(hours=1),
+        end=start + timedelta(hours=2),
+        number="APT-910003",
+    )
+    await _seed_query_appointment(
+        scheduling_api,
+        start=start + timedelta(hours=2),
+        end=start + timedelta(hours=3),
+        number="APT-910004",
+    )
+    await _seed_query_appointment(
+        scheduling_api,
+        status="draft",
+        number="APT-910005",
+        with_reservation=False,
+    )
+
+    response = await _get(
+        scheduling_api,
+        "/api/v1/scheduling/appointments",
+        token=scheduling_api.token,
+        params={
+            "start_at": start.isoformat(),
+            "end_at": (start + timedelta(hours=2)).isoformat(),
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert [UUID(item["id"]) for item in body["items"]] == [
+        first_id,
+        earlier_number_id,
+        later_number_id,
+        second_id,
+    ]
+    assert body["total_count"] == 4
+    assert len({item["id"] for item in body["items"]}) == 4
+
+
+@pytest.mark.asyncio
+async def test_calendar_filters_concealment_and_range_validation(
+    scheduling_api: SchedulingApiFixture,
+) -> None:
+    start = scheduling_api.start
+    scheduled_id = await _seed_query_appointment(
+        scheduling_api,
+        start=start,
+        end=start + timedelta(hours=1),
+        number="APT-920001",
+    )
+    await _seed_query_appointment(
+        scheduling_api,
+        start=start + timedelta(hours=1),
+        end=start + timedelta(hours=2),
+        status="confirmed",
+        number="APT-920002",
+    )
+    base = {
+        "start_at": start.isoformat(),
+        "end_at": (start + timedelta(hours=3)).isoformat(),
+        "branch_id": str(scheduling_api.branch_id),
+        "status": "scheduled",
+        "customer_id": str(scheduling_api.customer_id),
+        "service_location_id": str(scheduling_api.location_id),
+    }
+    filtered = await _get(
+        scheduling_api,
+        "/api/v1/scheduling/appointments",
+        token=scheduling_api.token,
+        params=base,
+    )
+    concealed_branch = await _get(
+        scheduling_api,
+        "/api/v1/scheduling/appointments",
+        token=scheduling_api.token,
+        params={**base, "branch_id": str(scheduling_api.unauthorized_branch_id)},
+    )
+    excessive = await _get(
+        scheduling_api,
+        "/api/v1/scheduling/appointments",
+        token=scheduling_api.token,
+        params={
+            "start_at": start.isoformat(),
+            "end_at": (start + timedelta(days=94)).isoformat(),
+        },
+    )
+    reversed_range = await _get(
+        scheduling_api,
+        "/api/v1/scheduling/appointments",
+        token=scheduling_api.token,
+        params={
+            "start_at": start.isoformat(),
+            "end_at": (start - timedelta(minutes=1)).isoformat(),
+        },
+    )
+    naive = await _get(
+        scheduling_api,
+        "/api/v1/scheduling/appointments",
+        token=scheduling_api.token,
+        params={
+            "start_at": "2026-07-22T10:00:00",
+            "end_at": "2026-07-22T11:00:00",
+        },
+    )
+    assert filtered.status_code == 200
+    assert [UUID(item["id"]) for item in filtered.json()["items"]] == [scheduled_id]
+    assert concealed_branch.status_code == 404
+    assert excessive.status_code == 422
+    assert reversed_range.status_code == 422
+    assert naive.status_code == 422
 
 
 async def _seed_unauthorized_branch_appointment(

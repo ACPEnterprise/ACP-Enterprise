@@ -9,9 +9,10 @@ and the Scheduling [Domain Architecture Brief](domain-architecture-brief.md).
 
 ## Authorization
 
-All endpoints require authentication, an active Company and Membership, authorized
-Branch access, and `COMPANY_SCHEDULING_MANAGE`. The permission grants Scheduling
-mutation access only; it grants no Company administration, Customer mutation,
+All endpoints require authentication, an active Company and Membership, and
+authorized Branch access. Appointment detail and calendar queries require
+`COMPANY_SCHEDULING_READ`; mutations require `COMPANY_SCHEDULING_MANAGE`. Neither
+permission implies the other or grants Company administration, Customer mutation,
 Dispatch, Job, or financial capability.
 
 New installations receive and assign the permission through Platform Bootstrap.
@@ -42,6 +43,18 @@ Cross-Company and inaccessible Branch, Customer, Service Location, and Appointme
 references are concealed with the same generic `404` response.
 
 ## Endpoints
+
+### `GET /api/v1/scheduling/appointments/{appointment_id}`
+
+Returns a tenant- and Branch-concealed Appointment detail through the shared
+Scheduling Query Engine.
+
+### `GET /api/v1/scheduling/appointments`
+
+Returns a bounded, paginated calendar query. `start_at` and `end_at` are required
+timezone-aware boundaries. Optional filters cover Branch, lifecycle status, Customer,
+and Service Location. Results use half-open overlap semantics and deterministic
+ordering. See [Scheduling Query Engine](query-engine.md).
 
 ### `POST /api/v1/scheduling/appointments`
 
