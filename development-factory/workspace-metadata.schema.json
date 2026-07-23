@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://acp.enterprise/schemas/development-factory/workspace-metadata-1.0.json",
+  "title": "ACP Development Factory Workspace Metadata",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "identity",
+    "created_at",
+    "inspected_at",
+    "repository_state",
+    "validation_status"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "workspace_id",
+        "worker_id",
+        "task_id",
+        "supervisory_run_id",
+        "approved_branch",
+        "approved_starting_sha",
+        "workspace_path",
+        "workspace_branch"
+      ],
+      "properties": {
+        "workspace_id": {"type": "string", "minLength": 1},
+        "worker_id": {"type": "string", "minLength": 1},
+        "task_id": {"type": "string", "minLength": 1},
+        "supervisory_run_id": {"type": "string", "minLength": 1},
+        "approved_branch": {"type": "string", "minLength": 1},
+        "approved_starting_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "workspace_path": {"type": "string", "minLength": 1},
+        "workspace_branch": {"type": "string", "minLength": 1}
+      }
+    },
+    "created_at": {"type": "string", "format": "date-time"},
+    "inspected_at": {"type": "string", "format": "date-time"},
+    "repository_state": {"type": "string", "minLength": 1},
+    "validation_status": {"type": "string", "minLength": 1}
+  }
+}

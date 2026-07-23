@@ -14,6 +14,7 @@ from development_factory.manifest import ManifestError
 from development_factory.reports import render_markdown
 from development_factory.task_contract import TaskContractError
 from development_factory.workflow import Action, WorkflowError, WorkflowState
+from development_factory.workspaces import WorkspaceError, WorkspaceManager
 
 
 def main() -> int:
@@ -49,11 +50,55 @@ def main() -> int:
     lia_dry_run.add_argument("contract", type=Path)
     lia_action = lia_commands.add_parser("check-action")
     lia_action.add_argument("action", choices=[item.value for item in Action])
+    workspace = lia_commands.add_parser("workspace")
+    workspace_commands = workspace.add_subparsers(
+        dest="workspace_command", required=True
+    )
+    for command in ("inspect", "prepare", "show"):
+        workspace_command = workspace_commands.add_parser(command)
+        workspace_command.add_argument("contract", type=Path)
+        workspace_command.add_argument("workspace_id")
+    workspace_list = workspace_commands.add_parser("list")
+    workspace_list.add_argument("contract", type=Path)
     args = parser.parse_args()
 
     try:
         if args.command == "lia":
             supervisor = LiaSupervisor(args.repo_root)
+            if args.lia_command == "workspace":
+                manager = WorkspaceManager(args.repo_root)
+                if args.workspace_command == "list":
+                    inspections = manager.list(args.contract)
+                    for inspection in inspections:
+                        print(
+                            f"{inspection.identity.workspace_id}: "
+                            f"{inspection.classification} "
+                            f"({inspection.identity.workspace_path})"
+                        )
+                    return int(any(item.requires_owner_review for item in inspections))
+                if args.workspace_command == "prepare":
+                    metadata, reused = manager.prepare(args.contract, args.workspace_id)
+                    print(
+                        f"Workspace {'reused' if reused else 'prepared'}: "
+                        f"{metadata.identity.workspace_id}"
+                    )
+                    print(f"Path: {metadata.identity.workspace_path}")
+                    print(f"Branch: {metadata.identity.workspace_branch}")
+                    return 0
+                if args.workspace_command == "show":
+                    metadata = manager.show(args.contract, args.workspace_id)
+                    print(json.dumps(metadata.to_dict(), indent=2, sort_keys=True))
+                    return 0
+                inspection = manager.inspect(args.contract, args.workspace_id)
+                print(
+                    f"Workspace {inspection.identity.workspace_id}: "
+                    f"{inspection.classification}"
+                )
+                print(f"Path: {inspection.identity.workspace_path}")
+                print(f"Branch: {inspection.identity.workspace_branch}")
+                for issue in inspection.issues:
+                    print(f"OWNER REVIEW: {issue}")
+                return int(inspection.requires_owner_review)
             if args.lia_command == "inspect":
                 lia_contract, plan, issues = supervisor.inspect(args.contract)
                 print(
@@ -149,6 +194,7 @@ def main() -> int:
         LiaContractError,
         TaskContractError,
         WorkflowError,
+        WorkspaceError,
         ValueError,
         OSError,
         json.JSONDecodeError,

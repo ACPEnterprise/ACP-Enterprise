@@ -1,8 +1,10 @@
 # LIA Isolation and Owner Guide
 
-## Future isolated worker model
+## Isolated workspace foundation
 
-DF.3 records isolation plans; it does not create or remove workspaces.
+DF.3 records isolation plans. DF.4A may inspect and explicitly prepare those
+planned workspaces from the exact approved commit. It does not execute workers
+or remove workspaces.
 
 Each future worker must:
 
@@ -18,8 +20,11 @@ Workers may not share uncommitted state, create merges, perform privileged
 actions, or conceal divergence. A workspace whose HEAD, branch, boundary, or
 dependencies no longer match is stale and blocked.
 
-Cleanup is manual and reviewed. DF.3 performs no branch deletion, destructive
+Cleanup is manual and reviewed. DF.4A performs no branch deletion, destructive
 workspace removal, reset, or history rewriting.
+
+Workspace commands, provenance, and recovery classifications are documented in
+`lia-workspace-lifecycle.md`.
 
 ## Owner phone review
 

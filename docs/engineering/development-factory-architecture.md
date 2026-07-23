@@ -9,6 +9,12 @@ merges, and deployments. The factory never approves its own work and contains
 no commit, push, merge, deployment, infrastructure, preview, or production-data
 operation.
 
+DF.4A adds a bounded isolated-workspace lifecycle. It may create only the
+worktree and branch derived from an approved LIA contract and exact approved
+commit after verifying that the owner's primary repository is unchanged. It
+does not execute workers, repair or remove workspaces, or integrate changes.
+See `lia-workspace-lifecycle.md`.
+
 The flow is:
 
 ```text
