@@ -547,15 +547,35 @@ async def test_insufficient_capacity_fails_without_partial_persistence(
                 session, context=fixture.context, command=create_command(fixture)
             )
     async with factory() as session:
-        assert await session.scalar(select(func.count()).select_from(Appointment)) == 1
         assert (
             await session.scalar(
-                select(func.count()).select_from(AppointmentCapacityReservation)
+                select(func.count())
+                .select_from(Appointment)
+                .where(Appointment.company_id == fixture.company.id)
             )
             == 1
         )
         assert (
-            await session.scalar(select(func.count()).select_from(BusinessEvent)) == 2
+            await session.scalar(
+                select(func.count())
+                .select_from(AppointmentCapacityReservation)
+                .where(
+                    AppointmentCapacityReservation.appointment_id.in_(
+                        select(Appointment.id).where(
+                            Appointment.company_id == fixture.company.id
+                        )
+                    )
+                )
+            )
+            == 1
+        )
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(BusinessEvent)
+                .where(BusinessEvent.company_id == fixture.company.id)
+            )
+            == 2
         )
 
 
@@ -637,7 +657,11 @@ async def test_cancellation_releases_capacity_and_is_idempotent(
         cancellation_events = await session.scalar(
             select(func.count())
             .select_from(BusinessEvent)
-            .where(BusinessEvent.event_type == "appointment.cancelled")
+            .where(
+                BusinessEvent.company_id == fixture.company.id,
+                BusinessEvent.entity_id == appointment.id,
+                BusinessEvent.event_type == "appointment.cancelled",
+            )
         )
     assert reservation is not None and reservation.released_at == FIXED_NOW
     assert cancellation_events == 1
@@ -791,13 +815,33 @@ async def test_event_staging_failure_rolls_back_appointment_and_reservation(
                 session, context=fixture.context, command=create_command(fixture)
             )
     async with factory() as session:
-        assert await session.scalar(select(func.count()).select_from(Appointment)) == 0
         assert (
             await session.scalar(
-                select(func.count()).select_from(AppointmentCapacityReservation)
+                select(func.count())
+                .select_from(Appointment)
+                .where(Appointment.company_id == fixture.company.id)
             )
             == 0
         )
         assert (
-            await session.scalar(select(func.count()).select_from(BusinessEvent)) == 0
+            await session.scalar(
+                select(func.count())
+                .select_from(AppointmentCapacityReservation)
+                .where(
+                    AppointmentCapacityReservation.appointment_id.in_(
+                        select(Appointment.id).where(
+                            Appointment.company_id == fixture.company.id
+                        )
+                    )
+                )
+            )
+            == 0
+        )
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(BusinessEvent)
+                .where(BusinessEvent.company_id == fixture.company.id)
+            )
+            == 0
         )

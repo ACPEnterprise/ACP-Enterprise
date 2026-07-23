@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import (
 from app.analytics.router import router as analytics_router
 from app.analytics.service import AnalyticsService
 from app.core.config import settings
-from app.database.session import get_database_session
+from app.database.session import get_database_session, get_security_database_session
 from app.events.models import BusinessEvent
 from app.platform.auth.access_tokens import AccessTokenClaims
 from app.platform.auth.dependencies import get_authenticated_context
@@ -275,6 +275,7 @@ def build_app(
             yield session
 
     app.dependency_overrides[get_database_session] = database_override
+    app.dependency_overrides[get_security_database_session] = database_override
     if authenticated is not None:
 
         async def identity_override() -> AuthenticatedContext:

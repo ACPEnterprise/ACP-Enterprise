@@ -210,6 +210,7 @@ def test_production_configuration_fails_closed() -> None:
         security_token_hmac_key="a-secure-production-hmac-key-value-00000001",
         security_headers_enabled=True,
         hsts_enabled=True,
+        cors_allowed_origins=["https://app.acp.example"],
         trust_forwarded_headers=True,
         trusted_proxy_cidrs=["10.0.0.0/8"],
     )
