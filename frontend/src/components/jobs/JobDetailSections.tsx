@@ -1,6 +1,8 @@
 import type { JobDetail } from "../../types/jobs";
 import { Card } from "../../ui";
 import { useAuth } from "../../auth";
+import { Link } from "react-router";
+import { appointmentDetailPath } from "../../routing/paths";
 
 export function CustomerSummaryCard({ job }: { readonly job: JobDetail }) {
   return <Card className="p-ui-6"><h3 className="font-semibold">Customer</h3><p className="mt-2">{job.customer.display_name}</p><p className="text-sm text-slate-500">{job.customer.customer_number}</p></Card>;
@@ -10,7 +12,7 @@ export function ServiceLocationCard({ job }: { readonly job: JobDetail }) {
   return <Card className="p-ui-6"><h3 className="font-semibold">Service Location</h3><address className="mt-2 not-italic text-sm text-slate-300">{location.nickname && <strong className="block">{location.nickname}</strong>}{location.address_line_1}<br />{location.address_line_2 && <>{location.address_line_2}<br /></>}{location.city}, {location.state} {location.postal_code}</address></Card>;
 }
 export function AppointmentSummaryTable({ job }: { readonly job: JobDetail }) {
-  return <Card className="p-ui-6"><h3 className="font-semibold">Appointments</h3>{job.appointments.length === 0 ? <p className="mt-3 text-sm text-slate-500">No Appointments linked.</p> : <div className="mt-3 divide-y divide-slate-800">{job.appointments.map((item) => <div className="flex justify-between py-3 text-sm" key={item.appointment_id}><span>{item.visit_sequence}. {item.appointment_number}</span><span className="text-slate-400">{item.arrival_window_start_at ? new Date(item.arrival_window_start_at).toLocaleString() : item.status}</span></div>)}</div>}</Card>;
+  return <Card className="p-ui-6"><h3 className="font-semibold">Appointments</h3>{job.appointments.length === 0 ? <p className="mt-3 text-sm text-slate-500">No Appointments linked.</p> : <div className="mt-3 divide-y divide-slate-800">{job.appointments.map((item) => <div className="flex flex-wrap items-center justify-between gap-3 py-3 text-sm" key={item.appointment_id}><div><span className="text-content-muted">{item.visit_sequence}. </span><Link className="font-semibold text-blue-400 hover:underline" to={appointmentDetailPath(item.appointment_id)}>{item.appointment_number}</Link><p className="mt-1 capitalize text-content-muted">{item.status.replaceAll("_", " ")}</p></div><span className="text-slate-400">{item.arrival_window_start_at ? new Date(item.arrival_window_start_at).toLocaleString() : "No arrival window"}</span></div>)}</div>}</Card>;
 }
 
 const timestamp = (value: string | null) => value ? new Date(value).toLocaleString() : "Not recorded";

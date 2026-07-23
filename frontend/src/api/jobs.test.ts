@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { apiClient } from "./client";
-import { activateJob, cancelJob, completeJob, createJob, getJob, listJobs, pauseJob, reopenJob, resumeJob, startJob } from "./jobs";
+import { activateJob, cancelJob, completeJob, createJob, createJobFromAppointment, getJob, listJobs, pauseJob, reopenJob, resumeJob, startJob } from "./jobs";
 
 vi.mock("./client", () => ({ apiClient: { get: vi.fn(), post: vi.fn() } }));
 const get = vi.mocked(apiClient.get); const post = vi.mocked(apiClient.post);
@@ -23,5 +23,13 @@ describe("Jobs API", () => {
     await completeJob("job-1", { expected_version: 5 }); await cancelJob("job-1", { expected_version: 1, reason_code: "duplicate" });
     await reopenJob("job-1", { expected_version: 6, reason_code: "correction_required" });
     expect(post.mock.calls.map(([url]) => url)).toEqual(["/api/v1/jobs", "/api/v1/jobs/job-1/activate", "/api/v1/jobs/job-1/start", "/api/v1/jobs/job-1/pause", "/api/v1/jobs/job-1/resume", "/api/v1/jobs/job-1/complete", "/api/v1/jobs/job-1/cancel", "/api/v1/jobs/job-1/reopen"]);
+  });
+  it("uses the Jobs-owned create-from-Appointment endpoint and relationship filter", async () => {
+    post.mockResolvedValueOnce({ data: { id: "job-1" } });
+    await createJobFromAppointment({ appointment_id: "appointment-1", priority: "urgent" });
+    expect(post).toHaveBeenCalledWith("/api/v1/jobs/from-appointment", { appointment_id: "appointment-1", priority: "urgent" });
+    get.mockResolvedValueOnce({ data: { items: [], page: 1, page_size: 1, total_count: 0, total_pages: 0 } });
+    await listJobs({ appointmentId: "appointment-1", page: 1, pageSize: 1 });
+    expect(get).toHaveBeenCalledWith("/api/v1/jobs", { params: expect.objectContaining({ appointment_id: "appointment-1" }) });
   });
 });

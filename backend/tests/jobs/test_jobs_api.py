@@ -16,7 +16,7 @@ from app.platform.permissions.authorization import (
 )
 from app.platform.permissions.codes import JobPermission
 from app.platform.permissions.dependencies import get_authorization_context
-from tests.jobs.test_jobs_persistence import JobsFixture
+from tests.jobs.test_jobs_persistence import JobsFixture, build_appointment
 from tests.jobs.test_jobs_query import _context_from_fixture
 
 pytest_plugins = ("tests.jobs.test_jobs_persistence",)
@@ -28,6 +28,7 @@ class JobsApiFixture:
     denied_app: FastAPI
     fixture: JobsFixture
     app_for: Callable[[frozenset[str]], FastAPI]
+    session_factory: async_sessionmaker[AsyncSession]
 
 
 def _context(
@@ -93,6 +94,7 @@ async def jobs_api(
         denied_app=build(frozenset()),
         fixture=fixture,
         app_for=build,
+        session_factory=factory,
     )
 
 
@@ -149,6 +151,57 @@ async def test_create_list_detail_and_query_mapping(jobs_api: JobsApiFixture) ->
     detail = await _request(jobs_api.app, "GET", f"/api/v1/jobs/{body['id']}")
     assert detail.status_code == 200
     assert detail.json()["customer"]["id"] == str(jobs_api.fixture.customer_id)
+
+
+@pytest.mark.asyncio
+async def test_create_from_appointment_uses_authoritative_relationship(
+    jobs_api: JobsApiFixture,
+) -> None:
+    appointment = build_appointment(
+        jobs_api.fixture,
+        appointment_number=f"APT-{int(uuid4().hex[:8], 16):010d}",
+    )
+    async with jobs_api.session_factory() as session, session.begin():
+        session.add(appointment)
+    payload = {
+        "appointment_id": str(appointment.id),
+        "job_type_code": "service_call",
+        "priority": "high",
+        "customer_reported_problem": "No heat",
+    }
+    created = await _request(
+        jobs_api.app, "POST", "/api/v1/jobs/from-appointment", json=payload
+    )
+    assert created.status_code == 201
+
+    retried = await _request(
+        jobs_api.app, "POST", "/api/v1/jobs/from-appointment", json=payload
+    )
+    assert retried.status_code == 201
+    assert retried.json()["id"] == created.json()["id"]
+
+    related = await _request(
+        jobs_api.app,
+        "GET",
+        "/api/v1/jobs",
+        params={"appointment_id": str(appointment.id)},
+    )
+    assert related.status_code == 200
+    assert related.json()["total_count"] == 1
+    assert related.json()["items"][0]["id"] == created.json()["id"]
+
+
+@pytest.mark.asyncio
+async def test_create_from_appointment_requires_manage_permission(
+    jobs_api: JobsApiFixture,
+) -> None:
+    response = await _request(
+        jobs_api.app_for(frozenset({JobPermission.READ})),
+        "POST",
+        "/api/v1/jobs/from-appointment",
+        json={"appointment_id": str(uuid4())},
+    )
+    assert response.status_code == 403
 
 
 @pytest.mark.asyncio

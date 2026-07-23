@@ -2,7 +2,7 @@ import { Navigate, createBrowserRouter, type RouteObject } from "react-router";
 
 import { ApplicationShell } from "../layout";
 import { ProtectedRoute } from "../auth";
-import { customersHandle, jobsHandle, missionControlHandle, notFoundHandle } from "./routeMetadata";
+import { appointmentsHandle, customersHandle, jobsHandle, missionControlHandle, notFoundHandle } from "./routeMetadata";
 
 export const appRoutes: RouteObject[] = [
   {
@@ -45,6 +45,11 @@ export const appRoutes: RouteObject[] = [
             path: "jobs/:jobId",
             handle: jobsHandle,
             lazy: async () => ({ Component: (await import("../routes/JobDetailRoute")).JobDetailRoute }),
+          },
+          {
+            path: "appointments/:appointmentId",
+            handle: appointmentsHandle,
+            lazy: async () => ({ Component: (await import("../routes/AppointmentDetailRoute")).AppointmentDetailRoute }),
           },
           {
             path: "*",

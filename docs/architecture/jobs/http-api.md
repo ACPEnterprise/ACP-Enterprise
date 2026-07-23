@@ -26,6 +26,7 @@ which Jobs a Technician may execute.
 | `GET /api/v1/jobs` | `COMPANY_JOB_READ` |
 | `GET /api/v1/jobs/{job_id}` | `COMPANY_JOB_READ` |
 | `POST /api/v1/jobs` | `COMPANY_JOB_MANAGE` |
+| `POST /api/v1/jobs/from-appointment` | `COMPANY_JOB_MANAGE` |
 | `POST /api/v1/jobs/{job_id}/activate` | `COMPANY_JOB_MANAGE` |
 | `POST /api/v1/jobs/{job_id}/cancel` | `COMPANY_JOB_MANAGE` |
 | `POST /api/v1/jobs/{job_id}/reopen` | `COMPANY_JOB_MANAGE` |
@@ -54,6 +55,12 @@ Creation returns `201`. Lifecycle operations accept `expected_version`; pause,
 cancellation, and reopening additionally accept their controlled reason enums. The
 response represents persisted Job state, including nullable lifecycle timestamps and
 retained historical completion or cancellation attribution.
+
+`POST /api/v1/jobs/from-appointment` accepts an Appointment identifier plus optional
+Job metadata. The Jobs service derives Branch, Customer, and Service Location from the
+locked Scheduling reference, creates the Job and durable association atomically, and
+returns the persisted Job. Identical retries return that Job without duplicate events;
+a conflicting existing association returns `409`.
 
 ## Errors and concealment
 

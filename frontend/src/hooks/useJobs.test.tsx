@@ -4,7 +4,8 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as jobsApi from "../api/jobs";
-import { jobKeys, useActivateJob, useJobs } from "./useJobs";
+import { appointmentKeys } from "./useScheduling";
+import { jobKeys, useActivateJob, useCreateJobFromAppointment, useJobs } from "./useJobs";
 
 vi.mock("../api/jobs");
 
@@ -28,6 +29,16 @@ describe("Jobs React Query hooks", () => {
     const result = renderHook(() => useActivateJob("job-1"), { wrapper });
     result.result.current.mutate({ expected_version: 3 });
     await waitFor(() => expect(result.result.current.isSuccess).toBe(true));
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: jobKeys.lists() });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: jobKeys.detail("job-1") });
+  });
+  it("invalidates both domain query families after creating from an Appointment", async () => {
+    vi.mocked(jobsApi.createJobFromAppointment).mockResolvedValue({ id: "job-1" } as never);
+    const { client, wrapper } = setup(); const invalidate = vi.spyOn(client, "invalidateQueries");
+    const result = renderHook(() => useCreateJobFromAppointment("appointment-1"), { wrapper });
+    result.result.current.mutate({ priority: "normal" });
+    await waitFor(() => expect(result.result.current.isSuccess).toBe(true));
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: appointmentKeys.detail("appointment-1") });
     expect(invalidate).toHaveBeenCalledWith({ queryKey: jobKeys.lists() });
     expect(invalidate).toHaveBeenCalledWith({ queryKey: jobKeys.detail("job-1") });
   });

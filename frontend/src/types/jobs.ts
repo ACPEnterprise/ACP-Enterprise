@@ -10,8 +10,10 @@ export interface JobListParams {
   searchText?: string; status?: readonly JobStatus[]; priority?: readonly JobPriority[];
   jobType?: readonly string[]; branchId?: string; page?: number; pageSize?: number;
   sortField?: JobSortField; sortDirection?: SortDirection;
+  appointmentId?: string;
 }
 export interface JobCreateInput { branch_id: string; customer_id: string; service_location_id: string; job_type_code?: string | null; priority?: JobPriority; customer_reported_problem?: string | null; internal_description?: string | null; }
+export interface JobCreateFromAppointmentInput extends Omit<JobCreateInput, "branch_id" | "customer_id" | "service_location_id"> { appointment_id: string; }
 export interface JobVersionInput { expected_version: number; }
 export interface JobMutationResponse extends Omit<JobCreateInput, "priority"> { id: string; job_number: string; company_id: string; status: JobStatus; priority: JobPriority; concurrency_version: number; activated_at: string | null; started_at: string | null; paused_at: string | null; pause_reason_code: JobPauseReason | null; completed_at: string | null; completed_by_user_id: string | null; cancelled_at: string | null; cancelled_by_user_id: string | null; cancellation_reason_code: JobCancellationReason | null; created_at: string; created_by_user_id: string | null; updated_at: string; updated_by_user_id: string | null; }
 export interface JobListItem { id: string; job_number: string; branch_id: string; customer_id: string; customer_display_name: string; service_location_id: string; service_location_label: string; status: JobStatus; priority: JobPriority; job_type_code: string | null; customer_reported_problem_summary: string | null; appointment_count: number; earliest_appointment_start_at: string | null; created_at: string; updated_at: string; started_at: string | null; completed_at: string | null; concurrency_version: number; }

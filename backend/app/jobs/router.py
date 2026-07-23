@@ -11,6 +11,7 @@ from app.jobs.commands import (
     CancelJob,
     CompleteJob,
     CreateJob,
+    CreateJobFromAppointment,
     PauseJob,
     ReopenJob,
     ResumeJob,
@@ -40,6 +41,7 @@ from app.jobs.query import (
 from app.jobs.query_service import jobs_query_service
 from app.jobs.schemas import (
     JobCancelRequest,
+    JobCreateFromAppointmentRequest,
     JobCreateRequest,
     JobDetailResponse,
     JobListItemResponse,
@@ -208,6 +210,28 @@ async def create_job(
     try:
         job = await job_service.create_job(
             session, context=context, command=CreateJob(**data.model_dump())
+        )
+    except JobError as error:
+        raise translate_job_error(error) from error
+    return _mutation_response(job)
+
+
+@router.post(
+    "/from-appointment",
+    response_model=JobMutationResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a Job from an Appointment",
+)
+async def create_job_from_appointment(
+    data: JobCreateFromAppointmentRequest,
+    context: JobsManageContext,
+    session: DatabaseSession,
+) -> JobMutationResponse:
+    try:
+        job = await job_service.create_job_from_appointment(
+            session,
+            context=context,
+            command=CreateJobFromAppointment(**data.model_dump()),
         )
     except JobError as error:
         raise translate_job_error(error) from error

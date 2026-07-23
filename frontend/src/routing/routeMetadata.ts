@@ -22,6 +22,10 @@ export const jobsHandle = {
   workspace: { pageTitle: "Jobs", breadcrumbs: [{ label: "Jobs" }], helpTopic: "jobs", aiContext: "jobs" },
 } as const satisfies ShellRouteHandle;
 
+export const appointmentsHandle = {
+  workspace: { pageTitle: "Appointment", breadcrumbs: [{ label: "Jobs", path: "/jobs" }, { label: "Appointment" }], helpTopic: "scheduling", aiContext: "scheduling" },
+} as const satisfies ShellRouteHandle;
+
 export const notFoundHandle = {
   workspace: {
     pageTitle: "Page not found",

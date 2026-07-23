@@ -24,6 +24,11 @@ dependency for larger Companies.
 
 The detail workspace composes lifecycle, Customer, Service Location, operational
 timestamps, descriptions, and ordered Appointment projections from the live response.
+A linked Appointment business number navigates to the protected Appointment detail
+workspace. Eligible unlinked Appointments can invoke the Jobs-owned
+create-from-Appointment workflow without re-entering Scheduling-owned references; the
+full cross-domain contract is documented in
+[Appointment-to-Job Operational Integration](appointment-integration.md).
 A centralized lifecycle-presentation map selects applicable controls. Pause,
 cancellation, and reopening use controlled reason values; completion, cancellation,
 and reopening require confirmation. Every action submits the displayed concurrency

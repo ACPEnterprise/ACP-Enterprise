@@ -26,6 +26,14 @@ class JobCreateRequest(JobsApiSchema):
     internal_description: str | None = None
 
 
+class JobCreateFromAppointmentRequest(JobsApiSchema):
+    appointment_id: UUID
+    job_type_code: str | None = Field(default=None, max_length=64)
+    priority: JobPriority = JobPriority.NORMAL
+    customer_reported_problem: str | None = None
+    internal_description: str | None = None
+
+
 class JobVersionRequest(JobsApiSchema):
     expected_version: int = Field(ge=1)
 
