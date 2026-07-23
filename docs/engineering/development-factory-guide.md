@@ -77,6 +77,27 @@ workflow approval state:
 
 This command checks authorization only. It never performs the action.
 
+Inspect a LIA supervisory decomposition:
+
+```sh
+./scripts/development-factory lia inspect path/to/lia-contract.json
+```
+
+Generate an inspection-only execution-wave and integration-plan report:
+
+```sh
+./scripts/development-factory lia dry-run path/to/lia-contract.json
+```
+
+Confirm that LIA rejects a privileged action:
+
+```sh
+./scripts/development-factory lia check-action push
+```
+
+LIA does not start agents or create isolated workspaces. The commands validate
+and report the owner-approved plan only.
+
 Reports are stored locally at:
 
 ```text
@@ -84,6 +105,8 @@ Reports are stored locally at:
 .development-factory/latest.md
 .development-factory/runs/<run-id>.json
 .development-factory/runs/<run-id>.md
+.development-factory/lia/<supervisory-run-id>.json
+.development-factory/lia/<supervisory-run-id>.md
 ```
 
 This directory is ignored by Git.

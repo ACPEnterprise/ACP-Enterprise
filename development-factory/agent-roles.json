@@ -1,0 +1,130 @@
+{
+  "schema_version": "1.0",
+  "roles": [
+    {
+      "role_id": "atlas",
+      "display_name": "Atlas",
+      "responsibilities": [
+        "Backend application and service architecture",
+        "Domain boundary and transaction review"
+      ],
+      "prohibited_responsibilities": [
+        "Frontend ownership without reassignment",
+        "Privileged Git or deployment actions"
+      ],
+      "default_validation": ["backend", "architecture"],
+      "escalation_conditions": [
+        "Domain ownership is unclear",
+        "Approved service boundaries must change"
+      ],
+      "may_propose_code_changes": true,
+      "may_review_other_work": true,
+      "privileged_authority": {
+        "commit": false,
+        "push": false,
+        "merge": false,
+        "deployment": false
+      }
+    },
+    {
+      "role_id": "nova",
+      "display_name": "Nova",
+      "responsibilities": [
+        "Frontend architecture and user experience",
+        "Accessibility and transport-contract integration"
+      ],
+      "prohibited_responsibilities": [
+        "Backend business-rule ownership",
+        "Privileged Git or deployment actions"
+      ],
+      "default_validation": ["frontend", "architecture"],
+      "escalation_conditions": [
+        "Backend transport contracts are insufficient",
+        "Security behavior would be reproduced in the browser"
+      ],
+      "may_propose_code_changes": true,
+      "may_review_other_work": true,
+      "privileged_authority": {
+        "commit": false,
+        "push": false,
+        "merge": false,
+        "deployment": false
+      }
+    },
+    {
+      "role_id": "forge",
+      "display_name": "Forge",
+      "responsibilities": [
+        "Persistence, migrations, and PostgreSQL architecture",
+        "Database ownership and constraint review"
+      ],
+      "prohibited_responsibilities": [
+        "Unreviewed production data operations",
+        "Privileged Git or deployment actions"
+      ],
+      "default_validation": ["backend", "migrations", "architecture"],
+      "escalation_conditions": [
+        "Migration ordering or ownership conflicts",
+        "Tenant constraints cannot be enforced safely"
+      ],
+      "may_propose_code_changes": true,
+      "may_review_other_work": true,
+      "privileged_authority": {
+        "commit": false,
+        "push": false,
+        "merge": false,
+        "deployment": false
+      }
+    },
+    {
+      "role_id": "sentinel",
+      "display_name": "Sentinel",
+      "responsibilities": [
+        "Security, authorization, and tenant-isolation review",
+        "Fail-closed architecture inspection"
+      ],
+      "prohibited_responsibilities": [
+        "Permission assignment or synchronization",
+        "Privileged Git or deployment actions"
+      ],
+      "default_validation": ["architecture"],
+      "escalation_conditions": [
+        "Authorization ownership is ambiguous",
+        "Company or Branch isolation cannot be demonstrated"
+      ],
+      "may_propose_code_changes": true,
+      "may_review_other_work": true,
+      "privileged_authority": {
+        "commit": false,
+        "push": false,
+        "merge": false,
+        "deployment": false
+      }
+    },
+    {
+      "role_id": "scout",
+      "display_name": "Scout",
+      "responsibilities": [
+        "Testing, validation, and quality assurance",
+        "Cross-worker validation and completion evidence"
+      ],
+      "prohibited_responsibilities": [
+        "Weakening or suppressing required validation",
+        "Privileged Git or deployment actions"
+      ],
+      "default_validation": ["all"],
+      "escalation_conditions": [
+        "Required validation is unavailable",
+        "Worker output cannot be reproduced"
+      ],
+      "may_propose_code_changes": true,
+      "may_review_other_work": true,
+      "privileged_authority": {
+        "commit": false,
+        "push": false,
+        "merge": false,
+        "deployment": false
+      }
+    }
+  ]
+}

@@ -1,0 +1,211 @@
+{
+  "schema_version": "1.0",
+  "supervisory_run_id": "DF3-LIA-DRY-RUN",
+  "parent_milestone": "Fictional documentation inspection",
+  "objective": "Plan independent documentation inspections and a dependent consolidation review.",
+  "workflow_state": "approved",
+  "owner_approved_scope": [
+    "Repository inspection",
+    "Documentation review",
+    "Consolidated validation planning"
+  ],
+  "expected_repository": {
+    "branch": "customer-management-v1",
+    "starting_head": "2ff1befc098c06fe6f90cc817ec4a21665405572"
+  },
+  "parent_permissions": {
+    "code_changes": false,
+    "stage_and_commit": false,
+    "push": false,
+    "merge": false,
+    "deployment": false
+  },
+  "parallel_execution_approved": true,
+  "workers": [
+    {
+      "agent_id": "atlas-doc-inspector",
+      "role_id": "atlas",
+      "task_contract": {
+        "schema_version": "1.0",
+        "task_id": "DF3-DOC-BACKEND",
+        "milestone": "Fictional backend documentation inspection",
+        "objective": "Inspect backend engineering documentation without modifying files.",
+        "workflow_state": "approved",
+        "approved_scope": ["Repository inspection", "Documentation review"],
+        "prohibited_scope": ["Product changes", "Privileged actions"],
+        "expected_repository": {
+          "branch": "customer-management-v1",
+          "starting_head": "2ff1befc098c06fe6f90cc817ec4a21665405572"
+        },
+        "allowed_file_boundaries": [],
+        "required_validation": ["architecture"],
+        "permissions": {
+          "code_changes": false,
+          "stage_and_commit": false,
+          "push": false,
+          "merge": false,
+          "deployment": false
+        },
+        "stop_conditions": {
+          "require_clean_start": false,
+          "require_empty_index": true,
+          "stop_on_branch_mismatch": true,
+          "stop_on_head_mismatch": true,
+          "stop_on_unapproved_files": true
+        },
+        "required_report_fields": ["repository_inspection", "validation", "blockers"]
+      },
+      "depends_on": [],
+      "exclusive_file_boundaries": ["docs/example/backend-inspection.md"],
+      "shared_resources": [
+        {
+          "resource_type": "documentation",
+          "resource_id": "backend-inspection",
+          "mode": "exclusive"
+        }
+      ],
+      "parallel_eligible": true,
+      "escalation_flags": [],
+      "workspace": {
+        "strategy": "isolated_worktree",
+        "workspace_id": "df3-atlas-inspection",
+        "branch_hint": "df3/atlas-inspection"
+      }
+    },
+    {
+      "agent_id": "nova-doc-inspector",
+      "role_id": "nova",
+      "task_contract": {
+        "schema_version": "1.0",
+        "task_id": "DF3-DOC-FRONTEND",
+        "milestone": "Fictional frontend documentation inspection",
+        "objective": "Inspect frontend engineering documentation without modifying files.",
+        "workflow_state": "approved",
+        "approved_scope": ["Repository inspection", "Documentation review"],
+        "prohibited_scope": ["Product changes", "Privileged actions"],
+        "expected_repository": {
+          "branch": "customer-management-v1",
+          "starting_head": "2ff1befc098c06fe6f90cc817ec4a21665405572"
+        },
+        "allowed_file_boundaries": [],
+        "required_validation": ["architecture"],
+        "permissions": {
+          "code_changes": false,
+          "stage_and_commit": false,
+          "push": false,
+          "merge": false,
+          "deployment": false
+        },
+        "stop_conditions": {
+          "require_clean_start": false,
+          "require_empty_index": true,
+          "stop_on_branch_mismatch": true,
+          "stop_on_head_mismatch": true,
+          "stop_on_unapproved_files": true
+        },
+        "required_report_fields": ["repository_inspection", "validation", "blockers"]
+      },
+      "depends_on": [],
+      "exclusive_file_boundaries": ["docs/example/frontend-inspection.md"],
+      "shared_resources": [
+        {
+          "resource_type": "documentation",
+          "resource_id": "frontend-inspection",
+          "mode": "exclusive"
+        }
+      ],
+      "parallel_eligible": true,
+      "escalation_flags": [],
+      "workspace": {
+        "strategy": "isolated_worktree",
+        "workspace_id": "df3-nova-inspection",
+        "branch_hint": "df3/nova-inspection"
+      }
+    },
+    {
+      "agent_id": "scout-consolidator",
+      "role_id": "scout",
+      "task_contract": {
+        "schema_version": "1.0",
+        "task_id": "DF3-DOC-CONSOLIDATE",
+        "milestone": "Fictional documentation consolidation review",
+        "objective": "Review the two inspection records and propose validation order.",
+        "workflow_state": "approved",
+        "approved_scope": [
+          "Repository inspection",
+          "Consolidated validation planning"
+        ],
+        "prohibited_scope": ["Product changes", "Privileged actions"],
+        "expected_repository": {
+          "branch": "customer-management-v1",
+          "starting_head": "2ff1befc098c06fe6f90cc817ec4a21665405572"
+        },
+        "allowed_file_boundaries": [],
+        "required_validation": ["changed"],
+        "permissions": {
+          "code_changes": false,
+          "stage_and_commit": false,
+          "push": false,
+          "merge": false,
+          "deployment": false
+        },
+        "stop_conditions": {
+          "require_clean_start": false,
+          "require_empty_index": true,
+          "stop_on_branch_mismatch": true,
+          "stop_on_head_mismatch": true,
+          "stop_on_unapproved_files": true
+        },
+        "required_report_fields": ["validation", "changed_files", "blockers"]
+      },
+      "depends_on": ["DF3-DOC-BACKEND", "DF3-DOC-FRONTEND"],
+      "exclusive_file_boundaries": ["docs/example/consolidated-inspection.md"],
+      "shared_resources": [
+        {
+          "resource_type": "documentation",
+          "resource_id": "consolidated-inspection",
+          "mode": "exclusive"
+        }
+      ],
+      "parallel_eligible": false,
+      "escalation_flags": [],
+      "workspace": {
+        "strategy": "isolated_worktree",
+        "workspace_id": "df3-scout-consolidation",
+        "branch_hint": "df3/scout-consolidation"
+      }
+    }
+  ],
+  "validation_requirements": ["all"],
+  "integration_strategy": "owner_reviewed_sequence",
+  "conflict_policy": "fail_closed",
+  "stop_conditions": {
+    "require_empty_index": true,
+    "stop_on_repository_divergence": true,
+    "stop_on_scope_expansion": true,
+    "stop_on_conflict": true,
+    "stop_on_validation_unavailable": true,
+    "stop_on_privileged_action": true,
+    "stop_on_destructive_action": true
+  },
+  "required_report_fields": [
+    "worker_assignments",
+    "execution_waves",
+    "dependency_status",
+    "validation_summaries",
+    "changed_file_boundaries",
+    "conflicts",
+    "blockers",
+    "integration_recommendation",
+    "owner_decisions",
+    "privileged_action_confirmation"
+  ],
+  "owner_approval_requirements": {
+    "architecture": true,
+    "task_scope": true,
+    "commit": true,
+    "push": true,
+    "merge": true,
+    "deployment": true
+  }
+}

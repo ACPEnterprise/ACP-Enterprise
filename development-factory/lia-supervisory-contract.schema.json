@@ -1,0 +1,194 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://acp.example/schemas/lia-supervisory-contract-1.0.json",
+  "title": "LIA Supervisory Contract",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "supervisory_run_id",
+    "parent_milestone",
+    "objective",
+    "workflow_state",
+    "owner_approved_scope",
+    "expected_repository",
+    "parent_permissions",
+    "parallel_execution_approved",
+    "workers",
+    "validation_requirements",
+    "integration_strategy",
+    "conflict_policy",
+    "stop_conditions",
+    "required_report_fields",
+    "owner_approval_requirements"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "supervisory_run_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{2,63}$"
+    },
+    "parent_milestone": {"type": "string", "minLength": 1},
+    "objective": {"type": "string", "minLength": 1},
+    "workflow_state": {"const": "approved"},
+    "owner_approved_scope": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "expected_repository": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["branch", "starting_head"],
+      "properties": {
+        "branch": {"type": "string", "minLength": 1},
+        "starting_head": {"type": "string", "pattern": "^[0-9a-f]{40}$"}
+      }
+    },
+    "parent_permissions": {"$ref": "#/$defs/permissions"},
+    "parallel_execution_approved": {"type": "boolean"},
+    "workers": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/worker"}
+    },
+    "validation_requirements": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"type": "string"}
+    },
+    "integration_strategy": {"const": "owner_reviewed_sequence"},
+    "conflict_policy": {"const": "fail_closed"},
+    "stop_conditions": {"$ref": "#/$defs/stopConditions"},
+    "required_report_fields": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"type": "string"}
+    },
+    "owner_approval_requirements": {"$ref": "#/$defs/ownerApprovals"}
+  },
+  "$defs": {
+    "permissions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code_changes", "stage_and_commit", "push", "merge", "deployment"],
+      "properties": {
+        "code_changes": {"type": "boolean"},
+        "stage_and_commit": {"type": "boolean"},
+        "push": {"type": "boolean"},
+        "merge": {"type": "boolean"},
+        "deployment": {"type": "boolean"}
+      }
+    },
+    "worker": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "agent_id",
+        "role_id",
+        "task_contract",
+        "depends_on",
+        "exclusive_file_boundaries",
+        "shared_resources",
+        "parallel_eligible",
+        "escalation_flags",
+        "workspace"
+      ],
+      "properties": {
+        "agent_id": {"type": "string", "minLength": 1},
+        "role_id": {"type": "string", "minLength": 1},
+        "task_contract": {
+          "$ref": "task-contract.schema.json"
+        },
+        "depends_on": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string"}
+        },
+        "exclusive_file_boundaries": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string"}
+        },
+        "shared_resources": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/resourceClaim"}
+        },
+        "parallel_eligible": {"type": "boolean"},
+        "escalation_flags": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string"}
+        },
+        "workspace": {"$ref": "#/$defs/workspace"}
+      }
+    },
+    "resourceClaim": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["resource_type", "resource_id", "mode"],
+      "properties": {
+        "resource_type": {
+          "enum": [
+            "migration",
+            "shared_schema",
+            "security_surface",
+            "integration_surface",
+            "database",
+            "documentation"
+          ]
+        },
+        "resource_id": {"type": "string", "minLength": 1},
+        "mode": {"enum": ["exclusive", "shared"]}
+      }
+    },
+    "workspace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["strategy", "workspace_id", "branch_hint"],
+      "properties": {
+        "strategy": {"const": "isolated_worktree"},
+        "workspace_id": {"type": "string", "minLength": 1},
+        "branch_hint": {"type": "string", "minLength": 1}
+      }
+    },
+    "stopConditions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "require_empty_index",
+        "stop_on_repository_divergence",
+        "stop_on_scope_expansion",
+        "stop_on_conflict",
+        "stop_on_validation_unavailable",
+        "stop_on_privileged_action",
+        "stop_on_destructive_action"
+      ],
+      "properties": {
+        "require_empty_index": {"const": true},
+        "stop_on_repository_divergence": {"const": true},
+        "stop_on_scope_expansion": {"const": true},
+        "stop_on_conflict": {"const": true},
+        "stop_on_validation_unavailable": {"const": true},
+        "stop_on_privileged_action": {"const": true},
+        "stop_on_destructive_action": {"const": true}
+      }
+    },
+    "ownerApprovals": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["architecture", "task_scope", "commit", "push", "merge", "deployment"],
+      "properties": {
+        "architecture": {"const": true},
+        "task_scope": {"const": true},
+        "commit": {"const": true},
+        "push": {"const": true},
+        "merge": {"const": true},
+        "deployment": {"const": true}
+      }
+    }
+  }
+}

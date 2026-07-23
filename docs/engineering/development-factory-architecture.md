@@ -139,3 +139,26 @@ supervisor, or remote notification system may consume these contracts, but
 must preserve the same state transitions and owner gates. DF.2 does not
 implement remote execution, webhooks, parallel agents, a control plane, or an
 approval interface.
+
+## DF.3 LIA supervision
+
+LIA, the Leadership Intelligence Assistant, composes approved DF.2 worker task
+contracts under one strict supervisory contract. LIA validates role charters,
+scope and permission inheritance, common branch and starting HEAD, dependency
+graphs, exclusive file ownership, typed shared resources, isolated-workspace
+plans, and owner approval requirements.
+
+The deterministic planner creates execution waves but does not start workers.
+Only independent tasks with compatible boundaries and explicit parent
+parallel approval share a wave. Dependencies, shared resources, migration or
+schema ownership, integration surfaces, and escalation flags require
+sequencing, blocking, or owner review.
+
+LIA produces advisory integration plans and ignored JSON/Markdown supervisory
+reports. It cannot create worktrees, execute concurrent agents, stage,
+integrate, push, deploy, rewrite history, or clean up branches. Validation
+success remains `ready_for_owner_review`, never approval.
+
+Stable agent roles are configured in `development-factory/agent-roles.json`.
+Display names are configurable; role IDs and restricted charters are the
+machine contract. Every role explicitly lacks privileged authority.

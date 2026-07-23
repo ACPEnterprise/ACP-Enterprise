@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://acp.example/schemas/lia-supervisory-report-1.0.json",
+  "title": "LIA Supervisory Report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "supervisory_run_id",
+    "parent_milestone",
+    "generated_at",
+    "branch",
+    "starting_head",
+    "ending_head",
+    "workflow_state",
+    "workers",
+    "execution_waves",
+    "dependency_status",
+    "validation_summary",
+    "conflicts",
+    "blockers",
+    "architecture_escalations",
+    "security_escalations",
+    "integration_recommendation",
+    "owner_decisions_required",
+    "actions",
+    "dry_run"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "supervisory_run_id": {"type": "string"},
+    "parent_milestone": {"type": "string"},
+    "generated_at": {"type": "string", "format": "date-time"},
+    "branch": {"type": "string"},
+    "starting_head": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "ending_head": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "workflow_state": {"enum": ["approved", "blocked"]},
+    "workers": {"type": "array"},
+    "execution_waves": {"type": "array"},
+    "dependency_status": {"type": "array"},
+    "validation_summary": {"type": "string"},
+    "conflicts": {"type": "array", "items": {"type": "string"}},
+    "blockers": {"type": "array", "items": {"type": "string"}},
+    "architecture_escalations": {"type": "array", "items": {"type": "string"}},
+    "security_escalations": {"type": "array", "items": {"type": "string"}},
+    "integration_recommendation": {"type": "object"},
+    "owner_decisions_required": {"type": "array", "items": {"type": "string"}},
+    "actions": {
+      "type": "object",
+      "required": ["committed", "pushed", "merged", "deployed"],
+      "properties": {
+        "committed": {"const": false},
+        "pushed": {"const": false},
+        "merged": {"const": false},
+        "deployed": {"const": false}
+      }
+    },
+    "dry_run": {"const": true}
+  }
+}

@@ -66,6 +66,10 @@ def load_task_contract(path: Path) -> TaskContract:
         payload: Any = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise TaskContractError(f"unable to load task contract: {exc}") from exc
+    return parse_task_contract(payload)
+
+
+def parse_task_contract(payload: object) -> TaskContract:
     if not isinstance(payload, dict):
         raise TaskContractError("task contract must be an object")
     _require_exact_keys(
