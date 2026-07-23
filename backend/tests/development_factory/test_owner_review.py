@@ -332,7 +332,11 @@ def test_provenance_mismatch_blocks_without_repair(
     review, _, _ = OwnerReviewManager(repo).consolidate(contract, request)
     first = {item.task_id: item for item in review.worker_reviews}["DOC-A"]
     assert first.classification == "blocked_provenance"
-    assert "changed after record finalization" in first.provenance_findings[0]
+    assert any(
+        "output content digest mismatch" in finding
+        or "changed after record finalization" in finding
+        for finding in first.provenance_findings
+    )
     assert path.read_text() == "# changed after record\n"
 
 

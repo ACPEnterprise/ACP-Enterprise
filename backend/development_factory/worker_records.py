@@ -1,17 +1,18 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import re
-import hashlib
 from dataclasses import asdict, dataclass, fields
 from pathlib import Path
 from typing import Any
 
 from development_factory.execution_adapters import OperationResult, WorkerOperation
+from development_factory.provenance import WorkerProvenance, validate_worker_provenance
 from development_factory.reports import redact
 
 
-WORKER_RECORD_VERSION = "1.0"
+WORKER_RECORD_VERSION = "1.1"
 WORKER_SECRET_PATTERN = re.compile(
     r"(?i)([A-Z0-9_]*(?:SECRET|TOKEN|PASSWORD|API_KEY|ACCESS_KEY)"
     r"[A-Z0-9_]*\s*[:=]\s*)([^\s,\"'}]+)"
@@ -84,6 +85,7 @@ class WorkerExecutionRecord:
     action_audit: WorkerActionAudit
     started_at: str
     completed_at: str
+    provenance: WorkerProvenance
 
     def to_dict(self) -> dict[str, Any]:
         return _sanitize(asdict(self))
@@ -147,6 +149,9 @@ def load_worker_record_payload(path: Path) -> dict[str, Any]:
             raise ValueError(f"worker record {field} is invalid")
     if not isinstance(payload["state_history"], list) or not payload["state_history"]:
         raise ValueError("worker record state history is invalid")
+    provenance_findings = validate_worker_provenance(payload)
+    if provenance_findings:
+        raise ValueError("; ".join(provenance_findings))
     return payload
 
 
@@ -178,6 +183,9 @@ def render_worker_markdown(record: WorkerExecutionRecord) -> str:
             f"- Workspace branch: `{redact(record.actual_ending_branch)}`",
             f"- Starting HEAD: `{record.starting_head}`",
             f"- Ending HEAD: `{record.ending_head}`",
+            f"- Provenance manifest: `{record.provenance.manifest_digest}`",
+            f"- Output manifest: `{record.provenance.output_manifest_digest}`",
+            f"- Integration state: `{record.provenance.integration_state}`",
             "",
             "## State history",
             "",

@@ -15,6 +15,7 @@ from development_factory.lia_contract import (
 )
 from development_factory.lia_planner import ExecutionPlan, plan_execution
 from development_factory.lia_roles import load_agent_roles
+from development_factory.provenance import canonical_digest as provenance_digest
 from development_factory.reports import redact
 from development_factory.review_conflicts import (
     FileConflict,
@@ -163,7 +164,14 @@ class OwnerReviewManager:
             issues.extend(record_issues)
             for task_id, record in records.items():
                 worker = self._workers(contract)[task_id]
-                issues.extend(self._provenance_findings(contract, worker, record))
+                issues.extend(
+                    self._provenance_findings(
+                        contract,
+                        worker,
+                        record,
+                        request.supervisory_contract_digest,
+                    )
+                )
         return tuple(dict.fromkeys(issues))
 
     def consolidate(
@@ -191,7 +199,10 @@ class OwnerReviewManager:
         provenance_by_task: dict[str, tuple[str, ...]] = {}
         for task_id, record in records.items():
             provenance_by_task[task_id] = self._provenance_findings(
-                contract, workers[task_id], record
+                contract,
+                workers[task_id],
+                record,
+                request.supervisory_contract_digest,
             )
 
         state = transition_consolidation(
@@ -303,6 +314,17 @@ class OwnerReviewManager:
             state, ConsolidationState.OWNER_REVIEW_REQUIRED
         )
         history.append(state.value)
+        evidence_chain_digest = canonical_digest(
+            {
+                task_id: {
+                    "worker_record_digest": record.digest,
+                    "provenance_manifest_digest": record.payload["provenance"][
+                        "manifest_digest"
+                    ],
+                }
+                for task_id, record in sorted(records.items())
+            }
+        )
         review = ConsolidatedOwnerReview(
             schema_version=OWNER_REVIEW_VERSION,
             review_id=request.review_id,
@@ -312,6 +334,7 @@ class OwnerReviewManager:
             approved_branch=contract.expected_branch,
             approved_starting_sha=contract.expected_starting_head,
             supervisory_contract_digest=request.supervisory_contract_digest,
+            evidence_chain_digest=evidence_chain_digest,
             included_worker_records=tuple(
                 (task_id, record.digest) for task_id, record in sorted(records.items())
             ),
@@ -330,6 +353,16 @@ class OwnerReviewManager:
                     record_digest=(
                         records[task_id].digest if task_id in records else None
                     ),
+                    provenance_manifest_digest=(
+                        records[task_id].payload["provenance"]["manifest_digest"]
+                        if task_id in records
+                        else None
+                    ),
+                    output_manifest_digest=(
+                        records[task_id].payload["provenance"]["output_manifest_digest"]
+                        if task_id in records
+                        else None
+                    ),
                     classification=classifications[task_id],
                     rationale=rationales[task_id],
                     workspace_id=workers[task_id].workspace.workspace_id,
@@ -341,6 +374,16 @@ class OwnerReviewManager:
                     changed_files=changed_files.get(task_id, ()),
                     provenance_findings=provenance_by_task.get(task_id, ()),
                     validation=validation.get(task_id),
+                    approval_state=(
+                        records[task_id].payload["provenance"]["approval_state"]
+                        if task_id in records
+                        else "owner_review_required"
+                    ),
+                    integration_state=(
+                        records[task_id].payload["provenance"]["integration_state"]
+                        if task_id in records
+                        else "not_integrated"
+                    ),
                 )
                 for task_id in request.included_worker_task_ids
             ),
@@ -514,6 +557,7 @@ class OwnerReviewManager:
         contract: LiaSupervisoryContract,
         worker: WorkerAssignment,
         record: IngestedRecord,
+        supervisory_contract_digest: str,
     ) -> tuple[str, ...]:
         payload = record.payload
         findings: list[str] = []
@@ -535,6 +579,11 @@ class OwnerReviewManager:
         for field, value in expected.items():
             if payload.get(field) != value:
                 findings.append(f"{worker.task.task_id}: record {field} mismatch")
+        provenance = payload["provenance"]
+        if provenance["supervisory_contract_digest"] != supervisory_contract_digest:
+            findings.append(
+                f"{worker.task.task_id}: supervisory contract digest mismatch"
+            )
         try:
             metadata = self.workspace_manager.read_metadata(identity)
         except Exception as exc:
@@ -545,6 +594,26 @@ class OwnerReviewManager:
             return tuple(findings)
         if metadata.identity != identity:
             findings.append(f"{worker.task.task_id}: workspace metadata mismatch")
+        if provenance["workspace_metadata_digest"] != provenance_digest(
+            metadata.to_dict()
+        ):
+            findings.append(
+                f"{worker.task.task_id}: workspace metadata digest mismatch"
+            )
+        expected_paths = tuple(
+            sorted(
+                set(
+                    (
+                        *worker.exclusive_file_boundaries,
+                        *worker.task.allowed_file_boundaries,
+                    )
+                )
+            )
+        )
+        if tuple(provenance["declared_allowed_paths"]) != expected_paths:
+            findings.append(
+                f"{worker.task.task_id}: declared evidence boundary mismatch"
+            )
         workspace = Path(identity.workspace_path)
         if not workspace.exists():
             findings.append(f"{worker.task.task_id}: workspace is missing")
@@ -566,6 +635,24 @@ class OwnerReviewManager:
         recorded_untracked = tuple(sorted(payload.get("untracked_files", ())))
         if actual_untracked != recorded_untracked:
             findings.append(f"{worker.task.task_id}: untracked-file disagreement")
+        output_by_path = {item["path"]: item for item in provenance["output_files"]}
+        if set(output_by_path) != set(actual_changed):
+            findings.append(f"{worker.task.task_id}: output evidence paths mismatch")
+        for relative_path in actual_changed:
+            item = output_by_path.get(relative_path)
+            candidate = workspace / relative_path
+            if item is None:
+                continue
+            actual_digest = (
+                provenance_digest(None)
+                if not candidate.exists()
+                else _file_sha256(candidate)
+            )
+            if item["sha256"] != actual_digest:
+                findings.append(
+                    f"{worker.task.task_id}: output content digest mismatch: "
+                    f"{relative_path}"
+                )
         if payload.get("final_index_clean") is True and status["staged"]:
             findings.append(f"{worker.task.task_id}: index no longer clean")
         completed_at = _parse_time(payload.get("completed_at"))
@@ -855,3 +942,9 @@ def _parse_time(value: object) -> datetime | None:
     except ValueError:
         return None
     return parsed if parsed.tzinfo is not None else None
+
+
+def _file_sha256(path: Path) -> str:
+    import hashlib
+
+    return hashlib.sha256(path.read_bytes()).hexdigest()

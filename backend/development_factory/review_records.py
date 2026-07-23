@@ -63,6 +63,8 @@ class WorkerReview:
     worker_id: str
     execution_id: str | None
     record_digest: str | None
+    provenance_manifest_digest: str | None
+    output_manifest_digest: str | None
     classification: str
     rationale: tuple[str, ...]
     workspace_id: str
@@ -70,6 +72,8 @@ class WorkerReview:
     changed_files: tuple[str, ...]
     provenance_findings: tuple[str, ...]
     validation: ValidationSummary | None
+    approval_state: str
+    integration_state: str
 
 
 @dataclass(frozen=True)
@@ -96,6 +100,7 @@ class ConsolidatedOwnerReview:
     approved_branch: str
     approved_starting_sha: str
     supervisory_contract_digest: str
+    evidence_chain_digest: str
     included_worker_records: tuple[tuple[str, str], ...]
     excluded_or_missing_workers: tuple[str, ...]
     execution_waves: tuple[tuple[str, ...], ...]
@@ -324,6 +329,7 @@ def render_owner_review_markdown(review: ConsolidatedOwnerReview) -> str:
             f"- Review: `{review.review_id}`",
             f"- Milestone: {redact(review.parent_milestone)}",
             f"- Starting SHA: `{review.approved_starting_sha}`",
+            f"- Evidence chain: `{review.evidence_chain_digest}`",
             "- Status: owner review required",
             "",
             "## What happened",
@@ -334,7 +340,9 @@ def render_owner_review_markdown(review: ConsolidatedOwnerReview) -> str:
             "## Worker results",
             "",
             *[
-                f"- `{item.task_id}`: `{item.classification}`"
+                f"- `{item.task_id}`: `{item.classification}`; "
+                f"approval `{item.approval_state}`; "
+                f"integration `{item.integration_state}`"
                 for item in review.worker_reviews
             ],
             "",

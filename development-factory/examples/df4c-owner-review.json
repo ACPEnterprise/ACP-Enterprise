@@ -7,6 +7,7 @@
   "approved_branch": "customer-management-v1",
   "approved_starting_sha": "8e431eab4e56888b82bc177133bddaa020fda210",
   "supervisory_contract_digest": "0000000000000000000000000000000000000000000000000000000000000000",
+  "evidence_chain_digest": "0000000000000000000000000000000000000000000000000000000000000000",
   "included_worker_records": [],
   "excluded_or_missing_workers": ["DOC-A", "DOC-B", "DOC-C"],
   "execution_waves": [["DOC-A", "DOC-B"], ["DOC-C"]],

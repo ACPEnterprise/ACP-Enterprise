@@ -90,3 +90,15 @@ workspace change. DF.4B provides no cleanup.
 
 There are intentionally no stage, commit, cherry-pick, merge, push, deployment,
 reset, cleanup, worktree-removal, or branch-deletion commands.
+
+## Provenance manifest
+
+Every new worker record carries a versioned provenance manifest. It references
+the assignment, supervisory contract, workspace metadata, bounded operations,
+validation plan/results, output-content manifest, and generated worker record.
+It also records that owner review is required, output is not integrated, and
+the workspace is retained.
+
+The manifest uses deterministic SHA-256 content digests. Digests provide
+consistency checks, not identity, authorship, or cryptographic trust. Missing or
+inconsistent evidence blocks DF.4C consolidation.

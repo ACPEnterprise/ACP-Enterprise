@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://acp.enterprise/schemas/development-factory/worker-execution-record-1.0.json",
+  "$id": "https://acp.enterprise/schemas/development-factory/worker-execution-record-1.1.json",
   "title": "LIA Worker Execution Record",
   "type": "object",
   "additionalProperties": false,
@@ -46,10 +46,11 @@
     "owner_review_required",
     "action_audit",
     "started_at",
-    "completed_at"
+    "completed_at",
+    "provenance"
   ],
   "properties": {
-    "schema_version": {"const": "1.0"},
+    "schema_version": {"const": "1.1"},
     "execution_id": {"type": "string"},
     "supervisory_run_id": {"type": "string"},
     "parent_milestone": {"type": "string"},
@@ -109,6 +110,54 @@
       }
     },
     "started_at": {"type": "string", "format": "date-time"},
-    "completed_at": {"type": "string", "format": "date-time"}
+    "completed_at": {"type": "string", "format": "date-time"},
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "assignment_id",
+        "supervisory_contract_digest",
+        "workspace_metadata_reference",
+        "workspace_metadata_digest",
+        "operations_manifest_digest",
+        "validation_plan_id",
+        "validation_selections",
+        "validation_plan_digest",
+        "validation_evidence_reference",
+        "validation_evidence_digest",
+        "output_manifest_digest",
+        "output_files",
+        "declared_allowed_paths",
+        "declared_operation_ids",
+        "artifact_references",
+        "approval_state",
+        "integration_state",
+        "cleanup_state",
+        "manifest_digest"
+      ],
+      "properties": {
+        "schema_version": {"const": "1.0"},
+        "assignment_id": {"type": "string"},
+        "supervisory_contract_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "workspace_metadata_reference": {"type": "string"},
+        "workspace_metadata_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "operations_manifest_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "validation_plan_id": {"type": "string"},
+        "validation_selections": {"type": "array", "items": {"type": "string"}},
+        "validation_plan_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "validation_evidence_reference": {"type": "string"},
+        "validation_evidence_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "output_manifest_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "output_files": {"type": "array", "items": {"type": "object"}},
+        "declared_allowed_paths": {"type": "array", "items": {"type": "string"}},
+        "declared_operation_ids": {"type": "array", "items": {"type": "string"}},
+        "artifact_references": {"type": "array", "items": {"type": "string"}},
+        "approval_state": {"const": "owner_review_required"},
+        "integration_state": {"const": "not_integrated"},
+        "cleanup_state": {"const": "workspace_retained"},
+        "manifest_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    }
   }
 }

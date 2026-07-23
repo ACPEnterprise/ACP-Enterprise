@@ -188,3 +188,16 @@ Consolidation is read-oriented and advisory. It does not execute workers,
 modify output, resolve conflicts, or perform Git integration. Every successful
 package ends at `owner_review_required`; any future integration remains a
 separately approved workflow.
+
+## DF.4D end-to-end proof and provenance
+
+DF.4D connects the established layers in a deterministic temporary-repository
+demonstration. DF.4B worker records now include an immutable provenance
+manifest linking the assignment, contract, workspace metadata, bounded
+operations, validation plan and results, output content, and retained
+workspace. DF.4C verifies those links against live repository facts and carries
+their digests into one aggregate evidence chain.
+
+Content digests detect disagreement; they are not signatures and do not prove
+authorship or trust. The workflow still terminates at owner review with worker
+output explicitly `not_integrated`.

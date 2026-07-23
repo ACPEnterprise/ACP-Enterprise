@@ -41,6 +41,13 @@ after record finalization are treated as provenance drift. Git metadata that
 was not captured by DF.4B cannot be proven historically; uncertainty blocks or
 is called out for owner review rather than being repaired.
 
+DF.4D adds per-file content evidence and a worker provenance-manifest digest.
+The review verifies the supervisory-contract and workspace-metadata digests,
+declared paths and operations, validation evidence, live output hashes, and
+explicit unapproved/unintegrated state. It then records an aggregate
+evidence-chain digest. These hashes detect content disagreement but do not
+prove authorship, identity, or trustworthiness.
+
 ## Dependencies, conflicts, and classifications
 
 The DF.3 graph remains authoritative. Missing, failed, stale, contradictory, or

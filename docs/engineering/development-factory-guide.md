@@ -172,3 +172,20 @@ Nothing is approved merely because it appears in a completed report.
 Owner decisions are saved separately with `lia review record-decision`; the
 decision must reference the current report digest. These records permit review
 or planning only. They do not authorize or perform Git or deployment actions.
+
+## Running the complete local proof
+
+The DF.4D proof is an automated real-Git test that uses only temporary files:
+
+```sh
+PYTHONPATH=backend pytest -q \
+  backend/tests/development_factory/test_factory_demonstration.py
+```
+
+It prepares an isolated workspace, makes one allowlisted documentation change,
+runs architecture validation, creates worker evidence, and produces an owner
+review. The change remains untracked in the temporary worker workspace and
+never appears in the supervising repository.
+
+Read `development-factory-end-to-end.md` for the evidence fields and the
+beginner owner decision checklist.

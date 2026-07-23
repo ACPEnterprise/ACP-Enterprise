@@ -6,7 +6,7 @@ import os
 import stat
 import subprocess
 import time
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
@@ -21,6 +21,10 @@ from development_factory.execution_adapters import (
 )
 from development_factory.lia_contract import LiaSupervisoryContract, WorkerAssignment
 from development_factory.lia_roles import AgentRole, load_agent_roles
+from development_factory.provenance import (
+    build_worker_provenance,
+    content_manifest,
+)
 from development_factory.reports import redact
 from development_factory.worker_records import (
     WORKER_RECORD_VERSION,
@@ -264,6 +268,24 @@ class WorkerExecutor:
         history.append(state.value)
         state = transition_worker(state, WorkerState.OWNER_REVIEW_REQUIRED)
         history.append(state.value)
+        contract_payload = json.loads(
+            self._resolve(contract_path).read_text(encoding="utf-8")
+        )
+        operations_payload = json.loads(
+            self._resolve(operations_path).read_text(encoding="utf-8")
+        )
+        output_files = content_manifest(workspace, final.changed_files)
+        provenance = build_worker_provenance(
+            assignment_id=worker.task.task_id,
+            supervisory_contract=contract_payload,
+            workspace_metadata=metadata.to_dict(),
+            operations_manifest=operations_payload,
+            validation_results=tuple(asdict(item) for item in validation_results),
+            output_files=output_files,
+            declared_allowed_paths=self._approved_patterns(worker),
+            execution_id=operations.execution_id,
+            workspace_id=worker.workspace.workspace_id,
+        )
         record = WorkerExecutionRecord(
             schema_version=WORKER_RECORD_VERSION,
             execution_id=operations.execution_id,
@@ -309,6 +331,7 @@ class WorkerExecutor:
             action_audit=WorkerActionAudit(),
             started_at=started_at,
             completed_at=_timestamp(),
+            provenance=provenance,
         )
         payload_size = len(json.dumps(record.to_dict(), sort_keys=True).encode("utf-8"))
         if payload_size > operations.termination_policy.maximum_output_record_bytes:
