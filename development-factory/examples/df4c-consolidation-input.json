@@ -1,0 +1,33 @@
+{
+  "schema_version": "1.0",
+  "review_id": "DF4C-DEMO-REVIEW",
+  "supervisory_run_id": "DF4C-DEMO",
+  "parent_milestone": "Fictional documentation consolidation",
+  "parent_objective": "Review three isolated documentation workers.",
+  "approved_repository": {
+    "branch": "customer-management-v1",
+    "starting_sha": "8e431eab4e56888b82bc177133bddaa020fda210"
+  },
+  "supervisory_contract_digest": "0000000000000000000000000000000000000000000000000000000000000000",
+  "included_worker_task_ids": ["DOC-A", "DOC-B", "DOC-C"],
+  "worker_records": [],
+  "required_execution_waves": [["DOC-A", "DOC-B"], ["DOC-C"]],
+  "required_dependency_evidence": true,
+  "required_validation_evidence": ["architecture"],
+  "review_policy": {
+    "require_all_workers": true,
+    "allow_incomplete_downstream_review": false,
+    "security_sensitive_owner_review": true
+  },
+  "conflict_policy": "fail_closed",
+  "stop_policy": [
+    "Stop on provenance mismatch",
+    "Stop on privileged action",
+    "Stop on unresolved security finding"
+  ],
+  "required_owner_decision_fields": [
+    "decision_type",
+    "rationale",
+    "review_digest"
+  ]
+}

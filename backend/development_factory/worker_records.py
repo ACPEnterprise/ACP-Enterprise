@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import asdict, dataclass
+import hashlib
+from dataclasses import asdict, dataclass, fields
 from pathlib import Path
 from typing import Any
 
@@ -104,6 +105,54 @@ def write_worker_record(
         json_path.unlink(missing_ok=True)
         raise
     return json_path, markdown_path
+
+
+def load_worker_record_payload(path: Path) -> dict[str, Any]:
+    try:
+        payload: Any = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"unable to load worker record: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise ValueError("worker record must be an object")
+    expected = {field.name for field in fields(WorkerExecutionRecord)}
+    if payload.keys() != expected:
+        raise ValueError("worker record fields are invalid")
+    if payload["schema_version"] != WORKER_RECORD_VERSION:
+        raise ValueError("worker record schema version is invalid")
+    audit = payload["action_audit"]
+    expected_audit = {field.name for field in fields(WorkerActionAudit)}
+    if not isinstance(audit, dict) or audit.keys() != expected_audit:
+        raise ValueError("worker action audit fields are invalid")
+    if any(value is not False for value in audit.values()):
+        raise ValueError("worker record contains a privileged action")
+    for field in (
+        "execution_id",
+        "supervisory_run_id",
+        "worker_task_id",
+        "worker_id",
+        "role_id",
+        "workspace_id",
+        "workspace_path",
+        "approved_owner_branch",
+        "approved_starting_sha",
+        "expected_workspace_branch",
+        "actual_starting_branch",
+        "actual_ending_branch",
+        "starting_head",
+        "ending_head",
+        "started_at",
+        "completed_at",
+    ):
+        if not isinstance(payload[field], str) or not payload[field]:
+            raise ValueError(f"worker record {field} is invalid")
+    if not isinstance(payload["state_history"], list) or not payload["state_history"]:
+        raise ValueError("worker record state history is invalid")
+    return payload
+
+
+def worker_record_digest(payload: dict[str, Any]) -> str:
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def render_worker_markdown(record: WorkerExecutionRecord) -> str:

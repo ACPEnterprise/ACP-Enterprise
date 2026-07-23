@@ -175,3 +175,16 @@ success remains `ready_for_owner_review`, never approval.
 Stable agent roles are configured in `development-factory/agent-roles.json`.
 Display names are configurable; role IDs and restricted charters are the
 machine contract. Every role explicitly lacks privileged authority.
+
+## DF.4C consolidated owner review
+
+DF.4C composes finalized DF.4B records and live DF.4A workspace evidence under
+the authoritative DF.3 dependency graph. It verifies provenance, consolidates
+validation, detects file and typed-resource conflicts, escalates migration and
+security-sensitive surfaces, and creates immutable ignored JSON/Markdown owner
+review packages.
+
+Consolidation is read-oriented and advisory. It does not execute workers,
+modify output, resolve conflicts, or perform Git integration. Every successful
+package ends at `owner_review_required`; any future integration remains a
+separately approved workflow.

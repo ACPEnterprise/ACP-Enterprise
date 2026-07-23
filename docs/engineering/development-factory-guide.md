@@ -157,3 +157,18 @@ contract; do not edit the contract merely to bypass the mismatch.
 Validation success means “Ready for owner review.” It does not mean permission
 to stage, commit, push, merge, or deploy. Each later approval remains a
 separate owner decision.
+
+## Reviewing several worker results
+
+Use `lia review inspect CONTRACT INPUT` before consolidation. If it reports no
+issues, `lia review consolidate CONTRACT INPUT` creates ignored JSON and
+phone-readable Markdown under `.development-factory/owner-reviews/`.
+
+Use `lia review workers`, `conflicts`, `validations`, and `decisions` to view
+one section at a time. Start with blockers and security findings, then review
+migrations, shared contracts, implementation, tests, and documentation.
+Nothing is approved merely because it appears in a completed report.
+
+Owner decisions are saved separately with `lia review record-decision`; the
+decision must reference the current report digest. These records permit review
+or planning only. They do not authorize or perform Git or deployment actions.

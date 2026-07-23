@@ -1,0 +1,25 @@
+{
+  "schema_version": "1.0",
+  "decision_id": "DF4C-DEMO-DECISION",
+  "supervisory_run_id": "DF4C-DEMO",
+  "review_id": "DF4C-DEMO-REVIEW",
+  "worker_task_id": "DOC-A",
+  "decision_type": "accept_for_continued_review",
+  "decision_status": "recorded",
+  "rationale": "Continue architectural review; no integration is authorized.",
+  "timestamp": "2026-07-23T12:00:00+00:00",
+  "review_digest": "0000000000000000000000000000000000000000000000000000000000000000",
+  "permits_further_planning_only": true,
+  "privileged_action_audit": {
+    "worker_execution_performed_by_consolidator": false,
+    "files_modified_by_consolidator": false,
+    "staged_by_factory": false,
+    "committed_by_factory": false,
+    "cherry_picked_by_factory": false,
+    "merged_by_factory": false,
+    "pushed_by_factory": false,
+    "deployed_by_factory": false,
+    "workspace_deleted_by_factory": false,
+    "branch_deleted_by_factory": false
+  }
+}

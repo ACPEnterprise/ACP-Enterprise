@@ -73,3 +73,14 @@ Later milestones may connect these contracts to isolated worker launchers,
 notifications, or owner dashboards. Those systems must remain separate from
 ACP product runtime and preserve the same contract validation, explicit owner
 gates, isolation, redaction, and no-self-integration rules.
+
+## Consolidated phone review
+
+DF.4C reads completed worker evidence without touching the workspaces. The
+Markdown owner-review package answers, in order: what happened, what passed,
+what is blocked, what conflicts exist, what to review first, and which decisions
+remain yours.
+
+“Verified ready for review” is not acceptance. Rejecting work, requesting
+remediation, or preserving a workspace can be recorded as metadata. Commit,
+merge, push, deployment, cleanup, and conflict resolution remain unavailable.

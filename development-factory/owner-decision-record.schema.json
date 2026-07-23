@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://acp.enterprise/schemas/development-factory/owner-decision-1.0.json",
+  "title": "LIA Owner Decision",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "decision_id",
+    "supervisory_run_id",
+    "review_id",
+    "worker_task_id",
+    "decision_type",
+    "decision_status",
+    "rationale",
+    "timestamp",
+    "review_digest",
+    "permits_further_planning_only",
+    "privileged_action_audit"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "decision_id": {"type": "string"},
+    "supervisory_run_id": {"type": "string"},
+    "review_id": {"type": "string"},
+    "worker_task_id": {"type": ["string", "null"]},
+    "decision_type": {"type": "string"},
+    "decision_status": {"enum": ["recorded", "rejected", "cancelled"]},
+    "rationale": {"type": "string", "minLength": 1},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "review_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "permits_further_planning_only": {"const": true},
+    "privileged_action_audit": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "worker_execution_performed_by_consolidator": {"const": false},
+        "files_modified_by_consolidator": {"const": false},
+        "staged_by_factory": {"const": false},
+        "committed_by_factory": {"const": false},
+        "cherry_picked_by_factory": {"const": false},
+        "merged_by_factory": {"const": false},
+        "pushed_by_factory": {"const": false},
+        "deployed_by_factory": {"const": false},
+        "workspace_deleted_by_factory": {"const": false},
+        "branch_deleted_by_factory": {"const": false}
+      },
+      "required": [
+        "worker_execution_performed_by_consolidator",
+        "files_modified_by_consolidator",
+        "staged_by_factory",
+        "committed_by_factory",
+        "cherry_picked_by_factory",
+        "merged_by_factory",
+        "pushed_by_factory",
+        "deployed_by_factory",
+        "workspace_deleted_by_factory",
+        "branch_deleted_by_factory"
+      ]
+    }
+  }
+}

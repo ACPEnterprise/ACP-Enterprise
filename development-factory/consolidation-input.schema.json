@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://acp.enterprise/schemas/development-factory/consolidation-input-1.0.json",
+  "title": "LIA Consolidation Input",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "review_id",
+    "supervisory_run_id",
+    "parent_milestone",
+    "parent_objective",
+    "approved_repository",
+    "supervisory_contract_digest",
+    "included_worker_task_ids",
+    "worker_records",
+    "required_execution_waves",
+    "required_dependency_evidence",
+    "required_validation_evidence",
+    "review_policy",
+    "conflict_policy",
+    "stop_policy",
+    "required_owner_decision_fields"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "review_id": {"type": "string", "minLength": 1},
+    "supervisory_run_id": {"type": "string", "minLength": 1},
+    "parent_milestone": {"type": "string", "minLength": 1},
+    "parent_objective": {"type": "string", "minLength": 1},
+    "approved_repository": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["branch", "starting_sha"],
+      "properties": {
+        "branch": {"type": "string", "minLength": 1},
+        "starting_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"}
+      }
+    },
+    "supervisory_contract_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "included_worker_task_ids": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"type": "string"}
+    },
+    "worker_records": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"type": "string"}
+    },
+    "required_execution_waves": {
+      "type": "array",
+      "items": {
+        "type": "array",
+        "minItems": 1,
+        "uniqueItems": true,
+        "items": {"type": "string"}
+      }
+    },
+    "required_dependency_evidence": {"type": "boolean"},
+    "required_validation_evidence": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"type": "string"}
+    },
+    "review_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "require_all_workers",
+        "allow_incomplete_downstream_review",
+        "security_sensitive_owner_review"
+      ],
+      "properties": {
+        "require_all_workers": {"type": "boolean"},
+        "allow_incomplete_downstream_review": {"type": "boolean"},
+        "security_sensitive_owner_review": {"type": "boolean"}
+      }
+    },
+    "conflict_policy": {"const": "fail_closed"},
+    "stop_policy": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+    "required_owner_decision_fields": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"type": "string"}
+    }
+  }
+}

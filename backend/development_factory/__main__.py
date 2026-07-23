@@ -11,7 +11,9 @@ from development_factory.lia import LiaSupervisor
 from development_factory.lia_contract import LiaContractError
 from development_factory.lia_roles import AgentRoleError
 from development_factory.manifest import ManifestError
+from development_factory.owner_review import OwnerReviewError, OwnerReviewManager
 from development_factory.reports import render_markdown
+from development_factory.review_records import ReviewRecordError
 from development_factory.task_contract import TaskContractError
 from development_factory.workflow import Action, WorkflowError, WorkflowState
 from development_factory.workspaces import WorkspaceError, WorkspaceManager
@@ -74,11 +76,89 @@ def main() -> int:
         worker_command = worker_commands.add_parser(command)
         worker_command.add_argument("contract", type=Path)
         worker_command.add_argument("task_id")
+    review = lia_commands.add_parser("review")
+    review_commands = review.add_subparsers(dest="review_command", required=True)
+    review_inspect = review_commands.add_parser("inspect")
+    review_inspect.add_argument("contract", type=Path)
+    review_inspect.add_argument("input", type=Path, nargs="?")
+    review_consolidate = review_commands.add_parser("consolidate")
+    review_consolidate.add_argument("contract", type=Path)
+    review_consolidate.add_argument("input", type=Path)
+    review_list = review_commands.add_parser("list")
+    review_list.add_argument("contract", type=Path)
+    for command in ("show", "workers", "conflicts", "validations", "decisions"):
+        review_command = review_commands.add_parser(command)
+        review_command.add_argument("contract", type=Path)
+        review_command.add_argument("review_id")
+    review_decision = review_commands.add_parser("record-decision")
+    review_decision.add_argument("contract", type=Path)
+    review_decision.add_argument("review_id")
+    review_decision.add_argument("decision", type=Path)
+    review_cancel = review_commands.add_parser("cancel")
+    review_cancel.add_argument("contract", type=Path)
+    review_cancel.add_argument("review_id")
     args = parser.parse_args()
 
     try:
         if args.command == "lia":
             supervisor = LiaSupervisor(args.repo_root)
+            if args.lia_command == "review":
+                manager = OwnerReviewManager(args.repo_root)
+                if args.review_command == "inspect":
+                    issues = manager.inspect(args.contract, args.input)
+                    for issue in issues:
+                        print(f"BLOCKED: {issue}")
+                    if not issues:
+                        print("Consolidation inputs are ready for owner review.")
+                    return int(bool(issues))
+                if args.review_command == "consolidate":
+                    owner_review, json_path, markdown_path = manager.consolidate(
+                        args.contract, args.input
+                    )
+                    print(f"Owner review state: {owner_review.state_history[-1]}")
+                    print(f"JSON owner review: {json_path}")
+                    print(f"Markdown owner review: {markdown_path}")
+                    return int(bool(owner_review.blockers))
+                if args.review_command == "list":
+                    for review_id in manager.list(args.contract):
+                        print(review_id)
+                    return 0
+                if args.review_command == "show":
+                    print(
+                        json.dumps(
+                            manager.show(args.contract, args.review_id),
+                            indent=2,
+                            sort_keys=True,
+                        )
+                    )
+                    return 0
+                if args.review_command in {
+                    "workers",
+                    "conflicts",
+                    "validations",
+                    "decisions",
+                }:
+                    print(
+                        json.dumps(
+                            manager.view_section(
+                                args.contract,
+                                args.review_id,
+                                args.review_command,
+                            ),
+                            indent=2,
+                            sort_keys=True,
+                        )
+                    )
+                    return 0
+                if args.review_command == "record-decision":
+                    path = manager.record_decision(
+                        args.contract, args.review_id, args.decision
+                    )
+                    print(f"Owner decision recorded: {path}")
+                    return 0
+                path = manager.cancel(args.contract, args.review_id)
+                print(f"Owner review cancellation recorded: {path}")
+                return 0
             if args.lia_command == "worker":
                 executor = WorkerExecutor(args.repo_root)
                 if args.worker_command == "inspect":
@@ -116,9 +196,9 @@ def main() -> int:
                 print(f"Worker cancellation recorded: {path}")
                 return 0
             if args.lia_command == "workspace":
-                manager = WorkspaceManager(args.repo_root)
+                workspace_manager = WorkspaceManager(args.repo_root)
                 if args.workspace_command == "list":
-                    inspections = manager.list(args.contract)
+                    inspections = workspace_manager.list(args.contract)
                     for inspection in inspections:
                         print(
                             f"{inspection.identity.workspace_id}: "
@@ -127,7 +207,9 @@ def main() -> int:
                         )
                     return int(any(item.requires_owner_review for item in inspections))
                 if args.workspace_command == "prepare":
-                    metadata, reused = manager.prepare(args.contract, args.workspace_id)
+                    metadata, reused = workspace_manager.prepare(
+                        args.contract, args.workspace_id
+                    )
                     print(
                         f"Workspace {'reused' if reused else 'prepared'}: "
                         f"{metadata.identity.workspace_id}"
@@ -136,10 +218,10 @@ def main() -> int:
                     print(f"Branch: {metadata.identity.workspace_branch}")
                     return 0
                 if args.workspace_command == "show":
-                    metadata = manager.show(args.contract, args.workspace_id)
+                    metadata = workspace_manager.show(args.contract, args.workspace_id)
                     print(json.dumps(metadata.to_dict(), indent=2, sort_keys=True))
                     return 0
-                inspection = manager.inspect(args.contract, args.workspace_id)
+                inspection = workspace_manager.inspect(args.contract, args.workspace_id)
                 print(
                     f"Workspace {inspection.identity.workspace_id}: "
                     f"{inspection.classification}"
@@ -240,6 +322,8 @@ def main() -> int:
         return int(validation_report["exit_status"])
     except (
         ManifestError,
+        OwnerReviewError,
+        ReviewRecordError,
         AgentRoleError,
         LiaContractError,
         TaskContractError,

@@ -112,3 +112,14 @@ LIA stops for:
 - Privileged or destructive action requests
 
 No automated conflict resolution may expand the owner-approved boundary.
+
+## DF.4C evidence consolidation
+
+DF.4C realizes the advisory-review boundary anticipated here. It reuses this
+contract’s assignments, roles, dependencies, waves, file patterns, and typed
+resource claims. Finalized worker records are not trusted alone: their live
+workspaces and DF.4A metadata must still match.
+
+The resulting review and future integration ordering are recommendations only.
+They contain exact owner decisions and aggregate revalidation requirements but
+cannot grant approval or invoke a privileged action.
