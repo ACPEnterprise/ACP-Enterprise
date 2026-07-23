@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import { AxiosError } from "axios";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -14,8 +15,8 @@ describe("Jobs request states", () => {
 
   it("renders a safe retryable error", async () => {
     const retry = vi.fn();
-    render(<JobsErrorState onRetry={retry} />);
-    expect(screen.getByText(/request could not be completed/i)).toBeInTheDocument();
+    render(<JobsErrorState error={new AxiosError("Network Error")} onRetry={retry} />);
+    expect(screen.getByText(/could not be reached/i)).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(retry).toHaveBeenCalledOnce();
   });
