@@ -1,0 +1,54 @@
+{
+  "schema_version": "1.0",
+  "manifest": "development-factory/manifest.json",
+  "report_directory": ".development-factory",
+  "parallelism": 2,
+  "database": {
+    "mode": "docker",
+    "postgres_container": "acp-enterprise-postgres",
+    "backend_container": "acp-enterprise-backend",
+    "database_user": "acp_enterprise",
+    "disposable_prefix": "acp_df_"
+  },
+  "policy": {
+    "allowlisted_paths": [
+      "backend/alembic/",
+      "backend/tests/",
+      "backend/app/core/database.py",
+      "backend/app/analytics/service.py",
+      "backend/app/api/health.py",
+      "backend/app/customers/router.py",
+      "backend/app/customers/timeline.py",
+      "backend/app/customers/update.py",
+      "backend/app/events/service.py",
+      "backend/app/platform/auth/services.py",
+      "backend/app/platform/company/admin_router.py",
+      "backend/app/platform/company/admin_service.py",
+      "backend/app/platform/permissions/authorization.py",
+      "backend/app/platform/permissions/catalog_sync.py",
+      "backend/app/platform/users/identity_router.py"
+    ],
+    "suppressions": [
+      {
+        "rule_id": "tenant.repository_scope",
+        "path": "backend/app/platform/notifications/repository.py",
+        "rationale": "The notification outbox is a global delivery queue whose ownership is carried by the referenced notification and recipient records."
+      },
+      {
+        "rule_id": "tenant.model_company_id",
+        "path": "backend/app/customers/models.py",
+        "rationale": "Customer child records inherit tenant ownership through composite Customer and Service Location foreign keys rather than redundant company_id columns."
+      },
+      {
+        "rule_id": "tenant.model_company_id",
+        "path": "backend/app/platform/company/membership_models.py",
+        "rationale": "Membership Branch access derives Company ownership through the constrained Membership and Branch relationship."
+      },
+      {
+        "rule_id": "tenant.model_company_id",
+        "path": "backend/app/scheduling/models.py",
+        "rationale": "Branch scheduling child rows inherit tenant ownership through their composite Branch ownership relationship."
+      }
+    ]
+  }
+}

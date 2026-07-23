@@ -24,3 +24,6 @@ build/
 
 # Logs
 *.log
+
+# Local Development Factory reports
+.development-factory/

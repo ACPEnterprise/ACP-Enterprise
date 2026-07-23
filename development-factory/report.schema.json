@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://acp.example/schemas/development-factory-report-1.0.json",
+  "title": "ACP Development Factory Report",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "generated_at",
+    "repository",
+    "selected_scope",
+    "checks",
+    "exit_status",
+    "readiness",
+    "changed_files",
+    "blocking_failures",
+    "owner_review_items"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "generated_at": {"type": "string", "format": "date-time"},
+    "repository": {
+      "type": "object",
+      "required": ["branch", "head", "working_tree_clean", "index_clean", "conflicts"]
+    },
+    "selected_scope": {"type": "array", "items": {"type": "string"}},
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "category",
+          "required",
+          "status",
+          "duration_seconds",
+          "summary"
+        ],
+        "properties": {
+          "status": {
+            "enum": [
+              "passed",
+              "failed",
+              "skipped",
+              "unavailable",
+              "blocked",
+              "not_applicable"
+            ]
+          }
+        }
+      }
+    },
+    "exit_status": {"type": "integer", "enum": [0, 1]},
+    "readiness": {
+      "enum": [
+        "Ready for owner review",
+        "Blocked by validation failures",
+        "Blocked by unavailable required checks",
+        "Validation incomplete",
+        "No changes detected"
+      ]
+    },
+    "changed_files": {"type": "array"},
+    "blocking_failures": {"type": "array", "items": {"type": "string"}},
+    "owner_review_items": {"type": "array", "items": {"type": "string"}}
+  }
+}
