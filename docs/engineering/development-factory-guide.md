@@ -5,6 +5,22 @@ source files, stage changes, commit, push, merge, or deploy.
 
 Run commands from the repository root.
 
+## Running one approved isolated worker
+
+For an approved LIA contract and DF.4A workspace:
+
+```sh
+./scripts/development-factory lia worker inspect CONTRACT TASK_ID
+./scripts/development-factory lia worker execute CONTRACT TASK_ID OPERATIONS
+./scripts/development-factory lia worker diff CONTRACT TASK_ID
+./scripts/development-factory lia worker record CONTRACT TASK_ID
+```
+
+The operations file is structured JSON, not a command prompt. Execution leaves
+approved changes unstaged and uncommitted. Completion always requires owner
+review. `lia worker cancel` records cancellation without removing or changing
+workspace content.
+
 ## Commands
 
 Full validation:

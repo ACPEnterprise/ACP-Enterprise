@@ -26,6 +26,11 @@ workspace removal, reset, or history rewriting.
 Workspace commands, provenance, and recovery classifications are documented in
 `lia-workspace-lifecycle.md`.
 
+DF.4B can execute one bounded operations document inside a ready workspace.
+Before approving later action, review its Markdown record, unstaged diff,
+validation, boundary findings, and false privileged-action audit values. See
+`lia-worker-execution.md`.
+
 ## Owner phone review
 
 The LIA Markdown report is designed for a short phone review. Check:

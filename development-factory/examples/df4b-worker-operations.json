@@ -1,0 +1,37 @@
+{
+  "schema_version": "1.0",
+  "execution_id": "DF4B-DEMO-MUTATION-001",
+  "task_id": "DF4B-DEMO-MUTATION",
+  "workspace_id": "df4b-demo-mutation",
+  "allowed_action_classes": ["inspection", "mutation", "validation"],
+  "operations": [
+    {
+      "operation_id": "create-demo-report",
+      "operation": "create_demonstration_file",
+      "path": "docs/examples/df4b-demonstration.md",
+      "paths": [],
+      "text": "# DF.4B demonstration\n\nThis fictional file remains unstaged.\n",
+      "expected_text": null,
+      "replacement_text": null,
+      "resource_type": "documentation",
+      "resource_id": "df4b-demonstration"
+    }
+  ],
+  "validation_selections": ["architecture"],
+  "termination_policy": {
+    "maximum_operations": 3,
+    "maximum_mutations": 1,
+    "maximum_files_inspected": 5,
+    "maximum_files_changed": 1,
+    "maximum_output_record_bytes": 1000000,
+    "maximum_validation_selections": 1,
+    "execution_timeout_seconds": 300
+  },
+  "required_report_fields": [
+    "state_history",
+    "files_changed",
+    "validation_results",
+    "blockers",
+    "action_audit"
+  ]
+}

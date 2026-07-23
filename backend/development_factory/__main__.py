@@ -15,6 +15,7 @@ from development_factory.reports import render_markdown
 from development_factory.task_contract import TaskContractError
 from development_factory.workflow import Action, WorkflowError, WorkflowState
 from development_factory.workspaces import WorkspaceError, WorkspaceManager
+from development_factory.worker_execution import WorkerExecutionError, WorkerExecutor
 
 
 def main() -> int:
@@ -60,11 +61,60 @@ def main() -> int:
         workspace_command.add_argument("workspace_id")
     workspace_list = workspace_commands.add_parser("list")
     workspace_list.add_argument("contract", type=Path)
+    worker = lia_commands.add_parser("worker")
+    worker_commands = worker.add_subparsers(dest="worker_command", required=True)
+    worker_inspect = worker_commands.add_parser("inspect")
+    worker_inspect.add_argument("contract", type=Path)
+    worker_inspect.add_argument("task_id")
+    worker_execute = worker_commands.add_parser("execute")
+    worker_execute.add_argument("contract", type=Path)
+    worker_execute.add_argument("task_id")
+    worker_execute.add_argument("operations", type=Path)
+    for command in ("validate", "show", "diff", "record", "cancel"):
+        worker_command = worker_commands.add_parser(command)
+        worker_command.add_argument("contract", type=Path)
+        worker_command.add_argument("task_id")
     args = parser.parse_args()
 
     try:
         if args.command == "lia":
             supervisor = LiaSupervisor(args.repo_root)
+            if args.lia_command == "worker":
+                executor = WorkerExecutor(args.repo_root)
+                if args.worker_command == "inspect":
+                    classification, issues = executor.inspect(
+                        args.contract, args.task_id
+                    )
+                    print(f"Worker workspace: {classification}")
+                    for issue in issues:
+                        print(f"BLOCKED: {issue}")
+                    return int(bool(issues))
+                if args.worker_command == "execute":
+                    worker_record, json_path, markdown_path = executor.execute(
+                        args.contract, args.task_id, args.operations
+                    )
+                    print(f"Worker state: {worker_record.recommended_worker_state}")
+                    print(f"JSON worker record: {json_path}")
+                    print(f"Markdown worker record: {markdown_path}")
+                    return int(bool(worker_record.blockers))
+                if args.worker_command == "validate":
+                    results = executor.validate(args.contract, args.task_id)
+                    for result in results:
+                        print(
+                            f"{result.selection}: {result.exit_classification} "
+                            f"({result.result})"
+                        )
+                    return int(any(item.blocks_completion for item in results))
+                if args.worker_command in {"show", "record"}:
+                    path = executor.show(args.contract, args.task_id)
+                    print(path.read_text(encoding="utf-8"))
+                    return 0
+                if args.worker_command == "diff":
+                    print(executor.diff(args.contract, args.task_id), end="")
+                    return 0
+                path = executor.cancel(args.contract, args.task_id)
+                print(f"Worker cancellation recorded: {path}")
+                return 0
             if args.lia_command == "workspace":
                 manager = WorkspaceManager(args.repo_root)
                 if args.workspace_command == "list":
@@ -195,6 +245,7 @@ def main() -> int:
         TaskContractError,
         WorkflowError,
         WorkspaceError,
+        WorkerExecutionError,
         ValueError,
         OSError,
         json.JSONDecodeError,

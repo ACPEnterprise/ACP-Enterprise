@@ -15,6 +15,13 @@ commit after verifying that the owner's primary repository is unchanged. It
 does not execute workers, repair or remove workspaces, or integrate changes.
 See `lia-workspace-lifecycle.md`.
 
+DF.4B adds single-worker bounded execution inside a verified DF.4A workspace.
+It consumes strict operations through a vendor-neutral adapter, applies
+permission and file/resource ceilings, runs approved validation, detects
+contamination, and writes immutable ignored worker records. It provides no
+arbitrary shell, privileged Git action, cleanup, integration, or multi-worker
+consolidation. See `lia-worker-execution.md`.
+
 The flow is:
 
 ```text

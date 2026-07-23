@@ -214,6 +214,14 @@ class WorkspaceManager:
         _, _, identity = self.load(contract_path, workspace_id)
         return self._read_metadata(identity)
 
+    def read_metadata(self, identity: WorkspaceIdentity) -> WorkspaceMetadata:
+        return self._read_metadata(identity)
+
+    def primary_repository_issues(
+        self, contract: LiaSupervisoryContract
+    ) -> tuple[str, ...]:
+        return self._primary_repository_issues(contract)
+
     def _inspect(
         self,
         contract: LiaSupervisoryContract,
