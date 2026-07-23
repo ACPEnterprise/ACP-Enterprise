@@ -16,12 +16,22 @@ from development_factory.repository import (
 
 
 SECRET_PATTERN = re.compile(
-    r"(?i)(password|token|secret|api[_-]?key|database_url)=([^\s]+)"
+    r"(?i)(password|token|secret|api[_-]?key|database_url)"
+    r"(\s*[:=]\s*)([\"']?)([^\s,\"'}]+)([\"']?)"
+)
+BEARER_PATTERN = re.compile(r"(?i)\bbearer\s+[A-Za-z0-9._~+/-]+=*")
+PRIVATE_KEY_PATTERN = re.compile(
+    r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----",
+    re.DOTALL,
 )
 
 
 def redact(value: str) -> str:
-    return SECRET_PATTERN.sub(lambda match: f"{match.group(1)}=[REDACTED]", value)
+    redacted = SECRET_PATTERN.sub(
+        lambda match: f"{match.group(1)}{match.group(2)}[REDACTED]", value
+    )
+    redacted = BEARER_PATTERN.sub("Bearer [REDACTED]", redacted)
+    return PRIVATE_KEY_PATTERN.sub("[REDACTED PRIVATE KEY]", redacted)
 
 
 def build_report(

@@ -94,3 +94,48 @@ validation, isolated worktrees, agent task manifests, pull-request review,
 remote notifications, mobile summaries, preview health checks, approval queues,
 and quality trends. DF.1 implements none of those systems, no remote approvals,
 no dashboard, and no autonomous repair or Git action.
+
+## DF.2 task automation boundary
+
+DF.2 adds a task-supervision layer to the same local Development Factory. A
+versioned task contract describes the approved objective, scope, repository
+preconditions, validation selection, file boundary, action permissions, stop
+conditions, and required completion-report fields. The strict parser rejects
+unknown fields and invalid combinations instead of guessing intent.
+
+The task runner supports repository inspection, dry-run records, and existing
+Development Factory validation. It deliberately has no implementation that
+stages, commits, pushes, merges, deploys, rewrites history, destroys databases,
+or changes infrastructure. Permission fields and workflow states are durable
+contracts for checking whether a later, separately owner-approved action would
+be authorized; they do not execute that action.
+
+The workflow is:
+
+```text
+proposed → approved → running → ready_for_owner_review
+                                  ↓ owner approval
+                         approved_for_commit → committed
+                                  ↓ owner approval
+                           approved_for_push → pushed
+                                  ↓ owner approval
+                          approved_for_merge → merged
+                                  ↓ owner approval
+                     approved_for_deployment → deployed
+```
+
+`blocked`, `rejected`, and `cancelled` are explicit outcomes. Invalid
+transitions fail closed. A successful validation run can reach only
+`ready_for_owner_review`; it can never infer approval for a later action.
+
+Generated task records live under ignored `.development-factory/runs/`.
+Records contain safe command-stage identifiers rather than shell transcripts or
+environment dumps, explicitly audit whether privileged actions occurred, and
+reuse report redaction. Task and run-record schemas are versioned in
+`development-factory/`.
+
+This is local-first and vendor-neutral. A future CI runner, isolated agent, LIA
+supervisor, or remote notification system may consume these contracts, but
+must preserve the same state transitions and owner gates. DF.2 does not
+implement remote execution, webhooks, parallel agents, a control plane, or an
+approval interface.

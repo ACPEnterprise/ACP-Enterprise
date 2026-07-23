@@ -186,12 +186,17 @@ def test_report_schema_contract_and_markdown() -> None:
 def test_secret_redaction() -> None:
     output = redact(
         "DATABASE_URL=postgresql://user:password@host/db "
-        "api_key=super-secret-value token=abc123"
+        "api_key=super-secret-value token=abc123 password: hidden "
+        "Bearer header.payload.signature "
+        "-----BEGIN PRIVATE KEY-----private-material-----END PRIVATE KEY-----"
     )
     assert "postgresql://" not in output
     assert "super-secret-value" not in output
     assert "abc123" not in output
-    assert output.count("[REDACTED]") == 3
+    assert "hidden" not in output
+    assert "header.payload.signature" not in output
+    assert "private-material" not in output
+    assert output.count("[REDACTED]") == 5
 
 
 @pytest.mark.parametrize(

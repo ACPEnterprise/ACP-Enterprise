@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://acp.example/schemas/development-factory-run-record-1.0.json",
+  "title": "ACP Development Factory Task Run Record",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "run_id",
+    "task_id",
+    "milestone",
+    "started_at",
+    "completed_at",
+    "starting_branch",
+    "starting_head",
+    "ending_branch",
+    "ending_head",
+    "working_tree_clean_at_start",
+    "working_tree_clean_at_end",
+    "index_clean_at_start",
+    "index_clean_at_end",
+    "commands_executed",
+    "validation_result",
+    "changed_files",
+    "workflow_state",
+    "blockers",
+    "recommended_next_action",
+    "actions",
+    "dry_run"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "run_id": {"type": "string", "minLength": 1},
+    "task_id": {"type": "string", "minLength": 1},
+    "milestone": {"type": "string", "minLength": 1},
+    "started_at": {"type": "string", "format": "date-time"},
+    "completed_at": {"type": "string", "format": "date-time"},
+    "starting_branch": {"type": "string"},
+    "starting_head": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "ending_branch": {"type": "string"},
+    "ending_head": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "working_tree_clean_at_start": {"type": "boolean"},
+    "working_tree_clean_at_end": {"type": "boolean"},
+    "index_clean_at_start": {"type": "boolean"},
+    "index_clean_at_end": {"type": "boolean"},
+    "commands_executed": {"type": "array", "items": {"type": "string"}},
+    "validation_result": {"type": "string"},
+    "changed_files": {"type": "array", "items": {"type": "string"}},
+    "workflow_state": {
+      "enum": [
+        "proposed",
+        "approved",
+        "running",
+        "blocked",
+        "ready_for_owner_review",
+        "approved_for_commit",
+        "committed",
+        "approved_for_push",
+        "pushed",
+        "approved_for_merge",
+        "merged",
+        "approved_for_deployment",
+        "deployed",
+        "rejected",
+        "cancelled"
+      ]
+    },
+    "blockers": {"type": "array", "items": {"type": "string"}},
+    "recommended_next_action": {"type": "string"},
+    "actions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["committed", "pushed", "merged", "deployed"],
+      "properties": {
+        "committed": {"type": "boolean"},
+        "pushed": {"type": "boolean"},
+        "merged": {"type": "boolean"},
+        "deployed": {"type": "boolean"}
+      }
+    },
+    "dry_run": {"type": "boolean"}
+  }
+}

@@ -49,11 +49,41 @@ Print the latest Markdown report:
 ./scripts/development-factory report
 ```
 
+Inspect an approved task contract without running validation:
+
+```sh
+./scripts/development-factory task inspect path/to/task.json
+```
+
+Create an inspection-only dry-run record:
+
+```sh
+./scripts/development-factory task run path/to/task.json --dry-run
+```
+
+Run the validation selection declared by an approved task:
+
+```sh
+./scripts/development-factory task run path/to/task.json
+```
+
+Check whether an action has both contract permission and the required explicit
+workflow approval state:
+
+```sh
+./scripts/development-factory task check-action path/to/task.json \
+  --action stage_and_commit --state approved_for_commit
+```
+
+This command checks authorization only. It never performs the action.
+
 Reports are stored locally at:
 
 ```text
 .development-factory/latest.json
 .development-factory/latest.md
+.development-factory/runs/<run-id>.json
+.development-factory/runs/<run-id>.md
 ```
 
 This directory is ignored by Git.
@@ -78,3 +108,13 @@ database, removes it afterward, and fails if removal cannot be confirmed.
 The tool may report warnings from heuristic architecture or security scans.
 Open the Markdown report for file and line references. Warnings require human
 judgment; do not change product architecture mechanically to silence them.
+
+## Task-contract failures
+
+A task stops if a required branch, starting HEAD, clean-start condition, empty
+index, or approved file boundary does not match. Ask the owner to review the
+contract; do not edit the contract merely to bypass the mismatch.
+
+Validation success means “Ready for owner review.” It does not mean permission
+to stage, commit, push, merge, or deploy. Each later approval remains a
+separate owner decision.

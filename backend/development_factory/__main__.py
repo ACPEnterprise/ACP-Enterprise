@@ -5,9 +5,12 @@ import json
 import sys
 from pathlib import Path
 
+from development_factory.automation import TaskRunner
 from development_factory.engine import DevelopmentFactory
 from development_factory.manifest import ManifestError
 from development_factory.reports import render_markdown
+from development_factory.task_contract import TaskContractError
+from development_factory.workflow import Action, WorkflowError, WorkflowState
 
 
 def main() -> int:
@@ -24,9 +27,52 @@ def main() -> int:
     validate.add_argument("--architecture", action="store_true")
     validate.add_argument("--changed", action="store_true")
     subparsers.add_parser("report")
+    task = subparsers.add_parser("task")
+    task_commands = task.add_subparsers(dest="task_command", required=True)
+    task_inspect = task_commands.add_parser("inspect")
+    task_inspect.add_argument("contract", type=Path)
+    task_run = task_commands.add_parser("run")
+    task_run.add_argument("contract", type=Path)
+    task_run.add_argument("--dry-run", action="store_true")
+    task_action = task_commands.add_parser("check-action")
+    task_action.add_argument("contract", type=Path)
+    task_action.add_argument("--action", choices=[item.value for item in Action])
+    task_action.add_argument("--state", choices=[item.value for item in WorkflowState])
     args = parser.parse_args()
 
     try:
+        if args.command == "task":
+            runner = TaskRunner(args.repo_root)
+            if args.task_command == "inspect":
+                contract, issues = runner.inspect(args.contract)
+                print(f"Task: {contract.task_id} ({contract.milestone})")
+                print(f"Workflow state: {contract.workflow_state.value}")
+                if issues:
+                    for issue in issues:
+                        print(f"BLOCKED: {issue}")
+                    return 1
+                print("Contract and repository preconditions are valid.")
+                return 0
+            if args.task_command == "check-action":
+                runner.check_action(
+                    args.contract,
+                    Action(args.action),
+                    WorkflowState(args.state),
+                )
+                print("Action is permitted by both contract and workflow state.")
+                return 0
+            record, json_path, markdown_path = runner.run(
+                args.contract, dry_run=args.dry_run
+            )
+            print(f"Task run state: {record.workflow_state.value}")
+            print(f"JSON run record: {json_path}")
+            print(f"Markdown run record: {markdown_path}")
+            if record.blockers:
+                for blocker in record.blockers:
+                    print(f"BLOCKED: {blocker}")
+                return 1
+            return 0
+
         factory = DevelopmentFactory(args.repo_root)
         if args.command == "report":
             latest = args.repo_root / ".development-factory" / "latest.json"
@@ -56,7 +102,14 @@ def main() -> int:
         print(f"Markdown report: {markdown_path}")
         print(f"Classification: {report['readiness']}")
         return int(report["exit_status"])
-    except (ManifestError, ValueError, OSError, json.JSONDecodeError) as exc:
+    except (
+        ManifestError,
+        TaskContractError,
+        WorkflowError,
+        ValueError,
+        OSError,
+        json.JSONDecodeError,
+    ) as exc:
         print(f"Development Factory configuration error: {exc}", file=sys.stderr)
         return 2
 

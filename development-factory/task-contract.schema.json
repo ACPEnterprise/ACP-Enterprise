@@ -1,0 +1,129 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://acp.example/schemas/development-factory-task-contract-1.0.json",
+  "title": "ACP Development Factory Task Contract",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "task_id",
+    "milestone",
+    "objective",
+    "workflow_state",
+    "approved_scope",
+    "prohibited_scope",
+    "expected_repository",
+    "allowed_file_boundaries",
+    "required_validation",
+    "permissions",
+    "stop_conditions",
+    "required_report_fields"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "task_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{2,63}$"},
+    "milestone": {"type": "string", "minLength": 1},
+    "objective": {"type": "string", "minLength": 1},
+    "workflow_state": {
+      "enum": [
+        "proposed",
+        "approved",
+        "running",
+        "blocked",
+        "ready_for_owner_review",
+        "approved_for_commit",
+        "committed",
+        "approved_for_push",
+        "pushed",
+        "approved_for_merge",
+        "merged",
+        "approved_for_deployment",
+        "deployed",
+        "rejected",
+        "cancelled"
+      ]
+    },
+    "approved_scope": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "prohibited_scope": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "expected_repository": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["branch", "starting_head"],
+      "properties": {
+        "branch": {"type": "string", "minLength": 1},
+        "starting_head": {"type": "string", "pattern": "^[0-9a-f]{40}$"}
+      }
+    },
+    "allowed_file_boundaries": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "required_validation": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "enum": ["all", "backend", "frontend", "migrations", "architecture", "changed"]
+      }
+    },
+    "permissions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code_changes", "stage_and_commit", "push", "merge", "deployment"],
+      "properties": {
+        "code_changes": {"type": "boolean"},
+        "stage_and_commit": {"type": "boolean"},
+        "push": {"type": "boolean"},
+        "merge": {"type": "boolean"},
+        "deployment": {"type": "boolean"}
+      }
+    },
+    "stop_conditions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "require_clean_start",
+        "require_empty_index",
+        "stop_on_branch_mismatch",
+        "stop_on_head_mismatch",
+        "stop_on_unapproved_files"
+      ],
+      "properties": {
+        "require_clean_start": {"type": "boolean"},
+        "require_empty_index": {"type": "boolean"},
+        "stop_on_branch_mismatch": {"type": "boolean"},
+        "stop_on_head_mismatch": {"type": "boolean"},
+        "stop_on_unapproved_files": {"type": "boolean"}
+      }
+    },
+    "required_report_fields": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "starting_state",
+          "repository_inspection",
+          "architecture",
+          "security",
+          "validation",
+          "changed_files",
+          "blockers",
+          "next_action",
+          "git_status",
+          "prohibited_action_confirmation"
+        ]
+      }
+    }
+  }
+}

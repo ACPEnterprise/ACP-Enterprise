@@ -1,0 +1,46 @@
+{
+  "schema_version": "1.0",
+  "task_id": "DF2-DRY-RUN",
+  "milestone": "Sprint DF.2 dry-run demonstration",
+  "objective": "Inspect the approved repository state and generate a safe local run record.",
+  "workflow_state": "approved",
+  "approved_scope": [
+    "Repository inspection",
+    "Dry-run record generation"
+  ],
+  "prohibited_scope": [
+    "Product changes",
+    "Git mutations",
+    "Remote operations",
+    "Deployment or infrastructure operations"
+  ],
+  "expected_repository": {
+    "branch": "customer-management-v1",
+    "starting_head": "66f448f10e09eadc79bb6bf286ef81aec3ad596b"
+  },
+  "allowed_file_boundaries": [],
+  "required_validation": ["all"],
+  "permissions": {
+    "code_changes": false,
+    "stage_and_commit": false,
+    "push": false,
+    "merge": false,
+    "deployment": false
+  },
+  "stop_conditions": {
+    "require_clean_start": false,
+    "require_empty_index": true,
+    "stop_on_branch_mismatch": true,
+    "stop_on_head_mismatch": true,
+    "stop_on_unapproved_files": true
+  },
+  "required_report_fields": [
+    "starting_state",
+    "repository_inspection",
+    "validation",
+    "changed_files",
+    "blockers",
+    "next_action",
+    "prohibited_action_confirmation"
+  ]
+}
