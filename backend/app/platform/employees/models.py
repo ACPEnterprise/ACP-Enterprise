@@ -74,6 +74,7 @@ class Employee(Base):
             ondelete="RESTRICT",
         ),
         UniqueConstraint("membership_id", name="uq_employees_membership_id"),
+        UniqueConstraint("company_id", "id", name="uq_employees_company_id_id"),
         Index(
             "uq_employees_active_company_employee_number",
             "company_id",

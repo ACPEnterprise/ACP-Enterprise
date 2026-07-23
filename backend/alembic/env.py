@@ -19,6 +19,7 @@ from app.platform.permissions import models as permission_models  # noqa: F401
 from app.platform.users import models as user_models  # noqa: F401
 from app.platform.users import identity_models  # noqa: F401
 from app.scheduling import models as scheduling_models  # noqa: F401
+from app.workforce import models as workforce_models  # noqa: F401
 
 
 config = context.config
