@@ -20,3 +20,21 @@ export interface AppointmentDetail {
   created_at: string;
   updated_at: string;
 }
+
+export interface AppointmentListParams {
+  startAt: string;
+  endAt: string;
+  branchId?: string;
+  status?: readonly AppointmentStatus[];
+  page?: number;
+  pageSize?: number;
+}
+
+export interface CalendarQueryResult {
+  items: readonly AppointmentDetail[];
+  total_count: number;
+  page: number;
+  page_size: number;
+  start_at: string;
+  end_at: string;
+}

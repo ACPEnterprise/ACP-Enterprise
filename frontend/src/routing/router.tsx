@@ -2,7 +2,7 @@ import { Navigate, createBrowserRouter, type RouteObject } from "react-router";
 
 import { ApplicationShell } from "../layout";
 import { ProtectedRoute } from "../auth";
-import { appointmentsHandle, customersHandle, jobsHandle, missionControlHandle, notFoundHandle } from "./routeMetadata";
+import { appointmentsHandle, customersHandle, dispatchHandle, jobsHandle, missionControlHandle, notFoundHandle } from "./routeMetadata";
 
 export const appRoutes: RouteObject[] = [
   {
@@ -35,6 +35,11 @@ export const appRoutes: RouteObject[] = [
               const module = await import("../routes/CustomersRoute");
               return { Component: module.CustomersRoute };
             },
+          },
+          {
+            path: "dispatch",
+            handle: dispatchHandle,
+            lazy: async () => ({ Component: (await import("../routes/DispatchRoute")).DispatchRoute }),
           },
           {
             path: "jobs",

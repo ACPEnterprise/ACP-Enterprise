@@ -13,6 +13,7 @@ vi.mock("../routes/CustomersRoute", () => ({ CustomersRoute: () => <div>Customer
 vi.mock("../routes/JobsRoute", () => ({ JobsRoute: () => <div>Jobs route content</div> }));
 vi.mock("../routes/JobDetailRoute", () => ({ JobDetailRoute: () => <div>Job detail route content</div> }));
 vi.mock("../routes/AppointmentDetailRoute", () => ({ AppointmentDetailRoute: () => <div>Appointment detail route content</div> }));
+vi.mock("../routes/DispatchRoute", () => ({ DispatchRoute: () => <div>Dispatch route content</div> }));
 
 const authenticatedContext: AuthenticationContextValue = {
   status: "authenticated",
@@ -68,6 +69,12 @@ describe("application routing", () => {
     const router = renderRoute("/appointments/appointment-1");
     expect(await screen.findByText("Appointment detail route content")).toBeInTheDocument();
     expect(router.state.location.pathname).toBe("/appointments/appointment-1");
+  });
+
+  it("loads Dispatch directly through the protected application shell", async () => {
+    renderRoute("/dispatch");
+    expect(await screen.findByText("Dispatch route content")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Dispatch" })).toHaveAttribute("aria-current", "page");
   });
 
   it("preserves browser-style back and forward navigation", async () => {

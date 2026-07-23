@@ -10,7 +10,7 @@ describe("PrimaryNavigation", () => {
     render(<MemoryRouter initialEntries={["/customers"]}><PrimaryNavigation items={availableNavigation} /></MemoryRouter>);
     expect(screen.getByRole("link", { name: "Customers" })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("link", { name: "Mission Control" })).not.toHaveAttribute("aria-current");
-    expect(screen.queryByText("Dispatch")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Dispatch" })).toHaveAttribute("href", "/dispatch");
   });
 
   it("retains accessible names when collapsed", () => {

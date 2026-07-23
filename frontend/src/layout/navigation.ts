@@ -17,7 +17,7 @@ import type { NavigationItem } from "./types";
 export const navigationCatalog = [
   { id: "mission-control", label: "Mission Control", path: "/mission-control", icon: LayoutDashboard, availability: "available" },
   { id: "customers", label: "Customers", path: "/customers", icon: Users, availability: "available" },
-  { id: "dispatch", label: "Dispatch", path: "/dispatch", icon: ClipboardList, availability: "hidden" },
+  { id: "dispatch", label: "Dispatch", path: "/dispatch", icon: ClipboardList, availability: "available" },
   { id: "estimates", label: "Estimates", path: "/estimates", icon: FileChartColumn, availability: "hidden" },
   { id: "jobs", label: "Jobs", path: "/jobs", icon: BriefcaseBusiness, availability: "available" },
   { id: "invoices", label: "Invoices", path: "/invoices", icon: FileText, availability: "hidden" },
