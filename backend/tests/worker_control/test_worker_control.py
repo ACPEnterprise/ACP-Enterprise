@@ -10,6 +10,19 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.core.config import settings
 from app.engineering_execution.service import EngineeringExecutionService
+from app.events.models import BusinessEvent
+from app.execution_providers.contracts import (
+    ExecutionProvider,
+    ProviderCapabilities,
+    ProviderCapability,
+    ProviderExecutionRequest,
+    ProviderExecutionResult,
+    ProviderExecutionStatus,
+    ProviderHealth,
+    ProviderIdentity,
+    immutable_mapping,
+)
+from app.execution_providers.registry import ExecutionProviderRegistry
 from app.platform.audit.models import AuditRecord
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import WorkerControlPermission
@@ -74,6 +87,7 @@ async def register_available_worker(
     fixture: ServiceFixture,
     *,
     name: str = "worker-one",
+    provider_identifier: str = "local-provider",
     capabilities: tuple[WorkerCapability, ...] = (
         WorkerCapability.ENGINEERING_EXECUTE,
     ),
@@ -85,7 +99,7 @@ async def register_available_worker(
             session,
             context=operator_context(fixture.context),
             command=RegisterWorkerCommand(
-                provider_identifier="local-provider",
+                provider_identifier=provider_identifier,
                 name=name,
                 worker_version="1.0.0",
                 capabilities=capabilities,
@@ -107,6 +121,52 @@ async def register_available_worker(
             now=now + timedelta(seconds=1),
         )
     return service, worker, worker_context, heartbeat
+
+
+class FakeExecutionProvider(ExecutionProvider):
+    def __init__(
+        self,
+        *,
+        identifier: str = "codex",
+        capabilities: tuple[ProviderCapability, ...] = (
+            ProviderCapability.ENGINEERING_EXECUTE,
+        ),
+        available: bool = True,
+    ) -> None:
+        self._identity = ProviderIdentity(identifier, "Test Provider", "1")
+        self._capabilities = ProviderCapabilities(capabilities)
+        self.available = available
+        self.requests: list[ProviderExecutionRequest] = []
+
+    @property
+    def identity(self) -> ProviderIdentity:
+        return self._identity
+
+    @property
+    def capabilities(self) -> ProviderCapabilities:
+        return self._capabilities
+
+    async def health(self) -> ProviderHealth:
+        return ProviderHealth(self.available, utc_now(), "test")
+
+    async def execute(
+        self, request: ProviderExecutionRequest
+    ) -> ProviderExecutionResult:
+        self.requests.append(request)
+        instant = utc_now()
+        return ProviderExecutionResult(
+            provider_request_id=request.provider_request_id,
+            execution_id=request.execution_id,
+            provider_execution_id="provider-result-1",
+            provider_identifier=self.identity.identifier,
+            status=ProviderExecutionStatus.SUCCEEDED,
+            started_at=instant,
+            finished_at=instant,
+            evidence_summary=immutable_mapping({"repository_mutated": False}),
+            validation_summary=immutable_mapping({"tests_run": False}),
+            output_references=("evidence://provider-result-1",),
+            failure_classification=None,
+        )
 
 
 async def disconnected_execution(fixture: ServiceFixture):
@@ -329,6 +389,76 @@ async def test_offer_and_lease_lifecycle_never_changes_execution(
         )
     assert stored_worker is not None
     assert stored_worker.lifecycle_state is WorkerLifecycleState.AVAILABLE
+
+
+@pytest.mark.asyncio
+async def test_worker_control_selects_provider_without_codex_dependency(
+    worker_database: ServiceFixture,
+) -> None:
+    fixture = worker_database
+    _, worker, worker_context, _ = await register_available_worker(
+        fixture, provider_identifier="codex"
+    )
+    execution = await disconnected_execution(fixture)
+    provider = FakeExecutionProvider()
+    service = WorkerControlService(providers=ExecutionProviderRegistry((provider,)))
+    started_at = utc_now()
+    async with fixture.factory() as session:
+        offer = await service.issue_offer(
+            session,
+            context=operator_context(fixture.context),
+            execution_id=execution.execution_id,
+            capability_required=WorkerCapability.ENGINEERING_EXECUTE,
+            lease_seconds=120,
+            now=started_at,
+        )
+    async with fixture.factory() as session:
+        lease = await service.acquire_lease(
+            session,
+            worker_context=worker_context,
+            offer=offer,
+            now=started_at + timedelta(seconds=1),
+        )
+    async with fixture.factory() as session:
+        result = await service.execute_with_provider(
+            session,
+            worker_context=worker_context,
+            lease_id=lease.id,
+            expected_lease_version=lease.version,
+            now=started_at + timedelta(seconds=2),
+        )
+    assert result.status is ProviderExecutionStatus.SUCCEEDED
+    assert len(provider.requests) == 1
+    request = provider.requests[0]
+    assert request.provider_request_id == lease.id
+    assert request.execution_id == execution.execution_id
+    assert request.company_id == worker.company_id
+    assert request.worker_id == worker.id
+    assert request.provider_identifier == "codex"
+    assert request.repository_key == "acp-enterprise"
+    assert request.instruction_digest == execution.validation_summary.get(
+        "instruction_digest", request.instruction_digest
+    )
+    async with fixture.factory() as session:
+        actions = (
+            await session.scalars(
+                select(AuditRecord.action)
+                .where(AuditRecord.resource_id == execution.execution_id)
+                .order_by(AuditRecord.occurred_at)
+            )
+        ).all()
+        event_types = (
+            await session.scalars(
+                select(BusinessEvent.event_type)
+                .where(BusinessEvent.entity_id == execution.execution_id)
+                .order_by(BusinessEvent.occurred_at)
+            )
+        ).all()
+    assert "engineering.execution_provider_selected" in actions
+    assert "engineering.provider_execution_started" in actions
+    assert "engineering.provider_execution_completed" in actions
+    assert "engineering.execution_provider_selected" in event_types
+    assert "engineering.provider_execution_completed" in event_types
 
 
 @pytest.mark.asyncio

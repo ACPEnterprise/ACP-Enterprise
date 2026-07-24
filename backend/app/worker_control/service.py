@@ -6,8 +6,33 @@ from uuid import UUID, uuid4
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.engineering_control.records import EngineeringApprovalState
+from app.engineering_control.repository import (
+    EngineeringCommandRepository,
+    engineering_command_repository,
+)
 from app.engineering_execution.contracts import EngineeringExecutionState
 from app.engineering_execution.repository import EngineeringExecutionRepository
+from app.events.schemas import BusinessEventCreate
+from app.events.service import BusinessEventService
+from app.events.types import EventType
+from app.execution_providers.contracts import (
+    ProviderCapability,
+    ProviderExecutionRequest,
+    ProviderExecutionResult,
+    ProviderExecutionStatus,
+)
+from app.execution_providers.errors import (
+    ExecutionProviderError,
+    ProviderCapabilityError,
+    ProviderNotFoundError,
+    ProviderRequestError,
+    ProviderUnavailableError,
+)
+from app.execution_providers.registry import (
+    ExecutionProviderRegistry,
+    execution_provider_registry,
+)
 from app.platform.audit.service import AuditEntry, AuditService, audit_service
 from app.platform.permissions.authorization import (
     AuthorizationContext,
@@ -73,13 +98,19 @@ class WorkerControlService:
         execution_repository: type[
             EngineeringExecutionRepository
         ] = EngineeringExecutionRepository,
+        command_repository: EngineeringCommandRepository = engineering_command_repository,
+        providers: ExecutionProviderRegistry = execution_provider_registry,
         authorization: AuthorizationService = authorization_service,
         audit: AuditService = audit_service,
+        business_events: type[BusinessEventService] = BusinessEventService,
     ) -> None:
         self.repository = repository
         self.execution_repository = execution_repository
+        self.command_repository = command_repository
+        self.providers = providers
         self.authorization = authorization
         self.audit = audit
+        self.business_events = business_events
 
     async def register_worker(
         self,
@@ -557,6 +588,215 @@ class WorkerControlService:
         )
         return record
 
+    async def execute_with_provider(
+        self,
+        session: AsyncSession,
+        *,
+        worker_context: AuthenticatedWorkerContext,
+        lease_id: UUID,
+        expected_lease_version: int,
+        now: datetime | None = None,
+    ) -> ProviderExecutionResult:
+        """Invoke the worker's provider after authoritative worker/lease checks.
+
+        The lease ID is the stable provider request identifier. Provider clients
+        must use it as their idempotency key. No Engineering Command can call
+        this boundary directly.
+        """
+
+        occurred_at = now or utc_now()
+        deferred_error: ExecutionProviderError | None = None
+        request: ProviderExecutionRequest | None = None
+        provider = None
+        async with session.begin():
+            worker = await self._authenticated_worker(
+                session, worker_context=worker_context
+            )
+            lease = await self._owned_lease(
+                session,
+                worker_context=worker_context,
+                lease_id=lease_id,
+                expected_version=expected_lease_version,
+                now=occurred_at,
+            )
+            execution = await self.execution_repository.get(
+                session,
+                company_id=worker.company_id,
+                execution_id=lease.execution_id,
+            )
+            if execution is None:
+                raise WorkerNotFoundError("Engineering Execution was not found.")
+            command = await self.command_repository.get_command(
+                session,
+                company_id=worker.company_id,
+                command_id=execution.command_id,
+            )
+            if (
+                command is None
+                or command.approval_state is not EngineeringApprovalState.APPROVED
+                or command.instruction_digest != execution.instruction_digest
+            ):
+                raise WorkerLifecycleError(
+                    "Engineering Command is not eligible for provider execution."
+                )
+            try:
+                provider = self.providers.resolve(worker.provider_identifier)
+            except ProviderNotFoundError:
+                deferred_error = ProviderUnavailableError(
+                    "Execution provider is unavailable."
+                )
+                self._stage_provider_observation(
+                    session,
+                    event_type=EventType.EXECUTION_PROVIDER_UNAVAILABLE,
+                    action="engineering.execution_provider_unavailable",
+                    worker_context=worker_context,
+                    execution_id=execution.id,
+                    lease_id=lease.id,
+                    correlation_id=execution.correlation_id,
+                    occurred_at=occurred_at,
+                    outcome="failure",
+                )
+            if provider is not None:
+                required = ProviderCapability(lease.capability_required)
+                if not provider.capabilities.supports(required):
+                    deferred_error = ProviderCapabilityError(
+                        "Execution provider lacks the leased capability."
+                    )
+                    self._stage_provider_observation(
+                        session,
+                        event_type=(EventType.EXECUTION_PROVIDER_CAPABILITY_MISMATCH),
+                        action="engineering.execution_provider_capability_mismatch",
+                        worker_context=worker_context,
+                        execution_id=execution.id,
+                        lease_id=lease.id,
+                        correlation_id=execution.correlation_id,
+                        occurred_at=occurred_at,
+                        outcome="failure",
+                    )
+                else:
+                    try:
+                        health = await provider.health()
+                    except ExecutionProviderError:
+                        health = None
+                    if health is None or not health.available:
+                        deferred_error = ProviderUnavailableError(
+                            "Execution provider is unavailable."
+                        )
+                        self._stage_provider_observation(
+                            session,
+                            event_type=EventType.EXECUTION_PROVIDER_UNAVAILABLE,
+                            action="engineering.execution_provider_unavailable",
+                            worker_context=worker_context,
+                            execution_id=execution.id,
+                            lease_id=lease.id,
+                            correlation_id=execution.correlation_id,
+                            occurred_at=occurred_at,
+                            outcome="failure",
+                        )
+                    else:
+                        request = ProviderExecutionRequest(
+                            provider_request_id=lease.id,
+                            execution_id=execution.id,
+                            lease_id=lease.id,
+                            company_id=worker.company_id,
+                            worker_id=worker.id,
+                            provider_identifier=worker.provider_identifier,
+                            repository_key=command.repository_key,
+                            expected_branch=command.expected_branch,
+                            expected_head=command.expected_head,
+                            authorized_code_changes=command.requested_code_changes,
+                            instruction=command.owner_instruction,
+                            instruction_digest=command.instruction_digest,
+                            request_digest=command.request_digest,
+                            correlation_id=execution.correlation_id,
+                        )
+                        self._stage_provider_observation(
+                            session,
+                            event_type=EventType.EXECUTION_PROVIDER_SELECTED,
+                            action="engineering.execution_provider_selected",
+                            worker_context=worker_context,
+                            execution_id=execution.id,
+                            lease_id=lease.id,
+                            correlation_id=execution.correlation_id,
+                            occurred_at=occurred_at,
+                        )
+                        self._stage_provider_observation(
+                            session,
+                            event_type=EventType.PROVIDER_EXECUTION_STARTED,
+                            action="engineering.provider_execution_started",
+                            worker_context=worker_context,
+                            execution_id=execution.id,
+                            lease_id=lease.id,
+                            correlation_id=execution.correlation_id,
+                            occurred_at=occurred_at,
+                        )
+        if deferred_error is not None:
+            raise deferred_error
+        if provider is None or request is None:
+            raise ProviderUnavailableError("Execution provider is unavailable.")
+        try:
+            result = await provider.execute(request)
+            self._validate_provider_result(request=request, result=result)
+        except ExecutionProviderError as error:
+            async with session.begin():
+                self._stage_provider_observation(
+                    session,
+                    event_type=EventType.PROVIDER_EXECUTION_FAILED,
+                    action="engineering.provider_execution_failed",
+                    worker_context=worker_context,
+                    execution_id=request.execution_id,
+                    lease_id=request.lease_id,
+                    correlation_id=request.correlation_id,
+                    occurred_at=utc_now(),
+                    outcome="failure",
+                    reason_code=error.code,
+                )
+            raise
+        async with session.begin():
+            self._stage_provider_observation(
+                session,
+                event_type=(
+                    EventType.PROVIDER_EXECUTION_COMPLETED
+                    if result.status is ProviderExecutionStatus.SUCCEEDED
+                    else EventType.PROVIDER_EXECUTION_FAILED
+                ),
+                action=(
+                    "engineering.provider_execution_completed"
+                    if result.status is ProviderExecutionStatus.SUCCEEDED
+                    else "engineering.provider_execution_failed"
+                ),
+                worker_context=worker_context,
+                execution_id=request.execution_id,
+                lease_id=request.lease_id,
+                correlation_id=request.correlation_id,
+                occurred_at=result.finished_at,
+                outcome=(
+                    "success"
+                    if result.status is ProviderExecutionStatus.SUCCEEDED
+                    else "failure"
+                ),
+                reason_code=(
+                    None
+                    if result.failure_classification is None
+                    else result.failure_classification.value
+                ),
+            )
+        return result
+
+    @staticmethod
+    def _validate_provider_result(
+        *,
+        request: ProviderExecutionRequest,
+        result: ProviderExecutionResult,
+    ) -> None:
+        if (
+            result.provider_request_id != request.provider_request_id
+            or result.execution_id != request.execution_id
+            or result.provider_identifier != request.provider_identifier
+            or result.finished_at < result.started_at
+        ):
+            raise ProviderRequestError("Provider result identity is invalid.")
+
     async def _authenticated_worker(
         self,
         session: AsyncSession,
@@ -703,6 +943,53 @@ class WorkerControlService:
                     "worker_id": str(worker_context.worker_id),
                     "provider_identifier": worker_context.provider_identifier,
                 },
+                occurred_at=occurred_at,
+            ),
+        )
+
+    def _stage_provider_observation(
+        self,
+        session: AsyncSession,
+        *,
+        event_type: EventType,
+        action: str,
+        worker_context: AuthenticatedWorkerContext,
+        execution_id: UUID,
+        lease_id: UUID,
+        correlation_id: UUID,
+        occurred_at: datetime,
+        outcome: str = "success",
+        reason_code: str | None = None,
+    ) -> None:
+        safe: dict[str, object] = {
+            "execution_id": str(execution_id),
+            "lease_id": str(lease_id),
+            "worker_id": str(worker_context.worker_id),
+            "provider_identifier": worker_context.provider_identifier,
+        }
+        self.audit.stage(
+            session,
+            AuditEntry(
+                action=action,
+                outcome=outcome,
+                resource_type="engineering_execution_provider",
+                company_id=worker_context.company_id,
+                resource_id=execution_id,
+                reason_code=reason_code,
+                correlation_id=correlation_id,
+                details=safe,
+                occurred_at=occurred_at,
+            ),
+        )
+        self.business_events.stage(
+            session,
+            BusinessEventCreate(
+                event_type=event_type,
+                entity_type="engineering_execution",
+                entity_id=execution_id,
+                company_id=worker_context.company_id,
+                payload=safe,
+                correlation_id=correlation_id,
                 occurred_at=occurred_at,
             ),
         )

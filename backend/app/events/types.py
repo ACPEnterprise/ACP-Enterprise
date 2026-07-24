@@ -34,6 +34,14 @@ class EventType(str, Enum):
     WORKER_CREDENTIAL_ACTIVATED = "engineering.worker_credential_activated"
     WORKER_CREDENTIAL_REVOKED = "engineering.worker_credential_revoked"
     WORKER_CREDENTIAL_EXPIRED = "engineering.worker_credential_expired"
+    EXECUTION_PROVIDER_SELECTED = "engineering.execution_provider_selected"
+    PROVIDER_EXECUTION_STARTED = "engineering.provider_execution_started"
+    PROVIDER_EXECUTION_COMPLETED = "engineering.provider_execution_completed"
+    PROVIDER_EXECUTION_FAILED = "engineering.provider_execution_failed"
+    EXECUTION_PROVIDER_UNAVAILABLE = "engineering.execution_provider_unavailable"
+    EXECUTION_PROVIDER_CAPABILITY_MISMATCH = (
+        "engineering.execution_provider_capability_mismatch"
+    )
 
     # CRM
     CUSTOMER_CREATED = "customer.created"
