@@ -4,7 +4,12 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from .contracts import MonitoringState, ProjectionAvailability
+from .contracts import (
+    ConnectionState,
+    LeasePhase,
+    MonitoringState,
+    ProjectionAvailability,
+)
 
 
 class StatusSchema(BaseModel):
@@ -22,12 +27,22 @@ class LeaseStatus(StatusSchema):
     started_at: datetime | None
     expires_at: datetime | None
     released_at: datetime | None
+    phase: LeasePhase
 
 
 class HeartbeatStatus(StatusSchema):
     availability: ProjectionAvailability
     health: str | None
     last_seen: datetime | None
+    age_seconds: int | None = Field(ge=0)
+
+
+class TransportSessionStatus(StatusSchema):
+    availability: ProjectionAvailability
+    state: str | None
+    established_at: datetime | None
+    expires_at: datetime | None
+    last_contact_at: datetime | None
 
 
 class ResultStatus(StatusSchema):
@@ -47,6 +62,8 @@ class MobileExecutionStatus(StatusSchema):
     monitoring_state: MonitoringState
     execution_available: bool
     execution_connected: Literal[False]
+    connection_state: ConnectionState
+    transport_health: str
     execution_id: UUID | None
     execution_state: str | None
     execution_status: str | None
@@ -57,6 +74,7 @@ class MobileExecutionStatus(StatusSchema):
     updated_at: datetime
     lease: LeaseStatus
     heartbeat: HeartbeatStatus
+    transport_session: TransportSessionStatus
     result: ResultStatus
     timeline: tuple[TimelineEntry, ...]
     terminal: bool

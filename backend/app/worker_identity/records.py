@@ -12,6 +12,7 @@ class WorkerIdentityRecord:
     name: str
     state: WorkerIdentityState
     registered_by_user_id: UUID
+    orchestration_worker_id: UUID | None
     version: int
     registered_at: datetime
     updated_at: datetime

@@ -25,12 +25,22 @@ export interface ExecutionLeaseStatus {
   started_at: string | null;
   expires_at: string | null;
   released_at: string | null;
+  phase: "active" | "expiring" | "inactive";
 }
 
 export interface ExecutionHeartbeatStatus {
   availability: ProjectionAvailability;
   health: string | null;
   last_seen: string | null;
+  age_seconds: number | null;
+}
+
+export interface TransportSessionStatus {
+  availability: ProjectionAvailability;
+  state: string | null;
+  established_at: string | null;
+  expires_at: string | null;
+  last_contact_at: string | null;
 }
 
 export interface ExecutionResultStatus {
@@ -50,6 +60,8 @@ export interface MobileExecutionStatus {
   monitoring_state: ExecutionMonitoringState;
   execution_available: boolean;
   execution_connected: false;
+  connection_state: "connected" | "connecting" | "disconnected";
+  transport_health: string;
   execution_id: string | null;
   execution_state: string | null;
   execution_status: string | null;
@@ -60,6 +72,7 @@ export interface MobileExecutionStatus {
   updated_at: string;
   lease: ExecutionLeaseStatus;
   heartbeat: ExecutionHeartbeatStatus;
+  transport_session: TransportSessionStatus;
   result: ExecutionResultStatus;
   timeline: readonly ExecutionTimelineEntry[];
   terminal: boolean;

@@ -5,10 +5,12 @@ from uuid import UUID, uuid4
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.platform.auth.tokens import SecurityTokenService
+from app.worker_control.contracts import AuthenticatedWorkerContext
 from app.worker_control.service import WorkerControlService
 from app.worker_control.transport.contracts import (
     AuthenticatedMessageEnvelope,
     HeartbeatMessage,
+    LeaseRenewalMessage,
     ResultMessage,
     TransportMessageKind,
     TransportReceipt,
@@ -69,15 +71,18 @@ class WorkerTransportService:
     ) -> WorkerSessionChallenge:
         issued_at = now or utc_now()
         raw_challenge = self.tokens.generate_token()
-        challenge = WorkerSessionChallenge(
-            challenge_id=uuid4(),
-            worker_id=worker_id,
-            challenge=raw_challenge,
-            issued_at=issued_at,
-            expires_at=issued_at + CHALLENGE_TTL,
-            key_version=self.authenticator.active_key_version,
-        )
         async with database.begin():
+            key_version = await self.authenticator.active_key_version(
+                database, worker_id=worker_id, now=issued_at
+            )
+            challenge = WorkerSessionChallenge(
+                challenge_id=uuid4(),
+                worker_id=worker_id,
+                challenge=raw_challenge,
+                issued_at=issued_at,
+                expires_at=issued_at + CHALLENGE_TTL,
+                key_version=key_version,
+            )
             await self.sessions.add_challenge(
                 database,
                 StoredChallenge(
@@ -113,18 +118,20 @@ class WorkerTransportService:
                 self.tokens.hash_token(request.challenge), challenge.challenge_digest
             ):
                 raise TransportAuthenticationError("Challenge response is invalid.")
-            context = await self.authenticator.authenticate_challenge_response(
+            authenticated = await self.authenticator.authenticate_challenge_response(
+                database,
                 worker_id=request.worker_id,
+                challenge=request.challenge,
                 authentication_response=request.authentication_response,
                 key_version=challenge.key_version,
                 now=established_at,
             )
-            if context.worker_id != request.worker_id:
+            if authenticated.context.worker_id != request.worker_id:
                 raise TransportBindingError(
                     "Authenticated worker identity does not match."
                 )
             worker = await self.worker_control.validate_worker_in_transaction(
-                database, worker_context=context
+                database, worker_context=authenticated.context
             )
             requested = tuple(
                 sorted(
@@ -137,7 +144,10 @@ class WorkerTransportService:
                 raise TransportCapabilityError("Worker cannot expand its capabilities.")
             session = WorkerSession(
                 session_id=uuid4(),
-                context=context,
+                context=authenticated.context,
+                worker_identity_id=authenticated.worker_identity_id,
+                credential_id=authenticated.credential_id,
+                credential_version=authenticated.credential_version,
                 capabilities=requested,
                 key_version=challenge.key_version,
                 state=WorkerSessionState.ACTIVE,
@@ -161,6 +171,9 @@ class WorkerTransportService:
             if session is None:
                 raise TransportSessionError("Worker session was not found.")
             self._validate_envelope(envelope, session=session, now=accepted_at)
+            await self.authenticator.validate_session(
+                database, session=session, now=accepted_at
+            )
             if not await self.authenticator.verify_message(
                 envelope=envelope, session=session
             ):
@@ -196,6 +209,31 @@ class WorkerTransportService:
                 database, envelope=envelope, receipt=receipt
             )
         return receipt
+
+    async def validate_authenticated_session_in_transaction(
+        self,
+        database: AsyncSession,
+        *,
+        context: AuthenticatedWorkerContext,
+        session_id: UUID,
+        now: datetime | None = None,
+    ) -> WorkerSession:
+        """Validate a bound session inside the caller-owned transaction."""
+        checked_at = now or utc_now()
+        session = await self.sessions.get_session(database, session_id)
+        if (
+            session is None
+            or session.context.company_id != context.company_id
+            or session.context.worker_id != context.worker_id
+            or session.context.provider_identifier != context.provider_identifier
+            or session.state is not WorkerSessionState.ACTIVE
+            or session.expires_at <= checked_at
+        ):
+            raise TransportBindingError("Worker session was not found.")
+        await self.authenticator.validate_session(
+            database, session=session, now=checked_at
+        )
+        return session
 
     async def _dispatch(
         self,
@@ -235,6 +273,18 @@ class WorkerTransportService:
                 now=envelope.sent_at,
             )
             return f"result:{record.id}:lease:{record.lease_id}"
+        if envelope.kind is TransportMessageKind.LEASE_RENEWAL:
+            if not isinstance(payload, LeaseRenewalMessage):
+                raise TransportMessageError("Lease renewal payload is invalid.")
+            lease = await self.worker_control.renew_lease_in_transaction(
+                database,
+                worker_context=session.context,
+                lease_id=payload.lease_id,
+                expected_version=payload.expected_lease_version,
+                lease_seconds=payload.lease_seconds,
+                now=envelope.sent_at,
+            )
+            return f"lease:{lease.id}:version:{lease.version}"
         raise TransportMessageError("Unsupported transport message kind.")
 
     @staticmethod

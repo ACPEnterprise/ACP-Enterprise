@@ -33,6 +33,7 @@ from app.platform.users.identity_router import (
     self_service_router as identity_self_service_router,
 )
 from app.scheduling.router import router as scheduling_router
+from app.worker_control.transport.http.router import router as worker_transport_router
 
 
 logging.basicConfig(
@@ -95,6 +96,7 @@ app.include_router(jobs_router)
 app.include_router(engineering_commands_router)
 app.include_router(mobile_engineering_router)
 app.include_router(execution_status_router)
+app.include_router(worker_transport_router)
 
 
 @app.get("/", tags=["System"])

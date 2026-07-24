@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,11 +11,14 @@ from app.platform.permissions.authorization import (
 from app.platform.permissions.codes import EngineeringCommandPermission
 
 from .contracts import (
+    ConnectionState,
     ExecutionStatusProvider,
     ExecutionStatusSources,
+    LeasePhase,
     MonitoringState,
     ProjectionAvailability,
 )
+from .policy import HEARTBEAT_FRESH_FOR, LEASE_EXPIRING_WITHIN
 from .repository import SqlExecutionStatusProvider
 from .schemas import (
     HeartbeatStatus,
@@ -22,6 +26,7 @@ from .schemas import (
     MobileExecutionStatus,
     ResultStatus,
     TimelineEntry,
+    TransportSessionStatus,
 )
 
 
@@ -39,6 +44,7 @@ class MobileExecutionStatusService:
         *,
         context: AuthorizationContext,
         command_id: UUID,
+        now: datetime | None = None,
     ) -> MobileExecutionStatus:
         self._authorize(context)
         sources = await self.provider.load(
@@ -46,7 +52,7 @@ class MobileExecutionStatusService:
         )
         if sources is None:
             raise ExecutionStatusNotFoundError
-        return self._project(sources)
+        return self._project(sources, now=now or datetime.now(timezone.utc))
 
     @staticmethod
     def _authorize(context: AuthorizationContext) -> None:
@@ -57,7 +63,9 @@ class MobileExecutionStatusService:
         )
 
     @staticmethod
-    def _project(sources: ExecutionStatusSources) -> MobileExecutionStatus:
+    def _project(
+        sources: ExecutionStatusSources, *, now: datetime
+    ) -> MobileExecutionStatus:
         execution = sources.execution
         approved = sources.command.approval_state == "approved"
         if execution is None:
@@ -116,8 +124,63 @@ class MobileExecutionStatusService:
                     event="result_recorded", occurred_at=sources.result.created_at
                 )
             )
+        if sources.transport_session is not None:
+            timeline.append(
+                TimelineEntry(
+                    event="transport_session_established",
+                    occurred_at=sources.transport_session.established_at,
+                )
+            )
+            if sources.transport_session.last_message_at is not None:
+                timeline.append(
+                    TimelineEntry(
+                        event="transport_contact",
+                        occurred_at=sources.transport_session.last_message_at,
+                    )
+                )
         timeline.sort(key=lambda item: (item.occurred_at, item.event))
 
+        heartbeat_age = (
+            max(0, int((now - sources.heartbeat.last_seen).total_seconds()))
+            if sources.heartbeat
+            else None
+        )
+        transport_session = sources.transport_session
+        session_active = bool(
+            transport_session
+            and transport_session.state == "active"
+            and transport_session.expires_at > now
+        )
+        heartbeat_fresh = bool(
+            sources.heartbeat
+            and now - sources.heartbeat.last_seen <= HEARTBEAT_FRESH_FOR
+        )
+        if session_active and heartbeat_fresh:
+            connection_state = ConnectionState.CONNECTED
+        elif session_active:
+            connection_state = ConnectionState.CONNECTING
+        else:
+            connection_state = ConnectionState.DISCONNECTED
+        lease_phase = LeasePhase.INACTIVE
+        if sources.lease and sources.lease.status == "active":
+            lease_phase = (
+                LeasePhase.EXPIRING
+                if sources.lease.expires_at <= now + LEASE_EXPIRING_WITHIN
+                else LeasePhase.ACTIVE
+            )
+        last_contact = (
+            max(
+                timestamp
+                for timestamp in (
+                    sources.heartbeat.last_seen if sources.heartbeat else None,
+                    transport_session.last_message_at if transport_session else None,
+                    transport_session.established_at if transport_session else None,
+                )
+                if timestamp is not None
+            )
+            if sources.heartbeat or transport_session
+            else None
+        )
         terminal = monitoring_state in {
             MonitoringState.COMPLETED,
             MonitoringState.FAILED,
@@ -130,6 +193,14 @@ class MobileExecutionStatusService:
             monitoring_state=monitoring_state,
             execution_available=execution is not None,
             execution_connected=False,
+            connection_state=connection_state,
+            transport_health=(
+                sources.heartbeat.health
+                if heartbeat_fresh and sources.heartbeat
+                else "stale"
+                if sources.heartbeat
+                else "unavailable"
+            ),
             execution_id=execution.execution_id if execution else None,
             execution_state=execution.state if execution else None,
             execution_status=execution.status if execution else None,
@@ -150,6 +221,7 @@ class MobileExecutionStatusService:
                 started_at=sources.lease.started_at if sources.lease else None,
                 expires_at=sources.lease.expires_at if sources.lease else None,
                 released_at=sources.lease.released_at if sources.lease else None,
+                phase=lease_phase,
             ),
             heartbeat=HeartbeatStatus(
                 availability=(
@@ -159,6 +231,20 @@ class MobileExecutionStatusService:
                 ),
                 health=sources.heartbeat.health if sources.heartbeat else None,
                 last_seen=sources.heartbeat.last_seen if sources.heartbeat else None,
+                age_seconds=heartbeat_age,
+            ),
+            transport_session=TransportSessionStatus(
+                availability=(
+                    ProjectionAvailability.AVAILABLE
+                    if transport_session
+                    else ProjectionAvailability.UNAVAILABLE
+                ),
+                state=transport_session.state if transport_session else None,
+                established_at=(
+                    transport_session.established_at if transport_session else None
+                ),
+                expires_at=transport_session.expires_at if transport_session else None,
+                last_contact_at=last_contact,
             ),
             result=ResultStatus(
                 availability=(
@@ -187,7 +273,16 @@ class MobileExecutionStatusService:
             ),
             timeline=tuple(timeline),
             terminal=terminal,
-            polling_after_seconds=None if terminal else 30,
+            polling_after_seconds=(
+                None
+                if terminal
+                else 10
+                if connection_state is ConnectionState.CONNECTED
+                or lease_phase is LeasePhase.EXPIRING
+                else 30
+                if connection_state is ConnectionState.CONNECTING
+                else 60
+            ),
         )
 
 

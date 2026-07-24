@@ -4,6 +4,8 @@ from enum import StrEnum
 from typing import Protocol
 from uuid import UUID
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.worker_control.contracts import (
     AuthenticatedWorkerContext,
     WorkerCapability,
@@ -21,6 +23,7 @@ class WorkerSessionState(StrEnum):
 class TransportMessageKind(StrEnum):
     HEARTBEAT = "heartbeat"
     RESULT = "result"
+    LEASE_RENEWAL = "lease_renewal"
 
 
 @dataclass(frozen=True)
@@ -46,6 +49,9 @@ class WorkerSessionRequest:
 class WorkerSession:
     session_id: UUID
     context: AuthenticatedWorkerContext
+    worker_identity_id: UUID | None
+    credential_id: UUID | None
+    credential_version: int | None
     capabilities: tuple[WorkerCapability, ...]
     key_version: str
     state: WorkerSessionState
@@ -68,7 +74,14 @@ class ResultMessage:
     result: WorkerExecutionResult
 
 
-TransportPayload = HeartbeatMessage | ResultMessage
+@dataclass(frozen=True)
+class LeaseRenewalMessage:
+    lease_id: UUID
+    expected_lease_version: int
+    lease_seconds: int
+
+
+TransportPayload = HeartbeatMessage | ResultMessage | LeaseRenewalMessage
 
 
 @dataclass(frozen=True)
@@ -93,20 +106,39 @@ class TransportReceipt:
     outcome_reference: str
 
 
+@dataclass(frozen=True)
+class AuthenticatedWorkerSessionIdentity:
+    context: AuthenticatedWorkerContext
+    worker_identity_id: UUID
+    credential_id: UUID
+    credential_version: int
+
+
 class WorkerMessageAuthenticator(Protocol):
     """Provider-neutral authentication seam; implementations own cryptography."""
 
-    @property
-    def active_key_version(self) -> str: ...
+    async def active_key_version(
+        self, database: AsyncSession, *, worker_id: UUID, now: datetime
+    ) -> str: ...
 
     async def authenticate_challenge_response(
         self,
+        database: AsyncSession,
         *,
         worker_id: UUID,
+        challenge: str,
         authentication_response: str,
         key_version: str,
         now: datetime,
-    ) -> AuthenticatedWorkerContext: ...
+    ) -> AuthenticatedWorkerSessionIdentity: ...
+
+    async def validate_session(
+        self,
+        database: AsyncSession,
+        *,
+        session: WorkerSession,
+        now: datetime,
+    ) -> None: ...
 
     async def verify_message(
         self,

@@ -147,6 +147,58 @@ class WorkerIdentityService:
             )
             return record
 
+    async def bind_orchestration_worker(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        identity_id: UUID,
+        worker_id: UUID,
+        expected_version: int,
+        now: datetime | None = None,
+    ) -> WorkerIdentityRecord:
+        self._require(context)
+        occurred_at = now or utc_now()
+        try:
+            async with session.begin():
+                identity = await self.repository.get_identity_for_update(
+                    session,
+                    company_id=context.company.id,
+                    identity_id=identity_id,
+                )
+                if identity is None:
+                    raise WorkerIdentityNotFoundError("Worker identity was not found.")
+                if identity.version != expected_version:
+                    raise WorkerIdentityConflictError(
+                        "Worker identity version is stale."
+                    )
+                if identity.orchestration_worker_id == worker_id:
+                    return self.repository.snapshot_identity(identity)
+                if identity.orchestration_worker_id is not None:
+                    raise WorkerIdentityLifecycleError(
+                        "Worker identity is already bound."
+                    )
+                record = await self.repository.bind_orchestration_worker(
+                    session,
+                    identity=identity,
+                    worker_id=worker_id,
+                    now=occurred_at,
+                )
+                self._evidence(
+                    session,
+                    context=context,
+                    record=record,
+                    action="engineering.worker_identity_bound",
+                    event_type=EventType.WORKER_IDENTITY_STATE_CHANGED,
+                    occurred_at=occurred_at,
+                )
+                return record
+        except IntegrityError as error:
+            await session.rollback()
+            raise WorkerIdentityConflictError(
+                "Worker identity binding conflicts with existing state."
+            ) from error
+
     async def issue_credential(
         self,
         session: AsyncSession,

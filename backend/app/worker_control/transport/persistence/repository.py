@@ -88,6 +88,9 @@ class PostgreSQLWorkerTransportSessionRepository:
                 id=session.session_id,
                 company_id=session.context.company_id,
                 worker_id=session.context.worker_id,
+                worker_identity_id=session.worker_identity_id,
+                credential_id=session.credential_id,
+                credential_version=session.credential_version,
                 provider_identifier=session.context.provider_identifier,
                 authentication_subject_digest=hashlib.sha256(
                     session.context.authentication_subject.encode()
@@ -194,6 +197,9 @@ def _session(entity: WorkerTransportSession) -> WorkerSession:
             authentication_subject=f"digest:{entity.authentication_subject_digest}",
             authenticated_at=entity.established_at,
         ),
+        worker_identity_id=entity.worker_identity_id,
+        credential_id=entity.credential_id,
+        credential_version=entity.credential_version,
         capabilities=tuple(WorkerCapability(value) for value in entity.capabilities),
         key_version=entity.key_version,
         state=WorkerSessionState(entity.state),

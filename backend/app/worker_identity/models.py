@@ -27,6 +27,12 @@ class WorkerIdentity(Base):
             name="fk_worker_identities_registering_membership",
             ondelete="RESTRICT",
         ),
+        ForeignKeyConstraint(
+            ["company_id", "orchestration_worker_id"],
+            ["engineering_workers.company_id", "engineering_workers.id"],
+            name="fk_worker_identities_orchestration_worker",
+            ondelete="RESTRICT",
+        ),
         CheckConstraint("length(btrim(name)) > 0", name="ck_worker_identities_name"),
         CheckConstraint(
             "state IN ('registered','active','suspended','revoked')",
@@ -37,6 +43,11 @@ class WorkerIdentity(Base):
             "company_id", "name", name="uq_worker_identities_company_name"
         ),
         UniqueConstraint("company_id", "id", name="uq_worker_identities_company_id"),
+        UniqueConstraint(
+            "company_id",
+            "orchestration_worker_id",
+            name="uq_worker_identities_orchestration_worker",
+        ),
         Index("ix_worker_identities_company_state", "company_id", "state", "id"),
     )
 
@@ -52,6 +63,9 @@ class WorkerIdentity(Base):
     state: Mapped[str] = mapped_column(String(20), nullable=False)
     registered_by_user_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), nullable=False
+    )
+    orchestration_worker_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), nullable=True
     )
     version: Mapped[int] = mapped_column(Integer, nullable=False)
     registered_at: Mapped[datetime] = mapped_column(
@@ -87,6 +101,12 @@ class WorkerCredential(Base):
             "identity_id",
             "version",
             name="uq_worker_credentials_identity_version",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "identity_id",
+            "id",
+            name="uq_worker_credentials_identity_id",
         ),
         Index(
             "uq_worker_credentials_active_identity",

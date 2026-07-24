@@ -25,6 +25,18 @@ class MonitoringState(StrEnum):
     CANCELLED = "cancelled"
 
 
+class ConnectionState(StrEnum):
+    CONNECTED = "connected"
+    CONNECTING = "connecting"
+    DISCONNECTED = "disconnected"
+
+
+class LeasePhase(StrEnum):
+    ACTIVE = "active"
+    EXPIRING = "expiring"
+    INACTIVE = "inactive"
+
+
 @dataclass(frozen=True)
 class CommandStatusSource:
     command_id: UUID
@@ -65,6 +77,14 @@ class HeartbeatStatusSource:
 
 
 @dataclass(frozen=True)
+class TransportSessionStatusSource:
+    state: str
+    established_at: datetime
+    expires_at: datetime
+    last_message_at: datetime | None
+
+
+@dataclass(frozen=True)
 class ResultStatusSource:
     status: str
     failure_classification: str
@@ -80,6 +100,7 @@ class ExecutionStatusSources:
     execution: ExecutionStatusSource | None
     lease: LeaseStatusSource | None
     heartbeat: HeartbeatStatusSource | None
+    transport_session: TransportSessionStatusSource | None
     result: ResultStatusSource | None
 
 

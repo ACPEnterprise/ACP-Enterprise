@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.engineering_control.models import EngineeringCommand
@@ -11,6 +11,15 @@ from app.worker_control.models import (
     WorkerLease,
     WorkerResult,
 )
+from app.worker_control.transport.persistence.models import (
+    WorkerTransportReceipt,
+    WorkerTransportSession,
+)
+from app.worker_identity.contracts import (
+    WorkerCredentialState,
+    WorkerIdentityState,
+)
+from app.worker_identity.models import WorkerCredential, WorkerIdentity
 
 from .contracts import (
     CommandStatusSource,
@@ -19,6 +28,7 @@ from .contracts import (
     HeartbeatStatusSource,
     LeaseStatusSource,
     ResultStatusSource,
+    TransportSessionStatusSource,
 )
 
 
@@ -47,7 +57,10 @@ class SqlExecutionStatusProvider:
                 EngineeringExecution.command_id == command_id,
             )
         )
-        lease = heartbeat = result = None
+        lease: WorkerLease | None = None
+        heartbeat: WorkerHeartbeat | None = None
+        result: WorkerResult | None = None
+        transport_session: WorkerTransportSession | None = None
         if execution is not None:
             lease = await session.scalar(
                 select(WorkerLease)
@@ -84,6 +97,38 @@ class SqlExecutionStatusProvider:
                         .order_by(
                             WorkerHeartbeat.last_seen.desc(),
                             WorkerHeartbeat.id.desc(),
+                        )
+                        .limit(1)
+                    )
+                    transport_session = await session.scalar(
+                        select(WorkerTransportSession)
+                        .join(
+                            WorkerIdentity,
+                            WorkerIdentity.id
+                            == WorkerTransportSession.worker_identity_id,
+                        )
+                        .join(
+                            WorkerCredential,
+                            WorkerCredential.id == WorkerTransportSession.credential_id,
+                        )
+                        .where(
+                            WorkerTransportSession.company_id == company_id,
+                            WorkerTransportSession.worker_id == lease.worker_id,
+                            WorkerIdentity.company_id == company_id,
+                            WorkerIdentity.orchestration_worker_id == lease.worker_id,
+                            WorkerIdentity.state == WorkerIdentityState.ACTIVE.value,
+                            WorkerCredential.company_id == company_id,
+                            WorkerCredential.identity_id
+                            == WorkerTransportSession.worker_identity_id,
+                            WorkerCredential.version
+                            == WorkerTransportSession.credential_version,
+                            WorkerCredential.state
+                            == WorkerCredentialState.ACTIVE.value,
+                            WorkerCredential.expires_at > func.now(),
+                        )
+                        .order_by(
+                            WorkerTransportSession.established_at.desc(),
+                            WorkerTransportSession.id.desc(),
                         )
                         .limit(1)
                     )
@@ -130,6 +175,27 @@ class SqlExecutionStatusProvider:
                 else HeartbeatStatusSource(
                     health=heartbeat.health,
                     last_seen=heartbeat.last_seen,
+                )
+            ),
+            transport_session=(
+                None
+                if transport_session is None
+                else TransportSessionStatusSource(
+                    state=transport_session.state,
+                    established_at=transport_session.established_at,
+                    expires_at=transport_session.expires_at,
+                    last_message_at=await session.scalar(
+                        select(WorkerTransportReceipt.accepted_at)
+                        .where(
+                            WorkerTransportReceipt.company_id == company_id,
+                            WorkerTransportReceipt.session_id == transport_session.id,
+                        )
+                        .order_by(
+                            WorkerTransportReceipt.accepted_at.desc(),
+                            WorkerTransportReceipt.message_id.desc(),
+                        )
+                        .limit(1)
+                    ),
                 )
             ),
             result=(

@@ -64,6 +64,22 @@ class WorkerTransportSession(Base):
             name="fk_worker_transport_sessions_worker",
             ondelete="RESTRICT",
         ),
+        ForeignKeyConstraint(
+            ["company_id", "worker_identity_id"],
+            ["worker_identities.company_id", "worker_identities.id"],
+            name="fk_worker_transport_sessions_identity",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "worker_identity_id", "credential_id"],
+            [
+                "worker_identity_credentials.company_id",
+                "worker_identity_credentials.identity_id",
+                "worker_identity_credentials.id",
+            ],
+            name="fk_worker_transport_sessions_credential",
+            ondelete="RESTRICT",
+        ),
         CheckConstraint(
             "state IN ('active','expired','revoked')",
             name="ck_worker_transport_sessions_state",
@@ -80,6 +96,17 @@ class WorkerTransportSession(Base):
             "length(authentication_subject_digest) = 64",
             name="ck_worker_transport_sessions_subject_digest",
         ),
+        CheckConstraint(
+            "(worker_identity_id IS NOT NULL AND credential_id IS NOT NULL "
+            "AND credential_version IS NOT NULL) OR "
+            "(state = 'revoked' AND worker_identity_id IS NULL "
+            "AND credential_id IS NULL AND credential_version IS NULL)",
+            name="ck_worker_transport_sessions_identity_binding",
+        ),
+        CheckConstraint(
+            "credential_version IS NULL OR credential_version >= 1",
+            name="ck_worker_transport_sessions_credential_version",
+        ),
         UniqueConstraint(
             "company_id", "id", name="uq_worker_transport_sessions_company_id"
         ),
@@ -95,6 +122,13 @@ class WorkerTransportSession(Base):
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True)
     company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     worker_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    worker_identity_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), nullable=True
+    )
+    credential_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), nullable=True
+    )
+    credential_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
     provider_identifier: Mapped[str] = mapped_column(String(100), nullable=False)
     authentication_subject_digest: Mapped[str] = mapped_column(
         String(64), nullable=False

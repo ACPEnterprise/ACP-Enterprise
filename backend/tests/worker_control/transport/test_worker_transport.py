@@ -23,6 +23,7 @@ from app.worker_control.records import (
 )
 from app.worker_control.transport.contracts import (
     AuthenticatedMessageEnvelope,
+    AuthenticatedWorkerSessionIdentity,
     HeartbeatMessage,
     ResultMessage,
     TransportMessageKind,
@@ -68,27 +69,53 @@ DATABASE = cast(AsyncSession, FakeDatabase())
 
 
 class FakeAuthenticator:
-    active_key_version = "key-2026-07"
+    key_version = "key-2026-07"
 
     def __init__(self, context: AuthenticatedWorkerContext) -> None:
         self.context = context
         self.message_valid = True
 
+    async def active_key_version(
+        self, database: AsyncSession, *, worker_id: UUID, now: datetime
+    ) -> str:
+        del database, now
+        if worker_id != self.context.worker_id:
+            raise TransportAuthenticationError("authentication failed")
+        return self.key_version
+
     async def authenticate_challenge_response(
         self,
+        database: AsyncSession,
         *,
         worker_id: UUID,
+        challenge: str,
         authentication_response: str,
         key_version: str,
         now: datetime,
-    ) -> AuthenticatedWorkerContext:
+    ) -> AuthenticatedWorkerSessionIdentity:
         if (
             worker_id != self.context.worker_id
             or authentication_response != "valid-proof"
-            or key_version != self.active_key_version
+            or key_version != self.key_version
+            or not challenge
         ):
             raise TransportAuthenticationError("authentication failed")
-        return replace(self.context, authenticated_at=now)
+        del database
+        return AuthenticatedWorkerSessionIdentity(
+            context=replace(self.context, authenticated_at=now),
+            worker_identity_id=self.context.worker_id,
+            credential_id=self.context.worker_id,
+            credential_version=1,
+        )
+
+    async def validate_session(
+        self,
+        database: AsyncSession,
+        *,
+        session: WorkerSession,
+        now: datetime,
+    ) -> None:
+        del database, session, now
 
     async def verify_message(
         self,

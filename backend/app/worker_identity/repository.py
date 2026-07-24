@@ -6,10 +6,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.worker_identity.contracts import (
     IssuedCredentialMetadata,
+    WorkerAuthenticationCredential,
     WorkerCredentialState,
     WorkerIdentityState,
 )
 from app.worker_identity.models import WorkerCredential, WorkerIdentity
+from app.worker_control.models import EngineeringWorker
 from app.worker_identity.records import WorkerCredentialRecord, WorkerIdentityRecord
 
 
@@ -78,6 +80,20 @@ class WorkerIdentityRepository:
         now: datetime,
     ) -> WorkerIdentityRecord:
         identity.state = state.value
+        identity.version += 1
+        identity.updated_at = now
+        await session.flush()
+        return _identity_record(identity)
+
+    async def bind_orchestration_worker(
+        self,
+        session: AsyncSession,
+        *,
+        identity: WorkerIdentity,
+        worker_id: UUID,
+        now: datetime,
+    ) -> WorkerIdentityRecord:
+        identity.orchestration_worker_id = worker_id
         identity.version += 1
         identity.updated_at = now
         await session.flush()
@@ -154,6 +170,107 @@ class WorkerIdentityRepository:
         )
         return None if entity is None else _credential_record(entity)
 
+    async def get_authentication_credential(
+        self,
+        session: AsyncSession,
+        *,
+        worker_id: UUID,
+        now: datetime,
+    ) -> WorkerAuthenticationCredential | None:
+        row = (
+            await session.execute(
+                select(WorkerIdentity, WorkerCredential, EngineeringWorker)
+                .join(
+                    WorkerCredential,
+                    WorkerCredential.identity_id == WorkerIdentity.id,
+                )
+                .join(
+                    EngineeringWorker,
+                    EngineeringWorker.id == WorkerIdentity.orchestration_worker_id,
+                )
+                .where(
+                    WorkerIdentity.orchestration_worker_id == worker_id,
+                    WorkerIdentity.state == WorkerIdentityState.ACTIVE.value,
+                    WorkerCredential.company_id == WorkerIdentity.company_id,
+                    WorkerCredential.state == WorkerCredentialState.ACTIVE.value,
+                    WorkerCredential.expires_at > now,
+                )
+            )
+        ).one_or_none()
+        if row is None:
+            return None
+        identity, credential, worker = row
+        return WorkerAuthenticationCredential(
+            identity_id=identity.id,
+            company_id=identity.company_id,
+            worker_id=worker_id,
+            provider_identifier=worker.provider_identifier,
+            credential_id=credential.id,
+            credential_version=credential.version,
+            verifier=credential.verifier,
+            verifier_algorithm=credential.verifier_algorithm,
+            public_key_id=credential.public_key_id,
+            expires_at=credential.expires_at,
+        )
+
+    async def get_bound_authentication_credential(
+        self,
+        session: AsyncSession,
+        *,
+        company_id: UUID,
+        worker_id: UUID,
+        identity_id: UUID,
+        credential_id: UUID,
+        credential_version: int,
+        now: datetime,
+    ) -> WorkerAuthenticationCredential | None:
+        identity = await session.scalar(
+            select(WorkerIdentity)
+            .where(
+                WorkerIdentity.company_id == company_id,
+                WorkerIdentity.id == identity_id,
+                WorkerIdentity.orchestration_worker_id == worker_id,
+                WorkerIdentity.state == WorkerIdentityState.ACTIVE.value,
+            )
+            .with_for_update()
+        )
+        if identity is None:
+            return None
+        credential = await session.scalar(
+            select(WorkerCredential)
+            .where(
+                WorkerCredential.company_id == company_id,
+                WorkerCredential.identity_id == identity_id,
+                WorkerCredential.id == credential_id,
+                WorkerCredential.version == credential_version,
+                WorkerCredential.state == WorkerCredentialState.ACTIVE.value,
+                WorkerCredential.expires_at > now,
+            )
+            .with_for_update()
+        )
+        if credential is None:
+            return None
+        worker = await session.scalar(
+            select(EngineeringWorker).where(
+                EngineeringWorker.company_id == company_id,
+                EngineeringWorker.id == worker_id,
+            )
+        )
+        if worker is None:
+            return None
+        return WorkerAuthenticationCredential(
+            identity_id=identity.id,
+            company_id=identity.company_id,
+            worker_id=worker.id,
+            provider_identifier=worker.provider_identifier,
+            credential_id=credential.id,
+            credential_version=credential.version,
+            verifier=credential.verifier,
+            verifier_algorithm=credential.verifier_algorithm,
+            public_key_id=credential.public_key_id,
+            expires_at=credential.expires_at,
+        )
+
     async def transition_credential(
         self,
         session: AsyncSession,
@@ -181,6 +298,7 @@ def _identity_record(entity: WorkerIdentity) -> WorkerIdentityRecord:
         name=entity.name,
         state=WorkerIdentityState(entity.state),
         registered_by_user_id=entity.registered_by_user_id,
+        orchestration_worker_id=entity.orchestration_worker_id,
         version=entity.version,
         registered_at=entity.registered_at,
         updated_at=entity.updated_at,

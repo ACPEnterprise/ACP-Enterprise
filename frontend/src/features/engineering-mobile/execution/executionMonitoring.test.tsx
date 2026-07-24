@@ -27,6 +27,8 @@ const status: MobileExecutionStatus = {
   monitoring_state: "disconnected",
   execution_available: true,
   execution_connected: false,
+  connection_state: "disconnected",
+  transport_health: "unavailable",
   execution_id: "execution-id",
   execution_state: "execution_not_connected",
   execution_status: "disconnected",
@@ -41,11 +43,20 @@ const status: MobileExecutionStatus = {
     started_at: null,
     expires_at: null,
     released_at: null,
+    phase: "inactive",
   },
   heartbeat: {
     availability: "unavailable",
     health: null,
     last_seen: null,
+    age_seconds: null,
+  },
+  transport_session: {
+    availability: "unavailable",
+    state: null,
+    established_at: null,
+    expires_at: null,
+    last_contact_at: null,
   },
   result: {
     availability: "unavailable",
@@ -102,7 +113,7 @@ describe("mobile execution monitoring", () => {
     } as never);
     render(<ExecutionMonitoringPanel commandId="command-id" />);
 
-    expect(screen.getByText("Execution not connected")).toBeInTheDocument();
+    expect(screen.getByText("Worker transport: Disconnected")).toBeInTheDocument();
     expect(
       screen.getByText(/No live progress is being inferred/i),
     ).toBeInTheDocument();
@@ -110,6 +121,40 @@ describe("mobile execution monitoring", () => {
     expect(screen.queryByRole("button", { name: /execute|cancel/i })).toBeNull();
     await userEvent.click(screen.getByRole("button", { name: "Refresh" }));
     expect(refetch).toHaveBeenCalledOnce();
+  });
+
+  it("renders connected transport evidence without claiming execution", () => {
+    vi.mocked(useExecutionStatus).mockReturnValue({
+      isLoading: false,
+      isError: false,
+      isFetching: false,
+      data: {
+        ...status,
+        connection_state: "connected",
+        transport_health: "healthy",
+        heartbeat: {
+          availability: "available",
+          health: "healthy",
+          last_seen: "2026-07-24T12:00:00Z",
+          age_seconds: 8,
+        },
+        transport_session: {
+          availability: "available",
+          state: "active",
+          established_at: "2026-07-24T11:59:00Z",
+          expires_at: "2026-07-24T12:14:00Z",
+          last_contact_at: "2026-07-24T12:00:00Z",
+        },
+      },
+      refetch: vi.fn(),
+    } as never);
+    render(<ExecutionMonitoringPanel commandId="command-id" />);
+
+    expect(screen.getByText("Worker transport: Connected")).toBeInTheDocument();
+    expect(screen.getByText("8 seconds")).toBeInTheDocument();
+    expect(
+      screen.getByText(/does not mean engineering execution has started/i),
+    ).toBeInTheDocument();
   });
 
   it("does not offer a retry for authentication failures", () => {

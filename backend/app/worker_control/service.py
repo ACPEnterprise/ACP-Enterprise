@@ -348,20 +348,40 @@ class WorkerControlService:
         self._validate_lease_seconds(lease_seconds)
         occurred_at = now or utc_now()
         async with session.begin():
-            await self._authenticated_worker(session, worker_context=worker_context)
-            lease = await self._owned_lease(
+            return await self.renew_lease_in_transaction(
                 session,
                 worker_context=worker_context,
                 lease_id=lease_id,
                 expected_version=expected_version,
+                lease_seconds=lease_seconds,
                 now=occurred_at,
             )
-            return await self.repository.renew_lease(
-                session,
-                lease=lease,
-                expires_at=occurred_at + timedelta(seconds=lease_seconds),
-                occurred_at=occurred_at,
-            )
+
+    async def renew_lease_in_transaction(
+        self,
+        session: AsyncSession,
+        *,
+        worker_context: AuthenticatedWorkerContext,
+        lease_id: UUID,
+        expected_version: int,
+        lease_seconds: int,
+        now: datetime,
+    ) -> WorkerLeaseRecord:
+        self._validate_lease_seconds(lease_seconds)
+        await self._authenticated_worker(session, worker_context=worker_context)
+        lease = await self._owned_lease(
+            session,
+            worker_context=worker_context,
+            lease_id=lease_id,
+            expected_version=expected_version,
+            now=now,
+        )
+        return await self.repository.renew_lease(
+            session,
+            lease=lease,
+            expires_at=now + timedelta(seconds=lease_seconds),
+            occurred_at=now,
+        )
 
     async def release_lease(
         self,

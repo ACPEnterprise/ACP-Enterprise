@@ -66,12 +66,16 @@ export function ExecutionMonitoringPanel({
       </div>
 
       <Alert
-        variant={status.execution_connected ? "information" : "warning"}
-        title={status.progress_label}
+        variant={
+          status.connection_state === "connected" ? "information" : "warning"
+        }
+        title={`Worker transport: ${mobileEngineeringLabel(status.connection_state)}`}
       >
-        {status.execution_connected
-          ? "Status is reported by the authoritative execution service."
-          : "Execution remains disconnected. No live progress is being inferred."}
+        {status.connection_state === "connected"
+          ? "A recent authenticated worker heartbeat is available. This does not mean engineering execution has started."
+          : status.connection_state === "connecting"
+            ? "An authenticated transport session exists, but a fresh heartbeat has not been observed."
+            : "No fresh authenticated worker connection is available. No live progress is being inferred."}
       </Alert>
 
       <div className="grid gap-ui-4 lg:grid-cols-2">
@@ -107,10 +111,21 @@ export function ExecutionMonitoringPanel({
           <h3 className="font-bold">Worker availability</h3>
           <dl className="mt-ui-3 grid gap-ui-3 text-sm">
             <div>
+              <dt className="text-content-muted">Connection</dt>
+              <dd>
+                <Badge>{mobileEngineeringLabel(status.connection_state)}</Badge>
+              </dd>
+            </div>
+            <div>
+              <dt className="text-content-muted">Transport health</dt>
+              <dd>{mobileEngineeringLabel(status.transport_health)}</dd>
+            </div>
+            <div>
               <dt className="text-content-muted">Lease</dt>
               <dd>
-                {status.lease.status ??
-                  mobileEngineeringLabel(status.lease.availability)}
+                {status.lease.status
+                  ? `${mobileEngineeringLabel(status.lease.status)} (${mobileEngineeringLabel(status.lease.phase)})`
+                  : mobileEngineeringLabel(status.lease.availability)}
               </dd>
             </div>
             <div>
@@ -127,6 +142,29 @@ export function ExecutionMonitoringPanel({
             <div>
               <dt className="text-content-muted">Last heartbeat</dt>
               <dd>{mobileEngineeringTimestamp(status.heartbeat.last_seen)}</dd>
+            </div>
+            <div>
+              <dt className="text-content-muted">Heartbeat age</dt>
+              <dd>
+                {status.heartbeat.age_seconds === null
+                  ? "Unavailable"
+                  : `${status.heartbeat.age_seconds} seconds`}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-content-muted">Session</dt>
+              <dd>
+                {status.transport_session.state ??
+                  mobileEngineeringLabel(status.transport_session.availability)}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-content-muted">Last contact</dt>
+              <dd>
+                {mobileEngineeringTimestamp(
+                  status.transport_session.last_contact_at,
+                )}
+              </dd>
             </div>
           </dl>
         </Card>

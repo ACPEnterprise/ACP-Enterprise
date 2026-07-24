@@ -7,7 +7,7 @@ from uuid import UUID, uuid4
 import pytest
 import pytest_asyncio
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.core.config import settings
 from app.worker_control.contracts import (
@@ -18,8 +18,10 @@ from app.worker_control.contracts import (
 from app.worker_control.models import WorkerHeartbeat
 from app.worker_control.transport.contracts import (
     AuthenticatedMessageEnvelope,
+    AuthenticatedWorkerSessionIdentity,
     HeartbeatMessage,
     TransportMessageKind,
+    TransportReceipt,
     WorkerSession,
 )
 from app.worker_control.transport.errors import (
@@ -36,6 +38,11 @@ from app.worker_control.transport.persistence.repository import (
     PostgreSQLWorkerTransportSessionRepository,
 )
 from app.worker_control.transport.service import WorkerTransportService
+from app.worker_identity.contracts import (
+    WorkerCredentialState,
+    WorkerIdentityState,
+)
+from app.worker_identity.models import WorkerCredential, WorkerIdentity as IdentityModel
 from tests.engineering_control.test_engineering_command_service import (
     ServiceFixture,
     seed_service_fixture,
@@ -45,23 +52,56 @@ from tests.worker_control.test_worker_control import register_available_worker
 
 
 class PersistenceAuthenticator:
-    active_key_version = "key-v1"
+    key_version = "key-v1"
 
-    def __init__(self, context: AuthenticatedWorkerContext) -> None:
+    def __init__(
+        self,
+        context: AuthenticatedWorkerContext,
+        *,
+        identity_id: UUID,
+        credential_id: UUID,
+    ) -> None:
         self.context = context
+        self.identity_id = identity_id
+        self.credential_id = credential_id
+
+    async def active_key_version(
+        self, database: AsyncSession, *, worker_id: UUID, now
+    ) -> str:
+        del database, now
+        assert worker_id == self.context.worker_id
+        return self.key_version
 
     async def authenticate_challenge_response(
         self,
+        database: AsyncSession,
         *,
         worker_id: UUID,
+        challenge: str,
         authentication_response: str,
         key_version: str,
         now,
-    ) -> AuthenticatedWorkerContext:
+    ) -> AuthenticatedWorkerSessionIdentity:
         assert worker_id == self.context.worker_id
         assert authentication_response == "proof"
-        assert key_version == self.active_key_version
-        return replace(self.context, authenticated_at=now)
+        assert key_version == self.key_version
+        assert challenge
+        del database
+        return AuthenticatedWorkerSessionIdentity(
+            context=replace(self.context, authenticated_at=now),
+            worker_identity_id=self.identity_id,
+            credential_id=self.credential_id,
+            credential_version=1,
+        )
+
+    async def validate_session(
+        self,
+        database: AsyncSession,
+        *,
+        session: WorkerSession,
+        now,
+    ) -> None:
+        del database, session, now
 
     async def verify_message(
         self,
@@ -98,11 +138,47 @@ async def established_transport(
     repository: PostgreSQLWorkerTransportSessionRepository | None = None,
 ) -> tuple[WorkerTransportService, WorkerSession]:
     _, _, context, _ = await register_available_worker(fixture)
+    now = utc_now()
+    identity_id = uuid4()
+    credential_id = uuid4()
+    async with fixture.factory() as database:
+        async with database.begin():
+            database.add(
+                IdentityModel(
+                    id=identity_id,
+                    company_id=context.company_id,
+                    name=f"transport-{context.worker_id}",
+                    state=WorkerIdentityState.ACTIVE.value,
+                    registered_by_user_id=fixture.context.user.id,
+                    orchestration_worker_id=context.worker_id,
+                    version=1,
+                    registered_at=now,
+                    updated_at=now,
+                )
+            )
+            await database.flush()
+            database.add(
+                WorkerCredential(
+                    id=credential_id,
+                    company_id=context.company_id,
+                    identity_id=identity_id,
+                    version=1,
+                    state=WorkerCredentialState.ACTIVE.value,
+                    verifier="test-verifier",
+                    verifier_algorithm="ed25519",
+                    public_key_id=f"key-{credential_id}",
+                    issued_at=now,
+                    expires_at=now + timedelta(days=1),
+                    activated_at=now,
+                    updated_at=now,
+                )
+            )
     service = WorkerTransportService(
-        authenticator=PersistenceAuthenticator(context),
+        authenticator=PersistenceAuthenticator(
+            context, identity_id=identity_id, credential_id=credential_id
+        ),
         sessions=repository or PostgreSQLWorkerTransportSessionRepository(),
     )
-    now = utc_now()
     async with fixture.factory() as database:
         challenge = await service.initiate_session(
             database, worker_id=context.worker_id, now=now
@@ -212,6 +288,29 @@ async def test_concurrent_same_sequence_has_one_winner(
     )
     assert sum(not isinstance(outcome, Exception) for outcome in outcomes) == 1
     assert sum(isinstance(outcome, TransportSequenceError) for outcome in outcomes) == 1
+
+
+@pytest.mark.asyncio
+async def test_concurrent_identical_message_returns_one_duplicate_receipt(
+    transport_database: ServiceFixture,
+) -> None:
+    service, worker_session = await established_transport(transport_database)
+    envelope = heartbeat(worker_session)
+
+    async def send() -> TransportReceipt:
+        async with transport_database.factory() as database:
+            return await service.handle_message(database, envelope=envelope)
+
+    outcomes = await asyncio.gather(send(), send())
+    assert {outcome.duplicate for outcome in outcomes} == {False, True}
+    async with transport_database.factory() as database:
+        receipts = await database.scalar(
+            select(func.count(WorkerTransportReceipt.message_id)).where(
+                WorkerTransportReceipt.session_id == worker_session.session_id,
+                WorkerTransportReceipt.message_id == envelope.message_id,
+            )
+        )
+    assert receipts == 1
 
 
 @pytest.mark.asyncio

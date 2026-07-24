@@ -11,7 +11,17 @@ from app.core.config import settings
 from app.engineering_control.commands import CreateEngineeringCommand
 from app.engineering_control.service import EngineeringControlService
 from app.engineering_execution.service import EngineeringExecutionService
-from app.engineering_execution.status.contracts import MonitoringState
+from app.engineering_execution.status.contracts import (
+    CommandStatusSource,
+    ConnectionState,
+    ExecutionStatusSource,
+    ExecutionStatusSources,
+    HeartbeatStatusSource,
+    LeasePhase,
+    LeaseStatusSource,
+    MonitoringState,
+    TransportSessionStatusSource,
+)
 from app.engineering_execution.status.service import (
     ExecutionStatusNotFoundError,
     MobileExecutionStatusService,
@@ -97,7 +107,7 @@ async def test_projection_is_honest_before_approval_and_without_execution(
     assert pending.heartbeat.last_seen is None
     assert pending.result.status is None
     assert pending.progress_label == "Awaiting owner approval"
-    assert pending.polling_after_seconds == 30
+    assert pending.polling_after_seconds == 60
 
     approved = await approved_command(fixture)
     async with fixture.factory() as session:
@@ -178,3 +188,84 @@ async def test_read_permission_and_active_membership_are_required(
             )
         with pytest.raises(AuthorizationError):
             await service.get(session, context=inactive, command_id=command.id)
+
+
+def test_live_connectivity_projection_uses_only_persisted_transport_evidence() -> None:
+    now = utc_now()
+    worker_id = uuid4()
+    sources = ExecutionStatusSources(
+        command=CommandStatusSource(
+            command_id=uuid4(),
+            ecid="ECID-2026-000001",
+            approval_state="approved",
+            command_updated_at=now - timedelta(minutes=4),
+        ),
+        execution=ExecutionStatusSource(
+            execution_id=uuid4(),
+            state="execution_not_connected",
+            status="disconnected",
+            requested_at=now - timedelta(minutes=3),
+            started_at=None,
+            finished_at=None,
+            updated_at=now - timedelta(minutes=3),
+            failure_classification="provider_not_connected",
+            validation_available=False,
+            evidence_available=False,
+            output_reference_count=0,
+        ),
+        lease=LeaseStatusSource(
+            lease_id=uuid4(),
+            worker_id=worker_id,
+            status="active",
+            started_at=now - timedelta(minutes=2),
+            expires_at=now + timedelta(seconds=45),
+            released_at=None,
+        ),
+        heartbeat=HeartbeatStatusSource(
+            health="healthy", last_seen=now - timedelta(seconds=12)
+        ),
+        transport_session=TransportSessionStatusSource(
+            state="active",
+            established_at=now - timedelta(minutes=2),
+            expires_at=now + timedelta(minutes=5),
+            last_message_at=now - timedelta(seconds=8),
+        ),
+        result=None,
+    )
+
+    projected = MobileExecutionStatusService._project(sources, now=now)
+
+    assert projected.connection_state is ConnectionState.CONNECTED
+    assert projected.execution_connected is False
+    assert projected.transport_health == "healthy"
+    assert projected.heartbeat.age_seconds == 12
+    assert projected.lease.phase is LeasePhase.EXPIRING
+    assert projected.transport_session.last_contact_at == now - timedelta(seconds=8)
+    assert projected.polling_after_seconds == 10
+    assert "transport_contact" in {entry.event for entry in projected.timeline}
+
+
+def test_stale_transport_evidence_is_disconnected_not_progress() -> None:
+    now = utc_now()
+    sources = ExecutionStatusSources(
+        command=CommandStatusSource(
+            command_id=uuid4(),
+            ecid="ECID-2026-000002",
+            approval_state="approved",
+            command_updated_at=now,
+        ),
+        execution=None,
+        lease=None,
+        heartbeat=HeartbeatStatusSource(
+            health="healthy", last_seen=now - timedelta(minutes=5)
+        ),
+        transport_session=None,
+        result=None,
+    )
+
+    projected = MobileExecutionStatusService._project(sources, now=now)
+
+    assert projected.connection_state is ConnectionState.DISCONNECTED
+    assert projected.transport_health == "stale"
+    assert projected.monitoring_state is MonitoringState.APPROVED_NOT_DISPATCHABLE
+    assert projected.polling_after_seconds == 60

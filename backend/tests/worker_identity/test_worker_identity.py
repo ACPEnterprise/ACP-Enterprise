@@ -1,11 +1,9 @@
 from collections.abc import AsyncIterator
 from dataclasses import FrozenInstanceError, replace
 from datetime import timedelta
-from typing import cast
-
 import pytest
 import pytest_asyncio
-from sqlalchemy import Table, func, select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.core.config import settings
@@ -24,7 +22,7 @@ from app.worker_identity.errors import (
     WorkerIdentityNotFoundError,
     WorkerIdentityPermissionError,
 )
-from app.worker_identity.models import WorkerCredential, WorkerIdentity
+from app.worker_identity.models import WorkerCredential
 from app.worker_identity.service import WorkerIdentityService
 from tests.engineering_control.test_engineering_command_service import (
     ServiceFixture,
@@ -62,20 +60,12 @@ def authorized(
 @pytest_asyncio.fixture
 async def identity_database() -> AsyncIterator[ServiceFixture]:
     engine = create_async_engine(settings.database_url)
-    identity_table = cast(Table, WorkerIdentity.__table__)
-    credential_table = cast(Table, WorkerCredential.__table__)
-    async with engine.begin() as connection:
-        await connection.run_sync(identity_table.create, checkfirst=True)
-        await connection.run_sync(credential_table.create, checkfirst=True)
     fixture = await seed_service_fixture(
         async_sessionmaker(engine, expire_on_commit=False)
     )
     try:
         yield fixture
     finally:
-        async with engine.begin() as connection:
-            await connection.run_sync(credential_table.drop, checkfirst=True)
-            await connection.run_sync(identity_table.drop, checkfirst=True)
         await engine.dispose()
 
 
