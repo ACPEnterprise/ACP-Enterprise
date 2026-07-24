@@ -1,0 +1,93 @@
+from dataclasses import dataclass
+from datetime import datetime
+from enum import StrEnum
+from typing import Protocol
+from uuid import UUID
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+
+class ProjectionAvailability(StrEnum):
+    AVAILABLE = "available"
+    UNAVAILABLE = "unavailable"
+    NOT_APPLICABLE = "not_applicable"
+
+
+class MonitoringState(StrEnum):
+    NOT_APPROVED = "not_approved"
+    APPROVED_NOT_DISPATCHABLE = "approved_not_dispatchable"
+    DISCONNECTED = "disconnected"
+    QUEUED = "queued"
+    STARTING = "starting"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+@dataclass(frozen=True)
+class CommandStatusSource:
+    command_id: UUID
+    ecid: str
+    approval_state: str
+    command_updated_at: datetime
+
+
+@dataclass(frozen=True)
+class ExecutionStatusSource:
+    execution_id: UUID
+    state: str
+    status: str
+    requested_at: datetime
+    started_at: datetime | None
+    finished_at: datetime | None
+    updated_at: datetime
+    failure_classification: str | None
+    validation_available: bool
+    evidence_available: bool
+    output_reference_count: int
+
+
+@dataclass(frozen=True)
+class LeaseStatusSource:
+    lease_id: UUID
+    worker_id: UUID
+    status: str
+    started_at: datetime
+    expires_at: datetime
+    released_at: datetime | None
+
+
+@dataclass(frozen=True)
+class HeartbeatStatusSource:
+    health: str
+    last_seen: datetime
+
+
+@dataclass(frozen=True)
+class ResultStatusSource:
+    status: str
+    failure_classification: str
+    validation_available: bool
+    evidence_available: bool
+    output_reference_count: int
+    created_at: datetime
+
+
+@dataclass(frozen=True)
+class ExecutionStatusSources:
+    command: CommandStatusSource
+    execution: ExecutionStatusSource | None
+    lease: LeaseStatusSource | None
+    heartbeat: HeartbeatStatusSource | None
+    result: ResultStatusSource | None
+
+
+class ExecutionStatusProvider(Protocol):
+    async def load(
+        self,
+        session: AsyncSession,
+        *,
+        company_id: UUID,
+        command_id: UUID,
+    ) -> ExecutionStatusSources | None: ...

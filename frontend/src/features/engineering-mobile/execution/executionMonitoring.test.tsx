@@ -1,0 +1,129 @@
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { describe, expect, it, vi } from "vitest";
+
+import { apiClient } from "../../../api/client";
+import { getExecutionStatus, executionStatusPath } from "./api";
+import { ExecutionMonitoringPanel } from "./ExecutionMonitoringPanel";
+import {
+  DEFAULT_EXECUTION_POLLING_MS,
+  executionPollingInterval,
+  useExecutionStatus,
+} from "./hooks";
+import type { MobileExecutionStatus } from "./types";
+
+vi.mock("../../../api/client", () => ({
+  apiClient: { get: vi.fn() },
+}));
+vi.mock("./hooks", async (importOriginal) => {
+  const original = await importOriginal<typeof import("./hooks")>();
+  return { ...original, useExecutionStatus: vi.fn() };
+});
+
+const status: MobileExecutionStatus = {
+  command_id: "command-id",
+  ecid: "ECID-2026-000001",
+  approval_state: "approved",
+  monitoring_state: "disconnected",
+  execution_available: true,
+  execution_connected: false,
+  execution_id: "execution-id",
+  execution_state: "execution_not_connected",
+  execution_status: "disconnected",
+  progress_label: "Execution not connected",
+  requested_at: "2026-07-24T12:00:00Z",
+  started_at: null,
+  finished_at: null,
+  updated_at: "2026-07-24T12:00:00Z",
+  lease: {
+    availability: "unavailable",
+    status: null,
+    started_at: null,
+    expires_at: null,
+    released_at: null,
+  },
+  heartbeat: {
+    availability: "unavailable",
+    health: null,
+    last_seen: null,
+  },
+  result: {
+    availability: "unavailable",
+    status: null,
+    validation_available: false,
+    evidence_available: false,
+    output_reference_count: 0,
+    failure_classification: "provider_not_connected",
+    created_at: null,
+  },
+  timeline: [
+    { event: "execution_requested", occurred_at: "2026-07-24T12:00:00Z" },
+  ],
+  terminal: false,
+  polling_after_seconds: 30,
+};
+
+describe("mobile execution monitoring", () => {
+  it("uses a centralized read-only endpoint", async () => {
+    vi.mocked(apiClient.get).mockResolvedValue({ data: status });
+    expect(await getExecutionStatus("command-id")).toEqual(status);
+    expect(apiClient.get).toHaveBeenCalledWith(
+      executionStatusPath("command-id"),
+    );
+  });
+
+  it("bounds polling and stops for terminal states", () => {
+    expect(executionPollingInterval(undefined)).toBe(
+      DEFAULT_EXECUTION_POLLING_MS,
+    );
+    expect(
+      executionPollingInterval({ ...status, polling_after_seconds: 1 }),
+    ).toBe(10_000);
+    expect(
+      executionPollingInterval({ ...status, polling_after_seconds: 500 }),
+    ).toBe(120_000);
+    expect(
+      executionPollingInterval({
+        ...status,
+        terminal: true,
+        polling_after_seconds: null,
+      }),
+    ).toBe(false);
+  });
+
+  it("renders honest disconnected and unavailable states with manual refresh", async () => {
+    const refetch = vi.fn();
+    vi.mocked(useExecutionStatus).mockReturnValue({
+      isLoading: false,
+      isError: false,
+      isFetching: false,
+      data: status,
+      refetch,
+    } as never);
+    render(<ExecutionMonitoringPanel commandId="command-id" />);
+
+    expect(screen.getByText("Execution not connected")).toBeInTheDocument();
+    expect(
+      screen.getByText(/No live progress is being inferred/i),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText("Unavailable").length).toBeGreaterThan(0);
+    expect(screen.queryByRole("button", { name: /execute|cancel/i })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    expect(refetch).toHaveBeenCalledOnce();
+  });
+
+  it("does not offer a retry for authentication failures", () => {
+    vi.mocked(useExecutionStatus).mockReturnValue({
+      isLoading: false,
+      isError: true,
+      error: {
+        isAxiosError: true,
+        response: { status: 401 },
+        config: {},
+        toJSON: () => ({}),
+      },
+    } as never);
+    render(<ExecutionMonitoringPanel commandId="command-id" />);
+    expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
+  });
+});

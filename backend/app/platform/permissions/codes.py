@@ -66,3 +66,9 @@ class WorkerControlPermission:
     MANAGE = "COMPANY_ENGINEERING_WORKER_MANAGE"
 
     ALL = frozenset({MANAGE})
+
+
+class WorkerIdentityPermission:
+    MANAGE = "COMPANY_WORKER_IDENTITY_MANAGE"
+
+    ALL = frozenset({MANAGE})

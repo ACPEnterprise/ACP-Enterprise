@@ -44,8 +44,27 @@ from app.worker_control.transport.service import (
     SESSION_TTL,
     WorkerTransportService,
 )
+from app.worker_control.transport.repository import (
+    InMemoryWorkerTransportSessionRepository,
+)
 
 NOW = datetime(2026, 7, 24, 12, tzinfo=timezone.utc)
+
+
+class FakeTransaction:
+    async def __aenter__(self) -> None:
+        return None
+
+    async def __aexit__(self, *args: object) -> None:
+        return None
+
+
+class FakeDatabase:
+    def begin(self) -> FakeTransaction:
+        return FakeTransaction()
+
+
+DATABASE = cast(AsyncSession, FakeDatabase())
 
 
 class FakeAuthenticator:
@@ -101,6 +120,8 @@ class FakeWorkerControl:
             raise TransportAuthenticationError("worker binding failed")
         return self.worker
 
+    validate_worker_in_transaction = validate_worker
+
     async def record_heartbeat(
         self,
         database: AsyncSession,
@@ -121,18 +142,20 @@ class FakeWorkerControl:
             created_at=now,
         )
 
+    record_heartbeat_in_transaction = record_heartbeat
+
     async def accept_result(
         self,
         database: AsyncSession,
         *,
         worker_context: AuthenticatedWorkerContext,
         lease_id: UUID,
-        expected_lease_version: int,
+        expected_version: int,
         result: WorkerExecutionResult,
         correlation_id: UUID,
         now: datetime,
     ) -> WorkerResultRecord:
-        del database, expected_lease_version
+        del database, expected_version
         assert worker_context.company_id == self.worker.company_id
         self.result_calls += 1
         return WorkerResultRecord(
@@ -149,6 +172,8 @@ class FakeWorkerControl:
             correlation_id=correlation_id,
             created_at=now,
         )
+
+    accept_result_in_transaction = accept_result
 
 
 def worker_identity() -> WorkerIdentity:
@@ -188,6 +213,7 @@ def make_service() -> tuple[
     service = WorkerTransportService(
         authenticator=authenticator,
         worker_control=cast(object, control),  # type: ignore[arg-type]
+        sessions=InMemoryWorkerTransportSessionRepository(),
     )
     return service, authenticator, control
 
@@ -201,9 +227,11 @@ async def established(
     ),
     now: datetime = NOW,
 ) -> WorkerSession:
-    challenge = await service.initiate_session(worker_id=control.worker.id, now=now)
+    challenge = await service.initiate_session(
+        DATABASE, worker_id=control.worker.id, now=now
+    )
     return await service.establish_session(
-        cast(AsyncSession, object()),
+        DATABASE,
         request=WorkerSessionRequest(
             challenge_id=challenge.challenge_id,
             worker_id=challenge.worker_id,
@@ -237,9 +265,11 @@ def heartbeat_envelope(
 @pytest.mark.asyncio
 async def test_challenge_session_contracts_are_immutable_and_secret_safe() -> None:
     service, _, control = make_service()
-    challenge = await service.initiate_session(worker_id=control.worker.id, now=NOW)
+    challenge = await service.initiate_session(
+        DATABASE, worker_id=control.worker.id, now=NOW
+    )
     stored = await service.sessions.consume_challenge(
-        challenge_id=challenge.challenge_id, now=NOW
+        DATABASE, challenge_id=challenge.challenge_id, now=NOW
     )
     assert stored is not None
     assert challenge.challenge not in stored.challenge_digest
@@ -260,14 +290,14 @@ async def test_session_binds_verified_identity_company_and_capabilities() -> Non
 
     other_service, other_authenticator, other_control = make_service()
     challenge = await other_service.initiate_session(
-        worker_id=other_control.worker.id, now=NOW
+        DATABASE, worker_id=other_control.worker.id, now=NOW
     )
     other_authenticator.context = replace(
         other_authenticator.context, company_id=uuid4()
     )
     with pytest.raises(TransportAuthenticationError):
         await other_service.establish_session(
-            cast(AsyncSession, object()),
+            DATABASE,
             request=WorkerSessionRequest(
                 challenge_id=challenge.challenge_id,
                 worker_id=challenge.worker_id,
@@ -284,7 +314,9 @@ async def test_challenge_replay_expiration_and_capability_expansion_fail_closed(
     None
 ):
     service, _, control = make_service()
-    challenge = await service.initiate_session(worker_id=control.worker.id, now=NOW)
+    challenge = await service.initiate_session(
+        DATABASE, worker_id=control.worker.id, now=NOW
+    )
     request = WorkerSessionRequest(
         challenge_id=challenge.challenge_id,
         worker_id=control.worker.id,
@@ -292,18 +324,16 @@ async def test_challenge_replay_expiration_and_capability_expansion_fail_closed(
         authentication_response="valid-proof",
         capabilities=(WorkerCapability.ENGINEERING_EXECUTE,),
     )
-    await service.establish_session(
-        cast(AsyncSession, object()), request=request, now=NOW
-    )
+    await service.establish_session(DATABASE, request=request, now=NOW)
     with pytest.raises(TransportReplayError):
-        await service.establish_session(
-            cast(AsyncSession, object()), request=request, now=NOW
-        )
+        await service.establish_session(DATABASE, request=request, now=NOW)
 
-    expired = await service.initiate_session(worker_id=control.worker.id, now=NOW)
+    expired = await service.initiate_session(
+        DATABASE, worker_id=control.worker.id, now=NOW
+    )
     with pytest.raises(TransportChallengeError):
         await service.establish_session(
-            cast(AsyncSession, object()),
+            DATABASE,
             request=replace(
                 request,
                 challenge_id=expired.challenge_id,
@@ -312,10 +342,12 @@ async def test_challenge_replay_expiration_and_capability_expansion_fail_closed(
             now=NOW + CHALLENGE_TTL,
         )
 
-    capability = await service.initiate_session(worker_id=control.worker.id, now=NOW)
+    capability = await service.initiate_session(
+        DATABASE, worker_id=control.worker.id, now=NOW
+    )
     with pytest.raises(TransportCapabilityError):
         await service.establish_session(
-            cast(AsyncSession, object()),
+            DATABASE,
             request=replace(
                 request,
                 challenge_id=capability.challenge_id,
@@ -331,12 +363,8 @@ async def test_heartbeat_is_authenticated_ordered_and_idempotent() -> None:
     service, _, control = make_service()
     session = await established(service, control)
     envelope = heartbeat_envelope(session)
-    first = await service.handle_message(
-        cast(AsyncSession, object()), envelope=envelope, now=NOW
-    )
-    replay = await service.handle_message(
-        cast(AsyncSession, object()), envelope=envelope, now=NOW
-    )
+    first = await service.handle_message(DATABASE, envelope=envelope, now=NOW)
+    replay = await service.handle_message(DATABASE, envelope=envelope, now=NOW)
     assert first.duplicate is False
     assert replay.duplicate is True
     assert replay.outcome_reference == first.outcome_reference
@@ -344,7 +372,7 @@ async def test_heartbeat_is_authenticated_ordered_and_idempotent() -> None:
 
     with pytest.raises(TransportSequenceError):
         await service.handle_message(
-            cast(AsyncSession, object()),
+            DATABASE,
             envelope=heartbeat_envelope(session, sequence=3),
             now=NOW,
         )
@@ -374,19 +402,15 @@ async def test_message_identity_timestamp_session_and_key_fail_closed() -> None:
     )
     for envelope, now, error in cases:
         with pytest.raises(error):
-            await service.handle_message(
-                cast(AsyncSession, object()), envelope=envelope, now=now
-            )
+            await service.handle_message(DATABASE, envelope=envelope, now=now)
 
     authenticator.message_valid = False
     with pytest.raises(TransportAuthenticationError):
-        await service.handle_message(
-            cast(AsyncSession, object()), envelope=base, now=NOW
-        )
+        await service.handle_message(DATABASE, envelope=base, now=NOW)
     authenticator.message_valid = True
     with pytest.raises(TransportSessionError):
         await service.handle_message(
-            cast(AsyncSession, object()),
+            DATABASE,
             envelope=base,
             now=NOW + SESSION_TTL,
         )
@@ -397,10 +421,10 @@ async def test_message_id_reuse_with_changed_content_is_rejected() -> None:
     service, _, control = make_service()
     session = await established(service, control)
     first = heartbeat_envelope(session)
-    await service.handle_message(cast(AsyncSession, object()), envelope=first, now=NOW)
+    await service.handle_message(DATABASE, envelope=first, now=NOW)
     with pytest.raises(TransportReplayError):
         await service.handle_message(
-            cast(AsyncSession, object()),
+            DATABASE,
             envelope=replace(first, payload=HeartbeatMessage(WorkerHealth.DEGRADED)),
             now=NOW,
         )
@@ -437,9 +461,7 @@ async def test_result_binds_worker_lease_capability_and_remains_disconnected() -
         authentication_proof="signed",
         key_version=session.key_version,
     )
-    receipt = await service.handle_message(
-        cast(AsyncSession, object()), envelope=message, now=NOW
-    )
+    receipt = await service.handle_message(DATABASE, envelope=message, now=NOW)
     assert receipt.outcome_reference.startswith("result:")
     assert control.result_calls == 1
 
@@ -451,7 +473,7 @@ async def test_result_binds_worker_lease_capability_and_remains_disconnected() -
     )
     with pytest.raises(TransportCapabilityError):
         await service2.handle_message(
-            cast(AsyncSession, object()),
+            DATABASE,
             envelope=replace(
                 message,
                 session_id=session2.session_id,

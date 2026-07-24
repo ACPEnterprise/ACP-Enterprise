@@ -16,6 +16,7 @@ import {
   shortExpectedHead,
 } from "./presentation";
 import type { MobileCancellationReason } from "./types";
+import { ExecutionMonitoringPanel } from "./execution/ExecutionMonitoringPanel";
 
 export function MobileEngineeringDetailPage() {
   const { commandId } = useParams();
@@ -238,50 +239,7 @@ export function MobileEngineeringDetailPage() {
         </dl>
       </Card>
 
-      <Card className="min-w-0 p-ui-4 sm:p-ui-5">
-        <h2 className="text-lg font-bold">Result and history</h2>
-        {status.isLoading && (
-          <div className="mt-ui-3">
-            <Spinner label="Loading command status" />
-          </div>
-        )}
-        {status.isError && (
-          <Alert
-            className="mt-ui-3"
-            variant="danger"
-            title="Status unavailable"
-            action={
-              <Button variant="outline" onClick={() => void status.refetch()}>
-                Retry
-              </Button>
-            }
-          >
-            Current status could not be loaded.
-          </Alert>
-        )}
-        {status.data && (
-          <dl className="mt-ui-3 grid gap-ui-3 text-sm">
-            <div>
-              <dt className="text-content-muted">Current status</dt>
-              <dd>{mobileEngineeringLabel(status.data.approval_state)}</dd>
-            </div>
-            <div>
-              <dt className="text-content-muted">Execution</dt>
-              <dd>Execution not connected</dd>
-            </div>
-            <div>
-              <dt className="text-content-muted">Result reference</dt>
-              <dd className="break-all">
-                {status.data.result_reference ?? "No structured result"}
-              </dd>
-            </div>
-          </dl>
-        )}
-        <p className="mt-ui-4 text-sm text-content-muted">
-          Detailed lifecycle history and structured execution results remain
-          deferred until the backend exposes owner-authorized evidence.
-        </p>
-      </Card>
+      <ExecutionMonitoringPanel commandId={review.id} />
 
       <section className="space-y-ui-5 border-t border-stroke pt-ui-5">
         {canApprove && (

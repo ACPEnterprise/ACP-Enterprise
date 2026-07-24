@@ -1,0 +1,1 @@
+"""Execution status projection tests."""

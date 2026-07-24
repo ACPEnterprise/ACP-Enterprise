@@ -18,6 +18,7 @@ from app.events.service import BusinessEventService
 from app.events.types import EventType
 from app.engineering_control.router import router as engineering_commands_router
 from app.engineering_control.mobile.router import router as mobile_engineering_router
+from app.engineering_execution.status.router import router as execution_status_router
 from app.jobs.router import router as jobs_router
 from app.platform.auth.router import router as auth_router
 from app.platform.company.admin_router import router as company_admin_router
@@ -93,6 +94,7 @@ app.include_router(scheduling_router)
 app.include_router(jobs_router)
 app.include_router(engineering_commands_router)
 app.include_router(mobile_engineering_router)
+app.include_router(execution_status_router)
 
 
 @app.get("/", tags=["System"])

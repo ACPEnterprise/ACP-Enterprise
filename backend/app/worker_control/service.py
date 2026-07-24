@@ -138,14 +138,29 @@ class WorkerControlService:
     ) -> tuple[WorkerIdentity, WorkerHeartbeatRecord]:
         occurred_at = now or utc_now()
         async with session.begin():
-            worker = await self._authenticated_worker(
-                session, worker_context=worker_context
+            return await self.record_heartbeat_in_transaction(
+                session,
+                worker_context=worker_context,
+                health=health,
+                now=occurred_at,
             )
-            if worker.lifecycle_state == WorkerLifecycleState.DISABLED.value:
-                raise WorkerLifecycleError("Disabled worker cannot send heartbeats.")
-            return await self.repository.record_heartbeat(
-                session, worker=worker, health=health, occurred_at=occurred_at
-            )
+
+    async def record_heartbeat_in_transaction(
+        self,
+        session: AsyncSession,
+        *,
+        worker_context: AuthenticatedWorkerContext,
+        health: WorkerHealth,
+        now: datetime,
+    ) -> tuple[WorkerIdentity, WorkerHeartbeatRecord]:
+        worker = await self._authenticated_worker(
+            session, worker_context=worker_context
+        )
+        if worker.lifecycle_state == WorkerLifecycleState.DISABLED.value:
+            raise WorkerLifecycleError("Disabled worker cannot send heartbeats.")
+        return await self.repository.record_heartbeat(
+            session, worker=worker, health=health, occurred_at=now
+        )
 
     async def validate_worker(
         self,
@@ -154,10 +169,20 @@ class WorkerControlService:
         worker_context: AuthenticatedWorkerContext,
     ) -> WorkerIdentity:
         async with session.begin():
-            worker = await self._authenticated_worker(
+            return await self.validate_worker_in_transaction(
                 session, worker_context=worker_context
             )
-            return self.repository.snapshot_worker(worker)
+
+    async def validate_worker_in_transaction(
+        self,
+        session: AsyncSession,
+        *,
+        worker_context: AuthenticatedWorkerContext,
+    ) -> WorkerIdentity:
+        worker = await self._authenticated_worker(
+            session, worker_context=worker_context
+        )
+        return self.repository.snapshot_worker(worker)
 
     async def set_worker_lifecycle(
         self,
@@ -442,57 +467,75 @@ class WorkerControlService:
         now: datetime | None = None,
     ) -> WorkerResultRecord:
         occurred_at = now or utc_now()
-        self._validate_disconnected_result(result)
         async with session.begin():
-            worker = await self._authenticated_worker(
-                session, worker_context=worker_context
-            )
-            lease = await self._owned_lease(
+            return await self.accept_result_in_transaction(
                 session,
                 worker_context=worker_context,
                 lease_id=lease_id,
                 expected_version=expected_lease_version,
+                result=result,
+                correlation_id=correlation_id,
                 now=occurred_at,
             )
-            if (
-                result.worker_id != worker.id
-                or result.execution_id != lease.execution_id
-            ):
-                raise WorkerLeaseError("Worker result identity does not match lease.")
-            record = await self.repository.create_result(
-                session,
-                lease=lease,
-                status=result.status,
-                validation_summary=dict(result.validation_summary),
-                evidence_summary=dict(result.evidence_summary),
-                output_references=result.output_references,
-                failure_classification=result.failure_classification,
-                correlation_id=correlation_id,
-                occurred_at=occurred_at,
-            )
-            await self.repository.finish_lease(
-                session,
-                lease=lease,
-                worker=worker,
-                status=WorkerLeaseStatus.RELEASED,
-                occurred_at=occurred_at,
-            )
-            self._stage_worker_audit(
-                session,
-                action="engineering.worker_result_recorded",
-                worker_context=worker_context,
-                resource_id=record.id,
-                correlation_id=correlation_id,
-                details={
-                    "execution_id": str(record.execution_id),
-                    "lease_id": str(record.lease_id),
-                    "status": record.status.value,
-                    "failure_classification": record.failure_classification.value,
-                    "repository_mutated": False,
-                },
-                occurred_at=occurred_at,
-            )
-            return record
+
+    async def accept_result_in_transaction(
+        self,
+        session: AsyncSession,
+        *,
+        worker_context: AuthenticatedWorkerContext,
+        lease_id: UUID,
+        expected_version: int,
+        result: WorkerExecutionResult,
+        correlation_id: UUID,
+        now: datetime,
+    ) -> WorkerResultRecord:
+        self._validate_disconnected_result(result)
+        worker = await self._authenticated_worker(
+            session, worker_context=worker_context
+        )
+        lease = await self._owned_lease(
+            session,
+            worker_context=worker_context,
+            lease_id=lease_id,
+            expected_version=expected_version,
+            now=now,
+        )
+        if result.worker_id != worker.id or result.execution_id != lease.execution_id:
+            raise WorkerLeaseError("Worker result identity does not match lease.")
+        record = await self.repository.create_result(
+            session,
+            lease=lease,
+            status=result.status,
+            validation_summary=dict(result.validation_summary),
+            evidence_summary=dict(result.evidence_summary),
+            output_references=result.output_references,
+            failure_classification=result.failure_classification,
+            correlation_id=correlation_id,
+            occurred_at=now,
+        )
+        await self.repository.finish_lease(
+            session,
+            lease=lease,
+            worker=worker,
+            status=WorkerLeaseStatus.RELEASED,
+            occurred_at=now,
+        )
+        self._stage_worker_audit(
+            session,
+            action="engineering.worker_result_recorded",
+            worker_context=worker_context,
+            resource_id=record.id,
+            correlation_id=correlation_id,
+            details={
+                "execution_id": str(record.execution_id),
+                "lease_id": str(record.lease_id),
+                "status": record.status.value,
+                "failure_classification": record.failure_classification.value,
+                "repository_mutated": False,
+            },
+            occurred_at=now,
+        )
+        return record
 
     async def _authenticated_worker(
         self,

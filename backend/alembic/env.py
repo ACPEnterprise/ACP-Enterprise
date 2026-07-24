@@ -23,6 +23,8 @@ from app.platform.users import identity_models  # noqa: F401
 from app.scheduling import models as scheduling_models  # noqa: F401
 from app.workforce import models as workforce_models  # noqa: F401
 from app.worker_control import models as worker_control_models  # noqa: F401
+from app.worker_control.transport.persistence import models as transport_models  # noqa: F401
+from app.worker_identity import models as worker_identity_models  # noqa: F401
 
 
 config = context.config

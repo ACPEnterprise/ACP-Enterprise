@@ -11,6 +11,7 @@ from app.platform.permissions.codes import (
     JobPermission,
     SchedulingPermission,
     WorkerControlPermission,
+    WorkerIdentityPermission,
 )
 
 
@@ -170,6 +171,17 @@ WORKER_CONTROL_DEFINITIONS = tuple(
     for code in sorted(WorkerControlPermission.ALL)
 )
 
+WORKER_IDENTITY_DEFINITIONS = tuple(
+    PermissionDefinition(
+        code=code,
+        name=code.replace("_", " ").title(),
+        resource="worker_identity",
+        action=code.rsplit("_", 1)[-1].lower(),
+        scope=PermissionScope.COMPANY,
+    )
+    for code in sorted(WorkerIdentityPermission.ALL)
+)
+
 permission_catalog = PermissionCatalog(
     ADMINISTRATION_DEFINITIONS
     + CUSTOMER_DEFINITIONS
@@ -179,4 +191,5 @@ permission_catalog = PermissionCatalog(
     + ENGINEERING_COMMAND_DEFINITIONS
     + ENGINEERING_EXECUTION_DEFINITIONS
     + WORKER_CONTROL_DEFINITIONS
+    + WORKER_IDENTITY_DEFINITIONS
 )

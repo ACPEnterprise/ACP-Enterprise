@@ -28,6 +28,12 @@ class EventType(str, Enum):
     ENGINEERING_COMMAND_CANCELED = "engineering.command_canceled"
     ENGINEERING_COMMAND_EXPIRED = "engineering.command_expired"
     ENGINEERING_EXECUTION_REQUESTED = "engineering.execution_requested"
+    WORKER_IDENTITY_REGISTERED = "engineering.worker_identity_registered"
+    WORKER_IDENTITY_STATE_CHANGED = "engineering.worker_identity_state_changed"
+    WORKER_CREDENTIAL_ISSUED = "engineering.worker_credential_issued"
+    WORKER_CREDENTIAL_ACTIVATED = "engineering.worker_credential_activated"
+    WORKER_CREDENTIAL_REVOKED = "engineering.worker_credential_revoked"
+    WORKER_CREDENTIAL_EXPIRED = "engineering.worker_credential_expired"
 
     # CRM
     CUSTOMER_CREATED = "customer.created"
