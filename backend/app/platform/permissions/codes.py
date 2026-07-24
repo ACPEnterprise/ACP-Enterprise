@@ -60,3 +60,9 @@ class EngineeringExecutionPermission:
     REQUEST = "COMPANY_ENGINEERING_EXECUTION_REQUEST"
 
     ALL = frozenset({REQUEST})
+
+
+class WorkerControlPermission:
+    MANAGE = "COMPANY_ENGINEERING_WORKER_MANAGE"
+
+    ALL = frozenset({MANAGE})

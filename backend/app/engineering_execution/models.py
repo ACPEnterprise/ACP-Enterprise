@@ -74,6 +74,9 @@ class EngineeringExecution(Base):
         UniqueConstraint(
             "company_id", "command_id", name="uq_engineering_executions_company_command"
         ),
+        UniqueConstraint(
+            "company_id", "id", name="uq_engineering_executions_company_id"
+        ),
         Index(
             "ix_engineering_executions_company_created",
             "company_id",
