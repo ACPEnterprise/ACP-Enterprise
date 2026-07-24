@@ -54,3 +54,9 @@ class EngineeringCommandPermission:
     APPROVE = "COMPANY_ENGINEERING_COMMAND_APPROVE"
 
     ALL = frozenset({READ, MANAGE, APPROVE})
+
+
+class EngineeringExecutionPermission:
+    REQUEST = "COMPANY_ENGINEERING_EXECUTION_REQUEST"
+
+    ALL = frozenset({REQUEST})

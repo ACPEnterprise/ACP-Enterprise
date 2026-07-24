@@ -27,6 +27,7 @@ class EventType(str, Enum):
     ENGINEERING_COMMAND_APPROVED = "engineering.command_approved"
     ENGINEERING_COMMAND_CANCELED = "engineering.command_canceled"
     ENGINEERING_COMMAND_EXPIRED = "engineering.command_expired"
+    ENGINEERING_EXECUTION_REQUESTED = "engineering.execution_requested"
 
     # CRM
     CUSTOMER_CREATED = "customer.created"
