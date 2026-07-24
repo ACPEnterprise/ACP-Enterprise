@@ -1,5 +1,14 @@
 import type { ShellRouteHandle } from "../layout";
 
+export const commandCenterHandle = {
+  workspace: {
+    pageTitle: "Command Center",
+    breadcrumbs: [{ label: "Command Center" }],
+    helpTopic: "command-center",
+    aiContext: "command-center",
+  },
+} as const satisfies ShellRouteHandle;
+
 export const missionControlHandle = {
   workspace: {
     pageTitle: "Mission Control",

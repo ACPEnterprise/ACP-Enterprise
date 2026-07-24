@@ -1,35 +1,85 @@
 import {
+  Bot,
   Boxes,
   BriefcaseBusiness,
-  Building2,
-  ChartNoAxesCombined,
-  CircleDollarSign,
+  CalendarDays,
   ClipboardList,
   FileChartColumn,
   FileText,
+  Headphones,
+  Landmark,
+  Megaphone,
+  MonitorCog,
+  ShieldCheck,
   Wrench,
   LayoutDashboard,
   Settings,
   Users,
 } from "lucide-react";
 
-import type { NavigationItem } from "./types";
+import type { NavigationGroup, NavigationItem } from "./types";
 
 export const navigationCatalog = [
+  { id: "command-center", label: "Command Center", path: "/", icon: MonitorCog, availability: "available" },
   { id: "mission-control", label: "Mission Control", path: "/mission-control", icon: LayoutDashboard, availability: "available" },
   { id: "customers", label: "Customers", path: "/customers", icon: Users, availability: "available" },
   { id: "dispatch", label: "Dispatch", path: "/dispatch", icon: ClipboardList, availability: "available" },
-  { id: "estimates", label: "Estimates", path: "/estimates", icon: FileChartColumn, availability: "hidden" },
+  { id: "scheduling", label: "Scheduling", path: "/scheduling", icon: CalendarDays, availability: "coming-soon" },
+  { id: "estimates", label: "Estimates", path: "/estimates", icon: FileChartColumn, availability: "coming-soon" },
   { id: "jobs", label: "Jobs", path: "/jobs", icon: BriefcaseBusiness, availability: "available" },
-  { id: "engineering", label: "Engineering", path: "/engineering", icon: Wrench, availability: "available" },
-  { id: "invoices", label: "Invoices", path: "/invoices", icon: FileText, availability: "hidden" },
-  { id: "inventory", label: "Inventory", path: "/inventory", icon: Boxes, availability: "hidden" },
-  { id: "fleet", label: "Fleet", path: "/fleet", icon: Building2, availability: "hidden" },
-  { id: "accounting", label: "Accounting", path: "/accounting", icon: CircleDollarSign, availability: "hidden" },
-  { id: "reports", label: "Reports", path: "/reports", icon: ChartNoAxesCombined, availability: "hidden" },
-  { id: "administration", label: "Administration", path: "/administration", icon: Settings, availability: "hidden" },
+  { id: "engineering", label: "Engineering Factory", path: "/engineering", icon: Wrench, availability: "available" },
+  { id: "invoices", label: "Invoices", path: "/invoices", icon: FileText, availability: "coming-soon" },
+  { id: "inventory", label: "Inventory", path: "/inventory", icon: Boxes, availability: "coming-soon" },
+  { id: "employees", label: "Employees", path: "/employees", icon: Users, availability: "coming-soon" },
+  { id: "administration", label: "Administration", path: "/administration", icon: ShieldCheck, availability: "coming-soon" },
+  { id: "settings", label: "Settings", path: "/settings", icon: Settings, availability: "coming-soon" },
+  { id: "dispatch-ai", label: "Dispatch AI", path: "/ai/dispatch", icon: Bot, availability: "coming-soon" },
+  { id: "customer-care-ai", label: "Customer Care AI", path: "/ai/customer-care", icon: Headphones, availability: "coming-soon" },
+  { id: "accounting-ai", label: "Accounting AI", path: "/ai/accounting", icon: Landmark, availability: "coming-soon" },
+  { id: "marketing-ai", label: "Marketing AI", path: "/ai/marketing", icon: Megaphone, availability: "coming-soon" },
 ] as const satisfies readonly NavigationItem[];
 
+const item = (id: NavigationItem["id"]) =>
+  navigationCatalog.find((candidate) => candidate.id === id)!;
+
+export const navigationGroups = [
+  { id: "command-center", label: "Command Center", items: [item("command-center")] },
+  {
+    id: "operations",
+    label: "Operations",
+    items: [
+      item("customers"),
+      item("scheduling"),
+      item("jobs"),
+      item("dispatch"),
+      item("estimates"),
+      item("invoices"),
+      item("inventory"),
+    ],
+  },
+  {
+    id: "ai-workforce",
+    label: "AI Workforce",
+    items: [
+      item("engineering"),
+      item("dispatch-ai"),
+      item("customer-care-ai"),
+      item("accounting-ai"),
+      item("marketing-ai"),
+    ],
+  },
+  {
+    id: "management",
+    label: "Management",
+    items: [
+      item("mission-control"),
+      item("employees"),
+      item("administration"),
+      item("settings"),
+    ],
+  },
+] as const satisfies readonly NavigationGroup[];
+
 export const availableNavigation = navigationCatalog.filter(
-  (item) => item.availability === "available",
+  (candidate) => candidate.availability === "available",
 );

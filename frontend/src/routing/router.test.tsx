@@ -9,6 +9,7 @@ import { ThemeProvider } from "../theme/ThemeProvider";
 import { appRoutes } from "./router";
 
 vi.mock("../routes/MissionControlRoute", () => ({ MissionControlRoute: () => <div>Mission route content</div> }));
+vi.mock("../routes/CommandCenterRoute", () => ({ CommandCenterRoute: () => <div>Command Center route content</div> }));
 vi.mock("../routes/CustomersRoute", () => ({ CustomersRoute: () => <div>Customer route content</div> }));
 vi.mock("../routes/JobsRoute", () => ({ JobsRoute: () => <div>Jobs route content</div> }));
 vi.mock("../routes/JobDetailRoute", () => ({ JobDetailRoute: () => <div>Job detail route content</div> }));
@@ -47,10 +48,11 @@ describe("application routing", () => {
     expect(router.state.location.pathname).toBe("/login");
   });
 
-  it("redirects the root to Mission Control", async () => {
+  it("uses Command Center as the authenticated landing route", async () => {
     const router = renderRoute("/");
-    expect(await screen.findByText("Mission route content")).toBeInTheDocument();
-    expect(router.state.location.pathname).toBe("/mission-control");
+    expect(await screen.findByText("Command Center route content")).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe("/");
+    expect(screen.getByRole("link", { name: "Command Center" })).toHaveAttribute("aria-current", "page");
   });
 
   it("renders Customers directly and marks its navigation link active", async () => {
@@ -82,7 +84,7 @@ describe("application routing", () => {
   it("routes Engineering list and detail through the protected shell", async () => {
     const router = renderRoute("/engineering");
     expect(await screen.findByText("Engineering route content")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Engineering" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: "Engineering Factory" })).toHaveAttribute("aria-current", "page");
     await router.navigate("/engineering/command-1");
     expect(await screen.findByText("Engineering detail route content")).toBeInTheDocument();
   });

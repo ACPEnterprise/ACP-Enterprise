@@ -1,8 +1,8 @@
-import { Navigate, createBrowserRouter, type RouteObject } from "react-router";
+import { createBrowserRouter, type RouteObject } from "react-router";
 
 import { ApplicationShell } from "../layout";
 import { ProtectedRoute } from "../auth";
-import { appointmentsHandle, customersHandle, dispatchHandle, engineeringHandle, jobsHandle, missionControlHandle, notFoundHandle } from "./routeMetadata";
+import { appointmentsHandle, commandCenterHandle, customersHandle, dispatchHandle, engineeringHandle, jobsHandle, missionControlHandle, notFoundHandle } from "./routeMetadata";
 
 export const appRoutes: RouteObject[] = [
   {
@@ -19,7 +19,13 @@ export const appRoutes: RouteObject[] = [
       {
         Component: ApplicationShell,
         children: [
-          { index: true, element: <Navigate to="/mission-control" replace /> },
+          {
+            index: true,
+            handle: commandCenterHandle,
+            lazy: async () => ({
+              Component: (await import("../routes/CommandCenterRoute")).CommandCenterRoute,
+            }),
+          },
           {
             path: "mission-control",
             handle: missionControlHandle,

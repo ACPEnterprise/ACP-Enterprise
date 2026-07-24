@@ -7,11 +7,12 @@ export { PrimaryNavigation } from "./PrimaryNavigation";
 export { Sidebar } from "./Sidebar";
 export { SkipLink } from "./SkipLink";
 export { Workspace } from "./Workspace";
-export { availableNavigation, navigationCatalog } from "./navigation";
+export { availableNavigation, navigationCatalog, navigationGroups } from "./navigation";
 export type {
   Breadcrumb,
   NavigationItem,
   NavigationItemId,
+  NavigationGroup,
   ShellRouteHandle,
   WorkspaceMetadata,
 } from "./types";

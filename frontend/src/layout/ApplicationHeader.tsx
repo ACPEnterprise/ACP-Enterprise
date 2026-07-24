@@ -1,4 +1,4 @@
-import { LogOut, Menu, Search } from "lucide-react";
+import { CircleCheck, LogOut, Menu, Search } from "lucide-react";
 import type { RefObject } from "react";
 import { Link } from "react-router";
 
@@ -18,7 +18,7 @@ interface ApplicationHeaderProps {
 
 export function ApplicationHeader({ brand, metadata, onOpenNavigation, navigationTriggerRef }: ApplicationHeaderProps) {
   const { preference, setPreference } = useTheme();
-  const { signOut, user } = useAuth();
+  const { activeCompany, signOut, user } = useAuth();
 
   return (
     <header className="sticky top-0 z-[var(--layer-sticky)] border-b border-stroke bg-header px-ui-4 py-ui-3 md:px-ui-6">
@@ -57,8 +57,22 @@ export function ApplicationHeader({ brand, metadata, onOpenNavigation, navigatio
         </div>
 
         <div className="flex items-center gap-ui-2">
-          <IconButton icon={<Search />} label="Global search is not yet available" variant="ghost" disabled />
-          <NotificationCenterRegion />
+          <div className="hidden text-right xl:block">
+            {user && <p className="text-body-s font-semibold text-content">Welcome, {user.first_name}</p>}
+            {activeCompany && <p className="text-caption text-content-muted">{activeCompany.name}</p>}
+          </div>
+          <span
+            className="hidden items-center gap-ui-1 rounded-[var(--radius-round)] border border-stroke px-ui-3 py-ui-2 text-caption font-semibold text-content-secondary sm:inline-flex"
+            role="status"
+            title="The authenticated Command Center interface is available. This does not describe providers or workers."
+          >
+            <CircleCheck aria-hidden="true" className="size-4 text-status-success" />
+            Command Center Online
+          </span>
+          <div className="hidden sm:contents">
+            <IconButton icon={<Search />} label="Global search is not yet available" variant="ghost" disabled />
+            <NotificationCenterRegion />
+          </div>
           <label className="relative">
             <VisuallyHidden>Theme preference</VisuallyHidden>
             <Select
@@ -73,7 +87,7 @@ export function ApplicationHeader({ brand, metadata, onOpenNavigation, navigatio
             </Select>
           </label>
           {brand.environment && <span className="hidden text-caption text-content-muted xl:inline">{brand.environment}</span>}
-          {user && <span className="hidden text-body-s text-content-muted md:inline">{user.display_name}</span>}
+          {user && <span className="sr-only">Signed in as {user.display_name}</span>}
           <IconButton icon={<LogOut />} label="Sign out" variant="ghost" onClick={() => void signOut()} />
         </div>
       </div>

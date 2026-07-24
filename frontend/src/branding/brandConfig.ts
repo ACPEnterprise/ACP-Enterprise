@@ -5,9 +5,10 @@ import type { BrandConfiguration } from "./types";
  * identity without changing application or design-system components.
  */
 export const brandConfig = {
-  wordmark: "ACP Enterprise",
+  wordmark: "ACP ENTERPRISE",
   productName: "ACP Enterprise",
-  applicationTitle: "ACP Enterprise",
+  applicationTitle: "ACP Enterprise Command Center",
+  tagline: "COMMAND CENTER",
   favicon: {
     href: "/favicon.svg",
     type: "image/svg+xml",

@@ -30,6 +30,7 @@
   --semantic-navigation-active: var(--acp-liberty-blue-600);
   --semantic-navigation-text: var(--acp-slate-200);
   --semantic-header-background: var(--acp-slate-950);
+  --semantic-command-center-accent: var(--acp-liberty-blue-400);
 }
 
 [data-theme="light"] {
@@ -63,4 +64,5 @@
   --semantic-navigation-active: var(--acp-liberty-blue-600);
   --semantic-navigation-text: var(--acp-slate-100);
   --semantic-header-background: var(--acp-white);
+  --semantic-command-center-accent: var(--acp-liberty-blue-700);
 }

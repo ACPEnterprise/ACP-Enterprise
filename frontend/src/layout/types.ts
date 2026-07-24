@@ -17,24 +17,35 @@ export interface ShellRouteHandle {
 }
 
 export type NavigationItemId =
+  | "command-center"
   | "mission-control"
   | "customers"
+  | "scheduling"
   | "dispatch"
   | "estimates"
   | "jobs"
   | "engineering"
   | "invoices"
   | "inventory"
-  | "fleet"
-  | "accounting"
-  | "reports"
-  | "administration";
+  | "administration"
+  | "employees"
+  | "settings"
+  | "dispatch-ai"
+  | "customer-care-ai"
+  | "accounting-ai"
+  | "marketing-ai";
 
 export interface NavigationItem {
   readonly id: NavigationItemId;
   readonly label: string;
   readonly path: string;
   readonly icon: LucideIcon;
-  readonly availability: "available" | "hidden";
+  readonly availability: "available" | "coming-soon";
   readonly requiredPermission?: string;
+}
+
+export interface NavigationGroup {
+  readonly id: string;
+  readonly label: string;
+  readonly items: readonly NavigationItem[];
 }

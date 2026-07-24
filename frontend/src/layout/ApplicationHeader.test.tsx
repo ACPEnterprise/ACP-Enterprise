@@ -11,7 +11,15 @@ import { ApplicationHeader } from "./ApplicationHeader";
 
 const authentication: AuthenticationContextValue = {
   status: "authenticated",
-  activeCompany: null,
+  activeCompany: {
+    id: "company-1",
+    code: "ACP",
+    name: "All County Plumbing",
+    membership_id: "membership-1",
+    default_branch_id: null,
+    has_all_branch_access: true,
+    branches: [],
+  },
   user: {
     id: "user-1",
     normalized_email: "admin@example.com",
@@ -44,6 +52,9 @@ describe("ApplicationHeader", () => {
     const breadcrumbs = screen.getByRole("navigation", { name: "Breadcrumb" });
     expect(breadcrumbs).toBeInTheDocument();
     expect(within(breadcrumbs).getByText("Customer Detail")).toHaveAttribute("aria-current", "page");
+    expect(screen.getByText("Welcome, Preview")).toBeInTheDocument();
+    expect(screen.getByText("All County Plumbing")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Command Center Online");
   });
 
   it("changes the active theme preference", async () => {

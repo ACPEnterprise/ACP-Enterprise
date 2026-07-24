@@ -10,7 +10,10 @@ export function ProtectedRoute() {
   if (status === "restoring") {
     return (
       <div className="flex min-h-screen items-center justify-center bg-app-background text-content">
-        <Spinner label="Restoring your session" size="large" />
+        <div className="text-center">
+          <p className="mb-ui-4 text-overline uppercase tracking-[0.16em] text-content-muted">ACP Enterprise</p>
+          <Spinner label="Initializing Command Center" size="large" />
+        </div>
       </div>
     );
   }

@@ -198,6 +198,7 @@
   --color-navigation-active: var(--semantic-navigation-active);
   --color-navigation-content: var(--semantic-navigation-text);
   --color-header: var(--semantic-header-background);
+  --color-command-center-accent: var(--semantic-command-center-accent);
 
   --spacing-ui-0: var(--space-0);
   --spacing-ui-1: var(--space-1);

@@ -3,7 +3,7 @@ import { PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
 import type { BrandConfiguration } from "../branding/types";
 import { IconButton } from "../ui";
 import { BrandRegion } from "./BrandRegion";
-import { availableNavigation } from "./navigation";
+import { navigationGroups } from "./navigation";
 import { PrimaryNavigation } from "./PrimaryNavigation";
 
 interface SidebarProps {
@@ -44,7 +44,7 @@ export function Sidebar({
           />
         )}
       </div>
-      <PrimaryNavigation items={availableNavigation} collapsed={collapsed} onNavigate={onNavigate} />
+      <PrimaryNavigation groups={navigationGroups} collapsed={collapsed} onNavigate={onNavigate} />
       {!mobile && (
         <div className="border-t border-stroke p-ui-3">
           <IconButton
