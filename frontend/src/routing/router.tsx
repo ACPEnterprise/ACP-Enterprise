@@ -59,12 +59,12 @@ export const appRoutes: RouteObject[] = [
           {
             path: "engineering",
             handle: engineeringHandle,
-            lazy: async () => ({ Component: (await import("../routes/EngineeringRoute")).EngineeringRoute }),
+            lazy: async () => ({ Component: (await import("../features/engineering-mobile/MobileEngineeringListPage")).MobileEngineeringListPage }),
           },
           {
             path: "engineering/:commandId",
             handle: engineeringHandle,
-            lazy: async () => ({ Component: (await import("../routes/EngineeringCommandDetailRoute")).EngineeringCommandDetailRoute }),
+            lazy: async () => ({ Component: (await import("../features/engineering-mobile/MobileEngineeringDetailPage")).MobileEngineeringDetailPage }),
           },
           {
             path: "*",

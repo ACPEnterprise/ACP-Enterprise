@@ -14,8 +14,8 @@ vi.mock("../routes/JobsRoute", () => ({ JobsRoute: () => <div>Jobs route content
 vi.mock("../routes/JobDetailRoute", () => ({ JobDetailRoute: () => <div>Job detail route content</div> }));
 vi.mock("../routes/AppointmentDetailRoute", () => ({ AppointmentDetailRoute: () => <div>Appointment detail route content</div> }));
 vi.mock("../routes/DispatchRoute", () => ({ DispatchRoute: () => <div>Dispatch route content</div> }));
-vi.mock("../routes/EngineeringRoute", () => ({ EngineeringRoute: () => <div>Engineering route content</div> }));
-vi.mock("../routes/EngineeringCommandDetailRoute", () => ({ EngineeringCommandDetailRoute: () => <div>Engineering detail route content</div> }));
+vi.mock("../features/engineering-mobile/MobileEngineeringListPage", () => ({ MobileEngineeringListPage: () => <div>Engineering route content</div> }));
+vi.mock("../features/engineering-mobile/MobileEngineeringDetailPage", () => ({ MobileEngineeringDetailPage: () => <div>Engineering detail route content</div> }));
 
 const authenticatedContext: AuthenticationContextValue = {
   status: "authenticated",
