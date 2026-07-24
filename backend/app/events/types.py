@@ -22,6 +22,12 @@ class EventType(str, Enum):
     IDENTITY_PASSWORD_RESET_REQUIRED = "identity.password_reset_required"
     IDENTITY_PASSWORD_RESET_CLEARED = "identity.password_reset_cleared"
 
+    # Engineering Control
+    ENGINEERING_COMMAND_CREATED = "engineering.command_created"
+    ENGINEERING_COMMAND_APPROVED = "engineering.command_approved"
+    ENGINEERING_COMMAND_CANCELED = "engineering.command_canceled"
+    ENGINEERING_COMMAND_EXPIRED = "engineering.command_expired"
+
     # CRM
     CUSTOMER_CREATED = "customer.created"
     CUSTOMER_UPDATED = "customer.updated"

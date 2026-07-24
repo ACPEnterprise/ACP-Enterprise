@@ -14,6 +14,8 @@ vi.mock("../routes/JobsRoute", () => ({ JobsRoute: () => <div>Jobs route content
 vi.mock("../routes/JobDetailRoute", () => ({ JobDetailRoute: () => <div>Job detail route content</div> }));
 vi.mock("../routes/AppointmentDetailRoute", () => ({ AppointmentDetailRoute: () => <div>Appointment detail route content</div> }));
 vi.mock("../routes/DispatchRoute", () => ({ DispatchRoute: () => <div>Dispatch route content</div> }));
+vi.mock("../routes/EngineeringRoute", () => ({ EngineeringRoute: () => <div>Engineering route content</div> }));
+vi.mock("../routes/EngineeringCommandDetailRoute", () => ({ EngineeringCommandDetailRoute: () => <div>Engineering detail route content</div> }));
 
 const authenticatedContext: AuthenticationContextValue = {
   status: "authenticated",
@@ -75,6 +77,14 @@ describe("application routing", () => {
     renderRoute("/dispatch");
     expect(await screen.findByText("Dispatch route content")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Dispatch" })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("routes Engineering list and detail through the protected shell", async () => {
+    const router = renderRoute("/engineering");
+    expect(await screen.findByText("Engineering route content")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Engineering" })).toHaveAttribute("aria-current", "page");
+    await router.navigate("/engineering/command-1");
+    expect(await screen.findByText("Engineering detail route content")).toBeInTheDocument();
   });
 
   it("preserves browser-style back and forward navigation", async () => {

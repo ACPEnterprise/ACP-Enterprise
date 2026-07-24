@@ -30,6 +30,15 @@ export const dispatchHandle = {
   workspace: { pageTitle: "Dispatch", breadcrumbs: [{ label: "Dispatch" }], helpTopic: "dispatch", aiContext: "dispatch" },
 } as const satisfies ShellRouteHandle;
 
+export const engineeringHandle = {
+  workspace: {
+    pageTitle: "Engineering",
+    breadcrumbs: [{ label: "Engineering", path: "/engineering" }],
+    helpTopic: "engineering-control",
+    aiContext: "engineering-control",
+  },
+} as const satisfies ShellRouteHandle;
+
 export const notFoundHandle = {
   workspace: {
     pageTitle: "Page not found",

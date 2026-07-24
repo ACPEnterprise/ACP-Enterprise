@@ -7,6 +7,7 @@ from app.customers import models as customer_models  # noqa: F401
 from app.core.config import settings
 from app.core.database import Base
 from app.events import models as event_models  # noqa: F401
+from app.engineering_control import models as engineering_control_models  # noqa: F401
 from app.jobs import models as job_models  # noqa: F401
 from app.platform.auth import models as auth_models  # noqa: F401
 from app.platform.audit import models as audit_models  # noqa: F401
