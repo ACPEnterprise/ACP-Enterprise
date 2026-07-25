@@ -9,14 +9,22 @@ from app.database.session import get_database_session
 from app.worker_control.contracts import WorkerExecutionResult
 from app.worker_control.transport.contracts import (
     AuthenticatedMessageEnvelope,
+    CancellationAcknowledgementMessage,
+    CompositionAcknowledgementMessage,
+    CompositionFetchMessage,
     HeartbeatMessage,
     LeaseRenewalMessage,
+    ProviderProgressMessage,
+    ProviderResultMessage,
     ResultMessage,
     TransportPayload,
     TransportMessageKind,
     WorkerSessionRequest,
 )
-from app.worker_control.transport.errors import WorkerTransportError
+from app.worker_control.transport.errors import (
+    TransportMessageError,
+    WorkerTransportError,
+)
 from app.worker_control.transport.http.dependencies import (
     AuthenticatedIdentity,
     BootstrapIdentity,
@@ -25,12 +33,19 @@ from app.worker_control.transport.http.dependencies import (
 from app.worker_control.transport.http.errors import transport_http_error
 from app.worker_control.transport.http.schemas import (
     ChallengeResponse,
+    CancellationAcknowledgementRequest,
+    CompositionAcknowledgementRequest,
+    CompositionDeliveryResponse,
+    CompositionFetchRequest,
+    CompositionFetchResponse,
     EstablishSessionRequest,
     EnvelopeEvidence,
     HeartbeatRequest,
     LeaseRenewalRequest,
     OfferPageResponse,
     OfferResponse,
+    ProviderNormalizedResultRequest,
+    ProviderProgressRequest,
     ReceiptResponse,
     ResultRequest,
     SessionResponse,
@@ -222,6 +237,171 @@ async def submit_result(
         ),
     )
     return await _handle(database, service, envelope)
+
+
+@router.post(
+    "/compositions/next",
+    response_model=CompositionFetchResponse,
+    summary="Fetch the next immutable approved composition",
+)
+async def fetch_composition(
+    data: CompositionFetchRequest,
+    identity: AuthenticatedIdentity,
+    database: Database,
+    service: TransportService,
+) -> CompositionFetchResponse:
+    receipt = await _handle(
+        database,
+        service,
+        _envelope(
+            data,
+            worker_id=identity.context.worker_id,
+            kind=TransportMessageKind.COMPOSITION_FETCH,
+            payload=CompositionFetchMessage(),
+        ),
+    )
+    if receipt.outcome_reference == "composition:none":
+        return CompositionFetchResponse(receipt=receipt, composition=None)
+    composition_id = UUID(receipt.outcome_reference.removeprefix("composition:"))
+    package = await service.delivery_package(
+        database,
+        context=identity.context,
+        composition_id=composition_id,
+    )
+    if package is None:
+        raise transport_http_error(
+            TransportMessageError("Composition delivery was not found.")
+        )
+    item = package.composition
+    return CompositionFetchResponse(
+        receipt=receipt,
+        composition=CompositionDeliveryResponse(
+            composition_id=item.id,
+            execution_id=item.execution_id,
+            lease_id=item.lease_id,
+            provider_identifier=item.provider_identifier,
+            required_capabilities=item.required_capabilities,
+            effective_capabilities=item.effective_capabilities,
+            approved_code_changes=item.approved_code_changes,
+            repository_key=item.repository_key,
+            expected_branch=item.expected_branch,
+            expected_head=item.expected_head,
+            instruction=package.instruction,
+            instruction_digest=item.instruction_digest,
+            request_digest=item.request_digest,
+            composition_digest=item.composition_digest,
+            expires_at=item.expires_at,
+            integrity_method=package.receipt.integrity.method,
+        ),
+    )
+
+
+@router.post("/compositions/acknowledge", response_model=ReceiptResponse)
+async def acknowledge_composition(
+    data: CompositionAcknowledgementRequest,
+    identity: AuthenticatedIdentity,
+    database: Database,
+    service: TransportService,
+) -> ReceiptResponse:
+    return await _handle(
+        database,
+        service,
+        _envelope(
+            data,
+            worker_id=identity.context.worker_id,
+            kind=TransportMessageKind.COMPOSITION_ACKNOWLEDGEMENT,
+            payload=CompositionAcknowledgementMessage(
+                composition_id=data.composition_id,
+                composition_digest=data.composition_digest,
+                instruction_digest=data.instruction_digest,
+                request_digest=data.request_digest,
+            ),
+        ),
+    )
+
+
+@router.post("/progress", response_model=ReceiptResponse)
+async def submit_provider_progress(
+    data: ProviderProgressRequest,
+    identity: AuthenticatedIdentity,
+    database: Database,
+    service: TransportService,
+) -> ReceiptResponse:
+    return await _handle(
+        database,
+        service,
+        _envelope(
+            data,
+            worker_id=identity.context.worker_id,
+            kind=TransportMessageKind.PROVIDER_PROGRESS,
+            payload=ProviderProgressMessage(
+                attempt_id=data.attempt_id,
+                lease_id=data.lease_id,
+                composition_digest=data.composition_digest,
+                instruction_digest=data.instruction_digest,
+                request_digest=data.request_digest,
+                phase=data.phase,
+                message_code=data.message_code,
+                summary=data.summary,
+                percentage=data.percentage,
+            ),
+        ),
+    )
+
+
+@router.post("/composition-results", response_model=ReceiptResponse)
+async def submit_provider_result(
+    data: ProviderNormalizedResultRequest,
+    identity: AuthenticatedIdentity,
+    database: Database,
+    service: TransportService,
+) -> ReceiptResponse:
+    return await _handle(
+        database,
+        service,
+        _envelope(
+            data,
+            worker_id=identity.context.worker_id,
+            kind=TransportMessageKind.PROVIDER_RESULT,
+            payload=ProviderResultMessage(
+                attempt_id=data.attempt_id,
+                lease_id=data.lease_id,
+                composition_digest=data.composition_digest,
+                instruction_digest=data.instruction_digest,
+                request_digest=data.request_digest,
+                status=data.status,
+                evidence_summary=data.evidence_summary,
+                validation_summary=data.validation_summary,
+                output_references=data.output_references,
+                failure_classification=data.failure_classification,
+                repository_mutated=data.repository_mutated,
+            ),
+        ),
+    )
+
+
+@router.post("/cancellations/acknowledge", response_model=ReceiptResponse)
+async def acknowledge_cancellation(
+    data: CancellationAcknowledgementRequest,
+    identity: AuthenticatedIdentity,
+    database: Database,
+    service: TransportService,
+) -> ReceiptResponse:
+    return await _handle(
+        database,
+        service,
+        _envelope(
+            data,
+            worker_id=identity.context.worker_id,
+            kind=TransportMessageKind.CANCELLATION_ACKNOWLEDGEMENT,
+            payload=CancellationAcknowledgementMessage(
+                attempt_id=data.attempt_id,
+                lease_id=data.lease_id,
+                expected_version=data.expected_version,
+                composition_digest=data.composition_digest,
+            ),
+        ),
+    )
 
 
 def _envelope(

@@ -31,7 +31,9 @@ from app.engineering_execution.composition.errors import (
 from app.engineering_execution.composition.records import (
     AppendProviderProgress,
     CompositionBundle,
+    CompositionDeliveryPackage,
     CreateExecutionComposition,
+    ExecutionCompositionRecord,
     NormalizedProviderResultRecord,
     PrepareProviderAttempt,
     ProviderExecutionAttemptRecord,
@@ -59,6 +61,7 @@ from app.platform.permissions.authorization import (
     authorization_service,
 )
 from app.platform.permissions.codes import EngineeringExecutionPermission
+from app.worker_control.contracts import AuthenticatedWorkerContext
 
 
 SAFE_CODE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,99}$")
@@ -515,6 +518,394 @@ class ExecutionCompositionService:
                 occurred_at=received_at,
             )
         return result
+
+    async def deliver_next_in_transaction(
+        self,
+        session: AsyncSession,
+        *,
+        worker_context: AuthenticatedWorkerContext,
+        now: datetime,
+    ) -> CompositionDeliveryPackage | None:
+        return await self.repository.next_delivery_for_update(
+            session,
+            company_id=worker_context.company_id,
+            worker_id=worker_context.worker_id,
+            provider_identifier=worker_context.provider_identifier,
+            now=now,
+        )
+
+    async def get_delivery_package(
+        self,
+        session: AsyncSession,
+        *,
+        worker_context: AuthenticatedWorkerContext,
+        composition_id: UUID,
+    ) -> CompositionDeliveryPackage | None:
+        return await self.repository.get_delivery_package(
+            session,
+            company_id=worker_context.company_id,
+            worker_id=worker_context.worker_id,
+            composition_id=composition_id,
+        )
+
+    async def acknowledge_composition_in_transaction(
+        self,
+        session: AsyncSession,
+        *,
+        worker_context: AuthenticatedWorkerContext,
+        composition_id: UUID,
+        composition_digest: str,
+        instruction_digest: str,
+        request_digest: str,
+        now: datetime,
+    ) -> ExecutionCompositionRecord:
+        composition = await self.repository.get_composition(
+            session,
+            company_id=worker_context.company_id,
+            composition_id=composition_id,
+        )
+        if composition is None or composition.worker_id != worker_context.worker_id:
+            raise CompositionNotFoundError("Composition was not found.")
+        if (
+            composition.provider_identifier != worker_context.provider_identifier
+            or composition.lease_id is None
+            or composition.expires_at <= now
+        ):
+            raise CompositionIneligibleError("Composition is not deliverable.")
+        if (
+            composition.composition_digest != composition_digest
+            or composition.instruction_digest != instruction_digest
+            or composition.request_digest != request_digest
+        ):
+            raise CompositionEvidenceMismatchError("Composition evidence differs.")
+        return composition
+
+    async def append_progress_in_transaction(
+        self,
+        session: AsyncSession,
+        *,
+        worker_context: AuthenticatedWorkerContext,
+        attempt_id: UUID,
+        lease_id: UUID,
+        composition_digest: str,
+        instruction_digest: str,
+        request_digest: str,
+        phase: ProviderProgressPhase,
+        message_code: str,
+        summary: str | None,
+        percentage: int | None,
+        now: datetime,
+    ) -> ProviderProgressEventRecord:
+        code = message_code.strip().lower()
+        normalized_summary = summary.strip() if summary is not None else None
+        if not SAFE_CODE.fullmatch(code):
+            raise ProgressValidationError("Progress message code is invalid.")
+        if normalized_summary is not None and len(normalized_summary) > 500:
+            raise ProgressValidationError("Progress summary is too long.")
+        if percentage is not None and not 0 <= percentage <= 100:
+            raise ProgressValidationError("Progress percentage is invalid.")
+        attempt, composition = await self._worker_attempt_binding(
+            session,
+            worker_context=worker_context,
+            attempt_id=attempt_id,
+            lease_id=lease_id,
+            composition_digest=composition_digest,
+            instruction_digest=instruction_digest,
+            request_digest=request_digest,
+            now=now,
+        )
+        if attempt.state not in {
+            ProviderAttemptState.STARTING,
+            ProviderAttemptState.RUNNING,
+        }:
+            raise AttemptTransitionError("Attempt cannot accept progress.")
+        record = await self.repository.append_progress(
+            session,
+            progress=AppendProviderProgress(
+                company_id=worker_context.company_id,
+                attempt_id=attempt.id,
+                phase=phase,
+                message_code=code,
+                summary=normalized_summary,
+                percentage=percentage,
+                created_at=now,
+            ),
+        )
+        self._stage_worker_event(
+            session,
+            worker_context=worker_context,
+            event_type=EventType.ENGINEERING_EXECUTION_PROGRESS_RECORDED,
+            action="engineering_execution.progress_recorded",
+            resource_id=attempt.id,
+            correlation_id=attempt.idempotency_key,
+            details={
+                "attempt_id": str(attempt.id),
+                "sequence_number": record.sequence_number,
+                "phase": record.phase.value,
+                "message_code": record.message_code,
+            },
+            occurred_at=now,
+        )
+        return record
+
+    async def record_result_in_transaction(
+        self,
+        session: AsyncSession,
+        *,
+        worker_context: AuthenticatedWorkerContext,
+        lease_id: UUID,
+        composition_digest: str,
+        instruction_digest: str,
+        request_digest: str,
+        command: RecordProviderResult,
+        now: datetime,
+    ) -> NormalizedProviderResultRecord:
+        self._validate_result(command)
+        attempt, composition = await self._worker_attempt_binding(
+            session,
+            worker_context=worker_context,
+            attempt_id=command.attempt_id,
+            lease_id=lease_id,
+            composition_digest=composition_digest,
+            instruction_digest=instruction_digest,
+            request_digest=request_digest,
+            now=now,
+            allow_expired=True,
+        )
+        source = await self.repository.load_source_for_update(
+            session,
+            company_id=worker_context.company_id,
+            execution_id=composition.execution_id,
+            lease_id=composition.lease_id,
+        )
+        disposition, reason = _result_disposition(
+            source=source,
+            attempt=attempt,
+            composition_expires_at=composition.expires_at,
+            now=now,
+        )
+        result = await self.repository.store_result(
+            session,
+            result=StoreProviderResult(
+                company_id=worker_context.company_id,
+                attempt_id=attempt.id,
+                composition_id=composition.id,
+                status=command.status,
+                evidence_summary=dict(command.evidence_summary),
+                validation_summary=dict(command.validation_summary),
+                output_references=command.output_references,
+                failure_classification=command.failure_classification,
+                received_at=now,
+                disposition=disposition,
+                disposition_reason=reason,
+            ),
+        )
+        terminal = (
+            ProviderAttemptState.QUARANTINED
+            if disposition is ProviderResultDisposition.QUARANTINED
+            else ProviderAttemptState.COMPLETED
+            if disposition is ProviderResultDisposition.ACCEPTED
+            and command.status is ProviderResultStatus.SUCCEEDED
+            else ProviderAttemptState.CANCELLED
+            if disposition is ProviderResultDisposition.ACCEPTED
+            and command.status is ProviderResultStatus.CANCELLED
+            else ProviderAttemptState.FAILED
+            if disposition is ProviderResultDisposition.ACCEPTED
+            else None
+        )
+        if terminal is not None:
+            changed = await self.repository.transition_attempt(
+                session,
+                company_id=worker_context.company_id,
+                attempt_id=attempt.id,
+                expected_version=attempt.version,
+                from_states=(attempt.state,),
+                to_state=terminal,
+                occurred_at=now,
+                failure_classification=command.failure_classification,
+            )
+            if changed is None:
+                raise StaleAttemptVersionError("Attempt version is stale.")
+        self._stage_worker_event(
+            session,
+            worker_context=worker_context,
+            event_type=(
+                EventType.ENGINEERING_EXECUTION_RESULT_QUARANTINED
+                if disposition is ProviderResultDisposition.QUARANTINED
+                else EventType.ENGINEERING_EXECUTION_RESULT_RECORDED
+            ),
+            action=(
+                "engineering_execution.result_quarantined"
+                if disposition is ProviderResultDisposition.QUARANTINED
+                else "engineering_execution.result_recorded"
+            ),
+            resource_id=result.id,
+            correlation_id=attempt.idempotency_key,
+            details={
+                "attempt_id": str(attempt.id),
+                "composition_id": str(composition.id),
+                "disposition": disposition.value,
+                "repository_mutated": False,
+            },
+            occurred_at=now,
+        )
+        return result
+
+    async def acknowledge_cancellation_in_transaction(
+        self,
+        session: AsyncSession,
+        *,
+        worker_context: AuthenticatedWorkerContext,
+        attempt_id: UUID,
+        lease_id: UUID,
+        expected_version: int,
+        composition_digest: str,
+        now: datetime,
+    ) -> ProviderExecutionAttemptRecord:
+        attempt, _ = await self._worker_attempt_binding(
+            session,
+            worker_context=worker_context,
+            attempt_id=attempt_id,
+            lease_id=lease_id,
+            composition_digest=composition_digest,
+            instruction_digest=None,
+            request_digest=None,
+            now=now,
+            allow_expired=True,
+        )
+        if attempt.cancellation_acknowledged_at is not None:
+            return attempt
+        record = await self.repository.acknowledge_cancellation(
+            session,
+            company_id=worker_context.company_id,
+            attempt_id=attempt.id,
+            expected_version=expected_version,
+            acknowledged_at=now,
+        )
+        if record is None:
+            raise AttemptTransitionError(
+                "Cancellation is not awaiting acknowledgement."
+            )
+        self._stage_worker_event(
+            session,
+            worker_context=worker_context,
+            event_type=EventType.ENGINEERING_EXECUTION_CANCELLATION_ACKNOWLEDGED,
+            action="engineering_execution.cancellation_acknowledged",
+            resource_id=record.id,
+            correlation_id=record.idempotency_key,
+            details={
+                "attempt_id": str(record.id),
+                "composition_id": str(record.composition_id),
+                "version": record.version,
+            },
+            occurred_at=now,
+        )
+        return record
+
+    async def _worker_attempt_binding(
+        self,
+        session: AsyncSession,
+        *,
+        worker_context: AuthenticatedWorkerContext,
+        attempt_id: UUID,
+        lease_id: UUID,
+        composition_digest: str,
+        instruction_digest: str | None,
+        request_digest: str | None,
+        now: datetime,
+        allow_expired: bool = False,
+    ) -> tuple[ProviderExecutionAttemptRecord, ExecutionCompositionRecord]:
+        attempt = await self.repository.get_attempt_for_update(
+            session,
+            company_id=worker_context.company_id,
+            attempt_id=attempt_id,
+        )
+        if (
+            attempt is None
+            or attempt.worker_id != worker_context.worker_id
+            or attempt.lease_id != lease_id
+            or attempt.provider_identifier != worker_context.provider_identifier
+        ):
+            raise CompositionNotFoundError("Attempt was not found.")
+        composition = await self.repository.get_composition(
+            session,
+            company_id=worker_context.company_id,
+            composition_id=attempt.composition_id,
+        )
+        if composition is None or composition.worker_id != worker_context.worker_id:
+            raise CompositionNotFoundError("Composition was not found.")
+        source = await self.repository.load_source_for_update(
+            session,
+            company_id=worker_context.company_id,
+            execution_id=composition.execution_id,
+            lease_id=composition.lease_id,
+        )
+        if source is None:
+            raise CompositionNotFoundError("Composition binding was not found.")
+        if (
+            source.worker_id != worker_context.worker_id
+            or source.worker_provider_identifier != worker_context.provider_identifier
+            or source.lease_worker_id != worker_context.worker_id
+        ):
+            raise CompositionNotFoundError("Composition binding was not found.")
+        if not allow_expired and (
+            source.lease_state != "active" or source.lease_expires_at <= now
+        ):
+            raise CompositionIneligibleError("Worker lease is invalid or expired.")
+        if not allow_expired and composition.expires_at <= now:
+            raise CompositionIneligibleError("Composition has expired.")
+        if composition.composition_digest != composition_digest:
+            raise CompositionEvidenceMismatchError("Composition digest differs.")
+        if (
+            instruction_digest is not None
+            and composition.instruction_digest != instruction_digest
+        ) or (
+            request_digest is not None and composition.request_digest != request_digest
+        ):
+            raise CompositionEvidenceMismatchError("Composition evidence differs.")
+        return attempt, composition
+
+    def _stage_worker_event(
+        self,
+        session: AsyncSession,
+        *,
+        worker_context: AuthenticatedWorkerContext,
+        event_type: EventType,
+        action: str,
+        resource_id: UUID,
+        correlation_id: UUID,
+        details: dict[str, object],
+        occurred_at: datetime,
+    ) -> None:
+        safe_details = {
+            **details,
+            "worker_id": str(worker_context.worker_id),
+            "provider_identifier": worker_context.provider_identifier,
+        }
+        self.audit.stage(
+            session,
+            AuditEntry(
+                action=action,
+                resource_type="engineering_execution",
+                company_id=worker_context.company_id,
+                resource_id=resource_id,
+                correlation_id=correlation_id,
+                details=safe_details,
+                occurred_at=occurred_at,
+            ),
+        )
+        self.business_events.stage(
+            session,
+            BusinessEventCreate(
+                event_type=event_type,
+                entity_type="engineering_execution",
+                entity_id=resource_id,
+                company_id=worker_context.company_id,
+                payload=safe_details,
+                correlation_id=correlation_id,
+                occurred_at=occurred_at,
+            ),
+        )
 
     def _require(self, context: AuthorizationContext) -> None:
         if context.membership.status != "active":

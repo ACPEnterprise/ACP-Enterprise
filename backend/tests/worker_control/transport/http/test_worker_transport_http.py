@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_database_session
+from app.engineering_execution.composition.contracts import ProviderProgressPhase
 from app.worker_control.contracts import (
     AuthenticatedWorkerContext,
     WorkerCapability,
@@ -232,6 +233,48 @@ async def test_heartbeat_builds_bound_envelope_and_returns_receipt() -> None:
 
 
 @pytest.mark.asyncio
+async def test_composition_progress_contract_derives_worker_authority() -> None:
+    transport = FakeTransport(context())
+    session = transport.sessions.session
+    payload = {
+        "message_id": str(uuid4()),
+        "session_id": str(session.session_id),
+        "sequence_number": 1,
+        "sent_at": NOW.isoformat(),
+        "authentication_proof": "signed-proof",
+        "key_version": "key-1",
+        "composition_id": str(uuid4()),
+        "attempt_id": str(uuid4()),
+        "lease_id": str(uuid4()),
+        "composition_digest": "a" * 64,
+        "instruction_digest": "b" * 64,
+        "request_digest": "c" * 64,
+        "phase": ProviderProgressPhase.EXECUTING.value,
+        "message_code": "simulated_progress",
+        "summary": "Structured progress only.",
+        "percentage": 25,
+    }
+    response = await request(
+        app_for(transport),
+        "POST",
+        "/api/v1/worker-transport/progress",
+        json=payload,
+    )
+    assert response.status_code == 200
+    assert transport.last_envelope is not None
+    assert transport.last_envelope.worker_id == transport.context.worker_id
+    assert transport.last_envelope.kind.value == "provider_progress"
+
+    rejected = await request(
+        app_for(transport),
+        "POST",
+        "/api/v1/worker-transport/progress",
+        json={**payload, "company_id": str(uuid4())},
+    )
+    assert rejected.status_code == 422
+
+
+@pytest.mark.asyncio
 async def test_polling_conceals_cross_company_session_and_default_has_no_offers() -> (
     None
 ):
@@ -262,4 +305,9 @@ def test_openapi_is_provider_neutral_and_has_no_execution_endpoint() -> None:
     assert "/api/v1/worker-transport/heartbeats" in paths
     assert "/api/v1/worker-transport/results" in paths
     assert "/api/v1/worker-transport/leases/refresh" in paths
+    assert "/api/v1/worker-transport/compositions/next" in paths
+    assert "/api/v1/worker-transport/compositions/acknowledge" in paths
+    assert "/api/v1/worker-transport/progress" in paths
+    assert "/api/v1/worker-transport/composition-results" in paths
+    assert "/api/v1/worker-transport/cancellations/acknowledge" in paths
     assert all("execute" not in path and "provider" not in path for path in paths)

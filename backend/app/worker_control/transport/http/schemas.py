@@ -10,6 +10,10 @@ from app.worker_control.contracts import (
     WorkerHealth,
     WorkerResultStatus,
 )
+from app.engineering_execution.composition.contracts import (
+    ProviderProgressPhase,
+    ProviderResultStatus,
+)
 
 
 class StrictModel(BaseModel):
@@ -73,6 +77,44 @@ class ResultRequest(EnvelopeEvidence):
     repository_mutated: Literal[False]
 
 
+class CompositionFetchRequest(EnvelopeEvidence):
+    pass
+
+
+class CompositionAcknowledgementRequest(EnvelopeEvidence):
+    composition_id: UUID
+    composition_digest: Annotated[str, Field(min_length=64, max_length=64)]
+    instruction_digest: Annotated[str, Field(min_length=64, max_length=128)]
+    request_digest: Annotated[str, Field(min_length=64, max_length=128)]
+
+
+class ProviderProgressRequest(CompositionAcknowledgementRequest):
+    attempt_id: UUID
+    lease_id: UUID
+    phase: ProviderProgressPhase
+    message_code: Annotated[str, Field(min_length=1, max_length=100)]
+    summary: Annotated[str | None, Field(max_length=500)] = None
+    percentage: Annotated[int | None, Field(ge=0, le=100)] = None
+
+
+class ProviderNormalizedResultRequest(CompositionAcknowledgementRequest):
+    attempt_id: UUID
+    lease_id: UUID
+    status: ProviderResultStatus
+    evidence_summary: dict[str, object] = Field(default_factory=dict)
+    validation_summary: dict[str, object] = Field(default_factory=dict)
+    output_references: Annotated[tuple[str, ...], Field(max_length=20)] = ()
+    failure_classification: Annotated[str | None, Field(max_length=100)] = None
+    repository_mutated: Literal[False]
+
+
+class CancellationAcknowledgementRequest(EnvelopeEvidence):
+    attempt_id: UUID
+    lease_id: UUID
+    expected_version: Annotated[int, Field(ge=1)]
+    composition_digest: Annotated[str, Field(min_length=64, max_length=64)]
+
+
 class ReceiptResponse(StrictModel):
     message_id: UUID
     sequence_number: int
@@ -93,3 +135,27 @@ class OfferResponse(StrictModel):
 class OfferPageResponse(StrictModel):
     items: tuple[OfferResponse, ...]
     retry_after_seconds: int
+
+
+class CompositionDeliveryResponse(StrictModel):
+    composition_id: UUID
+    execution_id: UUID
+    lease_id: UUID
+    provider_identifier: str
+    required_capabilities: tuple[str, ...]
+    effective_capabilities: tuple[str, ...]
+    approved_code_changes: bool
+    repository_key: str
+    expected_branch: str
+    expected_head: str
+    instruction: str
+    instruction_digest: str
+    request_digest: str
+    composition_digest: str
+    expires_at: datetime
+    integrity_method: str
+
+
+class CompositionFetchResponse(StrictModel):
+    receipt: ReceiptResponse
+    composition: CompositionDeliveryResponse | None

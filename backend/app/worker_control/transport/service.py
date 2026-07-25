@@ -5,12 +5,26 @@ from uuid import UUID, uuid4
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.platform.auth.tokens import SecurityTokenService
-from app.worker_control.contracts import AuthenticatedWorkerContext
+from app.engineering_execution.composition.errors import ExecutionCompositionError
+from app.engineering_execution.composition.service import (
+    ExecutionCompositionService,
+    RecordProviderResult,
+)
+from app.engineering_execution.composition.records import CompositionDeliveryPackage
+from app.worker_control.contracts import (
+    AuthenticatedWorkerContext,
+    WorkerCapability,
+)
 from app.worker_control.service import WorkerControlService
 from app.worker_control.transport.contracts import (
     AuthenticatedMessageEnvelope,
+    CancellationAcknowledgementMessage,
+    CompositionAcknowledgementMessage,
+    CompositionFetchMessage,
     HeartbeatMessage,
     LeaseRenewalMessage,
+    ProviderProgressMessage,
+    ProviderResultMessage,
     ResultMessage,
     TransportMessageKind,
     TransportReceipt,
@@ -56,11 +70,13 @@ class WorkerTransportService:
         sessions: WorkerTransportSessionRepository | None = None,
         worker_control: WorkerControlService | None = None,
         tokens: SecurityTokenService | None = None,
+        compositions: ExecutionCompositionService | None = None,
     ) -> None:
         self.authenticator = authenticator
         self.sessions = sessions or PostgreSQLWorkerTransportSessionRepository()
         self.worker_control = worker_control or WorkerControlService()
         self.tokens = tokens or SecurityTokenService()
+        self.compositions = compositions or ExecutionCompositionService()
 
     async def initiate_session(
         self,
@@ -242,6 +258,20 @@ class WorkerTransportService:
         envelope: AuthenticatedMessageEnvelope,
         session: WorkerSession,
     ) -> str:
+        try:
+            return await self._dispatch_composition(
+                database, envelope=envelope, session=session
+            )
+        except ExecutionCompositionError as error:
+            raise TransportMessageError(str(error)) from error
+
+    async def _dispatch_composition(
+        self,
+        database: AsyncSession,
+        *,
+        envelope: AuthenticatedMessageEnvelope,
+        session: WorkerSession,
+    ) -> str:
         payload = envelope.payload
         if envelope.kind is TransportMessageKind.HEARTBEAT:
             if not isinstance(payload, HeartbeatMessage):
@@ -285,7 +315,113 @@ class WorkerTransportService:
                 now=envelope.sent_at,
             )
             return f"lease:{lease.id}:version:{lease.version}"
+        if envelope.kind is TransportMessageKind.COMPOSITION_FETCH:
+            if not isinstance(payload, CompositionFetchMessage):
+                raise TransportMessageError("Composition fetch payload is invalid.")
+            if WorkerCapability.ENGINEERING_EXECUTE not in session.capabilities:
+                raise TransportCapabilityError("Session lacks execution capability.")
+            package = await self.compositions.deliver_next_in_transaction(
+                database,
+                worker_context=session.context,
+                now=envelope.sent_at,
+            )
+            return (
+                "composition:none"
+                if package is None
+                else f"composition:{package.composition.id}"
+            )
+        if envelope.kind is TransportMessageKind.COMPOSITION_ACKNOWLEDGEMENT:
+            if not isinstance(payload, CompositionAcknowledgementMessage):
+                raise TransportMessageError(
+                    "Composition acknowledgement payload is invalid."
+                )
+            composition = (
+                await self.compositions.acknowledge_composition_in_transaction(
+                    database,
+                    worker_context=session.context,
+                    composition_id=payload.composition_id,
+                    composition_digest=payload.composition_digest,
+                    instruction_digest=payload.instruction_digest,
+                    request_digest=payload.request_digest,
+                    now=envelope.sent_at,
+                )
+            )
+            return f"composition_acknowledged:{composition.id}"
+        if envelope.kind is TransportMessageKind.PROVIDER_PROGRESS:
+            if not isinstance(payload, ProviderProgressMessage):
+                raise TransportMessageError("Provider progress payload is invalid.")
+            if WorkerCapability.ENGINEERING_EXECUTE not in session.capabilities:
+                raise TransportCapabilityError("Session lacks execution capability.")
+            progress = await self.compositions.append_progress_in_transaction(
+                database,
+                worker_context=session.context,
+                attempt_id=payload.attempt_id,
+                lease_id=payload.lease_id,
+                composition_digest=payload.composition_digest,
+                instruction_digest=payload.instruction_digest,
+                request_digest=payload.request_digest,
+                phase=payload.phase,
+                message_code=payload.message_code,
+                summary=payload.summary,
+                percentage=payload.percentage,
+                now=envelope.sent_at,
+            )
+            return (
+                f"provider_progress:{progress.id}:sequence:{progress.sequence_number}"
+            )
+        if envelope.kind is TransportMessageKind.PROVIDER_RESULT:
+            if not isinstance(payload, ProviderResultMessage):
+                raise TransportMessageError("Provider result payload is invalid.")
+            if WorkerCapability.ENGINEERING_EXECUTE not in session.capabilities:
+                raise TransportCapabilityError("Session lacks execution capability.")
+            result = await self.compositions.record_result_in_transaction(
+                database,
+                worker_context=session.context,
+                lease_id=payload.lease_id,
+                composition_digest=payload.composition_digest,
+                instruction_digest=payload.instruction_digest,
+                request_digest=payload.request_digest,
+                command=RecordProviderResult(
+                    attempt_id=payload.attempt_id,
+                    status=payload.status,
+                    evidence_summary=payload.evidence_summary,
+                    validation_summary=payload.validation_summary,
+                    output_references=payload.output_references,
+                    failure_classification=payload.failure_classification,
+                    repository_mutated=payload.repository_mutated,
+                ),
+                now=envelope.sent_at,
+            )
+            return f"provider_result:{result.id}:{result.disposition.value}"
+        if envelope.kind is TransportMessageKind.CANCELLATION_ACKNOWLEDGEMENT:
+            if not isinstance(payload, CancellationAcknowledgementMessage):
+                raise TransportMessageError(
+                    "Cancellation acknowledgement payload is invalid."
+                )
+            attempt = await self.compositions.acknowledge_cancellation_in_transaction(
+                database,
+                worker_context=session.context,
+                attempt_id=payload.attempt_id,
+                lease_id=payload.lease_id,
+                expected_version=payload.expected_version,
+                composition_digest=payload.composition_digest,
+                now=envelope.sent_at,
+            )
+            return f"cancellation_acknowledged:{attempt.id}:version:{attempt.version}"
         raise TransportMessageError("Unsupported transport message kind.")
+
+    async def delivery_package(
+        self,
+        database: AsyncSession,
+        *,
+        context: AuthenticatedWorkerContext,
+        composition_id: UUID,
+    ) -> CompositionDeliveryPackage | None:
+        return await self.compositions.get_delivery_package(
+            database,
+            worker_context=context,
+            composition_id=composition_id,
+        )
 
     @staticmethod
     def _validate_envelope(

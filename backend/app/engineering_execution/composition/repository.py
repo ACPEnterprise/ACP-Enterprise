@@ -26,6 +26,7 @@ from app.engineering_execution.composition.models import (
 from app.engineering_execution.composition.records import (
     AppendProviderProgress,
     CompositionBundle,
+    CompositionDeliveryPackage,
     CompositionReceiptRecord,
     CreateExecutionComposition,
     ExecutionCompositionRecord,
@@ -174,6 +175,93 @@ class ExecutionCompositionRepository:
         if receipt is None:
             raise ValueError("Composition receipt invariant is broken.")
         return CompositionBundle(_composition_record(entity), _receipt_record(receipt))
+
+    @staticmethod
+    async def next_delivery_for_update(
+        session: AsyncSession,
+        *,
+        company_id: UUID,
+        worker_id: UUID,
+        provider_identifier: str,
+        now: datetime,
+    ) -> CompositionDeliveryPackage | None:
+        entity = await session.scalar(
+            select(ExecutionComposition)
+            .join(
+                WorkerLease,
+                (WorkerLease.company_id == ExecutionComposition.company_id)
+                & (WorkerLease.id == ExecutionComposition.lease_id),
+            )
+            .where(
+                ExecutionComposition.company_id == company_id,
+                ExecutionComposition.worker_id == worker_id,
+                ExecutionComposition.provider_identifier == provider_identifier,
+                ExecutionComposition.state == CompositionState.CREATED.value,
+                ExecutionComposition.expires_at > now,
+                WorkerLease.status == "active",
+                WorkerLease.expires_at > now,
+            )
+            .order_by(ExecutionComposition.created_at, ExecutionComposition.id)
+            .with_for_update()
+        )
+        if entity is None:
+            return None
+        receipt = await session.scalar(
+            select(CompositionReceipt).where(
+                CompositionReceipt.company_id == company_id,
+                CompositionReceipt.composition_id == entity.id,
+            )
+        )
+        command = await session.scalar(
+            select(EngineeringCommand).where(
+                EngineeringCommand.company_id == company_id,
+                EngineeringCommand.id == entity.command_id,
+            )
+        )
+        if receipt is None or command is None:
+            raise ValueError("Composition delivery invariant is broken.")
+        return CompositionDeliveryPackage(
+            composition=_composition_record(entity),
+            receipt=_receipt_record(receipt),
+            instruction=command.owner_instruction,
+        )
+
+    @staticmethod
+    async def get_delivery_package(
+        session: AsyncSession,
+        *,
+        company_id: UUID,
+        worker_id: UUID,
+        composition_id: UUID,
+    ) -> CompositionDeliveryPackage | None:
+        entity = await session.scalar(
+            select(ExecutionComposition).where(
+                ExecutionComposition.company_id == company_id,
+                ExecutionComposition.worker_id == worker_id,
+                ExecutionComposition.id == composition_id,
+            )
+        )
+        if entity is None:
+            return None
+        receipt = await session.scalar(
+            select(CompositionReceipt).where(
+                CompositionReceipt.company_id == company_id,
+                CompositionReceipt.composition_id == entity.id,
+            )
+        )
+        command = await session.scalar(
+            select(EngineeringCommand).where(
+                EngineeringCommand.company_id == company_id,
+                EngineeringCommand.id == entity.command_id,
+            )
+        )
+        if receipt is None or command is None:
+            return None
+        return CompositionDeliveryPackage(
+            composition=_composition_record(entity),
+            receipt=_receipt_record(receipt),
+            instruction=command.owner_instruction,
+        )
 
     @staticmethod
     async def create_bundle(
@@ -393,6 +481,34 @@ class ExecutionCompositionRepository:
             )
             .with_for_update()
         )
+        return None if entity is None else _attempt_record(entity)
+
+    @staticmethod
+    async def acknowledge_cancellation(
+        session: AsyncSession,
+        *,
+        company_id: UUID,
+        attempt_id: UUID,
+        expected_version: int,
+        acknowledged_at: datetime,
+    ) -> ProviderExecutionAttemptRecord | None:
+        entity = await session.scalar(
+            update(ProviderExecutionAttempt)
+            .where(
+                ProviderExecutionAttempt.company_id == company_id,
+                ProviderExecutionAttempt.id == attempt_id,
+                ProviderExecutionAttempt.version == expected_version,
+                ProviderExecutionAttempt.cancellation_requested_at.is_not(None),
+                ProviderExecutionAttempt.cancellation_acknowledged_at.is_(None),
+            )
+            .values(
+                cancellation_acknowledged_at=acknowledged_at,
+                version=expected_version + 1,
+                updated_at=acknowledged_at,
+            )
+            .returning(ProviderExecutionAttempt)
+        )
+        await session.flush()
         return None if entity is None else _attempt_record(entity)
 
     @staticmethod

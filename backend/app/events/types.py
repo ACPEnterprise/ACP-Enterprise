@@ -57,6 +57,9 @@ class EventType(str, Enum):
     ENGINEERING_EXECUTION_RESULT_QUARANTINED = (
         "engineering_execution.result_quarantined"
     )
+    ENGINEERING_EXECUTION_CANCELLATION_ACKNOWLEDGED = (
+        "engineering_execution.cancellation_acknowledged"
+    )
 
     # CRM
     CUSTOMER_CREATED = "customer.created"

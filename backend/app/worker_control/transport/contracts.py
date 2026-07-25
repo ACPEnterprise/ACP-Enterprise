@@ -12,6 +12,10 @@ from app.worker_control.contracts import (
     WorkerExecutionResult,
     WorkerHealth,
 )
+from app.engineering_execution.composition.contracts import (
+    ProviderProgressPhase,
+    ProviderResultStatus,
+)
 
 
 class WorkerSessionState(StrEnum):
@@ -24,6 +28,11 @@ class TransportMessageKind(StrEnum):
     HEARTBEAT = "heartbeat"
     RESULT = "result"
     LEASE_RENEWAL = "lease_renewal"
+    COMPOSITION_FETCH = "composition_fetch"
+    COMPOSITION_ACKNOWLEDGEMENT = "composition_acknowledgement"
+    PROVIDER_PROGRESS = "provider_progress"
+    PROVIDER_RESULT = "provider_result"
+    CANCELLATION_ACKNOWLEDGEMENT = "cancellation_acknowledgement"
 
 
 @dataclass(frozen=True)
@@ -81,7 +90,65 @@ class LeaseRenewalMessage:
     lease_seconds: int
 
 
-TransportPayload = HeartbeatMessage | ResultMessage | LeaseRenewalMessage
+@dataclass(frozen=True)
+class CompositionFetchMessage:
+    pass
+
+
+@dataclass(frozen=True)
+class CompositionAcknowledgementMessage:
+    composition_id: UUID
+    composition_digest: str
+    instruction_digest: str
+    request_digest: str
+
+
+@dataclass(frozen=True)
+class ProviderProgressMessage:
+    attempt_id: UUID
+    lease_id: UUID
+    composition_digest: str
+    instruction_digest: str
+    request_digest: str
+    phase: ProviderProgressPhase
+    message_code: str
+    summary: str | None = None
+    percentage: int | None = None
+
+
+@dataclass(frozen=True)
+class ProviderResultMessage:
+    attempt_id: UUID
+    lease_id: UUID
+    composition_digest: str
+    instruction_digest: str
+    request_digest: str
+    status: ProviderResultStatus
+    evidence_summary: dict[str, object]
+    validation_summary: dict[str, object]
+    output_references: tuple[str, ...]
+    failure_classification: str | None = None
+    repository_mutated: bool = False
+
+
+@dataclass(frozen=True)
+class CancellationAcknowledgementMessage:
+    attempt_id: UUID
+    lease_id: UUID
+    expected_version: int
+    composition_digest: str
+
+
+TransportPayload = (
+    HeartbeatMessage
+    | ResultMessage
+    | LeaseRenewalMessage
+    | CompositionFetchMessage
+    | CompositionAcknowledgementMessage
+    | ProviderProgressMessage
+    | ProviderResultMessage
+    | CancellationAcknowledgementMessage
+)
 
 
 @dataclass(frozen=True)

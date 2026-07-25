@@ -86,6 +86,13 @@ class CompositionBundle:
 
 
 @dataclass(frozen=True)
+class CompositionDeliveryPackage:
+    composition: ExecutionCompositionRecord
+    receipt: CompositionReceiptRecord
+    instruction: str
+
+
+@dataclass(frozen=True)
 class PrepareProviderAttempt:
     company_id: UUID
     composition_id: UUID
