@@ -42,6 +42,21 @@ class EventType(str, Enum):
     EXECUTION_PROVIDER_CAPABILITY_MISMATCH = (
         "engineering.execution_provider_capability_mismatch"
     )
+    ENGINEERING_EXECUTION_COMPOSITION_CREATED = (
+        "engineering_execution.composition_created"
+    )
+    ENGINEERING_EXECUTION_COMPOSITION_RECEIPT_CREATED = (
+        "engineering_execution.composition_receipt_created"
+    )
+    ENGINEERING_EXECUTION_ATTEMPT_PREPARED = "engineering_execution.attempt_prepared"
+    ENGINEERING_EXECUTION_ATTEMPT_STATE_CHANGED = (
+        "engineering_execution.attempt_state_changed"
+    )
+    ENGINEERING_EXECUTION_PROGRESS_RECORDED = "engineering_execution.progress_recorded"
+    ENGINEERING_EXECUTION_RESULT_RECORDED = "engineering_execution.result_recorded"
+    ENGINEERING_EXECUTION_RESULT_QUARANTINED = (
+        "engineering_execution.result_quarantined"
+    )
 
     # CRM
     CUSTOMER_CREATED = "customer.created"
