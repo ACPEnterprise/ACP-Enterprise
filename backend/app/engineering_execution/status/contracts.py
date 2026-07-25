@@ -95,6 +95,16 @@ class ResultStatusSource:
 
 
 @dataclass(frozen=True)
+class SupervisorStatusSource:
+    supervisor_state: str
+    session_state: str | None
+    ready: bool
+    updated_at: datetime
+    expires_at: datetime | None
+    failure_classification: str | None
+
+
+@dataclass(frozen=True)
 class ExecutionStatusSources:
     command: CommandStatusSource
     execution: ExecutionStatusSource | None
@@ -102,6 +112,7 @@ class ExecutionStatusSources:
     heartbeat: HeartbeatStatusSource | None
     transport_session: TransportSessionStatusSource | None
     result: ResultStatusSource | None
+    supervisor: SupervisorStatusSource | None = None
 
 
 class ExecutionStatusProvider(Protocol):

@@ -5,6 +5,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.engineering_control.models import EngineeringCommand
 from app.engineering_execution.models import EngineeringExecution
+from app.engineering_execution.composition.models import ExecutionComposition
+from app.engineering_execution.supervision.models import (
+    LiveClientSupervisorModel,
+    ProviderSessionModel,
+)
 from app.worker_control.models import (
     EngineeringWorker,
     WorkerHeartbeat,
@@ -28,6 +33,7 @@ from .contracts import (
     HeartbeatStatusSource,
     LeaseStatusSource,
     ResultStatusSource,
+    SupervisorStatusSource,
     TransportSessionStatusSource,
 )
 
@@ -61,6 +67,7 @@ class SqlExecutionStatusProvider:
         heartbeat: WorkerHeartbeat | None = None
         result: WorkerResult | None = None
         transport_session: WorkerTransportSession | None = None
+        supervisor_source: SupervisorStatusSource | None = None
         if execution is not None:
             lease = await session.scalar(
                 select(WorkerLease)
@@ -132,6 +139,73 @@ class SqlExecutionStatusProvider:
                         )
                         .limit(1)
                     )
+                    composition = await session.scalar(
+                        select(ExecutionComposition)
+                        .where(
+                            ExecutionComposition.company_id == company_id,
+                            ExecutionComposition.execution_id == execution.id,
+                            ExecutionComposition.worker_id == lease.worker_id,
+                        )
+                        .order_by(
+                            ExecutionComposition.created_at.desc(),
+                            ExecutionComposition.id.desc(),
+                        )
+                        .limit(1)
+                    )
+                    supervisor = await session.scalar(
+                        select(LiveClientSupervisorModel)
+                        .where(
+                            LiveClientSupervisorModel.company_id == company_id,
+                            LiveClientSupervisorModel.worker_id == lease.worker_id,
+                        )
+                        .limit(1)
+                    )
+                    provider_session = (
+                        None
+                        if composition is None
+                        else await session.scalar(
+                            select(ProviderSessionModel)
+                            .where(
+                                ProviderSessionModel.company_id == company_id,
+                                ProviderSessionModel.composition_id == composition.id,
+                            )
+                            .order_by(
+                                ProviderSessionModel.created_at.desc(),
+                                ProviderSessionModel.id.desc(),
+                            )
+                            .limit(1)
+                        )
+                    )
+                    if supervisor is not None:
+                        supervisor_source = SupervisorStatusSource(
+                            supervisor_state=supervisor.state,
+                            session_state=(
+                                provider_session.state
+                                if provider_session is not None
+                                else None
+                            ),
+                            ready=supervisor.state == "ready"
+                            and (
+                                provider_session is None
+                                or provider_session.state in {"ready", "active"}
+                            ),
+                            updated_at=max(
+                                supervisor.updated_at,
+                                provider_session.updated_at
+                                if provider_session is not None
+                                else supervisor.updated_at,
+                            ),
+                            expires_at=(
+                                provider_session.expires_at
+                                if provider_session is not None
+                                else None
+                            ),
+                            failure_classification=(
+                                provider_session.failure_classification
+                                if provider_session is not None
+                                else supervisor.failure_classification
+                            ),
+                        )
 
         return ExecutionStatusSources(
             command=CommandStatusSource(
@@ -210,4 +284,5 @@ class SqlExecutionStatusProvider:
                     created_at=result.created_at,
                 )
             ),
+            supervisor=supervisor_source,
         )

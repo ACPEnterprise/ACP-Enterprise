@@ -60,6 +60,18 @@ class EventType(str, Enum):
     ENGINEERING_EXECUTION_CANCELLATION_ACKNOWLEDGED = (
         "engineering_execution.cancellation_acknowledged"
     )
+    ENGINEERING_SUPERVISOR_STARTED = "engineering_execution.supervisor_started"
+    ENGINEERING_SUPERVISOR_RECOVERED = "engineering_execution.supervisor_recovered"
+    ENGINEERING_PROVIDER_SESSION_CREATED = (
+        "engineering_execution.provider_session_created"
+    )
+    ENGINEERING_PROVIDER_SESSION_READY = "engineering_execution.provider_session_ready"
+    ENGINEERING_PROVIDER_SESSION_CLOSED = (
+        "engineering_execution.provider_session_closed"
+    )
+    ENGINEERING_PROVIDER_SESSION_STATE_CHANGED = (
+        "engineering_execution.provider_session_state_changed"
+    )
 
     # CRM
     CUSTOMER_CREATED = "customer.created"

@@ -55,6 +55,21 @@ class ResultStatus(StatusSchema):
     created_at: datetime | None
 
 
+class SupervisorStatus(StatusSchema):
+    availability: ProjectionAvailability
+    state: str | None
+    session_state: str | None
+    ready: bool
+    reconnecting: bool
+    recovering: bool
+    timed_out: bool
+    cancelled: bool
+    failed: bool
+    updated_at: datetime | None
+    expires_at: datetime | None
+    failure_classification: str | None
+
+
 class MobileExecutionStatus(StatusSchema):
     command_id: UUID
     ecid: str
@@ -76,6 +91,7 @@ class MobileExecutionStatus(StatusSchema):
     heartbeat: HeartbeatStatus
     transport_session: TransportSessionStatus
     result: ResultStatus
+    supervisor: SupervisorStatus
     timeline: tuple[TimelineEntry, ...]
     terminal: bool
     polling_after_seconds: int | None = Field(ge=5, le=300)

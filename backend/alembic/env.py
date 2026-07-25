@@ -10,6 +10,7 @@ from app.events import models as event_models  # noqa: F401
 from app.engineering_control import models as engineering_control_models  # noqa: F401
 from app.engineering_execution import models as engineering_execution_models  # noqa: F401
 from app.engineering_execution.composition import models as composition_models  # noqa: F401
+from app.engineering_execution.supervision import models as supervision_models  # noqa: F401
 from app.jobs import models as job_models  # noqa: F401
 from app.platform.auth import models as auth_models  # noqa: F401
 from app.platform.audit import models as audit_models  # noqa: F401

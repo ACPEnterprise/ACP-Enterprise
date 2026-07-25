@@ -27,6 +27,7 @@ from .schemas import (
     ResultStatus,
     TimelineEntry,
     TransportSessionStatus,
+    SupervisorStatus,
 )
 
 
@@ -138,6 +139,13 @@ class MobileExecutionStatusService:
                         occurred_at=sources.transport_session.last_message_at,
                     )
                 )
+        if sources.supervisor is not None:
+            timeline.append(
+                TimelineEntry(
+                    event="supervisor_state_updated",
+                    occurred_at=sources.supervisor.updated_at,
+                )
+            )
         timeline.sort(key=lambda item: (item.occurred_at, item.event))
 
         heartbeat_age = (
@@ -270,6 +278,60 @@ class MobileExecutionStatusService:
                     else None
                 ),
                 created_at=sources.result.created_at if sources.result else None,
+            ),
+            supervisor=SupervisorStatus(
+                availability=(
+                    ProjectionAvailability.AVAILABLE
+                    if sources.supervisor
+                    else ProjectionAvailability.UNAVAILABLE
+                ),
+                state=(
+                    sources.supervisor.supervisor_state if sources.supervisor else None
+                ),
+                session_state=(
+                    sources.supervisor.session_state if sources.supervisor else None
+                ),
+                ready=bool(sources.supervisor and sources.supervisor.ready),
+                reconnecting=bool(
+                    sources.supervisor
+                    and sources.supervisor.supervisor_state == "reconnecting"
+                ),
+                recovering=bool(
+                    sources.supervisor
+                    and sources.supervisor.supervisor_state == "recovering"
+                ),
+                timed_out=bool(
+                    sources.supervisor
+                    and (
+                        sources.supervisor.supervisor_state == "timed_out"
+                        or sources.supervisor.session_state == "expired"
+                    )
+                ),
+                cancelled=bool(
+                    sources.supervisor
+                    and (
+                        sources.supervisor.supervisor_state == "cancelled"
+                        or sources.supervisor.session_state == "cancelled"
+                    )
+                ),
+                failed=bool(
+                    sources.supervisor
+                    and (
+                        sources.supervisor.supervisor_state == "failed"
+                        or sources.supervisor.session_state == "failed"
+                    )
+                ),
+                updated_at=(
+                    sources.supervisor.updated_at if sources.supervisor else None
+                ),
+                expires_at=(
+                    sources.supervisor.expires_at if sources.supervisor else None
+                ),
+                failure_classification=(
+                    sources.supervisor.failure_classification
+                    if sources.supervisor
+                    else None
+                ),
             ),
             timeline=tuple(timeline),
             terminal=terminal,

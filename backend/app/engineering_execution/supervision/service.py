@@ -1,0 +1,463 @@
+from datetime import datetime, timedelta, timezone
+from uuid import UUID
+
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.events.schemas import BusinessEventCreate
+from app.events.service import BusinessEventService
+from app.events.types import EventType
+from app.execution_providers.contracts import ProviderCapability
+from app.execution_providers.errors import ProviderNotFoundError
+from app.execution_providers.runtime import ProviderRuntime
+from app.platform.audit.service import AuditEntry, AuditService, audit_service
+from app.worker_control.contracts import AuthenticatedWorkerContext
+
+from .contracts import (
+    CapabilityNegotiation,
+    CreateProviderSession,
+    ProviderSessionState,
+    SupervisorRecovery,
+    SupervisorState,
+)
+from .errors import (
+    SupervisionCapabilityError,
+    SupervisionConflictError,
+    SupervisionIneligibleError,
+    SupervisionNotFoundError,
+    SupervisionTransitionError,
+)
+from .records import LiveClientSupervisorRecord, ProviderSessionRecord
+from .repository import SupervisionRepository
+
+
+def utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+class LiveClientSupervisor:
+    def __init__(
+        self,
+        *,
+        repository: type[SupervisionRepository] = SupervisionRepository,
+        audit: AuditService = audit_service,
+        events: type[BusinessEventService] = BusinessEventService,
+    ) -> None:
+        self.repository = repository
+        self.audit = audit
+        self.events = events
+
+    async def start(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthenticatedWorkerContext,
+        now: datetime | None = None,
+    ) -> LiveClientSupervisorRecord:
+        occurred_at = now or utc_now()
+        async with session.begin():
+            current = await self.repository.get_or_create_supervisor(
+                session,
+                company_id=context.company_id,
+                worker_id=context.worker_id,
+                now=occurred_at,
+            )
+            if current.state is SupervisorState.READY:
+                return current
+            starting = await self.repository.transition_supervisor(
+                session,
+                company_id=context.company_id,
+                supervisor_id=current.id,
+                expected_version=current.version,
+                from_states=(
+                    SupervisorState.STOPPED,
+                    SupervisorState.RECONNECTING,
+                    SupervisorState.TIMED_OUT,
+                    SupervisorState.FAILED,
+                ),
+                to_state=SupervisorState.STARTING,
+                now=occurred_at,
+            )
+            if starting is None:
+                raise SupervisionTransitionError("Supervisor cannot start.")
+            ready = await self.repository.transition_supervisor(
+                session,
+                company_id=context.company_id,
+                supervisor_id=current.id,
+                expected_version=starting.version,
+                from_states=(SupervisorState.STARTING,),
+                to_state=SupervisorState.READY,
+                now=occurred_at,
+            )
+            if ready is None:
+                raise SupervisionConflictError("Supervisor version changed.")
+            self._stage(
+                session,
+                context=context,
+                event_type=EventType.ENGINEERING_SUPERVISOR_STARTED,
+                action="engineering_execution.supervisor_started",
+                resource_id=ready.id,
+                details={"state": ready.state.value, "version": ready.version},
+                now=occurred_at,
+            )
+        return ready
+
+    async def recover(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthenticatedWorkerContext,
+        now: datetime | None = None,
+    ) -> SupervisorRecovery:
+        occurred_at = now or utc_now()
+        async with session.begin():
+            current = await self.repository.get_or_create_supervisor(
+                session,
+                company_id=context.company_id,
+                worker_id=context.worker_id,
+                now=occurred_at,
+            )
+            recovering = await self.repository.transition_supervisor(
+                session,
+                company_id=context.company_id,
+                supervisor_id=current.id,
+                expected_version=current.version,
+                from_states=(
+                    SupervisorState.STOPPED,
+                    SupervisorState.READY,
+                    SupervisorState.RECONNECTING,
+                    SupervisorState.TIMED_OUT,
+                    SupervisorState.FAILED,
+                ),
+                to_state=SupervisorState.RECOVERING,
+                now=occurred_at,
+            )
+            if recovering is None:
+                raise SupervisionTransitionError("Supervisor cannot recover.")
+            items = await self.repository.recovery_items(
+                session,
+                company_id=context.company_id,
+                worker_id=context.worker_id,
+                now=occurred_at,
+            )
+            ready = await self.repository.transition_supervisor(
+                session,
+                company_id=context.company_id,
+                supervisor_id=current.id,
+                expected_version=recovering.version,
+                from_states=(SupervisorState.RECOVERING,),
+                to_state=SupervisorState.READY,
+                now=occurred_at,
+            )
+            if ready is None:
+                raise SupervisionConflictError("Supervisor version changed.")
+            self._stage(
+                session,
+                context=context,
+                event_type=EventType.ENGINEERING_SUPERVISOR_RECOVERED,
+                action="engineering_execution.supervisor_recovered",
+                resource_id=ready.id,
+                details={"recovery_count": len(items), "state": ready.state.value},
+                now=occurred_at,
+            )
+        return SupervisorRecovery(ready.id, occurred_at, items)
+
+    def _stage(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthenticatedWorkerContext,
+        event_type: EventType,
+        action: str,
+        resource_id: UUID,
+        details: dict[str, object],
+        now: datetime,
+    ) -> None:
+        safe_details: dict[str, object] = {
+            **details,
+            "worker_id": str(context.worker_id),
+            "provider_identifier": context.provider_identifier,
+        }
+        self.audit.stage(
+            session,
+            AuditEntry(
+                action=action,
+                resource_type="engineering_execution_supervisor",
+                company_id=context.company_id,
+                resource_id=resource_id,
+                details=safe_details,
+                occurred_at=now,
+            ),
+        )
+        self.events.stage(
+            session,
+            BusinessEventCreate(
+                event_type=event_type,
+                entity_type="engineering_execution_supervisor",
+                entity_id=resource_id,
+                company_id=context.company_id,
+                payload=safe_details,
+                occurred_at=now,
+            ),
+        )
+
+
+class ProviderSessionService:
+    def __init__(
+        self,
+        *,
+        repository: type[SupervisionRepository] = SupervisionRepository,
+        runtime: ProviderRuntime,
+        audit: AuditService = audit_service,
+        events: type[BusinessEventService] = BusinessEventService,
+    ) -> None:
+        self.repository = repository
+        self.runtime = runtime
+        self.audit = audit
+        self.events = events
+
+    async def create(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthenticatedWorkerContext,
+        command: CreateProviderSession,
+        now: datetime | None = None,
+    ) -> ProviderSessionRecord:
+        occurred_at = now or utc_now()
+        if not 30 <= command.timeout_seconds <= 3600:
+            raise SupervisionIneligibleError("Session timeout is invalid.")
+        try:
+            async with session.begin():
+                try:
+                    supervisor = await self.repository.get_or_create_supervisor(
+                        session,
+                        company_id=context.company_id,
+                        worker_id=context.worker_id,
+                        now=occurred_at,
+                    )
+                except ValueError as error:
+                    raise SupervisionNotFoundError("Worker was not found.") from error
+                if supervisor.state is not SupervisorState.READY:
+                    raise SupervisionIneligibleError("Supervisor is not ready.")
+                source = await self.repository.load_session_source_for_update(
+                    session,
+                    company_id=context.company_id,
+                    worker_id=context.worker_id,
+                    composition_id=command.composition_id,
+                    attempt_id=command.attempt_id,
+                )
+                if source is None:
+                    raise SupervisionNotFoundError("Composition was not found.")
+                composition, attempt, lease, worker = source
+                if (
+                    composition.expires_at <= occurred_at
+                    or lease.status != "active"
+                    or lease.expires_at <= occurred_at
+                    or composition.provider_identifier != context.provider_identifier
+                    or worker.provider_identifier != context.provider_identifier
+                    or attempt.state not in {"prepared", "starting", "running"}
+                ):
+                    raise SupervisionIneligibleError(
+                        "Composition is not eligible for a provider session."
+                    )
+                negotiation = self.negotiate(
+                    composition_required=tuple(composition.required_capabilities),
+                    composition_effective=tuple(composition.effective_capabilities),
+                    worker_capabilities=tuple(worker.capabilities),
+                    provider_identifier=composition.provider_identifier,
+                    approved_code_changes=composition.approved_code_changes,
+                )
+                record = await self.repository.create_session(
+                    session,
+                    supervisor_id=supervisor.id,
+                    composition=composition,
+                    attempt=attempt,
+                    effective_capabilities=negotiation.effective,
+                    expires_at=min(
+                        composition.expires_at,
+                        lease.expires_at,
+                        occurred_at + timedelta(seconds=command.timeout_seconds),
+                    ),
+                    now=occurred_at,
+                )
+                self._stage(
+                    session,
+                    context=context,
+                    event_type=EventType.ENGINEERING_PROVIDER_SESSION_CREATED,
+                    action="engineering_execution.provider_session_created",
+                    record=record,
+                    now=occurred_at,
+                )
+            return record
+        except IntegrityError as error:
+            await session.rollback()
+            raise SupervisionConflictError("Provider session conflicts.") from error
+
+    def negotiate(
+        self,
+        *,
+        composition_required: tuple[str, ...],
+        composition_effective: tuple[str, ...],
+        worker_capabilities: tuple[str, ...],
+        provider_identifier: str,
+        approved_code_changes: bool,
+    ) -> CapabilityNegotiation:
+        try:
+            provider_capabilities = self.runtime.capabilities(provider_identifier)
+            required = tuple(
+                ProviderCapability(value) for value in composition_required
+            )
+        except (ProviderNotFoundError, ValueError) as error:
+            raise SupervisionCapabilityError(
+                "Provider capability declaration is unavailable."
+            ) from error
+        effective_values = (
+            set(composition_effective)
+            & set(worker_capabilities)
+            & {item.value for item in provider_capabilities.values}
+            & {item.value for item in required}
+        )
+        if effective_values != {item.value for item in required}:
+            raise SupervisionCapabilityError(
+                "Effective provider capability intersection is insufficient."
+            )
+        return CapabilityNegotiation(
+            required=required,
+            effective=tuple(
+                ProviderCapability(value) for value in sorted(effective_values)
+            ),
+            approved_code_changes=approved_code_changes,
+        )
+
+    async def transition(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthenticatedWorkerContext,
+        session_id: UUID,
+        expected_version: int,
+        to_state: ProviderSessionState,
+        failure_classification: str | None = None,
+        now: datetime | None = None,
+    ) -> ProviderSessionRecord:
+        occurred_at = now or utc_now()
+        allowed = _session_allowed_from(to_state)
+        async with session.begin():
+            record = await self.repository.transition_session(
+                session,
+                company_id=context.company_id,
+                session_id=session_id,
+                expected_version=expected_version,
+                from_states=allowed,
+                to_state=to_state,
+                now=occurred_at,
+                failure_classification=failure_classification,
+            )
+            if record is None or record.worker_id != context.worker_id:
+                raise SupervisionTransitionError("Provider session transition failed.")
+            event_type = (
+                EventType.ENGINEERING_PROVIDER_SESSION_READY
+                if to_state is ProviderSessionState.READY
+                else EventType.ENGINEERING_PROVIDER_SESSION_CLOSED
+                if to_state
+                in {
+                    ProviderSessionState.CLOSED,
+                    ProviderSessionState.EXPIRED,
+                    ProviderSessionState.FAILED,
+                    ProviderSessionState.CANCELLED,
+                }
+                else EventType.ENGINEERING_PROVIDER_SESSION_STATE_CHANGED
+            )
+            self._stage(
+                session,
+                context=context,
+                event_type=event_type,
+                action="engineering_execution.provider_session_state_changed",
+                record=record,
+                now=occurred_at,
+            )
+        return record
+
+    def _stage(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthenticatedWorkerContext,
+        event_type: EventType,
+        action: str,
+        record: ProviderSessionRecord,
+        now: datetime,
+    ) -> None:
+        details: dict[str, object] = {
+            "provider_session_id": str(record.id),
+            "composition_id": str(record.composition_id),
+            "attempt_id": str(record.attempt_id),
+            "worker_id": str(record.worker_id),
+            "provider_identifier": record.provider_identifier,
+            "state": record.state.value,
+            "version": record.version,
+        }
+        self.audit.stage(
+            session,
+            AuditEntry(
+                action=action,
+                resource_type="engineering_provider_session",
+                company_id=context.company_id,
+                resource_id=record.id,
+                details=details,
+                occurred_at=now,
+            ),
+        )
+        self.events.stage(
+            session,
+            BusinessEventCreate(
+                event_type=event_type,
+                entity_type="engineering_provider_session",
+                entity_id=record.id,
+                company_id=context.company_id,
+                payload=details,
+                occurred_at=now,
+            ),
+        )
+
+
+def _session_allowed_from(
+    to_state: ProviderSessionState,
+) -> tuple[ProviderSessionState, ...]:
+    transitions = {
+        ProviderSessionState.OPENING: (ProviderSessionState.CREATED,),
+        ProviderSessionState.READY: (ProviderSessionState.OPENING,),
+        ProviderSessionState.ACTIVE: (ProviderSessionState.READY,),
+        ProviderSessionState.CLOSING: (
+            ProviderSessionState.READY,
+            ProviderSessionState.ACTIVE,
+        ),
+        ProviderSessionState.CLOSED: (ProviderSessionState.CLOSING,),
+        ProviderSessionState.EXPIRED: (
+            ProviderSessionState.CREATED,
+            ProviderSessionState.OPENING,
+            ProviderSessionState.READY,
+            ProviderSessionState.ACTIVE,
+        ),
+        ProviderSessionState.FAILED: (
+            ProviderSessionState.CREATED,
+            ProviderSessionState.OPENING,
+            ProviderSessionState.READY,
+            ProviderSessionState.ACTIVE,
+            ProviderSessionState.CLOSING,
+        ),
+        ProviderSessionState.CANCELLED: (
+            ProviderSessionState.CREATED,
+            ProviderSessionState.OPENING,
+            ProviderSessionState.READY,
+            ProviderSessionState.ACTIVE,
+            ProviderSessionState.CLOSING,
+        ),
+    }
+    try:
+        return transitions[to_state]
+    except KeyError as error:
+        raise SupervisionTransitionError(
+            "Provider session transition is invalid."
+        ) from error

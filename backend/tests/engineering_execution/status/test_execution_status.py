@@ -20,6 +20,7 @@ from app.engineering_execution.status.contracts import (
     LeasePhase,
     LeaseStatusSource,
     MonitoringState,
+    SupervisorStatusSource,
     TransportSessionStatusSource,
 )
 from app.engineering_execution.status.service import (
@@ -231,6 +232,14 @@ def test_live_connectivity_projection_uses_only_persisted_transport_evidence() -
             last_message_at=now - timedelta(seconds=8),
         ),
         result=None,
+        supervisor=SupervisorStatusSource(
+            supervisor_state="recovering",
+            session_state="opening",
+            ready=False,
+            updated_at=now - timedelta(seconds=6),
+            expires_at=now + timedelta(minutes=4),
+            failure_classification=None,
+        ),
     )
 
     projected = MobileExecutionStatusService._project(sources, now=now)
@@ -241,8 +250,14 @@ def test_live_connectivity_projection_uses_only_persisted_transport_evidence() -
     assert projected.heartbeat.age_seconds == 12
     assert projected.lease.phase is LeasePhase.EXPIRING
     assert projected.transport_session.last_contact_at == now - timedelta(seconds=8)
+    assert projected.supervisor.state == "recovering"
+    assert projected.supervisor.session_state == "opening"
+    assert projected.supervisor.recovering is True
+    assert projected.supervisor.ready is False
     assert projected.polling_after_seconds == 10
-    assert "transport_contact" in {entry.event for entry in projected.timeline}
+    timeline_events = {entry.event for entry in projected.timeline}
+    assert "transport_contact" in timeline_events
+    assert "supervisor_state_updated" in timeline_events
 
 
 def test_stale_transport_evidence_is_disconnected_not_progress() -> None:
