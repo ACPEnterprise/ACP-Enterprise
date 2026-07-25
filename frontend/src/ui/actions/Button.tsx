@@ -42,7 +42,7 @@ const variantClasses: Record<ButtonVariant, string> = {
 };
 
 const sizeClasses: Record<ButtonSize, string> = {
-  small: "min-h-10 gap-ui-2 px-ui-3 text-body-s",
+  small: "min-h-11 gap-ui-2 px-ui-3 text-body-s",
   medium: "min-h-11 gap-ui-2 px-ui-4 text-body-s",
   large: "min-h-12 gap-ui-3 px-ui-5 text-body",
 };
@@ -72,7 +72,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       disabled={unavailable}
       aria-busy={loading || undefined}
       className={classNames(
-        "inline-flex items-center justify-center rounded-md border font-semibold transition-colors [transition-duration:var(--duration-fast)] disabled:cursor-not-allowed disabled:bg-[var(--semantic-disabled-background)] disabled:text-[var(--semantic-disabled-content)] disabled:opacity-100",
+        "inline-flex max-w-full touch-manipulation items-center justify-center rounded-md border text-center font-semibold whitespace-normal transition-colors [transition-duration:var(--duration-fast)] disabled:cursor-not-allowed disabled:bg-[var(--semantic-disabled-background)] disabled:text-[var(--semantic-disabled-content)] disabled:opacity-100",
         variantClasses[variant],
         sizeClasses[size],
         fullWidth && "w-full",

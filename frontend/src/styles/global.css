@@ -15,11 +15,93 @@ html {
 
 body {
   min-height: 100vh;
+  min-height: 100dvh;
   background: var(--semantic-background);
   color: var(--semantic-text-primary);
   font-family: inherit;
   font-size: 1rem;
   line-height: 1.5;
+}
+
+.safe-area-header {
+  padding:
+    max(var(--space-3), var(--safe-area-top))
+    max(var(--space-4), var(--safe-area-right))
+    var(--space-3)
+    max(var(--space-4), var(--safe-area-left));
+}
+
+.safe-area-workspace {
+  padding:
+    var(--space-4)
+    max(var(--space-4), var(--safe-area-right))
+    max(var(--space-4), var(--safe-area-bottom))
+    max(var(--space-4), var(--safe-area-left));
+}
+
+.safe-area-drawer {
+  padding-top: var(--safe-area-top);
+  padding-bottom: var(--safe-area-bottom);
+  padding-left: var(--safe-area-left);
+}
+
+.safe-area-login {
+  padding:
+    max(var(--space-8), var(--safe-area-top))
+    max(var(--space-4), var(--safe-area-right))
+    max(var(--space-8), var(--safe-area-bottom))
+    max(var(--space-4), var(--safe-area-left));
+}
+
+.safe-area-dialog {
+  padding:
+    max(var(--space-4), var(--safe-area-top))
+    max(var(--space-4), var(--safe-area-right))
+    max(var(--space-4), var(--safe-area-bottom))
+    max(var(--space-4), var(--safe-area-left));
+}
+
+@media (min-width: 48rem) {
+  .safe-area-header {
+    padding-right: max(var(--space-6), var(--safe-area-right));
+    padding-left: max(var(--space-6), var(--safe-area-left));
+  }
+
+  .safe-area-workspace {
+    padding:
+      var(--space-6)
+      max(var(--space-6), var(--safe-area-right))
+      max(var(--space-6), var(--safe-area-bottom))
+      max(var(--space-6), var(--safe-area-left));
+  }
+}
+
+@media (min-width: 80rem) {
+  .safe-area-workspace {
+    padding:
+      var(--space-8)
+      max(var(--space-8), var(--safe-area-right))
+      max(var(--space-8), var(--safe-area-bottom))
+      max(var(--space-8), var(--safe-area-left));
+  }
+}
+
+@media (orientation: landscape) and (max-height: 32rem) {
+  .safe-area-header {
+    padding-top: max(var(--space-2), var(--safe-area-top));
+    padding-bottom: var(--space-2);
+  }
+
+  .safe-area-workspace {
+    padding-top: var(--space-3);
+    padding-bottom: max(var(--space-3), var(--safe-area-bottom));
+  }
+
+  .safe-area-login {
+    place-items: start center;
+    padding-top: max(var(--space-4), var(--safe-area-top));
+    padding-bottom: max(var(--space-4), var(--safe-area-bottom));
+  }
 }
 
 ::selection {

@@ -26,4 +26,12 @@ describe("Button", () => {
     render(<Button leadingIcon={<CirclePlus data-testid="icon" />}>Create</Button>);
     expect(screen.getByTestId("icon").parentElement).toHaveAttribute("aria-hidden", "true");
   });
+
+  it("keeps the small size at the mobile touch-target minimum", () => {
+    render(<Button size="small">Small action</Button>);
+    expect(screen.getByRole("button", { name: "Small action" })).toHaveClass(
+      "min-h-11",
+      "touch-manipulation",
+    );
+  });
 });

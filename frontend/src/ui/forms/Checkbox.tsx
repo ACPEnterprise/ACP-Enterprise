@@ -49,7 +49,7 @@ export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(
     const controlId = id ?? field?.controlId;
     const isRequired = required ?? field?.required;
     return (
-      <label htmlFor={controlId} className="inline-flex w-fit items-start gap-ui-3 text-body-s text-content-secondary">
+      <label htmlFor={controlId} className="inline-flex min-h-11 w-fit touch-manipulation items-center gap-ui-3 text-body-s text-content-secondary">
         <input
           ref={setRef}
           id={controlId}
@@ -60,7 +60,7 @@ export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(
           aria-invalid={field?.invalid || undefined}
           aria-describedby={combineIds(ariaDescribedBy, field?.describedBy)}
           className={classNames(
-            "mt-ui-1 size-[var(--icon-small)] shrink-0 rounded-sm border border-stroke-strong accent-action-primary disabled:cursor-not-allowed disabled:opacity-60",
+            "size-[var(--icon-small)] shrink-0 rounded-sm border border-stroke-strong accent-action-primary disabled:cursor-not-allowed disabled:opacity-60",
             className,
           )}
           {...props}

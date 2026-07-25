@@ -21,6 +21,14 @@ function renderLogin(signIn: AuthenticationContextValue["signIn"]) {
 }
 
 describe("LoginRoute", () => {
+  it("uses the dynamic viewport and safe-area login foundation", () => {
+    renderLogin(vi.fn());
+    expect(screen.getByRole("main")).toHaveClass(
+      "safe-area-login",
+      "min-h-dvh",
+    );
+  });
+
   it("submits credentials and enters Mission Control", async () => {
     const signIn = vi.fn().mockResolvedValue(undefined);
     renderLogin(signIn);

@@ -10,7 +10,7 @@ export const Workspace = forwardRef<HTMLElement, WorkspaceProps>(function Worksp
       ref={ref}
       id="main-workspace"
       tabIndex={-1}
-      className="min-w-0 flex-1 overflow-y-auto bg-app-background p-ui-4 focus:outline-none md:p-ui-6 xl:p-ui-8"
+      className="safe-area-workspace min-w-0 flex-1 overflow-y-auto bg-app-background focus:outline-none"
     >
       <div className="mx-auto w-full max-w-[var(--content-wide)]">{children}</div>
     </main>

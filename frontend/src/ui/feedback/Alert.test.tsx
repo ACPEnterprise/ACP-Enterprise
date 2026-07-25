@@ -17,4 +17,16 @@ describe("Alert", () => {
     rerender(<Alert announcement="assertive">Connection lost</Alert>);
     expect(screen.getByRole("alert")).toHaveAttribute("aria-live", "assertive");
   });
+
+  it("wraps actions below content at narrow widths", () => {
+    render(
+      <Alert action={<button type="button">Retry</button>}>
+        Service unavailable
+      </Alert>,
+    );
+    expect(screen.getByRole("button", { name: "Retry" }).parentElement).toHaveClass(
+      "w-full",
+      "sm:w-auto",
+    );
+  });
 });

@@ -63,4 +63,11 @@ describe("ApplicationHeader", () => {
     await user.selectOptions(screen.getByRole("combobox", { name: "Theme preference" }), "light");
     expect(document.documentElement).toHaveAttribute("data-theme", "light");
   });
+
+  it("applies the shared safe-area header boundary", () => {
+    const { container } = render(
+      <AuthenticatedHeader metadata={{ pageTitle: "Command Center", breadcrumbs: [] }} />,
+    );
+    expect(container.querySelector("header")).toHaveClass("safe-area-header");
+  });
 });

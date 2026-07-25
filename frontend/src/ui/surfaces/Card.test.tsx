@@ -14,6 +14,11 @@ describe("Card", () => {
       </Card>,
     );
     expect(screen.getByRole("article")).toContainElement(screen.getByRole("heading", { name: "Account" }));
+    expect(screen.getByRole("article")).toHaveClass("min-w-0");
+    expect(screen.getByRole("heading", { name: "Account" }).parentElement).toHaveClass(
+      "p-ui-4",
+      "sm:p-ui-6",
+    );
     expect(screen.getByText("Updated today").tagName).toBe("FOOTER");
   });
 });

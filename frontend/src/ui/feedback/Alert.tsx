@@ -45,7 +45,7 @@ export const Alert = forwardRef<HTMLDivElement, AlertProps>(function Alert(
       aria-live={announcement}
       aria-labelledby={title ? titleId : undefined}
       className={classNames(
-        "flex gap-ui-3 rounded-lg border p-ui-4 text-body-s",
+        "flex flex-wrap items-start gap-ui-3 rounded-lg border p-ui-4 text-body-s sm:flex-nowrap",
         variantClasses[variant],
         className,
       )}
@@ -56,7 +56,7 @@ export const Alert = forwardRef<HTMLDivElement, AlertProps>(function Alert(
         {title && <p id={titleId} className="font-semibold text-content">{title}</p>}
         <div className={classNames("text-content-secondary", Boolean(title) && "mt-ui-1")}>{children}</div>
       </div>
-      {action && <div className="shrink-0">{action}</div>}
+      {action && <div className="w-full shrink-0 sm:w-auto">{action}</div>}
     </div>
   );
 });

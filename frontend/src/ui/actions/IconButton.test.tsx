@@ -20,4 +20,12 @@ describe("IconButton", () => {
     render(<IconButton loading icon={<Bell />} label="Notifications" />);
     expect(screen.getByRole("button", { name: "Notifications" })).toBeDisabled();
   });
+
+  it("keeps the small size at the mobile touch-target minimum", () => {
+    render(<IconButton size="small" icon={<Bell />} label="Compact action" />);
+    expect(screen.getByRole("button", { name: "Compact action" })).toHaveClass(
+      "size-11",
+      "touch-manipulation",
+    );
+  });
 });

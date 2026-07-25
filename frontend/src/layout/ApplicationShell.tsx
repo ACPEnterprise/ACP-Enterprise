@@ -65,7 +65,7 @@ export function ApplicationShell() {
   };
 
   return (
-    <div className="flex min-h-screen bg-app-background text-content">
+    <div className="flex min-h-screen min-h-dvh bg-app-background text-content">
       <SkipLink />
       <Sidebar
         brand={brandConfig}
@@ -90,7 +90,7 @@ export function ApplicationShell() {
           </div>
         </>
       )}
-      <div className="flex min-h-screen min-w-0 flex-1 flex-col">
+      <div className="flex min-h-screen min-h-dvh min-w-0 flex-1 flex-col">
         <ApplicationHeader
           brand={brandConfig}
           metadata={workspaceMetadata}

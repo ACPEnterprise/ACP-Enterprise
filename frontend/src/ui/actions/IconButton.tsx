@@ -26,7 +26,7 @@ const variantClasses: Record<ButtonVariant, string> = {
 };
 
 const sizeClasses: Record<ButtonSize, string> = {
-  small: "size-10 [&_svg]:size-[var(--icon-small)]",
+  small: "size-11 [&_svg]:size-[var(--icon-small)]",
   medium: "size-11 [&_svg]:size-[var(--icon-medium)]",
   large: "size-12 [&_svg]:size-[var(--icon-large)]",
 };
@@ -54,7 +54,7 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
         aria-label={label}
         aria-busy={loading || undefined}
         className={classNames(
-          "inline-flex shrink-0 items-center justify-center rounded-md border border-transparent transition-colors [transition-duration:var(--duration-fast)] disabled:cursor-not-allowed disabled:bg-[var(--semantic-disabled-background)] disabled:text-[var(--semantic-disabled-content)]",
+          "inline-flex shrink-0 touch-manipulation items-center justify-center rounded-md border border-transparent transition-colors [transition-duration:var(--duration-fast)] disabled:cursor-not-allowed disabled:bg-[var(--semantic-disabled-background)] disabled:text-[var(--semantic-disabled-content)]",
           variantClasses[variant],
           sizeClasses[size],
           className,

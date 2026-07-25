@@ -60,7 +60,7 @@ export function LoginRoute() {
   };
 
   return (
-    <main className="grid min-h-screen place-items-center bg-app-background px-ui-4 py-ui-8 text-content">
+    <main className="safe-area-login grid min-h-screen min-h-dvh place-items-center bg-app-background text-content">
       <div className="w-full max-w-[var(--content-compact)]">
         <Stack space="large">
           <div className="flex items-center justify-between gap-ui-4">
