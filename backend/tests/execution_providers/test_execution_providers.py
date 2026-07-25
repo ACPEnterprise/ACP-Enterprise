@@ -1,6 +1,6 @@
+import inspect
 from dataclasses import FrozenInstanceError, replace
 from datetime import datetime, timedelta, timezone
-import inspect
 from uuid import UUID, uuid4
 
 import pytest

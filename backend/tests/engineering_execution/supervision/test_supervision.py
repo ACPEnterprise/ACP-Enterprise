@@ -25,6 +25,7 @@ from app.engineering_execution.supervision.service import (
     ProviderSessionService,
 )
 from app.execution_providers.contracts import ProviderCapabilities
+from app.execution_providers.errors import ProviderRequestError
 from app.execution_providers.registry import ExecutionProviderRegistry
 from app.execution_providers.runtime import (
     ProviderCredentialStatus,
@@ -87,6 +88,23 @@ class ReadyRuntime(InterfaceOnlyRuntime):
             credential_status=ProviderCredentialStatus.USABLE,
             provider_session_reference="provider-session-reference",
         )
+
+    async def close(self, request: ProviderRuntimeRequest) -> ProviderRuntimeResult:
+        self.operation_calls.append("close")
+        return ProviderRuntimeResult(
+            provider_session_id=request.provider_session_id,
+            state=ProviderRuntimeState.CLOSED,
+            observed_at=utc_now(),
+            failure_classification=None,
+            credential_status=ProviderCredentialStatus.USABLE,
+            provider_session_reference=request.provider_session_reference,
+        )
+
+
+class ModelAccessFailureRuntime(InterfaceOnlyRuntime):
+    async def open(self, request: ProviderRuntimeRequest) -> ProviderRuntimeResult:
+        self.operation_calls.append("open")
+        raise ProviderRequestError("model inaccessible")
 
 
 def runtime_for(*providers: FakeExecutionProvider) -> InterfaceOnlyRuntime:
@@ -251,6 +269,40 @@ async def test_provider_runtime_establishment_stops_before_execution(
     assert ready.provider_session_reference == "provider-session-reference"
     assert runtime.operation_calls == ["open"]
     assert provider.requests == []
+    async with fixture.factory() as session:
+        closed = await sessions.shutdown(session, context=context, record=ready)
+    assert closed.state is ProviderSessionState.CLOSED
+    assert closed.runtime_state is ProviderRuntimeState.CLOSED
+    assert closed.provider_ready is False
+    assert runtime.operation_calls == ["open", "close"]
+
+
+@pytest.mark.asyncio
+async def test_model_access_failure_is_classified_without_readiness(
+    supervision_database: ServiceFixture,
+) -> None:
+    fixture = supervision_database
+    bundle, attempt, worker, provider = await scenario(fixture)
+    context = worker_context(worker)
+    async with fixture.factory() as session:
+        await LiveClientSupervisor().start(session, context=context)
+    service = ProviderSessionService(
+        runtime=ModelAccessFailureRuntime(ExecutionProviderRegistry((provider,)))
+    )
+    async with fixture.factory() as session:
+        record = await service.create(
+            session,
+            context=context,
+            command=CreateProviderSession(
+                composition_id=bundle.composition.id,
+                attempt_id=attempt.id,
+                timeout_seconds=300,
+            ),
+        )
+    async with fixture.factory() as session:
+        failed = await service.open(session, context=context, record=record)
+    assert failed.failure_classification == "model_access_failure"
+    assert failed.provider_ready is False
 
 
 @pytest.mark.asyncio

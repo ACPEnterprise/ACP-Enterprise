@@ -7,14 +7,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.events.schemas import BusinessEventCreate
 from app.events.service import BusinessEventService
 from app.events.types import EventType
-from app.execution_providers.contracts import ProviderCapability
-from app.execution_providers.contracts import ProviderCapabilities
+from app.execution_providers.contracts import ProviderCapabilities, ProviderCapability
 from app.execution_providers.errors import (
     ProviderAuthenticationError,
     ProviderNotFoundError,
+    ProviderRequestError,
     ProviderUnavailableError,
 )
 from app.execution_providers.runtime import (
+    ProviderCredentialResolutionError,
     ProviderCredentialStatus,
     ProviderRuntime,
     ProviderRuntimeRequest,
@@ -433,6 +434,16 @@ class ProviderSessionService:
                     expires_at=opening.expires_at,
                 )
             )
+        except ProviderCredentialResolutionError as error:
+            return await self._runtime_failure(
+                session,
+                context=context,
+                record=opening,
+                runtime_state=ProviderRuntimeState.CREDENTIAL_FAILURE,
+                credential_status=error.status,
+                failure_classification="credential_failure",
+                now=occurred_at,
+            )
         except ProviderAuthenticationError:
             return await self._runtime_failure(
                 session,
@@ -441,6 +452,16 @@ class ProviderSessionService:
                 runtime_state=ProviderRuntimeState.CREDENTIAL_FAILURE,
                 credential_status=ProviderCredentialStatus.INVALID,
                 failure_classification="credential_failure",
+                now=occurred_at,
+            )
+        except ProviderRequestError:
+            return await self._runtime_failure(
+                session,
+                context=context,
+                record=opening,
+                runtime_state=ProviderRuntimeState.PROVIDER_FAILURE,
+                credential_status=ProviderCredentialStatus.USABLE,
+                failure_classification="model_access_failure",
                 now=occurred_at,
             )
         except ProviderUnavailableError:
@@ -494,8 +515,16 @@ class ProviderSessionService:
             self._stage(
                 session,
                 context=context,
-                event_type=EventType.ENGINEERING_PROVIDER_READY,
-                action="engineering_execution.provider_ready",
+                event_type=EventType.ENGINEERING_PROVIDER_SESSION_ESTABLISHED,
+                action="engineering_execution.provider_session_established",
+                record=ready,
+                now=runtime_result.observed_at,
+            )
+            self._stage(
+                session,
+                context=context,
+                event_type=EventType.ENGINEERING_PROVIDER_READINESS_VERIFIED,
+                action="engineering_execution.provider_readiness_verified",
                 record=ready,
                 now=runtime_result.observed_at,
             )
@@ -538,6 +567,54 @@ class ProviderSessionService:
                 now=now,
             )
         return failed
+
+    async def shutdown(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthenticatedWorkerContext,
+        record: ProviderSessionRecord,
+        now: datetime | None = None,
+    ) -> ProviderSessionRecord:
+        del now
+        if not record.provider_ready or record.provider_session_reference is None:
+            raise SupervisionTransitionError("Provider session is not ready.")
+        runtime_result = await self.runtime.close(
+            ProviderRuntimeRequest(
+                provider_session_id=record.id,
+                company_id=record.company_id,
+                worker_id=record.worker_id,
+                provider_identifier=record.provider_identifier,
+                capabilities=ProviderCapabilities(record.effective_capabilities),
+                expires_at=record.expires_at,
+                provider_session_reference=record.provider_session_reference,
+            )
+        )
+        async with session.begin():
+            closed = await self.repository.update_runtime(
+                session,
+                company_id=context.company_id,
+                session_id=record.id,
+                expected_version=record.version,
+                from_states=(ProviderSessionState.READY, ProviderSessionState.ACTIVE),
+                to_state=ProviderSessionState.CLOSED,
+                runtime_state=runtime_result.state,
+                credential_status=record.credential_status,
+                provider_ready=False,
+                provider_session_reference=record.provider_session_reference,
+                now=runtime_result.observed_at,
+            )
+            if closed is None or closed.worker_id != context.worker_id:
+                raise SupervisionTransitionError("Provider session cannot close.")
+            self._stage(
+                session,
+                context=context,
+                event_type=EventType.ENGINEERING_PROVIDER_RUNTIME_CLOSED,
+                action="engineering_execution.provider_shutdown_completed",
+                record=closed,
+                now=runtime_result.observed_at,
+            )
+        return closed
 
     def _stage(
         self,

@@ -79,6 +79,12 @@ class EventType(str, Enum):
         "engineering_execution.provider_credential_validated"
     )
     ENGINEERING_PROVIDER_READY = "engineering_execution.provider_ready"
+    ENGINEERING_PROVIDER_SESSION_ESTABLISHED = (
+        "engineering_execution.provider_session_established"
+    )
+    ENGINEERING_PROVIDER_READINESS_VERIFIED = (
+        "engineering_execution.provider_readiness_verified"
+    )
     ENGINEERING_PROVIDER_RUNTIME_CLOSED = (
         "engineering_execution.provider_runtime_closed"
     )
