@@ -9,6 +9,10 @@ from app.engineering_execution.composition.models import (
     ProviderExecutionAttempt,
 )
 from app.execution_providers.contracts import ProviderCapability
+from app.execution_providers.runtime import (
+    ProviderCredentialStatus,
+    ProviderRuntimeState,
+)
 from app.worker_control.models import EngineeringWorker, WorkerLease
 
 from .contracts import ProviderSessionState, RecoveryItem, SupervisorState
@@ -191,6 +195,9 @@ class SupervisionRepository:
             effective_capabilities=[item.value for item in effective_capabilities],
             approved_code_changes=composition.approved_code_changes,
             state=ProviderSessionState.CREATED.value,
+            runtime_state=ProviderRuntimeState.CREATED.value,
+            credential_status=ProviderCredentialStatus.UNAVAILABLE.value,
+            provider_ready=False,
             version=1,
             created_at=now,
             expires_at=expires_at,
@@ -231,6 +238,59 @@ class SupervisionRepository:
         field = timestamp_fields.get(to_state)
         if field:
             values[field] = now
+        entity = await session.scalar(
+            update(ProviderSessionModel)
+            .where(
+                ProviderSessionModel.company_id == company_id,
+                ProviderSessionModel.id == session_id,
+                ProviderSessionModel.version == expected_version,
+                ProviderSessionModel.state.in_(
+                    tuple(state.value for state in from_states)
+                ),
+            )
+            .values(**values)
+            .returning(ProviderSessionModel)
+        )
+        await session.flush()
+        return None if entity is None else _provider_session(entity)
+
+    @staticmethod
+    async def update_runtime(
+        session: AsyncSession,
+        *,
+        company_id: UUID,
+        session_id: UUID,
+        expected_version: int,
+        from_states: tuple[ProviderSessionState, ...],
+        to_state: ProviderSessionState,
+        runtime_state: ProviderRuntimeState,
+        credential_status: ProviderCredentialStatus,
+        provider_ready: bool,
+        provider_session_reference: str | None,
+        now: datetime,
+        failure_classification: str | None = None,
+    ) -> ProviderSessionRecord | None:
+        values: dict[str, object] = {
+            "state": to_state.value,
+            "runtime_state": runtime_state.value,
+            "credential_status": credential_status.value,
+            "provider_ready": provider_ready,
+            "provider_session_reference": provider_session_reference,
+            "version": expected_version + 1,
+            "updated_at": now,
+            "failure_classification": failure_classification,
+        }
+        if to_state is ProviderSessionState.OPENING:
+            values["opening_at"] = now
+        if to_state is ProviderSessionState.READY:
+            values["ready_at"] = now
+        if to_state in {
+            ProviderSessionState.CLOSED,
+            ProviderSessionState.EXPIRED,
+            ProviderSessionState.FAILED,
+            ProviderSessionState.CANCELLED,
+        }:
+            values["closed_at"] = now
         entity = await session.scalar(
             update(ProviderSessionModel)
             .where(
@@ -326,6 +386,10 @@ def _provider_session(entity: ProviderSessionModel) -> ProviderSessionRecord:
         ),
         approved_code_changes=entity.approved_code_changes,
         state=ProviderSessionState(entity.state),
+        runtime_state=ProviderRuntimeState(entity.runtime_state),
+        credential_status=ProviderCredentialStatus(entity.credential_status),
+        provider_ready=entity.provider_ready,
+        provider_session_reference=entity.provider_session_reference,
         version=entity.version,
         created_at=entity.created_at,
         opening_at=entity.opening_at,

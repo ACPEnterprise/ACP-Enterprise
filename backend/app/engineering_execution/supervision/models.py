@@ -98,6 +98,23 @@ class ProviderSessionModel(Base):
             "'expired','failed','cancelled')",
             name="ck_provider_sessions_state",
         ),
+        CheckConstraint(
+            "runtime_state IN ('created','initializing','credential_validation',"
+            "'provider_initializing','provider_ready','opening','ready','active',"
+            "'closing','closed','recovering','failed','cancelled',"
+            "'credential_failure','provider_failure','timeout')",
+            name="ck_provider_sessions_runtime_state",
+        ),
+        CheckConstraint(
+            "credential_status IN ('unavailable','invalid','expired','usable')",
+            name="ck_provider_sessions_credential_status",
+        ),
+        CheckConstraint(
+            "provider_ready = false OR "
+            "(runtime_state = 'provider_ready' AND credential_status = 'usable' "
+            "AND provider_session_reference IS NOT NULL)",
+            name="ck_provider_sessions_provider_ready",
+        ),
         CheckConstraint("version >= 1", name="ck_provider_sessions_version"),
         CheckConstraint(
             "expires_at > created_at", name="ck_provider_sessions_expiration"
@@ -136,6 +153,14 @@ class ProviderSessionModel(Base):
     effective_capabilities: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
     approved_code_changes: Mapped[bool] = mapped_column(Boolean, nullable=False)
     state: Mapped[str] = mapped_column(String(20), nullable=False)
+    runtime_state: Mapped[str] = mapped_column(
+        String(40), nullable=False, default="created"
+    )
+    credential_status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="unavailable"
+    )
+    provider_ready: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    provider_session_reference: Mapped[str | None] = mapped_column(String(200))
     version: Mapped[int] = mapped_column(Integer, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False

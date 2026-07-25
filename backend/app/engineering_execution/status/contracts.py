@@ -98,6 +98,9 @@ class ResultStatusSource:
 class SupervisorStatusSource:
     supervisor_state: str
     session_state: str | None
+    runtime_state: str | None
+    credential_status: str
+    provider_ready: bool
     ready: bool
     updated_at: datetime
     expires_at: datetime | None

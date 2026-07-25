@@ -184,10 +184,22 @@ class SqlExecutionStatusProvider:
                                 if provider_session is not None
                                 else None
                             ),
+                            runtime_state=(
+                                provider_session.runtime_state
+                                if provider_session is not None
+                                else None
+                            ),
+                            credential_status=(
+                                provider_session.credential_status
+                                if provider_session is not None
+                                else "unavailable"
+                            ),
+                            provider_ready=bool(
+                                provider_session and provider_session.provider_ready
+                            ),
                             ready=supervisor.state == "ready"
-                            and (
-                                provider_session is None
-                                or provider_session.state in {"ready", "active"}
+                            and bool(
+                                provider_session and provider_session.provider_ready
                             ),
                             updated_at=max(
                                 supervisor.updated_at,

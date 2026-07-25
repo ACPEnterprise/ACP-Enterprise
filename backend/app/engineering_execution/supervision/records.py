@@ -3,6 +3,10 @@ from datetime import datetime
 from uuid import UUID
 
 from app.execution_providers.contracts import ProviderCapability
+from app.execution_providers.runtime import (
+    ProviderCredentialStatus,
+    ProviderRuntimeState,
+)
 
 from .contracts import ProviderSessionState, SupervisorState
 
@@ -35,6 +39,10 @@ class ProviderSessionRecord:
     effective_capabilities: tuple[ProviderCapability, ...]
     approved_code_changes: bool
     state: ProviderSessionState
+    runtime_state: ProviderRuntimeState
+    credential_status: ProviderCredentialStatus
+    provider_ready: bool
+    provider_session_reference: str | None
     version: int
     created_at: datetime
     opening_at: datetime | None

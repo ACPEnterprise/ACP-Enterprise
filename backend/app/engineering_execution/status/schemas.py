@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -59,6 +58,9 @@ class SupervisorStatus(StatusSchema):
     availability: ProjectionAvailability
     state: str | None
     session_state: str | None
+    runtime_state: str | None
+    credential_status: str
+    provider_ready: bool
     ready: bool
     reconnecting: bool
     recovering: bool
@@ -76,7 +78,7 @@ class MobileExecutionStatus(StatusSchema):
     approval_state: str
     monitoring_state: MonitoringState
     execution_available: bool
-    execution_connected: Literal[False]
+    execution_connected: bool
     connection_state: ConnectionState
     transport_health: str
     execution_id: UUID | None

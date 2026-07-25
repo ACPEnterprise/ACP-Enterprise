@@ -200,7 +200,9 @@ class MobileExecutionStatusService:
             approval_state=sources.command.approval_state,
             monitoring_state=monitoring_state,
             execution_available=execution is not None,
-            execution_connected=False,
+            execution_connected=bool(
+                sources.supervisor and sources.supervisor.provider_ready
+            ),
             connection_state=connection_state,
             transport_health=(
                 sources.heartbeat.health
@@ -290,6 +292,17 @@ class MobileExecutionStatusService:
                 ),
                 session_state=(
                     sources.supervisor.session_state if sources.supervisor else None
+                ),
+                runtime_state=(
+                    sources.supervisor.runtime_state if sources.supervisor else None
+                ),
+                credential_status=(
+                    sources.supervisor.credential_status
+                    if sources.supervisor
+                    else "unavailable"
+                ),
+                provider_ready=bool(
+                    sources.supervisor and sources.supervisor.provider_ready
                 ),
                 ready=bool(sources.supervisor and sources.supervisor.ready),
                 reconnecting=bool(

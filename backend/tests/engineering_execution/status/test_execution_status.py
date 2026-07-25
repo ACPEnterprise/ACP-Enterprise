@@ -235,6 +235,9 @@ def test_live_connectivity_projection_uses_only_persisted_transport_evidence() -
         supervisor=SupervisorStatusSource(
             supervisor_state="recovering",
             session_state="opening",
+            runtime_state="initializing",
+            credential_status="unavailable",
+            provider_ready=False,
             ready=False,
             updated_at=now - timedelta(seconds=6),
             expires_at=now + timedelta(minutes=4),
@@ -258,6 +261,24 @@ def test_live_connectivity_projection_uses_only_persisted_transport_evidence() -
     timeline_events = {entry.event for entry in projected.timeline}
     assert "transport_contact" in timeline_events
     assert "supervisor_state_updated" in timeline_events
+
+    assert sources.supervisor is not None
+    provider_ready = MobileExecutionStatusService._project(
+        replace(
+            sources,
+            supervisor=replace(
+                sources.supervisor,
+                session_state="ready",
+                runtime_state="provider_ready",
+                credential_status="usable",
+                provider_ready=True,
+                ready=True,
+            ),
+        ),
+        now=now,
+    )
+    assert provider_ready.execution_connected is True
+    assert provider_ready.supervisor.provider_ready is True
 
 
 def test_stale_transport_evidence_is_disconnected_not_progress() -> None:

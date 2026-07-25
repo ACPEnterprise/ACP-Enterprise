@@ -17,6 +17,13 @@ class ProviderExecutionStatus(StrEnum):
     FAILED = "failed"
 
 
+class ProviderSessionStatus(StrEnum):
+    READY = "ready"
+    CLOSED = "closed"
+    CANCELLED = "cancelled"
+    FAILED = "failed"
+
+
 class ProviderFailureClassification(StrEnum):
     AUTHENTICATION_FAILED = "authentication_failed"
     CAPABILITY_MISMATCH = "capability_mismatch"
@@ -45,6 +52,28 @@ class ProviderHealth:
     available: bool
     checked_at: datetime
     status_code: str
+
+
+@dataclass(frozen=True)
+class ProviderSessionRequest:
+    provider_session_id: UUID
+    company_id: UUID
+    worker_id: UUID
+    provider_identifier: str
+    capabilities: ProviderCapabilities
+    credential_reference: str | None
+    provider_session_reference: str | None
+    expires_at: datetime
+
+
+@dataclass(frozen=True)
+class ProviderSessionResult:
+    provider_session_id: UUID
+    provider_session_reference: str | None
+    provider_identifier: str
+    status: ProviderSessionStatus
+    observed_at: datetime
+    failure_classification: ProviderFailureClassification | None
 
 
 @dataclass(frozen=True)
@@ -98,6 +127,30 @@ class ExecutionProvider(ABC):
     @abstractmethod
     async def health(self) -> ProviderHealth:
         """Check readiness without starting execution."""
+
+    async def open_session(
+        self, request: ProviderSessionRequest
+    ) -> ProviderSessionResult:
+        """Establish a provider session without submitting execution."""
+        raise NotImplementedError
+
+    async def close_session(
+        self, request: ProviderSessionRequest
+    ) -> ProviderSessionResult:
+        """Close an established provider session."""
+        raise NotImplementedError
+
+    async def cancel_session(
+        self, request: ProviderSessionRequest
+    ) -> ProviderSessionResult:
+        """Propagate cancellation without asserting provider termination."""
+        raise NotImplementedError
+
+    async def recover_session(
+        self, request: ProviderSessionRequest
+    ) -> ProviderSessionResult:
+        """Prepare recovery of an established provider session."""
+        raise NotImplementedError
 
     @abstractmethod
     async def execute(

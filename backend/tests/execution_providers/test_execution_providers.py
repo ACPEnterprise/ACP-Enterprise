@@ -1,7 +1,7 @@
 from dataclasses import FrozenInstanceError, replace
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import inspect
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 
@@ -11,12 +11,17 @@ from app.execution_providers.codex import (
     CodexExecutionProvider,
     CodexOperation,
     CodexOperationResult,
+    CodexSessionRequest,
+    CodexSessionResult,
 )
 from app.execution_providers.contracts import (
+    ProviderCapabilities,
     ProviderCapability,
     ProviderExecutionRequest,
     ProviderExecutionStatus,
     ProviderHealth,
+    ProviderSessionRequest,
+    ProviderSessionStatus,
 )
 from app.execution_providers.errors import (
     DuplicateProviderError,
@@ -25,6 +30,13 @@ from app.execution_providers.errors import (
     ProviderUnavailableError,
 )
 from app.execution_providers.registry import ExecutionProviderRegistry
+from app.execution_providers.runtime import (
+    ProviderCredentialResolution,
+    ProviderCredentialStatus,
+    ProviderRuntimeRequest,
+    ProviderRuntimeState,
+    RegistryProviderRuntime,
+)
 from app.worker_control import service as worker_control_service_module
 
 
@@ -36,6 +48,7 @@ class FakeCodexClient:
     def __init__(self) -> None:
         self.operation: CodexOperation | None = None
         self.failure: Exception | None = None
+        self.session_request: CodexSessionRequest | None = None
 
     async def health(self) -> ProviderHealth:
         return ProviderHealth(True, now(), "ready")
@@ -52,6 +65,44 @@ class FakeCodexClient:
             evidence_summary={"repository_mutated": False},
             validation_summary={"tests_run": False},
             output_references=("evidence://codex-operation-1",),
+        )
+
+    async def open_session(self, request: CodexSessionRequest) -> CodexSessionResult:
+        self.session_request = request
+        if self.failure is not None:
+            raise self.failure
+        return CodexSessionResult("codex-session-1", True, now())
+
+    async def close_session(self, session_reference: str) -> CodexSessionResult:
+        return CodexSessionResult(session_reference, True, now())
+
+    async def cancel_session(self, session_reference: str) -> CodexSessionResult:
+        return CodexSessionResult(session_reference, True, now())
+
+    async def recover_session(self, session_reference: str) -> CodexSessionResult:
+        return CodexSessionResult(session_reference, True, now())
+
+
+class FakeCredentialResolver:
+    def __init__(self, status: ProviderCredentialStatus) -> None:
+        self.status = status
+
+    async def resolve(
+        self,
+        *,
+        company_id: UUID,
+        worker_id: UUID,
+        provider_identifier: str,
+        now: datetime,
+    ) -> ProviderCredentialResolution:
+        return ProviderCredentialResolution(
+            status=self.status,
+            credential_reference=(
+                "opaque-credential-reference"
+                if self.status is ProviderCredentialStatus.USABLE
+                else None
+            ),
+            expires_at=now + timedelta(hours=1),
         )
 
 
@@ -71,6 +122,19 @@ def request() -> ProviderExecutionRequest:
         instruction_digest="b" * 64,
         request_digest="c" * 64,
         correlation_id=uuid4(),
+    )
+
+
+def session_request() -> ProviderSessionRequest:
+    return ProviderSessionRequest(
+        provider_session_id=uuid4(),
+        company_id=uuid4(),
+        worker_id=uuid4(),
+        provider_identifier="codex",
+        capabilities=ProviderCapabilities((ProviderCapability.ENGINEERING_EXECUTE,)),
+        credential_reference="credential-reference",
+        provider_session_reference=None,
+        expires_at=now(),
     )
 
 
@@ -121,6 +185,95 @@ async def test_codex_adapter_translates_request_and_result() -> None:
         result.evidence_summary["unsafe"] = True  # type: ignore[index]
     with pytest.raises(FrozenInstanceError):
         result.provider_identifier = "other"  # type: ignore[misc]
+
+
+@pytest.mark.asyncio
+async def test_codex_adapter_establishes_session_without_execution() -> None:
+    client = FakeCodexClient()
+    provider = CodexExecutionProvider(
+        client=client,
+        model="codex-test-model",
+        implementation_version="1",
+    )
+    provider_request = session_request()
+
+    result = await provider.open_session(provider_request)
+
+    assert result.status is ProviderSessionStatus.READY
+    assert result.provider_session_reference == "codex-session-1"
+    assert client.session_request == CodexSessionRequest(
+        session_id=provider_request.provider_session_id,
+        credential_reference="credential-reference",
+        expires_at=provider_request.expires_at,
+    )
+    assert client.operation is None
+
+
+@pytest.mark.asyncio
+async def test_runtime_opens_codex_session_without_execution_or_secret_output() -> None:
+    client = FakeCodexClient()
+    provider = CodexExecutionProvider(
+        client=client,
+        model="codex-test-model",
+        implementation_version="1",
+    )
+    runtime = RegistryProviderRuntime(
+        providers=ExecutionProviderRegistry((provider,)),
+        credentials=FakeCredentialResolver(ProviderCredentialStatus.USABLE),
+    )
+    runtime_request = ProviderRuntimeRequest(
+        provider_session_id=uuid4(),
+        company_id=uuid4(),
+        worker_id=uuid4(),
+        provider_identifier="codex",
+        capabilities=provider.capabilities,
+        expires_at=now() + timedelta(minutes=10),
+    )
+
+    result = await runtime.open(runtime_request)
+
+    assert result.state is ProviderRuntimeState.PROVIDER_READY
+    assert result.credential_status is ProviderCredentialStatus.USABLE
+    assert result.provider_session_reference == "codex-session-1"
+    assert client.operation is None
+    assert not hasattr(result, "credential")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "status",
+    (
+        ProviderCredentialStatus.UNAVAILABLE,
+        ProviderCredentialStatus.INVALID,
+        ProviderCredentialStatus.EXPIRED,
+    ),
+)
+async def test_runtime_rejects_unusable_credentials_without_provider_call(
+    status: ProviderCredentialStatus,
+) -> None:
+    client = FakeCodexClient()
+    provider = CodexExecutionProvider(
+        client=client,
+        model="codex-test-model",
+        implementation_version="1",
+    )
+    runtime = RegistryProviderRuntime(
+        providers=ExecutionProviderRegistry((provider,)),
+        credentials=FakeCredentialResolver(status),
+    )
+    with pytest.raises(ProviderAuthenticationError):
+        await runtime.open(
+            ProviderRuntimeRequest(
+                provider_session_id=uuid4(),
+                company_id=uuid4(),
+                worker_id=uuid4(),
+                provider_identifier="codex",
+                capabilities=provider.capabilities,
+                expires_at=now() + timedelta(minutes=10),
+            )
+        )
+    assert client.session_request is None
+    assert client.operation is None
 
 
 @pytest.mark.asyncio

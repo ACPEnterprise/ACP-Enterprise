@@ -72,6 +72,19 @@ class EventType(str, Enum):
     ENGINEERING_PROVIDER_SESSION_STATE_CHANGED = (
         "engineering_execution.provider_session_state_changed"
     )
+    ENGINEERING_PROVIDER_RUNTIME_INITIALIZED = (
+        "engineering_execution.provider_runtime_initialized"
+    )
+    ENGINEERING_PROVIDER_CREDENTIAL_VALIDATED = (
+        "engineering_execution.provider_credential_validated"
+    )
+    ENGINEERING_PROVIDER_READY = "engineering_execution.provider_ready"
+    ENGINEERING_PROVIDER_RUNTIME_CLOSED = (
+        "engineering_execution.provider_runtime_closed"
+    )
+    ENGINEERING_PROVIDER_RUNTIME_FAILED = (
+        "engineering_execution.provider_runtime_failed"
+    )
 
     # CRM
     CUSTOMER_CREATED = "customer.created"

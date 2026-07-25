@@ -27,8 +27,10 @@ from app.engineering_execution.supervision.service import (
 from app.execution_providers.contracts import ProviderCapabilities
 from app.execution_providers.registry import ExecutionProviderRegistry
 from app.execution_providers.runtime import (
+    ProviderCredentialStatus,
     ProviderRuntimeRequest,
     ProviderRuntimeResult,
+    ProviderRuntimeState,
 )
 from app.worker_control.contracts import AuthenticatedWorkerContext
 from tests.engineering_control.test_engineering_command_service import (
@@ -72,6 +74,19 @@ class InterfaceOnlyRuntime:
     async def recover(self, request: ProviderRuntimeRequest) -> ProviderRuntimeResult:
         self.operation_calls.append("recover")
         raise AssertionError("Provider runtime operations are unavailable.")
+
+
+class ReadyRuntime(InterfaceOnlyRuntime):
+    async def open(self, request: ProviderRuntimeRequest) -> ProviderRuntimeResult:
+        self.operation_calls.append("open")
+        return ProviderRuntimeResult(
+            provider_session_id=request.provider_session_id,
+            state=ProviderRuntimeState.PROVIDER_READY,
+            observed_at=utc_now(),
+            failure_classification=None,
+            credential_status=ProviderCredentialStatus.USABLE,
+            provider_session_reference="provider-session-reference",
+        )
 
 
 def runtime_for(*providers: FakeExecutionProvider) -> InterfaceOnlyRuntime:
@@ -207,6 +222,35 @@ async def test_provider_session_lifecycle_never_invokes_provider(
     assert record.state is ProviderSessionState.CLOSED
     assert provider.requests == []
     assert runtime.operation_calls == []
+
+
+@pytest.mark.asyncio
+async def test_provider_runtime_establishment_stops_before_execution(
+    supervision_database: ServiceFixture,
+) -> None:
+    fixture = supervision_database
+    bundle, attempt, worker, provider = await scenario(fixture)
+    context = worker_context(worker)
+    async with fixture.factory() as session:
+        await LiveClientSupervisor().start(session, context=context)
+    runtime = ReadyRuntime(ExecutionProviderRegistry((provider,)))
+    sessions = ProviderSessionService(runtime=runtime)
+    async with fixture.factory() as session:
+        created = await sessions.create(
+            session,
+            context=context,
+            command=CreateProviderSession(bundle.composition.id, attempt.id, 300),
+        )
+    async with fixture.factory() as session:
+        ready = await sessions.open(session, context=context, record=created)
+
+    assert ready.state is ProviderSessionState.READY
+    assert ready.runtime_state is ProviderRuntimeState.PROVIDER_READY
+    assert ready.credential_status is ProviderCredentialStatus.USABLE
+    assert ready.provider_ready is True
+    assert ready.provider_session_reference == "provider-session-reference"
+    assert runtime.operation_calls == ["open"]
+    assert provider.requests == []
 
 
 @pytest.mark.asyncio

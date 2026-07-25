@@ -13,6 +13,9 @@ from app.execution_providers.contracts import (
     ProviderFailureClassification,
     ProviderHealth,
     ProviderIdentity,
+    ProviderSessionRequest,
+    ProviderSessionResult,
+    ProviderSessionStatus,
     immutable_mapping,
 )
 from app.execution_providers.errors import (
@@ -46,10 +49,35 @@ class CodexOperationResult:
     failure_code: str | None = None
 
 
+@dataclass(frozen=True)
+class CodexSessionRequest:
+    session_id: UUID
+    credential_reference: str
+    expires_at: datetime
+
+
+@dataclass(frozen=True)
+class CodexSessionResult:
+    session_reference: str
+    ready: bool
+    observed_at: datetime
+    failure_code: str | None = None
+
+
 class CodexClient(Protocol):
     """Injected Codex client boundary; credentials never enter domain contracts."""
 
     async def health(self) -> ProviderHealth: ...
+
+    async def open_session(
+        self, request: CodexSessionRequest
+    ) -> CodexSessionResult: ...
+
+    async def close_session(self, session_reference: str) -> CodexSessionResult: ...
+
+    async def cancel_session(self, session_reference: str) -> CodexSessionResult: ...
+
+    async def recover_session(self, session_reference: str) -> CodexSessionResult: ...
 
     async def execute(self, operation: CodexOperation) -> CodexOperationResult: ...
 
@@ -100,6 +128,68 @@ class CodexExecutionProvider(ExecutionProvider):
 
     async def health(self) -> ProviderHealth:
         return await self._client.health()
+
+    async def open_session(
+        self, request: ProviderSessionRequest
+    ) -> ProviderSessionResult:
+        if request.provider_identifier != self.identity.identifier:
+            raise ProviderAuthenticationError("Provider session identity mismatch.")
+        try:
+            response = await self._client.open_session(
+                CodexSessionRequest(
+                    session_id=request.provider_session_id,
+                    credential_reference=request.credential_reference or "",
+                    expires_at=request.expires_at,
+                )
+            )
+        except CodexClientAuthenticationError as error:
+            raise ProviderAuthenticationError("Codex authentication failed.") from error
+        except CodexClientUnavailableError as error:
+            raise ProviderUnavailableError("Codex is unavailable.") from error
+        return self._session_result(request, response)
+
+    async def close_session(
+        self, request: ProviderSessionRequest
+    ) -> ProviderSessionResult:
+        response = await self._client.close_session(
+            request.provider_session_reference or ""
+        )
+        return self._session_result(request, response, ProviderSessionStatus.CLOSED)
+
+    async def cancel_session(
+        self, request: ProviderSessionRequest
+    ) -> ProviderSessionResult:
+        response = await self._client.cancel_session(
+            request.provider_session_reference or ""
+        )
+        return self._session_result(request, response, ProviderSessionStatus.CANCELLED)
+
+    async def recover_session(
+        self, request: ProviderSessionRequest
+    ) -> ProviderSessionResult:
+        response = await self._client.recover_session(
+            request.provider_session_reference or ""
+        )
+        return self._session_result(request, response)
+
+    def _session_result(
+        self,
+        request: ProviderSessionRequest,
+        response: CodexSessionResult,
+        success_status: ProviderSessionStatus = ProviderSessionStatus.READY,
+    ) -> ProviderSessionResult:
+        return ProviderSessionResult(
+            provider_session_id=request.provider_session_id,
+            provider_session_reference=response.session_reference,
+            provider_identifier=self.identity.identifier,
+            status=(success_status if response.ready else ProviderSessionStatus.FAILED),
+            observed_at=response.observed_at,
+            failure_classification=(
+                None
+                if response.ready
+                else ProviderFailureClassification.PROVIDER_UNAVAILABLE
+            ),
+        )
 
     async def execute(
         self, request: ProviderExecutionRequest

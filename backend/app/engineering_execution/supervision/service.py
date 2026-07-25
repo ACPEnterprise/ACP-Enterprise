@@ -8,8 +8,18 @@ from app.events.schemas import BusinessEventCreate
 from app.events.service import BusinessEventService
 from app.events.types import EventType
 from app.execution_providers.contracts import ProviderCapability
-from app.execution_providers.errors import ProviderNotFoundError
-from app.execution_providers.runtime import ProviderRuntime
+from app.execution_providers.contracts import ProviderCapabilities
+from app.execution_providers.errors import (
+    ProviderAuthenticationError,
+    ProviderNotFoundError,
+    ProviderUnavailableError,
+)
+from app.execution_providers.runtime import (
+    ProviderCredentialStatus,
+    ProviderRuntime,
+    ProviderRuntimeRequest,
+    ProviderRuntimeState,
+)
 from app.platform.audit.service import AuditEntry, AuditService, audit_service
 from app.worker_control.contracts import AuthenticatedWorkerContext
 
@@ -379,6 +389,156 @@ class ProviderSessionService:
             )
         return record
 
+    async def open(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthenticatedWorkerContext,
+        record: ProviderSessionRecord,
+        now: datetime | None = None,
+    ) -> ProviderSessionRecord:
+        occurred_at = now or utc_now()
+        async with session.begin():
+            opening = await self.repository.update_runtime(
+                session,
+                company_id=context.company_id,
+                session_id=record.id,
+                expected_version=record.version,
+                from_states=(ProviderSessionState.CREATED,),
+                to_state=ProviderSessionState.OPENING,
+                runtime_state=ProviderRuntimeState.INITIALIZING,
+                credential_status=ProviderCredentialStatus.UNAVAILABLE,
+                provider_ready=False,
+                provider_session_reference=None,
+                now=occurred_at,
+            )
+            if opening is None or opening.worker_id != context.worker_id:
+                raise SupervisionTransitionError("Provider session cannot initialize.")
+            self._stage(
+                session,
+                context=context,
+                event_type=EventType.ENGINEERING_PROVIDER_RUNTIME_INITIALIZED,
+                action="engineering_execution.provider_runtime_initialized",
+                record=opening,
+                now=occurred_at,
+            )
+        try:
+            runtime_result = await self.runtime.open(
+                ProviderRuntimeRequest(
+                    provider_session_id=opening.id,
+                    company_id=opening.company_id,
+                    worker_id=opening.worker_id,
+                    provider_identifier=opening.provider_identifier,
+                    capabilities=ProviderCapabilities(opening.effective_capabilities),
+                    expires_at=opening.expires_at,
+                )
+            )
+        except ProviderAuthenticationError:
+            return await self._runtime_failure(
+                session,
+                context=context,
+                record=opening,
+                runtime_state=ProviderRuntimeState.CREDENTIAL_FAILURE,
+                credential_status=ProviderCredentialStatus.INVALID,
+                failure_classification="credential_failure",
+                now=occurred_at,
+            )
+        except ProviderUnavailableError:
+            return await self._runtime_failure(
+                session,
+                context=context,
+                record=opening,
+                runtime_state=ProviderRuntimeState.PROVIDER_FAILURE,
+                credential_status=ProviderCredentialStatus.USABLE,
+                failure_classification="provider_unavailable",
+                now=occurred_at,
+            )
+        if (
+            runtime_result.state is not ProviderRuntimeState.PROVIDER_READY
+            or runtime_result.credential_status is not ProviderCredentialStatus.USABLE
+            or runtime_result.provider_session_reference is None
+        ):
+            return await self._runtime_failure(
+                session,
+                context=context,
+                record=opening,
+                runtime_state=ProviderRuntimeState.PROVIDER_FAILURE,
+                credential_status=runtime_result.credential_status,
+                failure_classification="provider_not_ready",
+                now=runtime_result.observed_at,
+            )
+        async with session.begin():
+            ready = await self.repository.update_runtime(
+                session,
+                company_id=context.company_id,
+                session_id=opening.id,
+                expected_version=opening.version,
+                from_states=(ProviderSessionState.OPENING,),
+                to_state=ProviderSessionState.READY,
+                runtime_state=runtime_result.state,
+                credential_status=runtime_result.credential_status,
+                provider_ready=True,
+                provider_session_reference=runtime_result.provider_session_reference,
+                now=runtime_result.observed_at,
+            )
+            if ready is None:
+                raise SupervisionConflictError("Provider session version changed.")
+            self._stage(
+                session,
+                context=context,
+                event_type=EventType.ENGINEERING_PROVIDER_CREDENTIAL_VALIDATED,
+                action="engineering_execution.provider_credential_validated",
+                record=ready,
+                now=runtime_result.observed_at,
+            )
+            self._stage(
+                session,
+                context=context,
+                event_type=EventType.ENGINEERING_PROVIDER_READY,
+                action="engineering_execution.provider_ready",
+                record=ready,
+                now=runtime_result.observed_at,
+            )
+        return ready
+
+    async def _runtime_failure(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthenticatedWorkerContext,
+        record: ProviderSessionRecord,
+        runtime_state: ProviderRuntimeState,
+        credential_status: ProviderCredentialStatus,
+        failure_classification: str,
+        now: datetime,
+    ) -> ProviderSessionRecord:
+        async with session.begin():
+            failed = await self.repository.update_runtime(
+                session,
+                company_id=context.company_id,
+                session_id=record.id,
+                expected_version=record.version,
+                from_states=(ProviderSessionState.OPENING,),
+                to_state=ProviderSessionState.FAILED,
+                runtime_state=runtime_state,
+                credential_status=credential_status,
+                provider_ready=False,
+                provider_session_reference=None,
+                now=now,
+                failure_classification=failure_classification,
+            )
+            if failed is None:
+                raise SupervisionConflictError("Provider session version changed.")
+            self._stage(
+                session,
+                context=context,
+                event_type=EventType.ENGINEERING_PROVIDER_RUNTIME_FAILED,
+                action="engineering_execution.provider_runtime_failed",
+                record=failed,
+                now=now,
+            )
+        return failed
+
     def _stage(
         self,
         session: AsyncSession,
@@ -396,6 +556,8 @@ class ProviderSessionService:
             "worker_id": str(record.worker_id),
             "provider_identifier": record.provider_identifier,
             "state": record.state.value,
+            "runtime_state": record.runtime_state.value,
+            "provider_ready": record.provider_ready,
             "version": record.version,
         }
         self.audit.stage(
