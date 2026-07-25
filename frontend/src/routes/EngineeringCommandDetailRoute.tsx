@@ -8,27 +8,15 @@ import {
 } from "../features/engineering-control/useEngineeringCommands";
 import { engineeringLabel, shortHead, timestamp } from "../features/engineering-control/presentation";
 import type { EngineeringCancellationReason } from "../types/engineeringControl";
-import { Alert, Badge, Button, Card, Select, Spinner } from "../ui";
-
-function Confirmation({
-  title,
-  children,
-  confirmLabel,
-  destructive = false,
-  busy,
-  onCancel,
-  onConfirm,
-}: {
-  title: string;
-  children: React.ReactNode;
-  confirmLabel: string;
-  destructive?: boolean;
-  busy: boolean;
-  onCancel: () => void;
-  onConfirm: () => void;
-}) {
-  return <div role="dialog" aria-modal="true" aria-labelledby="confirmation-title" className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4"><Card className="max-h-[90vh] w-full max-w-lg overflow-y-auto p-ui-6"><h3 id="confirmation-title" className="text-xl font-bold">{title}</h3><div className="mt-4 space-y-3 text-sm">{children}</div><div className="mt-6 grid gap-3 sm:grid-cols-2"><Button variant="outline" onClick={onCancel}>Go back</Button><Button variant={destructive ? "destructive" : "primary"} loading={busy} onClick={onConfirm}>{confirmLabel}</Button></div></Card></div>;
-}
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  ConfirmationDialog,
+  Select,
+  Spinner,
+} from "../ui";
 
 export function EngineeringCommandDetailRoute() {
   const { commandId } = useParams();
@@ -97,7 +85,7 @@ export function EngineeringCommandDetailRoute() {
       {canApprove && <div><h3 className="font-bold">Approve reviewed command</h3><p className="mt-1 text-sm text-content-muted">Approve only after checking the instruction and evidence above.</p><Button className="mt-4 w-full sm:w-auto" size="large" onClick={() => setConfirmation("approve")}>Approve command</Button></div>}
       {!terminal && <div className="sm:justify-self-end"><label htmlFor="cancel-reason" className="block font-bold">Cancel command</label><Select id="cancel-reason" className="mt-2 min-w-56" value={reason} onChange={(event) => setReason(event.target.value as EngineeringCancellationReason)}><option value="owner_requested">Owner requested</option><option value="scope_changed">Scope changed</option><option value="no_longer_needed">No longer needed</option></Select><Button className="mt-4 w-full sm:w-auto" variant="destructive" onClick={() => setConfirmation("cancel")}>Cancel command</Button></div>}
     </section>
-    {confirmation === "approve" && <Confirmation title="Approve this Engineering Command?" confirmLabel="Approve command" busy={approve.isPending} onCancel={() => setConfirmation(null)} onConfirm={approveNow}><p><strong>{command.ecid}</strong></p><p>Repository: {command.repository_key}</p><p>Branch: {command.expected_branch}</p><p>HEAD: <code>{shortHead(command.expected_head)}</code></p><p>Change level: {command.requested_code_changes ? "Uncommitted code changes" : "Inspection only"}</p><p>Expires: {timestamp(command.expires_at)}</p><Alert variant="warning">Execution remains disconnected.</Alert></Confirmation>}
-    {confirmation === "cancel" && <Confirmation title="Cancel this Engineering Command?" confirmLabel="Cancel command" destructive busy={cancel.isPending} onCancel={() => setConfirmation(null)} onConfirm={cancelNow}><p>{command.ecid} will be canceled for: <strong>{engineeringLabel(reason)}</strong>.</p><p>Existing evidence is preserved. No workspace is cleaned up.</p></Confirmation>}
+    {confirmation === "approve" && <ConfirmationDialog title="Approve this Engineering Command?" confirmLabel="Approve command" pending={approve.isPending} onCancel={() => setConfirmation(null)} onConfirm={approveNow}><p><strong>{command.ecid}</strong></p><p className="break-words">Repository: {command.repository_key}</p><p className="break-words">Branch: {command.expected_branch}</p><p className="break-all">HEAD: <code>{shortHead(command.expected_head)}</code></p><p>Change level: {command.requested_code_changes ? "Uncommitted code changes" : "Inspection only"}</p><p>Expires: {timestamp(command.expires_at)}</p><Alert variant="warning">Execution remains disconnected.</Alert></ConfirmationDialog>}
+    {confirmation === "cancel" && <ConfirmationDialog title="Cancel this Engineering Command?" confirmLabel="Cancel command" destructive pending={cancel.isPending} onCancel={() => setConfirmation(null)} onConfirm={cancelNow}><p className="break-words">{command.ecid} will be canceled for: <strong>{engineeringLabel(reason)}</strong>.</p><p>Existing evidence is preserved. No workspace is cleaned up.</p></ConfirmationDialog>}
   </div>;
 }

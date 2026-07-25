@@ -9,8 +9,8 @@ import type {
 } from "../../types/customers";
 
 const inputClass =
-  "mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-blue-500";
-const labelClass = "text-sm font-medium text-slate-300";
+  "mt-1 min-h-11 w-full rounded-lg border border-stroke-strong bg-surface px-3 py-2 text-sm text-content outline-none focus:border-action-primary focus-visible:ring-2 focus-visible:ring-focus";
+const labelClass = "text-sm font-medium text-content-secondary";
 
 const emptyCustomer: CustomerInput = {
   customer_type: "individual",
@@ -244,12 +244,12 @@ export function CustomerForm({
         />
       </label>
 
-      <label className="flex items-center gap-3 text-sm text-slate-300">
+      <label className="flex min-h-11 items-center gap-3 text-sm text-content-secondary">
         <input
           type="checkbox"
           checked={form.is_vip}
           onChange={(event) => update("is_vip", event.target.checked)}
-          className="h-4 w-4 rounded border-slate-600"
+          className="h-5 w-5 rounded border-stroke-strong"
         />
         VIP customer
       </label>
@@ -278,11 +278,11 @@ export function CustomerForm({
         </div>
       )}
 
-      <div className="flex flex-wrap justify-end gap-3">
+      <div className="grid gap-3 sm:flex sm:flex-wrap sm:justify-end">
         <button
           type="button"
           onClick={onCancel}
-          className="rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-300"
+          className="min-h-11 rounded-lg border border-stroke-strong px-4 py-2 text-sm text-content-secondary"
         >
           Cancel
         </button>
@@ -295,7 +295,7 @@ export function CustomerForm({
               setValidationError(message);
               if (!message) onCheckDuplicates(normalizedInput());
             }}
-            className="flex items-center gap-2 rounded-lg border border-blue-700 px-4 py-2 text-sm text-blue-300 disabled:opacity-50"
+            className="flex min-h-11 items-center justify-center gap-2 rounded-lg border border-action-primary px-4 py-2 text-sm text-action-primary disabled:opacity-50"
           >
             <Search size={16} />
             {isCheckingDuplicates ? "Checking…" : "Check duplicates"}
@@ -304,7 +304,7 @@ export function CustomerForm({
         <button
           type="submit"
           disabled={isSaving}
-          className="rounded-lg bg-blue-600 px-5 py-2 text-sm font-semibold text-white disabled:opacity-50"
+          className="min-h-11 rounded-lg bg-action-primary px-5 py-2 text-sm font-semibold text-content-inverse disabled:opacity-50"
         >
           {isSaving ? "Saving…" : customer ? "Save customer" : "Create customer"}
         </button>

@@ -55,6 +55,7 @@ export function ExecutionMonitoringPanel({
           </p>
         </div>
         <Button
+          className="w-full sm:w-auto"
           variant="outline"
           leadingIcon={<RefreshCw size={18} />}
           loading={query.isFetching}
@@ -118,11 +119,11 @@ export function ExecutionMonitoringPanel({
             </div>
             <div>
               <dt className="text-content-muted">Transport health</dt>
-              <dd>{mobileEngineeringLabel(status.transport_health)}</dd>
+              <dd className="break-words">{mobileEngineeringLabel(status.transport_health)}</dd>
             </div>
             <div>
               <dt className="text-content-muted">Lease</dt>
-              <dd>
+              <dd className="break-words">
                 {status.lease.status
                   ? `${mobileEngineeringLabel(status.lease.status)} (${mobileEngineeringLabel(status.lease.phase)})`
                   : mobileEngineeringLabel(status.lease.availability)}
@@ -134,7 +135,7 @@ export function ExecutionMonitoringPanel({
             </div>
             <div>
               <dt className="text-content-muted">Heartbeat</dt>
-              <dd>
+              <dd className="break-words">
                 {status.heartbeat.health ??
                   mobileEngineeringLabel(status.heartbeat.availability)}
               </dd>
@@ -145,7 +146,7 @@ export function ExecutionMonitoringPanel({
             </div>
             <div>
               <dt className="text-content-muted">Heartbeat age</dt>
-              <dd>
+              <dd className="break-words">
                 {status.heartbeat.age_seconds === null
                   ? "Unavailable"
                   : `${status.heartbeat.age_seconds} seconds`}

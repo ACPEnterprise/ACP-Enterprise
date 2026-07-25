@@ -12,7 +12,7 @@ const base = { id: "job-1", job_number: "JOB-000001", concurrency_version: 4, pr
 function renderActions(status: JobStatus) { const client = new QueryClient({ defaultOptions: { mutations: { retry: false } } }); return render(<QueryClientProvider client={client}><LifecycleActionButtons job={{ ...base, status }} /></QueryClientProvider>); }
 
 describe("Job lifecycle actions", () => {
-  beforeEach(() => { vi.clearAllMocks(); vi.stubGlobal("confirm", vi.fn(() => true)); });
+  beforeEach(() => { vi.clearAllMocks(); });
   it("uses one centralized state presentation and submits the current version", async () => {
     vi.mocked(jobsApi.pauseJob).mockResolvedValue({ id: "job-1" } as never); renderActions("in_progress");
     expect(screen.getByRole("button", { name: "Pause work" })).toBeInTheDocument(); expect(screen.getByRole("button", { name: "Complete Job" })).toBeInTheDocument(); expect(screen.queryByRole("button", { name: "Activate" })).not.toBeInTheDocument();
@@ -22,7 +22,16 @@ describe("Job lifecycle actions", () => {
   it("confirms significant actions and renders controlled conflicts", async () => {
     vi.mocked(jobsApi.completeJob).mockRejectedValue({ response: { status: 409 }, isAxiosError: true }); renderActions("in_progress");
     await userEvent.click(screen.getByRole("button", { name: "Complete Job" }));
-    expect(window.confirm).toHaveBeenCalledWith("Complete Job JOB-000001?");
+    expect(screen.getByRole("dialog", { name: "Complete Job JOB-000001?" })).toBeInTheDocument();
+    await userEvent.click(screen.getAllByRole("button", { name: "Complete Job" })[1]);
     expect(await screen.findByText("Job changed")).toBeInTheDocument();
+  });
+  it("prevents duplicate lifecycle submission while confirmation is pending", async () => {
+    vi.mocked(jobsApi.cancelJob).mockImplementation(() => new Promise(() => undefined));
+    renderActions("ready");
+    await userEvent.click(screen.getByRole("button", { name: "Cancel Job" }));
+    await userEvent.click(screen.getAllByRole("button", { name: "Cancel Job" })[1]);
+    expect(screen.getAllByRole("button", { name: /Cancel Job/ })[1]).toBeDisabled();
+    expect(jobsApi.cancelJob).toHaveBeenCalledOnce();
   });
 });

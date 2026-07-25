@@ -10,14 +10,14 @@ export function KPIStatCard({
   detail,
 }: KPIStatCardProps) {
   return (
-    <article className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
-      <p className="text-sm text-slate-400">{label}</p>
+    <article className="min-w-0 rounded-xl border border-stroke bg-surface p-ui-4 sm:p-ui-5">
+      <p className="break-words text-sm text-content-muted">{label}</p>
 
-      <p className="mt-3 text-3xl font-bold text-white">
+      <p className="mt-2 break-words text-2xl font-bold text-content sm:mt-3 sm:text-3xl">
         {value}
       </p>
 
-      <p className="mt-2 text-xs text-slate-500">
+      <p className="mt-2 break-words text-xs text-content-muted">
         {detail}
       </p>
     </article>

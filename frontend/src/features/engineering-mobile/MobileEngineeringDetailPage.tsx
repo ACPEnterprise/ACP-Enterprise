@@ -2,8 +2,15 @@ import { useState } from "react";
 import { Link, useParams } from "react-router";
 
 import { getOperatorApiError } from "../../api/errors";
-import { Alert, Badge, Button, Card, Select, Spinner } from "../../ui";
-import { ConfirmationDialog } from "./ConfirmationDialog";
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  ConfirmationDialog,
+  Select,
+  Spinner,
+} from "../../ui";
 import {
   useApproveMobileReview,
   useCancelMobileReview,
@@ -249,7 +256,7 @@ export function MobileEngineeringDetailPage() {
               Check the instruction and evidence before approving.
             </p>
             <Button
-              className="mt-ui-3"
+              className="mt-ui-3 sm:w-auto"
               fullWidth
               size="large"
               disabled={approve.isPending || cancel.isPending}
@@ -286,7 +293,7 @@ export function MobileEngineeringDetailPage() {
               <option value="no_longer_needed">No longer needed</option>
             </Select>
             <Button
-              className="mt-ui-4"
+              className="mt-ui-4 sm:w-auto"
               fullWidth
               variant="destructive"
               size="large"

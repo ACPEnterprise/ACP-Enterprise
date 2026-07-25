@@ -6,7 +6,7 @@ import {
   useReopenJob, useResumeJob, useStartJob,
 } from "../../hooks/useJobs";
 import type { JobCancellationReason, JobDetail, JobPauseReason, JobReopeningReason } from "../../types/jobs";
-import { Alert, Button, Select } from "../../ui";
+import { Alert, Button, ConfirmationDialog, Select } from "../../ui";
 import { actionLabels, actionsByStatus, type JobAction } from "./jobPresentation";
 
 const pauseReasons: readonly JobPauseReason[] = ["customer_unavailable", "awaiting_approval", "awaiting_material", "safety_condition", "weather", "operational_hold"];
@@ -18,6 +18,7 @@ export function LifecycleActionButtons({ job }: { readonly job: JobDetail }) {
   const [pauseReason, setPauseReason] = useState<JobPauseReason>("operational_hold");
   const [cancelReason, setCancelReason] = useState<JobCancellationReason>("customer_cancelled");
   const [reopenReason, setReopenReason] = useState<JobReopeningReason>("additional_work_required");
+  const [confirmation, setConfirmation] = useState<JobAction>();
   const [feedback, setFeedback] = useState<{ kind: "success" | "error"; title: string; message: string }>();
   const activate = useActivateJob(job.id); const start = useStartJob(job.id); const pause = usePauseJob(job.id);
   const resume = useResumeJob(job.id); const complete = useCompleteJob(job.id); const cancel = useCancelJob(job.id); const reopen = useReopenJob(job.id);
@@ -27,8 +28,13 @@ export function LifecycleActionButtons({ job }: { readonly job: JobDetail }) {
   const failure = (error: unknown) => { const value = getOperatorApiError(error); setFeedback({ kind: "error", title: value.title, message: value.message }); };
   const execute = (action: JobAction) => {
     setFeedback(undefined);
-    if (["complete", "cancel", "reopen"].includes(action) && !window.confirm(`${actionLabels[action]} ${job.job_number}?`)) return;
-    const options = { onSuccess: () => success(action), onError: failure };
+    const options = {
+      onSuccess: () => {
+        setConfirmation(undefined);
+        success(action);
+      },
+      onError: failure,
+    };
     if (action === "activate") activate.mutate(version, options);
     if (action === "start") start.mutate(version, options);
     if (action === "pause") pause.mutate({ ...version, reason_code: pauseReason }, options);
@@ -38,11 +44,23 @@ export function LifecycleActionButtons({ job }: { readonly job: JobDetail }) {
     if (action === "reopen") reopen.mutate({ ...version, reason_code: reopenReason }, options);
   };
   const actions = actionsByStatus[job.status];
-  return <div className="max-w-xl space-y-3">
-    {actions.includes("pause") && <label className="flex items-center gap-2 text-sm"><span>Pause reason</span><Select aria-label="Pause reason" value={pauseReason} onChange={(event) => setPauseReason(event.target.value as JobPauseReason)}>{pauseReasons.map((reason) => <option key={reason} value={reason}>{label(reason)}</option>)}</Select></label>}
-    {actions.includes("cancel") && <label className="flex items-center gap-2 text-sm"><span>Cancellation reason</span><Select aria-label="Cancellation reason" value={cancelReason} onChange={(event) => setCancelReason(event.target.value as JobCancellationReason)}>{cancellationReasons.map((reason) => <option key={reason} value={reason}>{label(reason)}</option>)}</Select></label>}
-    {actions.includes("reopen") && <label className="flex items-center gap-2 text-sm"><span>Reopening reason</span><Select aria-label="Reopening reason" value={reopenReason} onChange={(event) => setReopenReason(event.target.value as JobReopeningReason)}>{reopeningReasons.map((reason) => <option key={reason} value={reason}>{label(reason)}</option>)}</Select></label>}
-    <div className="flex flex-wrap justify-end gap-2">{actions.map((action) => <Button key={action} variant={action === "cancel" ? "destructive" : "primary"} disabled={pending} onClick={() => execute(action)}>{actionLabels[action]}</Button>)}</div>
+  return <div className="w-full max-w-xl space-y-3">
+    {actions.includes("pause") && <label className="grid gap-2 text-sm sm:grid-cols-[auto_minmax(12rem,1fr)] sm:items-center"><span>Pause reason</span><Select aria-label="Pause reason" value={pauseReason} onChange={(event) => setPauseReason(event.target.value as JobPauseReason)}>{pauseReasons.map((reason) => <option key={reason} value={reason}>{label(reason)}</option>)}</Select></label>}
+    {actions.includes("cancel") && <label className="grid gap-2 text-sm sm:grid-cols-[auto_minmax(12rem,1fr)] sm:items-center"><span>Cancellation reason</span><Select aria-label="Cancellation reason" value={cancelReason} onChange={(event) => setCancelReason(event.target.value as JobCancellationReason)}>{cancellationReasons.map((reason) => <option key={reason} value={reason}>{label(reason)}</option>)}</Select></label>}
+    {actions.includes("reopen") && <label className="grid gap-2 text-sm sm:grid-cols-[auto_minmax(12rem,1fr)] sm:items-center"><span>Reopening reason</span><Select aria-label="Reopening reason" value={reopenReason} onChange={(event) => setReopenReason(event.target.value as JobReopeningReason)}>{reopeningReasons.map((reason) => <option key={reason} value={reason}>{label(reason)}</option>)}</Select></label>}
+    <div className="grid gap-2 sm:flex sm:flex-wrap sm:justify-end">{actions.map((action) => <Button key={action} variant={action === "cancel" ? "destructive" : "primary"} disabled={pending} onClick={() => ["complete", "cancel", "reopen"].includes(action) ? setConfirmation(action) : execute(action)}>{actionLabels[action]}</Button>)}</div>
     {feedback && <Alert variant={feedback.kind === "error" ? "danger" : "success"} title={feedback.title}>{feedback.message}</Alert>}
+    {confirmation && <ConfirmationDialog
+      title={`${actionLabels[confirmation]} ${job.job_number}?`}
+      description="This changes the authoritative Job lifecycle state."
+      confirmLabel={actionLabels[confirmation]}
+      destructive={confirmation === "cancel"}
+      pending={pending}
+      onCancel={() => setConfirmation(undefined)}
+      onConfirm={() => execute(confirmation)}
+    >
+      {confirmation === "cancel" && <p>Reason: {label(cancelReason)}</p>}
+      {confirmation === "reopen" && <p>Reason: {label(reopenReason)}</p>}
+    </ConfirmationDialog>}
   </div>;
 }

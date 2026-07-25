@@ -33,7 +33,7 @@ export function RevenueTrendChart() {
 
   if (isLoading) {
     return (
-      <div className="mt-8 grid h-80 place-items-center rounded-xl border border-slate-700 bg-slate-950 text-slate-400">
+      <div className="mt-ui-5 grid h-56 place-items-center rounded-xl border border-stroke bg-surface-subtle text-content-muted sm:h-72 landscape:max-h-48">
         Loading revenue trend…
       </div>
     );
@@ -41,30 +41,39 @@ export function RevenueTrendChart() {
 
   if (isError) {
     return (
-      <div className="mt-8 grid h-80 place-items-center rounded-xl border border-red-900 bg-red-950/30 text-red-300">
+      <div className="mt-ui-5 grid h-56 place-items-center rounded-xl border border-status-danger/40 bg-status-danger/10 p-ui-4 text-center text-status-danger sm:h-72 landscape:max-h-48">
         Unable to load revenue trend.
       </div>
     );
   }
 
+  if (chartData.length === 0) {
+    return (
+      <div className="mt-ui-5 grid h-56 place-items-center rounded-xl border border-dashed border-stroke bg-surface-subtle p-ui-4 text-center text-content-muted sm:h-72 landscape:max-h-48">
+        No revenue trend data is available.
+      </div>
+    );
+  }
+
   return (
-    <div className="mt-8 h-80 rounded-xl border border-slate-700 bg-slate-950 p-4">
+    <div className="mt-ui-5 h-56 min-w-0 rounded-xl border border-stroke bg-surface-subtle p-ui-2 sm:h-72 sm:p-ui-4 landscape:max-h-48">
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={chartData}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--semantic-border)" />
 
-          <XAxis dataKey="date" stroke="#94a3b8" />
+          <XAxis dataKey="date" stroke="var(--semantic-text-muted)" />
 
           <YAxis
-            stroke="#94a3b8"
+            stroke="var(--semantic-text-muted)"
             tickFormatter={(value) => `$${Number(value).toLocaleString()}`}
           />
 
           <Tooltip
             formatter={(value) => formatCurrency(Number(value))}
             contentStyle={{
-              backgroundColor: "#0f172a",
-              border: "1px solid #334155",
+              backgroundColor: "var(--semantic-surface)",
+              border: "1px solid var(--semantic-border)",
+              color: "var(--semantic-text-primary)",
               borderRadius: "12px",
             }}
           />
