@@ -5,7 +5,12 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.customers.errors import CustomerChildNotFoundError, CustomerNotFoundError
-from app.customers.models import Customer, CustomerContact, ServiceLocation
+from app.customers.models import (
+    Customer,
+    CustomerBillingAddress,
+    CustomerContact,
+    ServiceLocation,
+)
 from app.customers.normalization import (
     build_normalized_address,
     normalize_email,
@@ -146,6 +151,131 @@ class CustomerService:
         return await self.get_customer(
             session, context=context, customer_id=customer.id
         )
+
+    async def stage_migrated_customer(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        customer_data: CustomerCreate,
+        contact_data: ContactCreate | None,
+        service_location_data: ServiceLocationCreate | None,
+        billing_address_data: ServiceLocationCreate | None,
+    ) -> Customer:
+        """Stage one validated migrated aggregate in the caller's transaction."""
+        customer_number = await CustomerRepository.next_customer_number(
+            session, context.company.id
+        )
+        customer = Customer(
+            **values_for_model(customer_data.model_dump()),
+            company_id=context.company.id,
+            customer_number=customer_number,
+            normalized_name=normalize_search_text(customer_data.display_name),
+        )
+        session.add(customer)
+        await session.flush()
+        self._stage_event(
+            session,
+            context=context,
+            event_type=EventType.CUSTOMER_CREATED,
+            entity_type="customer",
+            entity_id=customer.id,
+            payload={
+                "customer_number": customer.customer_number,
+                "customer_type": customer.customer_type,
+                "status": customer.status,
+                "origin": "migration",
+            },
+        )
+        if contact_data is not None:
+            contact = CustomerContact(
+                customer_id=customer.id,
+                first_name=contact_data.first_name,
+                last_name=contact_data.last_name,
+                title=contact_data.title,
+                email=contact_data.email,
+                normalized_email=(
+                    normalize_email(contact_data.email) if contact_data.email else None
+                ),
+                mobile_phone=contact_data.mobile_phone,
+                normalized_mobile_phone=(
+                    normalize_phone(contact_data.mobile_phone)
+                    if contact_data.mobile_phone
+                    else None
+                ),
+                office_phone=contact_data.office_phone,
+                normalized_office_phone=(
+                    normalize_phone(contact_data.office_phone)
+                    if contact_data.office_phone
+                    else None
+                ),
+                is_preferred=contact_data.is_preferred,
+                active=contact_data.active,
+                notes=contact_data.notes,
+            )
+            session.add(contact)
+            await session.flush()
+            if contact.is_preferred:
+                customer.primary_contact_id = contact.id
+            self._stage_event(
+                session,
+                context=context,
+                event_type=EventType.CONTACT_CREATED,
+                entity_type="contact",
+                entity_id=contact.id,
+                payload={"customer_id": str(customer.id), "origin": "migration"},
+            )
+        if service_location_data is not None:
+            location = ServiceLocation(
+                customer_id=customer.id,
+                **service_location_data.model_dump(),
+                normalized_address=build_normalized_address(
+                    service_location_data.address,
+                    service_location_data.address_line_2,
+                    service_location_data.city,
+                    service_location_data.state,
+                    service_location_data.postal_code,
+                ),
+            )
+            session.add(location)
+            await session.flush()
+            self._stage_event(
+                session,
+                context=context,
+                event_type=EventType.SERVICE_LOCATION_CREATED,
+                entity_type="service_location",
+                entity_id=location.id,
+                payload={"customer_id": str(customer.id), "origin": "migration"},
+            )
+        if billing_address_data is not None:
+            billing = CustomerBillingAddress(
+                customer_id=customer.id,
+                address=billing_address_data.address,
+                address_line_2=billing_address_data.address_line_2,
+                city=billing_address_data.city,
+                state=billing_address_data.state,
+                postal_code=billing_address_data.postal_code,
+                country=billing_address_data.country,
+                notes=billing_address_data.property_notes,
+                normalized_address=build_normalized_address(
+                    billing_address_data.address,
+                    billing_address_data.address_line_2,
+                    billing_address_data.city,
+                    billing_address_data.state,
+                    billing_address_data.postal_code,
+                ),
+            )
+            session.add(billing)
+            await session.flush()
+            self._stage_event(
+                session,
+                context=context,
+                event_type=EventType.CUSTOMER_BILLING_ADDRESS_CREATED,
+                entity_type="customer_billing_address",
+                entity_id=billing.id,
+                payload={"customer_id": str(customer.id), "origin": "migration"},
+            )
+        return customer
 
     async def list_contacts(
         self,

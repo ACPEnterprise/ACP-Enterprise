@@ -150,6 +150,7 @@ class EventType(str, Enum):
     SERVICE_LOCATION_CREATED = "service_location.created"
     SERVICE_LOCATION_UPDATED = "service_location.updated"
     SERVICE_LOCATION_DEACTIVATED = "service_location.deactivated"
+    CUSTOMER_BILLING_ADDRESS_CREATED = "customer.billing_address_created"
     CUSTOMER_NOTE_ADDED = "customer.note_added"
     LEAD_CREATED = "lead.created"
     LEAD_QUALIFIED = "lead.qualified"

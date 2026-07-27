@@ -176,6 +176,9 @@ class Customer(Base):
     locations: Mapped[list["ServiceLocation"]] = relationship(
         back_populates="customer", passive_deletes=True
     )
+    billing_addresses: Mapped[list["CustomerBillingAddress"]] = relationship(
+        back_populates="customer", passive_deletes=True
+    )
     notes_history: Mapped[list["CustomerNote"]] = relationship(
         back_populates="customer", passive_deletes=True
     )
@@ -356,6 +359,55 @@ class ServiceLocation(Base):
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     customer: Mapped[Customer] = relationship(back_populates="locations")
+
+
+class CustomerBillingAddress(Base):
+    __tablename__ = "customer_billing_addresses"
+    __table_args__ = (
+        Index(
+            "ix_customer_billing_addresses_customer_id_active",
+            "customer_id",
+            "active",
+        ),
+        Index(
+            "uq_customer_billing_addresses_active_primary",
+            "customer_id",
+            unique=True,
+            postgresql_where=text("is_primary AND active AND archived_at IS NULL"),
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    customer_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey(
+            "customers.id",
+            name="fk_customer_billing_addresses_customer_id_customers",
+            ondelete="RESTRICT",
+        ),
+        nullable=False,
+    )
+    address: Mapped[str] = mapped_column("address_line_1", String(200), nullable=False)
+    address_line_2: Mapped[str | None] = mapped_column(String(200))
+    city: Mapped[str] = mapped_column(String(100), nullable=False)
+    state: Mapped[str] = mapped_column(String(100), nullable=False)
+    postal_code: Mapped[str] = mapped_column(String(20), nullable=False)
+    country: Mapped[str] = mapped_column(String(2), nullable=False, default="US")
+    notes: Mapped[str | None] = mapped_column(Text)
+    normalized_address: Mapped[str] = mapped_column(String(500), nullable=False)
+    is_primary: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now
+    )
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    customer: Mapped[Customer] = relationship(back_populates="billing_addresses")
 
 
 class CustomerNote(Base):
