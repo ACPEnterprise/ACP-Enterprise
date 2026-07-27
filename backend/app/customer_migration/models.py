@@ -262,6 +262,13 @@ class ServiceLocationSourceIdentity(Base):
             "service_location_id",
             name="uq_service_location_source_target",
         ),
+        UniqueConstraint(
+            "id",
+            "company_id",
+            "customer_id",
+            "service_location_id",
+            name="uq_service_location_source_parent_scope",
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(

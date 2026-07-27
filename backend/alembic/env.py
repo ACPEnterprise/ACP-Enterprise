@@ -5,8 +5,8 @@ from sqlalchemy import engine_from_config, pool
 from alembic import context
 from app.core.config import settings
 from app.core.database import Base
-from app.customers import models as customer_models  # noqa: F401
 from app.customer_migration import models as customer_migration_models  # noqa: F401
+from app.customers import models as customer_models  # noqa: F401
 from app.engineering_control import models as engineering_control_models  # noqa: F401
 from app.engineering_control.repository_authorization import (
     models as repository_authorization_models,  # noqa: F401
@@ -28,6 +28,9 @@ from app.engineering_execution.supervision import (
 )
 from app.events import models as event_models  # noqa: F401
 from app.jobs import models as job_models  # noqa: F401
+from app.operational_migration import (
+    models as operational_migration_models,  # noqa: F401
+)
 from app.platform.audit import models as audit_models  # noqa: F401
 from app.platform.auth import models as auth_models  # noqa: F401
 from app.platform.branch import models as branch_models  # noqa: F401

@@ -165,6 +165,7 @@ class EventType(str, Enum):
     APPOINTMENT_BOOKED = "appointment.booked"
     APPOINTMENT_RESCHEDULED = "appointment.rescheduled"
     APPOINTMENT_CANCELLED = "appointment.cancelled"
+    APPOINTMENT_MIGRATED = "appointment.migrated"
 
     # Dispatch
     TECHNICIAN_DISPATCHED = "technician.dispatched"
@@ -188,6 +189,7 @@ class EventType(str, Enum):
     JOB_COMPLETED = "job.completed"
     JOB_CANCELLED = "job.cancelled"
     JOB_REOPENED = "job.reopened"
+    JOB_MIGRATED = "job.migrated"
 
     # Financial
     INVOICE_CREATED = "invoice.created"

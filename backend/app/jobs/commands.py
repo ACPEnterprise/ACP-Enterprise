@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import datetime
 from enum import Enum
 from uuid import UUID
 
@@ -27,6 +28,20 @@ class CreateJob:
     priority: JobPriority = JobPriority.NORMAL
     customer_reported_problem: str | None = None
     internal_description: str | None = None
+
+
+@dataclass(frozen=True)
+class MigrateJob:
+    branch_id: UUID
+    customer_id: UUID
+    service_location_id: UUID
+    status: str
+    priority: JobPriority = JobPriority.NORMAL
+    customer_reported_problem: str | None = None
+    internal_description: str | None = None
+    activated_at: datetime | None = None
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
 
 
 @dataclass(frozen=True)
