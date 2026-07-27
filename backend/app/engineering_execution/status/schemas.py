@@ -98,6 +98,11 @@ class MobileExecutionStatus(StatusSchema):
     transport_session: TransportSessionStatus
     result: ResultStatus
     supervisor: SupervisorStatus
+    review_available: bool = False
+    review_id: UUID | None = None
+    review_state: str | None = None
+    review_version: int | None = Field(default=None, ge=1)
+    review_decided_at: datetime | None = None
     timeline: tuple[TimelineEntry, ...]
     terminal: bool
     polling_after_seconds: int | None = Field(ge=5, le=300)

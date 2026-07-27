@@ -4,6 +4,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.engineering_control.models import EngineeringCommand
+from app.engineering_control.review.models import EngineeringExecutionReview
 from app.engineering_execution.composition.models import (
     ExecutionComposition,
     ProviderExecutionAttempt,
@@ -36,6 +37,7 @@ from .contracts import (
     HeartbeatStatusSource,
     LeaseStatusSource,
     ResultStatusSource,
+    ReviewStatusSource,
     SupervisorStatusSource,
     TransportSessionStatusSource,
 )
@@ -71,6 +73,18 @@ class SqlExecutionStatusProvider:
         result: WorkerResult | None = None
         transport_session: WorkerTransportSession | None = None
         supervisor_source: SupervisorStatusSource | None = None
+        review = await session.scalar(
+            select(EngineeringExecutionReview)
+            .where(
+                EngineeringExecutionReview.company_id == company_id,
+                EngineeringExecutionReview.command_id == command_id,
+            )
+            .order_by(
+                EngineeringExecutionReview.created_at.desc(),
+                EngineeringExecutionReview.id.desc(),
+            )
+            .limit(1)
+        )
         if execution is not None:
             lease = await session.scalar(
                 select(WorkerLease)
@@ -325,4 +339,15 @@ class SqlExecutionStatusProvider:
                 )
             ),
             supervisor=supervisor_source,
+            review=(
+                None
+                if review is None
+                else ReviewStatusSource(
+                    review_id=review.id,
+                    state=review.state,
+                    version=review.version,
+                    created_at=review.created_at,
+                    decided_at=review.decided_at,
+                )
+            ),
         )

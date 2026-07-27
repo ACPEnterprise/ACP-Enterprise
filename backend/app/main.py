@@ -1,24 +1,24 @@
-from contextlib import asynccontextmanager
 import logging
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app.analytics.router import router as analytics_router
-
 from app.api.health import router as health_router
 from app.core.config import settings
 from app.customers.router import router as customers_router
 from app.database.session import AsyncSessionFactory, engine
+from app.engineering_control.mobile.router import router as mobile_engineering_router
+from app.engineering_control.review.router import router as engineering_reviews_router
+from app.engineering_control.router import router as engineering_commands_router
+from app.engineering_execution.status.router import router as execution_status_router
 from app.events.router import router as events_router
 from app.events.schemas import BusinessEventCreate
 from app.events.service import BusinessEventService
 from app.events.types import EventType
-from app.engineering_control.router import router as engineering_commands_router
-from app.engineering_control.mobile.router import router as mobile_engineering_router
-from app.engineering_execution.status.router import router as execution_status_router
 from app.jobs.router import router as jobs_router
 from app.platform.auth.router import router as auth_router
 from app.platform.company.admin_router import router as company_admin_router
@@ -30,11 +30,12 @@ from app.platform.security.middleware import (
 )
 from app.platform.users.identity_router import (
     administration_router as identity_administration_router,
+)
+from app.platform.users.identity_router import (
     self_service_router as identity_self_service_router,
 )
 from app.scheduling.router import router as scheduling_router
 from app.worker_control.transport.http.router import router as worker_transport_router
-
 
 logging.basicConfig(
     level=getattr(logging, settings.log_level),
@@ -94,6 +95,7 @@ app.include_router(identity_administration_router)
 app.include_router(scheduling_router)
 app.include_router(jobs_router)
 app.include_router(engineering_commands_router)
+app.include_router(engineering_reviews_router)
 app.include_router(mobile_engineering_router)
 app.include_router(execution_status_router)
 app.include_router(worker_transport_router)

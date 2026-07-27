@@ -95,6 +95,15 @@ class ResultStatusSource:
 
 
 @dataclass(frozen=True)
+class ReviewStatusSource:
+    review_id: UUID
+    state: str
+    version: int
+    created_at: datetime
+    decided_at: datetime | None
+
+
+@dataclass(frozen=True)
 class SupervisorStatusSource:
     supervisor_state: str
     session_state: str | None
@@ -120,6 +129,7 @@ class ExecutionStatusSources:
     transport_session: TransportSessionStatusSource | None
     result: ResultStatusSource | None
     supervisor: SupervisorStatusSource | None = None
+    review: ReviewStatusSource | None = None
 
 
 class ExecutionStatusProvider(Protocol):

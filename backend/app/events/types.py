@@ -94,6 +94,8 @@ class EventType(str, Enum):
     ENGINEERING_PROVIDER_EXECUTION_FAILED = (
         "engineering_execution.provider_execution_failed"
     )
+    ENGINEERING_REVIEW_PREPARED = "engineering_control.review_prepared"
+    ENGINEERING_REVIEW_DECIDED = "engineering_control.review_decided"
     ENGINEERING_PROVIDER_RUNTIME_CLOSED = (
         "engineering_execution.provider_runtime_closed"
     )

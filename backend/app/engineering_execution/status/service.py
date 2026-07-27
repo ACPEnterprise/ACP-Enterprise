@@ -146,6 +146,20 @@ class MobileExecutionStatusService:
                     occurred_at=sources.supervisor.updated_at,
                 )
             )
+        if sources.review is not None:
+            timeline.append(
+                TimelineEntry(
+                    event="owner_review_prepared",
+                    occurred_at=sources.review.created_at,
+                )
+            )
+            if sources.review.decided_at is not None:
+                timeline.append(
+                    TimelineEntry(
+                        event="owner_review_decided",
+                        occurred_at=sources.review.decided_at,
+                    )
+                )
         timeline.sort(key=lambda item: (item.occurred_at, item.event))
 
         heartbeat_age = (
@@ -361,6 +375,11 @@ class MobileExecutionStatusService:
                     and sources.supervisor.provider_session_reference_present
                 ),
             ),
+            review_available=sources.review is not None,
+            review_id=sources.review.review_id if sources.review else None,
+            review_state=sources.review.state if sources.review else None,
+            review_version=sources.review.version if sources.review else None,
+            review_decided_at=(sources.review.decided_at if sources.review else None),
             timeline=tuple(timeline),
             terminal=terminal,
             polling_after_seconds=(

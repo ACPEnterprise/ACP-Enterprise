@@ -1,33 +1,43 @@
 from logging.config import fileConfig
 
-from alembic import context
 from sqlalchemy import engine_from_config, pool
 
-from app.customers import models as customer_models  # noqa: F401
+from alembic import context
 from app.core.config import settings
 from app.core.database import Base
-from app.events import models as event_models  # noqa: F401
+from app.customers import models as customer_models  # noqa: F401
 from app.engineering_control import models as engineering_control_models  # noqa: F401
-from app.engineering_execution import models as engineering_execution_models  # noqa: F401
-from app.engineering_execution.composition import models as composition_models  # noqa: F401
-from app.engineering_execution.supervision import models as supervision_models  # noqa: F401
+from app.engineering_control.review import (
+    models as engineering_review_models,  # noqa: F401
+)
+from app.engineering_execution import (
+    models as engineering_execution_models,  # noqa: F401
+)
+from app.engineering_execution.composition import (
+    models as composition_models,  # noqa: F401
+)
+from app.engineering_execution.supervision import (
+    models as supervision_models,  # noqa: F401
+)
+from app.events import models as event_models  # noqa: F401
 from app.jobs import models as job_models  # noqa: F401
-from app.platform.auth import models as auth_models  # noqa: F401
 from app.platform.audit import models as audit_models  # noqa: F401
+from app.platform.auth import models as auth_models  # noqa: F401
 from app.platform.branch import models as branch_models  # noqa: F401
-from app.platform.company import models as company_models  # noqa: F401
 from app.platform.company import membership_models  # noqa: F401
+from app.platform.company import models as company_models  # noqa: F401
 from app.platform.employees import models as employee_models  # noqa: F401
 from app.platform.notifications import models as notification_models  # noqa: F401
 from app.platform.permissions import models as permission_models  # noqa: F401
-from app.platform.users import models as user_models  # noqa: F401
 from app.platform.users import identity_models  # noqa: F401
+from app.platform.users import models as user_models  # noqa: F401
 from app.scheduling import models as scheduling_models  # noqa: F401
-from app.workforce import models as workforce_models  # noqa: F401
 from app.worker_control import models as worker_control_models  # noqa: F401
-from app.worker_control.transport.persistence import models as transport_models  # noqa: F401
+from app.worker_control.transport.persistence import (
+    models as transport_models,  # noqa: F401
+)
 from app.worker_identity import models as worker_identity_models  # noqa: F401
-
+from app.workforce import models as workforce_models  # noqa: F401
 
 config = context.config
 
