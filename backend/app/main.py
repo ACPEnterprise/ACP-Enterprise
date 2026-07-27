@@ -15,6 +15,9 @@ from app.engineering_control.mobile.router import router as mobile_engineering_r
 from app.engineering_control.repository_authorization.router import (
     router as repository_authorizations_router,
 )
+from app.engineering_control.repository_operation.router import (
+    router as repository_operations_router,
+)
 from app.engineering_control.review.router import router as engineering_reviews_router
 from app.engineering_control.router import router as engineering_commands_router
 from app.engineering_execution.status.router import router as execution_status_router
@@ -100,6 +103,7 @@ app.include_router(jobs_router)
 app.include_router(engineering_commands_router)
 app.include_router(engineering_reviews_router)
 app.include_router(repository_authorizations_router)
+app.include_router(repository_operations_router)
 app.include_router(mobile_engineering_router)
 app.include_router(execution_status_router)
 app.include_router(worker_transport_router)

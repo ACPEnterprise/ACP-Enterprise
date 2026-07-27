@@ -7,6 +7,9 @@ from app.engineering_control.models import EngineeringCommand
 from app.engineering_control.repository_authorization.models import (
     EngineeringRepositoryAuthorization,
 )
+from app.engineering_control.repository_operation.models import (
+    EngineeringRepositoryOperation,
+)
 from app.engineering_control.review.models import EngineeringExecutionReview
 from app.engineering_execution.composition.models import (
     ExecutionComposition,
@@ -40,6 +43,7 @@ from .contracts import (
     HeartbeatStatusSource,
     LeaseStatusSource,
     RepositoryAuthorizationStatusSource,
+    RepositoryOperationStatusSource,
     ResultStatusSource,
     ReviewStatusSource,
     SupervisorStatusSource,
@@ -98,6 +102,18 @@ class SqlExecutionStatusProvider:
             .order_by(
                 EngineeringRepositoryAuthorization.authorized_at.desc(),
                 EngineeringRepositoryAuthorization.id.desc(),
+            )
+            .limit(1)
+        )
+        repository_operation = await session.scalar(
+            select(EngineeringRepositoryOperation)
+            .where(
+                EngineeringRepositoryOperation.company_id == company_id,
+                EngineeringRepositoryOperation.command_id == command_id,
+            )
+            .order_by(
+                EngineeringRepositoryOperation.requested_at.desc(),
+                EngineeringRepositoryOperation.id.desc(),
             )
             .limit(1)
         )
@@ -374,10 +390,33 @@ class SqlExecutionStatusProvider:
                     authorization_id=repository_authorization.id,
                     state=repository_authorization.state,
                     operation_type=repository_authorization.operation_type,
+                    expected_branch=repository_authorization.expected_branch,
                     authorized_at=repository_authorization.authorized_at,
                     expires_at=repository_authorization.expires_at,
                     revoked_at=repository_authorization.revoked_at,
                     consumed_at=repository_authorization.consumed_at,
+                )
+            ),
+            repository_operation=(
+                None
+                if repository_operation is None
+                else RepositoryOperationStatusSource(
+                    operation_id=repository_operation.id,
+                    operation_type=repository_operation.operation_type,
+                    state=repository_operation.state,
+                    expected_branch=repository_operation.expected_branch,
+                    resulting_commit_sha=repository_operation.resulting_commit_sha,
+                    failure_classification=(
+                        repository_operation.failure_classification
+                    ),
+                    requested_at=repository_operation.requested_at,
+                    reserved_at=repository_operation.reserved_at,
+                    execution_started_at=(repository_operation.execution_started_at),
+                    succeeded_at=repository_operation.succeeded_at,
+                    failed_at=repository_operation.failed_at,
+                    reconciliation_required_at=(
+                        repository_operation.reconciliation_required_at
+                    ),
                 )
             ),
         )

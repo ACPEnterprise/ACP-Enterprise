@@ -1,6 +1,6 @@
+import re
 from dataclasses import dataclass
 from enum import StrEnum
-import re
 
 from app.platform.permissions.codes import (
     AdministrationPermission,
@@ -8,12 +8,12 @@ from app.platform.permissions.codes import (
     CustomerPermission,
     EngineeringCommandPermission,
     EngineeringExecutionPermission,
+    EngineeringRepositoryOperationPermission,
     JobPermission,
     SchedulingPermission,
     WorkerControlPermission,
     WorkerIdentityPermission,
 )
-
 
 CODE_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]*$")
 
@@ -160,6 +160,17 @@ ENGINEERING_EXECUTION_DEFINITIONS = tuple(
     for code in sorted(EngineeringExecutionPermission.ALL)
 )
 
+ENGINEERING_REPOSITORY_OPERATION_DEFINITIONS = tuple(
+    PermissionDefinition(
+        code=code,
+        name=code.replace("_", " ").title(),
+        resource="engineering_repository_operation",
+        action=code.rsplit("_", 1)[-1].lower(),
+        scope=PermissionScope.COMPANY,
+    )
+    for code in sorted(EngineeringRepositoryOperationPermission.ALL)
+)
+
 WORKER_CONTROL_DEFINITIONS = tuple(
     PermissionDefinition(
         code=code,
@@ -190,6 +201,7 @@ permission_catalog = PermissionCatalog(
     + JOB_DEFINITIONS
     + ENGINEERING_COMMAND_DEFINITIONS
     + ENGINEERING_EXECUTION_DEFINITIONS
+    + ENGINEERING_REPOSITORY_OPERATION_DEFINITIONS
     + WORKER_CONTROL_DEFINITIONS
     + WORKER_IDENTITY_DEFINITIONS
 )

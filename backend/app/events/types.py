@@ -111,6 +111,24 @@ class EventType(str, Enum):
     ENGINEERING_REPOSITORY_AUTHORIZATION_CONSUMED = (
         "engineering_control.repository_authorization_consumed"
     )
+    ENGINEERING_REPOSITORY_OPERATION_REQUESTED = (
+        "engineering_control.repository_operation_requested"
+    )
+    ENGINEERING_REPOSITORY_OPERATION_RESERVED = (
+        "engineering_control.repository_operation_reserved"
+    )
+    ENGINEERING_REPOSITORY_OPERATION_STARTED = (
+        "engineering_control.repository_operation_started"
+    )
+    ENGINEERING_REPOSITORY_OPERATION_SUCCEEDED = (
+        "engineering_control.repository_operation_succeeded"
+    )
+    ENGINEERING_REPOSITORY_OPERATION_FAILED = (
+        "engineering_control.repository_operation_failed"
+    )
+    ENGINEERING_REPOSITORY_OPERATION_RECONCILIATION_REQUIRED = (
+        "engineering_control.repository_operation_reconciliation_required"
+    )
     ENGINEERING_PROVIDER_RUNTIME_CLOSED = (
         "engineering_execution.provider_runtime_closed"
     )

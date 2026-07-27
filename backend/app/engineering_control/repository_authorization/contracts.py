@@ -2,7 +2,7 @@ from enum import Enum
 
 
 class RepositoryOperationType(str, Enum):
-    COMMIT = "commit"
+    CREATE_COMMIT = "create_commit"
 
 
 class RepositoryAuthorizationState(str, Enum):

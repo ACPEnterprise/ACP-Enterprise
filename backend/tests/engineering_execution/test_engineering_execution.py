@@ -110,6 +110,8 @@ async def approved_command(
     expires_in_hours: int = 2,
     instruction: str = "Inspect only the approved execution bridge boundary.",
     requested_code_changes: bool = True,
+    expected_branch: str = "customer-management-v1",
+    expected_head: str = "a" * 40,
 ):
     now = utc_now()
     command_context = context_with_permissions(
@@ -127,8 +129,8 @@ async def approved_command(
                 command_type="owner_instruction",
                 owner_instruction=instruction,
                 repository_key="acp-enterprise",
-                expected_branch="customer-management-v1",
-                expected_head="a" * 40,
+                expected_branch=expected_branch,
+                expected_head=expected_head,
                 requested_code_changes=requested_code_changes,
                 expires_at=now + timedelta(hours=expires_in_hours),
                 idempotency_key=uuid4().hex,

@@ -112,6 +112,21 @@ class MobileExecutionStatus(StatusSchema):
     authorization_consumed_at: datetime | None = None
     authorized_operation_type: str | None = None
     authorization_eligible: bool = False
+    repository_operation_required: bool = False
+    repository_operation_id: UUID | None = None
+    repository_operation_type: str | None = None
+    repository_operation_status: str | None = None
+    repository_operation_eligible: bool = False
+    repository_operation_expected_branch: str | None = None
+    repository_operation_resulting_commit_sha: str | None = None
+    repository_operation_requested_at: datetime | None = None
+    repository_operation_reserved_at: datetime | None = None
+    repository_operation_started_at: datetime | None = None
+    repository_operation_completed_at: datetime | None = None
+    repository_operation_failed_at: datetime | None = None
+    repository_operation_reconciliation_at: datetime | None = None
+    repository_operation_failure_classification: str | None = None
+    repository_operation_owner_attention_required: bool = False
     timeline: tuple[TimelineEntry, ...]
     terminal: bool
     polling_after_seconds: int | None = Field(ge=5, le=300)

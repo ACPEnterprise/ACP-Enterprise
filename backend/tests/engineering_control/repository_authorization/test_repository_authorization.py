@@ -90,7 +90,13 @@ def owner_context(fixture: ServiceFixture) -> AuthorizationContext:
     )
 
 
-async def accepted_review(fixture: ServiceFixture, *, accept: bool = True):
+async def accepted_review(
+    fixture: ServiceFixture,
+    *,
+    accept: bool = True,
+    expected_branch: str = "customer-management-v1",
+    expected_head: str = "a" * 40,
+):
     (
         composition_service,
         compose,
@@ -99,7 +105,11 @@ async def accepted_review(fixture: ServiceFixture, *, accept: bool = True):
         _,
         _,
         _,
-    ) = await composition_scenario(fixture)
+    ) = await composition_scenario(
+        fixture,
+        expected_branch=expected_branch,
+        expected_head=expected_head,
+    )
     async with fixture.factory() as session:
         bundle = await composition_service.compose(
             session,
@@ -171,7 +181,7 @@ def request_for(review, *, suffix: str = "one") -> RequestRepositoryAuthorizatio
     return RequestRepositoryAuthorization(
         review_id=review.review.id,
         review_digest=review.review.review_digest,
-        operation_type=RepositoryOperationType.COMMIT,
+        operation_type=RepositoryOperationType.CREATE_COMMIT,
         file_boundary=BOUNDARY,
         expected_branch=review.expected_branch,
         expected_base_commit=review.expected_head,

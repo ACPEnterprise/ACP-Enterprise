@@ -92,11 +92,15 @@ async def composition_scenario(
     ),
     instruction: str = "Inspect only the approved execution bridge boundary.",
     requested_code_changes: bool = True,
+    expected_branch: str = "customer-management-v1",
+    expected_head: str = "a" * 40,
 ):
     command = await approved_command(
         fixture,
         instruction=instruction,
         requested_code_changes=requested_code_changes,
+        expected_branch=expected_branch,
+        expected_head=expected_head,
     )
     async with fixture.factory() as session:
         execution = await EngineeringExecutionService().request_execution(

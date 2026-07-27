@@ -316,6 +316,90 @@ class EngineeringRepositoryAuthorizationService:
             "Repository authorization is not active."
         )
 
+    async def validate_in_transaction(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        command: ValidateRepositoryAuthorization,
+        now: datetime,
+    ) -> RepositoryAuthorizationRecord:
+        """Validate exact current evidence inside a caller-owned transaction."""
+        self._require(context, EngineeringCommandPermission.APPROVE)
+        boundary = self._file_boundary(command.file_boundary)
+        record = await self.repository.get_for_update(
+            session,
+            company_id=context.company.id,
+            authorization_id=command.authorization_id,
+        )
+        if record is None:
+            raise RepositoryAuthorizationNotFoundError(
+                "Repository authorization not found."
+            )
+        if record.expires_at <= now:
+            raise RepositoryAuthorizationIneligibleError(
+                "Repository authorization is expired."
+            )
+        self._validate_capability(record, command, boundary)
+        source = await self._source(
+            session,
+            context=context,
+            review_id=record.review_id,
+        )
+        self._validate_evidence(
+            source,
+            review_digest=record.review_digest,
+            operation_type=record.operation_type,
+            file_boundary=record.file_boundary,
+            expected_branch=record.expected_branch,
+            expected_base_commit=record.expected_base_commit,
+        )
+        return record
+
+    async def consume_in_transaction(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        command: ValidateRepositoryAuthorization,
+        now: datetime,
+    ) -> RepositoryAuthorizationRecord:
+        """Consume exact authorization inside a caller-owned transaction."""
+        record = await self.validate_in_transaction(
+            session,
+            context=context,
+            command=command,
+            now=now,
+        )
+        consumed = await self.repository.transition(
+            session,
+            company_id=context.company.id,
+            authorization_id=record.id,
+            expected_version=record.version,
+            target=RepositoryAuthorizationState.CONSUMED,
+            now=now,
+        )
+        if consumed is None:
+            raise RepositoryAuthorizationConflictError("Authorization version changed.")
+        await self.repository.append_event(
+            session,
+            authorization=consumed,
+            actor_user_id=context.user.id,
+            event_type=RepositoryAuthorizationEventType.CONSUMED,
+            reason_code=None,
+            now=now,
+        )
+        self._stage(
+            session,
+            context=context,
+            record=consumed,
+            event_type=EventType.ENGINEERING_REPOSITORY_AUTHORIZATION_CONSUMED,
+            action="engineering.repository_authorization_consumed",
+            reason_code=None,
+            now=now,
+        )
+        return consumed
+
     async def consume(
         self,
         session: AsyncSession,
@@ -531,7 +615,7 @@ class EngineeringRepositoryAuthorizationService:
                 "Execution result is not eligible for repository authorization."
             )
         if (
-            operation_type is not RepositoryOperationType.COMMIT
+            operation_type is not RepositoryOperationType.CREATE_COMMIT
             or expected_branch != source.command.expected_branch
             or expected_branch != source.composition.expected_branch
             or expected_base_commit != source.command.expected_head

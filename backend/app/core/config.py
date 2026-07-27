@@ -17,6 +17,7 @@ class Settings(BaseSettings):
         "acp_development_password@postgres:5432/acp_enterprise"
     )
     redis_url: str = "redis://redis:6379/0"
+    repository_operation_root: str | None = None
     cors_allowed_origins: list[str] = Field(
         default_factory=lambda: [
             "http://localhost:5173",

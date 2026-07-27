@@ -62,6 +62,13 @@ class EngineeringExecutionPermission:
     ALL = frozenset({REQUEST})
 
 
+class EngineeringRepositoryOperationPermission:
+    READ = "COMPANY_ENGINEERING_REPOSITORY_OPERATION_READ"
+    EXECUTE = "COMPANY_ENGINEERING_REPOSITORY_OPERATION_EXECUTE"
+
+    ALL = frozenset({READ, EXECUTE})
+
+
 class WorkerControlPermission:
     MANAGE = "COMPANY_ENGINEERING_WORKER_MANAGE"
 

@@ -181,6 +181,32 @@ class MobileExecutionStatusService:
                         occurred_at=sources.repository_authorization.consumed_at,
                     )
                 )
+        if sources.repository_operation is not None:
+            timeline.append(
+                TimelineEntry(
+                    event="repository_operation_requested",
+                    occurred_at=sources.repository_operation.requested_at,
+                )
+            )
+            if sources.repository_operation.execution_started_at is not None:
+                timeline.append(
+                    TimelineEntry(
+                        event="repository_operation_started",
+                        occurred_at=sources.repository_operation.execution_started_at,
+                    )
+                )
+            completed_at = (
+                sources.repository_operation.succeeded_at
+                or sources.repository_operation.failed_at
+                or sources.repository_operation.reconciliation_required_at
+            )
+            if completed_at is not None:
+                timeline.append(
+                    TimelineEntry(
+                        event=f"repository_operation_{sources.repository_operation.state}",
+                        occurred_at=completed_at,
+                    )
+                )
         timeline.sort(key=lambda item: (item.occurred_at, item.event))
 
         heartbeat_age = (
@@ -441,6 +467,80 @@ class MobileExecutionStatusService:
                 sources.repository_authorization
                 and sources.repository_authorization.state == "authorized"
                 and sources.repository_authorization.expires_at > now
+            ),
+            repository_operation_required=sources.command.requested_code_changes,
+            repository_operation_id=(
+                sources.repository_operation.operation_id
+                if sources.repository_operation
+                else None
+            ),
+            repository_operation_type=(
+                sources.repository_operation.operation_type
+                if sources.repository_operation
+                else None
+            ),
+            repository_operation_status=(
+                sources.repository_operation.state
+                if sources.repository_operation
+                else None
+            ),
+            repository_operation_eligible=bool(
+                sources.repository_authorization
+                and sources.repository_authorization.state == "authorized"
+                and sources.repository_authorization.expires_at > now
+                and sources.repository_operation is None
+            ),
+            repository_operation_expected_branch=(
+                sources.repository_operation.expected_branch
+                if sources.repository_operation
+                else sources.repository_authorization.expected_branch
+                if sources.repository_authorization
+                else None
+            ),
+            repository_operation_resulting_commit_sha=(
+                sources.repository_operation.resulting_commit_sha
+                if sources.repository_operation
+                else None
+            ),
+            repository_operation_requested_at=(
+                sources.repository_operation.requested_at
+                if sources.repository_operation
+                else None
+            ),
+            repository_operation_reserved_at=(
+                sources.repository_operation.reserved_at
+                if sources.repository_operation
+                else None
+            ),
+            repository_operation_started_at=(
+                sources.repository_operation.execution_started_at
+                if sources.repository_operation
+                else None
+            ),
+            repository_operation_completed_at=(
+                sources.repository_operation.succeeded_at
+                if sources.repository_operation
+                else None
+            ),
+            repository_operation_failed_at=(
+                sources.repository_operation.failed_at
+                if sources.repository_operation
+                else None
+            ),
+            repository_operation_reconciliation_at=(
+                sources.repository_operation.reconciliation_required_at
+                if sources.repository_operation
+                else None
+            ),
+            repository_operation_failure_classification=(
+                sources.repository_operation.failure_classification
+                if sources.repository_operation
+                else None
+            ),
+            repository_operation_owner_attention_required=bool(
+                sources.repository_operation
+                and sources.repository_operation.state
+                in {"failed", "reconciliation_required"}
             ),
             timeline=tuple(timeline),
             terminal=terminal,

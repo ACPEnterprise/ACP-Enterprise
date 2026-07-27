@@ -41,7 +41,7 @@ class EngineeringRepositoryAuthorization(Base):
             ondelete="RESTRICT",
         ),
         CheckConstraint(
-            "operation_type IN ('commit')",
+            "operation_type IN ('create_commit')",
             name="ck_repository_authorizations_operation",
         ),
         CheckConstraint(

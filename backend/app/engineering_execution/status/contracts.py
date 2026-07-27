@@ -109,10 +109,27 @@ class RepositoryAuthorizationStatusSource:
     authorization_id: UUID
     state: str
     operation_type: str
+    expected_branch: str
     authorized_at: datetime
     expires_at: datetime
     revoked_at: datetime | None
     consumed_at: datetime | None
+
+
+@dataclass(frozen=True)
+class RepositoryOperationStatusSource:
+    operation_id: UUID
+    operation_type: str
+    state: str
+    expected_branch: str
+    resulting_commit_sha: str | None
+    failure_classification: str | None
+    requested_at: datetime
+    reserved_at: datetime | None
+    execution_started_at: datetime | None
+    succeeded_at: datetime | None
+    failed_at: datetime | None
+    reconciliation_required_at: datetime | None
 
 
 @dataclass(frozen=True)
@@ -143,6 +160,7 @@ class ExecutionStatusSources:
     supervisor: SupervisorStatusSource | None = None
     review: ReviewStatusSource | None = None
     repository_authorization: RepositoryAuthorizationStatusSource | None = None
+    repository_operation: RepositoryOperationStatusSource | None = None
 
 
 class ExecutionStatusProvider(Protocol):

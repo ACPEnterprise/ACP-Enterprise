@@ -10,6 +10,9 @@ from app.engineering_control import models as engineering_control_models  # noqa
 from app.engineering_control.repository_authorization import (
     models as repository_authorization_models,  # noqa: F401
 )
+from app.engineering_control.repository_operation import (
+    models as repository_operation_models,  # noqa: F401
+)
 from app.engineering_control.review import (
     models as engineering_review_models,  # noqa: F401
 )
