@@ -7,6 +7,10 @@ from app.engineering_control.records import (
     EngineeringApprovalState,
     EngineeringExecutionState,
 )
+from app.engineering_control.review.contracts import (
+    EngineeringReviewDecision,
+    EngineeringReviewState,
+)
 from app.engineering_control.schemas import EngineeringCancellationReason
 
 
@@ -47,6 +51,38 @@ class MobileCommandDetail(MobileCommandSummary):
 
 class MobileCommandPage(MobileEngineeringSchema):
     items: tuple[MobileCommandSummary, ...]
+    page: int = Field(ge=1)
+    page_size: int = Field(ge=1, le=100)
+    total_count: int = Field(ge=0)
+    total_pages: int = Field(ge=0)
+
+
+class MobileEngineeringConnectivity(MobileEngineeringSchema):
+    state: str
+    session_id: UUID | None
+    last_contact_at: datetime | None
+    heartbeat_at: datetime | None
+
+
+class MobileOwnerReviewSummary(MobileEngineeringSchema):
+    id: UUID
+    command_id: UUID
+    execution_id: UUID
+    ecid: str
+    provider_identifier: str
+    result_status: str
+    result_disposition: str
+    validation_summary: dict[str, object]
+    file_boundary: tuple[str, ...]
+    state: EngineeringReviewState
+    created_at: datetime
+    decision: EngineeringReviewDecision | None
+    decided_at: datetime | None
+
+
+class MobileOwnerReviewPage(MobileEngineeringSchema):
+    items: tuple[MobileOwnerReviewSummary, ...]
+    connectivity: MobileEngineeringConnectivity
     page: int = Field(ge=1)
     page_size: int = Field(ge=1, le=100)
     total_count: int = Field(ge=0)

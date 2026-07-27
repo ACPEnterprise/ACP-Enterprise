@@ -2,12 +2,12 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router";
 
+import { getOperatorApiError } from "../../api/errors";
 import { Alert, Badge, Button, EmptyState, Spinner } from "../../ui";
 import { useMobileReviews } from "./hooks";
 import {
   mobileEngineeringLabel,
   mobileEngineeringTimestamp,
-  shortExpectedHead,
 } from "./presentation";
 
 export function MobileEngineeringListPage() {
@@ -29,9 +29,22 @@ export function MobileEngineeringListPage() {
         </p>
       </header>
 
-      <Alert variant="warning" title="Execution is not connected">
-        This workspace cannot run workers, commit, push, merge, or deploy.
-      </Alert>
+      {query.data && (
+        <Alert
+          variant={
+            query.data.connectivity.state === "connected"
+              ? "information"
+              : "warning"
+          }
+          title={`Worker execution: ${mobileEngineeringLabel(query.data.connectivity.state)}`}
+        >
+          {query.data.connectivity.state === "connected"
+            ? "An authenticated worker session and fresh heartbeat are available. Individual execution still requires explicit approval and eligible durable state."
+            : query.data.connectivity.state === "connecting"
+              ? "An authenticated worker session exists without a fresh heartbeat. Execution is not connected."
+              : "No active authenticated worker session with a fresh heartbeat is available. Execution is not connected."}
+        </Alert>
+      )}
 
       <section aria-label="Engineering reviews">
         {query.isLoading && (
@@ -39,21 +52,32 @@ export function MobileEngineeringListPage() {
             <Spinner label="Loading engineering reviews" />
           </div>
         )}
-        {query.isError && (
-          <Alert
-            variant="danger"
-            announcement="assertive"
-            title="Reviews unavailable"
-            action={
-              <Button variant="outline" onClick={() => void query.refetch()}>
-                Retry
-              </Button>
-            }
-          >
-            Your session may have expired, access may be restricted, or the
-            service may be unavailable.
-          </Alert>
-        )}
+        {query.isError &&
+          (() => {
+            const error = getOperatorApiError(
+              query.error,
+              "Engineering reviews",
+            );
+            return (
+              <Alert
+                variant="danger"
+                announcement="assertive"
+                title={error.title}
+                action={
+                  error.retryable ? (
+                    <Button
+                      variant="outline"
+                      onClick={() => void query.refetch()}
+                    >
+                      Retry
+                    </Button>
+                  ) : undefined
+                }
+              >
+                {error.message}
+              </Alert>
+            );
+          })()}
         {query.data?.items.length === 0 && (
           <EmptyState
             title="No reviews found"
@@ -70,56 +94,68 @@ export function MobileEngineeringListPage() {
                 <div className="flex min-w-0 flex-wrap items-start justify-between gap-ui-3">
                   <div className="min-w-0">
                     <Link
-                      to={`/engineering/${review.id}`}
+                      to={`/engineering/${review.command_id}`}
                       className="break-all text-lg font-bold text-blue-400 hover:underline"
                     >
                       {review.ecid}
                     </Link>
                     <p className="mt-ui-1 text-sm text-content-muted">
-                      {mobileEngineeringLabel(review.command_type)}
+                      Execution {review.execution_id}
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-ui-2">
                     <Badge>
-                      {mobileEngineeringLabel(review.approval_state)}
+                      {mobileEngineeringLabel(review.state)}
                     </Badge>
-                    <Badge>Execution not connected</Badge>
+                    <Badge>
+                      {mobileEngineeringLabel(
+                        query.data.connectivity.state,
+                      )}
+                    </Badge>
                   </div>
                 </div>
                 <dl className="mt-ui-4 grid min-w-0 gap-ui-3 text-sm sm:grid-cols-2">
                   <div>
-                    <dt className="text-content-muted">Repository</dt>
-                    <dd className="break-all">{review.repository_key}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-content-muted">Branch</dt>
-                    <dd className="break-all">{review.expected_branch}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-content-muted">Expected HEAD</dt>
-                    <dd className="font-mono">
-                      {shortExpectedHead(review.expected_head)}
+                    <dt className="text-content-muted">Provider</dt>
+                    <dd className="break-all">
+                      {review.provider_identifier}
                     </dd>
                   </div>
                   <div>
-                    <dt className="text-content-muted">Change level</dt>
+                    <dt className="text-content-muted">Result</dt>
+                    <dd className="break-all">
+                      {mobileEngineeringLabel(review.result_status)}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-content-muted">Disposition</dt>
                     <dd>
-                      {review.requested_code_changes
-                        ? "Uncommitted changes"
-                        : "Inspection only"}
+                      {mobileEngineeringLabel(review.result_disposition)}
                     </dd>
                   </div>
                   <div>
-                    <dt className="text-content-muted">Created</dt>
+                    <dt className="text-content-muted">Reviewed files</dt>
+                    <dd>
+                      {review.file_boundary.length > 0
+                        ? `${review.file_boundary.length} authoritative file${review.file_boundary.length === 1 ? "" : "s"}`
+                        : "No authoritative file boundary"}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-content-muted">Review created</dt>
                     <dd>{mobileEngineeringTimestamp(review.created_at)}</dd>
                   </div>
                   <div>
-                    <dt className="text-content-muted">Expires</dt>
-                    <dd>{mobileEngineeringTimestamp(review.expires_at)}</dd>
+                    <dt className="text-content-muted">Owner decision</dt>
+                    <dd>
+                      {review.decision
+                        ? mobileEngineeringLabel(review.decision)
+                        : "Pending"}
+                    </dd>
                   </div>
                 </dl>
                 <Link
-                  to={`/engineering/${review.id}`}
+                  to={`/engineering/${review.command_id}`}
                   className="mt-ui-4 inline-flex min-h-11 w-full items-center justify-center rounded-md border border-stroke-strong px-ui-4 text-sm font-semibold hover:bg-surface-muted sm:w-auto"
                   aria-label={`Review ${review.ecid}`}
                 >

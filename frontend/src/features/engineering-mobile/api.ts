@@ -3,18 +3,20 @@ import type {
   MobileReviewApproval,
   MobileReviewCancellation,
   MobileReviewDetail,
-  MobileReviewPage,
   MobileReviewQuery,
   MobileCommandStatus,
+  MobileOwnerReviewPage,
 } from "./types";
 
 export const MOBILE_ENGINEERING_PATH = "/api/v1/engineering/mobile/reviews";
+export const MOBILE_OWNER_REVIEWS_PATH =
+  "/api/v1/engineering/mobile/owner-reviews";
 
 export async function listMobileReviews(
   query: MobileReviewQuery,
-): Promise<MobileReviewPage> {
+): Promise<MobileOwnerReviewPage> {
   return (
-    await apiClient.get<MobileReviewPage>(MOBILE_ENGINEERING_PATH, {
+    await apiClient.get<MobileOwnerReviewPage>(MOBILE_OWNER_REVIEWS_PATH, {
       params: {
         page: query.page,
         page_size: query.pageSize,

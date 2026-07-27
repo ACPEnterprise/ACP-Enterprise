@@ -212,6 +212,48 @@ class EngineeringReviewService:
             limit=limit,
         )
 
+    async def list_packages(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        state: EngineeringReviewState,
+        page: int,
+        page_size: int,
+    ) -> tuple[tuple[EngineeringReviewPackage, ...], int]:
+        self._require(context, EngineeringCommandPermission.READ)
+        if page < 1 or not 1 <= page_size <= 100:
+            raise EngineeringReviewIneligibleError("Review page is invalid.")
+        async with session.begin():
+            reviews, total = await self.repository.list_reviews_page(
+                session,
+                company_id=context.company.id,
+                state=state,
+                page=page,
+                page_size=page_size,
+            )
+            packages: list[EngineeringReviewPackage] = []
+            for review in reviews:
+                source = await self.repository.load_package_source_read_only(
+                    session,
+                    company_id=context.company.id,
+                    review=review,
+                )
+                if (
+                    source is None
+                    or self._review_digest(source) != review.review_digest
+                ):
+                    raise EngineeringReviewDigestMismatchError(
+                        "Review evidence is unavailable or changed."
+                    )
+                decision = await self.repository.get_decision(
+                    session,
+                    company_id=context.company.id,
+                    review_id=review.id,
+                )
+                packages.append(self._package(review, source, decision))
+        return tuple(packages), total
+
     async def decide(
         self,
         session: AsyncSession,

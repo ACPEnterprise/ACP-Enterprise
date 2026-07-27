@@ -11,9 +11,11 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from app.core.config import settings
 from app.database.session import get_database_session
 from app.engineering_control.mobile.router import router
+from app.engineering_control.review.service import EngineeringReviewService
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import EngineeringCommandPermission
 from app.platform.permissions.dependencies import get_authorization_context
+from tests.engineering_control.review.test_engineering_review import completed_command
 from tests.engineering_control.test_engineering_command_service import (
     ServiceFixture,
     context_with_permissions,
@@ -233,6 +235,60 @@ async def test_permissions_inactive_membership_and_company_concealment(
         f"/api/v1/engineering/mobile/reviews/{command['id']}",
     )
     assert concealed.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_owner_review_projection_uses_immutable_review_packages(
+    mobile_api: MobileApiFixture,
+) -> None:
+    command = await completed_command(mobile_api.service_fixture)
+    owner = mobile_api.app_for(tuple(EngineeringCommandPermission.ALL))
+    async with mobile_api.factory() as session:
+        package = await EngineeringReviewService().prepare(
+            session,
+            context=context_with_permissions(
+                mobile_api.service_fixture.context.user,
+                mobile_api.service_fixture.context.company,
+                mobile_api.service_fixture.context.membership,
+                tuple(EngineeringCommandPermission.ALL),
+            ),
+            command_id=command.id,
+        )
+
+    listed = await request(
+        owner,
+        "GET",
+        "/api/v1/engineering/mobile/owner-reviews",
+        params={"page": 1, "page_size": 10},
+    )
+    assert listed.status_code == 200
+    body = listed.json()
+    assert body["total_count"] == 1
+    assert body["connectivity"]["state"] == "disconnected"
+    assert body["connectivity"]["session_id"] is None
+    item = body["items"][0]
+    assert item["id"] == str(package.review.id)
+    assert item["command_id"] == str(command.id)
+    assert item["execution_id"] == str(package.review.execution_id)
+    assert item["provider_identifier"] == package.review.provider_identifier
+    assert item["result_disposition"] == package.result_disposition
+    assert item["validation_summary"] == package.validation_summary
+    assert item["file_boundary"] == package.validation_summary.get("file_boundary", [])
+    assert item["state"] == "pending"
+    assert item["decision"] is None
+    assert "review_digest" not in item
+    assert "credential" not in str(body).lower()
+
+    other_company = mobile_api.app_for(
+        tuple(EngineeringCommandPermission.ALL), other_company=True
+    )
+    concealed = await request(
+        other_company,
+        "GET",
+        "/api/v1/engineering/mobile/owner-reviews",
+    )
+    assert concealed.status_code == 200
+    assert concealed.json()["items"] == []
 
 
 def test_mobile_openapi_exposes_no_rejection_or_execution_operation() -> None:

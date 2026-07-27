@@ -8,6 +8,7 @@ import {
   getMobileReview,
   listMobileReviews,
   MOBILE_ENGINEERING_PATH,
+  MOBILE_OWNER_REVIEWS_PATH,
 } from "./api";
 
 vi.mock("../../api/client", () => ({
@@ -23,7 +24,7 @@ describe("mobile Engineering API client", () => {
   it("centralizes pending review, detail, and status paths", async () => {
     vi.mocked(apiClient.get).mockResolvedValue({ data: { items: [] } });
     await listMobileReviews({ page: 2, pageSize: 10 });
-    expect(apiClient.get).toHaveBeenCalledWith(MOBILE_ENGINEERING_PATH, {
+    expect(apiClient.get).toHaveBeenCalledWith(MOBILE_OWNER_REVIEWS_PATH, {
       params: { page: 2, page_size: 10 },
     });
 

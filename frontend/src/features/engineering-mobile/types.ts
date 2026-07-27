@@ -53,6 +53,45 @@ export interface MobileReviewPage {
   total_pages: number;
 }
 
+export type MobileOwnerReviewState = "pending" | "accepted" | "rejected";
+export type MobileOwnerReviewDecision = "accept" | "reject";
+export type MobileConnectivityState =
+  | "connected"
+  | "connecting"
+  | "disconnected";
+
+export interface MobileEngineeringConnectivity {
+  state: MobileConnectivityState;
+  session_id: string | null;
+  last_contact_at: string | null;
+  heartbeat_at: string | null;
+}
+
+export interface MobileOwnerReviewSummary {
+  id: string;
+  command_id: string;
+  execution_id: string;
+  ecid: string;
+  provider_identifier: string;
+  result_status: string;
+  result_disposition: string;
+  validation_summary: Readonly<Record<string, unknown>>;
+  file_boundary: readonly string[];
+  state: MobileOwnerReviewState;
+  created_at: string;
+  decision: MobileOwnerReviewDecision | null;
+  decided_at: string | null;
+}
+
+export interface MobileOwnerReviewPage {
+  items: readonly MobileOwnerReviewSummary[];
+  connectivity: MobileEngineeringConnectivity;
+  page: number;
+  page_size: number;
+  total_count: number;
+  total_pages: number;
+}
+
 export interface MobileReviewQuery {
   page: number;
   pageSize: number;

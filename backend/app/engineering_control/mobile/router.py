@@ -20,9 +20,9 @@ from .schemas import (
     MobileCancellationRequest,
     MobileCommandDetail,
     MobileCommandPage,
+    MobileOwnerReviewPage,
 )
 from .service import mobile_engineering_control_service
-
 
 router = APIRouter(
     prefix="/api/v1/engineering/mobile", tags=["Mobile Engineering Control"]
@@ -40,6 +40,25 @@ ApproveContext = Annotated[
     AuthorizationContext,
     Depends(require_permission(EngineeringCommandPermission.APPROVE)),
 ]
+
+
+@router.get(
+    "/owner-reviews",
+    response_model=MobileOwnerReviewPage,
+    summary="List immutable completed-result owner reviews",
+)
+async def list_owner_reviews(
+    context: ReadContext,
+    session: DatabaseSession,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 25,
+) -> MobileOwnerReviewPage:
+    return await mobile_engineering_control_service.list_owner_reviews(
+        session,
+        context=context,
+        page=page,
+        page_size=page_size,
+    )
 
 
 @router.get(

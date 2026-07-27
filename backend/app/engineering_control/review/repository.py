@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.engineering_control.models import EngineeringCommand
@@ -250,6 +250,39 @@ class EngineeringReviewRepository:
         return tuple(_review(entity) for entity in entities)
 
     @staticmethod
+    async def list_reviews_page(
+        session: AsyncSession,
+        *,
+        company_id: UUID,
+        state: EngineeringReviewState,
+        page: int,
+        page_size: int,
+    ) -> tuple[tuple[EngineeringReviewRecord, ...], int]:
+        predicate = (
+            EngineeringExecutionReview.company_id == company_id,
+            EngineeringExecutionReview.state == state.value,
+        )
+        total = int(
+            await session.scalar(
+                select(func.count(EngineeringExecutionReview.id)).where(*predicate)
+            )
+            or 0
+        )
+        entities = (
+            await session.scalars(
+                select(EngineeringExecutionReview)
+                .where(*predicate)
+                .order_by(
+                    EngineeringExecutionReview.created_at.desc(),
+                    EngineeringExecutionReview.id,
+                )
+                .offset((page - 1) * page_size)
+                .limit(page_size)
+            )
+        ).all()
+        return tuple(_review(entity) for entity in entities), total
+
+    @staticmethod
     async def load_package_source(
         session: AsyncSession,
         *,
@@ -270,6 +303,64 @@ class EngineeringReviewRepository:
         ):
             return None
         return source
+
+    @staticmethod
+    async def load_package_source_read_only(
+        session: AsyncSession,
+        *,
+        company_id: UUID,
+        review: EngineeringReviewRecord,
+    ) -> EngineeringReviewSource | None:
+        command = await session.scalar(
+            select(EngineeringCommand).where(
+                EngineeringCommand.company_id == company_id,
+                EngineeringCommand.id == review.command_id,
+            )
+        )
+        execution = await session.scalar(
+            select(EngineeringExecution).where(
+                EngineeringExecution.company_id == company_id,
+                EngineeringExecution.id == review.execution_id,
+                EngineeringExecution.command_id == review.command_id,
+            )
+        )
+        composition = await session.scalar(
+            select(ExecutionComposition).where(
+                ExecutionComposition.company_id == company_id,
+                ExecutionComposition.id == review.composition_id,
+                ExecutionComposition.execution_id == review.execution_id,
+            )
+        )
+        attempt = await session.scalar(
+            select(ProviderExecutionAttempt).where(
+                ProviderExecutionAttempt.company_id == company_id,
+                ProviderExecutionAttempt.id == review.attempt_id,
+                ProviderExecutionAttempt.composition_id == review.composition_id,
+            )
+        )
+        result = await session.scalar(
+            select(NormalizedProviderResult).where(
+                NormalizedProviderResult.company_id == company_id,
+                NormalizedProviderResult.id == review.result_id,
+                NormalizedProviderResult.attempt_id == review.attempt_id,
+                NormalizedProviderResult.composition_id == review.composition_id,
+            )
+        )
+        if (
+            command is None
+            or execution is None
+            or composition is None
+            or attempt is None
+            or result is None
+        ):
+            return None
+        return EngineeringReviewSource(
+            command=command,
+            execution=execution,
+            composition=composition,
+            attempt=attempt,
+            result=result,
+        )
 
 
 def _review(entity: EngineeringExecutionReview) -> EngineeringReviewRecord:

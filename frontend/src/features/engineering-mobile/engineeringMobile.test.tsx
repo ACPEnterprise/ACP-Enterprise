@@ -7,7 +7,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as hooks from "./hooks";
 import { MobileEngineeringDetailPage } from "./MobileEngineeringDetailPage";
 import { MobileEngineeringListPage } from "./MobileEngineeringListPage";
-import type { MobileReviewDetail } from "./types";
+import type {
+  MobileOwnerReviewSummary,
+  MobileReviewDetail,
+} from "./types";
 
 vi.mock("./hooks");
 
@@ -37,6 +40,31 @@ const review: MobileReviewDetail = {
   cancellation_reason_code: null,
   can_approve: true,
   can_cancel: true,
+};
+
+const ownerReview: MobileOwnerReviewSummary = {
+  id: "83f7f5bc-fab3-46a5-8ce5-141dd22e7c69",
+  command_id: review.id,
+  execution_id: "19366485-df36-436d-b39b-593e89c74c4c",
+  ecid: review.ecid,
+  provider_identifier: "codex",
+  result_status: "succeeded",
+  result_disposition: "accepted",
+  validation_summary: {
+    file_boundary: ["frontend/src/features/engineering-mobile/types.ts"],
+  },
+  file_boundary: ["frontend/src/features/engineering-mobile/types.ts"],
+  state: "pending",
+  created_at: "2026-07-26T12:00:00Z",
+  decision: null,
+  decided_at: null,
+};
+
+const disconnected = {
+  state: "disconnected" as const,
+  session_id: null,
+  last_contact_at: null,
+  heartbeat_at: null,
 };
 
 const mutation = (mutate = vi.fn()) =>
@@ -93,6 +121,7 @@ describe("mobile Engineering Control", () => {
       isLoading: false,
       data: {
         items: [],
+        connectivity: disconnected,
         page: 1,
         page_size: 10,
         total_count: 0,
@@ -105,21 +134,23 @@ describe("mobile Engineering Control", () => {
     ).toBeInTheDocument();
     cleanup();
 
-    const refetch = vi.fn();
     vi.mocked(hooks.useMobileReviews).mockReturnValueOnce({
       isLoading: false,
       isError: true,
-      refetch,
+      error: { isAxiosError: true, response: { status: 401 } },
     } as never);
     renderList();
-    await userEvent.click(screen.getByRole("button", { name: "Retry" }));
-    expect(refetch).toHaveBeenCalledOnce();
+    expect(
+      screen.getByRole("alert", { name: "Authentication required" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
     cleanup();
 
     vi.mocked(hooks.useMobileReviews).mockReturnValue({
       isLoading: false,
       data: {
-        items: [review],
+        items: [ownerReview],
+        connectivity: disconnected,
         page: 1,
         page_size: 10,
         total_count: 2,
@@ -127,12 +158,16 @@ describe("mobile Engineering Control", () => {
       },
     } as never);
     renderList();
-    expect(screen.getByRole("link", { name: review.ecid })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: ownerReview.ecid })).toHaveAttribute(
       "href",
       `/engineering/${review.id}`,
     );
     expect(screen.queryByText(review.owner_instruction)).not.toBeInTheDocument();
-    expect(screen.getAllByText("Execution not connected")).not.toHaveLength(0);
+    expect(
+      screen.getByText(/No active authenticated worker session/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText("codex")).toBeInTheDocument();
+    expect(screen.getByText("1 authoritative file")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Next page" }));
     expect(hooks.useMobileReviews).toHaveBeenLastCalledWith({
       page: 2,
