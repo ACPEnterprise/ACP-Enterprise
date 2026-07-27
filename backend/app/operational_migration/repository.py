@@ -10,10 +10,15 @@ from app.customer_migration.models import (
 from app.jobs.models import Job
 from app.operational_migration.models import (
     AppointmentSourceIdentity,
+    EstimateLineItemSourceIdentity,
+    EstimateSourceIdentity,
+    InvoiceLineItemSourceIdentity,
+    InvoiceSourceIdentity,
     JobSourceIdentity,
     OperationalMigrationException,
     OperationalMigrationProgress,
     OperationalMigrationRun,
+    PaymentSourceIdentity,
 )
 
 
@@ -148,6 +153,80 @@ class OperationalMigrationRepository:
         session: AsyncSession, exception: OperationalMigrationException
     ) -> None:
         session.add(exception)
+
+    @staticmethod
+    async def get_estimate_identity(
+        session: AsyncSession,
+        *,
+        company_id: UUID,
+        source_system: str,
+        source_id: str,
+    ) -> EstimateSourceIdentity | None:
+        return await session.scalar(
+            select(EstimateSourceIdentity).where(
+                EstimateSourceIdentity.company_id == company_id,
+                EstimateSourceIdentity.source_system == source_system,
+                EstimateSourceIdentity.source_estimate_id == source_id,
+            )
+        )
+
+    @staticmethod
+    async def get_invoice_identity(
+        session: AsyncSession,
+        *,
+        company_id: UUID,
+        source_system: str,
+        source_id: str,
+    ) -> InvoiceSourceIdentity | None:
+        return await session.scalar(
+            select(InvoiceSourceIdentity).where(
+                InvoiceSourceIdentity.company_id == company_id,
+                InvoiceSourceIdentity.source_system == source_system,
+                InvoiceSourceIdentity.source_invoice_id == source_id,
+            )
+        )
+
+    @staticmethod
+    async def get_payment_identity(
+        session: AsyncSession,
+        *,
+        company_id: UUID,
+        source_system: str,
+        source_id: str,
+    ) -> PaymentSourceIdentity | None:
+        return await session.scalar(
+            select(PaymentSourceIdentity).where(
+                PaymentSourceIdentity.company_id == company_id,
+                PaymentSourceIdentity.source_system == source_system,
+                PaymentSourceIdentity.source_payment_id == source_id,
+            )
+        )
+
+    @staticmethod
+    async def add_estimate_identity(
+        session: AsyncSession,
+        identity: EstimateSourceIdentity,
+        item_identities: list[EstimateLineItemSourceIdentity],
+    ) -> None:
+        session.add(identity)
+        await session.flush()
+        session.add_all(item_identities)
+
+    @staticmethod
+    async def add_invoice_identity(
+        session: AsyncSession,
+        identity: InvoiceSourceIdentity,
+        item_identities: list[InvoiceLineItemSourceIdentity],
+    ) -> None:
+        session.add(identity)
+        await session.flush()
+        session.add_all(item_identities)
+
+    @staticmethod
+    def add_payment_identity(
+        session: AsyncSession, identity: PaymentSourceIdentity
+    ) -> None:
+        session.add(identity)
 
 
 operational_migration_repository = OperationalMigrationRepository()

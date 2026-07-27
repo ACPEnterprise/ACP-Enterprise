@@ -177,6 +177,7 @@ class EventType(str, Enum):
     ESTIMATE_PRESENTED = "estimate.presented"
     ESTIMATE_APPROVED = "estimate.approved"
     ESTIMATE_DECLINED = "estimate.declined"
+    ESTIMATE_MIGRATED = "estimate.migrated"
 
     # Jobs
     JOB_CREATED = "job.created"
@@ -193,5 +194,7 @@ class EventType(str, Enum):
 
     # Financial
     INVOICE_CREATED = "invoice.created"
+    INVOICE_MIGRATED = "invoice.migrated"
     PAYMENT_RECEIVED = "payment.received"
     PAYMENT_REFUNDED = "payment.refunded"
+    PAYMENT_MIGRATED = "payment.migrated"
