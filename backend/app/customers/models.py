@@ -282,6 +282,9 @@ class CustomerContact(Base):
 class ServiceLocation(Base):
     __tablename__ = "service_locations"
     __table_args__ = (
+        UniqueConstraint(
+            "id", "customer_id", name="uq_service_locations_id_customer_id"
+        ),
         CheckConstraint(
             "country = upper(country)", name="ck_service_locations_country_upper"
         ),

@@ -289,6 +289,53 @@ class CustomerService:
             session, company_id=context.company.id, customer_id=customer_id
         )
 
+    async def stage_migrated_contact(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        customer_id: UUID,
+        data: ContactCreate,
+    ) -> CustomerContact:
+        """Stage one validated migrated Contact in the caller's transaction."""
+        customer = await self._customer_for_update(session, context, customer_id)
+        if data.is_preferred:
+            await CustomerRepository.clear_preferred_contacts(
+                session, customer_id=customer.id
+            )
+        contact = CustomerContact(
+            customer_id=customer.id,
+            first_name=data.first_name,
+            last_name=data.last_name,
+            title=data.title,
+            email=data.email,
+            normalized_email=normalize_email(data.email) if data.email else None,
+            mobile_phone=data.mobile_phone,
+            normalized_mobile_phone=(
+                normalize_phone(data.mobile_phone) if data.mobile_phone else None
+            ),
+            office_phone=data.office_phone,
+            normalized_office_phone=(
+                normalize_phone(data.office_phone) if data.office_phone else None
+            ),
+            is_preferred=data.is_preferred,
+            active=data.active,
+            notes=data.notes,
+        )
+        session.add(contact)
+        await session.flush()
+        if contact.is_preferred:
+            customer.primary_contact_id = contact.id
+        self._stage_event(
+            session,
+            context=context,
+            event_type=EventType.CONTACT_CREATED,
+            entity_type="contact",
+            entity_id=contact.id,
+            payload={"customer_id": str(customer.id), "origin": "migration"},
+        )
+        return contact
+
     async def add_contact(
         self,
         session: AsyncSession,
@@ -434,6 +481,39 @@ class CustomerService:
         return await CustomerRepository.list_locations(
             session, company_id=context.company.id, customer_id=customer_id
         )
+
+    async def stage_migrated_service_location(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        customer_id: UUID,
+        data: ServiceLocationCreate,
+    ) -> ServiceLocation:
+        """Stage one validated migrated Service Location in the caller transaction."""
+        customer = await self._customer_for_update(session, context, customer_id)
+        location = ServiceLocation(
+            customer_id=customer.id,
+            **data.model_dump(),
+            normalized_address=build_normalized_address(
+                data.address,
+                data.address_line_2,
+                data.city,
+                data.state,
+                data.postal_code,
+            ),
+        )
+        session.add(location)
+        await session.flush()
+        self._stage_event(
+            session,
+            context=context,
+            event_type=EventType.SERVICE_LOCATION_CREATED,
+            entity_type="service_location",
+            entity_id=location.id,
+            payload={"customer_id": str(customer.id), "origin": "migration"},
+        )
+        return location
 
     async def add_location(
         self,
