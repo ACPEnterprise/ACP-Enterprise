@@ -139,9 +139,15 @@ async def test_prepare_and_accept_exact_review_package(
     assert decided.decision.decision is EngineeringReviewDecision.ACCEPT
 
     async with fixture.factory() as session:
-        command_count = await session.scalar(select(func.count(EngineeringCommand.id)))
+        command_count = await session.scalar(
+            select(func.count(EngineeringCommand.id)).where(
+                EngineeringCommand.id == command.id
+            )
+        )
         decision_count = await session.scalar(
-            select(func.count(EngineeringExecutionReviewDecision.id))
+            select(func.count(EngineeringExecutionReviewDecision.id)).where(
+                EngineeringExecutionReviewDecision.review_id == package.review.id
+            )
         )
         stored_command = await session.get(EngineeringCommand, command.id)
     assert command_count == 1

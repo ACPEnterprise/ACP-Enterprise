@@ -160,6 +160,27 @@ class MobileExecutionStatusService:
                         occurred_at=sources.review.decided_at,
                     )
                 )
+        if sources.repository_authorization is not None:
+            timeline.append(
+                TimelineEntry(
+                    event="repository_authorization_granted",
+                    occurred_at=sources.repository_authorization.authorized_at,
+                )
+            )
+            if sources.repository_authorization.revoked_at is not None:
+                timeline.append(
+                    TimelineEntry(
+                        event="repository_authorization_revoked",
+                        occurred_at=sources.repository_authorization.revoked_at,
+                    )
+                )
+            if sources.repository_authorization.consumed_at is not None:
+                timeline.append(
+                    TimelineEntry(
+                        event="repository_authorization_consumed",
+                        occurred_at=sources.repository_authorization.consumed_at,
+                    )
+                )
         timeline.sort(key=lambda item: (item.occurred_at, item.event))
 
         heartbeat_age = (
@@ -380,6 +401,47 @@ class MobileExecutionStatusService:
             review_state=sources.review.state if sources.review else None,
             review_version=sources.review.version if sources.review else None,
             review_decided_at=(sources.review.decided_at if sources.review else None),
+            authorization_required=sources.command.requested_code_changes,
+            authorization_status=(
+                sources.repository_authorization.state
+                if sources.repository_authorization
+                else None
+            ),
+            authorization_id=(
+                sources.repository_authorization.authorization_id
+                if sources.repository_authorization
+                else None
+            ),
+            authorized_at=(
+                sources.repository_authorization.authorized_at
+                if sources.repository_authorization
+                else None
+            ),
+            authorization_expires_at=(
+                sources.repository_authorization.expires_at
+                if sources.repository_authorization
+                else None
+            ),
+            authorization_revoked_at=(
+                sources.repository_authorization.revoked_at
+                if sources.repository_authorization
+                else None
+            ),
+            authorization_consumed_at=(
+                sources.repository_authorization.consumed_at
+                if sources.repository_authorization
+                else None
+            ),
+            authorized_operation_type=(
+                sources.repository_authorization.operation_type
+                if sources.repository_authorization
+                else None
+            ),
+            authorization_eligible=bool(
+                sources.repository_authorization
+                and sources.repository_authorization.state == "authorized"
+                and sources.repository_authorization.expires_at > now
+            ),
             timeline=tuple(timeline),
             terminal=terminal,
             polling_after_seconds=(

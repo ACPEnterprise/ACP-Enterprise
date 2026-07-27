@@ -43,6 +43,7 @@ class CommandStatusSource:
     ecid: str
     approval_state: str
     command_updated_at: datetime
+    requested_code_changes: bool = False
 
 
 @dataclass(frozen=True)
@@ -104,6 +105,17 @@ class ReviewStatusSource:
 
 
 @dataclass(frozen=True)
+class RepositoryAuthorizationStatusSource:
+    authorization_id: UUID
+    state: str
+    operation_type: str
+    authorized_at: datetime
+    expires_at: datetime
+    revoked_at: datetime | None
+    consumed_at: datetime | None
+
+
+@dataclass(frozen=True)
 class SupervisorStatusSource:
     supervisor_state: str
     session_state: str | None
@@ -130,6 +142,7 @@ class ExecutionStatusSources:
     result: ResultStatusSource | None
     supervisor: SupervisorStatusSource | None = None
     review: ReviewStatusSource | None = None
+    repository_authorization: RepositoryAuthorizationStatusSource | None = None
 
 
 class ExecutionStatusProvider(Protocol):

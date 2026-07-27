@@ -103,6 +103,15 @@ class MobileExecutionStatus(StatusSchema):
     review_state: str | None = None
     review_version: int | None = Field(default=None, ge=1)
     review_decided_at: datetime | None = None
+    authorization_required: bool = False
+    authorization_status: str | None = None
+    authorization_id: UUID | None = None
+    authorized_at: datetime | None = None
+    authorization_expires_at: datetime | None = None
+    authorization_revoked_at: datetime | None = None
+    authorization_consumed_at: datetime | None = None
+    authorized_operation_type: str | None = None
+    authorization_eligible: bool = False
     timeline: tuple[TimelineEntry, ...]
     terminal: bool
     polling_after_seconds: int | None = Field(ge=5, le=300)

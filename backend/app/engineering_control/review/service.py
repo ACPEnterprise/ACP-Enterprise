@@ -38,6 +38,28 @@ MAX_REVIEW_JSON_BYTES = 32_000
 MAX_OUTPUT_REFERENCES = 20
 
 
+def calculate_review_digest(source: EngineeringReviewSource) -> str:
+    payload = {
+        "command_id": str(source.command.id),
+        "execution_id": str(source.execution.id),
+        "composition_id": str(source.composition.id),
+        "attempt_id": str(source.attempt.id),
+        "result_id": str(source.result.id),
+        "provider_identifier": source.composition.provider_identifier,
+        "instruction_digest": source.composition.instruction_digest,
+        "request_digest": source.composition.request_digest,
+        "composition_digest": source.composition.composition_digest,
+        "result_status": source.result.status,
+        "result_disposition": source.result.disposition,
+        "evidence_summary": source.result.evidence_summary,
+        "validation_summary": source.result.validation_summary,
+        "output_references": source.result.output_references,
+        "repository_mutated": source.result.repository_mutated,
+    }
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode()).hexdigest()
+
+
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -335,25 +357,7 @@ class EngineeringReviewService:
 
     @staticmethod
     def _review_digest(source: EngineeringReviewSource) -> str:
-        payload = {
-            "command_id": str(source.command.id),
-            "execution_id": str(source.execution.id),
-            "composition_id": str(source.composition.id),
-            "attempt_id": str(source.attempt.id),
-            "result_id": str(source.result.id),
-            "provider_identifier": source.composition.provider_identifier,
-            "instruction_digest": source.composition.instruction_digest,
-            "request_digest": source.composition.request_digest,
-            "composition_digest": source.composition.composition_digest,
-            "result_status": source.result.status,
-            "result_disposition": source.result.disposition,
-            "evidence_summary": source.result.evidence_summary,
-            "validation_summary": source.result.validation_summary,
-            "output_references": source.result.output_references,
-            "repository_mutated": source.result.repository_mutated,
-        }
-        canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
-        return hashlib.sha256(canonical.encode()).hexdigest()
+        return calculate_review_digest(source)
 
     @staticmethod
     def _package(

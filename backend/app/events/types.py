@@ -96,6 +96,21 @@ class EventType(str, Enum):
     )
     ENGINEERING_REVIEW_PREPARED = "engineering_control.review_prepared"
     ENGINEERING_REVIEW_DECIDED = "engineering_control.review_decided"
+    ENGINEERING_REPOSITORY_AUTHORIZATION_REQUESTED = (
+        "engineering_control.repository_authorization_requested"
+    )
+    ENGINEERING_REPOSITORY_AUTHORIZATION_GRANTED = (
+        "engineering_control.repository_authorization_granted"
+    )
+    ENGINEERING_REPOSITORY_AUTHORIZATION_REVOKED = (
+        "engineering_control.repository_authorization_revoked"
+    )
+    ENGINEERING_REPOSITORY_AUTHORIZATION_EXPIRED = (
+        "engineering_control.repository_authorization_expired"
+    )
+    ENGINEERING_REPOSITORY_AUTHORIZATION_CONSUMED = (
+        "engineering_control.repository_authorization_consumed"
+    )
     ENGINEERING_PROVIDER_RUNTIME_CLOSED = (
         "engineering_execution.provider_runtime_closed"
     )

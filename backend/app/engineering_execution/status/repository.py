@@ -4,6 +4,9 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.engineering_control.models import EngineeringCommand
+from app.engineering_control.repository_authorization.models import (
+    EngineeringRepositoryAuthorization,
+)
 from app.engineering_control.review.models import EngineeringExecutionReview
 from app.engineering_execution.composition.models import (
     ExecutionComposition,
@@ -36,6 +39,7 @@ from .contracts import (
     ExecutionStatusSources,
     HeartbeatStatusSource,
     LeaseStatusSource,
+    RepositoryAuthorizationStatusSource,
     ResultStatusSource,
     ReviewStatusSource,
     SupervisorStatusSource,
@@ -82,6 +86,18 @@ class SqlExecutionStatusProvider:
             .order_by(
                 EngineeringExecutionReview.created_at.desc(),
                 EngineeringExecutionReview.id.desc(),
+            )
+            .limit(1)
+        )
+        repository_authorization = await session.scalar(
+            select(EngineeringRepositoryAuthorization)
+            .where(
+                EngineeringRepositoryAuthorization.company_id == company_id,
+                EngineeringRepositoryAuthorization.command_id == command_id,
+            )
+            .order_by(
+                EngineeringRepositoryAuthorization.authorized_at.desc(),
+                EngineeringRepositoryAuthorization.id.desc(),
             )
             .limit(1)
         )
@@ -266,6 +282,7 @@ class SqlExecutionStatusProvider:
                 command_id=command.id,
                 ecid=command.ecid,
                 approval_state=command.approval_state,
+                requested_code_changes=command.requested_code_changes,
                 command_updated_at=command.updated_at,
             ),
             execution=(
@@ -348,6 +365,19 @@ class SqlExecutionStatusProvider:
                     version=review.version,
                     created_at=review.created_at,
                     decided_at=review.decided_at,
+                )
+            ),
+            repository_authorization=(
+                None
+                if repository_authorization is None
+                else RepositoryAuthorizationStatusSource(
+                    authorization_id=repository_authorization.id,
+                    state=repository_authorization.state,
+                    operation_type=repository_authorization.operation_type,
+                    authorized_at=repository_authorization.authorized_at,
+                    expires_at=repository_authorization.expires_at,
+                    revoked_at=repository_authorization.revoked_at,
+                    consumed_at=repository_authorization.consumed_at,
                 )
             ),
         )

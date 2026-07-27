@@ -1,0 +1,1 @@
+"""Repository-authorization foundation tests."""
