@@ -86,6 +86,40 @@ services:
     networks:
       preview:
 
+  worker:
+    profiles: ["worker"]
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.preview
+    environment:
+      ACP_WORKER_BASE_URL: http://backend:8000
+      ACP_WORKER_ID: ${ACP_WORKER_ID:-00000000-0000-0000-0000-000000000000}
+      ACP_WORKER_PRIVATE_KEY_FILE: /run/secrets/preview-worker.key
+      ACP_WORKER_CAPABILITIES: transport.connectivity
+      ACP_WORKER_HEARTBEAT_SECONDS: "30"
+      ACP_WORKER_REQUEST_TIMEOUT_SECONDS: "10"
+    command: ["python", "-m", "app.worker_runtime"]
+    volumes:
+      - ${ACP_WORKER_PRIVATE_KEY_FILE_HOST:-/opt/acp-enterprise/shared/secrets/preview-worker.key}:/run/secrets/preview-worker.key:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os; os.kill(1, 0)"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      preview:
+
   frontend:
     build:
       context: ./frontend

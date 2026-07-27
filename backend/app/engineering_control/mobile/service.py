@@ -85,11 +85,9 @@ class MobileEngineeringControlService:
                 if timestamp is not None
             )
             connection = MobileEngineeringConnectivity(
-                state=(
-                    "connected"
-                    if source.heartbeat_at is not None
-                    and current - source.heartbeat_at <= HEARTBEAT_FRESH_FOR
-                    else "connecting"
+                state=self._connectivity_state(
+                    heartbeat_at=source.heartbeat_at,
+                    now=current,
                 ),
                 session_id=source.session_id,
                 last_contact_at=last_contact,
@@ -128,6 +126,14 @@ class MobileEngineeringControlService:
             total_count=total,
             total_pages=ceil(total / page_size) if total else 0,
         )
+
+    @staticmethod
+    def _connectivity_state(*, heartbeat_at: datetime | None, now: datetime) -> str:
+        if heartbeat_at is None:
+            return "connecting"
+        if now - heartbeat_at <= HEARTBEAT_FRESH_FOR:
+            return "connected"
+        return "disconnected"
 
     async def list_pending(
         self,

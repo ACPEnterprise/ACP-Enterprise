@@ -1,6 +1,6 @@
 from collections.abc import AsyncIterator, Mapping
 from dataclasses import dataclass, replace
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 
 import httpx
 import pytest
@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from app.core.config import settings
 from app.database.session import get_database_session
 from app.engineering_control.mobile.router import router
+from app.engineering_control.mobile.service import MobileEngineeringControlService
 from app.engineering_control.review.service import EngineeringReviewService
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import EngineeringCommandPermission
@@ -298,3 +299,24 @@ def test_mobile_openapi_exposes_no_rejection_or_execution_operation() -> None:
     assert "/api/v1/engineering/mobile/reviews" in paths
     assert "/api/v1/engineering/mobile/reviews/{command_id}/approve" in paths
     assert all("reject" not in path and "execute" not in path for path in paths)
+
+
+def test_connectivity_projection_distinguishes_connecting_fresh_and_stale() -> None:
+    now = datetime(2026, 7, 27, 23, 0, tzinfo=timezone.utc)
+
+    assert (
+        MobileEngineeringControlService._connectivity_state(heartbeat_at=None, now=now)
+        == "connecting"
+    )
+    assert (
+        MobileEngineeringControlService._connectivity_state(
+            heartbeat_at=now - timedelta(seconds=90), now=now
+        )
+        == "connected"
+    )
+    assert (
+        MobileEngineeringControlService._connectivity_state(
+            heartbeat_at=now - timedelta(seconds=91), now=now
+        )
+        == "disconnected"
+    )

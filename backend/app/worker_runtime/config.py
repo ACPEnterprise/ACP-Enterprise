@@ -20,7 +20,7 @@ class WorkerRuntimeConfig:
         capabilities = tuple(
             WorkerCapability(value.strip())
             for value in os.environ.get(
-                "ACP_WORKER_CAPABILITIES", WorkerCapability.ENGINEERING_EXECUTE.value
+                "ACP_WORKER_CAPABILITIES", WorkerCapability.CONNECTIVITY.value
             ).split(",")
             if value.strip()
         )

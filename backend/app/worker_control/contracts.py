@@ -1,8 +1,8 @@
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
 from types import MappingProxyType
-from typing import Mapping
 from uuid import UUID
 
 
@@ -15,6 +15,7 @@ class WorkerLifecycleState(StrEnum):
 
 
 class WorkerCapability(StrEnum):
+    CONNECTIVITY = "transport.connectivity"
     ENGINEERING_EXECUTE = "engineering.execute"
     REVIEW_PACKAGE = "review.package"
     VALIDATION_RUN = "validation.run"

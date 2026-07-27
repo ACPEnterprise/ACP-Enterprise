@@ -191,6 +191,7 @@ def test_worker_contracts_are_immutable_and_provider_neutral() -> None:
     with pytest.raises(FrozenInstanceError):
         context.worker_id = uuid4()  # type: ignore[misc]
     assert tuple(capability.value for capability in WorkerCapability) == (
+        "transport.connectivity",
         "engineering.execute",
         "review.package",
         "validation.run",
