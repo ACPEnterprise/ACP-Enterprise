@@ -28,6 +28,7 @@ from app.worker_control.transport.errors import (
     TransportBindingError,
     TransportReplayError,
     TransportSequenceError,
+    TransportSessionError,
 )
 from app.worker_control.transport.persistence.models import (
     WorkerTransportChallenge,
@@ -42,7 +43,8 @@ from app.worker_identity.contracts import (
     WorkerCredentialState,
     WorkerIdentityState,
 )
-from app.worker_identity.models import WorkerCredential, WorkerIdentity as IdentityModel
+from app.worker_identity.models import WorkerCredential
+from app.worker_identity.models import WorkerIdentity as IdentityModel
 from tests.engineering_control.test_engineering_command_service import (
     ServiceFixture,
     seed_service_fixture,
@@ -105,10 +107,12 @@ class PersistenceAuthenticator:
 
     async def verify_message(
         self,
+        database,
         *,
         envelope: AuthenticatedMessageEnvelope,
         session: WorkerSession,
     ) -> bool:
+        del database
         return (
             envelope.authentication_proof == "signed"
             and envelope.worker_id == session.context.worker_id
@@ -141,38 +145,37 @@ async def established_transport(
     now = utc_now()
     identity_id = uuid4()
     credential_id = uuid4()
-    async with fixture.factory() as database:
-        async with database.begin():
-            database.add(
-                IdentityModel(
-                    id=identity_id,
-                    company_id=context.company_id,
-                    name=f"transport-{context.worker_id}",
-                    state=WorkerIdentityState.ACTIVE.value,
-                    registered_by_user_id=fixture.context.user.id,
-                    orchestration_worker_id=context.worker_id,
-                    version=1,
-                    registered_at=now,
-                    updated_at=now,
-                )
+    async with fixture.factory() as database, database.begin():
+        database.add(
+            IdentityModel(
+                id=identity_id,
+                company_id=context.company_id,
+                name=f"transport-{context.worker_id}",
+                state=WorkerIdentityState.ACTIVE.value,
+                registered_by_user_id=fixture.context.user.id,
+                orchestration_worker_id=context.worker_id,
+                version=1,
+                registered_at=now,
+                updated_at=now,
             )
-            await database.flush()
-            database.add(
-                WorkerCredential(
-                    id=credential_id,
-                    company_id=context.company_id,
-                    identity_id=identity_id,
-                    version=1,
-                    state=WorkerCredentialState.ACTIVE.value,
-                    verifier="test-verifier",
-                    verifier_algorithm="ed25519",
-                    public_key_id=f"key-{credential_id}",
-                    issued_at=now,
-                    expires_at=now + timedelta(days=1),
-                    activated_at=now,
-                    updated_at=now,
-                )
+        )
+        await database.flush()
+        database.add(
+            WorkerCredential(
+                id=credential_id,
+                company_id=context.company_id,
+                identity_id=identity_id,
+                version=1,
+                state=WorkerCredentialState.ACTIVE.value,
+                verifier="test-verifier",
+                verifier_algorithm="ed25519",
+                public_key_id=f"key-{credential_id}",
+                issued_at=now,
+                expires_at=now + timedelta(days=1),
+                activated_at=now,
+                updated_at=now,
             )
+        )
     service = WorkerTransportService(
         authenticator=PersistenceAuthenticator(
             context, identity_id=identity_id, credential_id=credential_id
@@ -348,7 +351,7 @@ async def test_expired_session_cannot_accept_message(
     service, worker_session = await established_transport(transport_database)
     envelope = heartbeat(worker_session)
     async with transport_database.factory() as database:
-        with pytest.raises(Exception):
+        with pytest.raises(TransportSessionError):
             await service.handle_message(
                 database,
                 envelope=envelope,

@@ -40,13 +40,13 @@ from app.worker_control.transport.errors import (
     TransportSessionError,
     TransportTimestampError,
 )
+from app.worker_control.transport.repository import (
+    InMemoryWorkerTransportSessionRepository,
+)
 from app.worker_control.transport.service import (
     CHALLENGE_TTL,
     SESSION_TTL,
     WorkerTransportService,
-)
-from app.worker_control.transport.repository import (
-    InMemoryWorkerTransportSessionRepository,
 )
 
 NOW = datetime(2026, 7, 24, 12, tzinfo=timezone.utc)
@@ -119,10 +119,12 @@ class FakeAuthenticator:
 
     async def verify_message(
         self,
+        database,
         *,
         envelope: AuthenticatedMessageEnvelope,
         session: WorkerSession,
     ) -> bool:
+        del database
         return self.message_valid and envelope.authentication_proof == "signed"
 
 

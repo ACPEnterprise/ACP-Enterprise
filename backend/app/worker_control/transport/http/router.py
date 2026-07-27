@@ -17,8 +17,8 @@ from app.worker_control.transport.contracts import (
     ProviderProgressMessage,
     ProviderResultMessage,
     ResultMessage,
-    TransportPayload,
     TransportMessageKind,
+    TransportPayload,
     WorkerSessionRequest,
 )
 from app.worker_control.transport.errors import (
@@ -32,14 +32,14 @@ from app.worker_control.transport.http.dependencies import (
 )
 from app.worker_control.transport.http.errors import transport_http_error
 from app.worker_control.transport.http.schemas import (
-    ChallengeResponse,
     CancellationAcknowledgementRequest,
+    ChallengeResponse,
     CompositionAcknowledgementRequest,
     CompositionDeliveryResponse,
     CompositionFetchRequest,
     CompositionFetchResponse,
-    EstablishSessionRequest,
     EnvelopeEvidence,
+    EstablishSessionRequest,
     HeartbeatRequest,
     LeaseRenewalRequest,
     OfferPageResponse,
@@ -171,6 +171,7 @@ async def heartbeat(
 ) -> ReceiptResponse:
     envelope = _envelope(
         data,
+        session_id=identity.session_id,
         worker_id=identity.context.worker_id,
         kind=TransportMessageKind.HEARTBEAT,
         payload=HeartbeatMessage(health=data.health),
@@ -191,6 +192,7 @@ async def refresh_lease(
 ) -> ReceiptResponse:
     envelope = _envelope(
         data,
+        session_id=identity.session_id,
         worker_id=identity.context.worker_id,
         kind=TransportMessageKind.LEASE_RENEWAL,
         payload=LeaseRenewalMessage(
@@ -226,6 +228,7 @@ async def submit_result(
     )
     envelope = _envelope(
         data,
+        session_id=identity.session_id,
         worker_id=identity.context.worker_id,
         kind=TransportMessageKind.RESULT,
         payload=ResultMessage(
@@ -255,6 +258,7 @@ async def fetch_composition(
         service,
         _envelope(
             data,
+            session_id=identity.session_id,
             worker_id=identity.context.worker_id,
             kind=TransportMessageKind.COMPOSITION_FETCH,
             payload=CompositionFetchMessage(),
@@ -308,6 +312,7 @@ async def acknowledge_composition(
         service,
         _envelope(
             data,
+            session_id=identity.session_id,
             worker_id=identity.context.worker_id,
             kind=TransportMessageKind.COMPOSITION_ACKNOWLEDGEMENT,
             payload=CompositionAcknowledgementMessage(
@@ -332,6 +337,7 @@ async def submit_provider_progress(
         service,
         _envelope(
             data,
+            session_id=identity.session_id,
             worker_id=identity.context.worker_id,
             kind=TransportMessageKind.PROVIDER_PROGRESS,
             payload=ProviderProgressMessage(
@@ -361,6 +367,7 @@ async def submit_provider_result(
         service,
         _envelope(
             data,
+            session_id=identity.session_id,
             worker_id=identity.context.worker_id,
             kind=TransportMessageKind.PROVIDER_RESULT,
             payload=ProviderResultMessage(
@@ -392,6 +399,7 @@ async def acknowledge_cancellation(
         service,
         _envelope(
             data,
+            session_id=identity.session_id,
             worker_id=identity.context.worker_id,
             kind=TransportMessageKind.CANCELLATION_ACKNOWLEDGEMENT,
             payload=CancellationAcknowledgementMessage(
@@ -407,13 +415,14 @@ async def acknowledge_cancellation(
 def _envelope(
     data: EnvelopeEvidence,
     *,
+    session_id: UUID,
     worker_id: UUID,
     kind: TransportMessageKind,
     payload: TransportPayload,
 ) -> AuthenticatedMessageEnvelope:
     return AuthenticatedMessageEnvelope(
         message_id=data.message_id,
-        session_id=data.session_id,
+        session_id=session_id,
         worker_id=worker_id,
         sequence_number=data.sequence_number,
         sent_at=data.sent_at,

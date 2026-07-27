@@ -18,20 +18,20 @@ from app.worker_control.transport.contracts import (
     WorkerSessionRequest,
 )
 from app.worker_control.transport.errors import TransportAuthenticationError
-from app.worker_control.transport.service import WorkerTransportService
 from app.worker_control.transport.http.service import WorkerPollingService
 from app.worker_control.transport.persistence.models import (
     WorkerTransportReceipt,
     WorkerTransportSession,
 )
+from app.worker_control.transport.service import WorkerTransportService
 from app.worker_identity.authentication import WorkerIdentityAuthenticator
 from app.worker_identity.contracts import (
     IssuedCredentialMetadata,
     WorkerCredentialState,
     WorkerIdentityState,
 )
-from app.worker_identity.service import WorkerIdentityService
 from app.worker_identity.models import WorkerCredential, WorkerIdentity
+from app.worker_identity.service import WorkerIdentityService
 from tests.engineering_control.test_engineering_command_service import (
     ServiceFixture,
     seed_service_fixture,
@@ -69,7 +69,10 @@ class MessageVerifier:
         *,
         envelope: AuthenticatedMessageEnvelope,
         session: WorkerSession,
+        verifier: str,
+        verifier_algorithm: str,
     ) -> bool:
+        del verifier, verifier_algorithm
         return (
             envelope.worker_id == session.context.worker_id
             and envelope.authentication_proof == "signed"

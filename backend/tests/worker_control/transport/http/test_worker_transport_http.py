@@ -22,6 +22,7 @@ from app.worker_control.transport.contracts import (
     WorkerSessionChallenge,
     WorkerSessionState,
 )
+from app.worker_control.transport.errors import TransportBindingError
 from app.worker_control.transport.http.dependencies import (
     WorkerBootstrapIdentity,
     WorkerHttpIdentity,
@@ -114,7 +115,7 @@ class FakeTransport:
             or session.context.company_id != context.company_id
             or session.context.worker_id != context.worker_id
         ):
-            raise Exception("Worker session was not found.")
+            raise TransportBindingError("Worker session was not found.")
         return session
 
 
@@ -160,7 +161,10 @@ def app_for(
             return WorkerBootstrapIdentity(transport.context.worker_id)
 
         async def identity_override():
-            return WorkerHttpIdentity(worker_context or transport.context)
+            return WorkerHttpIdentity(
+                worker_context or transport.context,
+                transport.sessions.session.session_id,
+            )
 
         app.dependency_overrides[get_worker_transport_service] = transport_override
         app.dependency_overrides[get_worker_bootstrap_identity] = bootstrap_override

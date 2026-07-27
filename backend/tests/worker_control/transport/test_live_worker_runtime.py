@@ -1,0 +1,191 @@
+import base64
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from uuid import uuid4
+
+import pytest
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+from app.worker_control.contracts import (
+    AuthenticatedWorkerContext,
+    WorkerCapability,
+    WorkerHealth,
+)
+from app.worker_control.transport.contracts import (
+    AuthenticatedMessageEnvelope,
+    HeartbeatMessage,
+    TransportMessageKind,
+    WorkerSession,
+    WorkerSessionState,
+)
+from app.worker_control.transport.crypto import canonical_message, encode_signature
+from app.worker_control.transport.http.dependencies import (
+    Ed25519CredentialProofVerifier,
+    Ed25519MessageProofVerifier,
+)
+from app.worker_runtime.client import Challenge, Session
+from app.worker_runtime.config import WorkerRuntimeConfig
+from app.worker_runtime.service import AuthenticatedWorkerRuntime, WorkerRuntimeState
+
+NOW = datetime(2026, 7, 27, 20, 0, tzinfo=timezone.utc)
+
+
+def public_key(private: Ed25519PrivateKey) -> str:
+    raw = private.public_key().public_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PublicFormat.Raw,
+    )
+    return base64.urlsafe_b64encode(raw).rstrip(b"=").decode()
+
+
+@pytest.mark.asyncio
+async def test_ed25519_challenge_and_message_proofs_fail_closed() -> None:
+    private = Ed25519PrivateKey.generate()
+    verifier = public_key(private)
+    challenge = "bounded-one-time-challenge"
+    credential = Ed25519CredentialProofVerifier()
+    assert await credential.verify(
+        challenge=challenge,
+        response=encode_signature(private.sign(challenge.encode())),
+        verifier=verifier,
+        verifier_algorithm="ed25519",
+    )
+    assert not await credential.verify(
+        challenge=challenge + "-altered",
+        response=encode_signature(private.sign(challenge.encode())),
+        verifier=verifier,
+        verifier_algorithm="ed25519",
+    )
+
+    worker_id, session_id = uuid4(), uuid4()
+    session = WorkerSession(
+        session_id=session_id,
+        context=AuthenticatedWorkerContext(
+            company_id=uuid4(),
+            worker_id=worker_id,
+            provider_identifier="codex",
+            authentication_subject="worker-identity:test",
+            authenticated_at=NOW,
+        ),
+        worker_identity_id=uuid4(),
+        credential_id=uuid4(),
+        credential_version=1,
+        capabilities=(WorkerCapability.ENGINEERING_EXECUTE,),
+        key_version="1",
+        state=WorkerSessionState.ACTIVE,
+        established_at=NOW,
+        expires_at=NOW + timedelta(minutes=15),
+        next_sequence=1,
+    )
+    unsigned = AuthenticatedMessageEnvelope(
+        message_id=uuid4(),
+        session_id=session_id,
+        worker_id=worker_id,
+        sequence_number=1,
+        sent_at=NOW,
+        kind=TransportMessageKind.HEARTBEAT,
+        payload=HeartbeatMessage(WorkerHealth.HEALTHY),
+        authentication_proof="",
+        key_version="1",
+    )
+    signed = AuthenticatedMessageEnvelope(
+        **{
+            **unsigned.__dict__,
+            "authentication_proof": encode_signature(
+                private.sign(canonical_message(unsigned))
+            ),
+        }
+    )
+    messages = Ed25519MessageProofVerifier()
+    assert await messages.verify_message(
+        envelope=signed,
+        session=session,
+        verifier=verifier,
+        verifier_algorithm="ed25519",
+    )
+    altered = AuthenticatedMessageEnvelope(**{**signed.__dict__, "sequence_number": 2})
+    assert not await messages.verify_message(
+        envelope=altered,
+        session=session,
+        verifier=verifier,
+        verifier_algorithm="ed25519",
+    )
+
+
+class FakeClient:
+    def __init__(self) -> None:
+        self.private: Ed25519PrivateKey | None = None
+        self.heartbeats: list[dict[str, object]] = []
+        self.renewals: list[dict[str, object]] = []
+        self.closed = False
+
+    async def challenge(self, worker_id):
+        del worker_id
+        return Challenge(uuid4(), "challenge", "1")
+
+    async def establish(self, *, worker_id, challenge, proof, capabilities):
+        del worker_id, capabilities
+        assert self.private is not None
+        self.private.public_key().verify(
+            base64.urlsafe_b64decode(proof + "=" * (-len(proof) % 4)),
+            challenge.challenge.encode(),
+        )
+        return Session(uuid4(), challenge.key_version, 1, NOW + timedelta(minutes=15))
+
+    async def heartbeat(self, *, session_id, payload):
+        assert str(session_id) == payload["session_id"]
+        self.heartbeats.append(payload)
+
+    async def renew_lease(self, *, session_id, payload):
+        assert str(session_id) == payload["session_id"]
+        self.renewals.append(payload)
+
+    async def close(self):
+        self.closed = True
+
+
+@pytest.mark.asyncio
+async def test_runtime_establishes_heartbeats_and_renews_only_explicit_lease() -> None:
+    private = Ed25519PrivateKey.generate()
+    client = FakeClient()
+    client.private = private
+    runtime = AuthenticatedWorkerRuntime(
+        config=WorkerRuntimeConfig(
+            base_url="https://worker.invalid",
+            worker_id=uuid4(),
+            private_key_file=Path("/not-read-by-injected-runtime"),
+            capabilities=(WorkerCapability.ENGINEERING_EXECUTE,),
+        ),
+        client=client,  # type: ignore[arg-type]
+        private_key=private,
+    )
+
+    connected = await runtime.establish()
+    assert connected.state is WorkerRuntimeState.CONNECTED
+    heartbeat = await runtime.heartbeat()
+    assert heartbeat.next_sequence == 2
+    assert len(client.heartbeats) == 1
+    await runtime.renew_lease(lease_id=uuid4(), expected_version=1, lease_seconds=60)
+    assert runtime.snapshot.next_sequence == 3
+    assert len(client.renewals) == 1
+    assert not hasattr(runtime, "execute")
+
+    await runtime.close()
+    assert runtime.snapshot.state is WorkerRuntimeState.CLOSED
+    assert runtime.snapshot.session_id is None
+    assert client.closed
+
+
+def test_private_key_file_must_be_owner_only(tmp_path: Path) -> None:
+    path = tmp_path / "worker.key"
+    path.write_text("not-a-real-key", encoding="utf-8")
+    path.chmod(0o644)
+    config = WorkerRuntimeConfig(
+        base_url="https://worker.invalid",
+        worker_id=uuid4(),
+        private_key_file=path,
+        capabilities=(WorkerCapability.ENGINEERING_EXECUTE,),
+    )
+    with pytest.raises(PermissionError):
+        config.read_private_key()

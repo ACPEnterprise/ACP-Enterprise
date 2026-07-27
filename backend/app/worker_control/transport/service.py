@@ -1,16 +1,16 @@
-from datetime import datetime, timedelta, timezone
 import hmac
+from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.platform.auth.tokens import SecurityTokenService
 from app.engineering_execution.composition.errors import ExecutionCompositionError
+from app.engineering_execution.composition.records import CompositionDeliveryPackage
 from app.engineering_execution.composition.service import (
     ExecutionCompositionService,
     RecordProviderResult,
 )
-from app.engineering_execution.composition.records import CompositionDeliveryPackage
+from app.platform.auth.tokens import SecurityTokenService
 from app.worker_control.contracts import (
     AuthenticatedWorkerContext,
     WorkerCapability,
@@ -45,12 +45,12 @@ from app.worker_control.transport.errors import (
     TransportSessionError,
     TransportTimestampError,
 )
+from app.worker_control.transport.persistence.repository import (
+    PostgreSQLWorkerTransportSessionRepository,
+)
 from app.worker_control.transport.repository import (
     StoredChallenge,
     WorkerTransportSessionRepository,
-)
-from app.worker_control.transport.persistence.repository import (
-    PostgreSQLWorkerTransportSessionRepository,
 )
 
 CHALLENGE_TTL = timedelta(minutes=2)
@@ -191,7 +191,7 @@ class WorkerTransportService:
                 database, session=session, now=accepted_at
             )
             if not await self.authenticator.verify_message(
-                envelope=envelope, session=session
+                database, envelope=envelope, session=session
             ):
                 raise TransportAuthenticationError("Message authentication failed.")
             try:
@@ -250,6 +250,27 @@ class WorkerTransportService:
             database, session=session, now=checked_at
         )
         return session
+
+    async def authenticate_http_session(
+        self,
+        database: AsyncSession,
+        *,
+        session_id: UUID,
+        now: datetime | None = None,
+    ) -> WorkerSession:
+        checked_at = now or utc_now()
+        async with database.begin():
+            session = await self.sessions.get_session(database, session_id)
+            if (
+                session is None
+                or session.state is not WorkerSessionState.ACTIVE
+                or session.expires_at <= checked_at
+            ):
+                raise TransportSessionError("Worker session was not found.")
+            await self.authenticator.validate_session(
+                database, session=session, now=checked_at
+            )
+            return session
 
     async def _dispatch(
         self,

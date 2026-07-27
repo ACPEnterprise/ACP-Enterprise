@@ -6,15 +6,15 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.engineering_execution.composition.contracts import (
+    ProviderProgressPhase,
+    ProviderResultStatus,
+)
 from app.worker_control.contracts import (
     AuthenticatedWorkerContext,
     WorkerCapability,
     WorkerExecutionResult,
     WorkerHealth,
-)
-from app.engineering_execution.composition.contracts import (
-    ProviderProgressPhase,
-    ProviderResultStatus,
 )
 
 
@@ -209,6 +209,7 @@ class WorkerMessageAuthenticator(Protocol):
 
     async def verify_message(
         self,
+        database: AsyncSession,
         *,
         envelope: AuthenticatedMessageEnvelope,
         session: WorkerSession,

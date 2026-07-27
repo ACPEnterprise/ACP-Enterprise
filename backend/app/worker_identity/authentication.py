@@ -21,6 +21,8 @@ class AuthenticatedMessageProofVerifier(Protocol):
         *,
         envelope: AuthenticatedMessageEnvelope,
         session: WorkerSession,
+        verifier: str,
+        verifier_algorithm: str,
     ) -> bool: ...
 
 
@@ -127,10 +129,31 @@ class WorkerIdentityAuthenticator:
 
     async def verify_message(
         self,
+        database: AsyncSession,
         *,
         envelope: AuthenticatedMessageEnvelope,
         session: WorkerSession,
     ) -> bool:
+        if (
+            session.worker_identity_id is None
+            or session.credential_id is None
+            or session.credential_version is None
+        ):
+            return False
+        credential = await self.repository.get_bound_authentication_credential(
+            database,
+            company_id=session.context.company_id,
+            worker_id=session.context.worker_id,
+            identity_id=session.worker_identity_id,
+            credential_id=session.credential_id,
+            credential_version=session.credential_version,
+            now=envelope.sent_at,
+        )
+        if credential is None:
+            return False
         return await self.message_verifier.verify_message(
-            envelope=envelope, session=session
+            envelope=envelope,
+            session=session,
+            verifier=credential.verifier,
+            verifier_algorithm=credential.verifier_algorithm,
         )
