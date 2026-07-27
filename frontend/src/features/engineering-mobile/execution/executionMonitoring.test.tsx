@@ -19,6 +19,9 @@ vi.mock("./hooks", async (importOriginal) => {
   const original = await importOriginal<typeof import("./hooks")>();
   return { ...original, useExecutionStatus: vi.fn() };
 });
+vi.mock("../owner-workflow/EngineeringOwnerWorkflow", () => ({
+  EngineeringOwnerWorkflow: () => <div>Owner workflow</div>,
+}));
 
 const status: MobileExecutionStatus = {
   command_id: "command-id",
@@ -67,6 +70,35 @@ const status: MobileExecutionStatus = {
     failure_classification: "provider_not_connected",
     created_at: null,
   },
+  review_available: false,
+  review_id: null,
+  review_state: null,
+  review_version: null,
+  review_decided_at: null,
+  authorization_required: true,
+  authorization_status: null,
+  authorization_id: null,
+  authorized_at: null,
+  authorization_expires_at: null,
+  authorization_revoked_at: null,
+  authorization_consumed_at: null,
+  authorized_operation_type: null,
+  authorization_eligible: false,
+  repository_operation_required: true,
+  repository_operation_id: null,
+  repository_operation_type: null,
+  repository_operation_status: null,
+  repository_operation_eligible: false,
+  repository_operation_expected_branch: null,
+  repository_operation_resulting_commit_sha: null,
+  repository_operation_requested_at: null,
+  repository_operation_reserved_at: null,
+  repository_operation_started_at: null,
+  repository_operation_completed_at: null,
+  repository_operation_failed_at: null,
+  repository_operation_reconciliation_at: null,
+  repository_operation_failure_classification: null,
+  repository_operation_owner_attention_required: false,
   timeline: [
     { event: "execution_requested", occurred_at: "2026-07-24T12:00:00Z" },
   ],

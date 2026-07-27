@@ -7,6 +7,7 @@ import {
   mobileEngineeringTimestamp,
 } from "../presentation";
 import { useExecutionStatus } from "./hooks";
+import { EngineeringOwnerWorkflow } from "../owner-workflow/EngineeringOwnerWorkflow";
 
 export function ExecutionMonitoringPanel({
   commandId,
@@ -221,6 +222,8 @@ export function ExecutionMonitoringPanel({
           ))}
         </ol>
       </Card>
+
+      <EngineeringOwnerWorkflow commandId={commandId} status={status} />
 
       <p className="text-xs text-content-muted">
         Automatic refresh is bounded and pauses when this execution reaches a
