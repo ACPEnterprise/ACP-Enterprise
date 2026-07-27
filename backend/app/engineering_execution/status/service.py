@@ -25,9 +25,9 @@ from .schemas import (
     LeaseStatus,
     MobileExecutionStatus,
     ResultStatus,
+    SupervisorStatus,
     TimelineEntry,
     TransportSessionStatus,
-    SupervisorStatus,
 )
 
 
@@ -344,6 +344,21 @@ class MobileExecutionStatusService:
                     sources.supervisor.failure_classification
                     if sources.supervisor
                     else None
+                ),
+                execution_active=bool(
+                    sources.supervisor and sources.supervisor.execution_active
+                ),
+                command_id=(
+                    sources.supervisor.command_id if sources.supervisor else None
+                ),
+                execution_offer_id=(
+                    sources.supervisor.execution_offer_id
+                    if sources.supervisor
+                    else None
+                ),
+                provider_session_reference_present=bool(
+                    sources.supervisor
+                    and sources.supervisor.provider_session_reference_present
                 ),
             ),
             timeline=tuple(timeline),

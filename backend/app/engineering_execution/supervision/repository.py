@@ -1,13 +1,17 @@
+from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.engineering_control.models import EngineeringCommand
 from app.engineering_execution.composition.models import (
     ExecutionComposition,
+    NormalizedProviderResult,
     ProviderExecutionAttempt,
 )
+from app.engineering_execution.models import EngineeringExecution
 from app.execution_providers.contracts import ProviderCapability
 from app.execution_providers.runtime import (
     ProviderCredentialStatus,
@@ -18,6 +22,18 @@ from app.worker_control.models import EngineeringWorker, WorkerLease
 from .contracts import ProviderSessionState, RecoveryItem, SupervisorState
 from .models import LiveClientSupervisorModel, ProviderSessionModel
 from .records import LiveClientSupervisorRecord, ProviderSessionRecord
+
+
+@dataclass(frozen=True)
+class SupervisedExecutionSource:
+    provider_session: ProviderSessionModel
+    composition: ExecutionComposition
+    attempt: ProviderExecutionAttempt
+    lease: WorkerLease
+    worker: EngineeringWorker
+    execution: EngineeringExecution
+    command: EngineeringCommand
+    existing_result: NormalizedProviderResult | None
 
 
 class SupervisionRepository:
@@ -161,6 +177,97 @@ class SupervisionRepository:
         if worker is None or lease is None:
             return None
         return composition, attempt, lease, worker
+
+    @staticmethod
+    async def load_execution_source_for_update(
+        session: AsyncSession,
+        *,
+        company_id: UUID,
+        worker_id: UUID,
+        provider_session_id: UUID,
+    ) -> SupervisedExecutionSource | None:
+        provider_session = await session.scalar(
+            select(ProviderSessionModel)
+            .where(
+                ProviderSessionModel.company_id == company_id,
+                ProviderSessionModel.worker_id == worker_id,
+                ProviderSessionModel.id == provider_session_id,
+            )
+            .with_for_update()
+        )
+        if provider_session is None:
+            return None
+        composition = await session.scalar(
+            select(ExecutionComposition)
+            .where(
+                ExecutionComposition.company_id == company_id,
+                ExecutionComposition.id == provider_session.composition_id,
+                ExecutionComposition.worker_id == worker_id,
+            )
+            .with_for_update()
+        )
+        attempt = await session.scalar(
+            select(ProviderExecutionAttempt)
+            .where(
+                ProviderExecutionAttempt.company_id == company_id,
+                ProviderExecutionAttempt.id == provider_session.attempt_id,
+                ProviderExecutionAttempt.worker_id == worker_id,
+            )
+            .with_for_update()
+        )
+        if composition is None or attempt is None:
+            return None
+        lease = await session.scalar(
+            select(WorkerLease)
+            .where(
+                WorkerLease.company_id == company_id,
+                WorkerLease.id == composition.lease_id,
+                WorkerLease.worker_id == worker_id,
+            )
+            .with_for_update()
+        )
+        worker = await session.scalar(
+            select(EngineeringWorker)
+            .where(
+                EngineeringWorker.company_id == company_id,
+                EngineeringWorker.id == worker_id,
+            )
+            .with_for_update()
+        )
+        execution = await session.scalar(
+            select(EngineeringExecution)
+            .where(
+                EngineeringExecution.company_id == company_id,
+                EngineeringExecution.id == composition.execution_id,
+            )
+            .with_for_update()
+        )
+        command = await session.scalar(
+            select(EngineeringCommand)
+            .where(
+                EngineeringCommand.company_id == company_id,
+                EngineeringCommand.id == composition.command_id,
+            )
+            .with_for_update()
+        )
+        if lease is None or worker is None or execution is None or command is None:
+            return None
+        existing_result = await session.scalar(
+            select(NormalizedProviderResult).where(
+                NormalizedProviderResult.company_id == company_id,
+                NormalizedProviderResult.attempt_id == attempt.id,
+            )
+        )
+        return SupervisedExecutionSource(
+            provider_session,
+            composition,
+            attempt,
+            lease,
+            worker,
+            execution,
+            command,
+            existing_result,
+        )
 
     @staticmethod
     async def create_session(

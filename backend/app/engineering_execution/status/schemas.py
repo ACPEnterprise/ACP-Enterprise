@@ -70,6 +70,10 @@ class SupervisorStatus(StatusSchema):
     updated_at: datetime | None
     expires_at: datetime | None
     failure_classification: str | None
+    execution_active: bool = False
+    command_id: UUID | None = None
+    execution_offer_id: UUID | None = None
+    provider_session_reference_present: bool = False
 
 
 class MobileExecutionStatus(StatusSchema):

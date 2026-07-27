@@ -1,5 +1,6 @@
 import asyncio
 from datetime import datetime, timedelta, timezone
+from typing import cast
 from uuid import uuid4
 
 import httpx
@@ -124,28 +125,99 @@ async def test_models_readiness_translates_transport_failures(error: Exception) 
 
 
 @pytest.mark.asyncio
-async def test_readiness_client_has_no_execution_path() -> None:
+async def test_execution_uses_one_bounded_tool_free_responses_request() -> None:
     requests: list[httpx.Request] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
         requests.append(request)
-        return httpx.Response(500)
+        return httpx.Response(
+            200,
+            json={
+                "output": [
+                    {
+                        "type": "message",
+                        "content": [
+                            {
+                                "type": "output_text",
+                                "text": "Truthful monitoring preserves owner trust.",
+                            }
+                        ],
+                    }
+                ],
+                "usage": {"output_tokens": 8},
+            },
+        )
 
     client = client_for(httpx.MockTransport(handler))
-    with pytest.raises(CodexClientRequestError):
+    result = await client.execute(
+        CodexOperation(
+            uuid4(),
+            "model",
+            "Explain truthful monitoring.",
+            "",
+            "",
+            "",
+            False,
+            uuid4(),
+            128,
+            10,
+        )
+    )
+    assert len(requests) == 1
+    request = requests[0]
+    assert request.method == "POST"
+    assert request.url.path == "/v1/responses"
+    payload = __import__("json").loads(request.content)
+    assert payload == {
+        "model": "configured-readiness-model",
+        "input": "Explain truthful monitoring.",
+        "max_output_tokens": 128,
+        "tools": [],
+        "store": False,
+    }
+    assert cast(str, result.evidence_summary["structured_text"]).startswith("Truthful")
+    assert result.output_references == ()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("status", "error"),
+    (
+        (401, CodexClientAuthenticationError),
+        (403, CodexClientRequestError),
+        (404, CodexClientRequestError),
+        (429, CodexClientUnavailableError),
+        (500, CodexClientUnavailableError),
+    ),
+)
+async def test_execution_translates_safe_failures_without_retry(
+    status: int, error: type[Exception]
+) -> None:
+    requests = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal requests
+        requests += 1
+        return httpx.Response(
+            status, json={"sensitive_provider_diagnostic": "not propagated"}
+        )
+
+    client = client_for(httpx.MockTransport(handler))
+    with pytest.raises(error) as captured:
         await client.execute(
             CodexOperation(
                 uuid4(),
                 "model",
-                "prohibited",
-                "repository",
-                "branch",
-                "head",
+                "Explain truthful monitoring.",
+                "",
+                "",
+                "",
                 False,
                 uuid4(),
             )
         )
-    assert requests == []
+    assert requests == 1
+    assert "sensitive_provider_diagnostic" not in str(captured.value)
 
 
 @pytest.mark.asyncio

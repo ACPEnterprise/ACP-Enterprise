@@ -104,7 +104,13 @@ def execution_context(
     )
 
 
-async def approved_command(fixture: ServiceFixture, *, expires_in_hours: int = 2):
+async def approved_command(
+    fixture: ServiceFixture,
+    *,
+    expires_in_hours: int = 2,
+    instruction: str = "Inspect only the approved execution bridge boundary.",
+    requested_code_changes: bool = True,
+):
     now = utc_now()
     command_context = context_with_permissions(
         fixture.context.user,
@@ -119,11 +125,11 @@ async def approved_command(fixture: ServiceFixture, *, expires_in_hours: int = 2
             context=command_context,
             command=CreateEngineeringCommand(
                 command_type="owner_instruction",
-                owner_instruction="Inspect only the approved execution bridge boundary.",
+                owner_instruction=instruction,
                 repository_key="acp-enterprise",
                 expected_branch="customer-management-v1",
                 expected_head="a" * 40,
-                requested_code_changes=True,
+                requested_code_changes=requested_code_changes,
                 expires_at=now + timedelta(hours=expires_in_hours),
                 idempotency_key=uuid4().hex,
             ),

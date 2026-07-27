@@ -39,6 +39,8 @@ class CodexOperation:
     expected_head: str
     allow_code_changes: bool
     correlation_id: UUID
+    max_output_tokens: int = 256
+    timeout_seconds: int = 30
 
 
 @dataclass(frozen=True)
@@ -170,9 +172,57 @@ class OpenAIModelsClient:
         return CodexSessionResult(session_reference, False, datetime.now().astimezone())
 
     async def execute(self, operation: CodexOperation) -> CodexOperationResult:
-        del operation
-        raise CodexClientRequestError(
-            "Provider execution is unavailable in the readiness client."
+        started_at = datetime.now().astimezone()
+        try:
+            response = await self._client.post(
+                "/v1/responses",
+                json={
+                    "model": self._model,
+                    "input": operation.instruction,
+                    "max_output_tokens": operation.max_output_tokens,
+                    "tools": [],
+                    "store": False,
+                },
+                timeout=httpx.Timeout(float(operation.timeout_seconds)),
+            )
+        except httpx.TimeoutException as error:
+            raise CodexClientUnavailableError("OpenAI execution timed out.") from error
+        except httpx.HTTPError as error:
+            raise CodexClientUnavailableError("OpenAI is unavailable.") from error
+        if response.status_code == 401:
+            raise CodexClientAuthenticationError("OpenAI authentication failed.")
+        if response.status_code in {403, 404}:
+            raise CodexClientRequestError("Configured model is inaccessible.")
+        if response.status_code == 429 or response.status_code >= 500:
+            raise CodexClientUnavailableError("OpenAI execution is unavailable.")
+        if response.status_code != 200:
+            raise CodexClientRequestError("OpenAI rejected the execution request.")
+        try:
+            payload = response.json()
+            text = _response_text(payload)
+            usage = payload.get("usage") or {}
+            output_tokens = usage.get("output_tokens")
+        except (AttributeError, TypeError, ValueError) as error:
+            raise CodexClientRequestError(
+                "OpenAI returned an invalid execution result."
+            ) from error
+        if not text or len(text) > 4000:
+            raise CodexClientRequestError("OpenAI returned an invalid bounded result.")
+        return CodexOperationResult(
+            operation_id=f"provider-result-{uuid4()}",
+            succeeded=True,
+            started_at=started_at,
+            finished_at=datetime.now().astimezone(),
+            evidence_summary={
+                "structured_text": text,
+            },
+            validation_summary={
+                "bounded_output": True,
+                "output_tokens": (
+                    output_tokens if isinstance(output_tokens, int) else None
+                ),
+            },
+            output_references=(),
         )
 
 
@@ -297,6 +347,8 @@ class CodexExecutionProvider(ExecutionProvider):
             expected_head=request.expected_head,
             allow_code_changes=request.authorized_code_changes,
             correlation_id=request.correlation_id,
+            max_output_tokens=request.max_output_tokens,
+            timeout_seconds=request.timeout_seconds,
         )
         try:
             response = await self._client.execute(operation)
@@ -326,4 +378,22 @@ class CodexExecutionProvider(ExecutionProvider):
                 if response.succeeded
                 else ProviderFailureClassification.PROVIDER_ERROR
             ),
+            provider_session_reference=request.provider_session_reference,
         )
+
+
+def _response_text(payload: object) -> str:
+    if not isinstance(payload, dict):
+        raise TypeError("response payload must be an object")
+    fragments: list[str] = []
+    for output in payload.get("output", ()):
+        if not isinstance(output, dict) or output.get("type") != "message":
+            continue
+        for content in output.get("content", ()):
+            if (
+                isinstance(content, dict)
+                and content.get("type") == "output_text"
+                and isinstance(content.get("text"), str)
+            ):
+                fragments.append(content["text"])
+    return "\n".join(fragments).strip()

@@ -15,6 +15,8 @@ class ProviderCapability(StrEnum):
 class ProviderExecutionStatus(StrEnum):
     SUCCEEDED = "succeeded"
     FAILED = "failed"
+    TIMED_OUT = "timed_out"
+    CANCELLED = "cancelled"
 
 
 class ProviderSessionStatus(StrEnum):
@@ -92,6 +94,9 @@ class ProviderExecutionRequest:
     instruction_digest: str
     request_digest: str
     correlation_id: UUID
+    provider_session_reference: str | None = None
+    max_output_tokens: int = 256
+    timeout_seconds: int = 30
 
 
 @dataclass(frozen=True)
@@ -107,6 +112,7 @@ class ProviderExecutionResult:
     validation_summary: Mapping[str, object]
     output_references: tuple[str, ...]
     failure_classification: ProviderFailureClassification | None
+    provider_session_reference: str | None = None
 
 
 def immutable_mapping(value: Mapping[str, object]) -> Mapping[str, object]:

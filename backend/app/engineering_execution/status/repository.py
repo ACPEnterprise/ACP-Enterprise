@@ -4,8 +4,11 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.engineering_control.models import EngineeringCommand
+from app.engineering_execution.composition.models import (
+    ExecutionComposition,
+    ProviderExecutionAttempt,
+)
 from app.engineering_execution.models import EngineeringExecution
-from app.engineering_execution.composition.models import ExecutionComposition
 from app.engineering_execution.supervision.models import (
     LiveClientSupervisorModel,
     ProviderSessionModel,
@@ -176,6 +179,17 @@ class SqlExecutionStatusProvider:
                             .limit(1)
                         )
                     )
+                    provider_attempt = (
+                        None
+                        if provider_session is None
+                        else await session.scalar(
+                            select(ProviderExecutionAttempt).where(
+                                ProviderExecutionAttempt.company_id == company_id,
+                                ProviderExecutionAttempt.id
+                                == provider_session.attempt_id,
+                            )
+                        )
+                    )
                     if supervisor is not None:
                         supervisor_source = SupervisorStatusSource(
                             supervisor_state=supervisor.state,
@@ -216,6 +230,20 @@ class SqlExecutionStatusProvider:
                                 provider_session.failure_classification
                                 if provider_session is not None
                                 else supervisor.failure_classification
+                            ),
+                            execution_active=bool(
+                                provider_attempt
+                                and provider_attempt.state in {"starting", "running"}
+                            ),
+                            command_id=command.id,
+                            execution_offer_id=(
+                                provider_attempt.idempotency_key
+                                if provider_attempt is not None
+                                else None
+                            ),
+                            provider_session_reference_present=bool(
+                                provider_session
+                                and provider_session.provider_session_reference
                             ),
                         )
 

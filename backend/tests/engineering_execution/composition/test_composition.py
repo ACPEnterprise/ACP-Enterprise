@@ -90,8 +90,14 @@ async def composition_scenario(
     provider_capabilities: tuple[ProviderCapability, ...] = (
         ProviderCapability.ENGINEERING_EXECUTE,
     ),
+    instruction: str = "Inspect only the approved execution bridge boundary.",
+    requested_code_changes: bool = True,
 ):
-    command = await approved_command(fixture)
+    command = await approved_command(
+        fixture,
+        instruction=instruction,
+        requested_code_changes=requested_code_changes,
+    )
     async with fixture.factory() as session:
         execution = await EngineeringExecutionService().request_execution(
             session,

@@ -24,7 +24,11 @@ from app.engineering_execution.supervision.service import (
     LiveClientSupervisor,
     ProviderSessionService,
 )
-from app.execution_providers.contracts import ProviderCapabilities
+from app.execution_providers.contracts import (
+    ProviderCapabilities,
+    ProviderExecutionRequest,
+    ProviderExecutionResult,
+)
 from app.execution_providers.errors import ProviderRequestError
 from app.execution_providers.registry import ExecutionProviderRegistry
 from app.execution_providers.runtime import (
@@ -74,6 +78,14 @@ class InterfaceOnlyRuntime:
 
     async def recover(self, request: ProviderRuntimeRequest) -> ProviderRuntimeResult:
         self.operation_calls.append("recover")
+        raise AssertionError("Provider runtime operations are unavailable.")
+
+    async def execute(
+        self,
+        request: ProviderRuntimeRequest,
+        execution: ProviderExecutionRequest,
+    ) -> ProviderExecutionResult:
+        self.operation_calls.append("execute")
         raise AssertionError("Provider runtime operations are unavailable.")
 
 

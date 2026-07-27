@@ -6,6 +6,8 @@ from uuid import UUID
 
 from .contracts import (
     ProviderCapabilities,
+    ProviderExecutionRequest,
+    ProviderExecutionResult,
     ProviderSessionRequest,
     ProviderSessionStatus,
 )
@@ -122,6 +124,13 @@ class ProviderRuntime(Protocol):
     async def recover(self, request: ProviderRuntimeRequest) -> ProviderRuntimeResult:
         """Recover a future provider session from durable state."""
 
+    async def execute(
+        self,
+        request: ProviderRuntimeRequest,
+        execution: ProviderExecutionRequest,
+    ) -> ProviderExecutionResult:
+        """Execute one bounded request through an established runtime."""
+
 
 class RegistryProviderRuntime:
     """Provider-neutral runtime; provider credentials remain resolver-owned."""
@@ -209,6 +218,16 @@ class RegistryProviderRuntime:
         return await self._session_operation(
             request, "recover", ProviderRuntimeState.PROVIDER_READY
         )
+
+    async def execute(
+        self,
+        request: ProviderRuntimeRequest,
+        execution: ProviderExecutionRequest,
+    ) -> ProviderExecutionResult:
+        if request.provider_session_reference is None:
+            raise ProviderUnavailableError("Provider session reference is unavailable.")
+        provider = self._providers.resolve(request.provider_identifier)
+        return await provider.execute(execution)
 
     async def _session_operation(
         self,
@@ -335,6 +354,50 @@ class ProductionProviderRuntime:
             ProviderCredentialStatus.UNAVAILABLE,
             request.provider_session_reference,
         )
+
+    async def execute(
+        self,
+        request: ProviderRuntimeRequest,
+        execution: ProviderExecutionRequest,
+    ) -> ProviderExecutionResult:
+        active = self._active.get(request.provider_session_id)
+        if active is None:
+            from datetime import timezone
+
+            now = datetime.now(timezone.utc)
+            resolution = await self._credentials.resolve(
+                company_id=request.company_id,
+                worker_id=request.worker_id,
+                provider_identifier=request.provider_identifier,
+                now=now,
+            )
+            if (
+                resolution.status is not ProviderCredentialStatus.USABLE
+                or resolution.material is None
+                or resolution.credential_reference is None
+            ):
+                raise ProviderCredentialResolutionError(resolution.status)
+            factory = self._factories.resolve(request.provider_identifier)
+            provider = factory.create(resolution.material)
+            provider_request = ProviderSessionRequest(
+                provider_session_id=request.provider_session_id,
+                company_id=request.company_id,
+                worker_id=request.worker_id,
+                provider_identifier=request.provider_identifier,
+                capabilities=request.capabilities,
+                credential_reference=resolution.credential_reference,
+                provider_session_reference=execution.provider_session_reference,
+                expires_at=request.expires_at,
+            )
+            self._active[request.provider_session_id] = (provider, provider_request)
+            active = (provider, provider_request)
+        provider, _ = active
+        try:
+            return await provider.execute(execution)  # type: ignore[attr-defined]
+        except BaseException:
+            self._active.pop(request.provider_session_id, None)
+            await provider.close_session(active[1])  # type: ignore[attr-defined]
+            raise
 
     async def _finish(
         self, request: ProviderRuntimeRequest, *, cancelled: bool

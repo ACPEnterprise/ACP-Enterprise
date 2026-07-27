@@ -85,6 +85,15 @@ class EventType(str, Enum):
     ENGINEERING_PROVIDER_READINESS_VERIFIED = (
         "engineering_execution.provider_readiness_verified"
     )
+    ENGINEERING_PROVIDER_EXECUTION_STARTED = (
+        "engineering_execution.provider_execution_started"
+    )
+    ENGINEERING_PROVIDER_EXECUTION_COMPLETED = (
+        "engineering_execution.provider_execution_completed"
+    )
+    ENGINEERING_PROVIDER_EXECUTION_FAILED = (
+        "engineering_execution.provider_execution_failed"
+    )
     ENGINEERING_PROVIDER_RUNTIME_CLOSED = (
         "engineering_execution.provider_runtime_closed"
     )
