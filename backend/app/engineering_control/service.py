@@ -42,6 +42,7 @@ from app.engineering_control.records import (
     CreateEngineeringCommand as CreateEngineeringCommandRecord,
 )
 from app.engineering_control.registry import (
+    EngineeringRepositoryDefinition,
     EngineeringRepositoryRegistry,
     EngineeringRepositoryRegistryError,
     engineering_repository_registry,
@@ -395,14 +396,12 @@ class EngineeringControlService:
             raise EngineeringCommandRepositoryPolicyError(
                 "Repository is not approved."
             ) from error
-        active_branch = command.expected_branch == repository.approved_active_branch
-        approved_read_only_inspection = (
-            command.command_type == "inspect_workspace"
-            and not command.requested_code_changes
-            and repository.inspection_allowed
-            and command.expected_branch in repository.approved_inspection_branches
-        )
-        if not active_branch and not approved_read_only_inspection:
+        if not self._repository_allows_command(
+            repository=repository,
+            command_type=command.command_type,
+            expected_branch=command.expected_branch,
+            requested_code_changes=command.requested_code_changes,
+        ):
             raise EngineeringCommandRepositoryPolicyError(
                 "Expected branch violates repository policy."
             )
@@ -524,13 +523,35 @@ class EngineeringControlService:
             raise EngineeringCommandRepositoryPolicyError(
                 "Repository is no longer approved."
             ) from error
-        if repository.approved_active_branch != record.expected_branch or (
-            record.requested_code_changes
-            and not repository.uncommitted_code_changes_allowed
+        if not self._repository_allows_command(
+            repository=repository,
+            command_type=record.command_type,
+            expected_branch=record.expected_branch,
+            requested_code_changes=record.requested_code_changes,
         ):
             raise EngineeringCommandRepositoryPolicyError(
                 "Repository policy no longer permits this command."
             )
+
+    @staticmethod
+    def _repository_allows_command(
+        *,
+        repository: EngineeringRepositoryDefinition,
+        command_type: str,
+        expected_branch: str,
+        requested_code_changes: bool,
+    ) -> bool:
+        active_branch = expected_branch == repository.approved_active_branch
+        active_branch_allowed = active_branch and (
+            not requested_code_changes or repository.uncommitted_code_changes_allowed
+        )
+        approved_read_only_inspection = (
+            command_type == "inspect_workspace"
+            and not requested_code_changes
+            and repository.inspection_allowed
+            and expected_branch in repository.approved_inspection_branches
+        )
+        return active_branch_allowed or approved_read_only_inspection
 
     @staticmethod
     def _resolve_idempotent(

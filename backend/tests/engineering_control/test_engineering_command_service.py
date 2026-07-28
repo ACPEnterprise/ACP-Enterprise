@@ -359,6 +359,23 @@ async def test_read_only_inspection_requires_explicit_branch_allowlist(
         )
     assert record.expected_branch == "df9-authenticated-live-worker-runtime"
     assert record.requested_code_changes is False
+    async with service_database.factory() as session:
+        approved = await service.approve_command(
+            session,
+            context=service_database.context,
+            command=ApproveEngineeringCommand(
+                command_id=record.id,
+                expected_version=record.version,
+                instruction_digest=record.instruction_digest,
+                request_digest=record.request_digest,
+                repository_key=record.repository_key,
+                expected_branch=record.expected_branch,
+                expected_head=record.expected_head,
+                requested_code_changes=record.requested_code_changes,
+            ),
+            now=now + timedelta(seconds=1),
+        )
+    assert approved.approval_state is EngineeringApprovalState.APPROVED
 
     for command in (
         create_input(
