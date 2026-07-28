@@ -160,6 +160,7 @@ class CustomerChildTransformationException:
 
 @dataclass(frozen=True)
 class AdaptedCustomerRecord:
+    row_number: int
     source_id: str
     schema_version: str
     customer: CustomerCreate
@@ -178,6 +179,7 @@ class CustomerTransformationRejection:
     code: str
     fields: tuple[str, ...] = ()
     source_id_sha256: str | None = None
+    source_row_sha256: str | None = None
 
 
 @dataclass(frozen=True)
@@ -393,6 +395,8 @@ class HousecallProCustomerExportAdapter:
         self,
         row: dict[str, str],
         contract: CustomerExportSchemaContract,
+        *,
+        row_number: int,
     ) -> tuple[AdaptedCustomerRecord, tuple[CustomerChildTransformationException, ...]]:
         source_id = _required(row, "ID")
         source_id_sha256 = hashlib.sha256(source_id.encode()).hexdigest()
@@ -435,6 +439,7 @@ class HousecallProCustomerExportAdapter:
         )
         row_payload = json.dumps(row, sort_keys=True).encode()
         return AdaptedCustomerRecord(
+            row_number=row_number,
             source_id=source_id,
             schema_version=contract.version,
             customer=customer,
@@ -542,6 +547,9 @@ class HousecallProCustomerExportAdapter:
         child_exceptions: list[CustomerChildTransformationException] = []
         seen: set[str] = set()
         for row_number, row in enumerate(rows, start=2):
+            source_row_sha256 = hashlib.sha256(
+                json.dumps(row, sort_keys=True).encode()
+            ).hexdigest()
             source_id = _optional(row, "ID")
             source_hash = (
                 hashlib.sha256(source_id.encode()).hexdigest()
@@ -549,7 +557,9 @@ class HousecallProCustomerExportAdapter:
                 else None
             )
             try:
-                record, record_child_exceptions = self._adapt(row, contract)
+                record, record_child_exceptions = self._adapt(
+                    row, contract, row_number=row_number
+                )
             except CustomerAdapterValidationError as error:
                 rejections.append(
                     CustomerTransformationRejection(
@@ -558,6 +568,7 @@ class HousecallProCustomerExportAdapter:
                         code=error.code,
                         fields=error.fields,
                         source_id_sha256=source_hash,
+                        source_row_sha256=source_row_sha256,
                     )
                 )
                 continue
@@ -568,6 +579,7 @@ class HousecallProCustomerExportAdapter:
                         disposition="rejected",
                         code="domain_validation_failed",
                         source_id_sha256=source_hash,
+                        source_row_sha256=source_row_sha256,
                     )
                 )
                 continue
@@ -578,6 +590,7 @@ class HousecallProCustomerExportAdapter:
                         disposition="duplicate",
                         code="duplicate_source_identity",
                         source_id_sha256=source_hash,
+                        source_row_sha256=source_row_sha256,
                     )
                 )
                 continue
