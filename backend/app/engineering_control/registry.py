@@ -1,6 +1,8 @@
-from dataclasses import dataclass
 import re
+from dataclasses import dataclass
 from types import MappingProxyType
+
+from app.core.config import settings
 
 
 class EngineeringRepositoryRegistryError(ValueError):
@@ -12,6 +14,7 @@ class EngineeringRepositoryDefinition:
     repository_key: str
     repository_identity: str
     approved_active_branch: str
+    approved_inspection_branches: tuple[str, ...]
     execution_environment_policy: str
     remote_execution_enabled: bool
     inspection_allowed: bool
@@ -65,6 +68,16 @@ class EngineeringRepositoryRegistry:
                     f"{field_name} cannot be blank"
                 )
         if any(
+            not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._/-]{0,199}", branch)
+            or branch.startswith("/")
+            or ".." in branch.split("/")
+            or ".git" in branch.split("/")
+            for branch in definition.approved_inspection_branches
+        ):
+            raise EngineeringRepositoryRegistryError(
+                "approved inspection branch is unsafe"
+            )
+        if any(
             (
                 definition.commit_allowed,
                 definition.push_allowed,
@@ -89,6 +102,9 @@ engineering_repository_registry = EngineeringRepositoryRegistry(
             repository_key="acp-enterprise",
             repository_identity="ACP Enterprise",
             approved_active_branch="customer-management-v1",
+            approved_inspection_branches=tuple(
+                settings.engineering_inspection_branches
+            ),
             execution_environment_policy="df5b_private_control_plane_required",
             remote_execution_enabled=False,
             inspection_allowed=True,

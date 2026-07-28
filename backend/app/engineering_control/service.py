@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
 import hashlib
 import json
 import re
+from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
 from sqlalchemy.exc import IntegrityError
@@ -33,11 +33,13 @@ from app.engineering_control.errors import (
 from app.engineering_control.lifecycle import EngineeringCommandEventType
 from app.engineering_control.records import (
     AppendEngineeringCommandEvent,
-    CreateEngineeringCommand as CreateEngineeringCommandRecord,
     EngineeringApprovalState,
     EngineeringCommandMutationResult,
     EngineeringCommandRecord,
     EngineeringMutationStatus,
+)
+from app.engineering_control.records import (
+    CreateEngineeringCommand as CreateEngineeringCommandRecord,
 )
 from app.engineering_control.registry import (
     EngineeringRepositoryRegistry,
@@ -60,13 +62,13 @@ from app.platform.permissions.authorization import (
 )
 from app.platform.permissions.codes import EngineeringCommandPermission
 
-
 COMMAND_TYPE = re.compile(r"^[a-z][a-z0-9_.-]{2,79}$")
 FULL_SHA = re.compile(r"^[0-9a-f]{40}$")
 IDEMPOTENCY_KEY = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{2,199}$")
 REASON_CODE = re.compile(r"^[a-z][a-z0-9_]{2,79}$")
 MAX_INSTRUCTION_LENGTH = 12_000
 MAX_COMMAND_LIFETIME = timedelta(days=7)
+DEFAULT_COMMAND_QUERY = EngineeringCommandQuery()
 
 SECRET_PATTERNS = (
     re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----", re.IGNORECASE),
@@ -339,7 +341,7 @@ class EngineeringControlService:
         session: AsyncSession,
         *,
         context: AuthorizationContext,
-        query: EngineeringCommandQuery = EngineeringCommandQuery(),
+        query: EngineeringCommandQuery = DEFAULT_COMMAND_QUERY,
     ) -> EngineeringCommandPage:
         self._require(context, EngineeringCommandPermission.READ)
         if query.page < 1:
@@ -393,7 +395,14 @@ class EngineeringControlService:
             raise EngineeringCommandRepositoryPolicyError(
                 "Repository is not approved."
             ) from error
-        if command.expected_branch != repository.approved_active_branch:
+        active_branch = command.expected_branch == repository.approved_active_branch
+        approved_read_only_inspection = (
+            command.command_type == "inspect_workspace"
+            and not command.requested_code_changes
+            and repository.inspection_allowed
+            and command.expected_branch in repository.approved_inspection_branches
+        )
+        if not active_branch and not approved_read_only_inspection:
             raise EngineeringCommandRepositoryPolicyError(
                 "Expected branch violates repository policy."
             )

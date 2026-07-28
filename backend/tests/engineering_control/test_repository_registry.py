@@ -15,6 +15,7 @@ def test_acp_enterprise_repository_policy_is_safe_and_immutable() -> None:
 
     assert definition.repository_identity == "ACP Enterprise"
     assert definition.approved_active_branch == "customer-management-v1"
+    assert definition.approved_inspection_branches == ()
     assert definition.remote_execution_enabled is False
     assert definition.inspection_allowed is True
     assert definition.validation_allowed is True
@@ -62,6 +63,20 @@ def test_registry_rejects_unknown_duplicate_and_unsafe_definitions() -> None:
                         **definition.__dict__,
                         "repository_key": "unsafe-repository",
                         "commit_allowed": True,
+                    }
+                ),
+            )
+        )
+    with pytest.raises(
+        EngineeringRepositoryRegistryError, match="inspection branch is unsafe"
+    ):
+        EngineeringRepositoryRegistry(
+            (
+                EngineeringRepositoryDefinition(
+                    **{
+                        **definition.__dict__,
+                        "repository_key": "unsafe-inspection-branch",
+                        "approved_inspection_branches": ("../escape",),
                     }
                 ),
             )

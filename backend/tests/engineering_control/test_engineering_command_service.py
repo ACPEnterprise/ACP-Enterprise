@@ -1,9 +1,9 @@
+import asyncio
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
-import asyncio
 import pytest
 import pytest_asyncio
 from sqlalchemy import func, select
@@ -33,6 +33,11 @@ from app.engineering_control.models import EngineeringCommand, EngineeringComman
 from app.engineering_control.records import (
     EngineeringApprovalState,
     EngineeringExecutionState,
+)
+from app.engineering_control.registry import (
+    EngineeringRepositoryDefinition,
+    EngineeringRepositoryRegistry,
+    engineering_repository_registry,
 )
 from app.engineering_control.service import EngineeringControlService
 from app.events.models import BusinessEvent
@@ -182,9 +187,10 @@ def create_input(
     head: str = "a" * 40,
     repository_key: str = "acp-enterprise",
     requested_code_changes: bool = True,
+    command_type: str = "owner_instruction",
 ) -> CreateEngineeringCommand:
     return CreateEngineeringCommand(
-        command_type="owner_instruction",
+        command_type=command_type,
         owner_instruction=instruction,
         repository_key=repository_key,
         expected_branch=branch,
@@ -318,6 +324,64 @@ async def test_creation_validates_repository_and_input(
                 command=create_input(now=now, **changes),  # type: ignore[arg-type]
                 now=now,
             )
+
+
+@pytest.mark.asyncio
+async def test_read_only_inspection_requires_explicit_branch_allowlist(
+    service_database: ServiceFixture,
+) -> None:
+    definition = engineering_repository_registry.resolve("acp-enterprise")
+    registry = EngineeringRepositoryRegistry(
+        (
+            EngineeringRepositoryDefinition(
+                **{
+                    **definition.__dict__,
+                    "approved_inspection_branches": (
+                        "df9-authenticated-live-worker-runtime",
+                    ),
+                }
+            ),
+        )
+    )
+    service = EngineeringControlService(registry=registry)
+    now = utc_now()
+    async with service_database.factory() as session:
+        record = await service.create_command(
+            session,
+            context=service_database.context,
+            command=create_input(
+                now=now,
+                branch="df9-authenticated-live-worker-runtime",
+                command_type="inspect_workspace",
+                requested_code_changes=False,
+            ),
+            now=now,
+        )
+    assert record.expected_branch == "df9-authenticated-live-worker-runtime"
+    assert record.requested_code_changes is False
+
+    for command in (
+        create_input(
+            now=now,
+            branch="df9-authenticated-live-worker-runtime",
+            requested_code_changes=True,
+            command_type="inspect_workspace",
+        ),
+        create_input(
+            now=now,
+            branch="df9-authenticated-live-worker-runtime",
+            requested_code_changes=False,
+            command_type="owner_instruction",
+        ),
+    ):
+        with pytest.raises(EngineeringCommandRepositoryPolicyError):
+            async with service_database.factory() as session:
+                await service.create_command(
+                    session,
+                    context=service_database.context,
+                    command=command,
+                    now=now,
+                )
 
 
 @pytest.mark.asyncio
