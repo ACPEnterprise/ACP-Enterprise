@@ -7,7 +7,10 @@ from app.beacon.contracts import (
     BeaconCategory,
     BeaconConfidenceLevel,
     BeaconExpirationPolicy,
+    BeaconPriorityBand,
+    BeaconRankingFactorAvailability,
     BeaconSeverity,
+    BeaconSignalSource,
 )
 
 
@@ -39,14 +42,39 @@ class BeaconSupportingFactResponse(BaseModel):
     unit: str | None
 
 
+class BeaconRankingFactorResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    name: str
+    value: str | int | bool | None
+    unit: str | None
+    availability: BeaconRankingFactorAvailability
+    contribution: int
+    explanation: str
+
+
+class BeaconPriorityResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    band: BeaconPriorityBand
+    score: int
+    rank: int
+    ranking_factors: tuple[BeaconRankingFactorResponse, ...]
+    explanation: str
+    evaluated_at: datetime
+    tie_break_semantics: str
+
+
 class BeaconSignalResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
     rule_code: str
+    source: BeaconSignalSource
     title: str
     category: BeaconCategory
     severity: BeaconSeverity
+    priority: BeaconPriorityResponse
     confidence: BeaconConfidenceResponse
     supporting_facts: tuple[BeaconSupportingFactResponse, ...]
     recommended_action: str

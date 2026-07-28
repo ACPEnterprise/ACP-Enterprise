@@ -15,10 +15,13 @@ from app.beacon.contracts import (
     BeaconEvidence,
     BeaconExpirationPolicy,
     BeaconFactRepository,
+    BeaconPriorityBand,
     BeaconSeverity,
+    BeaconSignalSource,
     BeaconSnapshot,
 )
-from app.beacon.records import BeaconSignal, BeaconSupportingFact
+from app.beacon.prioritization import beacon_prioritizer
+from app.beacon.records import BeaconPriority, BeaconSignal, BeaconSupportingFact
 from app.beacon.repository import beacon_fact_repository
 from app.platform.permissions.authorization import (
     AuthorizationContext,
@@ -31,12 +34,6 @@ CONFIDENCE = BeaconConfidence(
     level=BeaconConfidenceLevel.HIGH,
     basis="Authoritative Company-scoped records measured by a deterministic rule.",
 )
-SEVERITY_ORDER = {
-    BeaconSeverity.CRITICAL: 0,
-    BeaconSeverity.IMPORTANT: 1,
-    BeaconSeverity.ATTENTION: 2,
-    BeaconSeverity.INFORMATION: 3,
-}
 
 
 class BeaconQueryService:
@@ -68,17 +65,7 @@ class BeaconQueryService:
             )
             if signal is not None
         )
-        return tuple(
-            sorted(
-                signals,
-                key=lambda signal: (
-                    SEVERITY_ORDER[signal.severity],
-                    signal.category.value,
-                    signal.rule_code,
-                    str(signal.id),
-                ),
-            )
-        )
+        return beacon_prioritizer.prioritize(signals)
 
     @classmethod
     def _overdue_appointments(cls, snapshot: BeaconSnapshot) -> BeaconSignal | None:
@@ -120,6 +107,7 @@ class BeaconQueryService:
         return cls._signal(
             snapshot,
             rule_code="scheduling.overdue_committed_appointments",
+            source=BeaconSignalSource.SCHEDULING,
             title="Committed appointments are past their arrival window",
             category=BeaconCategory.SCHEDULING,
             severity=severity,
@@ -150,6 +138,7 @@ class BeaconQueryService:
         return cls._signal(
             snapshot,
             rule_code="operations.paused_jobs",
+            source=BeaconSignalSource.JOBS,
             title="Jobs remain paused",
             category=BeaconCategory.OPERATIONS,
             severity=severity,
@@ -195,6 +184,7 @@ class BeaconQueryService:
         return cls._signal(
             snapshot,
             rule_code="revenue.past_due_invoices",
+            source=BeaconSignalSource.INVOICES,
             title="Issued invoices are past due",
             category=BeaconCategory.REVENUE,
             severity=severity,
@@ -236,6 +226,7 @@ class BeaconQueryService:
         snapshot: BeaconSnapshot,
         *,
         rule_code: str,
+        source: BeaconSignalSource,
         title: str,
         category: BeaconCategory,
         severity: BeaconSeverity,
@@ -245,9 +236,19 @@ class BeaconQueryService:
         return BeaconSignal(
             id=cls._signal_id(snapshot.company_id, rule_code, supporting_facts),
             rule_code=rule_code,
+            source=source,
             title=title,
             category=category,
             severity=severity,
+            priority=BeaconPriority(
+                band=BeaconPriorityBand.MONITOR,
+                score=0,
+                rank=0,
+                ranking_factors=(),
+                explanation="Priority has not been evaluated.",
+                evaluated_at=snapshot.measured_at,
+                tie_break_semantics="Priority has not been evaluated.",
+            ),
             confidence=CONFIDENCE,
             supporting_facts=supporting_facts,
             recommended_action=recommended_action,

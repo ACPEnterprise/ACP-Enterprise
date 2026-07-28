@@ -7,9 +7,30 @@ import { BeaconPanel } from "./BeaconPanel";
 const signal: BeaconSignal = {
   id: "signal-id",
   rule_code: "revenue.past_due_invoices",
+  source: "invoices",
   title: "Issued invoices are past due",
   category: "revenue",
   severity: "important",
+  priority: {
+    band: "immediate",
+    score: 337,
+    rank: 1,
+    ranking_factors: [
+      {
+        name: "severity",
+        value: "important",
+        unit: null,
+        availability: "measured",
+        contribution: 300,
+        explanation: "Important severity contributes 300 points.",
+      },
+    ],
+    explanation:
+      "Important severity contributes 300 points; measured ranking factors contribute 37 points.",
+    evaluated_at: "2026-07-28T16:00:00Z",
+    tie_break_semantics:
+      "Higher score first; ties resolve by severity, source, rule code, then stable signal identifier.",
+  },
   confidence: {
     level: "high",
     basis: "Authoritative Company-scoped records.",
@@ -53,6 +74,40 @@ describe("BeaconPanel", () => {
     expect(screen.getByText("2 invoices")).toBeInTheDocument();
     expect(screen.getByText(/Review the authoritative invoice records/)).toBeInTheDocument();
     expect(screen.getByText("high confidence")).toBeInTheDocument();
+    expect(screen.getByText("Immediate priority")).toBeInTheDocument();
+    expect(screen.getByText("Important severity")).toBeInTheDocument();
+    expect(screen.getByText("First for owner attention")).toBeInTheDocument();
+    expect(
+      screen.getByText(/measured ranking factors contribute 37 points/),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps lower-priority signals in stable queue order", () => {
+    const lowerPriority = {
+      ...signal,
+      id: "second-signal",
+      title: "Jobs remain paused",
+      source: "jobs" as const,
+      category: "operations" as const,
+      priority: {
+        ...signal.priority,
+        band: "important" as const,
+        score: 204,
+        rank: 2,
+      },
+    };
+    render(
+      <BeaconPanel
+        signals={[signal, lowerPriority]}
+        loading={false}
+        error={false}
+        retry={vi.fn()}
+      />,
+    );
+    const queue = screen.getByRole("list", { name: "Owner attention queue" });
+    expect(queue).toHaveTextContent(signal.title);
+    expect(queue).toHaveTextContent(lowerPriority.title);
+    expect(screen.getByText(/Priority 2 · operations · jobs/)).toBeInTheDocument();
   });
 
   it("renders an honest empty state", () => {

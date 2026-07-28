@@ -10,7 +10,10 @@ from app.beacon.contracts import (
     BeaconConfidence,
     BeaconEvidence,
     BeaconExpirationPolicy,
+    BeaconPriorityBand,
+    BeaconRankingFactorAvailability,
     BeaconSeverity,
+    BeaconSignalSource,
 )
 
 BeaconFactValue: TypeAlias = str | int | bool
@@ -27,12 +30,35 @@ class BeaconSupportingFact:
 
 
 @dataclass(frozen=True)
+class BeaconRankingFactor:
+    name: str
+    value: BeaconFactValue | None
+    unit: str | None
+    availability: BeaconRankingFactorAvailability
+    contribution: int
+    explanation: str
+
+
+@dataclass(frozen=True)
+class BeaconPriority:
+    band: BeaconPriorityBand
+    score: int
+    rank: int
+    ranking_factors: tuple[BeaconRankingFactor, ...]
+    explanation: str
+    evaluated_at: datetime
+    tie_break_semantics: str
+
+
+@dataclass(frozen=True)
 class BeaconSignal:
     id: UUID
     rule_code: str
+    source: BeaconSignalSource
     title: str
     category: BeaconCategory
     severity: BeaconSeverity
+    priority: BeaconPriority
     confidence: BeaconConfidence
     supporting_facts: tuple[BeaconSupportingFact, ...]
     recommended_action: str

@@ -25,6 +25,24 @@ class BeaconSeverity(StrEnum):
     CRITICAL = "critical"
 
 
+class BeaconSignalSource(StrEnum):
+    SCHEDULING = "scheduling"
+    JOBS = "jobs"
+    INVOICES = "invoices"
+
+
+class BeaconPriorityBand(StrEnum):
+    CRITICAL = "critical"
+    IMMEDIATE = "immediate"
+    IMPORTANT = "important"
+    MONITOR = "monitor"
+
+
+class BeaconRankingFactorAvailability(StrEnum):
+    MEASURED = "measured"
+    NOT_APPLICABLE = "not_applicable"
+
+
 class BeaconConfidenceLevel(StrEnum):
     HIGH = "high"
     MEDIUM = "medium"

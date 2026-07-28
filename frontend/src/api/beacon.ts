@@ -12,6 +12,12 @@ export type BeaconSeverity =
   | "important"
   | "critical";
 export type BeaconConfidenceLevel = "high" | "medium" | "low";
+export type BeaconSignalSource = "scheduling" | "jobs" | "invoices";
+export type BeaconPriorityBand =
+  | "critical"
+  | "immediate"
+  | "important"
+  | "monitor";
 
 export interface BeaconSupportingFact {
   name: string;
@@ -31,9 +37,26 @@ export interface BeaconSupportingFact {
 export interface BeaconSignal {
   id: string;
   rule_code: string;
+  source: BeaconSignalSource;
   title: string;
   category: BeaconCategory;
   severity: BeaconSeverity;
+  priority: {
+    band: BeaconPriorityBand;
+    score: number;
+    rank: number;
+    ranking_factors: Array<{
+      name: string;
+      value: string | number | boolean | null;
+      unit: string | null;
+      availability: "measured" | "not_applicable";
+      contribution: number;
+      explanation: string;
+    }>;
+    explanation: string;
+    evaluated_at: string;
+    tie_break_semantics: string;
+  };
   confidence: {
     level: BeaconConfidenceLevel;
     basis: string;

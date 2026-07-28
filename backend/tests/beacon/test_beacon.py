@@ -12,6 +12,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.beacon.contracts import (
     BeaconCategory,
     BeaconEvidence,
+    BeaconRankingFactorAvailability,
+    BeaconSignalSource,
     BeaconSnapshot,
     OverdueAppointmentFacts,
     PastDueInvoiceFacts,
@@ -114,6 +116,13 @@ async def test_signals_are_immutable_deterministic_and_explainable() -> None:
         BeaconCategory.REVENUE,
         BeaconCategory.OPERATIONS,
     ]
+    assert [item.priority.rank for item in first] == [1, 2, 3]
+    assert [item.source for item in first] == [
+        BeaconSignalSource.SCHEDULING,
+        BeaconSignalSource.INVOICES,
+        BeaconSignalSource.JOBS,
+    ]
+    assert [item.priority for item in first] == [item.priority for item in second]
     assert all(item.supporting_facts for item in first)
     assert all(item.recommended_action for item in first)
     assert all(item.expires_at == NOW + timedelta(minutes=15) for item in first)
@@ -121,6 +130,105 @@ async def test_signals_are_immutable_deterministic_and_explainable() -> None:
     assert repository.calls == [(COMPANY_ID, NOW), (COMPANY_ID, NOW)]
     with pytest.raises(FrozenInstanceError):
         first[0].title = "Changed"  # type: ignore[misc]
+
+
+@pytest.mark.asyncio
+async def test_rule_factors_rank_revenue_jobs_and_appointments() -> None:
+    service = BeaconQueryService(FakeRepository(snapshot()))
+    signals = await service.list_signals(
+        object(),  # type: ignore[arg-type]
+        context=context(AnalyticsPermission.READ),
+        now=NOW,
+    )
+    by_source = {signal.source: signal for signal in signals}
+
+    revenue = by_source[BeaconSignalSource.INVOICES]
+    assert {
+        factor.name: (factor.value, factor.contribution)
+        for factor in revenue.priority.ranking_factors
+    } == {
+        "severity": ("important", 300),
+        "affected_records": (1, 1),
+        "condition_age": (10, 10),
+        "financial_exposure": ("125.50", 0),
+    }
+    jobs = by_source[BeaconSignalSource.JOBS]
+    assert {
+        factor.name: factor.contribution for factor in jobs.priority.ranking_factors
+    } == {
+        "severity": 200,
+        "affected_records": 3,
+        "condition_age": 1,
+        "financial_exposure": 0,
+    }
+    appointments = by_source[BeaconSignalSource.SCHEDULING]
+    assert {
+        factor.name: factor.contribution
+        for factor in appointments.priority.ranking_factors
+    } == {
+        "severity": 400,
+        "affected_records": 2,
+        "condition_age": 6,
+        "financial_exposure": 0,
+    }
+    assert all(signal.priority.explanation for signal in signals)
+
+
+@pytest.mark.asyncio
+async def test_missing_optional_factor_is_explicitly_not_applicable() -> None:
+    service = BeaconQueryService(FakeRepository(snapshot()))
+    signals = await service.list_signals(
+        object(),  # type: ignore[arg-type]
+        context=context(AnalyticsPermission.READ),
+        now=NOW,
+    )
+    jobs = next(signal for signal in signals if signal.source == "jobs")
+    exposure = next(
+        factor
+        for factor in jobs.priority.ranking_factors
+        if factor.name == "financial_exposure"
+    )
+    assert exposure.availability == BeaconRankingFactorAvailability.NOT_APPLICABLE
+    assert exposure.value is None
+    assert exposure.contribution == 0
+    assert "not applicable" in exposure.explanation
+
+
+@pytest.mark.asyncio
+async def test_ties_resolve_by_stable_source_not_generation_order() -> None:
+    tied = BeaconSnapshot(
+        company_id=COMPANY_ID,
+        measured_at=NOW,
+        overdue_appointments=OverdueAppointmentFacts(
+            count=1,
+            earliest_window_start=NOW - timedelta(minutes=30),
+            evidence=(evidence("appointment"),),
+        ),
+        paused_jobs=PausedJobFacts(
+            count=1,
+            earliest_paused_at=NOW - timedelta(minutes=30),
+            evidence=(evidence("job"),),
+        ),
+        past_due_invoices=PastDueInvoiceFacts(
+            count=0,
+            total_amount=Decimal(0),
+            earliest_due_on=None,
+            evidence=(),
+        ),
+    )
+    service = BeaconQueryService(FakeRepository(tied))
+    signals = await service.list_signals(
+        object(),  # type: ignore[arg-type]
+        context=context(AnalyticsPermission.READ),
+        now=NOW,
+    )
+
+    assert [signal.priority.score for signal in signals] == [201, 201]
+    assert [signal.source for signal in signals] == [
+        BeaconSignalSource.JOBS,
+        BeaconSignalSource.SCHEDULING,
+    ]
+    assert all("source" in signal.priority.tie_break_semantics for signal in signals)
 
 
 @pytest.mark.asyncio
@@ -185,5 +293,8 @@ async def test_beacon_http_api_returns_bounded_company_scoped_signals(
     body = response.json()
     assert len(body["items"]) == 3
     assert body["items"][0]["supporting_facts"]
+    assert body["items"][0]["source"] == "scheduling"
+    assert body["items"][0]["priority"]["rank"] == 1
+    assert body["items"][0]["priority"]["ranking_factors"]
     assert body["items"][0]["expiration_policy"] == "replace_on_next_evaluation"
     assert "payload" not in str(body).lower()
