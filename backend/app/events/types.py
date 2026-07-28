@@ -162,6 +162,7 @@ class EventType(str, Enum):
     SERVICE_LOCATION_CREATED = "service_location.created"
     SERVICE_LOCATION_UPDATED = "service_location.updated"
     SERVICE_LOCATION_DEACTIVATED = "service_location.deactivated"
+    CUSTOMER_BILLING_ADDRESS_CREATED = "customer.billing_address_created"
     CUSTOMER_NOTE_ADDED = "customer.note_added"
     LEAD_CREATED = "lead.created"
     LEAD_QUALIFIED = "lead.qualified"
@@ -176,6 +177,7 @@ class EventType(str, Enum):
     APPOINTMENT_BOOKED = "appointment.booked"
     APPOINTMENT_RESCHEDULED = "appointment.rescheduled"
     APPOINTMENT_CANCELLED = "appointment.cancelled"
+    APPOINTMENT_MIGRATED = "appointment.migrated"
 
     # Dispatch
     TECHNICIAN_DISPATCHED = "technician.dispatched"
@@ -187,6 +189,7 @@ class EventType(str, Enum):
     ESTIMATE_PRESENTED = "estimate.presented"
     ESTIMATE_APPROVED = "estimate.approved"
     ESTIMATE_DECLINED = "estimate.declined"
+    ESTIMATE_MIGRATED = "estimate.migrated"
 
     # Jobs
     JOB_CREATED = "job.created"
@@ -199,8 +202,20 @@ class EventType(str, Enum):
     JOB_COMPLETED = "job.completed"
     JOB_CANCELLED = "job.cancelled"
     JOB_REOPENED = "job.reopened"
+    JOB_MIGRATED = "job.migrated"
 
     # Financial
     INVOICE_CREATED = "invoice.created"
+    INVOICE_MIGRATED = "invoice.migrated"
     PAYMENT_RECEIVED = "payment.received"
     PAYMENT_REFUNDED = "payment.refunded"
+    PAYMENT_MIGRATED = "payment.migrated"
+
+    # Migration
+    NOTE_MIGRATED = "note.migrated"
+    ACTIVITY_MIGRATED = "activity.migrated"
+    ARTIFACT_REGISTERED = "artifact.registered"
+    ARTIFACT_MIGRATED = "artifact.migrated"
+    MIGRATION_CUTOVER_READINESS_EVALUATED = "migration.cutover_readiness_evaluated"
+    MIGRATION_COMPLETED = "migration.completed"
+    MIGRATION_COMPLETED_WITH_EXCEPTIONS = "migration.completed_with_exceptions"

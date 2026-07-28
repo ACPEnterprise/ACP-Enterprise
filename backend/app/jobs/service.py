@@ -20,6 +20,7 @@ from app.jobs.commands import (
     CreateJob,
     CreateJobFromAppointment,
     LinkAppointment,
+    MigrateJob,
     PauseJob,
     ReopenJob,
     ResumeJob,
@@ -118,6 +119,127 @@ class JobService:
                 payload=self._created_payload(job),
             )
         return job
+
+    async def stage_migrated_job(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        command: MigrateJob,
+    ) -> Job:
+        """Stage one validated historical Job in the caller's transaction."""
+        self._require_branch(context, command.branch_id)
+        try:
+            status = JobStatus(command.status)
+        except ValueError as error:
+            raise JobValidationError("Migrated Job status is invalid.") from error
+        if status in {JobStatus.PAUSED, JobStatus.CANCELLED}:
+            raise JobValidationError(
+                "Paused and cancelled Jobs require lifecycle details not supported "
+                "by this migration phase."
+            )
+        if status is not JobStatus.DRAFT and command.activated_at is None:
+            raise JobValidationError("Activated timestamp is required for this status.")
+        if status in {JobStatus.IN_PROGRESS, JobStatus.COMPLETED} and (
+            command.started_at is None
+        ):
+            raise JobValidationError("Started timestamp is required for this status.")
+        if status is JobStatus.COMPLETED and command.completed_at is None:
+            raise JobValidationError("Completion timestamp is required.")
+        timestamps = [
+            value
+            for value in (
+                command.activated_at,
+                command.started_at,
+                command.completed_at,
+            )
+            if value is not None
+        ]
+        if any(value.tzinfo is None for value in timestamps):
+            raise JobValidationError("Migrated Job timestamps must be timezone-aware.")
+        if timestamps != sorted(timestamps):
+            raise JobValidationError("Migrated Job timestamps are out of order.")
+        await self._require_customer_reference(
+            session,
+            context=context,
+            customer_id=command.customer_id,
+            service_location_id=command.service_location_id,
+        )
+        now = self._clock()
+        metadata = self._validate_creation_metadata(
+            CreateJob(
+                branch_id=command.branch_id,
+                customer_id=command.customer_id,
+                service_location_id=command.service_location_id,
+                priority=command.priority,
+                customer_reported_problem=command.customer_reported_problem,
+                internal_description=command.internal_description,
+            )
+        )
+        number = await self._repository.next_job_number(
+            session, company_id=context.company.id
+        )
+        job = Job(
+            id=uuid4(),
+            company_id=context.company.id,
+            branch_id=command.branch_id,
+            job_number=number,
+            customer_id=command.customer_id,
+            service_location_id=command.service_location_id,
+            status=status.value,
+            concurrency_version=1,
+            activated_at=command.activated_at,
+            started_at=command.started_at,
+            completed_at=command.completed_at,
+            completed_by_user_id=(
+                context.user.id if status is JobStatus.COMPLETED else None
+            ),
+            created_at=command.activated_at or now,
+            updated_at=command.completed_at
+            or command.started_at
+            or command.activated_at
+            or now,
+            created_by_user_id=context.user.id,
+            updated_by_user_id=context.user.id,
+            **metadata,
+        )
+        await self._repository.create_job(session, job=job)
+        self._stage_event(
+            session,
+            context=context,
+            job=job,
+            event_type=EventType.JOB_MIGRATED,
+            occurred_at=now,
+            correlation_id=uuid4(),
+            payload={
+                "job_number": job.job_number,
+                "status": job.status,
+                "origin": "migration",
+            },
+        )
+        return job
+
+    async def stage_migrated_appointment_link(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        job: Job,
+        appointment: AppointmentReference,
+        visit_sequence: int,
+    ) -> None:
+        """Stage a validated migrated Job/Appointment association."""
+        self._require_branch(context, job.branch_id)
+        self._require_matching_appointment(job, appointment)
+        await self._link(
+            session,
+            context=context,
+            job=job,
+            appointment=appointment,
+            visit_sequence=visit_sequence,
+            occurred_at=self._clock(),
+            increment_version=False,
+        )
 
     async def create_job_from_appointment(
         self,

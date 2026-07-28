@@ -53,6 +53,17 @@ class CreateAppointmentCommand:
 
 
 @dataclass(frozen=True)
+class MigrateAppointmentCommand:
+    branch_id: UUID
+    customer_id: UUID
+    service_location_id: UUID
+    status: AppointmentStatus
+    arrival_window_start_at: datetime | None
+    arrival_window_end_at: datetime | None
+    expected_duration_minutes: int | None
+
+
+@dataclass(frozen=True)
 class CancelAppointmentCommand:
     appointment_id: UUID
     expected_version: int
@@ -200,6 +211,99 @@ class SchedulingService:
                     "schema_version": 1,
                 },
             )
+        return appointment
+
+    async def stage_migrated_appointment(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        command: MigrateAppointmentCommand,
+    ) -> Appointment:
+        """Stage one validated migrated Appointment in the caller transaction."""
+        self._require_authorized_branch(context, command.branch_id)
+        if command.status is AppointmentStatus.CANCELLED:
+            raise SchedulingValidationError(
+                "Cancelled Appointment lifecycle details are not supported yet."
+            )
+        committed = command.status in {
+            AppointmentStatus.SCHEDULED,
+            AppointmentStatus.CONFIRMED,
+            AppointmentStatus.COMPLETED,
+            AppointmentStatus.NO_SHOW,
+        }
+        if committed and (
+            command.arrival_window_start_at is None
+            or command.arrival_window_end_at is None
+        ):
+            raise SchedulingValidationError(
+                "Committed Appointments require an arrival window."
+            )
+        if command.arrival_window_start_at is not None:
+            if command.arrival_window_end_at is None:
+                raise SchedulingValidationError("Arrival window end is required.")
+            self._validate_window(
+                command.arrival_window_start_at,
+                command.arrival_window_end_at,
+                command.expected_duration_minutes or 0,
+                Decimal("1.00"),
+            )
+        elif command.expected_duration_minutes is not None:
+            raise SchedulingValidationError(
+                "Duration without an arrival window is invalid."
+            )
+        branch = await self._repository.get_schedulable_branch(
+            session,
+            company_id=context.company.id,
+            branch_id=command.branch_id,
+        )
+        if branch is None:
+            raise SchedulingNotFoundError("Branch", command.branch_id)
+        if not await self._repository.references_are_schedulable(
+            session,
+            company_id=context.company.id,
+            customer_id=command.customer_id,
+            service_location_id=command.service_location_id,
+        ):
+            raise SchedulingNotFoundError(
+                "Customer or Service Location", command.customer_id
+            )
+        now = self._clock()
+        number = await self._repository.next_appointment_number(
+            session, company_id=context.company.id
+        )
+        appointment = Appointment(
+            id=uuid4(),
+            company_id=context.company.id,
+            branch_id=branch.id,
+            appointment_number=number,
+            customer_id=command.customer_id,
+            service_location_id=command.service_location_id,
+            status=command.status.value,
+            arrival_window_start_at=command.arrival_window_start_at,
+            arrival_window_end_at=command.arrival_window_end_at,
+            expected_duration_minutes=command.expected_duration_minutes,
+            scheduling_timezone=branch.timezone,
+            concurrency_version=1,
+            created_by_user_id=context.user.id,
+            updated_by_user_id=context.user.id,
+            created_at=now,
+            updated_at=now,
+        )
+        await self._repository.create_appointment(session, appointment=appointment)
+        self._stage_event(
+            session,
+            context=context,
+            branch_id=branch.id,
+            appointment=appointment,
+            event_type=EventType.APPOINTMENT_MIGRATED,
+            occurred_at=now,
+            payload={
+                "appointment_number": appointment.appointment_number,
+                "status": appointment.status,
+                "origin": "migration",
+            },
+        )
         return appointment
 
     async def cancel_appointment(
