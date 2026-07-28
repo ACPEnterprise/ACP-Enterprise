@@ -33,6 +33,8 @@ class TransportMessageKind(StrEnum):
     PROVIDER_PROGRESS = "provider_progress"
     PROVIDER_RESULT = "provider_result"
     CANCELLATION_ACKNOWLEDGEMENT = "cancellation_acknowledgement"
+    CONTROLLED_OFFER_ACQUISITION = "controlled_offer_acquisition"
+    CONTROLLED_EXECUTION_RESULT = "controlled_execution_result"
 
 
 @dataclass(frozen=True)
@@ -139,6 +141,22 @@ class CancellationAcknowledgementMessage:
     composition_digest: str
 
 
+@dataclass(frozen=True)
+class ControlledOfferAcquisitionMessage:
+    offer_id: UUID
+
+
+@dataclass(frozen=True)
+class ControlledExecutionResultMessage:
+    offer_id: UUID
+    lease_id: UUID
+    outcome: str
+    output: dict[str, object]
+    error_classification: str | None
+    started_at: datetime
+    completed_at: datetime
+
+
 TransportPayload = (
     HeartbeatMessage
     | ResultMessage
@@ -148,6 +166,8 @@ TransportPayload = (
     | ProviderProgressMessage
     | ProviderResultMessage
     | CancellationAcknowledgementMessage
+    | ControlledOfferAcquisitionMessage
+    | ControlledExecutionResultMessage
 )
 
 

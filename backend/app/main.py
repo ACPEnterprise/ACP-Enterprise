@@ -20,6 +20,9 @@ from app.engineering_control.repository_operation.router import (
 )
 from app.engineering_control.review.router import router as engineering_reviews_router
 from app.engineering_control.router import router as engineering_commands_router
+from app.engineering_execution.controlled.router import (
+    router as controlled_execution_router,
+)
 from app.engineering_execution.status.router import router as execution_status_router
 from app.events.router import router as events_router
 from app.events.schemas import BusinessEventCreate
@@ -106,6 +109,7 @@ app.include_router(repository_authorizations_router)
 app.include_router(repository_operations_router)
 app.include_router(mobile_engineering_router)
 app.include_router(execution_status_router)
+app.include_router(controlled_execution_router)
 app.include_router(worker_transport_router)
 
 

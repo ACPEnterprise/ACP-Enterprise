@@ -91,7 +91,10 @@ class EngineeringExecutionRepository:
 
 
 def _record(entity: EngineeringExecution) -> EngineeringExecutionRecord:
-    if entity.failure_classification is None:
+    if (
+        entity.state == EngineeringExecutionState.EXECUTION_NOT_CONNECTED.value
+        and entity.failure_classification is None
+    ):
         raise ValueError("Disconnected execution requires a failure classification")
     return EngineeringExecutionRecord(
         id=entity.id,
@@ -107,8 +110,10 @@ def _record(entity: EngineeringExecution) -> EngineeringExecutionRecord:
         evidence_summary=MappingProxyType(dict(entity.evidence_summary)),
         validation_summary=MappingProxyType(dict(entity.validation_summary)),
         output_references=tuple(entity.output_references),
-        failure_classification=EngineeringFailureClassification(
-            entity.failure_classification
+        failure_classification=(
+            EngineeringFailureClassification(entity.failure_classification)
+            if entity.failure_classification is not None
+            else None
         ),
         version=entity.version,
         requested_at=entity.requested_at,

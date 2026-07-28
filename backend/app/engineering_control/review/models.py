@@ -36,10 +36,22 @@ class EngineeringExecutionReview(Base):
             "version >= 1",
             name="ck_engineering_execution_reviews_version",
         ),
+        CheckConstraint(
+            "(controlled_result_id IS NULL AND composition_id IS NOT NULL "
+            "AND attempt_id IS NOT NULL AND result_id IS NOT NULL) OR "
+            "(controlled_result_id IS NOT NULL AND composition_id IS NULL "
+            "AND attempt_id IS NULL AND result_id IS NULL)",
+            name="ck_engineering_execution_reviews_evidence_source",
+        ),
         UniqueConstraint(
             "company_id",
             "result_id",
             name="uq_engineering_execution_reviews_result",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "controlled_result_id",
+            name="uq_engineering_execution_reviews_controlled_result",
         ),
         UniqueConstraint(
             "company_id",
@@ -80,20 +92,25 @@ class EngineeringExecutionReview(Base):
         ForeignKey("engineering_executions.id", ondelete="RESTRICT"),
         nullable=False,
     )
-    composition_id: Mapped[UUID] = mapped_column(
+    composition_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("engineering_execution_compositions.id", ondelete="RESTRICT"),
-        nullable=False,
     )
-    attempt_id: Mapped[UUID] = mapped_column(
+    attempt_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("engineering_provider_execution_attempts.id", ondelete="RESTRICT"),
-        nullable=False,
     )
-    result_id: Mapped[UUID] = mapped_column(
+    result_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("engineering_normalized_provider_results.id", ondelete="RESTRICT"),
-        nullable=False,
+    )
+    controlled_result_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey(
+            "engineering_controlled_execution_results.id",
+            name="fk_engineering_execution_reviews_controlled_result",
+            ondelete="RESTRICT",
+        ),
     )
     provider_identifier: Mapped[str] = mapped_column(String(100), nullable=False)
     instruction_digest: Mapped[str] = mapped_column(String(128), nullable=False)

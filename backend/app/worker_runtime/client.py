@@ -5,6 +5,7 @@ from uuid import UUID
 import httpx
 
 from app.worker_control.contracts import WorkerCapability
+from app.worker_runtime.execution import AcquiredControlledOffer
 
 
 class WorkerRuntimeTransportError(Exception):
@@ -87,6 +88,44 @@ class WorkerTransportClient:
     ) -> None:
         response = await self._client.post(
             "/api/v1/worker-transport/leases/refresh",
+            headers={"X-Worker-Session-ID": str(session_id)},
+            json=payload,
+        )
+        self._accepted(response, 200)
+
+    async def poll_offers(self, *, session_id: UUID) -> tuple[dict[str, object], ...]:
+        response = await self._client.get(
+            f"/api/v1/worker-transport/sessions/{session_id}/offers",
+            headers={"X-Worker-Session-ID": str(session_id)},
+            params={"limit": 1},
+        )
+        self._accepted(response, 200)
+        return tuple(response.json()["items"])
+
+    async def acquire_offer(
+        self, *, session_id: UUID, payload: dict[str, object]
+    ) -> AcquiredControlledOffer:
+        response = await self._client.post(
+            "/api/v1/worker-transport/offers/acquire",
+            headers={"X-Worker-Session-ID": str(session_id)},
+            json=payload,
+        )
+        self._accepted(response, 200)
+        data = response.json()
+        return AcquiredControlledOffer(
+            offer_id=UUID(data["offer_id"]),
+            lease_id=UUID(data["lease_id"]),
+            lease_version=data["lease_version"],
+            workspace_id=data["workspace_id"],
+            command_type=data["command_type"],
+            payload=data["payload"],
+        )
+
+    async def submit_controlled_result(
+        self, *, session_id: UUID, payload: dict[str, object]
+    ) -> None:
+        response = await self._client.post(
+            "/api/v1/worker-transport/controlled-results",
             headers={"X-Worker-Session-ID": str(session_id)},
             json=payload,
         )

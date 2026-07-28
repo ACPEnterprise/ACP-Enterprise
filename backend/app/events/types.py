@@ -28,6 +28,18 @@ class EventType(str, Enum):
     ENGINEERING_COMMAND_CANCELED = "engineering.command_canceled"
     ENGINEERING_COMMAND_EXPIRED = "engineering.command_expired"
     ENGINEERING_EXECUTION_REQUESTED = "engineering.execution_requested"
+    ENGINEERING_CONTROLLED_OFFER_CREATED = (
+        "engineering_execution.controlled_offer_created"
+    )
+    ENGINEERING_CONTROLLED_OFFER_ACQUIRED = (
+        "engineering_execution.controlled_offer_acquired"
+    )
+    ENGINEERING_CONTROLLED_EXECUTION_COMPLETED = (
+        "engineering_execution.controlled_execution_completed"
+    )
+    ENGINEERING_CONTROLLED_EXECUTION_FAILED = (
+        "engineering_execution.controlled_execution_failed"
+    )
     WORKER_IDENTITY_REGISTERED = "engineering.worker_identity_registered"
     WORKER_IDENTITY_STATE_CHANGED = "engineering.worker_identity_state_changed"
     WORKER_CREDENTIAL_ISSUED = "engineering.worker_credential_issued"

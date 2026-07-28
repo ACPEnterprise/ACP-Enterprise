@@ -11,6 +11,10 @@ from app.engineering_execution.composition.models import (
     NormalizedProviderResult,
     ProviderExecutionAttempt,
 )
+from app.engineering_execution.controlled.models import (
+    ControlledExecutionOfferModel,
+    ControlledExecutionResultModel,
+)
 from app.engineering_execution.models import EngineeringExecution
 
 from .contracts import EngineeringReviewDecision, EngineeringReviewState
@@ -25,9 +29,11 @@ from .records import (
 class EngineeringReviewSource:
     command: EngineeringCommand
     execution: EngineeringExecution
-    composition: ExecutionComposition
-    attempt: ProviderExecutionAttempt
-    result: NormalizedProviderResult
+    composition: ExecutionComposition | None = None
+    attempt: ProviderExecutionAttempt | None = None
+    result: NormalizedProviderResult | None = None
+    controlled_offer: ControlledExecutionOfferModel | None = None
+    controlled_result: ControlledExecutionResultModel | None = None
 
 
 class EngineeringReviewRepository:
@@ -71,7 +77,34 @@ class EngineeringReviewRepository:
             .with_for_update()
         )
         if composition is None:
-            return None
+            offer = await session.scalar(
+                select(ControlledExecutionOfferModel)
+                .where(
+                    ControlledExecutionOfferModel.company_id == company_id,
+                    ControlledExecutionOfferModel.execution_id == execution.id,
+                )
+                .order_by(ControlledExecutionOfferModel.created_at.desc())
+                .limit(1)
+                .with_for_update()
+            )
+            if offer is None:
+                return None
+            controlled_result = await session.scalar(
+                select(ControlledExecutionResultModel)
+                .where(
+                    ControlledExecutionResultModel.company_id == company_id,
+                    ControlledExecutionResultModel.offer_id == offer.id,
+                )
+                .with_for_update()
+            )
+            if controlled_result is None:
+                return None
+            return EngineeringReviewSource(
+                command=command,
+                execution=execution,
+                controlled_offer=offer,
+                controlled_result=controlled_result,
+            )
         attempt = await session.scalar(
             select(ProviderExecutionAttempt)
             .where(
@@ -95,7 +128,13 @@ class EngineeringReviewRepository:
         )
         if result is None:
             return None
-        return EngineeringReviewSource(command, execution, composition, attempt, result)
+        return EngineeringReviewSource(
+            command=command,
+            execution=execution,
+            composition=composition,
+            attempt=attempt,
+            result=result,
+        )
 
     @staticmethod
     async def get_by_result(
@@ -108,6 +147,21 @@ class EngineeringReviewRepository:
             select(EngineeringExecutionReview).where(
                 EngineeringExecutionReview.company_id == company_id,
                 EngineeringExecutionReview.result_id == result_id,
+            )
+        )
+        return None if entity is None else _review(entity)
+
+    @staticmethod
+    async def get_by_controlled_result(
+        session: AsyncSession,
+        *,
+        company_id: UUID,
+        result_id: UUID,
+    ) -> EngineeringReviewRecord | None:
+        entity = await session.scalar(
+            select(EngineeringExecutionReview).where(
+                EngineeringExecutionReview.company_id == company_id,
+                EngineeringExecutionReview.controlled_result_id == result_id,
             )
         )
         return None if entity is None else _review(entity)
@@ -141,13 +195,24 @@ class EngineeringReviewRepository:
             company_id=source.command.company_id,
             command_id=source.command.id,
             execution_id=source.execution.id,
-            composition_id=source.composition.id,
-            attempt_id=source.attempt.id,
-            result_id=source.result.id,
-            provider_identifier=source.composition.provider_identifier,
-            instruction_digest=source.composition.instruction_digest,
-            request_digest=source.composition.request_digest,
-            composition_digest=source.composition.composition_digest,
+            composition_id=source.composition.id if source.composition else None,
+            attempt_id=source.attempt.id if source.attempt else None,
+            result_id=source.result.id if source.result else None,
+            controlled_result_id=(
+                source.controlled_result.id if source.controlled_result else None
+            ),
+            provider_identifier=(
+                source.composition.provider_identifier
+                if source.composition
+                else "authenticated-worker"
+            ),
+            instruction_digest=source.command.instruction_digest,
+            request_digest=source.command.request_digest,
+            composition_digest=(
+                source.composition.composition_digest
+                if source.composition
+                else source.command.request_digest[:64]
+            ),
             review_digest=review_digest,
             state=EngineeringReviewState.PENDING.value,
             version=1,
@@ -297,9 +362,20 @@ class EngineeringReviewRepository:
         if (
             source is None
             or source.execution.id != review.execution_id
-            or source.composition.id != review.composition_id
-            or source.attempt.id != review.attempt_id
-            or source.result.id != review.result_id
+            or (
+                source.result is not None
+                and (
+                    source.composition is None
+                    or source.attempt is None
+                    or source.composition.id != review.composition_id
+                    or source.attempt.id != review.attempt_id
+                    or source.result.id != review.result_id
+                )
+            )
+            or (
+                source.controlled_result is not None
+                and source.controlled_result.id != review.controlled_result_id
+            )
         ):
             return None
         return source
@@ -324,6 +400,33 @@ class EngineeringReviewRepository:
                 EngineeringExecution.command_id == review.command_id,
             )
         )
+        if review.controlled_result_id is not None:
+            offer = await session.scalar(
+                select(ControlledExecutionOfferModel).where(
+                    ControlledExecutionOfferModel.company_id == company_id,
+                    ControlledExecutionOfferModel.execution_id == review.execution_id,
+                )
+            )
+            controlled_result = await session.scalar(
+                select(ControlledExecutionResultModel).where(
+                    ControlledExecutionResultModel.company_id == company_id,
+                    ControlledExecutionResultModel.id == review.controlled_result_id,
+                    ControlledExecutionResultModel.execution_id == review.execution_id,
+                )
+            )
+            if (
+                command is None
+                or execution is None
+                or offer is None
+                or controlled_result is None
+            ):
+                return None
+            return EngineeringReviewSource(
+                command=command,
+                execution=execution,
+                controlled_offer=offer,
+                controlled_result=controlled_result,
+            )
         composition = await session.scalar(
             select(ExecutionComposition).where(
                 ExecutionComposition.company_id == company_id,
@@ -372,6 +475,7 @@ def _review(entity: EngineeringExecutionReview) -> EngineeringReviewRecord:
         composition_id=entity.composition_id,
         attempt_id=entity.attempt_id,
         result_id=entity.result_id,
+        controlled_result_id=entity.controlled_result_id,
         provider_identifier=entity.provider_identifier,
         instruction_digest=entity.instruction_digest,
         request_digest=entity.request_digest,

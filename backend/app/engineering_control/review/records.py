@@ -12,9 +12,9 @@ class EngineeringReviewRecord:
     company_id: UUID
     command_id: UUID
     execution_id: UUID
-    composition_id: UUID
-    attempt_id: UUID
-    result_id: UUID
+    composition_id: UUID | None
+    attempt_id: UUID | None
+    result_id: UUID | None
     provider_identifier: str
     instruction_digest: str
     request_digest: str
@@ -25,6 +25,7 @@ class EngineeringReviewRecord:
     created_at: datetime
     updated_at: datetime
     decided_at: datetime | None
+    controlled_result_id: UUID | None = None
 
 
 @dataclass(frozen=True)

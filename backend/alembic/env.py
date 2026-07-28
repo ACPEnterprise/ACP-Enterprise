@@ -22,6 +22,9 @@ from app.engineering_execution import (
 from app.engineering_execution.composition import (
     models as composition_models,  # noqa: F401
 )
+from app.engineering_execution.controlled import (
+    models as controlled_execution_models,  # noqa: F401
+)
 from app.engineering_execution.supervision import (
     models as supervision_models,  # noqa: F401
 )

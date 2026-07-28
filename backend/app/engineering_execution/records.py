@@ -1,6 +1,6 @@
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Mapping
 from uuid import UUID
 
 from app.engineering_execution.contracts import (
@@ -39,7 +39,7 @@ class EngineeringExecutionRecord:
     evidence_summary: Mapping[str, object]
     validation_summary: Mapping[str, object]
     output_references: tuple[str, ...]
-    failure_classification: EngineeringFailureClassification
+    failure_classification: EngineeringFailureClassification | None
     version: int
     requested_at: datetime
     started_at: datetime | None

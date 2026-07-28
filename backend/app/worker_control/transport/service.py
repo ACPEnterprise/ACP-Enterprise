@@ -10,6 +10,9 @@ from app.engineering_execution.composition.service import (
     ExecutionCompositionService,
     RecordProviderResult,
 )
+from app.engineering_execution.controlled.contracts import ControlledOutcome
+from app.engineering_execution.controlled.errors import ControlledExecutionError
+from app.engineering_execution.controlled.service import ControlledExecutionService
 from app.platform.auth.tokens import SecurityTokenService
 from app.worker_control.contracts import (
     AuthenticatedWorkerContext,
@@ -21,6 +24,8 @@ from app.worker_control.transport.contracts import (
     CancellationAcknowledgementMessage,
     CompositionAcknowledgementMessage,
     CompositionFetchMessage,
+    ControlledExecutionResultMessage,
+    ControlledOfferAcquisitionMessage,
     HeartbeatMessage,
     LeaseRenewalMessage,
     ProviderProgressMessage,
@@ -71,12 +76,16 @@ class WorkerTransportService:
         worker_control: WorkerControlService | None = None,
         tokens: SecurityTokenService | None = None,
         compositions: ExecutionCompositionService | None = None,
+        controlled: ControlledExecutionService | None = None,
     ) -> None:
         self.authenticator = authenticator
         self.sessions = sessions or PostgreSQLWorkerTransportSessionRepository()
         self.worker_control = worker_control or WorkerControlService()
         self.tokens = tokens or SecurityTokenService()
         self.compositions = compositions or ExecutionCompositionService()
+        self.controlled = controlled or ControlledExecutionService(
+            workers=self.worker_control
+        )
 
     async def initiate_session(
         self,
@@ -283,7 +292,7 @@ class WorkerTransportService:
             return await self._dispatch_composition(
                 database, envelope=envelope, session=session
             )
-        except ExecutionCompositionError as error:
+        except (ExecutionCompositionError, ControlledExecutionError) as error:
             raise TransportMessageError(str(error)) from error
 
     async def _dispatch_composition(
@@ -395,7 +404,7 @@ class WorkerTransportService:
                 raise TransportMessageError("Provider result payload is invalid.")
             if WorkerCapability.ENGINEERING_EXECUTE not in session.capabilities:
                 raise TransportCapabilityError("Session lacks execution capability.")
-            result = await self.compositions.record_result_in_transaction(
+            provider_result = await self.compositions.record_result_in_transaction(
                 database,
                 worker_context=session.context,
                 lease_id=payload.lease_id,
@@ -413,7 +422,10 @@ class WorkerTransportService:
                 ),
                 now=envelope.sent_at,
             )
-            return f"provider_result:{result.id}:{result.disposition.value}"
+            return (
+                f"provider_result:{provider_result.id}:"
+                f"{provider_result.disposition.value}"
+            )
         if envelope.kind is TransportMessageKind.CANCELLATION_ACKNOWLEDGEMENT:
             if not isinstance(payload, CancellationAcknowledgementMessage):
                 raise TransportMessageError(
@@ -429,6 +441,48 @@ class WorkerTransportService:
                 now=envelope.sent_at,
             )
             return f"cancellation_acknowledged:{attempt.id}:version:{attempt.version}"
+        if envelope.kind is TransportMessageKind.CONTROLLED_OFFER_ACQUISITION:
+            if not isinstance(payload, ControlledOfferAcquisitionMessage):
+                raise TransportMessageError(
+                    "Controlled acquisition payload is invalid."
+                )
+            if WorkerCapability.ENGINEERING_EXECUTE not in session.capabilities:
+                raise TransportCapabilityError("Session lacks execution capability.")
+            offer = await self.controlled.acquire_in_transaction(
+                database,
+                worker_context=session.context,
+                session_id=session.session_id,
+                offer_id=payload.offer_id,
+                now=envelope.sent_at,
+            )
+            return f"controlled_offer:{offer.id}:lease:{offer.lease_id}"
+        if envelope.kind is TransportMessageKind.CONTROLLED_EXECUTION_RESULT:
+            if not isinstance(payload, ControlledExecutionResultMessage):
+                raise TransportMessageError("Controlled result payload is invalid.")
+            if WorkerCapability.ENGINEERING_EXECUTE not in session.capabilities:
+                raise TransportCapabilityError("Session lacks execution capability.")
+            try:
+                outcome = ControlledOutcome(payload.outcome)
+            except ValueError as error:
+                raise TransportMessageError(
+                    "Controlled result outcome is invalid."
+                ) from error
+            controlled_result = await self.controlled.complete_in_transaction(
+                database,
+                worker_context=session.context,
+                session_id=session.session_id,
+                offer_id=payload.offer_id,
+                lease_id=payload.lease_id,
+                outcome=outcome,
+                output=payload.output,
+                error_classification=payload.error_classification,
+                started_at=payload.started_at,
+                completed_at=payload.completed_at,
+            )
+            return (
+                f"controlled_result:{controlled_result.id}:"
+                f"offer:{controlled_result.offer_id}"
+            )
         raise TransportMessageError("Unsupported transport message kind.")
 
     async def delivery_package(

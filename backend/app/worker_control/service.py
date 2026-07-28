@@ -1,6 +1,6 @@
+import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-import re
 from uuid import UUID, uuid4
 
 from sqlalchemy.exc import IntegrityError
@@ -70,7 +70,6 @@ from app.worker_control.records import (
     WorkerResultRecord,
 )
 from app.worker_control.repository import WorkerControlRepository
-
 
 SAFE_IDENTIFIER = re.compile(r"^[a-z0-9][a-z0-9._-]{0,99}$")
 MIN_LEASE_SECONDS = 30
@@ -314,57 +313,65 @@ class WorkerControlService:
         self._validate_lease_seconds(int(offer.lease_duration.total_seconds()))
         try:
             async with session.begin():
-                worker = await self._authenticated_worker(
-                    session, worker_context=worker_context
-                )
-                if worker.lifecycle_state != WorkerLifecycleState.AVAILABLE.value:
-                    raise WorkerLifecycleError("Worker is not available.")
-                capabilities = {
-                    WorkerCapability(value) for value in worker.capabilities
-                }
-                if offer.capability_required not in capabilities:
-                    raise WorkerLifecycleError(
-                        "Worker does not claim the required capability."
-                    )
-                execution = await self.execution_repository.get(
+                return await self.acquire_lease_in_transaction(
                     session,
-                    company_id=worker.company_id,
-                    execution_id=offer.execution_id,
-                )
-                if execution is None:
-                    raise WorkerNotFoundError("Engineering Execution was not found.")
-                if execution.correlation_id != offer.correlation_id:
-                    raise WorkerLeaseError("Execution offer identity is invalid.")
-                if (
-                    execution.state
-                    is not EngineeringExecutionState.EXECUTION_NOT_CONNECTED
-                ):
-                    raise WorkerLifecycleError(
-                        "Engineering Execution is not disconnected."
-                    )
-                lease = await self.repository.create_lease(
-                    session,
-                    worker=worker,
-                    execution_id=execution.id,
-                    capability=offer.capability_required,
-                    started_at=occurred_at,
-                    expires_at=occurred_at + offer.lease_duration,
-                )
-                self._stage_worker_audit(
-                    session,
-                    action="engineering.worker_lease_acquired",
                     worker_context=worker_context,
-                    resource_id=lease.id,
-                    correlation_id=execution.correlation_id,
-                    details=self._lease_details(lease),
-                    occurred_at=occurred_at,
+                    offer=offer,
+                    now=occurred_at,
                 )
-            return lease
         except IntegrityError as error:
             await session.rollback()
             raise WorkerConflictError(
                 "Worker or Engineering Execution already has an active lease."
             ) from error
+
+    async def acquire_lease_in_transaction(
+        self,
+        session: AsyncSession,
+        *,
+        worker_context: AuthenticatedWorkerContext,
+        offer: ExecutionOffer,
+        now: datetime,
+    ) -> WorkerLeaseRecord:
+        if offer.expires_at <= now:
+            raise WorkerLeaseError("Execution offer has expired.")
+        worker = await self._authenticated_worker(
+            session, worker_context=worker_context
+        )
+        if worker.lifecycle_state != WorkerLifecycleState.AVAILABLE.value:
+            raise WorkerLifecycleError("Worker is not available.")
+        capabilities = {WorkerCapability(value) for value in worker.capabilities}
+        if offer.capability_required not in capabilities:
+            raise WorkerLifecycleError("Worker does not claim the required capability.")
+        execution = await self.execution_repository.get(
+            session,
+            company_id=worker.company_id,
+            execution_id=offer.execution_id,
+        )
+        if execution is None:
+            raise WorkerNotFoundError("Engineering Execution was not found.")
+        if execution.correlation_id != offer.correlation_id:
+            raise WorkerLeaseError("Execution offer identity is invalid.")
+        if execution.state is not EngineeringExecutionState.EXECUTION_NOT_CONNECTED:
+            raise WorkerLifecycleError("Engineering Execution is not disconnected.")
+        lease = await self.repository.create_lease(
+            session,
+            worker=worker,
+            execution_id=execution.id,
+            capability=offer.capability_required,
+            started_at=now,
+            expires_at=now + offer.lease_duration,
+        )
+        self._stage_worker_audit(
+            session,
+            action="engineering.worker_lease_acquired",
+            worker_context=worker_context,
+            resource_id=lease.id,
+            correlation_id=execution.correlation_id,
+            details=self._lease_details(lease),
+            occurred_at=now,
+        )
+        return lease
 
     async def renew_lease(
         self,
@@ -458,6 +465,41 @@ class WorkerControlService:
                 occurred_at=occurred_at,
             )
             return record
+
+    async def release_lease_in_transaction(
+        self,
+        session: AsyncSession,
+        *,
+        worker_context: AuthenticatedWorkerContext,
+        lease_id: UUID,
+        now: datetime,
+    ) -> WorkerLeaseRecord:
+        worker = await self._authenticated_worker(
+            session, worker_context=worker_context
+        )
+        lease = await self.repository.get_lease_for_update(
+            session,
+            company_id=worker_context.company_id,
+            lease_id=lease_id,
+        )
+        if (
+            lease is None
+            or lease.worker_id != worker_context.worker_id
+            or lease.status != WorkerLeaseStatus.ACTIVE.value
+        ):
+            raise WorkerLeaseError("Worker lease is not active.")
+        status = (
+            WorkerLeaseStatus.EXPIRED
+            if lease.expires_at <= now
+            else WorkerLeaseStatus.RELEASED
+        )
+        return await self.repository.finish_lease(
+            session,
+            lease=lease,
+            worker=worker,
+            status=status,
+            occurred_at=now,
+        )
 
     async def expire_lease(
         self,

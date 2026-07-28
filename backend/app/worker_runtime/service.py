@@ -6,9 +6,11 @@ from uuid import UUID, uuid4
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-from app.worker_control.contracts import WorkerHealth
+from app.worker_control.contracts import WorkerCapability, WorkerHealth
 from app.worker_control.transport.contracts import (
     AuthenticatedMessageEnvelope,
+    ControlledExecutionResultMessage,
+    ControlledOfferAcquisitionMessage,
     HeartbeatMessage,
     LeaseRenewalMessage,
     TransportMessageKind,
@@ -20,6 +22,10 @@ from app.worker_control.transport.crypto import (
 )
 from app.worker_runtime.client import Session, WorkerTransportClient
 from app.worker_runtime.config import WorkerRuntimeConfig
+from app.worker_runtime.execution import (
+    IsolatedWorkspaceExecutionError,
+    IsolatedWorkspaceExecutor,
+)
 
 
 class WorkerRuntimeState(StrEnum):
@@ -164,6 +170,8 @@ class AuthenticatedWorkerRuntime:
             await self.establish()
             while not stop.is_set():
                 await self.heartbeat()
+                if WorkerCapability.ENGINEERING_EXECUTE in self.config.capabilities:
+                    await self.execute_available_offer()
                 try:
                     await asyncio.wait_for(
                         stop.wait(), timeout=self.config.heartbeat_seconds
@@ -176,6 +184,86 @@ class AuthenticatedWorkerRuntime:
         finally:
             await self.close()
 
+    async def execute_available_offer(self) -> bool:
+        async with self._lock:
+            session = self._require_session()
+            offers = await self.client.poll_offers(session_id=session.session_id)
+            if not offers:
+                return False
+            offered = offers[0]
+            sent_at = datetime.now(timezone.utc)
+            acquisition = ControlledOfferAcquisitionMessage(
+                offer_id=UUID(str(offered["offer_id"]))
+            )
+            envelope = self._envelope(
+                session=session,
+                sent_at=sent_at,
+                kind=TransportMessageKind.CONTROLLED_OFFER_ACQUISITION,
+                payload=acquisition,
+            )
+            acquired = await self.client.acquire_offer(
+                session_id=session.session_id,
+                payload={
+                    "message_id": str(envelope.message_id),
+                    "session_id": str(envelope.session_id),
+                    "sequence_number": envelope.sequence_number,
+                    "sent_at": envelope.sent_at.isoformat(),
+                    "authentication_proof": envelope.authentication_proof,
+                    "key_version": envelope.key_version,
+                    "offer_id": str(acquisition.offer_id),
+                },
+            )
+            self._advance(sent_at)
+            started_at = datetime.now(timezone.utc)
+            outcome = "succeeded"
+            failure = None
+            try:
+                assert self.config.workspace_root is not None
+                output = IsolatedWorkspaceExecutor(self.config.workspace_root).execute(
+                    acquired
+                )
+            except IsolatedWorkspaceExecutionError:
+                outcome = "failed"
+                failure = "workspace_validation_failed"
+                output = {"repository_mutated": False}
+            completed_at = datetime.now(timezone.utc)
+            current = self._require_session()
+            result_payload = ControlledExecutionResultMessage(
+                offer_id=acquired.offer_id,
+                lease_id=acquired.lease_id,
+                outcome=outcome,
+                output=output,
+                error_classification=failure,
+                started_at=started_at,
+                completed_at=completed_at,
+            )
+            result_envelope = self._envelope(
+                session=current,
+                sent_at=completed_at,
+                kind=TransportMessageKind.CONTROLLED_EXECUTION_RESULT,
+                payload=result_payload,
+            )
+            await self.client.submit_controlled_result(
+                session_id=current.session_id,
+                payload={
+                    "message_id": str(result_envelope.message_id),
+                    "session_id": str(result_envelope.session_id),
+                    "sequence_number": result_envelope.sequence_number,
+                    "sent_at": result_envelope.sent_at.isoformat(),
+                    "authentication_proof": result_envelope.authentication_proof,
+                    "key_version": result_envelope.key_version,
+                    "offer_id": str(acquired.offer_id),
+                    "lease_id": str(acquired.lease_id),
+                    "outcome": outcome,
+                    "output": output,
+                    "error_classification": failure,
+                    "started_at": started_at.isoformat(),
+                    "completed_at": completed_at.isoformat(),
+                },
+            )
+            self._advance(completed_at)
+            return True
+
     async def close(self) -> None:
         await self.client.close()
         self._session = None
@@ -187,7 +275,12 @@ class AuthenticatedWorkerRuntime:
         session: Session,
         sent_at: datetime,
         kind: TransportMessageKind,
-        payload: HeartbeatMessage | LeaseRenewalMessage,
+        payload: (
+            HeartbeatMessage
+            | LeaseRenewalMessage
+            | ControlledOfferAcquisitionMessage
+            | ControlledExecutionResultMessage
+        ),
     ) -> AuthenticatedMessageEnvelope:
         unsigned = AuthenticatedMessageEnvelope(
             message_id=uuid4(),

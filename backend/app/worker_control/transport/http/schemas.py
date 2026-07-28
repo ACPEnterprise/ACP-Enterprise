@@ -4,15 +4,15 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.engineering_execution.composition.contracts import (
+    ProviderProgressPhase,
+    ProviderResultStatus,
+)
 from app.worker_control.contracts import (
     WorkerCapability,
     WorkerFailureClassification,
     WorkerHealth,
     WorkerResultStatus,
-)
-from app.engineering_execution.composition.contracts import (
-    ProviderProgressPhase,
-    ProviderResultStatus,
 )
 
 
@@ -115,6 +115,20 @@ class CancellationAcknowledgementRequest(EnvelopeEvidence):
     composition_digest: Annotated[str, Field(min_length=64, max_length=64)]
 
 
+class ControlledOfferAcquisitionRequest(EnvelopeEvidence):
+    offer_id: UUID
+
+
+class ControlledExecutionResultRequest(EnvelopeEvidence):
+    offer_id: UUID
+    lease_id: UUID
+    outcome: Literal["succeeded", "failed", "timed_out", "cancelled"]
+    output: dict[str, object]
+    error_classification: Annotated[str | None, Field(max_length=80)] = None
+    started_at: datetime
+    completed_at: datetime
+
+
 class ReceiptResponse(StrictModel):
     message_id: UUID
     sequence_number: int
@@ -130,6 +144,20 @@ class OfferResponse(StrictModel):
     capability_required: WorkerCapability
     lease_seconds: int
     expires_at: datetime
+    command_id: UUID
+    workspace_id: str
+    command_type: Literal["inspect_workspace"]
+    payload: dict[str, object]
+
+
+class ControlledOfferAcquisitionResponse(StrictModel):
+    receipt: ReceiptResponse
+    offer_id: UUID
+    lease_id: UUID
+    lease_version: int
+    workspace_id: str
+    command_type: Literal["inspect_workspace"]
+    payload: dict[str, object]
 
 
 class OfferPageResponse(StrictModel):

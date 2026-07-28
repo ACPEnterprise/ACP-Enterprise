@@ -14,6 +14,7 @@ class WorkerRuntimeConfig:
     capabilities: tuple[WorkerCapability, ...]
     heartbeat_seconds: int = 30
     request_timeout_seconds: int = 10
+    workspace_root: Path | None = None
 
     @classmethod
     def from_environment(cls) -> "WorkerRuntimeConfig":
@@ -33,6 +34,11 @@ class WorkerRuntimeConfig:
             request_timeout_seconds=int(
                 os.environ.get("ACP_WORKER_REQUEST_TIMEOUT_SECONDS", "10")
             ),
+            workspace_root=(
+                Path(os.environ["ACP_WORKER_WORKSPACE_ROOT"])
+                if "ACP_WORKER_WORKSPACE_ROOT" in os.environ
+                else None
+            ),
         )
         if (
             not config.base_url.startswith(("http://", "https://"))
@@ -41,6 +47,13 @@ class WorkerRuntimeConfig:
             or not 1 <= config.request_timeout_seconds <= 30
         ):
             raise ValueError("Worker runtime configuration is invalid.")
+        if (
+            WorkerCapability.ENGINEERING_EXECUTE in config.capabilities
+            and config.workspace_root is None
+        ):
+            raise ValueError(
+                "Execution-capable worker requires an isolated workspace root."
+            )
         return config
 
     def read_private_key(self) -> str:

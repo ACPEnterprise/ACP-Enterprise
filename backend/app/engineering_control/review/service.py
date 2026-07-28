@@ -1,7 +1,9 @@
 import hashlib
 import json
 import re
+from collections.abc import Mapping, Sequence
 from datetime import datetime, timezone
+from typing import TypedDict
 from uuid import UUID
 
 from sqlalchemy.exc import IntegrityError
@@ -38,23 +40,103 @@ MAX_REVIEW_JSON_BYTES = 32_000
 MAX_OUTPUT_REFERENCES = 20
 
 
+class _ReviewEvidence(TypedDict):
+    composition_id: str | None
+    attempt_id: str | None
+    result_id: str | None
+    controlled_result_id: str | None
+    provider_identifier: str
+    instruction_digest: str
+    request_digest: str
+    composition_digest: str
+    result_status: str
+    result_disposition: str
+    evidence_summary: Mapping[str, object]
+    validation_summary: Mapping[str, object]
+    output_references: Sequence[str]
+    failure_classification: str | None
+    repository_mutated: bool
+    received_at: datetime
+
+
+def _evidence(source: EngineeringReviewSource) -> _ReviewEvidence:
+    if (
+        source.result is not None
+        and source.composition is not None
+        and source.attempt is not None
+    ):
+        return {
+            "composition_id": str(source.composition.id),
+            "attempt_id": str(source.attempt.id),
+            "result_id": str(source.result.id),
+            "controlled_result_id": None,
+            "provider_identifier": source.composition.provider_identifier,
+            "instruction_digest": source.composition.instruction_digest,
+            "request_digest": source.composition.request_digest,
+            "composition_digest": source.composition.composition_digest,
+            "result_status": source.result.status,
+            "result_disposition": source.result.disposition,
+            "evidence_summary": source.result.evidence_summary,
+            "validation_summary": source.result.validation_summary,
+            "output_references": source.result.output_references,
+            "failure_classification": source.result.failure_classification,
+            "repository_mutated": source.result.repository_mutated,
+            "received_at": source.result.received_at,
+        }
+    if source.controlled_result is None or source.controlled_offer is None:
+        raise EngineeringReviewIneligibleError("Execution evidence is incomplete.")
+    result = source.controlled_result
+    return {
+        "composition_id": None,
+        "attempt_id": None,
+        "result_id": None,
+        "controlled_result_id": str(result.id),
+        "provider_identifier": "authenticated-worker",
+        "instruction_digest": source.command.instruction_digest,
+        "request_digest": source.command.request_digest,
+        "composition_digest": source.command.request_digest[:64],
+        "result_status": result.outcome,
+        "result_disposition": "accepted",
+        "evidence_summary": result.output,
+        "validation_summary": {
+            "controlled_execution": True,
+            "workspace_id": source.controlled_offer.workspace_id,
+            "repository_mutated": False,
+        },
+        "output_references": (),
+        "failure_classification": result.error_classification,
+        "repository_mutated": result.repository_mutated,
+        "received_at": result.created_at,
+    }
+
+
 def calculate_review_digest(source: EngineeringReviewSource) -> str:
+    evidence = _evidence(source)
+    evidence_mapping: Mapping[str, object] = evidence
+    identity_keys = (
+        ("composition_id", "attempt_id", "result_id")
+        if source.result is not None
+        else ("controlled_result_id",)
+    )
     payload = {
         "command_id": str(source.command.id),
         "execution_id": str(source.execution.id),
-        "composition_id": str(source.composition.id),
-        "attempt_id": str(source.attempt.id),
-        "result_id": str(source.result.id),
-        "provider_identifier": source.composition.provider_identifier,
-        "instruction_digest": source.composition.instruction_digest,
-        "request_digest": source.composition.request_digest,
-        "composition_digest": source.composition.composition_digest,
-        "result_status": source.result.status,
-        "result_disposition": source.result.disposition,
-        "evidence_summary": source.result.evidence_summary,
-        "validation_summary": source.result.validation_summary,
-        "output_references": source.result.output_references,
-        "repository_mutated": source.result.repository_mutated,
+        **{
+            key: evidence_mapping[key]
+            for key in (
+                *identity_keys,
+                "provider_identifier",
+                "instruction_digest",
+                "request_digest",
+                "composition_digest",
+                "result_status",
+                "result_disposition",
+                "evidence_summary",
+                "validation_summary",
+                "output_references",
+                "repository_mutated",
+            )
+        },
     }
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(canonical.encode()).hexdigest()
@@ -101,11 +183,7 @@ class EngineeringReviewService:
                     )
                 self._validate_source(source)
                 digest = self._review_digest(source)
-                review = await self.repository.get_by_result(
-                    session,
-                    company_id=context.company.id,
-                    result_id=source.result.id,
-                )
+                review = await self._existing_review(session, context, source)
                 if review is None:
                     review = await self.repository.create(
                         session,
@@ -144,11 +222,7 @@ class EngineeringReviewService:
                     raise EngineeringReviewNotFoundError(
                         "Completed Engineering result was not found."
                     )
-                review = await self.repository.get_by_result(
-                    session,
-                    company_id=context.company.id,
-                    result_id=source.result.id,
-                )
+                review = await self._existing_review(session, context, source)
                 if review is None or review.review_digest != self._review_digest(
                     source
                 ):
@@ -161,6 +235,26 @@ class EngineeringReviewService:
                     review_id=review.id,
                 )
                 return self._package(review, source, decision)
+
+    async def _existing_review(
+        self,
+        session: AsyncSession,
+        context: AuthorizationContext,
+        source: EngineeringReviewSource,
+    ) -> EngineeringReviewRecord | None:
+        if source.result is not None:
+            return await self.repository.get_by_result(
+                session,
+                company_id=context.company.id,
+                result_id=source.result.id,
+            )
+        if source.controlled_result is None:
+            raise EngineeringReviewIneligibleError("Execution evidence is incomplete.")
+        return await self.repository.get_by_controlled_result(
+            session,
+            company_id=context.company.id,
+            result_id=source.controlled_result.id,
+        )
 
     async def get(
         self,
@@ -358,24 +452,24 @@ class EngineeringReviewService:
 
     @staticmethod
     def _validate_source(source: EngineeringReviewSource) -> None:
+        evidence = _evidence(source)
         if source.command.approval_state != "approved":
             raise EngineeringReviewIneligibleError("Command is not approved.")
-        if source.attempt.state not in {
-            "completed",
-            "failed",
-            "cancelled",
-            "timed_out",
-        }:
+        if source.result is not None and (
+            source.attempt is None
+            or source.attempt.state
+            not in {"completed", "failed", "cancelled", "timed_out"}
+        ):
             raise EngineeringReviewIneligibleError("Execution is not terminal.")
-        if source.result.disposition != "accepted":
+        if evidence["result_disposition"] != "accepted":
             raise EngineeringReviewIneligibleError(
                 "Quarantined or rejected results cannot enter owner review."
             )
-        if source.result.repository_mutated:
+        if evidence["repository_mutated"]:
             raise EngineeringReviewIneligibleError(
                 "Repository-mutating results cannot enter owner review."
             )
-        if (
+        if source.composition is not None and (
             source.command.instruction_digest != source.composition.instruction_digest
             or source.command.request_digest != source.composition.request_digest
         ):
@@ -384,16 +478,16 @@ class EngineeringReviewService:
             )
         serialized = json.dumps(
             {
-                "evidence": source.result.evidence_summary,
-                "validation": source.result.validation_summary,
-                "outputs": source.result.output_references,
+                "evidence": evidence["evidence_summary"],
+                "validation": evidence["validation_summary"],
+                "outputs": evidence["output_references"],
             },
             sort_keys=True,
             separators=(",", ":"),
         ).encode()
         if (
             len(serialized) > MAX_REVIEW_JSON_BYTES
-            or len(source.result.output_references) > MAX_OUTPUT_REFERENCES
+            or len(evidence["output_references"]) > MAX_OUTPUT_REFERENCES
         ):
             raise EngineeringReviewIneligibleError("Review evidence is too large.")
 
@@ -407,6 +501,7 @@ class EngineeringReviewService:
         source: EngineeringReviewSource,
         decision,
     ) -> EngineeringReviewPackage:
+        evidence = _evidence(source)
         return EngineeringReviewPackage(
             review=review,
             ecid=source.command.ecid,
@@ -416,14 +511,14 @@ class EngineeringReviewService:
             repository_key=source.command.repository_key,
             expected_branch=source.command.expected_branch,
             expected_head=source.command.expected_head,
-            result_status=source.result.status,
-            result_disposition=source.result.disposition,
-            evidence_summary=dict(source.result.evidence_summary),
-            validation_summary=dict(source.result.validation_summary),
-            output_references=tuple(source.result.output_references),
-            failure_classification=source.result.failure_classification,
-            repository_mutated=source.result.repository_mutated,
-            result_received_at=source.result.received_at,
+            result_status=str(evidence["result_status"]),
+            result_disposition=str(evidence["result_disposition"]),
+            evidence_summary=dict(evidence["evidence_summary"]),
+            validation_summary=dict(evidence["validation_summary"]),
+            output_references=tuple(evidence["output_references"]),
+            failure_classification=evidence["failure_classification"],
+            repository_mutated=bool(evidence["repository_mutated"]),
+            result_received_at=evidence["received_at"],
             decision=decision,
         )
 

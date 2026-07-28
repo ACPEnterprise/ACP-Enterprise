@@ -12,6 +12,8 @@ from app.worker_control.transport.contracts import (
     CancellationAcknowledgementMessage,
     CompositionAcknowledgementMessage,
     CompositionFetchMessage,
+    ControlledExecutionResultMessage,
+    ControlledOfferAcquisitionMessage,
     HeartbeatMessage,
     LeaseRenewalMessage,
     ProviderProgressMessage,
@@ -38,6 +40,9 @@ from app.worker_control.transport.http.schemas import (
     CompositionDeliveryResponse,
     CompositionFetchRequest,
     CompositionFetchResponse,
+    ControlledExecutionResultRequest,
+    ControlledOfferAcquisitionRequest,
+    ControlledOfferAcquisitionResponse,
     EnvelopeEvidence,
     EstablishSessionRequest,
     HeartbeatRequest,
@@ -132,6 +137,7 @@ async def poll_offers(
     polling = WorkerPollingService(
         sessions=service.sessions,
         session_validator=service,
+        offers=service.controlled,
     )
     try:
         offers = await polling.poll(
@@ -151,10 +157,88 @@ async def poll_offers(
                 capability_required=offer.capability_required,
                 lease_seconds=int(offer.lease_duration.total_seconds()),
                 expires_at=offer.expires_at,
+                command_id=UUID(str(offer.metadata["command_id"])),
+                workspace_id=str(offer.metadata["workspace_id"]),
+                command_type="inspect_workspace",
+                payload=dict(offer.metadata),
             )
             for offer in offers
         ),
         retry_after_seconds=15,
+    )
+
+
+@router.post(
+    "/offers/acquire",
+    response_model=ControlledOfferAcquisitionResponse,
+    summary="Acquire one capability-bound controlled execution offer",
+)
+async def acquire_controlled_offer(
+    data: ControlledOfferAcquisitionRequest,
+    identity: AuthenticatedIdentity,
+    database: Database,
+    service: TransportService,
+) -> ControlledOfferAcquisitionResponse:
+    receipt = await _handle(
+        database,
+        service,
+        _envelope(
+            data,
+            session_id=identity.session_id,
+            worker_id=identity.context.worker_id,
+            kind=TransportMessageKind.CONTROLLED_OFFER_ACQUISITION,
+            payload=ControlledOfferAcquisitionMessage(offer_id=data.offer_id),
+        ),
+    )
+    offer = await service.controlled.repository.get_offer(
+        database,
+        company_id=identity.context.company_id,
+        offer_id=data.offer_id,
+    )
+    if offer is None or offer.lease_id is None:
+        raise transport_http_error(
+            TransportMessageError("Acquired offer was not found.")
+        )
+    return ControlledOfferAcquisitionResponse(
+        receipt=receipt,
+        offer_id=offer.id,
+        lease_id=offer.lease_id,
+        lease_version=1,
+        workspace_id=offer.workspace_id,
+        command_type="inspect_workspace",
+        payload=dict(offer.payload),
+    )
+
+
+@router.post(
+    "/controlled-results",
+    response_model=ReceiptResponse,
+    summary="Submit a bounded controlled execution result",
+)
+async def submit_controlled_result(
+    data: ControlledExecutionResultRequest,
+    identity: AuthenticatedIdentity,
+    database: Database,
+    service: TransportService,
+) -> ReceiptResponse:
+    return await _handle(
+        database,
+        service,
+        _envelope(
+            data,
+            session_id=identity.session_id,
+            worker_id=identity.context.worker_id,
+            kind=TransportMessageKind.CONTROLLED_EXECUTION_RESULT,
+            payload=ControlledExecutionResultMessage(
+                offer_id=data.offer_id,
+                lease_id=data.lease_id,
+                outcome=data.outcome,
+                output=data.output,
+                error_classification=data.error_classification,
+                started_at=data.started_at,
+                completed_at=data.completed_at,
+            ),
+        ),
     )
 
 
