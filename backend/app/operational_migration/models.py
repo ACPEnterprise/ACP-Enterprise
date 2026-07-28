@@ -30,7 +30,8 @@ class OperationalMigrationRun(Base):
             name="ck_operational_migration_runs_mode",
         ),
         CheckConstraint(
-            "status IN ('running', 'completed', 'failed')",
+            "status IN ('running', 'interrupted', 'completed', "
+            "'completed_with_exceptions', 'failed')",
             name="ck_operational_migration_runs_status",
         ),
         CheckConstraint(
@@ -61,7 +62,7 @@ class OperationalMigrationRun(Base):
     source_system: Mapped[str] = mapped_column(String(80), nullable=False)
     source_digest: Mapped[str] = mapped_column(String(64), nullable=False)
     mode: Mapped[str] = mapped_column(String(20), nullable=False)
-    status: Mapped[str] = mapped_column(String(20), nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False)
     source_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     accepted_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     rejected_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

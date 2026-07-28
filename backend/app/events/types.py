@@ -198,3 +198,12 @@ class EventType(str, Enum):
     PAYMENT_RECEIVED = "payment.received"
     PAYMENT_REFUNDED = "payment.refunded"
     PAYMENT_MIGRATED = "payment.migrated"
+
+    # Migration
+    NOTE_MIGRATED = "note.migrated"
+    ACTIVITY_MIGRATED = "activity.migrated"
+    ARTIFACT_REGISTERED = "artifact.registered"
+    ARTIFACT_MIGRATED = "artifact.migrated"
+    MIGRATION_CUTOVER_READINESS_EVALUATED = "migration.cutover_readiness_evaluated"
+    MIGRATION_COMPLETED = "migration.completed"
+    MIGRATION_COMPLETED_WITH_EXCEPTIONS = "migration.completed_with_exceptions"
