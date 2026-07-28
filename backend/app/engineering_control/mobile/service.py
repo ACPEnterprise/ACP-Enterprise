@@ -104,7 +104,10 @@ class MobileEngineeringControlService:
                     result_status=package.result_status,
                     result_disposition=package.result_disposition,
                     validation_summary=dict(package.validation_summary),
-                    file_boundary=self._file_boundary(package.validation_summary),
+                    file_boundary=self._file_boundary(
+                        package.validation_summary,
+                        package.evidence_summary,
+                    ),
                     state=package.review.state,
                     created_at=package.review.created_at,
                     decision=(
@@ -226,15 +229,16 @@ class MobileEngineeringControlService:
         )
 
     @staticmethod
-    def _file_boundary(summary: object) -> tuple[str, ...]:
-        if not isinstance(summary, Mapping):
-            return ()
-        value = summary.get("file_boundary")
-        if not isinstance(value, list) or not all(
-            isinstance(path, str) for path in value
-        ):
-            return ()
-        return tuple(value)
+    def _file_boundary(*summaries: object) -> tuple[str, ...]:
+        for summary in summaries:
+            if not isinstance(summary, Mapping):
+                continue
+            value = summary.get("file_boundary")
+            if isinstance(value, (list, tuple)) and all(
+                isinstance(path, str) for path in value
+            ):
+                return tuple(value)
+        return ()
 
 
 mobile_engineering_control_service = MobileEngineeringControlService()

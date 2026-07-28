@@ -320,3 +320,10 @@ def test_connectivity_projection_distinguishes_connecting_fresh_and_stale() -> N
         )
         == "disconnected"
     )
+
+
+def test_file_boundary_falls_back_to_controlled_workspace_evidence() -> None:
+    assert MobileEngineeringControlService._file_boundary(
+        {"controlled_execution": True},
+        {"file_boundary": ("README.md",)},
+    ) == ("README.md",)
