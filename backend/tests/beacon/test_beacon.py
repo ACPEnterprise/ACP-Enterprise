@@ -1,0 +1,189 @@
+from dataclasses import FrozenInstanceError
+from datetime import date, datetime, timedelta, timezone
+from decimal import Decimal
+from types import SimpleNamespace
+from uuid import UUID, uuid4
+
+import httpx
+import pytest
+from fastapi import FastAPI
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.beacon.contracts import (
+    BeaconCategory,
+    BeaconEvidence,
+    BeaconSnapshot,
+    OverdueAppointmentFacts,
+    PastDueInvoiceFacts,
+    PausedJobFacts,
+)
+from app.beacon.router import router
+from app.beacon.service import BeaconQueryService, beacon_query_service
+from app.database.session import get_database_session
+from app.platform.permissions.authorization import (
+    AuthorizationContext,
+    PermissionDeniedError,
+)
+from app.platform.permissions.codes import AnalyticsPermission
+from app.platform.permissions.dependencies import get_authorization_context
+
+NOW = datetime(2026, 7, 28, 16, 0, tzinfo=timezone.utc)
+COMPANY_ID = UUID("f47ac10b-58cc-4372-a567-0e02b2c3d479")
+
+
+def context(*permissions: str) -> AuthorizationContext:
+    value = object.__new__(AuthorizationContext)
+    object.__setattr__(value, "company", SimpleNamespace(id=COMPANY_ID))
+    object.__setattr__(
+        value,
+        "effective_permissions",
+        tuple(SimpleNamespace(code=permission) for permission in permissions),
+    )
+    return value
+
+
+def evidence(entity_type: str) -> BeaconEvidence:
+    return BeaconEvidence(
+        entity_type=entity_type,
+        entity_id=uuid4(),
+        event_id=uuid4(),
+        event_type=f"{entity_type}.updated",
+        occurred_at=NOW - timedelta(hours=1),
+    )
+
+
+def snapshot(*, populated: bool = True) -> BeaconSnapshot:
+    return BeaconSnapshot(
+        company_id=COMPANY_ID,
+        measured_at=NOW,
+        overdue_appointments=OverdueAppointmentFacts(
+            count=2 if populated else 0,
+            earliest_window_start=NOW - timedelta(hours=25) if populated else None,
+            evidence=(evidence("appointment"),) if populated else (),
+        ),
+        paused_jobs=PausedJobFacts(
+            count=3 if populated else 0,
+            earliest_paused_at=NOW - timedelta(hours=5) if populated else None,
+            evidence=(evidence("job"),) if populated else (),
+        ),
+        past_due_invoices=PastDueInvoiceFacts(
+            count=1 if populated else 0,
+            total_amount=Decimal("125.50") if populated else Decimal(0),
+            earliest_due_on=date(2026, 7, 18) if populated else None,
+            evidence=(evidence("invoice"),) if populated else (),
+        ),
+    )
+
+
+class FakeRepository:
+    def __init__(self, value: BeaconSnapshot) -> None:
+        self.value = value
+        self.calls: list[tuple[UUID, datetime]] = []
+
+    async def load_snapshot(
+        self,
+        _session: AsyncSession,
+        *,
+        company_id: UUID,
+        measured_at: datetime,
+    ) -> BeaconSnapshot:
+        self.calls.append((company_id, measured_at))
+        return self.value
+
+
+@pytest.mark.asyncio
+async def test_signals_are_immutable_deterministic_and_explainable() -> None:
+    source = snapshot()
+    repository = FakeRepository(source)
+    service = BeaconQueryService(repository)
+
+    first = await service.list_signals(
+        object(),  # type: ignore[arg-type]
+        context=context(AnalyticsPermission.READ),
+        now=NOW,
+    )
+    second = await service.list_signals(
+        object(),  # type: ignore[arg-type]
+        context=context(AnalyticsPermission.READ),
+        now=NOW,
+    )
+
+    assert [item.id for item in first] == [item.id for item in second]
+    assert [item.category for item in first] == [
+        BeaconCategory.SCHEDULING,
+        BeaconCategory.REVENUE,
+        BeaconCategory.OPERATIONS,
+    ]
+    assert all(item.supporting_facts for item in first)
+    assert all(item.recommended_action for item in first)
+    assert all(item.expires_at == NOW + timedelta(minutes=15) for item in first)
+    assert all(item.confidence.level == "high" for item in first)
+    assert repository.calls == [(COMPANY_ID, NOW), (COMPANY_ID, NOW)]
+    with pytest.raises(FrozenInstanceError):
+        first[0].title = "Changed"  # type: ignore[misc]
+
+
+@pytest.mark.asyncio
+async def test_empty_authoritative_snapshot_produces_no_signal() -> None:
+    service = BeaconQueryService(FakeRepository(snapshot(populated=False)))
+    assert (
+        await service.list_signals(
+            object(),  # type: ignore[arg-type]
+            context=context(AnalyticsPermission.READ),
+            now=NOW,
+        )
+        == ()
+    )
+
+
+@pytest.mark.asyncio
+async def test_permission_and_company_scope_fail_closed() -> None:
+    repository = FakeRepository(snapshot())
+    service = BeaconQueryService(repository)
+    with pytest.raises(PermissionDeniedError):
+        await service.list_signals(
+            object(),  # type: ignore[arg-type]
+            context=context(),
+            now=NOW,
+        )
+    assert repository.calls == []
+
+
+def test_category_architecture_is_complete() -> None:
+    assert {item.value for item in BeaconCategory} == {
+        "operations",
+        "revenue",
+        "customer",
+        "scheduling",
+        "workforce",
+    }
+
+
+@pytest.mark.asyncio
+async def test_beacon_http_api_returns_bounded_company_scoped_signals(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repository = FakeRepository(snapshot())
+    monkeypatch.setattr(beacon_query_service, "repository", repository)
+    app = FastAPI()
+    app.include_router(router)
+
+    async def session_override():
+        yield object()
+
+    async def context_override() -> AuthorizationContext:
+        return context(AnalyticsPermission.READ)
+
+    app.dependency_overrides[get_database_session] = session_override
+    app.dependency_overrides[get_authorization_context] = context_override
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.get("/api/v1/beacon/signals")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body["items"]) == 3
+    assert body["items"][0]["supporting_facts"]
+    assert body["items"][0]["expiration_policy"] == "replace_on_next_evaluation"
+    assert "payload" not in str(body).lower()

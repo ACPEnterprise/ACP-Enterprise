@@ -17,7 +17,9 @@ import {
   IntegrationStateBadge,
   WorkforceRow,
 } from "../components/command-center/CommandCenterPrimitives";
+import { BeaconPanel } from "../components/command-center/BeaconPanel";
 import { useAnalyticsSummary } from "../hooks/useAnalyticsSummary";
+import { useBeaconSignals } from "../hooks/useBeaconSignals";
 import { useJobs } from "../hooks/useJobs";
 
 function formatCurrency(value: string | number): string {
@@ -42,6 +44,7 @@ function metricState(
 
 export function CommandCenterRoute() {
   const analytics = useAnalyticsSummary();
+  const beacon = useBeaconSignals();
   const jobs = useJobs({ page: 1, pageSize: 1 });
   const revenue = analytics.data
     ? { value: formatCurrency(analytics.data.booked_revenue.value) }
@@ -102,6 +105,13 @@ export function CommandCenterRoute() {
           />
         </div>
       </section>
+
+      <BeaconPanel
+        signals={beacon.data?.items}
+        loading={beacon.isLoading}
+        error={beacon.isError}
+        retry={() => void beacon.refetch()}
+      />
 
       <div className="grid gap-ui-6 xl:grid-cols-[1.15fr_0.85fr]">
         <CommandCenterPanel

@@ -3,17 +3,30 @@ import { MemoryRouter } from "react-router";
 import { describe, expect, it, vi } from "vitest";
 
 import { useAnalyticsSummary } from "../hooks/useAnalyticsSummary";
+import { useBeaconSignals } from "../hooks/useBeaconSignals";
 import { useJobs } from "../hooks/useJobs";
 import { CommandCenterRoute } from "./CommandCenterRoute";
 
 vi.mock("../hooks/useAnalyticsSummary");
+vi.mock("../hooks/useBeaconSignals");
 vi.mock("../hooks/useJobs");
 
 const analyticsHook = vi.mocked(useAnalyticsSummary);
+const beaconHook = vi.mocked(useBeaconSignals);
 const jobsHook = vi.mocked(useJobs);
 
 describe("CommandCenterRoute", () => {
   it("renders connected metrics without fabricating workforce activity", () => {
+    beaconHook.mockReturnValue({
+      data: {
+        items: [],
+        evaluated_at: "2026-07-24T00:00:00Z",
+        expires_at: "2026-07-24T00:15:00Z",
+      },
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof useBeaconSignals>);
     analyticsHook.mockReturnValue({
       data: {
         period_start: "2026-07-24T00:00:00Z",
@@ -39,12 +52,19 @@ describe("CommandCenterRoute", () => {
     expect(screen.getByRole("heading", { name: "Command Center", level: 2 })).toBeInTheDocument();
     expect(screen.getByText("$1,250")).toBeInTheDocument();
     expect(screen.getByText("No critical issues requiring attention.")).toBeInTheDocument();
+    expect(screen.getByText("No active Beacon signals")).toBeInTheDocument();
     expect(screen.getAllByText("Not Connected").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Coming Soon").length).toBeGreaterThan(0);
     expect(screen.queryByText(/Codex.*live/i)).not.toBeInTheDocument();
   });
 
   it("renders honest unavailable states when connected APIs fail", () => {
+    beaconHook.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof useBeaconSignals>);
     analyticsHook.mockReturnValue({
       data: undefined,
       isLoading: false,
@@ -60,5 +80,6 @@ describe("CommandCenterRoute", () => {
     expect(screen.getAllByText("No Data Available").length).toBeGreaterThanOrEqual(4);
     expect(screen.queryByText("$0")).not.toBeInTheDocument();
     expect(screen.queryByText("0%")).not.toBeInTheDocument();
+    expect(screen.getByText("Beacon signals unavailable")).toBeInTheDocument();
   });
 });
