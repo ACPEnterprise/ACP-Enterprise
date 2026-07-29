@@ -8,6 +8,8 @@ const signal: BeaconSignal = {
   id: "signal-id",
   condition_key: "condition-id",
   evidence_digest: "a".repeat(64),
+  definition_id: "revenue.past_due_invoices",
+  definition_version: 1,
   rule_code: "revenue.past_due_invoices",
   source: "invoices",
   title: "Issued invoices are past due",

@@ -76,10 +76,29 @@ class BeaconLifecycleProjection:
 
 
 @dataclass(frozen=True)
+class BeaconCondition:
+    company_id: UUID
+    definition_id: str
+    definition_version: int
+    rule_code: str
+    source: BeaconSignalSource
+    category: BeaconCategory
+    severity: BeaconSeverity
+    confidence: BeaconConfidence
+    supporting_facts: tuple[BeaconSupportingFact, ...]
+    evidence_digest: str
+    evaluated_at: datetime
+    expires_at: datetime
+    expiration_policy: BeaconExpirationPolicy
+
+
+@dataclass(frozen=True)
 class BeaconSignal:
     id: UUID
     condition_key: UUID
     evidence_digest: str
+    definition_id: str
+    definition_version: int
     rule_code: str
     source: BeaconSignalSource
     title: str

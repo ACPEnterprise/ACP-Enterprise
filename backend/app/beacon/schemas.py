@@ -97,6 +97,8 @@ class BeaconSignalResponse(BaseModel):
     id: UUID
     condition_key: UUID
     evidence_digest: str
+    definition_id: str
+    definition_version: int
     rule_code: str
     source: BeaconSignalSource
     title: str

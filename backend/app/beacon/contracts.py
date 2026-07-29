@@ -53,6 +53,17 @@ class BeaconExpirationPolicy(StrEnum):
     REPLACE_ON_NEXT_EVALUATION = "replace_on_next_evaluation"
 
 
+class BeaconConditionKind(StrEnum):
+    OVERDUE_APPOINTMENTS = "overdue_appointments"
+    PAUSED_JOBS = "paused_jobs"
+    PAST_DUE_INVOICES = "past_due_invoices"
+
+
+class BeaconEscalationMatch(StrEnum):
+    ANY = "any"
+    ALL = "all"
+
+
 class BeaconLifecycleAction(StrEnum):
     ACKNOWLEDGE = "acknowledge"
     REVIEW = "review"
@@ -70,6 +81,32 @@ class BeaconLifecycleStatus(StrEnum):
 class BeaconConfidence:
     level: BeaconConfidenceLevel
     basis: str
+
+
+@dataclass(frozen=True)
+class BeaconEscalationThreshold:
+    severity: BeaconSeverity
+    minimum_age: int | None = None
+    minimum_count: int | None = None
+    match: BeaconEscalationMatch = BeaconEscalationMatch.ALL
+
+
+@dataclass(frozen=True)
+class BeaconSignalDefinition:
+    definition_id: str
+    version: int
+    rule_code: str
+    condition_kind: BeaconConditionKind
+    source: BeaconSignalSource
+    category: BeaconCategory
+    title: str
+    recommended_action: str
+    confidence: BeaconConfidence
+    base_severity: BeaconSeverity
+    escalation_thresholds: tuple[BeaconEscalationThreshold, ...]
+    expiration_policy: BeaconExpirationPolicy
+    ttl_seconds: int
+    evidence_entity_type: str
 
 
 @dataclass(frozen=True)

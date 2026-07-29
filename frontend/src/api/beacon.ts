@@ -53,6 +53,8 @@ export interface BeaconSignal {
   id: string;
   condition_key: string;
   evidence_digest: string;
+  definition_id: string;
+  definition_version: number;
   rule_code: string;
   source: BeaconSignalSource;
   title: string;

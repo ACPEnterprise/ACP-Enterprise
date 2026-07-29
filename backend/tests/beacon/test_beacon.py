@@ -149,6 +149,8 @@ async def test_signals_are_immutable_deterministic_and_explainable() -> None:
     assert [item.priority for item in first] == [item.priority for item in second]
     assert all(item.supporting_facts for item in first)
     assert all(item.recommended_action for item in first)
+    assert all(item.definition_id == item.rule_code for item in first)
+    assert all(item.definition_version == 1 for item in first)
     assert all(item.expires_at == NOW + timedelta(minutes=15) for item in first)
     assert all(item.confidence.level == "high" for item in first)
     assert repository.calls == [(COMPANY_ID, NOW), (COMPANY_ID, NOW)]
@@ -323,6 +325,7 @@ async def test_beacon_http_api_returns_bounded_company_scoped_signals(
     body = response.json()
     assert len(body["items"]) == 3
     assert body["items"][0]["supporting_facts"]
+    assert body["items"][0]["definition_version"] == 1
     assert body["items"][0]["source"] == "scheduling"
     assert body["items"][0]["priority"]["rank"] == 1
     assert body["items"][0]["priority"]["ranking_factors"]
