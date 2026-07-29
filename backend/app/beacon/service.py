@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from uuid import NAMESPACE_URL, UUID, uuid5
@@ -15,14 +16,27 @@ from app.beacon.contracts import (
     BeaconEvidence,
     BeaconExpirationPolicy,
     BeaconFactRepository,
+    BeaconLifecycleAction,
+    BeaconLifecycleStatus,
     BeaconPriorityBand,
     BeaconSeverity,
     BeaconSignalSource,
     BeaconSnapshot,
 )
 from app.beacon.prioritization import beacon_prioritizer
-from app.beacon.records import BeaconPriority, BeaconSignal, BeaconSupportingFact
-from app.beacon.repository import beacon_fact_repository
+from app.beacon.records import (
+    BeaconAttentionQueue,
+    BeaconLifecycleEvent,
+    BeaconLifecycleProjection,
+    BeaconPriority,
+    BeaconSignal,
+    BeaconSupportingFact,
+)
+from app.beacon.repository import (
+    BeaconLifecycleRepository,
+    beacon_fact_repository,
+    beacon_lifecycle_repository,
+)
 from app.platform.permissions.authorization import (
     AuthorizationContext,
     authorization_service,
@@ -38,9 +52,12 @@ CONFIDENCE = BeaconConfidence(
 
 class BeaconQueryService:
     def __init__(
-        self, repository: BeaconFactRepository = beacon_fact_repository
+        self,
+        repository: BeaconFactRepository = beacon_fact_repository,
+        lifecycle_repository: BeaconLifecycleRepository = beacon_lifecycle_repository,
     ) -> None:
         self.repository = repository
+        self.lifecycle_repository = lifecycle_repository
 
     async def list_signals(
         self,
@@ -49,11 +66,56 @@ class BeaconQueryService:
         context: AuthorizationContext,
         now: datetime | None = None,
     ) -> tuple[BeaconSignal, ...]:
+        return (
+            await self.get_attention_queue(session, context=context, now=now)
+        ).active
+
+    async def get_attention_queue(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        now: datetime | None = None,
+    ) -> BeaconAttentionQueue:
         authorization_service.require_permission(context, AnalyticsPermission.READ)
         measured_at = now or datetime.now(timezone.utc)
-        snapshot = await self.repository.load_snapshot(
+        signals = await self.evaluate_current(
             session,
             company_id=context.company.id,
+            measured_at=measured_at,
+        )
+        latest = await self.lifecycle_repository.latest_for_conditions(
+            session,
+            company_id=context.company.id,
+            condition_keys=tuple(signal.condition_key for signal in signals),
+        )
+        projected = tuple(
+            self._with_lifecycle(signal, latest.get(signal.condition_key), measured_at)
+            for signal in signals
+        )
+        return BeaconAttentionQueue(
+            active=tuple(
+                signal
+                for signal in projected
+                if not signal.lifecycle.temporarily_suppressed
+            ),
+            snoozed=tuple(
+                signal
+                for signal in projected
+                if signal.lifecycle.temporarily_suppressed
+            ),
+        )
+
+    async def evaluate_current(
+        self,
+        session: AsyncSession,
+        *,
+        company_id: UUID,
+        measured_at: datetime,
+    ) -> tuple[BeaconSignal, ...]:
+        snapshot = await self.repository.load_snapshot(
+            session,
+            company_id=company_id,
             measured_at=measured_at,
         )
         signals = tuple(
@@ -66,6 +128,44 @@ class BeaconQueryService:
             if signal is not None
         )
         return beacon_prioritizer.prioritize(signals)
+
+    @staticmethod
+    def _with_lifecycle(
+        signal: BeaconSignal,
+        event: BeaconLifecycleEvent | None,
+        measured_at: datetime,
+    ) -> BeaconSignal:
+        current = (
+            event
+            if event is not None
+            and event.signal_id == signal.id
+            and event.evidence_digest == signal.evidence_digest
+            else None
+        )
+        snoozed = bool(
+            current
+            and current.action is BeaconLifecycleAction.SNOOZE
+            and current.snooze_until
+            and current.snooze_until > measured_at
+        )
+        if snoozed:
+            status = BeaconLifecycleStatus.SNOOZED
+        elif (
+            current is not None and current.action is BeaconLifecycleAction.ACKNOWLEDGE
+        ):
+            status = BeaconLifecycleStatus.ACKNOWLEDGED
+        elif current is not None and current.action is BeaconLifecycleAction.REVIEW:
+            status = BeaconLifecycleStatus.REVIEWED
+        else:
+            status = BeaconLifecycleStatus.ACTIVE
+        return replace(
+            signal,
+            lifecycle=BeaconLifecycleProjection(
+                status=status,
+                latest_event=current,
+                temporarily_suppressed=snoozed,
+            ),
+        )
 
     @classmethod
     def _overdue_appointments(cls, snapshot: BeaconSnapshot) -> BeaconSignal | None:
@@ -233,8 +333,17 @@ class BeaconQueryService:
         supporting_facts: tuple[BeaconSupportingFact, ...],
         recommended_action: str,
     ) -> BeaconSignal:
+        evidence_digest = cls._evidence_digest(supporting_facts)
         return BeaconSignal(
-            id=cls._signal_id(snapshot.company_id, rule_code, supporting_facts),
+            id=uuid5(
+                NAMESPACE_URL,
+                f"beacon:{snapshot.company_id}:{rule_code}:{evidence_digest}",
+            ),
+            condition_key=uuid5(
+                NAMESPACE_URL,
+                f"beacon:condition:{snapshot.company_id}:{source.value}:{rule_code}",
+            ),
+            evidence_digest=evidence_digest,
             rule_code=rule_code,
             source=source,
             title=title,
@@ -248,6 +357,11 @@ class BeaconQueryService:
                 explanation="Priority has not been evaluated.",
                 evaluated_at=snapshot.measured_at,
                 tie_break_semantics="Priority has not been evaluated.",
+            ),
+            lifecycle=BeaconLifecycleProjection(
+                status=BeaconLifecycleStatus.ACTIVE,
+                latest_event=None,
+                temporarily_suppressed=False,
             ),
             confidence=CONFIDENCE,
             supporting_facts=supporting_facts,
@@ -276,11 +390,9 @@ class BeaconQueryService:
         )
 
     @staticmethod
-    def _signal_id(
-        company_id: UUID,
-        rule_code: str,
+    def _evidence_digest(
         supporting_facts: tuple[BeaconSupportingFact, ...],
-    ) -> UUID:
+    ) -> str:
         payload = json.dumps(
             [
                 {
@@ -302,8 +414,7 @@ class BeaconQueryService:
             sort_keys=True,
             separators=(",", ":"),
         )
-        digest = hashlib.sha256(payload.encode()).hexdigest()
-        return uuid5(NAMESPACE_URL, f"beacon:{company_id}:{rule_code}:{digest}")
+        return hashlib.sha256(payload.encode()).hexdigest()
 
 
 beacon_query_service = BeaconQueryService()

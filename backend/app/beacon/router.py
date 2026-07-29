@@ -1,14 +1,32 @@
 from datetime import datetime, timezone
 from typing import Annotated
+from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.beacon.schemas import BeaconSignalPage, BeaconSignalResponse
+from app.beacon.contracts import BeaconLifecycleAction
+from app.beacon.errors import (
+    BeaconSignalNotFoundError,
+    BeaconSignalStaleError,
+    BeaconSnoozeInvalidError,
+)
+from app.beacon.lifecycle import (
+    RecordBeaconLifecycleAction,
+    beacon_lifecycle_service,
+)
+from app.beacon.schemas import (
+    BeaconLifecycleCommandRequest,
+    BeaconLifecycleEventResponse,
+    BeaconLifecycleHistoryResponse,
+    BeaconSignalPage,
+    BeaconSignalResponse,
+    BeaconSnoozeCommandRequest,
+)
 from app.beacon.service import SIGNAL_TTL, beacon_query_service
 from app.database.session import get_database_session
 from app.platform.permissions.authorization import AuthorizationContext
-from app.platform.permissions.codes import AnalyticsPermission
+from app.platform.permissions.codes import AnalyticsPermission, BeaconPermission
 from app.platform.permissions.dependencies import require_permission
 
 router = APIRouter(prefix="/api/v1/beacon", tags=["Beacon"])
@@ -16,6 +34,10 @@ DatabaseSession = Annotated[AsyncSession, Depends(get_database_session)]
 BeaconReader = Annotated[
     AuthorizationContext,
     Depends(require_permission(AnalyticsPermission.READ)),
+]
+BeaconReviewer = Annotated[
+    AuthorizationContext,
+    Depends(require_permission(BeaconPermission.REVIEW)),
 ]
 
 
@@ -29,13 +51,135 @@ async def list_beacon_signals(
     context: BeaconReader,
 ) -> BeaconSignalPage:
     evaluated_at = datetime.now(timezone.utc)
-    signals = await beacon_query_service.list_signals(
+    queue = await beacon_query_service.get_attention_queue(
         session,
         context=context,
         now=evaluated_at,
     )
     return BeaconSignalPage(
-        items=tuple(BeaconSignalResponse.model_validate(item) for item in signals),
+        items=tuple(BeaconSignalResponse.model_validate(item) for item in queue.active),
+        snoozed_items=tuple(
+            BeaconSignalResponse.model_validate(item) for item in queue.snoozed
+        ),
         evaluated_at=evaluated_at,
         expires_at=evaluated_at + SIGNAL_TTL,
+        lifecycle_commands_available=context.has_permission(BeaconPermission.REVIEW),
+    )
+
+
+def _lifecycle_http_error(error: Exception) -> HTTPException:
+    if isinstance(error, BeaconSignalNotFoundError):
+        return HTTPException(status.HTTP_404_NOT_FOUND, str(error))
+    if isinstance(error, BeaconSignalStaleError):
+        return HTTPException(status.HTTP_409_CONFLICT, str(error))
+    return HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(error))
+
+
+async def _record_action(
+    *,
+    signal_id,
+    evidence_digest: str,
+    action: BeaconLifecycleAction,
+    context: AuthorizationContext,
+    session: AsyncSession,
+    snooze_until: datetime | None = None,
+) -> BeaconLifecycleEventResponse:
+    try:
+        event = await beacon_lifecycle_service.record(
+            session,
+            context=context,
+            command=RecordBeaconLifecycleAction(
+                signal_id=signal_id,
+                evidence_digest=evidence_digest,
+                action=action,
+                snooze_until=snooze_until,
+            ),
+        )
+    except (
+        BeaconSignalNotFoundError,
+        BeaconSignalStaleError,
+        BeaconSnoozeInvalidError,
+    ) as error:
+        raise _lifecycle_http_error(error) from error
+    return BeaconLifecycleEventResponse.model_validate(event)
+
+
+@router.post(
+    "/signals/{signal_id}/acknowledge",
+    response_model=BeaconLifecycleEventResponse,
+)
+async def acknowledge_signal(
+    signal_id: UUID,
+    data: BeaconLifecycleCommandRequest,
+    context: BeaconReviewer,
+    session: DatabaseSession,
+) -> BeaconLifecycleEventResponse:
+    return await _record_action(
+        signal_id=signal_id,
+        evidence_digest=data.evidence_digest,
+        action=BeaconLifecycleAction.ACKNOWLEDGE,
+        context=context,
+        session=session,
+    )
+
+
+@router.post(
+    "/signals/{signal_id}/review",
+    response_model=BeaconLifecycleEventResponse,
+)
+async def review_signal(
+    signal_id: UUID,
+    data: BeaconLifecycleCommandRequest,
+    context: BeaconReviewer,
+    session: DatabaseSession,
+) -> BeaconLifecycleEventResponse:
+    return await _record_action(
+        signal_id=signal_id,
+        evidence_digest=data.evidence_digest,
+        action=BeaconLifecycleAction.REVIEW,
+        context=context,
+        session=session,
+    )
+
+
+@router.post(
+    "/signals/{signal_id}/snooze",
+    response_model=BeaconLifecycleEventResponse,
+)
+async def snooze_signal(
+    signal_id: UUID,
+    data: BeaconSnoozeCommandRequest,
+    context: BeaconReviewer,
+    session: DatabaseSession,
+) -> BeaconLifecycleEventResponse:
+    return await _record_action(
+        signal_id=signal_id,
+        evidence_digest=data.evidence_digest,
+        action=BeaconLifecycleAction.SNOOZE,
+        snooze_until=data.snooze_until,
+        context=context,
+        session=session,
+    )
+
+
+@router.get(
+    "/lifecycle-events",
+    response_model=BeaconLifecycleHistoryResponse,
+)
+async def lifecycle_history(
+    condition_key: UUID,
+    context: BeaconReader,
+    session: DatabaseSession,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+) -> BeaconLifecycleHistoryResponse:
+    events = await beacon_lifecycle_service.history(
+        session,
+        context=context,
+        condition_key=condition_key,
+        limit=limit,
+    )
+    return BeaconLifecycleHistoryResponse(
+        items=tuple(
+            BeaconLifecycleEventResponse.model_validate(item) for item in events
+        )
     )

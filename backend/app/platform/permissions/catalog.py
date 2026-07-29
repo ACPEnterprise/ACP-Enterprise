@@ -5,6 +5,7 @@ from enum import StrEnum
 from app.platform.permissions.codes import (
     AdministrationPermission,
     AnalyticsPermission,
+    BeaconPermission,
     CustomerPermission,
     EngineeringCommandPermission,
     EngineeringExecutionPermission,
@@ -116,6 +117,17 @@ ANALYTICS_DEFINITIONS = tuple(
     for code in sorted(AnalyticsPermission.ALL)
 )
 
+BEACON_DEFINITIONS = tuple(
+    PermissionDefinition(
+        code=code,
+        name="Company Beacon Review",
+        resource="beacon",
+        action="review",
+        scope=PermissionScope.COMPANY,
+    )
+    for code in sorted(BeaconPermission.ALL)
+)
+
 SCHEDULING_DEFINITIONS = tuple(
     PermissionDefinition(
         code=code,
@@ -197,6 +209,7 @@ permission_catalog = PermissionCatalog(
     ADMINISTRATION_DEFINITIONS
     + CUSTOMER_DEFINITIONS
     + ANALYTICS_DEFINITIONS
+    + BEACON_DEFINITIONS
     + SCHEDULING_DEFINITIONS
     + JOB_DEFINITIONS
     + ENGINEERING_COMMAND_DEFINITIONS

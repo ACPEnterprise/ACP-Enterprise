@@ -19,7 +19,10 @@ import {
 } from "../components/command-center/CommandCenterPrimitives";
 import { BeaconPanel } from "../components/command-center/BeaconPanel";
 import { useAnalyticsSummary } from "../hooks/useAnalyticsSummary";
-import { useBeaconSignals } from "../hooks/useBeaconSignals";
+import {
+  useBeaconLifecycleActions,
+  useBeaconSignals,
+} from "../hooks/useBeaconSignals";
 import { useJobs } from "../hooks/useJobs";
 
 function formatCurrency(value: string | number): string {
@@ -45,6 +48,7 @@ function metricState(
 export function CommandCenterRoute() {
   const analytics = useAnalyticsSummary();
   const beacon = useBeaconSignals();
+  const beaconLifecycle = useBeaconLifecycleActions();
   const jobs = useJobs({ page: 1, pageSize: 1 });
   const revenue = analytics.data
     ? { value: formatCurrency(analytics.data.booked_revenue.value) }
@@ -108,8 +112,15 @@ export function CommandCenterRoute() {
 
       <BeaconPanel
         signals={beacon.data?.items}
+        snoozedSignals={beacon.data?.snoozed_items}
+        canReview={beacon.data?.lifecycle_commands_available ?? false}
         loading={beacon.isLoading}
         error={beacon.isError}
+        lifecycleError={beaconLifecycle.isError}
+        lifecyclePending={beaconLifecycle.isPending}
+        onLifecycleAction={(signal, action, snoozeUntil) =>
+          beaconLifecycle.mutate({ signal, action, snoozeUntil })
+        }
         retry={() => void beacon.refetch()}
       />
 

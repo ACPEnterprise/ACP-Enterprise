@@ -3,6 +3,7 @@ from logging.config import fileConfig
 from sqlalchemy import engine_from_config, pool
 
 from alembic import context
+from app.beacon import models as beacon_models  # noqa: F401
 from app.core.config import settings
 from app.core.database import Base
 from app.customer_migration import models as customer_migration_models  # noqa: F401

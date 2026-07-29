@@ -19,6 +19,7 @@ from app.beacon.contracts import (
     PastDueInvoiceFacts,
     PausedJobFacts,
 )
+from app.beacon.records import BeaconLifecycleEvent
 from app.beacon.router import router
 from app.beacon.service import BeaconQueryService, beacon_query_service
 from app.database.session import get_database_session
@@ -36,6 +37,7 @@ COMPANY_ID = UUID("f47ac10b-58cc-4372-a567-0e02b2c3d479")
 def context(*permissions: str) -> AuthorizationContext:
     value = object.__new__(AuthorizationContext)
     object.__setattr__(value, "company", SimpleNamespace(id=COMPANY_ID))
+    object.__setattr__(value, "membership", SimpleNamespace(id=uuid4()))
     object.__setattr__(
         value,
         "effective_permissions",
@@ -93,11 +95,33 @@ class FakeRepository:
         return self.value
 
 
+class FakeLifecycleRepository:
+    def __init__(self) -> None:
+        self.events: dict[UUID, BeaconLifecycleEvent] = {}
+
+    async def latest_for_conditions(
+        self,
+        _session: AsyncSession,
+        *,
+        company_id: UUID,
+        condition_keys: tuple[UUID, ...],
+    ) -> dict[UUID, BeaconLifecycleEvent]:
+        assert company_id == COMPANY_ID
+        return {key: self.events[key] for key in condition_keys if key in self.events}
+
+
+def query_service(repository: FakeRepository) -> BeaconQueryService:
+    return BeaconQueryService(
+        repository,
+        FakeLifecycleRepository(),  # type: ignore[arg-type]
+    )
+
+
 @pytest.mark.asyncio
 async def test_signals_are_immutable_deterministic_and_explainable() -> None:
     source = snapshot()
     repository = FakeRepository(source)
-    service = BeaconQueryService(repository)
+    service = query_service(repository)
 
     first = await service.list_signals(
         object(),  # type: ignore[arg-type]
@@ -134,7 +158,7 @@ async def test_signals_are_immutable_deterministic_and_explainable() -> None:
 
 @pytest.mark.asyncio
 async def test_rule_factors_rank_revenue_jobs_and_appointments() -> None:
-    service = BeaconQueryService(FakeRepository(snapshot()))
+    service = query_service(FakeRepository(snapshot()))
     signals = await service.list_signals(
         object(),  # type: ignore[arg-type]
         context=context(AnalyticsPermission.READ),
@@ -176,7 +200,7 @@ async def test_rule_factors_rank_revenue_jobs_and_appointments() -> None:
 
 @pytest.mark.asyncio
 async def test_missing_optional_factor_is_explicitly_not_applicable() -> None:
-    service = BeaconQueryService(FakeRepository(snapshot()))
+    service = query_service(FakeRepository(snapshot()))
     signals = await service.list_signals(
         object(),  # type: ignore[arg-type]
         context=context(AnalyticsPermission.READ),
@@ -216,7 +240,7 @@ async def test_ties_resolve_by_stable_source_not_generation_order() -> None:
             evidence=(),
         ),
     )
-    service = BeaconQueryService(FakeRepository(tied))
+    service = query_service(FakeRepository(tied))
     signals = await service.list_signals(
         object(),  # type: ignore[arg-type]
         context=context(AnalyticsPermission.READ),
@@ -233,7 +257,7 @@ async def test_ties_resolve_by_stable_source_not_generation_order() -> None:
 
 @pytest.mark.asyncio
 async def test_empty_authoritative_snapshot_produces_no_signal() -> None:
-    service = BeaconQueryService(FakeRepository(snapshot(populated=False)))
+    service = query_service(FakeRepository(snapshot(populated=False)))
     assert (
         await service.list_signals(
             object(),  # type: ignore[arg-type]
@@ -247,7 +271,7 @@ async def test_empty_authoritative_snapshot_produces_no_signal() -> None:
 @pytest.mark.asyncio
 async def test_permission_and_company_scope_fail_closed() -> None:
     repository = FakeRepository(snapshot())
-    service = BeaconQueryService(repository)
+    service = query_service(repository)
     with pytest.raises(PermissionDeniedError):
         await service.list_signals(
             object(),  # type: ignore[arg-type]
@@ -272,7 +296,13 @@ async def test_beacon_http_api_returns_bounded_company_scoped_signals(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     repository = FakeRepository(snapshot())
+    lifecycle_repository = FakeLifecycleRepository()
     monkeypatch.setattr(beacon_query_service, "repository", repository)
+    monkeypatch.setattr(
+        beacon_query_service,
+        "lifecycle_repository",
+        lifecycle_repository,
+    )
     app = FastAPI()
     app.include_router(router)
 
@@ -297,4 +327,6 @@ async def test_beacon_http_api_returns_bounded_company_scoped_signals(
     assert body["items"][0]["priority"]["rank"] == 1
     assert body["items"][0]["priority"]["ranking_factors"]
     assert body["items"][0]["expiration_policy"] == "replace_on_next_evaluation"
+    assert body["snoozed_items"] == []
+    assert body["lifecycle_commands_available"] is False
     assert "payload" not in str(body).lower()

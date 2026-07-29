@@ -10,6 +10,8 @@ from app.beacon.contracts import (
     BeaconConfidence,
     BeaconEvidence,
     BeaconExpirationPolicy,
+    BeaconLifecycleAction,
+    BeaconLifecycleStatus,
     BeaconPriorityBand,
     BeaconRankingFactorAvailability,
     BeaconSeverity,
@@ -51,17 +53,49 @@ class BeaconPriority:
 
 
 @dataclass(frozen=True)
+class BeaconLifecycleEvent:
+    id: UUID
+    company_id: UUID
+    condition_key: UUID
+    signal_id: UUID
+    rule_code: str
+    signal_source: BeaconSignalSource
+    evidence_digest: str
+    action: BeaconLifecycleAction
+    actor_membership_id: UUID
+    action_at: datetime
+    snooze_until: datetime | None
+    created_at: datetime
+
+
+@dataclass(frozen=True)
+class BeaconLifecycleProjection:
+    status: BeaconLifecycleStatus
+    latest_event: BeaconLifecycleEvent | None
+    temporarily_suppressed: bool
+
+
+@dataclass(frozen=True)
 class BeaconSignal:
     id: UUID
+    condition_key: UUID
+    evidence_digest: str
     rule_code: str
     source: BeaconSignalSource
     title: str
     category: BeaconCategory
     severity: BeaconSeverity
     priority: BeaconPriority
+    lifecycle: BeaconLifecycleProjection
     confidence: BeaconConfidence
     supporting_facts: tuple[BeaconSupportingFact, ...]
     recommended_action: str
     created_at: datetime
     expires_at: datetime
     expiration_policy: BeaconExpirationPolicy
+
+
+@dataclass(frozen=True)
+class BeaconAttentionQueue:
+    active: tuple[BeaconSignal, ...]
+    snoozed: tuple[BeaconSignal, ...]

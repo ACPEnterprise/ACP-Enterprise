@@ -9,11 +9,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.beacon.contracts import (
     BeaconEvidence,
+    BeaconLifecycleAction,
+    BeaconSignalSource,
     BeaconSnapshot,
     OverdueAppointmentFacts,
     PastDueInvoiceFacts,
     PausedJobFacts,
 )
+from app.beacon.models import BeaconSignalReviewEventModel
+from app.beacon.records import BeaconLifecycleEvent
 from app.events.models import BusinessEvent
 from app.financials.models import Invoice
 from app.jobs.models import Job
@@ -197,3 +201,111 @@ class SqlBeaconFactRepository:
 
 
 beacon_fact_repository = SqlBeaconFactRepository()
+
+
+class BeaconLifecycleRepository:
+    @staticmethod
+    async def append(
+        session: AsyncSession,
+        *,
+        company_id: UUID,
+        condition_key: UUID,
+        signal_id: UUID,
+        rule_code: str,
+        signal_source: BeaconSignalSource,
+        evidence_digest: str,
+        action: BeaconLifecycleAction,
+        actor_membership_id: UUID,
+        action_at: datetime,
+        snooze_until: datetime | None,
+    ) -> BeaconLifecycleEvent:
+        entity = BeaconSignalReviewEventModel(
+            company_id=company_id,
+            condition_key=condition_key,
+            signal_id=signal_id,
+            rule_code=rule_code,
+            signal_source=signal_source.value,
+            evidence_digest=evidence_digest,
+            action=action.value,
+            actor_membership_id=actor_membership_id,
+            action_at=action_at,
+            snooze_until=snooze_until,
+            created_at=action_at,
+        )
+        session.add(entity)
+        await session.flush()
+        return _lifecycle_event(entity)
+
+    @staticmethod
+    async def latest_for_conditions(
+        session: AsyncSession,
+        *,
+        company_id: UUID,
+        condition_keys: tuple[UUID, ...],
+    ) -> dict[UUID, BeaconLifecycleEvent]:
+        if not condition_keys:
+            return {}
+        entities = tuple(
+            (
+                await session.scalars(
+                    select(BeaconSignalReviewEventModel)
+                    .where(
+                        BeaconSignalReviewEventModel.company_id == company_id,
+                        BeaconSignalReviewEventModel.condition_key.in_(condition_keys),
+                    )
+                    .order_by(
+                        BeaconSignalReviewEventModel.condition_key,
+                        BeaconSignalReviewEventModel.action_at.desc(),
+                        BeaconSignalReviewEventModel.id.desc(),
+                    )
+                )
+            ).all()
+        )
+        latest: dict[UUID, BeaconLifecycleEvent] = {}
+        for entity in entities:
+            latest.setdefault(entity.condition_key, _lifecycle_event(entity))
+        return latest
+
+    @staticmethod
+    async def list_history(
+        session: AsyncSession,
+        *,
+        company_id: UUID,
+        condition_key: UUID,
+        limit: int,
+    ) -> tuple[BeaconLifecycleEvent, ...]:
+        entities = (
+            await session.scalars(
+                select(BeaconSignalReviewEventModel)
+                .where(
+                    BeaconSignalReviewEventModel.company_id == company_id,
+                    BeaconSignalReviewEventModel.condition_key == condition_key,
+                )
+                .order_by(
+                    BeaconSignalReviewEventModel.action_at.desc(),
+                    BeaconSignalReviewEventModel.id.desc(),
+                )
+                .limit(limit)
+            )
+        ).all()
+        return tuple(_lifecycle_event(entity) for entity in entities)
+
+
+def _lifecycle_event(entity: BeaconSignalReviewEventModel) -> BeaconLifecycleEvent:
+    return BeaconLifecycleEvent(
+        id=entity.id,
+        company_id=entity.company_id,
+        condition_key=entity.condition_key,
+        signal_id=entity.signal_id,
+        rule_code=entity.rule_code,
+        signal_source=BeaconSignalSource(entity.signal_source),
+        evidence_digest=entity.evidence_digest,
+        action=BeaconLifecycleAction(entity.action),
+        actor_membership_id=entity.actor_membership_id,
+        action_at=entity.action_at,
+        snooze_until=entity.snooze_until,
+        created_at=entity.created_at,
+    )
+
+
+beacon_lifecycle_repository = BeaconLifecycleRepository()

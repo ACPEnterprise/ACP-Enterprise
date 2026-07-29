@@ -53,6 +53,19 @@ class BeaconExpirationPolicy(StrEnum):
     REPLACE_ON_NEXT_EVALUATION = "replace_on_next_evaluation"
 
 
+class BeaconLifecycleAction(StrEnum):
+    ACKNOWLEDGE = "acknowledge"
+    REVIEW = "review"
+    SNOOZE = "snooze"
+
+
+class BeaconLifecycleStatus(StrEnum):
+    ACTIVE = "active"
+    ACKNOWLEDGED = "acknowledged"
+    REVIEWED = "reviewed"
+    SNOOZED = "snoozed"
+
+
 @dataclass(frozen=True)
 class BeaconConfidence:
     level: BeaconConfidenceLevel

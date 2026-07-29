@@ -1,12 +1,16 @@
 import { RadioTower } from "lucide-react";
+import { useState } from "react";
 
 import type {
+  BeaconLifecycleAction,
+  BeaconLifecycleEvent,
   BeaconPriorityBand,
   BeaconSeverity,
   BeaconSignal,
   BeaconSupportingFact,
 } from "../../api/beacon";
-import { Alert, Badge, Button, EmptyState, Spinner } from "../../ui";
+import { getBeaconLifecycleHistory } from "../../api/beacon";
+import { Alert, Badge, Button, EmptyState, Input, Spinner } from "../../ui";
 import { CommandCenterPanel } from "./CommandCenterPrimitives";
 
 const severityPresentation: Record<
@@ -42,9 +46,42 @@ function factValue(fact: BeaconSupportingFact): string {
   return `${fact.value}${fact.unit ? ` ${fact.unit.replaceAll("_", " ")}` : ""}`;
 }
 
-function SignalRow({ signal }: { readonly signal: BeaconSignal }) {
+function SignalRow({
+  signal,
+  canReview,
+  lifecyclePending,
+  onLifecycleAction,
+}: {
+  readonly signal: BeaconSignal;
+  readonly canReview: boolean;
+  readonly lifecyclePending: boolean;
+  readonly onLifecycleAction: (
+    signal: BeaconSignal,
+    action: BeaconLifecycleAction,
+    snoozeUntil?: string,
+  ) => void;
+}) {
   const severity = severityPresentation[signal.severity];
   const priority = priorityPresentation[signal.priority.band];
+  const [snoozeUntil, setSnoozeUntil] = useState("");
+  const [history, setHistory] = useState<readonly BeaconLifecycleEvent[] | null>(
+    null,
+  );
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState(false);
+
+  const loadHistory = async () => {
+    setHistoryLoading(true);
+    setHistoryError(false);
+    try {
+      setHistory(await getBeaconLifecycleHistory(signal.condition_key));
+    } catch {
+      setHistoryError(true);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
   return (
     <li className="border-b border-stroke py-ui-4 first:pt-0 last:border-0 last:pb-0">
       {signal.priority.rank === 1 && (
@@ -87,19 +124,116 @@ function SignalRow({ signal }: { readonly signal: BeaconSignal }) {
         <span className="font-semibold text-content">Recommended action:</span>{" "}
         {signal.recommended_action}
       </p>
+      {signal.lifecycle.status !== "active" && (
+        <p className="mt-ui-3 text-body-s text-content-muted">
+          Owner lifecycle status:{" "}
+          <strong className="text-content">{signal.lifecycle.status}</strong>.
+          This does not indicate operational resolution.
+        </p>
+      )}
+      <div className="mt-ui-4 flex flex-wrap items-end gap-ui-2">
+        {canReview && (
+          <>
+            <Button
+              disabled={lifecyclePending}
+              variant="outline"
+              onClick={() => onLifecycleAction(signal, "acknowledge")}
+            >
+              Acknowledge
+            </Button>
+            <Button
+              disabled={lifecyclePending}
+              variant="outline"
+              onClick={() => onLifecycleAction(signal, "review")}
+            >
+              Mark reviewed
+            </Button>
+            <label className="min-w-56 flex-1 text-body-s text-content-secondary">
+              Snooze until
+              <Input
+                className="mt-ui-1"
+                type="datetime-local"
+                value={snoozeUntil}
+                onChange={(event) => setSnoozeUntil(event.target.value)}
+              />
+            </label>
+            <Button
+              disabled={!snoozeUntil || lifecyclePending}
+              variant="outline"
+              onClick={() =>
+                onLifecycleAction(
+                  signal,
+                  "snooze",
+                  new Date(snoozeUntil).toISOString(),
+                )
+              }
+            >
+              Snooze temporarily
+            </Button>
+          </>
+        )}
+        <Button
+          disabled={historyLoading}
+          variant="ghost"
+          onClick={() => void loadHistory()}
+        >
+          View review history
+        </Button>
+      </div>
+      {historyError && (
+        <p className="mt-ui-2 text-body-s text-status-danger">
+          Review history is unavailable.
+        </p>
+      )}
+      {history && (
+        <div className="mt-ui-3 rounded-md border border-stroke p-ui-3">
+          <h4 className="font-semibold text-content">Review history</h4>
+          {history.length === 0 ? (
+            <p className="mt-ui-1 text-body-s text-content-muted">
+              No lifecycle actions recorded.
+            </p>
+          ) : (
+            <ol className="mt-ui-2 space-y-ui-2">
+              {history.map((event) => (
+                <li className="text-body-s text-content-secondary" key={event.id}>
+                  {event.action} ·{" "}
+                  {new Date(event.action_at).toLocaleString()}
+                  {event.snooze_until
+                    ? ` · until ${new Date(event.snooze_until).toLocaleString()}`
+                    : ""}
+                </li>
+              ))}
+            </ol>
+          )}
+        </div>
+      )}
     </li>
   );
 }
 
 export function BeaconPanel({
   signals,
+  snoozedSignals,
+  canReview,
   loading,
   error,
+  lifecycleError,
+  lifecyclePending,
+  onLifecycleAction,
   retry,
 }: {
   readonly signals: readonly BeaconSignal[] | undefined;
+  readonly snoozedSignals: readonly BeaconSignal[] | undefined;
+  readonly canReview: boolean;
   readonly loading: boolean;
   readonly error: boolean;
+  readonly lifecycleError: boolean;
+  readonly lifecyclePending: boolean;
+  readonly onLifecycleAction: (
+    signal: BeaconSignal,
+    action: BeaconLifecycleAction,
+    snoozeUntil?: string,
+  ) => void;
   readonly retry: () => void;
 }) {
   return (
@@ -132,7 +266,16 @@ export function BeaconPanel({
           been inferred.
         </Alert>
       )}
-      {!loading && !error && signals?.length === 0 && (
+      {lifecycleError && (
+        <Alert variant="danger" title="Lifecycle action not recorded">
+          Beacon did not accept the requested action. The authoritative queue
+          has not been changed.
+        </Alert>
+      )}
+      {!loading &&
+        !error &&
+        signals?.length === 0 &&
+        snoozedSignals?.length === 0 && (
         <EmptyState
           title="No active Beacon signals"
           description="Current authoritative records do not satisfy any configured deterministic signal rule."
@@ -141,9 +284,43 @@ export function BeaconPanel({
       {!loading && !error && signals && signals.length > 0 && (
         <ol aria-label="Owner attention queue">
           {signals.map((signal) => (
-            <SignalRow key={signal.id} signal={signal} />
+            <SignalRow
+              canReview={canReview}
+              key={signal.id}
+              lifecyclePending={lifecyclePending}
+              signal={signal}
+              onLifecycleAction={onLifecycleAction}
+            />
           ))}
         </ol>
+      )}
+      {!loading &&
+        !error &&
+        signals?.length === 0 &&
+        snoozedSignals &&
+        snoozedSignals.length > 0 && (
+          <Alert variant="information" title="Current signals are temporarily snoozed">
+            Unresolved conditions will return automatically when their snoozes
+            expire or their authoritative evidence changes.
+          </Alert>
+        )}
+      {!loading && !error && snoozedSignals && snoozedSignals.length > 0 && (
+        <details className="mt-ui-4 border-t border-stroke pt-ui-4">
+          <summary className="cursor-pointer font-semibold text-content">
+            Temporarily snoozed ({snoozedSignals.length})
+          </summary>
+          <ol className="mt-ui-3" aria-label="Temporarily snoozed Beacon signals">
+            {snoozedSignals.map((signal) => (
+              <SignalRow
+                canReview={false}
+                key={signal.id}
+                lifecyclePending={lifecyclePending}
+                signal={signal}
+                onLifecycleAction={onLifecycleAction}
+              />
+            ))}
+          </ol>
+        </details>
       )}
     </CommandCenterPanel>
   );

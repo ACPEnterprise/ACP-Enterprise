@@ -6,6 +6,8 @@ import { BeaconPanel } from "./BeaconPanel";
 
 const signal: BeaconSignal = {
   id: "signal-id",
+  condition_key: "condition-id",
+  evidence_digest: "a".repeat(64),
   rule_code: "revenue.past_due_invoices",
   source: "invoices",
   title: "Issued invoices are past due",
@@ -30,6 +32,11 @@ const signal: BeaconSignal = {
     evaluated_at: "2026-07-28T16:00:00Z",
     tie_break_semantics:
       "Higher score first; ties resolve by severity, source, rule code, then stable signal identifier.",
+  },
+  lifecycle: {
+    status: "active",
+    latest_event: null,
+    temporarily_suppressed: false,
   },
   confidence: {
     level: "high",
@@ -59,14 +66,23 @@ const signal: BeaconSignal = {
   expiration_policy: "replace_on_next_evaluation",
 };
 
+const panelProps = {
+  snoozedSignals: [],
+  canReview: false,
+  loading: false,
+  error: false,
+  lifecycleError: false,
+  lifecyclePending: false,
+  onLifecycleAction: vi.fn(),
+  retry: vi.fn(),
+};
+
 describe("BeaconPanel", () => {
   it("renders explainable signals and measured facts", () => {
     render(
       <BeaconPanel
+        {...panelProps}
         signals={[signal]}
-        loading={false}
-        error={false}
-        retry={vi.fn()}
       />,
     );
     expect(screen.getByRole("heading", { name: "Beacon" })).toBeInTheDocument();
@@ -98,10 +114,8 @@ describe("BeaconPanel", () => {
     };
     render(
       <BeaconPanel
+        {...panelProps}
         signals={[signal, lowerPriority]}
-        loading={false}
-        error={false}
-        retry={vi.fn()}
       />,
     );
     const queue = screen.getByRole("list", { name: "Owner attention queue" });
@@ -113,10 +127,8 @@ describe("BeaconPanel", () => {
   it("renders an honest empty state", () => {
     render(
       <BeaconPanel
+        {...panelProps}
         signals={[]}
-        loading={false}
-        error={false}
-        retry={vi.fn()}
       />,
     );
     expect(screen.getByText("No active Beacon signals")).toBeInTheDocument();
@@ -127,8 +139,8 @@ describe("BeaconPanel", () => {
     const retry = vi.fn();
     render(
       <BeaconPanel
+        {...panelProps}
         signals={undefined}
-        loading={false}
         error
         retry={retry}
       />,
@@ -136,5 +148,35 @@ describe("BeaconPanel", () => {
     expect(screen.getByText("Beacon signals unavailable")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(retry).toHaveBeenCalledOnce();
+  });
+
+  it("shows lifecycle controls only with review permission", () => {
+    const onLifecycleAction = vi.fn();
+    const { rerender } = render(
+      <BeaconPanel
+        {...panelProps}
+        signals={[signal]}
+        onLifecycleAction={onLifecycleAction}
+      />,
+    );
+    expect(
+      screen.queryByRole("button", { name: "Acknowledge" }),
+    ).not.toBeInTheDocument();
+
+    rerender(
+      <BeaconPanel
+        {...panelProps}
+        canReview
+        signals={[signal]}
+        onLifecycleAction={onLifecycleAction}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Acknowledge" }));
+    expect(onLifecycleAction).toHaveBeenCalledWith(
+      signal,
+      "acknowledge",
+    );
+    expect(screen.queryByRole("button", { name: /dismiss/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /resolve/i })).not.toBeInTheDocument();
   });
 });

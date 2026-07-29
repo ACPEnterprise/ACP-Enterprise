@@ -3,7 +3,10 @@ import { MemoryRouter } from "react-router";
 import { describe, expect, it, vi } from "vitest";
 
 import { useAnalyticsSummary } from "../hooks/useAnalyticsSummary";
-import { useBeaconSignals } from "../hooks/useBeaconSignals";
+import {
+  useBeaconLifecycleActions,
+  useBeaconSignals,
+} from "../hooks/useBeaconSignals";
 import { useJobs } from "../hooks/useJobs";
 import { CommandCenterRoute } from "./CommandCenterRoute";
 
@@ -13,15 +16,23 @@ vi.mock("../hooks/useJobs");
 
 const analyticsHook = vi.mocked(useAnalyticsSummary);
 const beaconHook = vi.mocked(useBeaconSignals);
+const beaconLifecycleHook = vi.mocked(useBeaconLifecycleActions);
 const jobsHook = vi.mocked(useJobs);
 
 describe("CommandCenterRoute", () => {
   it("renders connected metrics without fabricating workforce activity", () => {
+    beaconLifecycleHook.mockReturnValue({
+      mutate: vi.fn(),
+      isPending: false,
+      isError: false,
+    } as unknown as ReturnType<typeof useBeaconLifecycleActions>);
     beaconHook.mockReturnValue({
       data: {
         items: [],
+        snoozed_items: [],
         evaluated_at: "2026-07-24T00:00:00Z",
         expires_at: "2026-07-24T00:15:00Z",
+        lifecycle_commands_available: false,
       },
       isLoading: false,
       isError: false,
@@ -59,6 +70,11 @@ describe("CommandCenterRoute", () => {
   });
 
   it("renders honest unavailable states when connected APIs fail", () => {
+    beaconLifecycleHook.mockReturnValue({
+      mutate: vi.fn(),
+      isPending: false,
+      isError: false,
+    } as unknown as ReturnType<typeof useBeaconLifecycleActions>);
     beaconHook.mockReturnValue({
       data: undefined,
       isLoading: false,

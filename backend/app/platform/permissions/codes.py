@@ -33,6 +33,12 @@ class AnalyticsPermission:
     ALL = frozenset({READ})
 
 
+class BeaconPermission:
+    REVIEW = "COMPANY_BEACON_REVIEW"
+
+    ALL = frozenset({REVIEW})
+
+
 class SchedulingPermission:
     READ = "COMPANY_SCHEDULING_READ"
     MANAGE = "COMPANY_SCHEDULING_MANAGE"
