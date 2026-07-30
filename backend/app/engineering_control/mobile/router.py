@@ -21,6 +21,7 @@ from .schemas import (
     MobileCommandDetail,
     MobileCommandPage,
     MobileOwnerReviewPage,
+    MobileWorkstreamPage,
 )
 from .service import mobile_engineering_control_service
 
@@ -40,6 +41,25 @@ ApproveContext = Annotated[
     AuthorizationContext,
     Depends(require_permission(EngineeringCommandPermission.APPROVE)),
 ]
+
+
+@router.get(
+    "/workstreams",
+    response_model=MobileWorkstreamPage,
+    summary="List authoritative Engineering workstreams",
+)
+async def list_workstreams(
+    context: ReadContext,
+    session: DatabaseSession,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 25,
+) -> MobileWorkstreamPage:
+    return await mobile_engineering_control_service.list_workstreams(
+        session,
+        context=context,
+        page=page,
+        page_size=page_size,
+    )
 
 
 @router.get(

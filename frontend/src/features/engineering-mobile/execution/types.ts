@@ -21,6 +21,7 @@ export interface ExecutionTimelineEntry {
 
 export interface ExecutionLeaseStatus {
   availability: ProjectionAvailability;
+  worker_id: string | null;
   status: string | null;
   started_at: string | null;
   expires_at: string | null;

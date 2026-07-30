@@ -31,6 +31,7 @@ const status: MobileExecutionStatus = {
   updated_at: "2026-07-27T18:02:00Z",
   lease: {
     availability: "unavailable",
+    worker_id: null,
     status: null,
     started_at: null,
     expires_at: null,

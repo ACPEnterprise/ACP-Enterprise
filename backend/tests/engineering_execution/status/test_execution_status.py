@@ -252,6 +252,7 @@ def test_live_connectivity_projection_uses_only_persisted_transport_evidence() -
     assert projected.transport_health == "healthy"
     assert projected.heartbeat.age_seconds == 12
     assert projected.lease.phase is LeasePhase.EXPIRING
+    assert projected.lease.worker_id == worker_id
     assert projected.transport_session.last_contact_at == now - timedelta(seconds=8)
     assert projected.supervisor.state == "recovering"
     assert projected.supervisor.session_state == "opening"

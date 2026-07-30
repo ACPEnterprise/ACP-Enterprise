@@ -4,7 +4,7 @@ import { Link } from "react-router";
 
 import { getOperatorApiError } from "../../api/errors";
 import { Alert, Badge, Button, EmptyState, Spinner } from "../../ui";
-import { useMobileReviews } from "./hooks";
+import { useMobileWorkstreams } from "./hooks";
 import {
   mobileEngineeringLabel,
   mobileEngineeringTimestamp,
@@ -12,7 +12,7 @@ import {
 
 export function MobileEngineeringListPage() {
   const [page, setPage] = useState(1);
-  const query = useMobileReviews({ page, pageSize: 10 });
+  const query = useMobileWorkstreams({ page, pageSize: 10 });
 
   return (
     <div className="mx-auto w-full max-w-5xl space-y-ui-5 overflow-x-hidden">
@@ -21,11 +21,11 @@ export function MobileEngineeringListPage() {
           Engineering Control
         </p>
         <h1 className="mt-ui-1 text-2xl font-bold sm:text-3xl">
-          Pending reviews
+          Engineering workstreams
         </h1>
         <p className="mt-ui-2 text-sm text-content-muted">
-          Review owner instructions from your phone. Approval never starts
-          execution.
+          See what is happening now, what needs your attention, and the next
+          bounded owner action.
         </p>
       </header>
 
@@ -46,17 +46,17 @@ export function MobileEngineeringListPage() {
         </Alert>
       )}
 
-      <section aria-label="Engineering reviews">
+      <section aria-label="Engineering workstreams">
         {query.isLoading && (
           <div className="flex min-h-48 items-center justify-center">
-            <Spinner label="Loading engineering reviews" />
+            <Spinner label="Loading engineering workstreams" />
           </div>
         )}
         {query.isError &&
           (() => {
             const error = getOperatorApiError(
               query.error,
-              "Engineering reviews",
+              "Engineering workstreams",
             );
             return (
               <Alert
@@ -80,86 +80,111 @@ export function MobileEngineeringListPage() {
           })()}
         {query.data?.items.length === 0 && (
           <EmptyState
-            title="No reviews found"
-            description="There are no commands awaiting owner review."
+            title="No engineering workstreams"
+            description="There are no Engineering Commands in the current Company scope."
           />
         )}
         {query.data && query.data.items.length > 0 && (
           <div className="grid gap-ui-3">
-            {query.data.items.map((review) => (
+            {query.data.items.map((workstream) => (
               <article
-                key={review.id}
+                key={workstream.command_id}
                 className="min-w-0 rounded-xl border border-stroke bg-surface p-ui-4"
               >
                 <div className="flex min-w-0 flex-wrap items-start justify-between gap-ui-3">
                   <div className="min-w-0">
                     <Link
-                      to={`/engineering/${review.command_id}`}
+                      to={`/engineering/${workstream.command_id}`}
                       className="break-all text-lg font-bold text-blue-400 hover:underline"
                     >
-                      {review.ecid}
+                      {workstream.ecid}
                     </Link>
                     <p className="mt-ui-1 text-sm text-content-muted">
-                      Execution {review.execution_id}
+                      {workstream.repository_key} · {workstream.expected_branch}
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-ui-2">
                     <Badge>
-                      {mobileEngineeringLabel(review.state)}
+                      {mobileEngineeringLabel(workstream.lifecycle_state)}
                     </Badge>
-                    <Badge>
-                      {mobileEngineeringLabel(
-                        query.data.connectivity.state,
-                      )}
-                    </Badge>
+                    {workstream.owner_attention_required && (
+                      <Badge>Owner attention</Badge>
+                    )}
                   </div>
                 </div>
+                <p className="mt-ui-3 text-sm">
+                  {workstream.progress_summary}
+                </p>
                 <dl className="mt-ui-4 grid min-w-0 gap-ui-3 text-sm sm:grid-cols-2">
                   <div>
-                    <dt className="text-content-muted">Provider</dt>
+                    <dt className="text-content-muted">Next safe action</dt>
                     <dd className="break-all">
-                      {review.provider_identifier}
+                      {mobileEngineeringLabel(workstream.next_owner_action)}
                     </dd>
                   </div>
                   <div>
-                    <dt className="text-content-muted">Result</dt>
+                    <dt className="text-content-muted">Worker</dt>
                     <dd className="break-all">
-                      {mobileEngineeringLabel(review.result_status)}
+                      {workstream.assigned_worker_id ?? "Not assigned"}
                     </dd>
                   </div>
                   <div>
-                    <dt className="text-content-muted">Disposition</dt>
+                    <dt className="text-content-muted">Lease or offer</dt>
                     <dd>
-                      {mobileEngineeringLabel(review.result_disposition)}
+                      {workstream.offer_or_lease_state
+                        ? mobileEngineeringLabel(workstream.offer_or_lease_state)
+                        : "Not available"}
                     </dd>
                   </div>
                   <div>
-                    <dt className="text-content-muted">Reviewed files</dt>
+                    <dt className="text-content-muted">Last heartbeat</dt>
                     <dd>
-                      {review.file_boundary.length > 0
-                        ? `${review.file_boundary.length} authoritative file${review.file_boundary.length === 1 ? "" : "s"}`
-                        : "No authoritative file boundary"}
+                      {mobileEngineeringTimestamp(workstream.heartbeat_at)}
                     </dd>
                   </div>
                   <div>
-                    <dt className="text-content-muted">Review created</dt>
-                    <dd>{mobileEngineeringTimestamp(review.created_at)}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-content-muted">Owner decision</dt>
+                    <dt className="text-content-muted">Review</dt>
                     <dd>
-                      {review.decision
-                        ? mobileEngineeringLabel(review.decision)
-                        : "Pending"}
+                      {workstream.review_state
+                        ? mobileEngineeringLabel(workstream.review_state)
+                        : "Not available"}
                     </dd>
                   </div>
+                  <div>
+                    <dt className="text-content-muted">Repository operation</dt>
+                    <dd>
+                      {workstream.repository_operation_status
+                        ? mobileEngineeringLabel(
+                            workstream.repository_operation_status,
+                          )
+                        : "Not available"}
+                    </dd>
+                  </div>
+                  {workstream.resulting_commit_sha && (
+                    <div>
+                      <dt className="text-content-muted">Completed commit</dt>
+                      <dd className="break-all font-mono">
+                        {workstream.resulting_commit_sha}
+                      </dd>
+                    </div>
+                  )}
+                  {workstream.failure_classification && (
+                    <div>
+                      <dt className="text-content-muted">Failure</dt>
+                      <dd className="break-all">
+                        {mobileEngineeringLabel(
+                          workstream.failure_classification,
+                        )}
+                      </dd>
+                    </div>
+                  )}
                 </dl>
                 <Link
-                  to={`/engineering/${review.command_id}`}
+                  to={`/engineering/${workstream.command_id}`}
                   className="mt-ui-4 inline-flex min-h-11 w-full items-center justify-center rounded-md border border-stroke-strong px-ui-4 text-sm font-semibold hover:bg-surface-muted sm:w-auto"
-                  aria-label={`Review ${review.ecid}`}
+                  aria-label={`Open ${workstream.ecid}`}
                 >
-                  Review command
+                  Open workstream
                 </Link>
               </article>
             ))}
@@ -174,7 +199,7 @@ export function MobileEngineeringListPage() {
         >
           <span className="text-sm text-content-muted">
             Page {query.data.page} of {query.data.total_pages} ·{" "}
-            {query.data.total_count} reviews
+            {query.data.total_count} workstreams
           </span>
           <div className="flex gap-ui-2">
             <Button

@@ -131,6 +131,12 @@ export function ExecutionMonitoringPanel({
               </dd>
             </div>
             <div>
+              <dt className="text-content-muted">Assigned worker</dt>
+              <dd className="break-all">
+                {status.lease.worker_id ?? "Not assigned"}
+              </dd>
+            </div>
+            <div>
               <dt className="text-content-muted">Lease expires</dt>
               <dd>{mobileEngineeringTimestamp(status.lease.expires_at)}</dd>
             </div>

@@ -22,6 +22,7 @@ class TimelineEntry(StatusSchema):
 
 class LeaseStatus(StatusSchema):
     availability: ProjectionAvailability
+    worker_id: UUID | None
     status: str | None
     started_at: datetime | None
     expires_at: datetime | None

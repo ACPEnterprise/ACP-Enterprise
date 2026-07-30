@@ -92,6 +92,44 @@ export interface MobileOwnerReviewPage {
   total_pages: number;
 }
 
+export interface MobileWorkstreamSummary {
+  command_id: string;
+  ecid: string;
+  repository_key: string;
+  expected_branch: string;
+  expected_head: string;
+  approval_state: string;
+  lifecycle_state: string;
+  progress_summary: string;
+  owner_action_required: boolean;
+  next_owner_action: string;
+  connection_state: MobileConnectivityState;
+  assigned_worker_id: string | null;
+  execution_id: string | null;
+  offer_or_lease_state: string | null;
+  heartbeat_at: string | null;
+  review_id: string | null;
+  review_state: string | null;
+  authorization_id: string | null;
+  authorization_status: string | null;
+  repository_operation_id: string | null;
+  repository_operation_status: string | null;
+  failure_classification: string | null;
+  resulting_commit_sha: string | null;
+  repository_clean: boolean | null;
+  owner_attention_required: boolean;
+  updated_at: string;
+}
+
+export interface MobileWorkstreamPage {
+  items: readonly MobileWorkstreamSummary[];
+  connectivity: MobileEngineeringConnectivity;
+  page: number;
+  page_size: number;
+  total_count: number;
+  total_pages: number;
+}
+
 export interface MobileReviewQuery {
   page: number;
   pageSize: number;

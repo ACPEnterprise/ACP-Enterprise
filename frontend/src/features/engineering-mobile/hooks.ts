@@ -13,11 +13,21 @@ export const mobileEngineeringKeys = {
   lists: () => ["engineering-mobile", "list"] as const,
   list: (query: MobileReviewQuery) =>
     ["engineering-mobile", "list", query] as const,
+  workstreams: (query: MobileReviewQuery) =>
+    ["engineering-mobile", "workstreams", query] as const,
   detail: (reviewId: string) =>
     ["engineering-mobile", "detail", reviewId] as const,
   status: (reviewId: string) =>
     ["engineering-mobile", "status", reviewId] as const,
 };
+
+export function useMobileWorkstreams(query: MobileReviewQuery) {
+  return useQuery({
+    queryKey: mobileEngineeringKeys.workstreams(query),
+    queryFn: () => mobileApi.listMobileWorkstreams(query),
+    retry: shouldRetryApiQuery,
+  });
+}
 
 export function useMobileReviews(query: MobileReviewQuery) {
   return useQuery({

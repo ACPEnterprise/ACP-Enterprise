@@ -288,6 +288,7 @@ class MobileExecutionStatusService:
                     if sources.lease
                     else ProjectionAvailability.UNAVAILABLE
                 ),
+                worker_id=sources.lease.worker_id if sources.lease else None,
                 status=sources.lease.status if sources.lease else None,
                 started_at=sources.lease.started_at if sources.lease else None,
                 expires_at=sources.lease.expires_at if sources.lease else None,

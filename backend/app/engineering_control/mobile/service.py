@@ -17,6 +17,8 @@ from app.engineering_control.records import (
 from app.engineering_control.review.contracts import EngineeringReviewState
 from app.engineering_control.review.service import EngineeringReviewService
 from app.engineering_control.service import EngineeringControlService
+from app.engineering_execution.status.schemas import MobileExecutionStatus
+from app.engineering_execution.status.service import MobileExecutionStatusService
 from app.platform.permissions.authorization import AuthorizationContext
 
 from .repository import MobileConnectivityRepository
@@ -27,6 +29,8 @@ from .schemas import (
     MobileEngineeringConnectivity,
     MobileOwnerReviewPage,
     MobileOwnerReviewSummary,
+    MobileWorkstreamPage,
+    MobileWorkstreamSummary,
 )
 
 HEARTBEAT_FRESH_FOR = timedelta(seconds=90)
@@ -39,11 +43,48 @@ class MobileEngineeringControlService:
         self,
         control: EngineeringControlService | None = None,
         reviews: EngineeringReviewService | None = None,
+        statuses: MobileExecutionStatusService | None = None,
         connectivity: type[MobileConnectivityRepository] = MobileConnectivityRepository,
     ) -> None:
         self.control = control or EngineeringControlService()
         self.reviews = reviews or EngineeringReviewService()
+        self.statuses = statuses or MobileExecutionStatusService()
         self.connectivity = connectivity
+
+    async def list_workstreams(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        page: int,
+        page_size: int,
+        now: datetime | None = None,
+    ) -> MobileWorkstreamPage:
+        current = now or datetime.now(timezone.utc)
+        commands = await self.control.list_commands(
+            session,
+            context=context,
+            query=EngineeringCommandQuery(page=page, page_size=page_size),
+        )
+        items: list[MobileWorkstreamSummary] = []
+        for command in commands.items:
+            status = await self.statuses.get(
+                session,
+                context=context,
+                command_id=command.id,
+                now=current,
+            )
+            items.append(self._workstream_summary(command=command, status=status))
+        return MobileWorkstreamPage(
+            items=tuple(items),
+            connectivity=await self._connectivity(
+                session, company_id=context.company.id, now=current
+            ),
+            page=commands.page,
+            page_size=commands.page_size,
+            total_count=commands.total_count,
+            total_pages=commands.total_pages,
+        )
 
     async def list_owner_reviews(
         self,
@@ -62,37 +103,9 @@ class MobileEngineeringControlService:
             page=page,
             page_size=page_size,
         )
-        source = await self.connectivity.load(
-            session,
-            company_id=context.company.id,
-            now=current,
+        connection = await self._connectivity(
+            session, company_id=context.company.id, now=current
         )
-        if source is None:
-            connection = MobileEngineeringConnectivity(
-                state="disconnected",
-                session_id=None,
-                last_contact_at=None,
-                heartbeat_at=None,
-            )
-        else:
-            last_contact = max(
-                timestamp
-                for timestamp in (
-                    source.established_at,
-                    source.last_message_at,
-                    source.heartbeat_at,
-                )
-                if timestamp is not None
-            )
-            connection = MobileEngineeringConnectivity(
-                state=self._connectivity_state(
-                    heartbeat_at=source.heartbeat_at,
-                    now=current,
-                ),
-                session_id=source.session_id,
-                last_contact_at=last_contact,
-                heartbeat_at=source.heartbeat_at,
-            )
         return MobileOwnerReviewPage(
             items=tuple(
                 MobileOwnerReviewSummary(
@@ -128,6 +141,37 @@ class MobileEngineeringControlService:
             page_size=page_size,
             total_count=total,
             total_pages=ceil(total / page_size) if total else 0,
+        )
+
+    async def _connectivity(
+        self,
+        session: AsyncSession,
+        *,
+        company_id: UUID,
+        now: datetime,
+    ) -> MobileEngineeringConnectivity:
+        source = await self.connectivity.load(session, company_id=company_id, now=now)
+        if source is None:
+            return MobileEngineeringConnectivity(
+                state="disconnected",
+                session_id=None,
+                last_contact_at=None,
+                heartbeat_at=None,
+            )
+        last_contact = max(
+            timestamp
+            for timestamp in (
+                source.established_at,
+                source.last_message_at,
+                source.heartbeat_at,
+            )
+            if timestamp is not None
+        )
+        return MobileEngineeringConnectivity(
+            state=self._connectivity_state(heartbeat_at=source.heartbeat_at, now=now),
+            session_id=source.session_id,
+            last_contact_at=last_contact,
+            heartbeat_at=source.heartbeat_at,
         )
 
     @staticmethod
@@ -239,6 +283,127 @@ class MobileEngineeringControlService:
             ):
                 return tuple(value)
         return ()
+
+    @classmethod
+    def _workstream_summary(
+        cls,
+        *,
+        command: EngineeringCommandRecord,
+        status: MobileExecutionStatus,
+    ) -> MobileWorkstreamSummary:
+        lifecycle, next_action, owner_action = cls._next_action(
+            command=command, status=status
+        )
+        failure = (
+            status.repository_operation_failure_classification
+            or status.result.failure_classification
+        )
+        repository_clean = (
+            True
+            if status.repository_operation_status == "succeeded"
+            and status.repository_operation_resulting_commit_sha is not None
+            else None
+        )
+        return MobileWorkstreamSummary(
+            command_id=command.id,
+            ecid=command.ecid,
+            repository_key=command.repository_key,
+            expected_branch=command.expected_branch,
+            expected_head=command.expected_head,
+            approval_state=command.approval_state,
+            lifecycle_state=lifecycle,
+            progress_summary=status.progress_label,
+            owner_action_required=owner_action,
+            next_owner_action=next_action,
+            connection_state=status.connection_state,
+            assigned_worker_id=status.lease.worker_id,
+            execution_id=status.execution_id,
+            offer_or_lease_state=status.lease.status,
+            heartbeat_at=status.heartbeat.last_seen,
+            review_id=status.review_id,
+            review_state=status.review_state,
+            authorization_id=status.authorization_id,
+            authorization_status=status.authorization_status,
+            repository_operation_id=status.repository_operation_id,
+            repository_operation_status=status.repository_operation_status,
+            failure_classification=failure,
+            resulting_commit_sha=status.repository_operation_resulting_commit_sha,
+            repository_clean=repository_clean,
+            owner_attention_required=(
+                owner_action
+                or status.repository_operation_owner_attention_required
+                or failure is not None
+            ),
+            updated_at=status.updated_at,
+        )
+
+    @staticmethod
+    def _next_action(
+        *,
+        command: EngineeringCommandRecord,
+        status: MobileExecutionStatus,
+    ) -> tuple[str, str, bool]:
+        operation_state = status.repository_operation_status
+        if operation_state == "reconciliation_required":
+            return "reconciliation_required", "inspect_reconciliation", True
+        if operation_state == "failed":
+            return "failed", "inspect_repository_failure", True
+        if operation_state == "succeeded":
+            return "succeeded", "verify_commit", False
+        if operation_state in {"requested", "reserved", "executing"}:
+            return (
+                "repository_operation_executing",
+                "monitor_repository_operation",
+                False,
+            )
+        if status.authorization_status == "authorized":
+            return (
+                "awaiting_repository_operation",
+                "execute_authorized_commit",
+                True,
+            )
+        if status.authorization_status in {"expired", "revoked"}:
+            return (
+                status.authorization_status,
+                "review_repository_authorization",
+                True,
+            )
+        if status.review_state == "pending":
+            return "awaiting_review", "review_execution_result", True
+        if (
+            status.review_state == "accepted"
+            and command.requested_code_changes
+            and status.authorization_id is None
+        ):
+            return (
+                "awaiting_repository_authorization",
+                "authorize_repository",
+                True,
+            )
+        if status.review_state == "rejected":
+            return "revision_requested", "request_revision", True
+        if status.monitoring_state == "failed":
+            return "failed", "inspect_execution_failure", True
+        if status.monitoring_state == "cancelled":
+            return "cancelled", "none", False
+        if status.monitoring_state == "completed":
+            if not status.review_available:
+                return "awaiting_review_package", "prepare_review_package", True
+            return "completed", "none", False
+        if status.monitoring_state == "running":
+            return "executing", "monitor_execution", False
+        if status.lease.status == "active":
+            return "leased", "monitor_execution", False
+        if status.monitoring_state == "queued":
+            return "offered", "wait_for_worker", False
+        if command.approval_state is EngineeringApprovalState.AWAITING_APPROVAL:
+            return "awaiting_approval", "review_command", True
+        if command.approval_state in {
+            EngineeringApprovalState.CANCELED,
+            EngineeringApprovalState.EXPIRED,
+        }:
+            return command.approval_state, "none", False
+        return "waiting_for_worker", "wait_for_worker", False
 
 
 mobile_engineering_control_service = MobileEngineeringControlService()

@@ -8,8 +8,8 @@ import * as hooks from "./hooks";
 import { MobileEngineeringDetailPage } from "./MobileEngineeringDetailPage";
 import { MobileEngineeringListPage } from "./MobileEngineeringListPage";
 import type {
-  MobileOwnerReviewSummary,
   MobileReviewDetail,
+  MobileWorkstreamSummary,
 } from "./types";
 
 vi.mock("./hooks");
@@ -42,22 +42,33 @@ const review: MobileReviewDetail = {
   can_cancel: true,
 };
 
-const ownerReview: MobileOwnerReviewSummary = {
-  id: "83f7f5bc-fab3-46a5-8ce5-141dd22e7c69",
+const workstream: MobileWorkstreamSummary = {
   command_id: review.id,
   execution_id: "19366485-df36-436d-b39b-593e89c74c4c",
   ecid: review.ecid,
-  provider_identifier: "codex",
-  result_status: "succeeded",
-  result_disposition: "accepted",
-  validation_summary: {
-    file_boundary: ["frontend/src/features/engineering-mobile/types.ts"],
-  },
-  file_boundary: ["frontend/src/features/engineering-mobile/types.ts"],
-  state: "pending",
-  created_at: "2026-07-26T12:00:00Z",
-  decision: null,
-  decided_at: null,
+  repository_key: review.repository_key,
+  expected_branch: review.expected_branch,
+  expected_head: review.expected_head,
+  approval_state: "approved",
+  lifecycle_state: "awaiting_review",
+  progress_summary: "Execution completed",
+  owner_action_required: true,
+  next_owner_action: "review_execution_result",
+  connection_state: "disconnected",
+  assigned_worker_id: "worker-id",
+  offer_or_lease_state: "released",
+  heartbeat_at: "2026-07-26T11:58:00Z",
+  review_id: "83f7f5bc-fab3-46a5-8ce5-141dd22e7c69",
+  review_state: "pending",
+  authorization_id: null,
+  authorization_status: null,
+  repository_operation_id: null,
+  repository_operation_status: null,
+  failure_classification: null,
+  resulting_commit_sha: null,
+  repository_clean: null,
+  owner_attention_required: true,
+  updated_at: "2026-07-26T12:00:00Z",
 };
 
 const disconnected = {
@@ -107,17 +118,17 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("mobile Engineering Control", () => {
-  it("renders loading, empty, error, and phone-safe pending review cards", async () => {
-    vi.mocked(hooks.useMobileReviews).mockReturnValueOnce({
+  it("renders loading, empty, error, and phone-safe workstream cards", async () => {
+    vi.mocked(hooks.useMobileWorkstreams).mockReturnValueOnce({
       isLoading: true,
     } as never);
     renderList();
     expect(
-      screen.getByRole("status", { name: "Loading engineering reviews" }),
+      screen.getByRole("status", { name: "Loading engineering workstreams" }),
     ).toBeInTheDocument();
     cleanup();
 
-    vi.mocked(hooks.useMobileReviews).mockReturnValueOnce({
+    vi.mocked(hooks.useMobileWorkstreams).mockReturnValueOnce({
       isLoading: false,
       data: {
         items: [],
@@ -130,11 +141,11 @@ describe("mobile Engineering Control", () => {
     } as never);
     renderList();
     expect(
-      screen.getByRole("heading", { name: "No reviews found" }),
+      screen.getByRole("heading", { name: "No engineering workstreams" }),
     ).toBeInTheDocument();
     cleanup();
 
-    vi.mocked(hooks.useMobileReviews).mockReturnValueOnce({
+    vi.mocked(hooks.useMobileWorkstreams).mockReturnValueOnce({
       isLoading: false,
       isError: true,
       error: { isAxiosError: true, response: { status: 401 } },
@@ -146,10 +157,10 @@ describe("mobile Engineering Control", () => {
     expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
     cleanup();
 
-    vi.mocked(hooks.useMobileReviews).mockReturnValue({
+    vi.mocked(hooks.useMobileWorkstreams).mockReturnValue({
       isLoading: false,
       data: {
-        items: [ownerReview],
+        items: [workstream],
         connectivity: disconnected,
         page: 1,
         page_size: 10,
@@ -158,7 +169,7 @@ describe("mobile Engineering Control", () => {
       },
     } as never);
     renderList();
-    expect(screen.getByRole("link", { name: ownerReview.ecid })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: workstream.ecid })).toHaveAttribute(
       "href",
       `/engineering/${review.id}`,
     );
@@ -166,10 +177,11 @@ describe("mobile Engineering Control", () => {
     expect(
       screen.getByText(/No active authenticated worker session/i),
     ).toBeInTheDocument();
-    expect(screen.getByText("codex")).toBeInTheDocument();
-    expect(screen.getByText("1 authoritative file")).toBeInTheDocument();
+    expect(screen.getByText("Owner attention")).toBeInTheDocument();
+    expect(screen.getByText("Review Execution Result")).toBeInTheDocument();
+    expect(screen.getByText("worker-id")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Next page" }));
-    expect(hooks.useMobileReviews).toHaveBeenLastCalledWith({
+    expect(hooks.useMobileWorkstreams).toHaveBeenLastCalledWith({
       page: 2,
       pageSize: 10,
     });

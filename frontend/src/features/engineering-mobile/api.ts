@@ -6,11 +6,27 @@ import type {
   MobileReviewQuery,
   MobileCommandStatus,
   MobileOwnerReviewPage,
+  MobileWorkstreamPage,
 } from "./types";
 
 export const MOBILE_ENGINEERING_PATH = "/api/v1/engineering/mobile/reviews";
 export const MOBILE_OWNER_REVIEWS_PATH =
   "/api/v1/engineering/mobile/owner-reviews";
+export const MOBILE_WORKSTREAMS_PATH =
+  "/api/v1/engineering/mobile/workstreams";
+
+export async function listMobileWorkstreams(
+  query: MobileReviewQuery,
+): Promise<MobileWorkstreamPage> {
+  return (
+    await apiClient.get<MobileWorkstreamPage>(MOBILE_WORKSTREAMS_PATH, {
+      params: {
+        page: query.page,
+        page_size: query.pageSize,
+      },
+    })
+  ).data;
+}
 
 export async function listMobileReviews(
   query: MobileReviewQuery,

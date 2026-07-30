@@ -213,6 +213,56 @@ async def test_pending_review_detail_approval_status_and_cancel(
 
 
 @pytest.mark.asyncio
+async def test_workstream_projection_lists_authoritative_safe_next_action(
+    mobile_api: MobileApiFixture,
+) -> None:
+    command = await create_command(mobile_api, suffix="workstream")
+    app = mobile_api.app_for(tuple(EngineeringCommandPermission.ALL))
+
+    response = await request(
+        app,
+        "GET",
+        "/api/v1/engineering/mobile/workstreams",
+        params={"page": 1, "page_size": 10},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total_count"] == 1
+    assert body["connectivity"]["state"] == "disconnected"
+    assert body["items"] == [
+        {
+            "command_id": command["id"],
+            "ecid": body["items"][0]["ecid"],
+            "repository_key": command["repository_key"],
+            "expected_branch": command["expected_branch"],
+            "expected_head": command["expected_head"],
+            "approval_state": "awaiting_approval",
+            "lifecycle_state": "awaiting_approval",
+            "progress_summary": "Awaiting owner approval",
+            "owner_action_required": True,
+            "next_owner_action": "review_command",
+            "connection_state": "disconnected",
+            "assigned_worker_id": None,
+            "execution_id": None,
+            "offer_or_lease_state": None,
+            "heartbeat_at": None,
+            "review_id": None,
+            "review_state": None,
+            "authorization_id": None,
+            "authorization_status": None,
+            "repository_operation_id": None,
+            "repository_operation_status": None,
+            "failure_classification": None,
+            "resulting_commit_sha": None,
+            "repository_clean": None,
+            "owner_attention_required": True,
+            "updated_at": body["items"][0]["updated_at"],
+        }
+    ]
+
+
+@pytest.mark.asyncio
 async def test_permissions_inactive_membership_and_company_concealment(
     mobile_api: MobileApiFixture,
 ) -> None:
@@ -220,6 +270,10 @@ async def test_permissions_inactive_membership_and_company_concealment(
     no_read = mobile_api.app_for((EngineeringCommandPermission.MANAGE,))
     denied = await request(no_read, "GET", "/api/v1/engineering/mobile/reviews")
     assert denied.status_code == 403
+    workstreams_denied = await request(
+        no_read, "GET", "/api/v1/engineering/mobile/workstreams"
+    )
+    assert workstreams_denied.status_code == 403
 
     inactive = mobile_api.app_for(
         tuple(EngineeringCommandPermission.ALL), membership_status="suspended"

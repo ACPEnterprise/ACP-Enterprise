@@ -7,8 +7,10 @@ import {
   getMobileCommandStatus,
   getMobileReview,
   listMobileReviews,
+  listMobileWorkstreams,
   MOBILE_ENGINEERING_PATH,
   MOBILE_OWNER_REVIEWS_PATH,
+  MOBILE_WORKSTREAMS_PATH,
 } from "./api";
 
 vi.mock("../../api/client", () => ({
@@ -26,6 +28,11 @@ describe("mobile Engineering API client", () => {
     await listMobileReviews({ page: 2, pageSize: 10 });
     expect(apiClient.get).toHaveBeenCalledWith(MOBILE_OWNER_REVIEWS_PATH, {
       params: { page: 2, page_size: 10 },
+    });
+
+    await listMobileWorkstreams({ page: 3, pageSize: 5 });
+    expect(apiClient.get).toHaveBeenCalledWith(MOBILE_WORKSTREAMS_PATH, {
+      params: { page: 3, page_size: 5 },
     });
 
     await getMobileReview("command-id");
