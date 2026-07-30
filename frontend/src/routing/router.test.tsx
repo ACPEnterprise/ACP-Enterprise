@@ -11,6 +11,7 @@ import { appRoutes } from "./router";
 vi.mock("../routes/MissionControlRoute", () => ({ MissionControlRoute: () => <div>Mission route content</div> }));
 vi.mock("../routes/CommandCenterRoute", () => ({ CommandCenterRoute: () => <div>Command Center route content</div> }));
 vi.mock("../routes/CustomersRoute", () => ({ CustomersRoute: () => <div>Customer route content</div> }));
+vi.mock("../routes/CustomerDetailRoute", () => ({ CustomerDetailRoute: () => <div>Customer detail route content</div> }));
 vi.mock("../routes/JobsRoute", () => ({ JobsRoute: () => <div>Jobs route content</div> }));
 vi.mock("../routes/JobDetailRoute", () => ({ JobDetailRoute: () => <div>Job detail route content</div> }));
 vi.mock("../routes/AppointmentDetailRoute", () => ({ AppointmentDetailRoute: () => <div>Appointment detail route content</div> }));
@@ -59,6 +60,16 @@ describe("application routing", () => {
     renderRoute("/customers");
     expect(await screen.findByText("Customer route content")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Customers" })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("supports direct Customer detail navigation through the protected shell", async () => {
+    renderRoute("/customers/customer-1");
+    expect(await screen.findByText("Customer detail route content")).toBeInTheDocument();
+    expect(
+      screen
+        .getAllByRole("link", { name: "Customers" })
+        .find((link) => link.getAttribute("aria-current") === "page"),
+    ).toBeDefined();
   });
 
   it("routes Jobs list and detail through the application shell", async () => {
@@ -119,6 +130,10 @@ describe("application routing", () => {
     const trigger = await screen.findByRole("button", { name: "Open navigation" });
     await user.click(trigger);
     expect(screen.getByRole("complementary", { name: "Mobile application navigation" })).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: "Customers" })).toHaveLength(2);
+    expect(screen.getAllByRole("link", { name: "Jobs" })).toHaveLength(2);
+    expect(screen.getAllByRole("link", { name: "Dispatch" })).toHaveLength(2);
+    expect(screen.getAllByRole("link", { name: "Engineering Factory" })).toHaveLength(2);
     await user.keyboard("{Escape}");
     await waitFor(() => expect(screen.queryByRole("complementary", { name: "Mobile application navigation" })).not.toBeInTheDocument());
     expect(trigger).toHaveFocus();

@@ -13,7 +13,7 @@ vi.mock("../hooks/useScheduling");
 const refetchAppointments = vi.fn();
 const refetchJobs = vi.fn();
 const appointment = { id: "appointment-1", appointment_number: "APT-000001", status: "scheduled", arrival_window_start_at: "2026-07-23T13:00:00Z", arrival_window_end_at: "2026-07-23T15:00:00Z", expected_duration_minutes: 90 };
-const job = { id: "job-1", job_number: "JOB-000001", status: "paused", priority: "urgent", customer_display_name: "Taylor Home", service_location_label: "10 Main Street", updated_at: "2026-07-23T12:00:00Z" };
+const job = { id: "job-1", job_number: "JOB-000001", status: "paused", priority: "urgent", customer_display_name: "Taylor Home", service_location_label: "10 Main Street", earliest_appointment_start_at: null, updated_at: "2026-07-23T12:00:00Z" };
 
 describe("DispatchRoute", () => {
   beforeEach(() => {
@@ -26,8 +26,8 @@ describe("DispatchRoute", () => {
     expect(screen.getByRole("heading", { name: "Dispatch" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "APT-000001" })).toHaveAttribute("href", "/appointments/appointment-1");
     expect(screen.getByRole("link", { name: "JOB-000001" })).toHaveAttribute("href", "/jobs/job-1");
-    expect(screen.getAllByText("Paused")).toHaveLength(2);
-    expect(screen.getByText("High priority")).toBeInTheDocument();
+    expect(screen.getByText("Technician assignment unavailable")).toBeInTheDocument();
+    expect(screen.getAllByText("Unscheduled")).toHaveLength(2);
   });
   it("updates domain queries when Branch and date scope change", () => {
     render(<MemoryRouter><DispatchRoute /></MemoryRouter>);

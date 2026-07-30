@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { ArrowLeft, Edit3, MapPin, Plus, Star, UserRound } from "lucide-react";
 
-import { getApiErrorMessage } from "../../api/errors";
+import { getApiErrorMessage, getOperatorApiError } from "../../api/errors";
 import { useCustomerDetail, useCustomerMutations } from "../../hooks/useCustomers";
 import type { CustomerContact, CustomerProperty } from "../../types/customers";
 import {
@@ -42,10 +42,15 @@ export function CustomerDetailView({ customerId, onBack }: CustomerDetailViewPro
     return <Card className="p-ui-5 text-content-muted">Loading customer…</Card>;
   }
   if (detail.isError || !detail.data) {
+    const error = getOperatorApiError(detail.error, "customer");
     return (
-      <Alert variant="danger" title="Unable to load customer">
-        Unable to load customer. {getApiErrorMessage(detail.error)}
-        <Button type="button" variant="outline" onClick={onBack} className="mt-ui-4">Return to customer list</Button>
+      <Alert
+        variant="danger"
+        title={error.title}
+        action={error.retryable ? <Button type="button" variant="outline" onClick={() => void detail.refetch()}>Retry</Button> : undefined}
+      >
+        {error.message}
+        <Button type="button" variant="ghost" onClick={onBack} className="mt-ui-4">Return to customer list</Button>
       </Alert>
     );
   }

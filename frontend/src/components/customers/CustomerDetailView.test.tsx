@@ -72,4 +72,21 @@ describe("CustomerDetailView", () => {
     );
     expect(archive).toHaveBeenCalledOnce();
   });
+
+  it("classifies a backend failure and retries only when safe", async () => {
+    const refetch = vi.fn();
+    vi.mocked(customerHooks.useCustomerDetail).mockReturnValue({
+      isLoading: false,
+      isError: true,
+      error: { isAxiosError: true, response: { status: 503 } },
+      refetch,
+    } as never);
+    vi.mocked(customerHooks.useCustomerMutations).mockReturnValue({} as never);
+
+    render(<CustomerDetailView customerId={customer.id} onBack={vi.fn()} />);
+
+    expect(screen.getByText("Service unavailable")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(refetch).toHaveBeenCalledOnce();
+  });
 });

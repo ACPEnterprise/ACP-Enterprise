@@ -27,6 +27,18 @@ export const customersHandle = {
   },
 } as const satisfies ShellRouteHandle;
 
+export const customerDetailHandle = {
+  workspace: {
+    pageTitle: "Customer",
+    breadcrumbs: [
+      { label: "Customers", path: "/customers" },
+      { label: "Customer" },
+    ],
+    helpTopic: "customer-management",
+    aiContext: "customers",
+  },
+} as const satisfies ShellRouteHandle;
+
 export const jobsHandle = {
   workspace: { pageTitle: "Jobs", breadcrumbs: [{ label: "Jobs" }], helpTopic: "jobs", aiContext: "jobs" },
 } as const satisfies ShellRouteHandle;
