@@ -82,6 +82,10 @@ EXTENDED_SCALAR_HEADERS = frozenset(
         "Lifetime value",
     }
 )
+PHONE_2B_SCALAR_HEADERS = EXTENDED_SCALAR_HEADERS - {
+    "Email marketing consent",
+    "SMS marketing consent",
+} | {"Do Not Service"}
 MAPPED_SCALAR_HEADERS = frozenset(
     {
         "First Name",
@@ -136,6 +140,14 @@ HOUSECALL_PRO_CUSTOMER_EXPORT_CONTRACTS = (
         address_group_count=61,
         order_independent_header_sha256=(
             "4ee5c82b18e7673392ae612ce2f380af6ee24e3e1b384093355659e77e82c9f5"
+        ),
+    ),
+    CustomerExportSchemaContract(
+        version="housecall_pro_customer_450_v1",
+        scalar_headers=PHONE_2B_SCALAR_HEADERS,
+        address_group_count=61,
+        order_independent_header_sha256=(
+            "27ae0928bb107dc030455ed4da841ab0104047e9cc2f47c4742d88af027d919d"
         ),
     ),
 )

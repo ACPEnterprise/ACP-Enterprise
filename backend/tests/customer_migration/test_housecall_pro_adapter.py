@@ -40,7 +40,7 @@ def base_row(*, source_id: str = "synthetic-customer-1") -> dict[str, str]:
     }
 
 
-@pytest.mark.parametrize("contract_index", [0, 1])
+@pytest.mark.parametrize("contract_index", [0, 1, 2])
 def test_detects_actual_versioned_layout_without_column_positions(
     contract_index: int,
 ) -> None:
@@ -50,6 +50,35 @@ def test_detects_actual_versioned_layout_without_column_positions(
     detected = detect_customer_export_contract(headers)
 
     assert detected == contract
+
+
+def test_450_contract_is_limited_to_verified_header_differences() -> None:
+    extended = HOUSECALL_PRO_CUSTOMER_EXPORT_CONTRACTS[1]
+    phone_2b = HOUSECALL_PRO_CUSTOMER_EXPORT_CONTRACTS[2]
+
+    assert phone_2b.version == "housecall_pro_customer_450_v1"
+    assert phone_2b.headers == (
+        extended.headers - {"Email marketing consent", "SMS marketing consent"}
+        | {"Do Not Service"}
+    )
+    assert phone_2b.address_group_count == extended.address_group_count
+
+
+def test_450_contract_preserves_do_not_service_as_unmapped_evidence() -> None:
+    row = base_row()
+    row["Do Not Service"] = "synthetic-source-value"
+    raw = source_bytes(contract_index=2, rows=[row])
+
+    report = adapter().transform(
+        raw, expected_source_sha256=hashlib.sha256(raw).hexdigest()
+    )
+
+    assert report.schema_version == "housecall_pro_customer_450_v1"
+    assert report.accepted == 1
+    assert report.records[0].customer.status == CustomerStatus.ACTIVE
+    assert report.records[0].unmapped_fields == {
+        "Do Not Service": "synthetic-source-value"
+    }
 
 
 def test_unknown_columns_fail_closed() -> None:
