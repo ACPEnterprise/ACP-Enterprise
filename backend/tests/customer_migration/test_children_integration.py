@@ -18,15 +18,15 @@ from app.customer_migration.children import (
     HousecallProCustomerChildrenMigration,
     MigrationProgress,
 )
-from app.customer_migration.housecall_pro import HousecallProCustomerMigration
 from app.customer_migration.models import (
     CustomerContactSourceIdentity,
     CustomerMigrationProgress,
     CustomerMigrationRun,
+    CustomerSourceIdentity,
     ServiceLocationSourceIdentity,
 )
 from app.customers.models import Customer, CustomerContact, ServiceLocation
-from app.customers.schemas import ContactCreate
+from app.customers.schemas import ContactCreate, CustomerCreate
 from app.customers.service import CustomerService
 from app.platform.branch.models import Branch
 from app.platform.company.membership_models import Membership
@@ -112,15 +112,44 @@ async def seed_parent(
     context: AuthorizationContext,
     path: Path,
 ) -> None:
-    write_csv(
-        path,
-        ["Customer ID", "Display Name", "Type"],
-        [["parent-1", "Phase 2 Synthetic Customer", "homeowner"]],
-    )
-    report = await HousecallProCustomerMigration().run(
-        factory, context=context, source_path=path, dry_run=False
-    )
-    assert report.accepted == 1
+    del path
+    assert context.active_branch is not None
+    async with factory() as session, session.begin():
+        run = CustomerMigrationRun(
+            company_id=context.company.id,
+            branch_id=context.active_branch.id,
+            initiated_by_user_id=context.user.id,
+            source_system="synthetic_fixture",
+            source_sha256="0" * 64,
+            mode="import",
+            status="completed",
+            source_count=1,
+            accepted_count=1,
+        )
+        session.add(run)
+        await session.flush()
+        customer = await CustomerService().stage_migrated_customer(
+            session,
+            context=context,
+            customer_data=CustomerCreate(
+                customer_type="residential",
+                display_name="Phase 2 Synthetic Customer",
+                status="active",
+            ),
+            contact_data=None,
+            service_location_data=None,
+            billing_address_data=None,
+        )
+        session.add(
+            CustomerSourceIdentity(
+                company_id=context.company.id,
+                branch_id=context.active_branch.id,
+                customer_id=customer.id,
+                source_system="housecall_pro",
+                source_customer_id="parent-1",
+                first_run_id=run.id,
+            )
+        )
 
 
 def write_children(contacts: Path, locations: Path) -> None:

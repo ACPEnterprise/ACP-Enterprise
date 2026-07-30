@@ -17,7 +17,12 @@ from sqlalchemy.ext.asyncio import (
 
 from app.core.config import settings
 from app.customer_migration.children import HousecallProCustomerChildrenMigration
-from app.customer_migration.housecall_pro import HousecallProCustomerMigration
+from app.customer_migration.models import (
+    CustomerMigrationRun,
+    CustomerSourceIdentity,
+)
+from app.customers.schemas import CustomerCreate
+from app.customers.service import CustomerService
 from app.events.models import BusinessEvent
 from app.financials.models import (
     Estimate,
@@ -167,9 +172,43 @@ async def seed_migrated_customer(
         ],
         [["location-1", "customer-1", "301 Test Ave", "Testville", "FL", "33755"]],
     )
-    customer_report = await HousecallProCustomerMigration().run(
-        factory, context=context, source_path=customers, dry_run=False
-    )
+    assert context.active_branch is not None
+    async with factory() as session, session.begin():
+        run = CustomerMigrationRun(
+            company_id=context.company.id,
+            branch_id=context.active_branch.id,
+            initiated_by_user_id=context.user.id,
+            source_system="synthetic_fixture",
+            source_sha256="0" * 64,
+            mode="import",
+            status="completed",
+            source_count=1,
+            accepted_count=1,
+        )
+        session.add(run)
+        await session.flush()
+        customer = await CustomerService().stage_migrated_customer(
+            session,
+            context=context,
+            customer_data=CustomerCreate(
+                customer_type="residential",
+                display_name="Phase 3 Synthetic Customer",
+                status="active",
+            ),
+            contact_data=None,
+            service_location_data=None,
+            billing_address_data=None,
+        )
+        session.add(
+            CustomerSourceIdentity(
+                company_id=context.company.id,
+                branch_id=context.active_branch.id,
+                customer_id=customer.id,
+                source_system="housecall_pro",
+                source_customer_id="customer-1",
+                first_run_id=run.id,
+            )
+        )
     location_report = await HousecallProCustomerChildrenMigration().run(
         factory,
         context=context,
@@ -177,7 +216,6 @@ async def seed_migrated_customer(
         service_locations_path=locations,
         dry_run=False,
     )
-    assert customer_report.accepted == 1
     assert location_report.accepted == 1
 
 

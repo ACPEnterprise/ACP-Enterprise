@@ -2,6 +2,8 @@ import pytest
 
 from app.customer_migration.children import parse_contact, parse_service_location
 from app.customer_migration.housecall_pro import (
+    HousecallProCustomerMigration,
+    LegacyCustomerImportRetiredError,
     UnresolvedRowError,
     normalized_header,
     parse_customer,
@@ -53,6 +55,12 @@ def test_housecall_pro_mapping_does_not_fabricate_identity_or_address_parts() ->
 
 def test_headers_normalize_without_guessing_semantics() -> None:
     assert normalized_header(" Billing Address Notes ") == "billing_address_notes"
+
+
+@pytest.mark.asyncio
+async def test_legacy_customer_operational_orchestration_is_retired() -> None:
+    with pytest.raises(LegacyCustomerImportRetiredError, match="retired"):
+        await HousecallProCustomerMigration().run()
 
 
 def test_contact_and_location_rows_require_source_and_parent_identities() -> None:
