@@ -140,11 +140,9 @@ async def execute(args: argparse.Namespace) -> int:
     token = os.environ.get(ACCESS_TOKEN_ENV)
     if not token:
         raise PilotExecutionError("authenticated owner access token is required")
-    backup = None
-    if args.mode == "import":
-        if args.backup is None or args.backup_sha256 is None:
-            raise PilotExecutionError("backup path and digest are required")
-        backup = verify_backup(args.backup, args.backup_sha256)
+    if args.backup is None or args.backup_sha256 is None:
+        raise PilotExecutionError("backup path and digest are required")
+    backup = verify_backup(args.backup, args.backup_sha256)
     claims = access_token_service.decode(token)
     async with AsyncSessionFactory() as session:
         authenticated = await authentication_service.validate_access_context(

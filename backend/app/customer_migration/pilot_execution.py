@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -133,6 +136,12 @@ class CustomerPilotApproval(BaseModel):
             expected=ExpectedCustomerImportCounts(**self.expected.model_dump()),
         )
 
+    def sha256(self) -> str:
+        payload = json.dumps(
+            self.model_dump(mode="json"), sort_keys=True, separators=(",", ":")
+        )
+        return hashlib.sha256(payload.encode()).hexdigest()
+
 
 class PreviewBackupEvidence(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -170,8 +179,15 @@ class CustomerPilotExecutionReport(BaseModel):
     mode: Literal["validate", "import"]
     source_sha256: str
     schema_version: str
+    approval_sha256: str
     reviewed_output_sha256: str
     pilot_boundary_sha256: str
+    deployed_git_sha: str
+    alembic_revision: str
+    started_at: datetime
+    completed_at: datetime
+    expected_counts: PilotExpectedCounts
+    actual_count_delta: PilotExpectedCounts
     approved_aggregate_count: int
     run_id: str | None
     attempted: int
@@ -278,11 +294,9 @@ class CustomerPilotExecutionService:
             boundary.validate()
         except ValueError as error:
             raise PilotExecutionError(str(error)) from error
-        if approval.mode == "import" and (
-            runtime.backup is None or not runtime.backup.custom_format_verified
-        ):
+        if runtime.backup is None or not runtime.backup.custom_format_verified:
             raise PilotExecutionError(
-                "verified preview PostgreSQL backup is required before import"
+                "verified preview PostgreSQL backup is required before execution"
             )
         return boundary
 
@@ -295,6 +309,7 @@ class CustomerPilotExecutionService:
         approval: CustomerPilotApproval,
         runtime: PreviewExecutionRuntime,
     ) -> CustomerPilotExecutionReport:
+        started_at = datetime.now(timezone.utc)
         pre_counts = await self.repository.read(factory)
         current_alembic_head = await self.repository.alembic_head(factory)
         boundary = self._validate(
@@ -317,6 +332,18 @@ class CustomerPilotExecutionService:
         if approval.mode == "validate" and post_counts != pre_counts:
             raise PilotExecutionError("validation mode changed operational records")
         post_import_counts_match = True
+        actual_delta = PilotExpectedCounts(
+            customers=post_counts.customers - pre_counts.customers,
+            contacts=post_counts.customer_contacts - pre_counts.customer_contacts,
+            service_locations=(
+                post_counts.service_locations - pre_counts.service_locations
+            ),
+            billing_addresses=(
+                post_counts.customer_billing_addresses
+                - pre_counts.customer_billing_addresses
+            ),
+            business_events=post_counts.business_events - pre_counts.business_events,
+        )
         if imported is not None:
             expected_delta = (
                 approval.expected
@@ -331,20 +358,6 @@ class CustomerPilotExecutionService:
                 if imported.accepted == 0
                 and imported.duplicate == approval.expected.customers
                 else None
-            )
-            actual_delta = PilotExpectedCounts(
-                customers=post_counts.customers - pre_counts.customers,
-                contacts=(post_counts.customer_contacts - pre_counts.customer_contacts),
-                service_locations=(
-                    post_counts.service_locations - pre_counts.service_locations
-                ),
-                billing_addresses=(
-                    post_counts.customer_billing_addresses
-                    - pre_counts.customer_billing_addresses
-                ),
-                business_events=(
-                    post_counts.business_events - pre_counts.business_events
-                ),
             )
             post_import_counts_match = (
                 expected_delta is not None and actual_delta == expected_delta
@@ -361,8 +374,15 @@ class CustomerPilotExecutionService:
             mode=approval.mode,
             source_sha256=approval.source_sha256,
             schema_version=approval.schema_version,
+            approval_sha256=approval.sha256(),
             reviewed_output_sha256=approval.reviewed_output_sha256,
             pilot_boundary_sha256=approval.pilot_boundary_sha256,
+            deployed_git_sha=runtime.deployed_git_sha,
+            alembic_revision=current_alembic_head,
+            started_at=started_at,
+            completed_at=datetime.now(timezone.utc),
+            expected_counts=approval.expected,
+            actual_count_delta=actual_delta,
             approved_aggregate_count=len(approval.ordered_source_identity_allowlist),
             run_id=imported.run_id if imported is not None else None,
             attempted=imported.attempted if imported is not None else 0,

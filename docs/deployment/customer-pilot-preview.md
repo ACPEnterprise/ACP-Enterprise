@@ -35,12 +35,13 @@ The authoritative repository mechanism is:
 * `docker-compose.preview.yml`;
 * `scripts/verify-preview.sh`;
 * the manual deployment process in `preview-deployment.md`;
-* host Nginx and Certbot for reverse proxy and TLS;
+* host Caddy for reverse proxy and automatic TLS;
 * the Compose `postgres`, `redis`, `backend`, and `frontend` services.
 
-The repository does not currently define a Caddy service. If the actual preview
-host uses Caddy, stop: reconcile the deployment record and repository runbook
-before a pilot. Do not assume Nginx commands validate Caddy.
+Preview topology was reconciled during PHONE.2F: Caddy is the active host
+reverse proxy and Nginx is inactive. Caddy forwards the public HTTPS hostname
+to the frontend loopback listener on port 8080. Caddy is host-managed rather
+than a Compose service and must be validated separately.
 
 Run these checks on the preview host from the clean, approved release checkout:
 
@@ -50,7 +51,8 @@ git rev-parse HEAD
 docker compose --env-file .env.preview -f docker-compose.preview.yml ps
 docker compose --env-file .env.preview -f docker-compose.preview.yml exec -T \
   backend alembic current
-systemctl is-active nginx
+systemctl is-active caddy
+caddy validate --config /etc/caddy/Caddyfile
 PREVIEW_URL=https://preview.allcountyhomeservices.com \
   sh scripts/verify-preview.sh .env.preview
 ```
@@ -61,7 +63,7 @@ deployed SHA to the backend command as `ACP_DEPLOYED_GIT_SHA`.
 
 ## Required backup
 
-Before import mode, create a restricted PostgreSQL custom-format backup:
+Before validation or import mode, create a restricted PostgreSQL custom-format backup:
 
 ```bash
 install -d -m 0700 /opt/acp-enterprise/backups
@@ -90,6 +92,7 @@ boundary. It does not invoke the import facade.
 docker compose --env-file .env.preview -f docker-compose.preview.yml run --rm -T \
   --no-deps \
   -v /opt/acp-enterprise/migration-runtime:/run/acp-migration:ro \
+  -v /opt/acp-enterprise/backups:/run/acp-backups:ro \
   -e ACP_DEPLOYED_GIT_SHA=APPROVED_FULL_GIT_SHA \
   -e ACP_CUSTOMER_PILOT_ACCESS_TOKEN \
   backend python -m app.customer_migration.pilot_command \
@@ -98,7 +101,9 @@ docker compose --env-file .env.preview -f docker-compose.preview.yml run --rm -T
   --approval /run/acp-migration/customer-pilot-approval.json \
   --reviewed-output /run/acp-migration/customer-reviewed-output.json \
   --company-id APPROVED_COMPANY_UUID \
-  --branch-id APPROVED_BRANCH_UUID
+  --branch-id APPROVED_BRANCH_UUID \
+  --backup /run/acp-backups/APPROVED_BACKUP.dump \
+  --backup-sha256 APPROVED_BACKUP_SHA256
 ```
 
 The approval and reviewed-output files must be mounted read-only into the

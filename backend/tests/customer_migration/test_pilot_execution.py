@@ -164,7 +164,7 @@ def approval(reviewed, *, mode: str = "validate") -> CustomerPilotApproval:
     )
 
 
-def runtime(*, environment: str = "preview", backup: bool = False):
+def runtime(*, environment: str = "preview", backup: bool = True):
     return PreviewExecutionRuntime(
         environment=environment,
         deployed_git_sha="a" * 40,
@@ -240,7 +240,7 @@ async def test_import_requires_verified_preview_backup() -> None:
             context=context(),
             reviewed=reviewed,
             approval=approval(reviewed, mode="import"),
-            runtime=runtime(),
+            runtime=runtime(backup=False),
         )
     facade.import_reviewed.assert_not_awaited()
 
