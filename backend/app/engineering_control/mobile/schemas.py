@@ -92,6 +92,7 @@ class MobileOwnerReviewPage(MobileEngineeringSchema):
 class MobileWorkstreamSummary(MobileEngineeringSchema):
     command_id: UUID
     ecid: str
+    display_name: str
     repository_key: str
     expected_branch: str
     expected_head: str

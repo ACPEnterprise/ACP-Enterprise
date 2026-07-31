@@ -119,6 +119,7 @@ export interface MobileOwnerReviewPage {
 export interface MobileWorkstreamSummary {
   command_id: string;
   ecid: string;
+  display_name: string;
   repository_key: string;
   expected_branch: string;
   expected_head: string;

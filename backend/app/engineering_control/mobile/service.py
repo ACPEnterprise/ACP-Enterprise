@@ -479,6 +479,7 @@ class MobileEngineeringControlService:
         return MobileWorkstreamSummary(
             command_id=command.id,
             ecid=command.ecid,
+            display_name=cls._display_name(command.owner_instruction),
             repository_key=command.repository_key,
             expected_branch=command.expected_branch,
             expected_head=command.expected_head,
@@ -524,6 +525,16 @@ class MobileEngineeringControlService:
             progress_percent=runtime.progress_percent if runtime else None,
             current_activity=runtime.current_activity if runtime else None,
         )
+
+    @staticmethod
+    def _display_name(owner_instruction: str) -> str:
+        normalized = " ".join(owner_instruction.split()).strip(" .")
+        if not normalized:
+            return "Engineering workstream"
+        first_sentence = normalized.split(". ", 1)[0]
+        if len(first_sentence) <= 72:
+            return first_sentence
+        return f"{first_sentence[:69].rstrip()}…"
 
     @staticmethod
     def _pipeline_status(

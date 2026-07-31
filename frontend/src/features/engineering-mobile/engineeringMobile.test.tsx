@@ -47,6 +47,7 @@ const workstream: MobileWorkstreamSummary = {
   command_id: review.id,
   execution_id: "19366485-df36-436d-b39b-593e89c74c4c",
   ecid: review.ecid,
+  display_name: "Prepare the Mission Control owner experience",
   repository_key: review.repository_key,
   expected_branch: review.expected_branch,
   expected_head: review.expected_head,
@@ -210,13 +211,13 @@ describe("mobile Engineering Control", () => {
       },
     } as never);
     renderList();
-    expect(screen.getByText(workstream.ecid).closest("a")).toHaveAttribute(
+    expect(screen.getByText(workstream.display_name).closest("a")).toHaveAttribute(
       "href",
       `/engineering/${review.id}`,
     );
     expect(screen.queryByText(review.owner_instruction)).not.toBeInTheDocument();
     expect(screen.getAllByText("Needs you").length).toBeGreaterThan(0);
-    expect(screen.getByText("Needs attention")).toBeInTheDocument();
+    expect(screen.getByText("Unavailable")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: /Analytics/ }));
     expect(screen.getByRole("heading", { name: "Engineering analytics" })).toBeInTheDocument();
     expect(hooks.useMobileWorkstreams).toHaveBeenLastCalledWith({ page: 1, pageSize: 100 });

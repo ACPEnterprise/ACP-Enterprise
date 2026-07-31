@@ -235,6 +235,7 @@ async def test_workstream_projection_lists_authoritative_safe_next_action(
         {
             "command_id": command["id"],
             "ecid": body["items"][0]["ecid"],
+            "display_name": "Inspect the approved mobile API boundary",
             "repository_key": command["repository_key"],
             "expected_branch": command["expected_branch"],
             "expected_head": command["expected_head"],
