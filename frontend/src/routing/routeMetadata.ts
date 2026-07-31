@@ -35,6 +35,10 @@ export const appointmentsHandle = {
   workspace: { pageTitle: "Appointment", breadcrumbs: [{ label: "Jobs", path: "/jobs" }, { label: "Appointment" }], helpTopic: "scheduling", aiContext: "scheduling" },
 } as const satisfies ShellRouteHandle;
 
+export const financialsHandle = {
+  workspace: { pageTitle: "Financial History", breadcrumbs: [{ label: "Financial History" }], helpTopic: "financial-history", aiContext: "financials" },
+} as const satisfies ShellRouteHandle;
+
 export const dispatchHandle = {
   workspace: { pageTitle: "Dispatch", breadcrumbs: [{ label: "Dispatch" }], helpTopic: "dispatch", aiContext: "dispatch" },
 } as const satisfies ShellRouteHandle;

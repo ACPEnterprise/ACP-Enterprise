@@ -2,7 +2,7 @@ import { createBrowserRouter, type RouteObject } from "react-router";
 
 import { ApplicationShell } from "../layout";
 import { ProtectedRoute } from "../auth";
-import { appointmentsHandle, commandCenterHandle, customersHandle, dispatchHandle, engineeringHandle, jobsHandle, missionControlHandle, notFoundHandle } from "./routeMetadata";
+import { appointmentsHandle, commandCenterHandle, customersHandle, dispatchHandle, engineeringHandle, financialsHandle, jobsHandle, missionControlHandle, notFoundHandle } from "./routeMetadata";
 import { RouteErrorBoundary } from "./RouteErrorBoundary";
 
 export const appRoutes: RouteObject[] = [
@@ -65,6 +65,16 @@ export const appRoutes: RouteObject[] = [
             handle: appointmentsHandle,
             lazy: async () => ({ Component: (await import("../routes/AppointmentDetailRoute")).AppointmentDetailRoute }),
           },
+          ...["estimates", "invoices", "payments"].map((path) => ({
+            path,
+            handle: financialsHandle,
+            lazy: async () => ({ Component: (await import("../routes/FinancialListRoute")).FinancialListRoute }),
+          })),
+          ...["estimates/:financialId", "invoices/:financialId", "payments/:financialId"].map((path) => ({
+            path,
+            handle: financialsHandle,
+            lazy: async () => ({ Component: (await import("../routes/FinancialDetailRoute")).FinancialDetailRoute }),
+          })),
           {
             path: "engineering",
             handle: engineeringHandle,
