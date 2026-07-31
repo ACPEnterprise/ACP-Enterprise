@@ -152,6 +152,8 @@ configured worker ID and protected key path:
 ```bash
 install -d -m 700 /opt/acp-enterprise/shared/secrets \
   /opt/acp-enterprise/shared/worker-workspaces
+docker compose --profile worker-provision --env-file .env.preview \
+  -f docker-compose.preview.yml run --rm worker-provision
 test "$(stat -c %a "$ACP_WORKER_PRIVATE_KEY_FILE_HOST")" = 600
 ACP_WORKER_SERVICE_VERSION="$(git rev-parse HEAD)" \
   docker compose --profile worker --env-file .env.preview \

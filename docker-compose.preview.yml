@@ -127,6 +127,34 @@ services:
     networks:
       preview:
 
+  worker-provision:
+    profiles: ["worker-provision"]
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.preview
+    environment:
+      <<: *backend-environment
+      ACP_WORKER_COMPANY_CODE: ${ACP_WORKER_COMPANY_CODE:?Set ACP_WORKER_COMPANY_CODE}
+      ACP_WORKER_ADMINISTRATOR_EMAIL: ${ACP_WORKER_ADMINISTRATOR_EMAIL:?Set ACP_WORKER_ADMINISTRATOR_EMAIL}
+      ACP_WORKER_NAME: ${ACP_WORKER_NAME:-ACP Preview Engineering Worker}
+      ACP_WORKER_PROVIDER_IDENTIFIER: ${ACP_WORKER_PROVIDER_IDENTIFIER:-connectivity}
+      ACP_WORKER_CAPABILITIES: ${ACP_WORKER_CAPABILITIES:-transport.connectivity}
+      ACP_WORKER_PRIVATE_KEY_FILE: /run/secrets/preview-worker.key
+      ACP_WORKER_CREDENTIAL_DAYS: ${ACP_WORKER_CREDENTIAL_DAYS:-30}
+    command: ["python", "-m", "app.worker_runtime.provision"]
+    volumes:
+      - ${ACP_WORKER_PRIVATE_KEY_FILE_HOST:-/opt/acp-enterprise/shared/secrets/preview-worker.key}:/run/secrets/preview-worker.key
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      preview:
+
   frontend:
     build:
       context: ./frontend
