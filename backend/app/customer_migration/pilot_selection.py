@@ -156,7 +156,8 @@ class CustomerPilotSelectionService:
             "generated_at": timestamp,
         }
         provisional = CustomerPilotManifest.model_construct(
-            manifest_sha256="", **values  # type: ignore[arg-type]
+            manifest_sha256="",
+            **values,  # type: ignore[arg-type]
         )
         payload = json.dumps(
             provisional.integrity_payload(), sort_keys=True, separators=(",", ":")
