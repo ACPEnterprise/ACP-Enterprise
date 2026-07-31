@@ -73,3 +73,34 @@ application boundary; ledger services stage changes but never commit independent
 Authenticated callers with `COMPANY_ECONOMICS_READ` can list company-scoped
 measurements or fetch the latest measurement for a subject. Phase 1 exposes no
 write, override, or deletion endpoint.
+
+## Phase 2 authoritative ingestion
+
+All source adapters are deterministic translators. They never write economics
+tables and never infer missing values. `EconomicsIngestionService` rejects any
+adapter output that is not explicitly measured and routes accepted commands to
+`EconomicsLedgerService`, the sole internal materialization boundary.
+
+- Issued invoices produce accrual-basis job revenue.
+- Successful payments produce separate cash-basis invoice facts and therefore do
+  not double-count accrual profitability.
+- Labor time entries, material usage, equipment utilization, and truck activity
+  implement a strict measured-cost source contract. Economics does not duplicate
+  or own their future operational source tables.
+- Jobs and appointments are supported sources but currently produce no monetary
+  facts: Jobs have no measured amount, and Appointment duration is expected rather
+  than measured.
+- Business Events produce facts only when their payload explicitly declares a
+  complete measured economics value.
+
+Each known fact requires SHA-256 source evidence and Business Event linkage.
+Canonical command digests make re-ingestion idempotent. Reversals, supersessions,
+and effective-date corrections append new facts linked to the corrected fact;
+historical facts and measurements are never updated or deleted.
+
+Fact ingestion queues job, branch, and company recalculation scopes. The scheduled
+recalculation service locks and processes only pending scopes. Job scopes create
+idempotent, versioned measurement snapshots; branch and company read models roll
+up the latest job snapshots without duplicating the accounting ledger. Read-only
+projections expose job, branch, and company profitability, subject history,
+evidence completeness, and stale measurements.
