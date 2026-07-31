@@ -6,14 +6,6 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import (
-    AsyncEngine,
-    AsyncSession,
-    async_sessionmaker,
-    create_async_engine,
-)
-
 from app.core.config import settings
 from app.economics.contracts import EvidenceInput, RecordBusinessFact
 from app.economics.domain import (
@@ -34,6 +26,13 @@ from app.economics.models import (
 from app.economics.service import EconomicsQueryService
 from app.events.models import BusinessEvent
 from app.platform.company.models import Company
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 
 @pytest_asyncio.fixture
@@ -219,11 +218,17 @@ async def test_affected_scope_recalculation_versions_snapshots_and_corrections(
         company_projection = await EconomicsQueryService.company_profitability(
             session, company.id
         )
+        fact_projection = await EconomicsQueryService.list_facts(
+            session, company.id, "job", job_id, 50, 0
+        )
     assert len(history.items) == 1
     assert history.items[0].net_profit_minor == 48_000
     assert completeness.completeness_percentage == 100
     assert branch_projection.net_profit_minor == 48_000
     assert company_projection.net_profit_minor == 48_000
+    assert len(fact_projection.items) == 6
+    assert all(len(item.input_digest) == 64 for item in fact_projection.items)
+    assert all(item.evidence for item in fact_projection.items)
 
     async with economics_database() as session, session.begin():
         correction_event = BusinessEvent(

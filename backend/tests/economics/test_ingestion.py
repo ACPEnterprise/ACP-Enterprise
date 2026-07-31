@@ -4,10 +4,10 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
-
 from app.economics.adapters import (
     AdapterContext,
     AppointmentSourceAdapter,
+    BusinessEventSourceAdapter,
     InvoiceSourceAdapter,
     JobSourceAdapter,
     MeasuredOperationalCost,
@@ -17,7 +17,9 @@ from app.economics.adapters import (
     material_usage_adapter,
     truck_activity_adapter,
 )
-from app.economics.domain import EconomicCategory
+from app.economics.domain import EconomicCategory, MeasurementStatus
+from app.economics.ingestion import EconomicsIngestionService
+from app.economics.ledger import EconomicsLedgerError, EconomicsLedgerService
 
 
 def context() -> AdapterContext:
@@ -110,3 +112,83 @@ def test_job_and_appointment_adapters_do_not_infer_values() -> None:
     assert "no measured monetary" in (job_result.omission_reason or "")
     assert appointment_result.commands == ()
     assert "expected, not measured" in (appointment_result.omission_reason or "")
+
+
+def test_business_event_adapter_accepts_only_explicit_measured_values() -> None:
+    now = datetime.now(timezone.utc)
+    company_id = uuid4()
+    event = SimpleNamespace(
+        id=uuid4(),
+        company_id=company_id,
+        branch_id=uuid4(),
+        entity_type="job",
+        entity_id=uuid4(),
+        event_type="economics.material_recorded",
+        occurred_at=now,
+        payload={
+            "economics": {
+                "category": "materials",
+                "fact_key": "material_usage_cost",
+                "amount_minor": 2300,
+                "currency": "USD",
+                "period_start": "2026-07-31",
+                "period_end": "2026-07-31",
+                "measurement_status": "measured",
+            }
+        },
+    )
+    command = BusinessEventSourceAdapter().adapt(event, context()).commands[0]
+    assert command.amount_minor == 2300
+    assert command.confidence.status is MeasurementStatus.MEASURED
+    assert command.evidence[0].business_event_id == event.id
+
+    event.payload["economics"]["measurement_status"] = "estimated"
+    result = BusinessEventSourceAdapter().adapt(event, context())
+    assert result.commands == ()
+    assert "not measured" in (result.omission_reason or "")
+
+
+@pytest.mark.asyncio
+async def test_ingestion_routes_through_ledger_and_enforces_company_scope(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    company_id = uuid4()
+    source = MeasuredOperationalCost(
+        id=uuid4(),
+        company_id=company_id,
+        branch_id=uuid4(),
+        job_id=uuid4(),
+        amount_minor=500,
+        currency="USD",
+        period_start=date(2026, 7, 31),
+        period_end=date(2026, 7, 31),
+        occurred_at=datetime.now(timezone.utc),
+        source_version="1",
+        measurement_method="recorded_usage_cost",
+    )
+    recorded: list[object] = []
+
+    async def record_fact(session, scoped_company_id, command):
+        del session
+        assert scoped_company_id == company_id
+        recorded.append(command)
+        return SimpleNamespace(id=uuid4())
+
+    monkeypatch.setattr(EconomicsLedgerService, "record_fact", record_fact)
+    facts = await EconomicsIngestionService.ingest(
+        object(),  # type: ignore[arg-type]
+        company_id=company_id,
+        adapter=material_usage_adapter,
+        source=source,
+        context=context(),
+    )
+    assert len(facts) == len(recorded) == 1
+
+    with pytest.raises(EconomicsLedgerError, match="Company"):
+        await EconomicsIngestionService.ingest(
+            object(),  # type: ignore[arg-type]
+            company_id=uuid4(),
+            adapter=material_usage_adapter,
+            source=source,
+            context=context(),
+        )

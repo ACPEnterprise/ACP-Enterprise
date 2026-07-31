@@ -4,7 +4,6 @@ from datetime import date, datetime, timezone
 from uuid import uuid4
 
 import pytest
-
 from app.economics.allocation import AllocationTarget, allocation_registry
 from app.economics.domain import (
     BusinessFact,

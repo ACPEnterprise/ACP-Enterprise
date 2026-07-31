@@ -1,6 +1,5 @@
-from fastapi import FastAPI
-
 from app.economics.router import router
+from fastapi import FastAPI
 
 
 def test_economics_api_is_read_only() -> None:
@@ -15,6 +14,7 @@ def test_economics_api_is_read_only() -> None:
 
     assert economics_operations == {"get"}
     assert {
+        "/api/v1/economics/facts",
         "/api/v1/economics/jobs/{job_id}/profitability",
         "/api/v1/economics/branches/{branch_id}/profitability",
         "/api/v1/economics/company/profitability",
