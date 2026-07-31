@@ -17,6 +17,8 @@ from app.customer_migration.adapter_import import (
 from app.customer_migration.pilot_command import _load_reviewed, verify_backup
 from app.customer_migration.pilot_execution import (
     PILOT_APPROVAL_VERSION,
+    STAGE_APPROVAL_VERSION,
+    CustomerMigrationStageApproval,
     CustomerPilotApproval,
     CustomerPilotExecutionService,
     OperationalCounts,
@@ -166,6 +168,42 @@ def approval(reviewed, *, mode: str = "validate") -> CustomerPilotApproval:
     )
 
 
+def stage_approval(reviewed) -> CustomerMigrationStageApproval:
+    first = reviewed.aggregates[0].source_identity_sha256
+    second = digest("second-source-identity")
+    return CustomerMigrationStageApproval(
+        approval_version=STAGE_APPROVAL_VERSION,
+        target_environment="preview",
+        mode="import",
+        source_sha256=reviewed.source_sha256,
+        schema_version=reviewed.schema_version,
+        reviewed_output_sha256=reviewed.review_sha256,
+        pilot_manifest_sha256=digest("stage-manifest"),
+        pilot_boundary_sha256=digest(
+            json.dumps((first, second), separators=(",", ":"))
+        ),
+        ordered_source_identity_allowlist=(first, second),
+        expected={
+            "customers": 2,
+            "contacts": 0,
+            "service_locations": 0,
+            "billing_addresses": 0,
+            "business_events": 2,
+        },
+        expected_already_imported={
+            "customers": 1,
+            "contacts": 0,
+            "service_locations": 0,
+            "billing_addresses": 0,
+            "business_events": 1,
+        },
+        expected_blocking_dispositions=0,
+        expected_deployed_git_sha="a" * 40,
+        expected_alembic_head="phase-head",
+        expected_pre_import_counts=counts(customers=1, business_events=1),
+    )
+
+
 def runtime(*, environment: str = "preview", backup: bool = True):
     return PreviewExecutionRuntime(
         environment=environment,
@@ -228,6 +266,37 @@ async def test_import_invokes_only_authoritative_facade() -> None:
         runtime=runtime(backup=True),
     )
     facade.import_reviewed.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_cumulative_stage_recognizes_prior_prefix_and_creates_delta() -> None:
+    reviewed = reviewed_output()
+    facade = Facade(
+        CustomerAdapterImportReport(
+            run_id="00000000-0000-0000-0000-000000000002",
+            attempted=2,
+            accepted=1,
+            duplicate=1,
+            rejected=0,
+        )
+    )
+    repository = CountRepository(
+        counts(customers=1, business_events=1),
+        post_counts=counts(customers=2, business_events=2),
+    )
+    report = await CustomerPilotExecutionService(
+        facade=facade, repository=repository
+    ).run(
+        object(),
+        context=context(),
+        reviewed=reviewed,
+        approval=stage_approval(reviewed),
+        runtime=runtime(),
+    )
+    assert report.status == "completed"
+    assert report.accepted == 1
+    assert report.duplicate == 1
+    assert report.actual_count_delta.customers == 1
 
 
 @pytest.mark.asyncio

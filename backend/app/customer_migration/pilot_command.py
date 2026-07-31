@@ -23,11 +23,16 @@ from app.customer_migration.adapter_import import (
 from app.customer_migration.pilot_execution import (
     CustomerPilotApproval,
     CustomerPilotExecutionService,
+    CustomerMigrationStageApproval,
     PilotExecutionError,
     PreviewBackupEvidence,
     PreviewExecutionRuntime,
 )
 from app.customer_migration.pilot_selection import CustomerPilotManifest
+from app.customer_migration.stage_selection import (
+    STAGE_MANIFEST_VERSION,
+    CustomerMigrationStageManifest,
+)
 from app.database.session import AsyncSessionFactory, engine
 from app.platform.auth.errors import AuthenticationError
 from app.platform.auth.services import access_token_service, authentication_service
@@ -131,8 +136,19 @@ def verify_backup(path: Path, expected_sha256: str) -> PreviewBackupEvidence:
 async def execute(args: argparse.Namespace) -> int:
     if settings.environment != "preview" or args.target != "preview":
         raise PilotExecutionError("command can execute only inside preview")
-    approval = CustomerPilotApproval.model_validate(_load_json(args.approval))
-    manifest = CustomerPilotManifest.model_validate(_load_json(args.manifest))
+    approval_payload = _load_json(args.approval)
+    approval = (
+        CustomerMigrationStageApproval.model_validate(approval_payload)
+        if approval_payload.get("approval_version")
+        == "customer-migration-stage-execution/v1"
+        else CustomerPilotApproval.model_validate(approval_payload)
+    )
+    manifest_payload = _load_json(args.manifest)
+    manifest = (
+        CustomerMigrationStageManifest.model_validate(manifest_payload)
+        if manifest_payload.get("manifest_version") == STAGE_MANIFEST_VERSION
+        else CustomerPilotManifest.model_validate(manifest_payload)
+    )
     reviewed = _load_reviewed(args.reviewed_output)
     if approval.mode != args.mode:
         raise PilotExecutionError("command mode does not match owner approval")

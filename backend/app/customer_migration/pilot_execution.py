@@ -45,6 +45,7 @@ from app.scheduling.models import Appointment
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 GIT_SHA_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 PILOT_APPROVAL_VERSION = "customer-pilot-execution/v1"
+STAGE_APPROVAL_VERSION = "customer-migration-stage-execution/v1"
 
 
 class PilotExecutionError(ValueError):
@@ -99,7 +100,10 @@ class CustomerPilotApproval(BaseModel):
 
     @model_validator(mode="after")
     def validate_approval(self) -> CustomerPilotApproval:
-        if self.approval_version != PILOT_APPROVAL_VERSION:
+        if self.approval_version not in (
+            PILOT_APPROVAL_VERSION,
+            STAGE_APPROVAL_VERSION,
+        ):
             raise ValueError("unsupported pilot execution approval version")
         for field_name in (
             "source_sha256",
@@ -143,6 +147,24 @@ class CustomerPilotApproval(BaseModel):
             self.model_dump(mode="json"), sort_keys=True, separators=(",", ":")
         )
         return hashlib.sha256(payload.encode()).hexdigest()
+
+
+class CustomerMigrationStageApproval(CustomerPilotApproval):
+    """Cumulative execution boundary with an explicit imported prefix."""
+
+    expected_already_imported: PilotExpectedCounts
+
+    @model_validator(mode="after")
+    def validate_stage_approval(self) -> CustomerMigrationStageApproval:
+        if self.approval_version != STAGE_APPROVAL_VERSION:
+            raise ValueError("unsupported Customer migration stage approval version")
+        if any(
+            getattr(self.expected_already_imported, field)
+            > getattr(self.expected, field)
+            for field in PilotExpectedCounts.model_fields
+        ):
+            raise ValueError("already-imported counts exceed cumulative stage counts")
+        return self
 
 
 class PreviewBackupEvidence(BaseModel):
@@ -313,7 +335,7 @@ class CustomerPilotExecutionService:
         approval: CustomerPilotApproval,
     ) -> OperationalCounts:
         initial = approval.expected_pre_import_counts
-        expected = approval.expected
+        expected = CustomerPilotExecutionService._incremental_expected(approval)
         return initial.model_copy(
             update={
                 "customers": initial.customers + expected.customers,
@@ -325,6 +347,24 @@ class CustomerPilotExecutionService:
                     initial.customer_billing_addresses + expected.billing_addresses
                 ),
                 "business_events": (initial.business_events + expected.business_events),
+            }
+        )
+
+    @staticmethod
+    def _incremental_expected(approval: CustomerPilotApproval) -> PilotExpectedCounts:
+        existing = getattr(
+            approval, "expected_already_imported", None
+        ) or PilotExpectedCounts(
+            customers=0,
+            contacts=0,
+            service_locations=0,
+            billing_addresses=0,
+            business_events=0,
+        )
+        return PilotExpectedCounts(
+            **{
+                field: getattr(approval.expected, field) - getattr(existing, field)
+                for field in PilotExpectedCounts.model_fields
             }
         )
 
@@ -374,9 +414,20 @@ class CustomerPilotExecutionService:
             business_events=post_counts.business_events - pre_counts.business_events,
         )
         if imported is not None:
+            incremental = self._incremental_expected(approval)
+            existing = getattr(
+                approval, "expected_already_imported", None
+            ) or PilotExpectedCounts(
+                customers=0,
+                contacts=0,
+                service_locations=0,
+                billing_addresses=0,
+                business_events=0,
+            )
             expected_delta = (
-                approval.expected
-                if imported.accepted == approval.expected.customers
+                incremental
+                if imported.accepted == incremental.customers
+                and imported.duplicate == existing.customers
                 else PilotExpectedCounts(
                     customers=0,
                     contacts=0,
