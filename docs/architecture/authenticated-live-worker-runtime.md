@@ -56,8 +56,9 @@ with a heartbeat no older than the existing 90-second policy. Stopping the runti
 does not fabricate immediate disconnection; the projection becomes disconnected
 when its authoritative heartbeat freshness rule is no longer satisfied.
 
-Transport sessions retain the existing 15-minute bound. No background execution,
-automatic offer acceptance, or provider reconnect loop is introduced.
+Transport sessions retain the existing 15-minute bound. PHONE.5 adds a bounded
+service reconnect loop and durable recovery journal; it never retries execution
+when an acquired offer has an ambiguous outcome.
 
 ## Lease behavior
 
@@ -81,6 +82,6 @@ It requires `ACP_WORKER_BASE_URL`, `ACP_WORKER_ID`, and
 `ACP_WORKER_PRIVATE_KEY_FILE`; optional bounded heartbeat, timeout, and capability
 configuration follows the names in `WorkerRuntimeConfig`.
 
-Credential provisioning and a worker Compose service are deliberately deferred to a
-separate approved operational rollout. This milestone does not create credentials,
-start a live worker, deploy, or change preview connectivity.
+Credential provisioning and the hardened worker Compose service are implemented by
+PHONE.5. Provisioning remains an explicit permission-checked operation and runtime
+startup never creates or displays credentials.

@@ -146,6 +146,25 @@ docker compose --env-file .env.preview -f docker-compose.preview.yml up -d
 docker compose --env-file .env.preview -f docker-compose.preview.yml ps
 ```
 
+Start the persistent worker only after explicit enrollment has produced the
+configured worker ID and protected key path:
+
+```bash
+install -d -m 700 /opt/acp-enterprise/shared/secrets \
+  /opt/acp-enterprise/shared/worker-workspaces
+test "$(stat -c %a "$ACP_WORKER_PRIVATE_KEY_FILE_HOST")" = 600
+ACP_WORKER_SERVICE_VERSION="$(git rev-parse HEAD)" \
+  docker compose --profile worker --env-file .env.preview \
+  -f docker-compose.preview.yml up -d worker
+docker compose --profile worker --env-file .env.preview \
+  -f docker-compose.preview.yml ps worker
+```
+
+The worker must become healthy from a recent authenticated heartbeat without an
+attached shell. Restart rehearsal uses `docker compose restart worker`, verifies a
+new authenticated session and fresh heartbeat, and confirms any acquired recovery
+record becomes reconciliation-required rather than being executed again.
+
 Do not use `docker compose down -v`; it deletes named database storage.
 
 ## 6. Host reverse proxy and TLS

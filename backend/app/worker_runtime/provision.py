@@ -48,6 +48,8 @@ class ProvisioningConfig:
     administrator_email: str
     worker_name: str
     private_key_file: Path
+    provider_identifier: str = "connectivity"
+    capabilities: tuple[WorkerCapability, ...] = (WorkerCapability.CONNECTIVITY,)
     credential_days: int = 30
 
     @classmethod
@@ -61,12 +63,25 @@ class ProvisioningConfig:
                 "ACP_WORKER_NAME", "ACP Preview Connectivity Worker"
             ).strip(),
             private_key_file=Path(os.environ["ACP_WORKER_PRIVATE_KEY_FILE"]),
+            provider_identifier=os.environ.get(
+                "ACP_WORKER_PROVIDER_IDENTIFIER", "connectivity"
+            ).strip(),
+            capabilities=tuple(
+                WorkerCapability(value.strip())
+                for value in os.environ.get(
+                    "ACP_WORKER_CAPABILITIES", WorkerCapability.CONNECTIVITY.value
+                ).split(",")
+                if value.strip()
+            ),
             credential_days=int(os.environ.get("ACP_WORKER_CREDENTIAL_DAYS", "30")),
         )
         if (
             not SAFE_CODE.fullmatch(config.company_code)
             or not SAFE_EMAIL.fullmatch(config.administrator_email)
             or not config.worker_name
+            or not config.provider_identifier
+            or len(config.provider_identifier) > 100
+            or not config.capabilities
             or len(config.worker_name) > 100
             or not 1 <= config.credential_days <= 90
             or not config.private_key_file.is_absolute()
@@ -155,10 +170,10 @@ class PreviewWorkerProvisioningService:
             session,
             context=context,
             command=RegisterWorkerCommand(
-                provider_identifier="connectivity",
+                provider_identifier=config.provider_identifier,
                 name=config.worker_name,
                 worker_version="1",
-                capabilities=(WorkerCapability.CONNECTIVITY,),
+                capabilities=config.capabilities,
             ),
         )
         identity = await identity_service.register(

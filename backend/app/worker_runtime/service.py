@@ -2,8 +2,10 @@ import asyncio
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import StrEnum
+from typing import cast
 from uuid import UUID, uuid4
 
+import httpx
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from app.worker_control.contracts import WorkerCapability, WorkerHealth
@@ -22,12 +24,17 @@ from app.worker_control.transport.crypto import (
     decode_private_key,
     encode_signature,
 )
-from app.worker_runtime.client import Session, WorkerTransportClient
+from app.worker_runtime.client import (
+    Session,
+    WorkerRuntimeTransportError,
+    WorkerTransportClient,
+)
 from app.worker_runtime.config import WorkerRuntimeConfig
 from app.worker_runtime.execution import (
     IsolatedWorkspaceExecutionError,
     IsolatedWorkspaceExecutor,
 )
+from app.worker_runtime.recovery import RecoveryRecord, WorkerRecoveryJournal
 
 
 class WorkerRuntimeState(StrEnum):
@@ -56,10 +63,12 @@ class AuthenticatedWorkerRuntime:
         config: WorkerRuntimeConfig,
         client: WorkerTransportClient,
         private_key: Ed25519PrivateKey,
+        journal: WorkerRecoveryJournal | None = None,
     ) -> None:
         self.config = config
         self.client = client
         self.private_key = private_key
+        self.journal = journal
         self._session: Session | None = None
         self._state = WorkerRuntimeState.STOPPED
         self._last_heartbeat_at: datetime | None = None
@@ -76,6 +85,11 @@ class AuthenticatedWorkerRuntime:
                 timeout_seconds=config.request_timeout_seconds,
             ),
             private_key=decode_private_key(config.read_private_key()),
+            journal=(
+                WorkerRecoveryJournal(config.state_directory)
+                if config.state_directory is not None
+                else None
+            ),
         )
 
     @property
@@ -129,6 +143,12 @@ class AuthenticatedWorkerRuntime:
                 },
             )
             self._advance(sent_at)
+            if self.journal is not None:
+                self.journal.record_health(
+                    worker_id=self.config.worker_id,
+                    observed_at=sent_at,
+                    service_version=self.config.service_version,
+                )
             return self.snapshot
 
     async def renew_lease(
@@ -170,22 +190,54 @@ class AuthenticatedWorkerRuntime:
             return self.snapshot
 
     async def run(self, stop: asyncio.Event) -> None:
+        delay = self.config.reconnect_min_seconds
         try:
-            await self.establish()
             while not stop.is_set():
-                await self.heartbeat()
-                if WorkerCapability.ENGINEERING_EXECUTE in self.config.capabilities:
-                    await self.consume_workstream_control()
-                    await self.execute_available_offer()
                 try:
-                    await asyncio.wait_for(
-                        stop.wait(), timeout=self.config.heartbeat_seconds
-                    )
-                except TimeoutError:
-                    continue
-        except Exception:
-            self._state = WorkerRuntimeState.DEGRADED
-            raise
+                    await self.establish()
+                    delay = self.config.reconnect_min_seconds
+                    while not stop.is_set():
+                        recovery = self.journal.load() if self.journal else None
+                        await self.heartbeat(
+                            WorkerHealth.DEGRADED
+                            if recovery is not None
+                            else WorkerHealth.HEALTHY
+                        )
+                        if recovery and recovery.phase == "pending_result":
+                            await self._deliver_pending_result(recovery)
+                        elif recovery and recovery.phase == "acquired":
+                            assert self.journal is not None
+                            self.journal.store(
+                                RecoveryRecord(
+                                    phase="reconciliation_required",
+                                    offer_id=recovery.offer_id,
+                                    lease_id=recovery.lease_id,
+                                    started_at=recovery.started_at,
+                                )
+                            )
+                        elif (
+                            recovery is None
+                            and WorkerCapability.ENGINEERING_EXECUTE
+                            in self.config.capabilities
+                        ):
+                            await self.consume_workstream_control()
+                            await self.execute_available_offer()
+                        try:
+                            await asyncio.wait_for(
+                                stop.wait(), timeout=self.config.heartbeat_seconds
+                            )
+                        except TimeoutError:
+                            continue
+                except asyncio.CancelledError:
+                    raise
+                # Transport/authentication failure is retryable by the service.
+                except (WorkerRuntimeTransportError, httpx.HTTPError, OSError):
+                    self._session = None
+                    self._state = WorkerRuntimeState.DEGRADED
+                    try:
+                        await asyncio.wait_for(stop.wait(), timeout=delay)
+                    except TimeoutError:
+                        delay = min(delay * 2, self.config.reconnect_max_seconds)
         finally:
             await self.close()
 
@@ -223,6 +275,16 @@ class AuthenticatedWorkerRuntime:
             )
             self._advance(sent_at)
             started_at = datetime.now(timezone.utc)
+            if self.journal is None:
+                raise RuntimeError("Execution-capable worker requires recovery state.")
+            self.journal.store(
+                RecoveryRecord(
+                    phase="acquired",
+                    offer_id=acquired.offer_id,
+                    lease_id=acquired.lease_id,
+                    started_at=started_at,
+                )
+            )
             if command_id in self._workstream_versions:
                 await self._publish_workstream_state(
                     command_id=command_id,
@@ -243,41 +305,20 @@ class AuthenticatedWorkerRuntime:
                 failure = "workspace_validation_failed"
                 output = {"repository_mutated": False}
             completed_at = datetime.now(timezone.utc)
-            current = self._require_session()
-            result_payload = ControlledExecutionResultMessage(
+            pending = RecoveryRecord(
+                phase="pending_result",
                 offer_id=acquired.offer_id,
                 lease_id=acquired.lease_id,
-                outcome=outcome,
-                output=output,
-                error_classification=failure,
                 started_at=started_at,
-                completed_at=completed_at,
-            )
-            result_envelope = self._envelope(
-                session=current,
-                sent_at=completed_at,
-                kind=TransportMessageKind.CONTROLLED_EXECUTION_RESULT,
-                payload=result_payload,
-            )
-            await self.client.submit_controlled_result(
-                session_id=current.session_id,
-                payload={
-                    "message_id": str(result_envelope.message_id),
-                    "session_id": str(result_envelope.session_id),
-                    "sequence_number": result_envelope.sequence_number,
-                    "sent_at": result_envelope.sent_at.isoformat(),
-                    "authentication_proof": result_envelope.authentication_proof,
-                    "key_version": result_envelope.key_version,
-                    "offer_id": str(acquired.offer_id),
-                    "lease_id": str(acquired.lease_id),
+                result={
                     "outcome": outcome,
                     "output": output,
                     "error_classification": failure,
-                    "started_at": started_at.isoformat(),
                     "completed_at": completed_at.isoformat(),
                 },
             )
-            self._advance(completed_at)
+            self.journal.store(pending)
+            await self._deliver_pending_result(pending)
             if command_id in self._workstream_versions:
                 await self._publish_workstream_state(
                     command_id=command_id,
@@ -388,6 +429,51 @@ class AuthenticatedWorkerRuntime:
         )
         self._advance(sent_at)
         self._workstream_versions[command_id] = version
+
+    async def _deliver_pending_result(self, pending: RecoveryRecord) -> None:
+        if pending.result is None or self.journal is None:
+            raise RuntimeError("Pending worker result is incomplete.")
+        current = self._require_session()
+        completed_at = datetime.fromisoformat(str(pending.result["completed_at"]))
+        result_payload = ControlledExecutionResultMessage(
+            offer_id=pending.offer_id,
+            lease_id=pending.lease_id,
+            outcome=str(pending.result["outcome"]),  # type: ignore[arg-type]
+            output=cast(dict[str, object], pending.result["output"]),
+            error_classification=(
+                str(pending.result["error_classification"])
+                if pending.result.get("error_classification") is not None
+                else None
+            ),
+            started_at=pending.started_at,
+            completed_at=completed_at,
+        )
+        result_envelope = self._envelope(
+            session=current,
+            sent_at=completed_at,
+            kind=TransportMessageKind.CONTROLLED_EXECUTION_RESULT,
+            payload=result_payload,
+        )
+        await self.client.submit_controlled_result(
+            session_id=current.session_id,
+            payload={
+                "message_id": str(result_envelope.message_id),
+                "session_id": str(result_envelope.session_id),
+                "sequence_number": result_envelope.sequence_number,
+                "sent_at": result_envelope.sent_at.isoformat(),
+                "authentication_proof": result_envelope.authentication_proof,
+                "key_version": result_envelope.key_version,
+                "offer_id": str(pending.offer_id),
+                "lease_id": str(pending.lease_id),
+                "outcome": pending.result["outcome"],
+                "output": pending.result["output"],
+                "error_classification": pending.result.get("error_classification"),
+                "started_at": pending.started_at.isoformat(),
+                "completed_at": completed_at.isoformat(),
+            },
+        )
+        self._advance(completed_at)
+        self.journal.clear()
 
     async def close(self) -> None:
         await self.client.close()
