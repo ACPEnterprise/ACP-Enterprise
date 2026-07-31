@@ -157,6 +157,8 @@ async def act_on_milestone(
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(error)) from error
     except ValueError as error:
         raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
+    except EngineeringControlError as error:
+        raise engineering_http_error(error) from error
     return MilestoneItem.model_validate(item)
 
 

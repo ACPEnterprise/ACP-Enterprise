@@ -18,6 +18,7 @@ from app.engineering_control.mobile.roadmaps import EngineeringMilestone
 from app.engineering_control.mobile.router import router
 from app.engineering_control.mobile.service import MobileEngineeringControlService
 from app.engineering_control.models import EngineeringCommand
+from app.engineering_control.registry import engineering_repository_registry
 from app.engineering_control.review.service import EngineeringReviewService
 from app.engineering_control.workstream_runtime import EngineeringWorkstreamRuntime
 from app.platform.permissions.authorization import AuthorizationContext
@@ -525,6 +526,12 @@ def test_initial_roadmap_catalog_is_truthful_and_never_auto_dispatches() -> None
         "Mission Control V2.1 Phone Acceptance Rehearsal"
     ]
     assert ready[0]["requested_code_changes"] is False
+    assert (
+        by_title["Mission Control"]["branch"]
+        == engineering_repository_registry.resolve(
+            "acp-enterprise"
+        ).approved_active_branch
+    )
     assert all(
         item["status"] != "draft" or item["approved"] is False
         for item in all_milestones
@@ -537,6 +544,52 @@ def test_initial_roadmap_catalog_is_truthful_and_never_auto_dispatches() -> None
         "Operational Migration Phase 2 — Estimates, Invoices, and Payments",
         "Phase 4 Accounting Integration and Financial Close",
     }
+
+
+@pytest.mark.asyncio
+async def test_start_reports_repository_policy_rejection_as_api_error(
+    mobile_api: MobileApiFixture,
+) -> None:
+    permissions = tuple(
+        EngineeringCommandPermission.ALL | EngineeringExecutionPermission.ALL
+    )
+    app = mobile_api.app_for(permissions)
+    created = await request(
+        app,
+        "POST",
+        "/api/v1/engineering/mobile/roadmaps",
+        json={
+            "title": "Invalid dispatch coordinates",
+            "repository_key": "acp-enterprise",
+            "expected_branch": "mission-control-v2.1",
+            "expected_head": "a" * 40,
+            "milestones": [
+                {
+                    "title": "Read-only inspection",
+                    "objective": "Prove policy failures are returned to the owner.",
+                    "approved": True,
+                    "requested_code_changes": False,
+                }
+            ],
+        },
+    )
+    assert created.status_code == 200
+    listing = (await request(app, "GET", "/api/v1/engineering/mobile/roadmaps")).json()
+    milestone = next(
+        item
+        for item in listing["milestones"]
+        if item["title"] == "Read-only inspection"
+    )
+
+    rejected = await request(
+        app,
+        "POST",
+        f"/api/v1/engineering/mobile/milestones/{milestone['id']}/actions",
+        json={"action": "start", "expected_version": milestone["version"]},
+    )
+
+    assert rejected.status_code == 422
+    assert rejected.json()["detail"]["code"] == "engineering_command_invalid"
 
 
 @pytest.mark.asyncio

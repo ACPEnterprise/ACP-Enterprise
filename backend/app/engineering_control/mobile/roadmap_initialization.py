@@ -1,7 +1,6 @@
 """Approved ACP Enterprise roadmap catalog and one-time Preview initialization."""
 
 import asyncio
-import os
 from collections.abc import Mapping, Sequence
 from datetime import datetime, timezone
 from typing import Any
@@ -244,8 +243,8 @@ ROADMAPS: tuple[Mapping[str, Any], ...] = (
     },
     {
         "title": "Mission Control",
-        "branch": "mission-control-v2.1",
-        "head": "a7667cb0c4f437388965bff0028d4d59d9c227a2",
+        "branch": "customer-management-v1",
+        "head": "eb63fe8ccbc936bcb38104d159bb3742bf967d31",
         "milestones": tuple(
             completed(title, branch)
             for title, branch in (
@@ -300,38 +299,44 @@ async def initialize(company_code: str = "ACP") -> tuple[int, int]:
         )
         if company is None:
             raise RuntimeError(f"Company {company_code!r} does not exist.")
-        existing = set(
-            (
+        existing = {
+            item.title: item
+            for item in (
                 await session.scalars(
-                    select(EngineeringRoadmap.title).where(
+                    select(EngineeringRoadmap).where(
                         EngineeringRoadmap.company_id == company.id
                     )
                 )
             ).all()
-        )
+        }
         created_roadmaps = 0
         created_milestones = 0
         for definition in ROADMAPS:
-            if definition["title"] in existing:
-                continue
-            expected_head = definition["head"]
-            if definition["title"] == "Mission Control":
-                release_head = os.environ.get("ACP_ROADMAP_RELEASE_SHA")
-                if release_head:
-                    if len(release_head) != 40 or any(
-                        character not in "0123456789abcdef"
-                        for character in release_head
-                    ):
-                        raise RuntimeError(
-                            "ACP_ROADMAP_RELEASE_SHA must be a full Git SHA."
+            current = existing.get(definition["title"])
+            if current is not None:
+                if current.title == "Mission Control":
+                    dispatched = await session.scalar(
+                        select(EngineeringMilestone.id).where(
+                            EngineeringMilestone.company_id == company.id,
+                            EngineeringMilestone.roadmap_id == current.id,
+                            EngineeringMilestone.command_id.is_not(None),
                         )
-                    expected_head = release_head
+                    )
+                    if dispatched is None and (
+                        current.expected_branch != definition["branch"]
+                        or current.expected_head != definition["head"]
+                    ):
+                        current.expected_branch = definition["branch"]
+                        current.expected_head = definition["head"]
+                        current.version += 1
+                        current.updated_at = now
+                continue
             roadmap = EngineeringRoadmap(
                 company_id=company.id,
                 title=definition["title"],
                 repository_key="acp-enterprise",
                 expected_branch=definition["branch"],
-                expected_head=expected_head,
+                expected_head=definition["head"],
                 status="active",
                 created_at=now,
                 updated_at=now,
