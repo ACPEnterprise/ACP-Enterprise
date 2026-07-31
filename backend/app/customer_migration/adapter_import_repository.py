@@ -82,6 +82,23 @@ class CustomerAdapterImportRepository:
         )
 
     @staticmethod
+    async def existing_source_identities(
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        source_system: str,
+        source_identities: tuple[str, ...],
+    ) -> frozenset[str]:
+        values = await session.scalars(
+            select(CustomerSourceIdentity.source_customer_id).where(
+                CustomerSourceIdentity.company_id == context.company.id,
+                CustomerSourceIdentity.source_system == source_system,
+                CustomerSourceIdentity.source_customer_id.in_(source_identities),
+            )
+        )
+        return frozenset(values.all())
+
+    @staticmethod
     async def count_supplied_identity_matches(
         session: AsyncSession,
         *,

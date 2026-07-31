@@ -408,6 +408,8 @@ class CustomerAdapterImportService:
         self,
         reviewed: ReviewedCustomerAdapterOutput,
         selected: tuple[ReviewedCustomerAggregate, ...],
+        *,
+        existing_source_identities: frozenset[str] = frozenset(),
     ) -> None:
         selected_ids = {item.source_identity_sha256 for item in selected}
         blocked = selected_ids.intersection(
@@ -424,7 +426,12 @@ class CustomerAdapterImportService:
                 "approved boundary contains a multi-location aggregate"
             )
         duplicate_members = self.policy.duplicate_members(reviewed.aggregates)
-        if selected_ids.intersection(duplicate_members):
+        grandfathered = {
+            item.source_identity_sha256
+            for item in selected
+            if item.source_identity in existing_source_identities
+        }
+        if (selected_ids - grandfathered).intersection(duplicate_members):
             raise CustomerAdapterImportError(
                 "approved boundary contains a recomputed duplicate signal"
             )
@@ -616,7 +623,20 @@ class CustomerAdapterImportService:
         if reviewed.schema_version != boundary.schema_version:
             raise CustomerAdapterImportError("schema-version mismatch")
         selected = self._selected(reviewed, boundary)
-        self._validate_exclusions(reviewed, selected)
+        async with factory() as session:
+            existing_source_identities = (
+                await self.repository.existing_source_identities(
+                    session,
+                    context=context,
+                    source_system=reviewed.source_system,
+                    source_identities=tuple(item.source_identity for item in selected),
+                )
+            )
+        self._validate_exclusions(
+            reviewed,
+            selected,
+            existing_source_identities=existing_source_identities,
+        )
         policy_counts = self.policy.expected_counts(selected)
         if (
             policy_counts.customers,
