@@ -4,6 +4,11 @@ from uuid import UUID, uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.engineering_control.workstream_runtime import (
+    WorkstreamRuntimeError,
+    WorkstreamRuntimeService,
+    workstream_runtime_service,
+)
 from app.engineering_execution.composition.errors import ExecutionCompositionError
 from app.engineering_execution.composition.records import CompositionDeliveryPackage
 from app.engineering_execution.composition.service import (
@@ -38,6 +43,8 @@ from app.worker_control.transport.contracts import (
     WorkerSessionChallenge,
     WorkerSessionRequest,
     WorkerSessionState,
+    WorkstreamAcknowledgementMessage,
+    WorkstreamRuntimeUpdateMessage,
 )
 from app.worker_control.transport.errors import (
     TransportAuthenticationError,
@@ -77,6 +84,7 @@ class WorkerTransportService:
         tokens: SecurityTokenService | None = None,
         compositions: ExecutionCompositionService | None = None,
         controlled: ControlledExecutionService | None = None,
+        workstreams: WorkstreamRuntimeService = workstream_runtime_service,
     ) -> None:
         self.authenticator = authenticator
         self.sessions = sessions or PostgreSQLWorkerTransportSessionRepository()
@@ -86,6 +94,7 @@ class WorkerTransportService:
         self.controlled = controlled or ControlledExecutionService(
             workers=self.worker_control
         )
+        self.workstreams = workstreams
 
     async def initiate_session(
         self,
@@ -292,7 +301,11 @@ class WorkerTransportService:
             return await self._dispatch_composition(
                 database, envelope=envelope, session=session
             )
-        except (ExecutionCompositionError, ControlledExecutionError) as error:
+        except (
+            ExecutionCompositionError,
+            ControlledExecutionError,
+            WorkstreamRuntimeError,
+        ) as error:
             raise TransportMessageError(str(error)) from error
 
     async def _dispatch_composition(
@@ -303,6 +316,45 @@ class WorkerTransportService:
         session: WorkerSession,
     ) -> str:
         payload = envelope.payload
+        if envelope.kind is TransportMessageKind.WORKSTREAM_ACKNOWLEDGEMENT:
+            if not isinstance(payload, WorkstreamAcknowledgementMessage):
+                raise TransportMessageError(
+                    "Workstream acknowledgement payload is invalid."
+                )
+            if WorkerCapability.ENGINEERING_EXECUTE not in session.capabilities:
+                raise TransportCapabilityError("Session lacks execution capability.")
+            runtime = await self.workstreams.acknowledge(
+                database,
+                context=session.context,
+                session_id=session.session_id,
+                control_id=payload.control_id,
+                expected_control_version=payload.expected_control_version,
+                action=payload.action,
+                idempotency_key=payload.idempotency_key,
+                reason_code=payload.reason_code,
+                now=envelope.sent_at,
+            )
+            return f"workstream:{runtime.command_id}:runtime-version:{runtime.version}"
+        if envelope.kind is TransportMessageKind.WORKSTREAM_RUNTIME_UPDATE:
+            if not isinstance(payload, WorkstreamRuntimeUpdateMessage):
+                raise TransportMessageError("Workstream runtime payload is invalid.")
+            if WorkerCapability.ENGINEERING_EXECUTE not in session.capabilities:
+                raise TransportCapabilityError("Session lacks execution capability.")
+            runtime = await self.workstreams.transition(
+                database,
+                context=session.context,
+                session_id=session.session_id,
+                command_id=payload.command_id,
+                expected_version=payload.expected_runtime_version,
+                runtime_state=payload.runtime_state,
+                health=payload.worker_health,
+                progress_percent=payload.progress_percent,
+                current_activity=payload.current_activity,
+                reason_code=payload.reason_code,
+                idempotency_key=payload.idempotency_key,
+                now=envelope.sent_at,
+            )
+            return f"workstream:{runtime.command_id}:runtime-version:{runtime.version}"
         if envelope.kind is TransportMessageKind.HEARTBEAT:
             if not isinstance(payload, HeartbeatMessage):
                 raise TransportMessageError("Heartbeat payload is invalid.")

@@ -35,6 +35,8 @@ class TransportMessageKind(StrEnum):
     CANCELLATION_ACKNOWLEDGEMENT = "cancellation_acknowledgement"
     CONTROLLED_OFFER_ACQUISITION = "controlled_offer_acquisition"
     CONTROLLED_EXECUTION_RESULT = "controlled_execution_result"
+    WORKSTREAM_ACKNOWLEDGEMENT = "workstream_acknowledgement"
+    WORKSTREAM_RUNTIME_UPDATE = "workstream_runtime_update"
 
 
 @dataclass(frozen=True)
@@ -157,6 +159,27 @@ class ControlledExecutionResultMessage:
     completed_at: datetime
 
 
+@dataclass(frozen=True)
+class WorkstreamAcknowledgementMessage:
+    control_id: UUID
+    expected_control_version: int
+    action: str
+    idempotency_key: str
+    reason_code: str | None
+
+
+@dataclass(frozen=True)
+class WorkstreamRuntimeUpdateMessage:
+    command_id: UUID
+    expected_runtime_version: int
+    runtime_state: str
+    worker_health: str
+    progress_percent: int | None
+    current_activity: str | None
+    reason_code: str | None
+    idempotency_key: str
+
+
 TransportPayload = (
     HeartbeatMessage
     | ResultMessage
@@ -168,6 +191,8 @@ TransportPayload = (
     | CancellationAcknowledgementMessage
     | ControlledOfferAcquisitionMessage
     | ControlledExecutionResultMessage
+    | WorkstreamAcknowledgementMessage
+    | WorkstreamRuntimeUpdateMessage
 )
 
 

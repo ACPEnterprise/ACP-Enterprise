@@ -120,6 +120,14 @@ class MobileWorkstreamSummary(MobileEngineeringSchema):
     desired_state: str
     control_pending: bool
     available_actions: tuple[str, ...]
+    runtime_state: str
+    runtime_version: int | None
+    acknowledged_action: str | None
+    acknowledged_at: datetime | None
+    acknowledgement_expires_at: datetime | None
+    worker_health: str | None
+    progress_percent: int | None
+    current_activity: str | None
 
 
 class MobileWorkstreamDetail(MobileWorkstreamSummary):

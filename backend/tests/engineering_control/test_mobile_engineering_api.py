@@ -262,6 +262,14 @@ async def test_workstream_projection_lists_authoritative_safe_next_action(
             "desired_state": "active",
             "control_pending": False,
             "available_actions": ["refresh", "cancel"],
+            "runtime_state": "waiting_for_owner",
+            "runtime_version": None,
+            "acknowledged_action": None,
+            "acknowledged_at": None,
+            "acknowledgement_expires_at": None,
+            "worker_health": None,
+            "progress_percent": None,
+            "current_activity": None,
         }
     ]
 

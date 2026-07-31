@@ -9,6 +9,8 @@ from app.core.database import Base
 from app.customer_migration import models as customer_migration_models  # noqa: F401
 from app.customers import models as customer_models  # noqa: F401
 from app.engineering_control import models as engineering_control_models  # noqa: F401
+from app.engineering_control import workstream_runtime as workstream_runtime_models  # noqa: F401
+from app.engineering_control.mobile import control as workstream_control_models  # noqa: F401
 from app.engineering_control.repository_authorization import (
     models as repository_authorization_models,  # noqa: F401
 )

@@ -14,6 +14,8 @@ from app.worker_control.transport.contracts import (
     HeartbeatMessage,
     LeaseRenewalMessage,
     TransportMessageKind,
+    WorkstreamAcknowledgementMessage,
+    WorkstreamRuntimeUpdateMessage,
 )
 from app.worker_control.transport.crypto import (
     canonical_message,
@@ -61,6 +63,7 @@ class AuthenticatedWorkerRuntime:
         self._session: Session | None = None
         self._state = WorkerRuntimeState.STOPPED
         self._last_heartbeat_at: datetime | None = None
+        self._workstream_versions: dict[UUID, int] = {}
         self._lock = asyncio.Lock()
 
     @classmethod
@@ -171,6 +174,7 @@ class AuthenticatedWorkerRuntime:
             while not stop.is_set():
                 await self.heartbeat()
                 if WorkerCapability.ENGINEERING_EXECUTE in self.config.capabilities:
+                    await self.consume_workstream_control()
                     await self.execute_available_offer()
                 try:
                     await asyncio.wait_for(
@@ -215,6 +219,15 @@ class AuthenticatedWorkerRuntime:
             )
             self._advance(sent_at)
             started_at = datetime.now(timezone.utc)
+            command_id = UUID(str(offered["command_id"]))
+            if command_id in self._workstream_versions:
+                await self._publish_workstream_state(
+                    command_id=command_id,
+                    state="running",
+                    health="healthy",
+                    progress=0,
+                    activity="Executing controlled workstream",
+                )
             outcome = "succeeded"
             failure = None
             try:
@@ -262,7 +275,115 @@ class AuthenticatedWorkerRuntime:
                 },
             )
             self._advance(completed_at)
+            if command_id in self._workstream_versions:
+                await self._publish_workstream_state(
+                    command_id=command_id,
+                    state="completed" if outcome == "succeeded" else "failed",
+                    health="healthy" if outcome == "succeeded" else "degraded",
+                    progress=100 if outcome == "succeeded" else None,
+                    activity="Controlled execution completed"
+                    if outcome == "succeeded"
+                    else "Controlled execution failed",
+                    reason_code=failure,
+                )
             return True
+
+    async def consume_workstream_control(self) -> bool:
+        async with self._lock:
+            session = self._require_session()
+            controls = await self.client.poll_workstream_controls(
+                session_id=session.session_id
+            )
+            if not controls:
+                return False
+            control = controls[0]
+            sent_at = datetime.now(timezone.utc)
+            action = str(control["action"])
+            message = WorkstreamAcknowledgementMessage(
+                control_id=UUID(str(control["control_id"])),
+                expected_control_version=int(str(control["version"])),
+                action=action,
+                idempotency_key=f"ack:{control['control_id']}:{control['version']}:{session.session_id}",
+                reason_code=None,
+            )
+            envelope = self._envelope(
+                session=session,
+                sent_at=sent_at,
+                kind=TransportMessageKind.WORKSTREAM_ACKNOWLEDGEMENT,
+                payload=message,
+            )
+            runtime_version = await self.client.acknowledge_workstream_control(
+                session_id=session.session_id,
+                payload={
+                    "message_id": str(envelope.message_id),
+                    "session_id": str(envelope.session_id),
+                    "sequence_number": envelope.sequence_number,
+                    "sent_at": envelope.sent_at.isoformat(),
+                    "authentication_proof": envelope.authentication_proof,
+                    "key_version": envelope.key_version,
+                    "control_id": str(message.control_id),
+                    "expected_control_version": message.expected_control_version,
+                    "action": action,
+                    "idempotency_key": message.idempotency_key,
+                    "reason_code": message.reason_code,
+                },
+            )
+            self._advance(sent_at)
+            self._workstream_versions[UUID(str(control["command_id"]))] = (
+                runtime_version
+            )
+            return True
+
+    async def _publish_workstream_state(
+        self,
+        *,
+        command_id: UUID,
+        state: str,
+        health: str,
+        progress: int | None,
+        activity: str,
+        reason_code: str | None = None,
+    ) -> None:
+        session = self._require_session()
+        sent_at = datetime.now(timezone.utc)
+        expected = self._workstream_versions[command_id]
+        message = WorkstreamRuntimeUpdateMessage(
+            command_id=command_id,
+            expected_runtime_version=expected,
+            runtime_state=state,
+            worker_health=health,
+            progress_percent=progress,
+            current_activity=activity,
+            reason_code=reason_code,
+            idempotency_key=f"runtime:{command_id}:{expected}:{state}",
+        )
+        envelope = self._envelope(
+            session=session,
+            sent_at=sent_at,
+            kind=TransportMessageKind.WORKSTREAM_RUNTIME_UPDATE,
+            payload=message,
+        )
+        version = await self.client.publish_workstream_runtime(
+            session_id=session.session_id,
+            payload={
+                "message_id": str(envelope.message_id),
+                "session_id": str(envelope.session_id),
+                "sequence_number": envelope.sequence_number,
+                "sent_at": envelope.sent_at.isoformat(),
+                "authentication_proof": envelope.authentication_proof,
+                "key_version": envelope.key_version,
+                "command_id": str(command_id),
+                "expected_runtime_version": expected,
+                "runtime_state": state,
+                "worker_health": health,
+                "progress_percent": progress,
+                "current_activity": activity,
+                "reason_code": reason_code,
+                "idempotency_key": message.idempotency_key,
+            },
+        )
+        self._advance(sent_at)
+        self._workstream_versions[command_id] = version
 
     async def close(self) -> None:
         await self.client.close()
@@ -280,6 +401,8 @@ class AuthenticatedWorkerRuntime:
             | LeaseRenewalMessage
             | ControlledOfferAcquisitionMessage
             | ControlledExecutionResultMessage
+            | WorkstreamAcknowledgementMessage
+            | WorkstreamRuntimeUpdateMessage
         ),
     ) -> AuthenticatedMessageEnvelope:
         unsigned = AuthenticatedMessageEnvelope(

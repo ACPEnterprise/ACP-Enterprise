@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 from math import ceil
 from uuid import UUID
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.engineering_control.commands import (
@@ -17,6 +18,10 @@ from app.engineering_control.records import (
 from app.engineering_control.review.contracts import EngineeringReviewState
 from app.engineering_control.review.service import EngineeringReviewService
 from app.engineering_control.service import EngineeringControlService
+from app.engineering_control.workstream_runtime import (
+    EngineeringWorkstreamEvent,
+    EngineeringWorkstreamRuntime,
+)
 from app.engineering_execution.errors import EngineeringExecutionError
 from app.engineering_execution.service import EngineeringExecutionService
 from app.engineering_execution.status.schemas import MobileExecutionStatus
@@ -86,11 +91,19 @@ class MobileEngineeringControlService:
             control = await self.controls.get(
                 session, company_id=context.company.id, command_id=command.id
             )
+            runtime = await session.scalar(
+                select(EngineeringWorkstreamRuntime).where(
+                    EngineeringWorkstreamRuntime.company_id == context.company.id,
+                    EngineeringWorkstreamRuntime.command_id == command.id,
+                )
+            )
             items.append(
                 self._workstream_summary(
                     command=command,
                     status=status,
                     desired_state=control.desired_state if control else "active",
+                    runtime=runtime,
+                    now=current,
                 )
             )
         return MobileWorkstreamPage(
@@ -121,10 +134,19 @@ class MobileEngineeringControlService:
         control = await self.controls.get(
             session, company_id=context.company.id, command_id=command_id
         )
+        runtime = await session.scalar(
+            select(EngineeringWorkstreamRuntime).where(
+                EngineeringWorkstreamRuntime.company_id == context.company.id,
+                EngineeringWorkstreamRuntime.command_id == command_id,
+            )
+        )
+        current = now or datetime.now(timezone.utc)
         summary = self._workstream_summary(
             command=command,
             status=status,
             desired_state=control.desired_state if control else "active",
+            runtime=runtime,
+            now=current,
         )
         return MobileWorkstreamDetail(
             **summary.model_dump(),
@@ -193,8 +215,24 @@ class MobileEngineeringControlService:
             command_id=command_id,
             actor_user_id=context.user.id,
             desired_state=desired,
+            requested_action=action,
             reason=reason,
             occurred_at=occurred_at,
+        )
+        session.add(
+            EngineeringWorkstreamEvent(
+                company_id=context.company.id,
+                command_id=command_id,
+                control_id=record.id,
+                control_version=record.version,
+                worker_id=None,
+                event_type="owner_request",
+                action=action,
+                runtime_state=None,
+                reason_code=reason,
+                idempotency_key=f"owner:{record.id}:{record.version}",
+                occurred_at=occurred_at,
+            )
         )
         await session.commit()
         return MobileWorkstreamActionResult(
@@ -411,6 +449,8 @@ class MobileEngineeringControlService:
         command: EngineeringCommandRecord,
         status: MobileExecutionStatus,
         desired_state: str = "active",
+        runtime: EngineeringWorkstreamRuntime | None = None,
+        now: datetime | None = None,
     ) -> MobileWorkstreamSummary:
         lifecycle, next_action, owner_action = cls._next_action(
             command=command, status=status
@@ -426,7 +466,11 @@ class MobileEngineeringControlService:
             else None
         )
         pipeline = cls._pipeline_status(
-            command=command, status=status, desired_state=desired_state
+            command=command,
+            status=status,
+            desired_state=desired_state,
+            runtime=runtime,
+            now=now or datetime.now(timezone.utc),
         )
         actions = cls._available_actions(
             command=command, status=status, desired_state=desired_state
@@ -468,6 +512,16 @@ class MobileEngineeringControlService:
                 desired_state != "active" and status.monitoring_state != "cancelled"
             ),
             available_actions=actions,
+            runtime_state=pipeline,
+            runtime_version=runtime.version if runtime else None,
+            acknowledged_action=runtime.acknowledged_action if runtime else None,
+            acknowledged_at=runtime.acknowledged_at if runtime else None,
+            acknowledgement_expires_at=runtime.acknowledgement_expires_at
+            if runtime
+            else None,
+            worker_health=runtime.worker_health if runtime else None,
+            progress_percent=runtime.progress_percent if runtime else None,
+            current_activity=runtime.current_activity if runtime else None,
         )
 
     @staticmethod
@@ -476,7 +530,16 @@ class MobileEngineeringControlService:
         command: EngineeringCommandRecord,
         status: MobileExecutionStatus,
         desired_state: str,
+        runtime: EngineeringWorkstreamRuntime | None,
+        now: datetime,
     ) -> str:
+        if runtime is not None:
+            if (
+                runtime.acknowledgement_expires_at <= now
+                and runtime.runtime_state not in {"completed", "failed", "cancelled"}
+            ):
+                return "recovering"
+            return runtime.runtime_state
         if desired_state == "cancelled" or status.monitoring_state == "cancelled":
             return "cancelled"
         if (

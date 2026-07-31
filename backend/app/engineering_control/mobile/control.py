@@ -35,6 +35,10 @@ class EngineeringWorkstreamControl(Base):
             "desired_state IN ('active','paused','cancelled')",
             name="ck_workstream_controls_desired_state",
         ),
+        CheckConstraint(
+            "requested_action IN ('start','pause','resume','cancel')",
+            name="ck_workstream_controls_requested_action",
+        ),
         CheckConstraint("version >= 1", name="ck_workstream_controls_version"),
         UniqueConstraint(
             "company_id", "command_id", name="uq_workstream_controls_command"
@@ -61,6 +65,7 @@ class EngineeringWorkstreamControl(Base):
         nullable=False,
     )
     desired_state: Mapped[str] = mapped_column(String(16), nullable=False)
+    requested_action: Mapped[str] = mapped_column(String(16), nullable=False)
     actor_user_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     reason: Mapped[str | None] = mapped_column(String(240))
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
@@ -93,6 +98,7 @@ class WorkstreamControlRepository:
         command_id: UUID,
         actor_user_id: UUID,
         desired_state: str,
+        requested_action: str,
         reason: str | None,
         occurred_at: datetime,
     ) -> EngineeringWorkstreamControl:
@@ -110,6 +116,7 @@ class WorkstreamControlRepository:
                 command_id=command_id,
                 actor_user_id=actor_user_id,
                 desired_state=desired_state,
+                requested_action=requested_action,
                 reason=reason,
                 created_at=occurred_at,
                 updated_at=occurred_at,
@@ -117,6 +124,7 @@ class WorkstreamControlRepository:
             session.add(record)
         else:
             record.desired_state = desired_state
+            record.requested_action = requested_action
             record.actor_user_id = actor_user_id
             record.reason = reason
             record.version += 1
