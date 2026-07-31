@@ -104,3 +104,33 @@ idempotent, versioned measurement snapshots; branch and company read models roll
 up the latest job snapshots without duplicating the accounting ledger. Read-only
 projections expose job, branch, and company profitability, subject history,
 evidence completeness, and stale measurements.
+
+## Phase 3 financial integrity and allocation execution
+
+Accounting periods govern ledger and allocation writes. Periods move through
+`open -> closing -> closed`; a closed period accepts late evidence only after an
+explicit `reopened` transition. Every transition retains its effective range,
+responsible owner, reason, timestamp, and version. Closing is refused while
+affected recalculations or recorded reconciliation failures remain.
+
+Allocation policies remain immutable and versioned. `AllocationExecutionService`
+executes registered labor, revenue, truck, equipment, overhead, branch, and
+company strategies against measured ledger facts. Each idempotent run persists
+its policy version, source fact, period, exact lines, source evidence, input
+digest, residual, confidence, duration, and run version. Allocation never changes
+the source ledger.
+
+The integrity flow is:
+
+`source evidence -> EconomicsIngestionService -> EconomicsLedgerService -> period-controlled allocation -> affected-scope materialization -> durable projection`
+
+Recalculation publishes immutable job, branch, and company profitability
+projection versions from authoritative measurement IDs. It never updates an
+earlier projection. Source, ledger, allocation, measurement, and evidence
+reconciliation results are immutable and input-digested. Failed checks remain
+visible when a later run succeeds.
+
+Operational observations persist pending recalculations, allocation and
+materialization duration, reconciliation failures, stale measurements, and
+incomplete periods. These records are operational evidence; they do not alter
+financial values.
