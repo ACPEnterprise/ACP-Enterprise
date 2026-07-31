@@ -215,3 +215,78 @@ class MobileApprovalRequest(MobileEngineeringSchema):
 class MobileCancellationRequest(MobileEngineeringSchema):
     expected_version: int = Field(ge=1)
     reason_code: EngineeringCancellationReason
+
+
+class MilestoneDefinitionCreate(MobileEngineeringSchema):
+    title: str = Field(min_length=1, max_length=160)
+    objective: str = Field(min_length=1, max_length=10000)
+    authority: tuple[str, ...] = ()
+    constraints: tuple[str, ...] = ()
+    validation: tuple[str, ...] = ()
+    deliverables: tuple[str, ...] = ()
+    stop_conditions: tuple[str, ...] = ()
+    expected_completion_evidence: tuple[str, ...] = ()
+    approved: bool = False
+
+
+class RoadmapCreate(MobileEngineeringSchema):
+    title: str = Field(min_length=1, max_length=160)
+    repository_key: str = Field(min_length=1, max_length=100)
+    expected_branch: str = Field(min_length=1, max_length=255)
+    expected_head: str = Field(pattern=r"^[0-9a-f]{40}$")
+    milestones: tuple[MilestoneDefinitionCreate, ...] = Field(min_length=1)
+
+
+class RoadmapItem(MobileEngineeringSchema):
+    id: UUID
+    title: str
+    repository_key: str
+    expected_branch: str
+    expected_head: str
+    status: str
+    version: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class MilestoneItem(MobileEngineeringSchema):
+    id: UUID
+    roadmap_id: UUID
+    position: int
+    title: str
+    objective: str
+    authority: tuple[str, ...]
+    constraints: tuple[str, ...]
+    validation: tuple[str, ...]
+    deliverables: tuple[str, ...]
+    stop_conditions: tuple[str, ...]
+    expected_completion_evidence: tuple[str, ...]
+    status: str
+    definition_approved: bool
+    command_id: UUID | None
+    version: int
+    started_at: datetime | None
+    completed_at: datetime | None
+    reviewed_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class RoadmapPage(MobileEngineeringSchema):
+    roadmaps: tuple[RoadmapItem, ...]
+    milestones: tuple[MilestoneItem, ...]
+    waiting_for_me: tuple[MilestoneItem, ...]
+    current_milestones: tuple[MilestoneItem, ...]
+    next_approved_milestones: tuple[MilestoneItem, ...]
+    future_milestones: tuple[MilestoneItem, ...]
+    completed_milestones: tuple[MilestoneItem, ...]
+    blocked_milestones: tuple[MilestoneItem, ...]
+    actionable_count: int = Field(ge=0)
+
+
+class MilestoneActionRequest(MobileEngineeringSchema):
+    action: str = Field(
+        pattern=r"^(start|approve|reject|request_revision|skip|pause|resume|cancel|archive)$"
+    )
+    expected_version: int = Field(ge=1)
+    reason: str | None = Field(default=None, max_length=240)

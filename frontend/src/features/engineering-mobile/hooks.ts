@@ -7,6 +7,7 @@ import type {
   MobileReviewCancellation,
   MobileReviewQuery,
   MobileWorkstreamAction,
+  MilestoneAction,
 } from "./types";
 
 export const mobileEngineeringKeys = {
@@ -24,6 +25,7 @@ export const mobileEngineeringKeys = {
     ["engineering-mobile", "workstream", commandId] as const,
   notifications: () => ["engineering-mobile", "notifications"] as const,
   approvalQueue: () => ["engineering-mobile", "approval-queue"] as const,
+  roadmaps: () => ["engineering-mobile", "roadmaps"] as const,
 };
 
 export function useMissionNotifications() {
@@ -41,7 +43,9 @@ export function useAcknowledgeMissionNotification() {
       mobileApi.acknowledgeMissionNotification(id, version),
     retry: false,
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: mobileEngineeringKeys.notifications() });
+      await queryClient.invalidateQueries({
+        queryKey: mobileEngineeringKeys.notifications(),
+      });
     },
   });
 }
@@ -49,11 +53,20 @@ export function useAcknowledgeMissionNotification() {
 export function useTransitionMissionNotification() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, version, action }: { id: string; version: number; action: "read" | "archive" }) =>
-      mobileApi.transitionMissionNotification(id, version, action),
+    mutationFn: ({
+      id,
+      version,
+      action,
+    }: {
+      id: string;
+      version: number;
+      action: "read" | "archive";
+    }) => mobileApi.transitionMissionNotification(id, version, action),
     retry: false,
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: mobileEngineeringKeys.notifications() });
+      await queryClient.invalidateQueries({
+        queryKey: mobileEngineeringKeys.notifications(),
+      });
     },
   });
 }
@@ -63,6 +76,40 @@ export function usePendingMobileReviews() {
     queryKey: mobileEngineeringKeys.approvalQueue(),
     queryFn: mobileApi.listPendingMobileReviews,
     retry: shouldRetryApiQuery,
+  });
+}
+
+export function useRoadmaps() {
+  return useQuery({
+    queryKey: mobileEngineeringKeys.roadmaps(),
+    queryFn: mobileApi.listRoadmaps,
+    retry: shouldRetryApiQuery,
+  });
+}
+
+export function useMilestoneAction() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      version,
+      action,
+      reason,
+    }: {
+      id: string;
+      version: number;
+      action: MilestoneAction;
+      reason?: string;
+    }) => mobileApi.actOnMilestone(id, version, action, reason),
+    retry: false,
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: mobileEngineeringKeys.roadmaps(),
+        }),
+        queryClient.invalidateQueries({ queryKey: mobileEngineeringKeys.all }),
+      ]);
+    },
   });
 }
 
@@ -86,12 +133,19 @@ export function useMobileWorkstream(commandId: string | undefined) {
 export function useControlMobileWorkstream(commandId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ action, reason }: { action: MobileWorkstreamAction; reason?: string }) =>
-      mobileApi.controlMobileWorkstream(commandId, action, reason),
+    mutationFn: ({
+      action,
+      reason,
+    }: {
+      action: MobileWorkstreamAction;
+      reason?: string;
+    }) => mobileApi.controlMobileWorkstream(commandId, action, reason),
     retry: false,
     onSuccess: async () => {
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: mobileEngineeringKeys.workstream(commandId) }),
+        queryClient.invalidateQueries({
+          queryKey: mobileEngineeringKeys.workstream(commandId),
+        }),
         queryClient.invalidateQueries({ queryKey: mobileEngineeringKeys.all }),
       ]);
     },

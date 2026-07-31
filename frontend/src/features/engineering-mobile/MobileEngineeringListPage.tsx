@@ -6,6 +6,7 @@ import {
   HeartPulse,
   Inbox,
   Rocket,
+  Route,
   ShieldAlert,
   Sparkles,
 } from "lucide-react";
@@ -19,6 +20,7 @@ import {
   useMissionNotifications,
   useMobileWorkstreams,
   usePendingMobileReviews,
+  useRoadmaps,
   useTransitionMissionNotification,
 } from "./hooks";
 import {
@@ -28,9 +30,10 @@ import {
   workstreamDisplayName,
 } from "./presentation";
 import { useEngineeringRealtime } from "./realtime";
+import { MissionRoadmapPanel } from "./MissionRoadmapPanel";
 import type { MissionNotificationItem, MobileWorkstreamSummary } from "./types";
 
-type View = "overview" | "inbox" | "briefing" | "analytics";
+type View = "overview" | "roadmap" | "inbox" | "briefing" | "analytics";
 type InboxFilter =
   "all" | "attention" | "failures" | "recovering" | "completed";
 
@@ -206,6 +209,7 @@ export function MobileEngineeringListPage() {
   const workstreams = useMobileWorkstreams({ page: 1, pageSize: 100 });
   const notifications = useMissionNotifications();
   const approvals = usePendingMobileReviews();
+  const roadmaps = useRoadmaps();
   const realtime = useEngineeringRealtime();
   const items = useMemo(
     () => workstreams.data?.items ?? [],
@@ -215,12 +219,7 @@ export function MobileEngineeringListPage() {
     () => ({
       active: items.filter((item) => !terminal.has(item.pipeline_status))
         .length,
-      waiting:
-        items.filter(
-          (item) =>
-            item.owner_attention_required ||
-            item.pipeline_status === "waiting_for_owner",
-        ).length + (approvals.data?.total_count ?? 0),
+      waiting: roadmaps.data?.actionable_count ?? 0,
       running: items.filter((item) =>
         ["acknowledged", "running", "validating", "deploying_preview"].includes(
           item.pipeline_status,
@@ -234,7 +233,7 @@ export function MobileEngineeringListPage() {
         (item) => item.pipeline_status === "failed" && isToday(item.updated_at),
       ).length,
     }),
-    [items, approvals.data?.total_count],
+    [items, roadmaps.data?.actionable_count],
   );
   const filteredNotifications = (notifications.data?.items ?? []).filter(
     (item) => {
@@ -323,7 +322,7 @@ export function MobileEngineeringListPage() {
         </div>
         <p className="mt-ui-3 max-w-2xl text-base leading-7 text-content-muted">
           {counts.waiting
-          ? `${counts.waiting} item${counts.waiting === 1 ? " needs" : "s need"} your attention.`
+            ? `${counts.waiting} item${counts.waiting === 1 ? " needs" : "s need"} your attention.`
             : "Engineering is moving without anything waiting on you."}{" "}
           {counts.running
             ? `${counts.running} workstream${counts.running === 1 ? " is" : "s are"} in progress.`
@@ -332,12 +331,13 @@ export function MobileEngineeringListPage() {
       </header>
 
       <nav
-        className="grid grid-cols-4 gap-1 rounded-2xl border border-stroke bg-surface p-1"
+        className="grid grid-cols-5 gap-1 rounded-2xl border border-stroke bg-surface p-1"
         aria-label="Mission Control views"
       >
         {(
           [
             ["overview", Activity, "Overview"],
+            ["roadmap", Route, "Roadmap"],
             ["inbox", Inbox, "Inbox"],
             ["briefing", Sparkles, "Briefing"],
             ["analytics", HeartPulse, "Analytics"],
@@ -355,6 +355,8 @@ export function MobileEngineeringListPage() {
           </button>
         ))}
       </nav>
+
+      {view === "roadmap" && <MissionRoadmapPanel />}
 
       {view === "overview" && (
         <>
@@ -567,7 +569,7 @@ export function MobileEngineeringListPage() {
       {view === "briefing" && (
         <section className="space-y-ui-4">
           <div>
-          <h2 className="text-2xl font-bold">Daily briefing</h2>
+            <h2 className="text-2xl font-bold">Daily briefing</h2>
             <p className="mt-1 text-sm text-content-muted">
               A concise readout of engineering since your last check-in.
             </p>

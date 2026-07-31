@@ -1,9 +1,19 @@
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
-import { activeCompanyId, apiUrl, authenticatedRequestHeaders, refreshAuthentication } from "../../api/client";
+import {
+  activeCompanyId,
+  apiUrl,
+  authenticatedRequestHeaders,
+  refreshAuthentication,
+} from "../../api/client";
 import { mobileEngineeringKeys } from "./hooks";
-import type { MobileWorkstreamDetail, MobileWorkstreamPage, MobileWorkstreamRuntimeState, MobileWorkstreamSummary } from "./types";
+import type {
+  MobileWorkstreamDetail,
+  MobileWorkstreamPage,
+  MobileWorkstreamRuntimeState,
+  MobileWorkstreamSummary,
+} from "./types";
 
 export interface EngineeringRuntimeEvent {
   event_id: string;
@@ -31,7 +41,10 @@ export interface EngineeringRuntimeEvent {
   recovery_state: string | null;
 }
 
-function merge<T extends MobileWorkstreamSummary>(item: T, event: EngineeringRuntimeEvent): T {
+function merge<T extends MobileWorkstreamSummary>(
+  item: T,
+  event: EngineeringRuntimeEvent,
+): T {
   if (item.command_id !== event.command_id) return item;
   return {
     ...item,
@@ -56,7 +69,9 @@ function merge<T extends MobileWorkstreamSummary>(item: T, event: EngineeringRun
 
 export function useEngineeringRealtime(): "connecting" | "live" | "recovering" {
   const queryClient = useQueryClient();
-  const [state, setState] = useState<"connecting" | "live" | "recovering">("connecting");
+  const [state, setState] = useState<"connecting" | "live" | "recovering">(
+    "connecting",
+  );
   useEffect(() => {
     const companyId = activeCompanyId();
     if (!companyId) return;
@@ -72,17 +87,24 @@ export function useEngineeringRealtime(): "connecting" | "live" | "recovering" {
         const resume = window.sessionStorage.getItem(storageKey);
         if (resume) headers.set("Last-Event-ID", resume);
         try {
-          const response = await fetch(apiUrl("/api/v1/engineering/mobile/events"), { headers, signal: controller.signal });
-          if (response.status === 401 && await refreshAuthentication()) continue;
+          const response = await fetch(
+            apiUrl("/api/v1/engineering/mobile/events"),
+            { headers, signal: controller.signal },
+          );
+          if (response.status === 401 && (await refreshAuthentication()))
+            continue;
           if (response.status === 409 && resume) {
             window.sessionStorage.removeItem(storageKey);
             setState("recovering");
             continue;
           }
-          if (!response.ok || !response.body) throw new Error(`Realtime transport returned ${response.status}`);
+          if (!response.ok || !response.body)
+            throw new Error(`Realtime transport returned ${response.status}`);
           reconnects = 0;
           setState("live");
-          const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
+          const reader = response.body
+            .pipeThrough(new TextDecoderStream())
+            .getReader();
           let buffer = "";
           while (!stopped) {
             const { value, done } = await reader.read();
@@ -91,48 +113,94 @@ export function useEngineeringRealtime(): "connecting" | "live" | "recovering" {
             const frames = buffer.split("\n\n");
             buffer = frames.pop() ?? "";
             for (const frame of frames) {
-              const data = frame.split("\n").find((line) => line.startsWith("data: "))?.slice(6);
+              const data = frame
+                .split("\n")
+                .find((line) => line.startsWith("data: "))
+                ?.slice(6);
               if (!data) continue;
               const event = JSON.parse(data) as EngineeringRuntimeEvent;
-              if (window.sessionStorage.getItem(storageKey) === event.event_id) continue;
+              if (window.sessionStorage.getItem(storageKey) === event.event_id)
+                continue;
               window.sessionStorage.setItem(storageKey, event.event_id);
-              queryClient.setQueriesData<MobileWorkstreamPage>({ queryKey: mobileEngineeringKeys.all }, (page) =>
-                page ? {
-                  ...page,
-                  connectivity: {
-                    ...page.connectivity,
-                    state: event.worker_available ? "connected" : "disconnected",
-                    session_id: event.current_session,
-                    heartbeat_at: event.heartbeat_at,
-                    last_contact_at: event.occurred_at,
-                  },
-                  items: page.items.map((item) => merge(item, event)),
-                } : page,
+              queryClient.setQueriesData<MobileWorkstreamPage>(
+                { queryKey: mobileEngineeringKeys.all },
+                (page) =>
+                  page
+                    ? {
+                        ...page,
+                        connectivity: {
+                          ...page.connectivity,
+                          state: event.worker_available
+                            ? "connected"
+                            : "disconnected",
+                          session_id: event.current_session,
+                          heartbeat_at: event.heartbeat_at,
+                          last_contact_at: event.occurred_at,
+                        },
+                        items: page.items.map((item) => merge(item, event)),
+                      }
+                    : page,
               );
-              queryClient.setQueryData<MobileWorkstreamDetail>(mobileEngineeringKeys.workstream(event.command_id), (item) =>
-                item ? {
-                  ...merge(item, event),
-                  timeline: item.timeline.some((entry) => entry.event === event.event_type && entry.occurred_at === event.occurred_at)
-                    ? item.timeline
-                    : [...item.timeline, { event: event.notification ?? event.event_type, occurred_at: event.occurred_at }],
-                } : item,
+              queryClient.setQueryData<MobileWorkstreamDetail>(
+                mobileEngineeringKeys.workstream(event.command_id),
+                (item) =>
+                  item
+                    ? {
+                        ...merge(item, event),
+                        timeline: item.timeline.some(
+                          (entry) =>
+                            entry.event === event.event_type &&
+                            entry.occurred_at === event.occurred_at,
+                        )
+                          ? item.timeline
+                          : [
+                              ...item.timeline,
+                              {
+                                event: event.notification ?? event.event_type,
+                                occurred_at: event.occurred_at,
+                              },
+                            ],
+                      }
+                    : item,
               );
-              if (event.notifications.length > 0 || event.event_type === "owner_request") {
-                void queryClient.invalidateQueries({ queryKey: mobileEngineeringKeys.notifications() });
-                void queryClient.invalidateQueries({ queryKey: mobileEngineeringKeys.approvalQueue() });
+              if (
+                event.notifications.length > 0 ||
+                event.event_type === "owner_request"
+              ) {
+                void queryClient.invalidateQueries({
+                  queryKey: mobileEngineeringKeys.notifications(),
+                });
+                void queryClient.invalidateQueries({
+                  queryKey: mobileEngineeringKeys.approvalQueue(),
+                });
               }
+              void queryClient.invalidateQueries({
+                queryKey: mobileEngineeringKeys.roadmaps(),
+              });
             }
           }
         } catch (error) {
-          if (stopped || (error instanceof DOMException && error.name === "AbortError")) return;
+          if (
+            stopped ||
+            (error instanceof DOMException && error.name === "AbortError")
+          )
+            return;
           reconnects += 1;
           setState("recovering");
-          await new Promise((resolve) => window.setTimeout(resolve, Math.min(1000 * 2 ** Math.min(reconnects, 5), 30_000)));
+          await new Promise((resolve) =>
+            window.setTimeout(
+              resolve,
+              Math.min(1000 * 2 ** Math.min(reconnects, 5), 30_000),
+            ),
+          );
         }
       }
     };
     void connect();
-    return () => { stopped = true; controller?.abort(); };
+    return () => {
+      stopped = true;
+      controller?.abort();
+    };
   }, [queryClient]);
   return state;
 }

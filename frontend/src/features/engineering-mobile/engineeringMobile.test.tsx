@@ -7,10 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as hooks from "./hooks";
 import { MobileEngineeringDetailPage } from "./MobileEngineeringDetailPage";
 import { MobileEngineeringListPage } from "./MobileEngineeringListPage";
-import type {
-  MobileReviewDetail,
-  MobileWorkstreamSummary,
-} from "./types";
+import type { MobileReviewDetail, MobileWorkstreamSummary } from "./types";
 
 vi.mock("./hooks");
 vi.mock("./realtime", () => ({ useEngineeringRealtime: () => "live" }));
@@ -98,8 +95,7 @@ const disconnected = {
   heartbeat_at: null,
 };
 
-const mutation = (mutate = vi.fn()) =>
-  ({ mutate, isPending: false } as never);
+const mutation = (mutate = vi.fn()) => ({ mutate, isPending: false }) as never;
 
 function renderList() {
   return render(
@@ -134,8 +130,24 @@ beforeEach(() => {
     data: review,
   } as never);
   vi.mocked(hooks.useControlMobileWorkstream).mockReturnValue(mutation());
-  vi.mocked(hooks.useAcknowledgeMissionNotification).mockReturnValue(mutation());
+  vi.mocked(hooks.useAcknowledgeMissionNotification).mockReturnValue(
+    mutation(),
+  );
   vi.mocked(hooks.useTransitionMissionNotification).mockReturnValue(mutation());
+  vi.mocked(hooks.useMilestoneAction).mockReturnValue(mutation());
+  vi.mocked(hooks.useRoadmaps).mockReturnValue({
+    data: {
+      roadmaps: [],
+      milestones: [],
+      waiting_for_me: [],
+      current_milestones: [],
+      next_approved_milestones: [],
+      future_milestones: [],
+      completed_milestones: [],
+      blocked_milestones: [],
+      actionable_count: 0,
+    },
+  } as never);
   vi.mocked(hooks.useMissionNotifications).mockReturnValue({
     data: {
       items: [],
@@ -162,6 +174,56 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("mobile Engineering Control", () => {
+  it("shows exactly the actionable milestone and dispatches it without a prompt", async () => {
+    const mutate = vi.fn();
+    const milestone = {
+      id: "f58de32e-bf42-43ac-857d-17ffeb0c2bb2",
+      roadmap_id: "dd37ad9f-f32a-4dd7-9cb5-f25cf63a4870",
+      position: 2,
+      title: "Owner milestone dispatch",
+      objective: "Send the approved definition directly to Engineering Execution.",
+      authority: ["Milestone authority"],
+      constraints: ["Do not redesign transport"],
+      validation: ["Run integration tests"],
+      deliverables: ["Dispatcher"],
+      stop_conditions: ["Unrecoverable blocker"],
+      expected_completion_evidence: ["Structured result"],
+      status: "ready" as const,
+      definition_approved: true,
+      command_id: null,
+      version: 3,
+      started_at: null,
+      completed_at: null,
+      reviewed_at: null,
+      created_at: "2026-07-31T12:00:00Z",
+      updated_at: "2026-07-31T12:00:00Z",
+    };
+    vi.mocked(hooks.useMilestoneAction).mockReturnValue(mutation(mutate));
+    vi.mocked(hooks.useRoadmaps).mockReturnValue({
+      data: {
+        roadmaps: [{ id: milestone.roadmap_id, title: "Mission Control", repository_key: "acp-enterprise", expected_branch: "mission-control-v2", expected_head: "a".repeat(40), status: "active", version: 1, created_at: milestone.created_at, updated_at: milestone.updated_at }],
+        milestones: [milestone],
+        waiting_for_me: [milestone],
+        current_milestones: [milestone],
+        next_approved_milestones: [],
+        future_milestones: [],
+        completed_milestones: [],
+        blocked_milestones: [],
+        actionable_count: 1,
+      },
+    } as never);
+    vi.mocked(hooks.useMobileWorkstreams).mockReturnValue({ isLoading: false, data: { items: [], connectivity: disconnected, page: 1, page_size: 100, total_count: 0, total_pages: 0 } } as never);
+    renderList();
+    await userEvent.click(screen.getByRole("button", { name: /Roadmap/ }));
+    expect(screen.getAllByText("Owner milestone dispatch").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("1").length).toBeGreaterThan(0);
+    await userEvent.click(screen.getByRole("button", { name: "Start next milestone" }));
+    expect(mutate).toHaveBeenCalledWith(
+      { id: milestone.id, version: 3, action: "start" },
+      expect.any(Object),
+    );
+  });
+
   it("renders loading, empty, error, and phone-safe workstream cards", async () => {
     vi.mocked(hooks.useMobileWorkstreams).mockReturnValueOnce({
       isLoading: true,
@@ -184,7 +246,9 @@ describe("mobile Engineering Control", () => {
       },
     } as never);
     renderList();
-    expect(screen.getByText("No workstreams are active right now.")).toBeInTheDocument();
+    expect(
+      screen.getByText("No workstreams are active right now."),
+    ).toBeInTheDocument();
     cleanup();
 
     vi.mocked(hooks.useMobileWorkstreams).mockReturnValueOnce({
@@ -196,7 +260,9 @@ describe("mobile Engineering Control", () => {
     expect(
       screen.getByRole("alert", { name: "Authentication required" }),
     ).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Retry" }),
+    ).not.toBeInTheDocument();
     cleanup();
 
     vi.mocked(hooks.useMobileWorkstreams).mockReturnValue({
@@ -211,16 +277,22 @@ describe("mobile Engineering Control", () => {
       },
     } as never);
     renderList();
-    expect(screen.getByText(workstream.display_name).closest("a")).toHaveAttribute(
-      "href",
-      `/engineering/${review.id}`,
-    );
-    expect(screen.queryByText(review.owner_instruction)).not.toBeInTheDocument();
+    expect(
+      screen.getByText(workstream.display_name).closest("a"),
+    ).toHaveAttribute("href", `/engineering/${review.id}`);
+    expect(
+      screen.queryByText(review.owner_instruction),
+    ).not.toBeInTheDocument();
     expect(screen.getAllByText("Needs you").length).toBeGreaterThan(0);
     expect(screen.getByText("Unavailable")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: /Analytics/ }));
-    expect(screen.getByRole("heading", { name: "Engineering analytics" })).toBeInTheDocument();
-    expect(hooks.useMobileWorkstreams).toHaveBeenLastCalledWith({ page: 1, pageSize: 100 });
+    expect(
+      screen.getByRole("heading", { name: "Engineering analytics" }),
+    ).toBeInTheDocument();
+    expect(hooks.useMobileWorkstreams).toHaveBeenLastCalledWith({
+      page: 1,
+      pageSize: 100,
+    });
   });
 
   it("shows the pipeline and confirms owner control actions", async () => {
@@ -234,7 +306,9 @@ describe("mobile Engineering Control", () => {
         created_at: review.created_at,
         started_at: "2026-07-26T11:00:00Z",
         finished_at: null,
-        timeline: [{ event: "execution_started", occurred_at: "2026-07-26T11:00:00Z" }],
+        timeline: [
+          { event: "execution_started", occurred_at: "2026-07-26T11:00:00Z" },
+        ],
         runtime_state: "running",
         pipeline_status: "running",
         runtime_version: 3,
@@ -246,16 +320,25 @@ describe("mobile Engineering Control", () => {
         current_activity: "Running validation",
       },
     } as never);
-    vi.mocked(hooks.useControlMobileWorkstream).mockReturnValue(mutation(mutate));
+    vi.mocked(hooks.useControlMobileWorkstream).mockReturnValue(
+      mutation(mutate),
+    );
     renderDetail();
 
     expect(screen.getByText(review.owner_instruction)).toBeInTheDocument();
     expect(screen.getByText("42% · Running validation")).toBeInTheDocument();
     expect(screen.getByText("Healthy")).toBeInTheDocument();
-    expect(screen.getByRole("listitem", { current: "step" })).toHaveTextContent("Running");
+    expect(screen.getByRole("listitem", { current: "step" })).toHaveTextContent(
+      "Running",
+    );
     await userEvent.click(screen.getByRole("button", { name: "Pause" }));
-    expect(screen.getByRole("dialog", { name: "Pause this workstream?" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("dialog", { name: "Pause this workstream?" }),
+    ).toBeInTheDocument();
     await userEvent.click(screen.getAllByRole("button", { name: "Pause" })[1]);
-    expect(mutate).toHaveBeenCalledWith({ action: "pause" }, expect.any(Object));
+    expect(mutate).toHaveBeenCalledWith(
+      { action: "pause" },
+      expect.any(Object),
+    );
   });
 });

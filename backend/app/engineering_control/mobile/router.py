@@ -18,7 +18,10 @@ from app.platform.permissions.dependencies import require_permission
 
 from .notifications import mission_notification_service
 from .realtime import InvalidResumeToken, event_stream, validate_resume_token
+from .roadmaps import roadmap_service
 from .schemas import (
+    MilestoneActionRequest,
+    MilestoneItem,
     MissionNotificationAcknowledgement,
     MissionNotificationItem,
     MissionNotificationPage,
@@ -32,12 +35,16 @@ from .schemas import (
     MobileWorkstreamActionResult,
     MobileWorkstreamDetail,
     MobileWorkstreamPage,
+    RoadmapCreate,
+    RoadmapItem,
+    RoadmapPage,
 )
 from .service import mobile_engineering_control_service
 
 router = APIRouter(
     prefix="/api/v1/engineering/mobile", tags=["Mobile Engineering Control"]
 )
+
 DatabaseSession = Annotated[AsyncSession, Depends(get_database_session)]
 ReadContext = Annotated[
     AuthorizationContext,
@@ -51,6 +58,105 @@ ApproveContext = Annotated[
     AuthorizationContext,
     Depends(require_permission(EngineeringCommandPermission.APPROVE)),
 ]
+
+
+@router.post(
+    "/roadmaps",
+    response_model=RoadmapItem,
+    summary="Create a versioned Engineering roadmap",
+)
+async def create_roadmap(
+    request: RoadmapCreate, context: ManageContext, session: DatabaseSession
+) -> RoadmapItem:
+    return RoadmapItem.model_validate(
+        await roadmap_service.create(session, context=context, payload=request)
+    )
+
+
+@router.get(
+    "/roadmaps",
+    response_model=RoadmapPage,
+    summary="List roadmap and exact actionable dispatch truth",
+)
+async def list_roadmaps(context: ReadContext, session: DatabaseSession) -> RoadmapPage:
+    roadmaps = await roadmap_service.list(session, context=context)
+    milestones = await roadmap_service.milestones(session, context=context)
+    actionable = tuple(
+        item for item in milestones if item.status in roadmap_service.actionable
+    )
+    current = tuple(
+        item
+        for item in milestones
+        if item.status in {"ready", "running", "paused", "waiting_review"}
+    )
+    next_ids: set[UUID] = set()
+    for roadmap in roadmaps:
+        candidate = next(
+            (
+                item
+                for item in sorted(milestones, key=lambda value: value.position)
+                if item.roadmap_id == roadmap.id
+                and item.status == "planned"
+                and item.definition_approved
+            ),
+            None,
+        )
+        if candidate is not None:
+            next_ids.add(candidate.id)
+    next_approved = tuple(item for item in milestones if item.id in next_ids)
+    future = tuple(
+        item
+        for item in milestones
+        if item.status == "planned" and item.id not in next_ids
+    )
+    completed = tuple(item for item in milestones if item.status == "completed")
+    blocked = tuple(item for item in milestones if item.status == "blocked")
+    return RoadmapPage(
+        roadmaps=tuple(RoadmapItem.model_validate(item) for item in roadmaps),
+        milestones=tuple(MilestoneItem.model_validate(item) for item in milestones),
+        waiting_for_me=tuple(MilestoneItem.model_validate(item) for item in actionable),
+        current_milestones=tuple(
+            MilestoneItem.model_validate(item) for item in current
+        ),
+        next_approved_milestones=tuple(
+            MilestoneItem.model_validate(item) for item in next_approved
+        ),
+        future_milestones=tuple(MilestoneItem.model_validate(item) for item in future),
+        completed_milestones=tuple(
+            MilestoneItem.model_validate(item) for item in completed
+        ),
+        blocked_milestones=tuple(
+            MilestoneItem.model_validate(item) for item in blocked
+        ),
+        actionable_count=len(actionable),
+    )
+
+
+@router.post(
+    "/milestones/{milestone_id}/actions",
+    response_model=MilestoneItem,
+    summary="Apply one versioned owner milestone action",
+)
+async def act_on_milestone(
+    milestone_id: UUID,
+    request: MilestoneActionRequest,
+    context: ApproveContext,
+    session: DatabaseSession,
+) -> MilestoneItem:
+    try:
+        item = await roadmap_service.action(
+            session,
+            context=context,
+            milestone_id=milestone_id,
+            action=request.action,
+            expected_version=request.expected_version,
+            reason=request.reason,
+        )
+    except LookupError as error:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
+    return MilestoneItem.model_validate(item)
 
 
 @router.get(

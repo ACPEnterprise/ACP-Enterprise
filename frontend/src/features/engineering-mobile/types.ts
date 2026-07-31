@@ -1,16 +1,10 @@
 export type MobileReviewState =
-  | "awaiting_approval"
-  | "approved"
-  | "rejected"
-  | "canceled"
-  | "expired";
+  "awaiting_approval" | "approved" | "rejected" | "canceled" | "expired";
 
 export type MobileExecutionState = "execution_not_connected";
 
 export type MobileCancellationReason =
-  | "owner_requested"
-  | "scope_changed"
-  | "no_longer_needed";
+  "owner_requested" | "scope_changed" | "no_longer_needed";
 
 export interface MobileReviewSummary {
   id: string;
@@ -80,9 +74,7 @@ export interface MissionNotificationPage {
 export type MobileOwnerReviewState = "pending" | "accepted" | "rejected";
 export type MobileOwnerReviewDecision = "accept" | "reject";
 export type MobileConnectivityState =
-  | "connected"
-  | "connecting"
-  | "disconnected";
+  "connected" | "connecting" | "disconnected";
 
 export interface MobileEngineeringConnectivity {
   state: MobileConnectivityState;
@@ -179,11 +171,7 @@ export type MobileWorkstreamPipelineStatus =
   | "cancelled"
   | "recovering";
 
-export type MobileWorkstreamAction =
-  | "start"
-  | "pause"
-  | "resume"
-  | "cancel";
+export type MobileWorkstreamAction = "start" | "pause" | "resume" | "cancel";
 
 export interface MobileWorkstreamDetail extends MobileWorkstreamSummary {
   owner_instruction: string;
@@ -210,6 +198,76 @@ export interface MobileWorkstreamPage {
   page_size: number;
   total_count: number;
   total_pages: number;
+}
+
+export type MilestoneStatus =
+  | "planned"
+  | "ready"
+  | "running"
+  | "waiting_review"
+  | "waiting_approval"
+  | "blocked"
+  | "completed"
+  | "paused"
+  | "cancelled"
+  | "skipped"
+  | "archived";
+export type MilestoneAction =
+  | "start"
+  | "approve"
+  | "reject"
+  | "request_revision"
+  | "skip"
+  | "pause"
+  | "resume"
+  | "cancel"
+  | "archive";
+
+export interface RoadmapItem {
+  id: string;
+  title: string;
+  repository_key: string;
+  expected_branch: string;
+  expected_head: string;
+  status: "active" | "completed" | "archived";
+  version: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MilestoneItem {
+  id: string;
+  roadmap_id: string;
+  position: number;
+  title: string;
+  objective: string;
+  authority: readonly string[];
+  constraints: readonly string[];
+  validation: readonly string[];
+  deliverables: readonly string[];
+  stop_conditions: readonly string[];
+  expected_completion_evidence: readonly string[];
+  status: MilestoneStatus;
+  definition_approved: boolean;
+  command_id: string | null;
+  version: number;
+  started_at: string | null;
+  completed_at: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RoadmapPage {
+  roadmaps: readonly RoadmapItem[];
+  milestones: readonly MilestoneItem[];
+  waiting_for_me: readonly MilestoneItem[];
+  current_milestones: readonly MilestoneItem[];
+  next_approved_milestones: readonly MilestoneItem[];
+  future_milestones: readonly MilestoneItem[];
+  completed_milestones: readonly MilestoneItem[];
+  blocked_milestones: readonly MilestoneItem[];
+  actionable_count: number;
 }
 
 export interface MobileReviewQuery {

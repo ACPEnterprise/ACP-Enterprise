@@ -13,18 +13,23 @@ import type {
   MobileReviewPage,
   MissionNotificationItem,
   MissionNotificationPage,
+  MilestoneAction,
+  MilestoneItem,
+  RoadmapPage,
 } from "./types";
 
 export const MOBILE_ENGINEERING_PATH = "/api/v1/engineering/mobile/reviews";
 export const MOBILE_OWNER_REVIEWS_PATH =
   "/api/v1/engineering/mobile/owner-reviews";
-export const MOBILE_WORKSTREAMS_PATH =
-  "/api/v1/engineering/mobile/workstreams";
+export const MOBILE_WORKSTREAMS_PATH = "/api/v1/engineering/mobile/workstreams";
 export const MISSION_NOTIFICATIONS_PATH =
   "/api/v1/engineering/mobile/notifications";
+export const MISSION_ROADMAPS_PATH = "/api/v1/engineering/mobile/roadmaps";
 
 export async function listMissionNotifications(): Promise<MissionNotificationPage> {
-  return (await apiClient.get<MissionNotificationPage>(MISSION_NOTIFICATIONS_PATH)).data;
+  return (
+    await apiClient.get<MissionNotificationPage>(MISSION_NOTIFICATIONS_PATH)
+  ).data;
 }
 
 export async function acknowledgeMissionNotification(
@@ -52,6 +57,24 @@ export async function transitionMissionNotification(
   ).data;
 }
 
+export async function listRoadmaps(): Promise<RoadmapPage> {
+  return (await apiClient.get<RoadmapPage>(MISSION_ROADMAPS_PATH)).data;
+}
+
+export async function actOnMilestone(
+  milestoneId: string,
+  expectedVersion: number,
+  action: MilestoneAction,
+  reason?: string,
+): Promise<MilestoneItem> {
+  return (
+    await apiClient.post<MilestoneItem>(
+      `/api/v1/engineering/mobile/milestones/${milestoneId}/actions`,
+      { expected_version: expectedVersion, action, reason },
+    )
+  ).data;
+}
+
 export async function listPendingMobileReviews(): Promise<MobileReviewPage> {
   return (
     await apiClient.get<MobileReviewPage>(MOBILE_ENGINEERING_PATH, {
@@ -73,12 +96,27 @@ export async function listMobileWorkstreams(
   ).data;
 }
 
-export async function getMobileWorkstream(commandId: string): Promise<MobileWorkstreamDetail> {
-  return (await apiClient.get<MobileWorkstreamDetail>(`${MOBILE_WORKSTREAMS_PATH}/${commandId}`)).data;
+export async function getMobileWorkstream(
+  commandId: string,
+): Promise<MobileWorkstreamDetail> {
+  return (
+    await apiClient.get<MobileWorkstreamDetail>(
+      `${MOBILE_WORKSTREAMS_PATH}/${commandId}`,
+    )
+  ).data;
 }
 
-export async function controlMobileWorkstream(commandId: string, action: MobileWorkstreamAction, reason?: string): Promise<MobileWorkstreamActionResult> {
-  return (await apiClient.post<MobileWorkstreamActionResult>(`${MOBILE_WORKSTREAMS_PATH}/${commandId}/actions`, { action, reason })).data;
+export async function controlMobileWorkstream(
+  commandId: string,
+  action: MobileWorkstreamAction,
+  reason?: string,
+): Promise<MobileWorkstreamActionResult> {
+  return (
+    await apiClient.post<MobileWorkstreamActionResult>(
+      `${MOBILE_WORKSTREAMS_PATH}/${commandId}/actions`,
+      { action, reason },
+    )
+  ).data;
 }
 
 export async function listMobileReviews(
