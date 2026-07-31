@@ -1,8 +1,10 @@
-from typing import Annotated
+import logging
+from typing import Annotated, TypeVar
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_database_session
@@ -44,6 +46,30 @@ from .service import mobile_engineering_control_service
 router = APIRouter(
     prefix="/api/v1/engineering/mobile", tags=["Mobile Engineering Control"]
 )
+logger = logging.getLogger(__name__)
+ProjectionItem = TypeVar("ProjectionItem", bound=BaseModel)
+
+
+def _bounded_projection(
+    records: tuple[object, ...], schema: type[ProjectionItem], resource: str
+) -> tuple[tuple[ProjectionItem, ...], tuple[str, ...]]:
+    items: list[ProjectionItem] = []
+    warnings: list[str] = []
+    for record in records:
+        try:
+            items.append(schema.model_validate(record))
+        except ValidationError:
+            record_id = getattr(record, "id", "unknown")
+            logger.exception(
+                "Mission Control omitted invalid %s projection id=%s",
+                resource,
+                record_id,
+            )
+            warnings.append(
+                f"One {resource} record is unavailable because its stored definition is invalid."
+            )
+    return tuple(items), tuple(warnings)
+
 
 DatabaseSession = Annotated[AsyncSession, Depends(get_database_session)]
 ReadContext = Annotated[
@@ -81,6 +107,14 @@ async def create_roadmap(
 async def list_roadmaps(context: ReadContext, session: DatabaseSession) -> RoadmapPage:
     roadmaps = await roadmap_service.list(session, context=context)
     milestones = await roadmap_service.milestones(session, context=context)
+    roadmap_items, roadmap_warnings = _bounded_projection(
+        roadmaps, RoadmapItem, "roadmap"
+    )
+    milestone_items, milestone_warnings = _bounded_projection(
+        milestones, MilestoneItem, "milestone"
+    )
+    valid_milestone_ids = {item.id for item in milestone_items}
+    milestones = tuple(item for item in milestones if item.id in valid_milestone_ids)
     actionable = tuple(
         item for item in milestones if item.status in roadmap_service.actionable
     )
@@ -113,8 +147,8 @@ async def list_roadmaps(context: ReadContext, session: DatabaseSession) -> Roadm
     completed = tuple(item for item in milestones if item.status == "completed")
     blocked = tuple(item for item in milestones if item.status == "blocked")
     return RoadmapPage(
-        roadmaps=tuple(RoadmapItem.model_validate(item) for item in roadmaps),
-        milestones=tuple(MilestoneItem.model_validate(item) for item in milestones),
+        roadmaps=roadmap_items,
+        milestones=milestone_items,
         waiting_for_me=tuple(MilestoneItem.model_validate(item) for item in actionable),
         current_milestones=tuple(
             MilestoneItem.model_validate(item) for item in current
@@ -130,6 +164,7 @@ async def list_roadmaps(context: ReadContext, session: DatabaseSession) -> Roadm
             MilestoneItem.model_validate(item) for item in blocked
         ),
         actionable_count=len(actionable),
+        projection_warnings=roadmap_warnings + milestone_warnings,
     )
 
 

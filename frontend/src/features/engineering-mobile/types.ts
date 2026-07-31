@@ -275,6 +275,7 @@ export interface RoadmapPage {
   completed_milestones: readonly MilestoneItem[];
   blocked_milestones: readonly MilestoneItem[];
   actionable_count: number;
+  projection_warnings?: readonly string[];
 }
 
 export interface MobileReviewQuery {

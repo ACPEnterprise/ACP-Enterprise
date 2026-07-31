@@ -24,3 +24,13 @@ preview.allcountyhomeservices.com {
 		}
 	}
 }
+
+# The isolated API container must retain the Compose-owned security boundary:
+#
+#   ENVIRONMENT=preview
+#   TRUST_FORWARDED_HEADERS=true
+#   TRUSTED_PROXY_CIDRS=["172.32.0.0/24"]
+#
+# Do not recreate it from the shared env file alone: ENVIRONMENT and the
+# isolated Docker network CIDR are service configuration, not secrets. Run
+# scripts/verify-mission-control-preview.sh after every API or Caddy replacement.

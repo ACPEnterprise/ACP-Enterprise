@@ -173,10 +173,7 @@ export function MissionRoadmapPanel() {
   const current = data.current_milestones.filter(
     (item) => item.status !== "ready" && item.status !== "waiting_review",
   );
-  const future = [
-    ...data.next_approved_milestones,
-    ...data.future_milestones,
-  ];
+  const future = [...data.next_approved_milestones, ...data.future_milestones];
   const completed = data.completed_milestones;
   const blocked = data.blocked_milestones;
   return (
@@ -191,6 +188,15 @@ export function MissionRoadmapPanel() {
           sends the complete definition to the worker.
         </p>
       </header>
+      {data.projection_warnings?.map((warning) => (
+        <Alert
+          key={warning}
+          variant="warning"
+          title="Some roadmap data needs attention"
+        >
+          {warning}
+        </Alert>
+      ))}
       <Card className="p-ui-4">
         <div className="flex items-center justify-between gap-ui-3">
           <div className="flex items-center gap-ui-2">

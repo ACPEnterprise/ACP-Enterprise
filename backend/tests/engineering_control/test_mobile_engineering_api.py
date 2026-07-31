@@ -1,6 +1,7 @@
 from collections.abc import AsyncIterator, Mapping
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 from uuid import uuid4
 
 import httpx
@@ -15,7 +16,8 @@ from app.database.session import get_database_session
 from app.engineering_control.mobile.control import EngineeringWorkstreamControl
 from app.engineering_control.mobile.roadmap_initialization import ROADMAPS
 from app.engineering_control.mobile.roadmaps import EngineeringMilestone
-from app.engineering_control.mobile.router import router
+from app.engineering_control.mobile.router import _bounded_projection, router
+from app.engineering_control.mobile.schemas import MilestoneItem
 from app.engineering_control.mobile.service import MobileEngineeringControlService
 from app.engineering_control.models import EngineeringCommand
 from app.engineering_control.registry import engineering_repository_registry
@@ -627,6 +629,46 @@ def test_v22_catalog_has_ordered_approved_dependency_chains() -> None:
         assert positions == sorted(positions)
         assert sum(item["status"] == "ready" for item in populated[-len(chain) :]) <= 1
     assert len(populated) == 15
+
+
+def test_invalid_milestone_does_not_blank_roadmap_projection() -> None:
+    now = utc_now()
+    values = {
+        "id": uuid4(),
+        "roadmap_id": uuid4(),
+        "position": 1,
+        "title": "Valid milestone",
+        "objective": "Remain visible when an adjacent record is malformed.",
+        "owning_workstream": "Mission Control",
+        "owning_branch": "customer-management-v1",
+        "authority": [],
+        "constraints": [],
+        "dependencies": [],
+        "validation": [],
+        "deliverables": [],
+        "stop_conditions": [],
+        "expected_completion_evidence": [],
+        "status": "ready",
+        "definition_approved": True,
+        "requested_code_changes": False,
+        "external_evidence": None,
+        "command_id": None,
+        "version": 1,
+        "started_at": None,
+        "completed_at": None,
+        "reviewed_at": None,
+        "created_at": now,
+        "updated_at": now,
+    }
+    valid = SimpleNamespace(**values)
+    invalid = SimpleNamespace(**{**values, "id": uuid4(), "objective": None})
+
+    items, warnings = _bounded_projection((valid, invalid), MilestoneItem, "milestone")
+
+    assert [item.title for item in items] == ["Valid milestone"]
+    assert warnings == (
+        "One milestone record is unavailable because its stored definition is invalid.",
+    )
 
 
 @pytest.mark.asyncio

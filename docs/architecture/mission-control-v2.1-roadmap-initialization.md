@@ -37,6 +37,12 @@ keeps duration visible in the stored work order sent only after an explicit
 authenticated owner Start action. Dependencies remain in the dedicated
 `dependencies` field.
 
+Roadmap projection validates each persisted item independently. If legacy or
+manually corrupted metadata cannot satisfy the public contract, Mission Control
+omits that item, returns a bounded projection warning, and continues rendering
+the remaining truthful records. It does not infer replacement status or create
+placeholder operational truth.
+
 Preview serves Mission Control from its isolated stack through route-level
 Caddy handlers. V2 assets use `/mission-assets/`, allowing the general Preview
 application and active Customer Migration containers to remain untouched.

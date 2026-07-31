@@ -291,6 +291,7 @@ class RoadmapPage(MobileEngineeringSchema):
     completed_milestones: tuple[MilestoneItem, ...]
     blocked_milestones: tuple[MilestoneItem, ...]
     actionable_count: int = Field(ge=0)
+    projection_warnings: tuple[str, ...] = ()
 
 
 class MilestoneActionRequest(MobileEngineeringSchema):
