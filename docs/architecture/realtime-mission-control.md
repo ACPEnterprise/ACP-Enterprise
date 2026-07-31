@@ -16,21 +16,23 @@ PHONE.5 worker runtime without changing either authority boundary.
 4. The SSE service reads ordered events from PostgreSQL and emits bounded,
    non-sensitive projections. The request database connection is released
    before the long-lived stream begins.
-5. Mission Control merges the event immediately and then refreshes the affected
-   detail projection. It does not poll.
+5. Mission Control merges the event directly into its list and detail caches.
+   It does not poll or request a current-state refresh after an event.
 
 ## Resume and delivery
 
 Each SSE frame uses the durable event UUID as `id`. A client reconnects with
 `Last-Event-ID` or `after`; the server validates that token inside the current
-Company and returns events ordered by `(occurred_at, id)`. The browser stores
+Company and resolves it to a database-assigned monotonic sequence. Events are
+returned by that sequence, independent of clock skew. The browser stores
 the last applied ID per Company in session storage and suppresses a repeated
 frame. Unknown tokens fail closed with `409`; the client clears only that
 Company's unusable cursor and reconnects from durable retained truth.
 
 PostgreSQL notifications may be coalesced or dropped without losing events.
-Every wake-up and keepalive causes another persisted-event query after the last
-cursor. Replays are capped at 500 rows per query and continue until caught up.
+Every wake-up causes another persisted-event query after the last cursor; the
+server-side heartbeat watchdog also checks expiry on keepalive. Replays are
+capped at 500 rows per query and continue until caught up.
 
 ## Runtime truth and notifications
 

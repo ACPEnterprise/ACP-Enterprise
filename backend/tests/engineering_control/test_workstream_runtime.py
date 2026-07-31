@@ -190,3 +190,15 @@ async def test_worker_acknowledgement_is_idempotent_versioned_and_recoverable(
         assert recovered is not None and recovered.runtime_state == "recovering"
         assert recovered.worker_health == "unhealthy"
         assert expired is not None
+    recovery_payloads = await _events_after(
+        worker_context.company_id, UUID(str(command_payloads[-1]["event_id"]))
+    )
+    recovery_payload = next(
+        item for item in recovery_payloads if item["command_id"] == str(command.id)
+    )
+    assert recovery_payload["runtime_state"] == "recovering"
+    assert recovery_payload["notifications"] == (
+        "recovering",
+        "worker_offline",
+        "heartbeat_expired",
+    )

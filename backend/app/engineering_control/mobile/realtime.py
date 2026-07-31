@@ -75,21 +75,14 @@ async def _events_after(
         )
         if boundary is not None:
             statement = statement.where(
-                or_(
-                    EngineeringWorkstreamEvent.occurred_at > boundary.occurred_at,
-                    and_(
-                        EngineeringWorkstreamEvent.occurred_at == boundary.occurred_at,
-                        EngineeringWorkstreamEvent.id > boundary.id,
-                    ),
-                )
+                EngineeringWorkstreamEvent.sequence_id > boundary.sequence_id
             )
         events = tuple(
             (
                 await db.scalars(
-                    statement.order_by(
-                        EngineeringWorkstreamEvent.occurred_at,
-                        EngineeringWorkstreamEvent.id,
-                    ).limit(500)
+                    statement.order_by(EngineeringWorkstreamEvent.sequence_id).limit(
+                        500
+                    )
                 )
             ).all()
         )

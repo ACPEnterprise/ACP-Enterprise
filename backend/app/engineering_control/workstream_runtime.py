@@ -2,10 +2,12 @@ from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
+    BigInteger,
     CheckConstraint,
     DateTime,
     ForeignKey,
     ForeignKeyConstraint,
+    Identity,
     Index,
     Integer,
     String,
@@ -111,12 +113,14 @@ class EngineeringWorkstreamEvent(Base):
         Index(
             "ix_workstream_events_company_order",
             "company_id",
-            "occurred_at",
-            "id",
+            "sequence_id",
         ),
     )
     id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    sequence_id: Mapped[int] = mapped_column(
+        BigInteger, Identity(), nullable=False, unique=True
     )
     company_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),

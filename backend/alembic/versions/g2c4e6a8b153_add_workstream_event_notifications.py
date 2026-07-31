@@ -17,12 +17,21 @@ depends_on = None
 def upgrade() -> None:
     op.add_column(
         "engineering_workstream_events",
+        sa.Column("sequence_id", sa.BigInteger(), sa.Identity(), nullable=False),
+    )
+    op.create_unique_constraint(
+        "uq_engineering_workstream_event_sequence",
+        "engineering_workstream_events",
+        ["sequence_id"],
+    )
+    op.add_column(
+        "engineering_workstream_events",
         sa.Column("worker_session_id", postgresql.UUID(as_uuid=True)),
     )
     op.create_index(
         "ix_workstream_events_company_order",
         "engineering_workstream_events",
-        ["company_id", "occurred_at", "id"],
+        ["company_id", "sequence_id"],
     )
     op.execute("""
         CREATE FUNCTION notify_engineering_workstream_event() RETURNS trigger AS $$
@@ -51,4 +60,10 @@ def downgrade() -> None:
         "ix_workstream_events_company_order",
         table_name="engineering_workstream_events",
     )
+    op.drop_constraint(
+        "uq_engineering_workstream_event_sequence",
+        "engineering_workstream_events",
+        type_="unique",
+    )
+    op.drop_column("engineering_workstream_events", "sequence_id")
     op.drop_column("engineering_workstream_events", "worker_session_id")
