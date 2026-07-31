@@ -241,7 +241,7 @@ async def test_validation_mode_is_write_free_and_pii_safe() -> None:
         context=context(),
         reviewed=reviewed,
         approval=approval(reviewed),
-        runtime=runtime(),
+        runtime=runtime(backup=False),
     )
     facade.import_reviewed.assert_not_awaited()
     assert repository.read_count == 2

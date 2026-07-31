@@ -324,7 +324,9 @@ class CustomerPilotExecutionService:
             boundary.validate()
         except ValueError as error:
             raise PilotExecutionError(str(error)) from error
-        if runtime.backup is None or not runtime.backup.custom_format_verified:
+        if approval.mode == "import" and (
+            runtime.backup is None or not runtime.backup.custom_format_verified
+        ):
             raise PilotExecutionError(
                 "verified preview PostgreSQL backup is required before execution"
             )
