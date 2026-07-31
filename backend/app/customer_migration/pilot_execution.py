@@ -88,6 +88,7 @@ class CustomerPilotApproval(BaseModel):
     source_sha256: str
     schema_version: str = Field(min_length=1, max_length=100)
     reviewed_output_sha256: str
+    pilot_manifest_sha256: str
     pilot_boundary_sha256: str
     ordered_source_identity_allowlist: tuple[str, ...] = Field(min_length=1)
     expected: PilotExpectedCounts
@@ -103,6 +104,7 @@ class CustomerPilotApproval(BaseModel):
         for field_name in (
             "source_sha256",
             "reviewed_output_sha256",
+            "pilot_manifest_sha256",
             "pilot_boundary_sha256",
         ):
             if SHA256_PATTERN.fullmatch(getattr(self, field_name)) is None:
@@ -180,6 +182,7 @@ class CustomerPilotExecutionReport(BaseModel):
     source_sha256: str
     schema_version: str
     approval_sha256: str
+    pilot_manifest_sha256: str
     reviewed_output_sha256: str
     pilot_boundary_sha256: str
     deployed_git_sha: str
@@ -375,6 +378,7 @@ class CustomerPilotExecutionService:
             source_sha256=approval.source_sha256,
             schema_version=approval.schema_version,
             approval_sha256=approval.sha256(),
+            pilot_manifest_sha256=approval.pilot_manifest_sha256,
             reviewed_output_sha256=approval.reviewed_output_sha256,
             pilot_boundary_sha256=approval.pilot_boundary_sha256,
             deployed_git_sha=runtime.deployed_git_sha,

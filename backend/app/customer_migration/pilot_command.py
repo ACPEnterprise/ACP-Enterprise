@@ -27,6 +27,7 @@ from app.customer_migration.pilot_execution import (
     PreviewBackupEvidence,
     PreviewExecutionRuntime,
 )
+from app.customer_migration.pilot_selection import CustomerPilotManifest
 from app.database.session import AsyncSessionFactory, engine
 from app.platform.auth.errors import AuthenticationError
 from app.platform.auth.services import access_token_service, authentication_service
@@ -131,9 +132,19 @@ async def execute(args: argparse.Namespace) -> int:
     if settings.environment != "preview" or args.target != "preview":
         raise PilotExecutionError("command can execute only inside preview")
     approval = CustomerPilotApproval.model_validate(_load_json(args.approval))
+    manifest = CustomerPilotManifest.model_validate(_load_json(args.manifest))
     reviewed = _load_reviewed(args.reviewed_output)
     if approval.mode != args.mode:
         raise PilotExecutionError("command mode does not match owner approval")
+    if (
+        approval.pilot_manifest_sha256 != manifest.manifest_sha256
+        or approval.source_sha256 != manifest.source_sha256
+        or approval.schema_version != manifest.export_version
+        or approval.pilot_boundary_sha256 != manifest.replay_key
+        or approval.ordered_source_identity_allowlist
+        != manifest.ordered_customer_identity_sha256
+    ):
+        raise PilotExecutionError("pilot manifest does not match owner approval")
     deployed_sha = os.environ.get(DEPLOYED_SHA_ENV)
     if not deployed_sha:
         raise PilotExecutionError("deployed Git SHA evidence is required")
@@ -180,6 +191,7 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--mode", choices=("validate", "import"), required=True)
     result.add_argument("--approval", type=Path, required=True)
     result.add_argument("--reviewed-output", type=Path, required=True)
+    result.add_argument("--manifest", type=Path, required=True)
     result.add_argument("--company-id", required=True)
     result.add_argument("--branch-id", required=True)
     result.add_argument("--backup", type=Path)

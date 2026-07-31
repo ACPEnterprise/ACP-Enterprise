@@ -24,6 +24,7 @@ from app.customer_migration.pilot_execution import (
     PreviewBackupEvidence,
     PreviewExecutionRuntime,
 )
+from app.customer_migration.pilot_selection import CustomerPilotSelectionService
 from app.customers.schemas import CustomerCreate, CustomerStatus, CustomerType
 
 
@@ -148,6 +149,7 @@ def approval(reviewed, *, mode: str = "validate") -> CustomerPilotApproval:
         source_sha256=reviewed.source_sha256,
         schema_version=reviewed.schema_version,
         reviewed_output_sha256=reviewed.review_sha256,
+        pilot_manifest_sha256=digest("manifest"),
         pilot_boundary_sha256=digest(json.dumps(identities, separators=(",", ":"))),
         ordered_source_identity_allowlist=identities,
         expected={
@@ -404,3 +406,25 @@ def test_reviewed_contract_loader_and_backup_verification(tmp_path: Path) -> Non
     evidence = verify_backup(backup_path, backup_sha256)
     assert evidence.backup_sha256 == backup_sha256
     assert evidence.custom_format_verified is True
+
+
+def test_pilot_manifest_selection_is_deterministic_and_replayable() -> None:
+    reviewed = reviewed_output()
+    service = CustomerPilotSelectionService()
+    generated = service.select(
+        reviewed,
+        migration_version="synthetic-migration-v1",
+        limit=1,
+    )
+    replay = service.select(
+        reviewed,
+        migration_version="synthetic-migration-v1",
+        limit=1,
+        generated_at=generated.generated_at,
+    )
+    assert replay == generated
+    assert generated.expected_customers == 1
+    assert generated.ordered_customer_identity_sha256 == (
+        reviewed.aggregates[0].source_identity_sha256,
+    )
+    assert generated.replay_key == approval(reviewed).pilot_boundary_sha256
