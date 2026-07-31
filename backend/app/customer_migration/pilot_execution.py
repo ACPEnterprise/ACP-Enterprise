@@ -245,6 +245,13 @@ class OperationalCountReader(Protocol):
 
 
 class CustomerPilotExecutionRepository:
+    CUSTOMER_MIGRATION_EVENT_TYPES = (
+        "customer.created",
+        "contact.created",
+        "service_location.created",
+        "customer.billing_address_created",
+    )
+
     async def read(
         self, factory: async_sessionmaker[AsyncSession]
     ) -> OperationalCounts:
@@ -259,7 +266,6 @@ class CustomerPilotExecutionRepository:
             "estimates": Estimate,
             "invoices": Invoice,
             "payments": Payment,
-            "business_events": BusinessEvent,
         }
         async with factory() as session:
             values = {
@@ -268,6 +274,18 @@ class CustomerPilotExecutionRepository:
                 )
                 for name, model in models.items()
             }
+            values["business_events"] = int(
+                await session.scalar(
+                    select(func.count())
+                    .select_from(BusinessEvent)
+                    .where(
+                        BusinessEvent.event_type.in_(
+                            self.CUSTOMER_MIGRATION_EVENT_TYPES
+                        )
+                    )
+                )
+                or 0
+            )
         return OperationalCounts.model_validate(values)
 
     async def alembic_head(self, factory: async_sessionmaker[AsyncSession]) -> str:
