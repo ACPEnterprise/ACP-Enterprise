@@ -201,6 +201,7 @@ class CustomerPilotExecutionReport(BaseModel):
     post_import_counts: OperationalCounts
     backup_sha256: str | None
     post_import_counts_match: bool
+    idempotent_replay: bool
 
 
 class OperationalCountReader(Protocol):
@@ -289,7 +290,11 @@ class CustomerPilotExecutionService:
             raise PilotExecutionError("source digest mismatch")
         if reviewed.schema_version != approval.schema_version:
             raise PilotExecutionError("schema version mismatch")
-        if pre_counts != approval.expected_pre_import_counts:
+        expected_post_counts = self._expected_post_counts(approval)
+        if pre_counts not in (
+            approval.expected_pre_import_counts,
+            expected_post_counts,
+        ):
             raise PilotExecutionError("pre-import operational counts changed")
         boundary = approval.import_boundary()
         try:
@@ -302,6 +307,26 @@ class CustomerPilotExecutionService:
                 "verified preview PostgreSQL backup is required before execution"
             )
         return boundary
+
+    @staticmethod
+    def _expected_post_counts(
+        approval: CustomerPilotApproval,
+    ) -> OperationalCounts:
+        initial = approval.expected_pre_import_counts
+        expected = approval.expected
+        return initial.model_copy(
+            update={
+                "customers": initial.customers + expected.customers,
+                "customer_contacts": initial.customer_contacts + expected.contacts,
+                "service_locations": (
+                    initial.service_locations + expected.service_locations
+                ),
+                "customer_billing_addresses": (
+                    initial.customer_billing_addresses + expected.billing_addresses
+                ),
+                "business_events": (initial.business_events + expected.business_events),
+            }
+        )
 
     async def run(
         self,
@@ -324,6 +349,7 @@ class CustomerPilotExecutionService:
             pre_counts=pre_counts,
         )
         imported: CustomerAdapterImportReport | None = None
+        replay_expected = pre_counts == self._expected_post_counts(approval)
         if approval.mode == "import":
             imported = await self.facade.import_reviewed(
                 factory,
@@ -399,6 +425,12 @@ class CustomerPilotExecutionService:
                 runtime.backup.backup_sha256 if runtime.backup is not None else None
             ),
             post_import_counts_match=post_import_counts_match,
+            idempotent_replay=(
+                replay_expected
+                and imported is not None
+                and imported.accepted == 0
+                and imported.duplicate == approval.expected.customers
+            ),
         )
 
 

@@ -343,8 +343,9 @@ async def test_retry_delegates_idempotently_to_facade() -> None:
             rejected=0,
         )
     )
+    post_import = counts(customers=1, business_events=1)
     report = await CustomerPilotExecutionService(
-        facade=facade, repository=CountRepository(counts())
+        facade=facade, repository=CountRepository(post_import)
     ).run(
         object(),
         context=context(),
@@ -353,7 +354,25 @@ async def test_retry_delegates_idempotently_to_facade() -> None:
         runtime=runtime(backup=True),
     )
     assert report.duplicate == 1
+    assert report.idempotent_replay is True
     facade.import_reviewed.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_retry_fails_closed_when_counts_are_neither_initial_nor_expected() -> (
+    None
+):
+    reviewed = reviewed_output()
+    with pytest.raises(PilotExecutionError, match="operational counts changed"):
+        await CustomerPilotExecutionService(
+            facade=Facade(), repository=CountRepository(counts(customers=2))
+        ).run(
+            object(),
+            context=context(),
+            reviewed=reviewed,
+            approval=approval(reviewed, mode="import"),
+            runtime=runtime(backup=True),
+        )
 
 
 @pytest.mark.asyncio
