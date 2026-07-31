@@ -15,7 +15,6 @@ from .service import (
     mobile_execution_status_service,
 )
 
-
 router = APIRouter(
     prefix="/api/v1/engineering/mobile",
     tags=["Mobile Engineering Execution Status"],

@@ -7,10 +7,10 @@ Create Date: 2026-07-24
 
 from collections.abc import Sequence
 
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
+from alembic import op
 
 revision: str = "c3e5a7b9d124"
 down_revision: str | None = "b2d4f6a8c013"
@@ -80,9 +80,7 @@ def upgrade() -> None:
         sa.CheckConstraint(
             "next_sequence >= 1", name="ck_worker_transport_sessions_sequence"
         ),
-        sa.CheckConstraint(
-            "version >= 1", name="ck_worker_transport_sessions_version"
-        ),
+        sa.CheckConstraint("version >= 1", name="ck_worker_transport_sessions_version"),
         sa.CheckConstraint(
             "length(authentication_subject_digest) = 64",
             name="ck_worker_transport_sessions_subject_digest",

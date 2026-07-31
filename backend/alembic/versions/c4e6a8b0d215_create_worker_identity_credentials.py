@@ -6,9 +6,10 @@ Revises: b2d4f6a8c013
 
 from collections.abc import Sequence
 
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
+
+from alembic import op
 
 revision: str = "c4e6a8b0d215"
 down_revision: str | None = "c3e5a7b9d124"
@@ -23,7 +24,9 @@ def upgrade() -> None:
         sa.Column("company_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("name", sa.String(100), nullable=False),
         sa.Column("state", sa.String(20), nullable=False),
-        sa.Column("registered_by_user_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column(
+            "registered_by_user_id", postgresql.UUID(as_uuid=True), nullable=False
+        ),
         sa.Column("version", sa.Integer(), nullable=False),
         sa.Column("registered_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
@@ -33,9 +36,7 @@ def upgrade() -> None:
             name="ck_worker_identities_state",
         ),
         sa.CheckConstraint("version >= 1", name="ck_worker_identities_version"),
-        sa.ForeignKeyConstraint(
-            ["company_id"], ["companies.id"], ondelete="RESTRICT"
-        ),
+        sa.ForeignKeyConstraint(["company_id"], ["companies.id"], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(
             ["registered_by_user_id", "company_id"],
             ["memberships.user_id", "memberships.company_id"],
@@ -46,9 +47,7 @@ def upgrade() -> None:
         sa.UniqueConstraint(
             "company_id", "name", name="uq_worker_identities_company_name"
         ),
-        sa.UniqueConstraint(
-            "company_id", "id", name="uq_worker_identities_company_id"
-        ),
+        sa.UniqueConstraint("company_id", "id", name="uq_worker_identities_company_id"),
     )
     op.create_index(
         "ix_worker_identities_company_state",
