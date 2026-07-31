@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal
 from uuid import UUID
 
@@ -16,6 +16,9 @@ class EvidenceReferenceResponse(BaseModel):
     reference_id: str
     source_system: str
     source_version: str
+    source_record_type: str
+    content_digest: str
+    observed_at: datetime
     explanation: str
 
 
@@ -25,6 +28,8 @@ class ProfitMeasurementResponse(BaseModel):
     branch_id: UUID | None
     subject_type: str
     subject_id: UUID
+    period_start: date
+    period_end: date
     currency: str
     revenue_minor: int | None
     labor_minor: int | None
@@ -36,6 +41,8 @@ class ProfitMeasurementResponse(BaseModel):
     net_profit_minor: int | None
     confidence: ConfidenceResponse
     evidence: list[EvidenceReferenceResponse]
+    input_fact_ids: list[UUID]
+    input_allocation_ids: list[UUID]
     engine_version: str
     version: int
     measured_at: datetime

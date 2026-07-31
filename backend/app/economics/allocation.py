@@ -1,3 +1,4 @@
+import hashlib
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from uuid import UUID, uuid4
@@ -53,6 +54,7 @@ class AllocationRegistry:
                 denominator=item.denominator,
                 allocated_amount_minor=item.allocated_amount_minor,
                 strategy_version=version,
+                input_digest=item.input_digest,
                 evidence=item.evidence,
             )
             for item in allocations
@@ -75,6 +77,16 @@ def proportional_allocation(
     for index in range(abs(remainder)):
         amounts[index % len(amounts)] += 1 if remainder > 0 else -1
 
+    ordered_input = ",".join(
+        f"{target.subject_type}:{target.subject_id}:{target.weight}"
+        for target in targets
+    )
+    input_digest = hashlib.sha256(
+        (
+            f"{fact.id}:{fact.version}:{fact.amount_minor}:"
+            f"{fact.currency}:{ordered_input}"
+        ).encode()
+    ).hexdigest()
     return tuple(
         Allocation(
             id=uuid4(),
@@ -86,12 +98,16 @@ def proportional_allocation(
             denominator=denominator,
             allocated_amount_minor=amount,
             strategy_version="pending_registry_version",
+            input_digest=input_digest,
             evidence=(
                 EvidenceReference(
                     kind=EvidenceKind.ALLOCATION,
                     reference_id=str(fact.id),
                     source_system="business_economics",
                     source_version=str(fact.version),
+                    source_record_type="business_fact",
+                    content_digest=input_digest,
+                    observed_at=fact.occurred_at,
                     explanation=(
                         f"Allocated {target.weight}/{denominator} of source fact {fact.id}."
                     ),

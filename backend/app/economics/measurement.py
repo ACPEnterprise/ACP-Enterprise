@@ -107,10 +107,13 @@ class MeasurementEngine:
             raise ValueError("profit measurement requires business facts")
         currencies = {fact.currency.upper() for fact in facts}
         subjects = {(fact.subject_type, fact.subject_id) for fact in facts}
+        periods = {(fact.period_start, fact.period_end) for fact in facts}
         if len(currencies) != 1:
             raise ValueError("profit measurement cannot mix currencies")
         if subjects != {(subject_type, subject_id)}:
             raise ValueError("all facts must belong to the measured subject")
+        if len(periods) != 1:
+            raise ValueError("all facts must cover the same measurement period")
         currency = currencies.pop()
         input_categories = (
             EconomicCategory.REVENUE,
@@ -164,6 +167,11 @@ class MeasurementEngine:
             reference_id=ENGINE_VERSION,
             source_system="business_economics",
             source_version=ENGINE_VERSION,
+            source_record_type="measurement_formula",
+            content_digest=(
+                "cb8a23a67b7d90c1bf4c21bb6e902b726c761878c104a3fe299d29fc7ba89e53"
+            ),
+            observed_at=max(fact.occurred_at for fact in facts),
             explanation=(
                 "Gross profit is revenue less direct costs; net profit is gross "
                 "profit less allocated overhead. Unknown inputs propagate."
@@ -178,9 +186,12 @@ class MeasurementEngine:
             )
         ] = reasoning
         overall = net.confidence
+        period_start, period_end = periods.pop()
         return ProfitMeasurement(
             subject_type=subject_type,
             subject_id=subject_id,
+            period_start=period_start,
+            period_end=period_end,
             currency=currency,
             revenue=totals[EconomicCategory.REVENUE],
             labor=totals[EconomicCategory.LABOR],
@@ -192,5 +203,7 @@ class MeasurementEngine:
             net_profit=net,
             confidence=overall,
             evidence=tuple(evidence_by_key.values()),
+            input_fact_ids=tuple(sorted((fact.id for fact in facts), key=str)),
+            input_allocation_ids=(),
             engine_version=ENGINE_VERSION,
         )

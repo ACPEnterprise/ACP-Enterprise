@@ -1,5 +1,6 @@
+import hashlib
 from dataclasses import FrozenInstanceError
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from uuid import uuid4
 
 import pytest
@@ -25,6 +26,7 @@ def fact(
     status: MeasurementStatus = MeasurementStatus.MEASURED,
 ) -> BusinessFact:
     fact_id = uuid4()
+    digest = hashlib.sha256(str(fact_id).encode()).hexdigest()
     return BusinessFact(
         id=fact_id,
         company_id=company_id or uuid4(),
@@ -32,6 +34,7 @@ def fact(
         subject_type="job",
         subject_id=subject_id or uuid4(),
         category=category,
+        fact_key=category.value,
         amount_minor=amount_minor,
         currency="USD",
         confidence=Confidence(
@@ -51,10 +54,16 @@ def fact(
                 reference_id=str(fact_id),
                 source_system="test_ledger",
                 source_version="1",
+                source_record_type="test_record",
+                content_digest=digest,
+                observed_at=datetime.now(timezone.utc),
                 explanation="Test source record.",
             ),
         ),
         occurred_at=datetime.now(timezone.utc),
+        period_start=date(2026, 7, 1),
+        period_end=date(2026, 7, 31),
+        measurement_method="direct_source",
     )
 
 
@@ -153,11 +162,15 @@ def test_engine_rejects_mixed_currency_and_subjects() -> None:
         subject_type=other.subject_type,
         subject_id=other.subject_id,
         category=other.category,
+        fact_key=other.fact_key,
         amount_minor=other.amount_minor,
         currency="EUR",
         confidence=other.confidence,
         evidence=other.evidence,
         occurred_at=other.occurred_at,
+        period_start=other.period_start,
+        period_end=other.period_end,
+        measurement_method=other.measurement_method,
     )
     with pytest.raises(ValueError, match="mix currencies"):
         MeasurementEngine.measure("job", subject_id, tuple(facts))

@@ -25,6 +25,8 @@ class EconomicsQueryService:
             branch_id=record.branch_id,
             subject_type=record.subject_type,
             subject_id=record.subject_id,
+            period_start=record.period_start,
+            period_end=record.period_end,
             currency=record.currency,
             revenue_minor=record.revenue_minor,
             labor_minor=record.labor_minor,
@@ -41,8 +43,10 @@ class EconomicsQueryService:
             ),
             evidence=[
                 EvidenceReferenceResponse.model_validate(item)
-                for item in record.evidence
+                for item in record.evidence_snapshot
             ],
+            input_fact_ids=[UUID(item) for item in record.input_fact_ids],
+            input_allocation_ids=[UUID(item) for item in record.input_allocation_ids],
             engine_version=record.engine_version,
             version=record.version,
             measured_at=record.measured_at,

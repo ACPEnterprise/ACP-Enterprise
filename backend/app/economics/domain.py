@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from enum import StrEnum
 from uuid import UUID
 
@@ -60,6 +60,9 @@ class EvidenceReference:
     reference_id: str
     source_system: str
     source_version: str
+    source_record_type: str
+    content_digest: str
+    observed_at: datetime
     explanation: str
 
     def __post_init__(self) -> None:
@@ -67,10 +70,14 @@ class EvidenceReference:
             self.reference_id,
             self.source_system,
             self.source_version,
+            self.source_record_type,
+            self.content_digest,
             self.explanation,
         ):
             if not value.strip():
                 raise ValueError("evidence fields must not be blank")
+        if len(self.content_digest) != 64:
+            raise ValueError("evidence content digest must be SHA-256")
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,11 +88,15 @@ class BusinessFact:
     subject_type: str
     subject_id: UUID
     category: EconomicCategory
+    fact_key: str
     amount_minor: int | None
     currency: str
     confidence: Confidence
     evidence: tuple[EvidenceReference, ...]
     occurred_at: datetime
+    period_start: date
+    period_end: date
+    measurement_method: str
     version: int = 1
 
     def __post_init__(self) -> None:
@@ -103,6 +114,10 @@ class BusinessFact:
             raise ValueError("currency must be an ISO 4217 alpha code")
         if self.version < 1:
             raise ValueError("fact version must be positive")
+        if self.period_end < self.period_start:
+            raise ValueError("fact period end cannot precede its start")
+        if not self.fact_key.strip() or not self.measurement_method.strip():
+            raise ValueError("fact key and measurement method are required")
         if self.amount_minor is not None and not self.evidence:
             raise ValueError("a known fact requires evidence")
 
@@ -127,6 +142,7 @@ class Allocation:
     denominator: int
     allocated_amount_minor: int
     strategy_version: str
+    input_digest: str
     evidence: tuple[EvidenceReference, ...]
 
     def __post_init__(self) -> None:
@@ -138,12 +154,16 @@ class Allocation:
             raise ValueError("allocation numerator cannot exceed denominator")
         if not self.strategy.strip() or not self.strategy_version.strip():
             raise ValueError("allocation strategy and version are required")
+        if len(self.input_digest) != 64:
+            raise ValueError("allocation input digest must be SHA-256")
 
 
 @dataclass(frozen=True, slots=True)
 class ProfitMeasurement:
     subject_type: str
     subject_id: UUID
+    period_start: date
+    period_end: date
     currency: str
     revenue: MeasuredCost
     labor: MeasuredCost
@@ -155,4 +175,7 @@ class ProfitMeasurement:
     net_profit: MeasuredCost
     confidence: Confidence
     evidence: tuple[EvidenceReference, ...]
+    input_fact_ids: tuple[UUID, ...]
+    input_allocation_ids: tuple[UUID, ...]
     engine_version: str
+    version: int = 1
