@@ -6,6 +6,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     ForeignKeyConstraint,
+    Index,
     Integer,
     String,
     UniqueConstraint,
@@ -104,7 +105,15 @@ class EngineeringWorkstreamRuntime(Base):
 class EngineeringWorkstreamEvent(Base):
     __tablename__ = "engineering_workstream_events"
     __table_args__ = (
-        UniqueConstraint("company_id", "idempotency_key", name="uq_workstream_event_idempotency"),
+        UniqueConstraint(
+            "company_id", "idempotency_key", name="uq_workstream_event_idempotency"
+        ),
+        Index(
+            "ix_workstream_events_company_order",
+            "company_id",
+            "occurred_at",
+            "id",
+        ),
     )
     id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), primary_key=True, default=uuid4
@@ -122,6 +131,7 @@ class EngineeringWorkstreamEvent(Base):
     control_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     control_version: Mapped[int] = mapped_column(Integer, nullable=False)
     worker_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    worker_session_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
     event_type: Mapped[str] = mapped_column(String(32), nullable=False)
     action: Mapped[str] = mapped_column(String(16), nullable=False)
     runtime_state: Mapped[str | None] = mapped_column(String(32))
@@ -267,6 +277,7 @@ class WorkstreamRuntimeService:
                 control_id=control.id,
                 control_version=control.version,
                 worker_id=context.worker_id,
+                worker_session_id=session_id,
                 event_type="worker_acknowledgement",
                 action=action,
                 runtime_state=state,
@@ -343,6 +354,7 @@ class WorkstreamRuntimeService:
                 control_id=runtime.control_id,
                 control_version=runtime.acknowledged_control_version,
                 worker_id=context.worker_id,
+                worker_session_id=session_id,
                 event_type="runtime_transition",
                 action=runtime.acknowledged_action,
                 runtime_state=runtime_state,

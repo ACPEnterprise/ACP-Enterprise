@@ -23,6 +23,27 @@ interface AuthenticationHandlers {
 
 let authenticationHandlers: AuthenticationHandlers | null = null;
 
+export function authenticatedRequestHeaders(): Headers {
+  const headers = new Headers({ Accept: "text/event-stream" });
+  const accessToken = authenticationHandlers?.getAccessToken();
+  const companyId = authenticationHandlers?.getActiveCompanyId();
+  if (accessToken) headers.set("Authorization", `Bearer ${accessToken}`);
+  if (companyId) headers.set("X-Company-ID", companyId);
+  return headers;
+}
+
+export function activeCompanyId(): string | null {
+  return authenticationHandlers?.getActiveCompanyId() ?? null;
+}
+
+export async function refreshAuthentication(): Promise<boolean> {
+  return Boolean(await authenticationHandlers?.refresh());
+}
+
+export function apiUrl(path: string): string {
+  return new URL(path.replace(/^\//, ""), new URL(apiBaseUrl, window.location.origin)).toString();
+}
+
 export function configureAuthentication(handlers: AuthenticationHandlers | null): void {
   authenticationHandlers = handlers;
 }

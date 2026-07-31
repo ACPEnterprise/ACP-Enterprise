@@ -1,6 +1,7 @@
 from collections.abc import AsyncIterator, Mapping
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
+from uuid import uuid4
 
 import httpx
 import pytest
@@ -261,7 +262,7 @@ async def test_workstream_projection_lists_authoritative_safe_next_action(
             "pipeline_status": "waiting_for_owner",
             "desired_state": "active",
             "control_pending": False,
-            "available_actions": ["refresh", "cancel"],
+            "available_actions": ["cancel"],
             "runtime_state": "waiting_for_owner",
             "runtime_version": None,
             "acknowledged_action": None,
@@ -270,6 +271,12 @@ async def test_workstream_projection_lists_authoritative_safe_next_action(
             "worker_health": None,
             "progress_percent": None,
             "current_activity": None,
+            "acknowledgement_latency_ms": None,
+            "execution_latency_ms": None,
+            "validation_latency_ms": None,
+            "deployment_latency_ms": None,
+            "worker_uptime_seconds": None,
+            "reconnect_count": 0,
         }
     ]
 
@@ -301,7 +308,21 @@ async def test_workstream_projection_lists_authoritative_safe_next_action(
     )
     assert refreshed.json()["desired_state"] == "paused"
     assert refreshed.json()["control_pending"] is True
-    assert refreshed.json()["available_actions"] == ["resume", "refresh", "cancel"]
+    assert refreshed.json()["available_actions"] == ["resume", "cancel"]
+
+
+@pytest.mark.asyncio
+async def test_realtime_stream_rejects_unknown_company_resume_token(
+    mobile_api: MobileApiFixture,
+) -> None:
+    app = mobile_api.app_for(tuple(EngineeringCommandPermission.ALL))
+    response = await request(
+        app,
+        "GET",
+        f"/api/v1/engineering/mobile/events?after={uuid4()}",
+    )
+    assert response.status_code == 409
+    assert "resume token" in response.json()["detail"]
 
 
 @pytest.mark.asyncio

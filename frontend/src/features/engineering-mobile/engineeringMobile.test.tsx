@@ -13,6 +13,7 @@ import type {
 } from "./types";
 
 vi.mock("./hooks");
+vi.mock("./realtime", () => ({ useEngineeringRealtime: () => "live" }));
 
 const review: MobileReviewDetail = {
   id: "3f68dc17-0be5-46d1-9666-1c7bb825be51",
@@ -72,7 +73,7 @@ const workstream: MobileWorkstreamSummary = {
   pipeline_status: "waiting_for_owner",
   desired_state: "active",
   control_pending: false,
-  available_actions: ["pause", "refresh", "cancel"],
+  available_actions: ["pause", "cancel"],
   runtime_state: "waiting_for_owner",
   runtime_version: null,
   acknowledged_action: null,
@@ -81,6 +82,12 @@ const workstream: MobileWorkstreamSummary = {
   worker_health: null,
   progress_percent: null,
   current_activity: null,
+  acknowledgement_latency_ms: null,
+  execution_latency_ms: null,
+  validation_latency_ms: null,
+  deployment_latency_ms: null,
+  worker_uptime_seconds: null,
+  reconnect_count: 0,
 };
 
 const disconnected = {

@@ -1,7 +1,8 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_database_session
@@ -15,6 +16,7 @@ from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import EngineeringCommandPermission
 from app.platform.permissions.dependencies import require_permission
 
+from .realtime import InvalidResumeToken, event_stream, validate_resume_token
 from .schemas import (
     MobileApprovalRequest,
     MobileCancellationRequest,
@@ -44,6 +46,47 @@ ApproveContext = Annotated[
     AuthorizationContext,
     Depends(require_permission(EngineeringCommandPermission.APPROVE)),
 ]
+
+
+@router.get(
+    "/events",
+    summary="Stream ordered authoritative Engineering runtime events",
+    response_class=StreamingResponse,
+)
+async def stream_workstream_events(
+    context: ReadContext,
+    session: DatabaseSession,
+    last_event_id: Annotated[str | None, Header(alias="Last-Event-ID")] = None,
+    after: UUID | None = None,
+) -> StreamingResponse:
+    try:
+        header_token = UUID(last_event_id) if last_event_id else None
+    except ValueError as error:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY, "Invalid Last-Event-ID."
+        ) from error
+    if header_token and after and header_token != after:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "Conflicting realtime resume tokens."
+        )
+    token = header_token or after
+    try:
+        await validate_resume_token(session, context.company.id, token)
+    except InvalidResumeToken as error:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
+    finally:
+        # Release the request-scoped database connection before the stream's
+        # intentionally long lifetime. Replays use short independent sessions.
+        await session.rollback()
+    return StreamingResponse(
+        event_stream(context.company.id, token),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
 
 
 @router.get(

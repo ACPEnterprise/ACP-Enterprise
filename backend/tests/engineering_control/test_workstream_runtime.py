@@ -1,12 +1,19 @@
-from datetime import timedelta
-from uuid import uuid4
+from datetime import datetime, timedelta, timezone
+from uuid import UUID, uuid4
 
 import pytest
 import pytest_asyncio
 from app.core.config import settings
 from app.engineering_control.mobile.control import WorkstreamControlRepository
+from app.engineering_control.mobile.realtime import (
+    InvalidResumeToken,
+    _events_after,
+    persist_expired_heartbeats,
+    validate_resume_token,
+)
 from app.engineering_control.workstream_runtime import (
     EngineeringWorkstreamEvent,
+    EngineeringWorkstreamRuntime,
     WorkstreamRuntimeError,
     WorkstreamRuntimeService,
 )
@@ -25,7 +32,9 @@ from tests.worker_control.test_worker_control import (
 @pytest_asyncio.fixture
 async def worker_database_fixture():
     engine = create_async_engine(settings.database_url)
-    fixture = await seed_service_fixture(async_sessionmaker(engine, expire_on_commit=False))
+    fixture = await seed_service_fixture(
+        async_sessionmaker(engine, expire_on_commit=False)
+    )
     try:
         yield fixture
     finally:
@@ -133,3 +142,51 @@ async def test_worker_acknowledgement_is_idempotent_versioned_and_recoverable(
         )
         assert tuple(item.id for item in recovery) == (control.id,)
         assert event_count == 2
+
+    payloads = await _events_after(worker_context.company_id, None)
+    command_payloads = tuple(
+        item for item in payloads if item["command_id"] == str(command.id)
+    )
+    assert [item["event_type"] for item in command_payloads] == [
+        "worker_acknowledgement",
+        "runtime_transition",
+    ]
+    assert command_payloads[-1]["acknowledgement_latency_ms"] is None
+    assert command_payloads[-1]["reconnect_count"] == 0
+    replay = await _events_after(
+        worker_context.company_id, UUID(str(command_payloads[0]["event_id"]))
+    )
+    assert [
+        item["event_id"] for item in replay if item["command_id"] == str(command.id)
+    ] == [command_payloads[1]["event_id"]]
+
+    async with worker_database.factory() as session:
+        with pytest.raises(InvalidResumeToken):
+            await validate_resume_token(session, worker_context.company_id, uuid4())
+
+    stale_at = datetime.now(timezone.utc) - timedelta(minutes=6)
+    async with worker_database.factory() as session, session.begin():
+        persisted = await session.scalar(
+            select(EngineeringWorkstreamRuntime).where(
+                EngineeringWorkstreamRuntime.command_id == command.id
+            )
+        )
+        assert persisted is not None
+        persisted.heartbeat_at = stale_at
+        persisted.updated_at = stale_at
+    await persist_expired_heartbeats(worker_context.company_id)
+    async with worker_database.factory() as session:
+        recovered = await session.scalar(
+            select(EngineeringWorkstreamRuntime).where(
+                EngineeringWorkstreamRuntime.command_id == command.id
+            )
+        )
+        expired = await session.scalar(
+            select(EngineeringWorkstreamEvent).where(
+                EngineeringWorkstreamEvent.command_id == command.id,
+                EngineeringWorkstreamEvent.reason_code == "heartbeat_expired",
+            )
+        )
+        assert recovered is not None and recovered.runtime_state == "recovering"
+        assert recovered.worker_health == "unhealthy"
+        assert expired is not None

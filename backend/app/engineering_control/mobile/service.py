@@ -226,6 +226,7 @@ class MobileEngineeringControlService:
                 control_id=record.id,
                 control_version=record.version,
                 worker_id=None,
+                worker_session_id=None,
                 event_type="owner_request",
                 action=action,
                 runtime_state=None,
@@ -572,8 +573,8 @@ class MobileEngineeringControlService:
         desired_state: str,
     ) -> tuple[str, ...]:
         if status.terminal or desired_state == "cancelled":
-            return ("refresh",)
-        actions = ["refresh"]
+            return ()
+        actions: list[str] = []
         if (
             command.approval_state is EngineeringApprovalState.APPROVED
             and not status.execution_available

@@ -128,6 +128,12 @@ class MobileWorkstreamSummary(MobileEngineeringSchema):
     worker_health: str | None
     progress_percent: int | None
     current_activity: str | None
+    acknowledgement_latency_ms: int | None = None
+    execution_latency_ms: int | None = None
+    validation_latency_ms: int | None = None
+    deployment_latency_ms: int | None = None
+    worker_uptime_seconds: int | None = None
+    reconnect_count: int = 0
 
 
 class MobileWorkstreamDetail(MobileWorkstreamSummary):

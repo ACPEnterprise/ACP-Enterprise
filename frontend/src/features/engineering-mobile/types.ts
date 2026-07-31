@@ -131,6 +131,12 @@ export interface MobileWorkstreamSummary {
   worker_health: string | null;
   progress_percent: number | null;
   current_activity: string | null;
+  acknowledgement_latency_ms: number | null;
+  execution_latency_ms: number | null;
+  validation_latency_ms: number | null;
+  deployment_latency_ms: number | null;
+  worker_uptime_seconds: number | null;
+  reconnect_count: number;
 }
 
 export type MobileWorkstreamRuntimeState = MobileWorkstreamPipelineStatus;
@@ -152,8 +158,7 @@ export type MobileWorkstreamAction =
   | "start"
   | "pause"
   | "resume"
-  | "cancel"
-  | "refresh";
+  | "cancel";
 
 export interface MobileWorkstreamDetail extends MobileWorkstreamSummary {
   owner_instruction: string;

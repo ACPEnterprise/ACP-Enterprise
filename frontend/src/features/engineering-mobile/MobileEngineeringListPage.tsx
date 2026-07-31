@@ -5,6 +5,7 @@ import { Link } from "react-router";
 import { getOperatorApiError } from "../../api/errors";
 import { Alert, Badge, Button, EmptyState, Spinner } from "../../ui";
 import { useMobileWorkstreams } from "./hooks";
+import { useEngineeringRealtime } from "./realtime";
 import {
   mobileEngineeringLabel,
   mobileEngineeringTimestamp,
@@ -13,6 +14,7 @@ import {
 export function MobileEngineeringListPage() {
   const [page, setPage] = useState(1);
   const query = useMobileWorkstreams({ page, pageSize: 10 });
+  const realtime = useEngineeringRealtime();
 
   return (
     <div className="mx-auto w-full max-w-5xl space-y-ui-5 overflow-x-hidden">
@@ -28,6 +30,10 @@ export function MobileEngineeringListPage() {
           bounded owner action.
         </p>
       </header>
+
+      <p className="text-xs font-semibold uppercase tracking-wide text-content-muted" role="status">
+        Live updates: {realtime}
+      </p>
 
       {query.data && (
         <Alert
@@ -127,8 +133,15 @@ export function MobileEngineeringListPage() {
                   </div>
                 </div>
                 <p className="mt-ui-3 text-sm">
-                  {workstream.progress_summary}
+                  {workstream.current_activity ?? workstream.progress_summary}
                 </p>
+                {workstream.progress_percent != null && (
+                  <div className="mt-ui-2" aria-label={`Progress ${workstream.progress_percent}%`}>
+                    <div className="h-2 overflow-hidden rounded-full bg-surface-muted">
+                      <div className="h-full bg-blue-400" style={{ width: `${workstream.progress_percent}%` }} />
+                    </div>
+                  </div>
+                )}
                 {workstream.control_pending && (
                   <p className="mt-ui-2 text-xs font-semibold text-amber-300">Owner control request awaiting worker acknowledgement</p>
                 )}
