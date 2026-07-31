@@ -10,6 +10,9 @@ import type {
   MobileWorkstreamDetail,
   MobileWorkstreamAction,
   MobileWorkstreamActionResult,
+  MobileReviewPage,
+  MissionNotificationItem,
+  MissionNotificationPage,
 } from "./types";
 
 export const MOBILE_ENGINEERING_PATH = "/api/v1/engineering/mobile/reviews";
@@ -17,6 +20,32 @@ export const MOBILE_OWNER_REVIEWS_PATH =
   "/api/v1/engineering/mobile/owner-reviews";
 export const MOBILE_WORKSTREAMS_PATH =
   "/api/v1/engineering/mobile/workstreams";
+export const MISSION_NOTIFICATIONS_PATH =
+  "/api/v1/engineering/mobile/notifications";
+
+export async function listMissionNotifications(): Promise<MissionNotificationPage> {
+  return (await apiClient.get<MissionNotificationPage>(MISSION_NOTIFICATIONS_PATH)).data;
+}
+
+export async function acknowledgeMissionNotification(
+  notificationId: string,
+  expectedVersion: number,
+): Promise<MissionNotificationItem> {
+  return (
+    await apiClient.post<MissionNotificationItem>(
+      `${MISSION_NOTIFICATIONS_PATH}/${notificationId}/acknowledge`,
+      { expected_version: expectedVersion },
+    )
+  ).data;
+}
+
+export async function listPendingMobileReviews(): Promise<MobileReviewPage> {
+  return (
+    await apiClient.get<MobileReviewPage>(MOBILE_ENGINEERING_PATH, {
+      params: { page: 1, page_size: 10 },
+    })
+  ).data;
+}
 
 export async function listMobileWorkstreams(
   query: MobileReviewQuery,

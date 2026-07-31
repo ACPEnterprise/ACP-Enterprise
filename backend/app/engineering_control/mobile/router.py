@@ -16,8 +16,12 @@ from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import EngineeringCommandPermission
 from app.platform.permissions.dependencies import require_permission
 
+from .notifications import mission_notification_service
 from .realtime import InvalidResumeToken, event_stream, validate_resume_token
 from .schemas import (
+    MissionNotificationAcknowledgement,
+    MissionNotificationItem,
+    MissionNotificationPage,
     MobileApprovalRequest,
     MobileCancellationRequest,
     MobileCommandDetail,
@@ -46,6 +50,60 @@ ApproveContext = Annotated[
     AuthorizationContext,
     Depends(require_permission(EngineeringCommandPermission.APPROVE)),
 ]
+
+
+@router.get(
+    "/notifications",
+    response_model=MissionNotificationPage,
+    summary="List persisted Mission Control notifications",
+)
+async def list_mission_notifications(
+    context: ReadContext,
+    session: DatabaseSession,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 25,
+) -> MissionNotificationPage:
+    records, total = await mission_notification_service.list(
+        session, context=context, page=page, page_size=page_size
+    )
+    items = tuple(MissionNotificationItem.model_validate(item) for item in records)
+    return MissionNotificationPage(
+        items=items,
+        unread_count=sum(item.status == "unread" for item in records),
+        escalated_count=sum(
+            item.status == "unread" and item.escalated_at is not None
+            for item in records
+        ),
+        page=page,
+        page_size=page_size,
+        total_count=total,
+        total_pages=(total + page_size - 1) // page_size,
+    )
+
+
+@router.post(
+    "/notifications/{notification_id}/acknowledge",
+    response_model=MissionNotificationItem,
+    summary="Acknowledge one Mission Control notification",
+)
+async def acknowledge_mission_notification(
+    notification_id: UUID,
+    request: MissionNotificationAcknowledgement,
+    context: ManageContext,
+    session: DatabaseSession,
+) -> MissionNotificationItem:
+    try:
+        record = await mission_notification_service.acknowledge(
+            session,
+            context=context,
+            notification_id=notification_id,
+            expected_version=request.expected_version,
+        )
+    except LookupError as error:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
+    return MissionNotificationItem.model_validate(record)
 
 
 @router.get(

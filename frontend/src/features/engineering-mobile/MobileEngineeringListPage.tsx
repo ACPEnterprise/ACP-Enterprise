@@ -4,7 +4,12 @@ import { Link } from "react-router";
 
 import { getOperatorApiError } from "../../api/errors";
 import { Alert, Badge, Button, EmptyState, Spinner } from "../../ui";
-import { useMobileWorkstreams } from "./hooks";
+import {
+  useAcknowledgeMissionNotification,
+  useMissionNotifications,
+  useMobileWorkstreams,
+  usePendingMobileReviews,
+} from "./hooks";
 import { useEngineeringRealtime } from "./realtime";
 import {
   mobileEngineeringLabel,
@@ -14,6 +19,9 @@ import {
 export function MobileEngineeringListPage() {
   const [page, setPage] = useState(1);
   const query = useMobileWorkstreams({ page, pageSize: 10 });
+  const notifications = useMissionNotifications();
+  const acknowledge = useAcknowledgeMissionNotification();
+  const approvalQueue = usePendingMobileReviews();
   const realtime = useEngineeringRealtime();
 
   return (
@@ -67,6 +75,45 @@ export function MobileEngineeringListPage() {
           ))}
         </section>
       )}
+
+      <section className="grid gap-ui-4 lg:grid-cols-2" aria-label="Owner mission queues">
+        <div className="rounded-xl border border-stroke bg-surface p-ui-4">
+          <div className="flex items-center justify-between gap-ui-3">
+            <h2 className="font-bold">Notification center</h2>
+            {notifications.data && <Badge>{notifications.data.unread_count} unread</Badge>}
+          </div>
+          {notifications.data?.items.length === 0 && <p className="mt-ui-3 text-sm text-content-muted">No mission notifications.</p>}
+          <ol className="mt-ui-3 space-y-ui-3">
+            {notifications.data?.items.slice(0, 5).map((item) => (
+              <li key={item.id} className="rounded-lg border border-stroke p-ui-3 text-sm">
+                <div className="flex flex-wrap items-start justify-between gap-ui-2">
+                  <Link className="font-semibold text-blue-400 hover:underline" to={`/engineering/${item.command_id}`}>{mobileEngineeringLabel(item.kind)}</Link>
+                  <Badge>{item.escalated_at ? "Escalated" : mobileEngineeringLabel(item.severity)}</Badge>
+                </div>
+                <p className="mt-ui-1 text-content-muted">{mobileEngineeringTimestamp(item.created_at)}</p>
+                {item.status === "unread" && <Button className="mt-ui-2" variant="outline" disabled={acknowledge.isPending} onClick={() => acknowledge.mutate({ id: item.id, version: item.version })}>Acknowledge</Button>}
+              </li>
+            ))}
+          </ol>
+        </div>
+
+        <div className="rounded-xl border border-stroke bg-surface p-ui-4">
+          <div className="flex items-center justify-between gap-ui-3">
+            <h2 className="font-bold">Owner approval queue</h2>
+            {approvalQueue.data && <Badge>{approvalQueue.data.total_count} pending</Badge>}
+          </div>
+          {approvalQueue.data?.items.length === 0 && <p className="mt-ui-3 text-sm text-content-muted">No commands await owner approval.</p>}
+          <ol className="mt-ui-3 space-y-ui-3">
+            {approvalQueue.data?.items.slice(0, 5).map((item) => (
+              <li key={item.id} className="rounded-lg border border-stroke p-ui-3 text-sm">
+                <Link className="break-all font-semibold text-blue-400 hover:underline" to={`/engineering/${item.id}`}>{item.ecid}</Link>
+                <p className="mt-ui-1 text-content-muted">{item.repository_key} · {item.expected_branch}</p>
+                <p className="mt-ui-1">Expires {mobileEngineeringTimestamp(item.expires_at)}</p>
+              </li>
+            ))}
+          </ol>
+        </div>
+      </section>
 
       <section aria-label="Engineering workstreams">
         {query.isLoading && (

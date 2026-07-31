@@ -3,7 +3,12 @@ import { Link, useParams } from "react-router";
 
 import { getOperatorApiError } from "../../api/errors";
 import { Alert, Badge, Button, Card, ConfirmationDialog, Spinner } from "../../ui";
-import { useControlMobileWorkstream, useMobileWorkstream } from "./hooks";
+import {
+  useApproveMobileReview,
+  useControlMobileWorkstream,
+  useMobileReview,
+  useMobileWorkstream,
+} from "./hooks";
 import { mobileEngineeringLabel, mobileEngineeringTimestamp, shortExpectedHead } from "./presentation";
 import type { MobileWorkstreamAction } from "./types";
 import { useEngineeringRealtime } from "./realtime";
@@ -20,6 +25,8 @@ export function MobileEngineeringDetailPage() {
   const { commandId } = useParams();
   const query = useMobileWorkstream(commandId);
   const control = useControlMobileWorkstream(commandId ?? "");
+  const review = useMobileReview(commandId);
+  const approve = useApproveMobileReview(commandId ?? "");
   const realtime = useEngineeringRealtime();
   const [confirmation, setConfirmation] = useState<MobileWorkstreamAction | null>(null);
 
@@ -31,6 +38,18 @@ export function MobileEngineeringDetailPage() {
   const workstream = query.data;
   const act = (action: MobileWorkstreamAction) => {
     control.mutate({ action }, { onSuccess: () => setConfirmation(null) });
+  };
+  const approveCommand = () => {
+    if (!review.data) return;
+    approve.mutate({
+      expected_version: review.data.version,
+      instruction_digest: review.data.instruction_digest,
+      request_digest: review.data.request_digest,
+      repository_key: review.data.repository_key,
+      expected_branch: review.data.expected_branch,
+      expected_head: review.data.expected_head,
+      requested_code_changes: review.data.requested_code_changes,
+    });
   };
 
   return <div className="mx-auto w-full max-w-5xl space-y-ui-5 overflow-x-hidden pb-24">
@@ -51,6 +70,8 @@ export function MobileEngineeringDetailPage() {
     {workstream.control_pending && <Alert variant="warning" title="Control request pending">The owner intent is saved. Observed worker state remains authoritative until acknowledgement.</Alert>}
     {workstream.runtime_state === "recovering" && <Alert variant="warning" title="Worker recovering">The last acknowledgement expired. The reconnected worker must acknowledge the current owner request before execution continues.</Alert>}
     {control.isError && <Alert variant="danger" announcement="assertive" title="Action not accepted">{getOperatorApiError(control.error, "Workstream action").message}</Alert>}
+    {review.data?.can_approve && <Alert variant="warning" title="Owner approval required" action={<Button disabled={approve.isPending} onClick={approveCommand}>{approve.isPending ? "Approving…" : "Approve exact command"}</Button>}>Review the owner instruction, repository, branch, expected HEAD, and change authority below. Approval does not itself grant unbounded worker authority.</Alert>}
+    {approve.isError && <Alert variant="danger" announcement="assertive" title="Approval not accepted">{getOperatorApiError(approve.error, "Owner approval").message}</Alert>}
 
     <div className="grid gap-ui-4 lg:grid-cols-2">
       <Card className="min-w-0 p-ui-4"><h2 className="font-bold">Current work</h2><p className="mt-ui-3 whitespace-pre-wrap break-words text-sm">{workstream.owner_instruction}</p><dl className="mt-ui-4 grid gap-ui-3 text-sm"><div><dt className="text-content-muted">Progress</dt><dd>{workstream.progress_percent == null ? workstream.progress_summary : `${workstream.progress_percent}% · ${workstream.current_activity ?? workstream.progress_summary}`}</dd></div><div><dt className="text-content-muted">Worker health</dt><dd>{mobileEngineeringLabel(workstream.worker_health ?? "not_available")}</dd></div><div><dt className="text-content-muted">Worker</dt><dd className="break-all">{workstream.assigned_worker_id ?? "Not assigned"}</dd></div><div><dt className="text-content-muted">Last heartbeat</dt><dd>{mobileEngineeringTimestamp(workstream.heartbeat_at)}</dd></div><div><dt className="text-content-muted">Acknowledged</dt><dd>{mobileEngineeringTimestamp(workstream.acknowledged_at)}</dd></div></dl></Card>

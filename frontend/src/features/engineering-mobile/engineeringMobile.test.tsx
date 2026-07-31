@@ -133,6 +133,28 @@ beforeEach(() => {
     data: review,
   } as never);
   vi.mocked(hooks.useControlMobileWorkstream).mockReturnValue(mutation());
+  vi.mocked(hooks.useAcknowledgeMissionNotification).mockReturnValue(mutation());
+  vi.mocked(hooks.useMissionNotifications).mockReturnValue({
+    data: {
+      items: [],
+      unread_count: 0,
+      escalated_count: 0,
+      page: 1,
+      page_size: 25,
+      total_count: 0,
+      total_pages: 0,
+    },
+  } as never);
+  vi.mocked(hooks.usePendingMobileReviews).mockReturnValue({
+    data: {
+      items: [],
+      page: 1,
+      page_size: 10,
+      total_count: 0,
+      total_pages: 0,
+    },
+  } as never);
+  vi.mocked(hooks.useMobileReview).mockReturnValue({ data: review } as never);
 });
 
 afterEach(cleanup);

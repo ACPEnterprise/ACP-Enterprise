@@ -117,6 +117,10 @@ export function useEngineeringRealtime(): "connecting" | "live" | "recovering" {
                     : [...item.timeline, { event: event.notification ?? event.event_type, occurred_at: event.occurred_at }],
                 } : item,
               );
+              if (event.notifications.length > 0 || event.event_type === "owner_request") {
+                void queryClient.invalidateQueries({ queryKey: mobileEngineeringKeys.notifications() });
+                void queryClient.invalidateQueries({ queryKey: mobileEngineeringKeys.approvalQueue() });
+              }
             }
           }
         } catch (error) {

@@ -53,6 +53,28 @@ export interface MobileReviewPage {
   total_pages: number;
 }
 
+export interface MissionNotificationItem {
+  id: string;
+  command_id: string;
+  kind: string;
+  severity: "information" | "warning" | "critical";
+  status: "unread" | "acknowledged";
+  created_at: string;
+  escalated_at: string | null;
+  acknowledged_at: string | null;
+  version: number;
+}
+
+export interface MissionNotificationPage {
+  items: readonly MissionNotificationItem[];
+  unread_count: number;
+  escalated_count: number;
+  page: number;
+  page_size: number;
+  total_count: number;
+  total_pages: number;
+}
+
 export type MobileOwnerReviewState = "pending" | "accepted" | "rejected";
 export type MobileOwnerReviewDecision = "accept" | "reject";
 export type MobileConnectivityState =

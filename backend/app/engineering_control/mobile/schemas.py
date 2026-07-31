@@ -168,6 +168,32 @@ class MobileWorkstreamPage(MobileEngineeringSchema):
     total_pages: int = Field(ge=0)
 
 
+class MissionNotificationItem(MobileEngineeringSchema):
+    id: UUID
+    command_id: UUID
+    kind: str
+    severity: str
+    status: str
+    created_at: datetime
+    escalated_at: datetime | None
+    acknowledged_at: datetime | None
+    version: int
+
+
+class MissionNotificationPage(MobileEngineeringSchema):
+    items: tuple[MissionNotificationItem, ...]
+    unread_count: int = Field(ge=0)
+    escalated_count: int = Field(ge=0)
+    page: int = Field(ge=1)
+    page_size: int = Field(ge=1, le=100)
+    total_count: int = Field(ge=0)
+    total_pages: int = Field(ge=0)
+
+
+class MissionNotificationAcknowledgement(MobileEngineeringSchema):
+    expected_version: int = Field(ge=1)
+
+
 class MobileApprovalRequest(MobileEngineeringSchema):
     expected_version: int = Field(ge=1)
     instruction_digest: str = Field(min_length=1, max_length=128)

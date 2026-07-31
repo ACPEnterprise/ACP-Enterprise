@@ -5,6 +5,7 @@ import pytest
 import pytest_asyncio
 from app.core.config import settings
 from app.engineering_control.mobile.control import WorkstreamControlRepository
+from app.engineering_control.mobile.notifications import MissionNotificationService
 from app.engineering_control.mobile.realtime import (
     InvalidResumeToken,
     _events_after,
@@ -190,6 +191,44 @@ async def test_worker_acknowledgement_is_idempotent_versioned_and_recoverable(
         assert recovered is not None and recovered.runtime_state == "recovering"
         assert recovered.worker_health == "unhealthy"
         assert expired is not None
+
+    notifications = MissionNotificationService()
+    async with worker_database.factory() as session:
+        rows, total = await notifications.list(
+            session,
+            context=worker_database.context,
+            page=1,
+            page_size=25,
+            now=datetime.now(timezone.utc),
+        )
+        heartbeat_notice = next(item for item in rows if item.command_id == command.id)
+        assert total >= 1
+        assert heartbeat_notice.kind == "heartbeat_expired"
+        assert heartbeat_notice.severity == "warning"
+
+    async with worker_database.factory() as session:
+        escalated, _ = await notifications.list(
+            session,
+            context=worker_database.context,
+            page=1,
+            page_size=25,
+            now=datetime.now(timezone.utc) + timedelta(minutes=6),
+        )
+        heartbeat_notice = next(
+            item for item in escalated if item.command_id == command.id
+        )
+        assert heartbeat_notice.severity == "critical"
+        assert heartbeat_notice.escalated_at is not None
+
+    async with worker_database.factory() as session:
+        acknowledged = await notifications.acknowledge(
+            session,
+            context=worker_database.context,
+            notification_id=heartbeat_notice.id,
+            expected_version=heartbeat_notice.version,
+        )
+        assert acknowledged.status == "acknowledged"
+        assert acknowledged.acknowledged_by_user_id == worker_database.context.user.id
     recovery_payloads = await _events_after(
         worker_context.company_id, UUID(str(command_payloads[-1]["event_id"]))
     )

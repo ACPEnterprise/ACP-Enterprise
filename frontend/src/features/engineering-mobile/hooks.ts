@@ -22,7 +22,37 @@ export const mobileEngineeringKeys = {
     ["engineering-mobile", "status", reviewId] as const,
   workstream: (commandId: string) =>
     ["engineering-mobile", "workstream", commandId] as const,
+  notifications: () => ["engineering-mobile", "notifications"] as const,
+  approvalQueue: () => ["engineering-mobile", "approval-queue"] as const,
 };
+
+export function useMissionNotifications() {
+  return useQuery({
+    queryKey: mobileEngineeringKeys.notifications(),
+    queryFn: mobileApi.listMissionNotifications,
+    retry: shouldRetryApiQuery,
+  });
+}
+
+export function useAcknowledgeMissionNotification() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, version }: { id: string; version: number }) =>
+      mobileApi.acknowledgeMissionNotification(id, version),
+    retry: false,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: mobileEngineeringKeys.notifications() });
+    },
+  });
+}
+
+export function usePendingMobileReviews() {
+  return useQuery({
+    queryKey: mobileEngineeringKeys.approvalQueue(),
+    queryFn: mobileApi.listPendingMobileReviews,
+    retry: shouldRetryApiQuery,
+  });
+}
 
 export function useMobileWorkstreams(query: MobileReviewQuery) {
   return useQuery({
