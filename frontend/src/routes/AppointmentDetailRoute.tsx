@@ -31,7 +31,7 @@ export function AppointmentDetailRoute() {
   const relatedJob = relatedQuery.data?.items[0];
   const branch = activeCompany?.branches.find((item) => item.id === appointment.branch_id);
   const customer = customerQuery.data;
-  const location = customer?.properties.find((item) => item.id === appointment.service_location_id);
+  const location = customer?.properties?.find((item) => item.id === appointment.service_location_id);
   const eligible = jobEligibleStatuses.has(appointment.status);
   return <div className="min-w-0 space-y-6">
     <Link className="inline-flex min-h-11 items-center gap-2 text-sm text-action-primary" to={jobsPath()}><ArrowLeft size={16} />Back to Jobs</Link>
