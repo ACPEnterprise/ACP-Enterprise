@@ -355,11 +355,12 @@ class CustomerPilotExecutionService:
             "customer_contacts",
             "service_locations",
             "customer_billing_addresses",
-            "business_events",
         )
         if any(
             getattr(pre_counts, field) != getattr(initial, field) for field in unchanged
         ):
+            raise PilotExecutionError("pre-import operational counts changed")
+        if pre_counts.business_events < initial.business_events:
             raise PilotExecutionError("pre-import operational counts changed")
         if any(
             not (
@@ -443,10 +444,22 @@ class CustomerPilotExecutionService:
             pre_counts=pre_counts,
         )
         expected_post_counts = self._expected_post_counts(approval)
-        partial_resume = pre_counts not in (
-            approval.expected_pre_import_counts,
-            expected_post_counts,
+        structural_fields = (
+            "customers",
+            "customer_contacts",
+            "service_locations",
+            "customer_billing_addresses",
         )
+        at_initial_boundary = all(
+            getattr(pre_counts, field)
+            == getattr(approval.expected_pre_import_counts, field)
+            for field in structural_fields
+        )
+        at_final_boundary = all(
+            getattr(pre_counts, field) == getattr(expected_post_counts, field)
+            for field in structural_fields
+        )
+        partial_resume = not at_initial_boundary and not at_final_boundary
         if partial_resume:
             existing = getattr(approval, "expected_already_imported", None)
             if existing is None:
@@ -473,7 +486,7 @@ class CustomerPilotExecutionService:
                     "partial stage is not the deterministic imported prefix"
                 )
         imported: CustomerAdapterImportReport | None = None
-        replay_expected = pre_counts == expected_post_counts
+        replay_expected = at_final_boundary
         if approval.mode == "import":
             imported = await self.facade.import_reviewed(
                 factory,
@@ -498,22 +511,33 @@ class CustomerPilotExecutionService:
             business_events=post_counts.business_events - pre_counts.business_events,
         )
         if imported is not None:
+            existing = getattr(approval, "expected_already_imported", None)
+            imported_count = (existing.customers if existing is not None else 0) + (
+                pre_counts.customers - approval.expected_pre_import_counts.customers
+            )
+            selected_by_hash = {
+                aggregate.source_identity_sha256: aggregate
+                for aggregate in reviewed.aggregates
+            }
+            missing = tuple(
+                selected_by_hash[identity]
+                for identity in approval.ordered_source_identity_allowlist[
+                    imported_count:
+                ]
+            )
             incremental = PilotExpectedCounts(
-                customers=expected_post_counts.customers - pre_counts.customers,
-                contacts=(
-                    expected_post_counts.customer_contacts
-                    - pre_counts.customer_contacts
+                customers=len(missing),
+                contacts=sum(item.contact is not None for item in missing),
+                service_locations=sum(len(item.service_locations) for item in missing),
+                billing_addresses=sum(
+                    item.billing_address is not None for item in missing
                 ),
-                service_locations=(
-                    expected_post_counts.service_locations
-                    - pre_counts.service_locations
-                ),
-                billing_addresses=(
-                    expected_post_counts.customer_billing_addresses
-                    - pre_counts.customer_billing_addresses
-                ),
-                business_events=(
-                    expected_post_counts.business_events - pre_counts.business_events
+                business_events=sum(
+                    1
+                    + (item.contact is not None)
+                    + len(item.service_locations)
+                    + (item.billing_address is not None)
+                    for item in missing
                 ),
             )
             recognized = approval.expected.customers - incremental.customers

@@ -100,28 +100,41 @@ class Facade:
         )
 
 
-def reviewed_output():
+def reviewed_output(*, include_second: bool = False):
+    records = (
+        Record(
+            row_number=2,
+            source_id="synthetic-source",
+            schema_version="registered-schema-v1",
+            source_row_sha256=digest("row"),
+            customer=CustomerCreate(
+                customer_type=CustomerType.RESIDENTIAL,
+                display_name="Synthetic Customer",
+                status=CustomerStatus.ACTIVE,
+            ),
+        ),
+    )
+    if include_second:
+        records += (
+            replace(
+                records[0],
+                row_number=3,
+                source_id="second-source",
+                source_row_sha256=digest("second-row"),
+                customer=records[0].customer.model_copy(
+                    update={"display_name": "Second Customer"}
+                ),
+            ),
+        )
     output = AdapterOutput(
         source_sha256=digest("source"),
         schema_version="registered-schema-v1",
         transformation_sha256=digest("transformation"),
-        source=1,
-        accepted=1,
+        source=len(records),
+        accepted=len(records),
         rejected=0,
         duplicate=0,
-        records=(
-            Record(
-                row_number=2,
-                source_id="synthetic-source",
-                schema_version="registered-schema-v1",
-                source_row_sha256=digest("row"),
-                customer=CustomerCreate(
-                    customer_type=CustomerType.RESIDENTIAL,
-                    display_name="Synthetic Customer",
-                    status=CustomerStatus.ACTIVE,
-                ),
-            ),
-        ),
+        records=records,
     )
     return review_adapter_output(output, source_system="synthetic")
 
@@ -189,7 +202,7 @@ def approval(reviewed, *, mode: str = "validate") -> CustomerPilotApproval:
 
 def stage_approval(reviewed) -> CustomerMigrationStageApproval:
     first = reviewed.aggregates[0].source_identity_sha256
-    second = digest("second-source-identity")
+    second = reviewed.aggregates[1].source_identity_sha256
     return CustomerMigrationStageApproval(
         approval_version=STAGE_APPROVAL_VERSION,
         target_environment="preview",
@@ -289,7 +302,7 @@ async def test_import_invokes_only_authoritative_facade() -> None:
 
 @pytest.mark.asyncio
 async def test_cumulative_stage_recognizes_prior_prefix_and_creates_delta() -> None:
-    reviewed = reviewed_output()
+    reviewed = reviewed_output(include_second=True)
     facade = Facade(
         CustomerAdapterImportReport(
             run_id="00000000-0000-0000-0000-000000000002",
