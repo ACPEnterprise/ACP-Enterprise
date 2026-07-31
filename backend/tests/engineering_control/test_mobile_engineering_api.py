@@ -523,18 +523,16 @@ def test_initial_roadmap_catalog_is_truthful_and_never_auto_dispatches() -> None
     ]
     ready = [item for item in all_milestones if item["status"] == "ready"]
     assert [item["title"] for item in ready] == [
-        "Mission Control V2.1 Phone Acceptance Rehearsal"
+        "BEA.6 Economics Signal Definitions",
+        "Scheduling Readiness",
+        "Mission Control V2.1 Phone Acceptance Rehearsal",
     ]
-    assert ready[0]["requested_code_changes"] is False
+    assert ready[-1]["requested_code_changes"] is False
     assert (
         by_title["Mission Control"]["branch"]
         == engineering_repository_registry.resolve(
             "acp-enterprise"
         ).approved_active_branch
-    )
-    assert all(
-        item["status"] != "draft" or item["approved"] is False
-        for item in all_milestones
     )
     assert {
         item["title"]
@@ -544,6 +542,91 @@ def test_initial_roadmap_catalog_is_truthful_and_never_auto_dispatches() -> None
         "Operational Migration Phase 2 — Estimates, Invoices, and Payments",
         "Phase 4 Accounting Integration and Financial Close",
     }
+
+
+def test_v22_catalog_has_ordered_approved_dependency_chains() -> None:
+    expected = {
+        "Customer Migration": (
+            (
+                "Complete Historical Job Boundary",
+                "draft",
+                ("Operational Migration Phase 2 — Estimates, Invoices, and Payments",),
+            ),
+            (
+                "Multi-Property Customer Expansion",
+                "draft",
+                ("Complete Historical Job Boundary",),
+            ),
+            (
+                "Historical Notes Migration",
+                "draft",
+                ("Multi-Property Customer Expansion",),
+            ),
+            ("Attachment Migration", "draft", ("Historical Notes Migration",)),
+        ),
+        "Business Economics": (
+            (
+                "Accounting Integration",
+                "draft",
+                ("Phase 4 Accounting Integration and Financial Close",),
+            ),
+            ("Financial Close", "draft", ("Accounting Integration",)),
+            ("General Ledger Reconciliation", "draft", ("Financial Close",)),
+            ("Projection Publication", "draft", ("General Ledger Reconciliation",)),
+        ),
+        "Beacon": (
+            (
+                "BEA.6 Economics Signal Definitions",
+                "ready",
+                ("BEA.5 Business Economics Signal Integration",),
+            ),
+            (
+                "BEA.7 Signal Evaluation",
+                "draft",
+                ("BEA.6 Economics Signal Definitions",),
+            ),
+            ("BEA.8 Signal Lifecycle", "draft", ("BEA.7 Signal Evaluation",)),
+            ("BEA.9 Beacon Dashboard", "draft", ("BEA.8 Signal Lifecycle",)),
+        ),
+        "Operations": (
+            ("Scheduling Readiness", "ready", ()),
+            ("Dispatch Readiness", "draft", ("Scheduling Readiness",)),
+            ("Estimate Workspace", "draft", ("Dispatch Readiness",)),
+        ),
+    }
+    by_roadmap = {item["title"]: item for item in ROADMAPS}
+    populated = []
+    for roadmap_title, chain in expected.items():
+        milestones = {
+            item["title"]: item for item in by_roadmap[roadmap_title]["milestones"]
+        }
+        positions = []
+        for title, status, dependencies in chain:
+            item = milestones[title]
+            populated.append(item)
+            positions.append(
+                next(
+                    index
+                    for index, candidate in enumerate(
+                        by_roadmap[roadmap_title]["milestones"]
+                    )
+                    if candidate["title"] == title
+                )
+            )
+            assert item["status"] == status
+            assert item["approved"] is True
+            assert tuple(item["dependencies"]) == dependencies
+            assert any(
+                constraint.startswith("Estimated duration: ")
+                for constraint in item["constraints"]
+            )
+            assert any(
+                "explicit authenticated owner Start" in constraint
+                for constraint in item["constraints"]
+            )
+        assert positions == sorted(positions)
+        assert sum(item["status"] == "ready" for item in populated[-len(chain) :]) <= 1
+    assert len(populated) == 15
 
 
 @pytest.mark.asyncio

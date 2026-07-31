@@ -4,8 +4,10 @@ import asyncio
 from collections.abc import Mapping, Sequence
 from datetime import datetime, timezone
 from typing import Any
+from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import AsyncSessionFactory
 from app.platform.company.models import Company
@@ -59,6 +61,40 @@ def draft(
         "validation": ["Define milestone-specific validation before approval."],
         "deliverables": ["Owner-approved detailed milestone definition."],
         "evidence": ["Approved definition and dependency evidence."],
+    }
+
+
+def approved_milestone(
+    title: str,
+    objective: str,
+    branch: str,
+    dependencies: Sequence[str],
+    estimated_duration: str,
+    *,
+    ready: bool = False,
+) -> dict[str, Any]:
+    """Define approved roadmap work without granting execution authority."""
+    return {
+        "title": title,
+        "objective": objective,
+        "status": "ready" if ready else "draft",
+        "approved": True,
+        "branch": branch,
+        "authority": [
+            "Operate under milestone-level authority after an authenticated owner explicitly starts this milestone."
+        ],
+        "constraints": [
+            "Do not dispatch or execute without an explicit authenticated owner Start action.",
+            f"Estimated duration: {estimated_duration}.",
+        ],
+        "dependencies": list(dependencies),
+        "validation": [
+            "Run milestone-focused tests and applicable regression, typing, lint, and production-build checks."
+        ],
+        "deliverables": [f"Complete and validate {title}."],
+        "evidence": [
+            "Committed implementation, clean validation results, and durable completion evidence."
+        ],
     }
 
 
@@ -120,6 +156,34 @@ ROADMAPS: tuple[Mapping[str, Any], ...] = (
                 "customer-migration-workstream",
                 ["Owner Disposition Resolution"],
             ),
+            approved_milestone(
+                "Complete Historical Job Boundary",
+                "Complete the approved deterministic boundary for historical job migration without changing active migration execution.",
+                "customer-migration-workstream",
+                ["Operational Migration Phase 2 — Estimates, Invoices, and Payments"],
+                "5 engineering days",
+            ),
+            approved_milestone(
+                "Multi-Property Customer Expansion",
+                "Expand deterministic customer migration to approved multi-property relationships and reconciliation evidence.",
+                "customer-migration-workstream",
+                ["Complete Historical Job Boundary"],
+                "5 engineering days",
+            ),
+            approved_milestone(
+                "Historical Notes Migration",
+                "Migrate approved historical notes with deterministic ownership, ordering, and reconciliation.",
+                "customer-migration-workstream",
+                ["Multi-Property Customer Expansion"],
+                "4 engineering days",
+            ),
+            approved_milestone(
+                "Attachment Migration",
+                "Migrate approved historical attachments with bounded storage, integrity, and reconciliation controls.",
+                "customer-migration-workstream",
+                ["Historical Notes Migration"],
+                "5 engineering days",
+            ),
         ),
     },
     {
@@ -176,6 +240,34 @@ ROADMAPS: tuple[Mapping[str, Any], ...] = (
                 "business-economics-foundation",
                 ["Financial Integrity Readiness Gate for Beacon"],
             ),
+            approved_milestone(
+                "Accounting Integration",
+                "Complete the approved accounting integration boundary after the active Phase 4 work is reconciled.",
+                "business-economics-foundation",
+                ["Phase 4 Accounting Integration and Financial Close"],
+                "5 engineering days",
+            ),
+            approved_milestone(
+                "Financial Close",
+                "Establish the approved repeatable financial-close workflow on reconciled accounting facts.",
+                "business-economics-foundation",
+                ["Accounting Integration"],
+                "4 engineering days",
+            ),
+            approved_milestone(
+                "General Ledger Reconciliation",
+                "Reconcile authoritative economic facts and approved close outputs against the general ledger.",
+                "business-economics-foundation",
+                ["Financial Close"],
+                "4 engineering days",
+            ),
+            approved_milestone(
+                "Projection Publication",
+                "Publish approved projections from reconciled financial facts with versioned evidence.",
+                "business-economics-foundation",
+                ["General Ledger Reconciliation"],
+                "4 engineering days",
+            ),
         ),
     },
     {
@@ -208,6 +300,35 @@ ROADMAPS: tuple[Mapping[str, Any], ...] = (
                 "beacon-economics-signals",
                 ["Signal Evaluation and Lifecycle"],
             ),
+            approved_milestone(
+                "BEA.6 Economics Signal Definitions",
+                "Define the approved economics-backed Beacon signals and their authoritative inputs.",
+                "beacon-economics-signals",
+                ["BEA.5 Business Economics Signal Integration"],
+                "4 engineering days",
+                ready=True,
+            ),
+            approved_milestone(
+                "BEA.7 Signal Evaluation",
+                "Implement deterministic evaluation of approved Beacon signal definitions.",
+                "beacon-economics-signals",
+                ["BEA.6 Economics Signal Definitions"],
+                "5 engineering days",
+            ),
+            approved_milestone(
+                "BEA.8 Signal Lifecycle",
+                "Implement the approved acknowledgement, resolution, and retirement lifecycle for Beacon signals.",
+                "beacon-economics-signals",
+                ["BEA.7 Signal Evaluation"],
+                "4 engineering days",
+            ),
+            approved_milestone(
+                "BEA.9 Beacon Dashboard",
+                "Deliver the approved owner-facing Beacon dashboard over durable signal truth.",
+                "beacon-economics-signals",
+                ["BEA.8 Signal Lifecycle"],
+                "5 engineering days",
+            ),
         ),
     },
     {
@@ -239,6 +360,30 @@ ROADMAPS: tuple[Mapping[str, Any], ...] = (
                 ),
                 ("Payments", "Define the payment lifecycle milestone.", ("Invoicing",)),
             )
+        )
+        + (
+            approved_milestone(
+                "Scheduling Readiness",
+                "Establish the approved real-data scheduling readiness boundary and evidence.",
+                "customer-management-v1",
+                [],
+                "5 engineering days",
+                ready=True,
+            ),
+            approved_milestone(
+                "Dispatch Readiness",
+                "Establish the approved dispatch readiness boundary on validated scheduling truth.",
+                "customer-management-v1",
+                ["Scheduling Readiness"],
+                "4 engineering days",
+            ),
+            approved_milestone(
+                "Estimate Workspace",
+                "Deliver the approved estimate workspace on validated operational foundations.",
+                "customer-management-v1",
+                ["Dispatch Readiness"],
+                "5 engineering days",
+            ),
         ),
     },
     {
@@ -291,6 +436,59 @@ ROADMAPS: tuple[Mapping[str, Any], ...] = (
 )
 
 
+async def _add_milestone(
+    session: AsyncSession,
+    *,
+    company_id: UUID,
+    roadmap: EngineeringRoadmap,
+    workstream: str,
+    position: int,
+    definition: Mapping[str, Any],
+    now: datetime,
+) -> None:
+    status = definition["status"]
+    evidence = definition["evidence"]
+    milestone = EngineeringMilestone(
+        company_id=company_id,
+        roadmap_id=roadmap.id,
+        position=position,
+        title=definition["title"],
+        objective=definition["objective"],
+        owning_workstream=workstream,
+        owning_branch=definition["branch"],
+        authority=list(definition["authority"]),
+        constraints=list(definition["constraints"]),
+        dependencies=list(definition["dependencies"]),
+        validation=list(definition["validation"]),
+        deliverables=list(definition["deliverables"]),
+        stop_conditions=STANDARD_STOP,
+        expected_completion_evidence=list(evidence),
+        status=status,
+        definition_approved=definition["approved"],
+        requested_code_changes=definition.get("requested_code_changes", True),
+        external_evidence=evidence[0] if status == "externally_running" else None,
+        completed_at=now if status == "completed" else None,
+        reviewed_at=now if status == "completed" else None,
+        created_at=now,
+        updated_at=now,
+    )
+    session.add(milestone)
+    await session.flush()
+    session.add(
+        EngineeringMilestoneEvent(
+            company_id=company_id,
+            roadmap_id=roadmap.id,
+            milestone_id=milestone.id,
+            event_type="roadmap_initialized",
+            prior_status=None,
+            new_status=status,
+            actor_user_id=None,
+            reason="Repository and Preview truth reconciliation",
+            occurred_at=now,
+        )
+    )
+
+
 async def initialize(company_code: str = "ACP") -> tuple[int, int]:
     now = datetime.now(timezone.utc)
     async with AsyncSessionFactory() as session, session.begin():
@@ -330,6 +528,45 @@ async def initialize(company_code: str = "ACP") -> tuple[int, int]:
                         current.expected_head = definition["head"]
                         current.version += 1
                         current.updated_at = now
+                existing_titles = set(
+                    (
+                        await session.scalars(
+                            select(EngineeringMilestone.title).where(
+                                EngineeringMilestone.company_id == company.id,
+                                EngineeringMilestone.roadmap_id == current.id,
+                            )
+                        )
+                    ).all()
+                )
+                next_position = (
+                    await session.scalar(
+                        select(func.max(EngineeringMilestone.position)).where(
+                            EngineeringMilestone.company_id == company.id,
+                            EngineeringMilestone.roadmap_id == current.id,
+                        )
+                    )
+                    or 0
+                ) + 1
+                added = 0
+                for milestone_definition in definition["milestones"]:
+                    if milestone_definition["title"] in existing_titles:
+                        continue
+                    await _add_milestone(
+                        session,
+                        company_id=company.id,
+                        roadmap=current,
+                        workstream=definition["title"],
+                        position=next_position,
+                        definition=milestone_definition,
+                        now=now,
+                    )
+                    existing_titles.add(milestone_definition["title"])
+                    next_position += 1
+                    added += 1
+                if added:
+                    current.version += 1
+                    current.updated_at = now
+                    created_milestones += added
                 continue
             roadmap = EngineeringRoadmap(
                 company_id=company.id,
@@ -347,50 +584,14 @@ async def initialize(company_code: str = "ACP") -> tuple[int, int]:
             for position, milestone_definition in enumerate(
                 definition["milestones"], start=1
             ):
-                status = milestone_definition["status"]
-                evidence = milestone_definition["evidence"]
-                milestone = EngineeringMilestone(
+                await _add_milestone(
+                    session,
                     company_id=company.id,
-                    roadmap_id=roadmap.id,
+                    roadmap=roadmap,
+                    workstream=definition["title"],
                     position=position,
-                    title=milestone_definition["title"],
-                    objective=milestone_definition["objective"],
-                    owning_workstream=definition["title"],
-                    owning_branch=milestone_definition["branch"],
-                    authority=list(milestone_definition["authority"]),
-                    constraints=list(milestone_definition["constraints"]),
-                    dependencies=list(milestone_definition["dependencies"]),
-                    validation=list(milestone_definition["validation"]),
-                    deliverables=list(milestone_definition["deliverables"]),
-                    stop_conditions=STANDARD_STOP,
-                    expected_completion_evidence=list(evidence),
-                    status=status,
-                    definition_approved=milestone_definition["approved"],
-                    requested_code_changes=milestone_definition.get(
-                        "requested_code_changes", True
-                    ),
-                    external_evidence=(
-                        evidence[0] if status == "externally_running" else None
-                    ),
-                    completed_at=now if status == "completed" else None,
-                    reviewed_at=now if status == "completed" else None,
-                    created_at=now,
-                    updated_at=now,
-                )
-                session.add(milestone)
-                await session.flush()
-                session.add(
-                    EngineeringMilestoneEvent(
-                        company_id=company.id,
-                        roadmap_id=roadmap.id,
-                        milestone_id=milestone.id,
-                        event_type="roadmap_initialized",
-                        prior_status=None,
-                        new_status=status,
-                        actor_user_id=None,
-                        reason="Repository and Preview truth reconciliation",
-                        occurred_at=now,
-                    )
+                    definition=milestone_definition,
+                    now=now,
                 )
                 created_milestones += 1
         return created_roadmaps, created_milestones
