@@ -272,8 +272,11 @@ ROADMAPS: tuple[Mapping[str, Any], ...] = (
     },
     {
         "title": "Beacon",
-        "branch": "beacon-economics-signals",
-        "head": "b843f74dd594fe5ecdb17d97a468cedfc66dac44",
+        # Dispatch must target the repository registry's approved active branch.
+        # The Beacon workstream name remains durable milestone metadata; it is
+        # not an independently authorized execution branch.
+        "branch": "customer-management-v1",
+        "head": "eb63fe8ccbc936bcb38104d159bb3742bf967d31",
         "milestones": (
             completed(
                 "Beacon Signal Intelligence Engine / BEA.4", "beacon-economics-signals"
@@ -303,7 +306,7 @@ ROADMAPS: tuple[Mapping[str, Any], ...] = (
             approved_milestone(
                 "BEA.6 Economics Signal Definitions",
                 "Define the approved economics-backed Beacon signals and their authoritative inputs.",
-                "beacon-economics-signals",
+                "customer-management-v1",
                 ["BEA.5 Business Economics Signal Integration"],
                 "4 engineering days",
                 ready=True,
@@ -512,7 +515,7 @@ async def initialize(company_code: str = "ACP") -> tuple[int, int]:
         for definition in ROADMAPS:
             current = existing.get(definition["title"])
             if current is not None:
-                if current.title == "Mission Control":
+                if current.title in {"Mission Control", "Beacon"}:
                     dispatched = await session.scalar(
                         select(EngineeringMilestone.id).where(
                             EngineeringMilestone.company_id == company.id,
@@ -528,6 +531,20 @@ async def initialize(company_code: str = "ACP") -> tuple[int, int]:
                         current.expected_head = definition["head"]
                         current.version += 1
                         current.updated_at = now
+                if current.title == "Beacon":
+                    bea6 = await session.scalar(
+                        select(EngineeringMilestone).where(
+                            EngineeringMilestone.company_id == company.id,
+                            EngineeringMilestone.roadmap_id == current.id,
+                            EngineeringMilestone.title
+                            == "BEA.6 Economics Signal Definitions",
+                            EngineeringMilestone.command_id.is_(None),
+                        )
+                    )
+                    if bea6 is not None and bea6.owning_branch != definition["branch"]:
+                        bea6.owning_branch = definition["branch"]
+                        bea6.version += 1
+                        bea6.updated_at = now
                 existing_titles = set(
                     (
                         await session.scalars(

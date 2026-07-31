@@ -7,10 +7,6 @@ from uuid import uuid4
 import httpx
 import pytest
 import pytest_asyncio
-from fastapi import FastAPI
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-
 from app.core.config import settings
 from app.database.session import get_database_session
 from app.engineering_control.mobile.control import EngineeringWorkstreamControl
@@ -30,6 +26,10 @@ from app.platform.permissions.codes import (
 )
 from app.platform.permissions.dependencies import get_authorization_context
 from app.worker_control.models import EngineeringWorker
+from fastapi import FastAPI
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
 from tests.engineering_control.review.test_engineering_review import completed_command
 from tests.engineering_control.test_engineering_command_service import (
     ServiceFixture,
@@ -536,6 +536,17 @@ def test_initial_roadmap_catalog_is_truthful_and_never_auto_dispatches() -> None
             "acp-enterprise"
         ).approved_active_branch
     )
+    beacon = by_title["Beacon"]
+    bea6 = next(
+        item
+        for item in beacon["milestones"]
+        if item["title"] == "BEA.6 Economics Signal Definitions"
+    )
+    approved_branch = engineering_repository_registry.resolve(
+        "acp-enterprise"
+    ).approved_active_branch
+    assert beacon["branch"] == approved_branch
+    assert bea6["branch"] == approved_branch
     assert {
         item["title"]
         for item in all_milestones
