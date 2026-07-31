@@ -7,6 +7,7 @@ from app.platform.permissions.codes import (
     AnalyticsPermission,
     BeaconPermission,
     CustomerPermission,
+    EconomicsPermission,
     EngineeringCommandPermission,
     EngineeringExecutionPermission,
     EngineeringRepositoryOperationPermission,
@@ -117,6 +118,17 @@ ANALYTICS_DEFINITIONS = tuple(
     for code in sorted(AnalyticsPermission.ALL)
 )
 
+ECONOMICS_DEFINITIONS = tuple(
+    PermissionDefinition(
+        code=code,
+        name="Company Economics Read",
+        resource="business_economics",
+        action="read",
+        scope=PermissionScope.COMPANY,
+    )
+    for code in sorted(EconomicsPermission.ALL)
+)
+
 BEACON_DEFINITIONS = tuple(
     PermissionDefinition(
         code=code,
@@ -209,6 +221,7 @@ permission_catalog = PermissionCatalog(
     ADMINISTRATION_DEFINITIONS
     + CUSTOMER_DEFINITIONS
     + ANALYTICS_DEFINITIONS
+    + ECONOMICS_DEFINITIONS
     + BEACON_DEFINITIONS
     + SCHEDULING_DEFINITIONS
     + JOB_DEFINITIONS

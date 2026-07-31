@@ -33,6 +33,12 @@ class AnalyticsPermission:
     ALL = frozenset({READ})
 
 
+class EconomicsPermission:
+    READ = "COMPANY_ECONOMICS_READ"
+
+    ALL = frozenset({READ})
+
+
 class BeaconPermission:
     REVIEW = "COMPANY_BEACON_REVIEW"
 

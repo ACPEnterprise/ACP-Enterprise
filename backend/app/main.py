@@ -12,6 +12,7 @@ from app.beacon.router import router as beacon_router
 from app.core.config import settings
 from app.customers.router import router as customers_router
 from app.database.session import AsyncSessionFactory, engine
+from app.economics.router import router as economics_router
 from app.engineering_control.mobile.router import router as mobile_engineering_router
 from app.engineering_control.repository_authorization.router import (
     router as repository_authorizations_router,
@@ -96,6 +97,7 @@ app.add_middleware(SecurityHeadersMiddleware, configuration=settings)
 app.include_router(health_router)
 app.include_router(events_router)
 app.include_router(analytics_router)
+app.include_router(economics_router)
 app.include_router(beacon_router)
 app.include_router(customers_router)
 app.include_router(auth_router)
