@@ -126,6 +126,21 @@ def reviewed_output():
     return review_adapter_output(output, source_system="synthetic")
 
 
+def test_duplicate_policy_matches_operational_name_gate() -> None:
+    reviewed = reviewed_output()
+    first = reviewed.aggregates[0]
+    second = replace(
+        first,
+        source_identity="second-source",
+        source_identity_sha256=digest("second-source"),
+    )
+    members = CustomerPilotSelectionService().policy.duplicate_members((first, second))
+    assert members == {
+        first.source_identity_sha256,
+        second.source_identity_sha256,
+    }
+
+
 def counts(**changes: int) -> OperationalCounts:
     values = {
         "customers": 0,

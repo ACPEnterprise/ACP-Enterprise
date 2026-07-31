@@ -78,6 +78,9 @@ class CustomerAdapterImportPolicy:
         signals: dict[str, dict[str, set[str]]] = defaultdict(lambda: defaultdict(set))
         for aggregate in aggregates:
             identity = aggregate.source_identity_sha256
+            signals["name"][normalize_search_text(aggregate.customer.display_name)].add(
+                identity
+            )
             contact = aggregate.contact
             if contact is not None:
                 if contact.email:
