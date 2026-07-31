@@ -119,6 +119,45 @@ export interface MobileWorkstreamSummary {
   repository_clean: boolean | null;
   owner_attention_required: boolean;
   updated_at: string;
+  pipeline_status: MobileWorkstreamPipelineStatus;
+  desired_state: "active" | "paused" | "cancelled";
+  control_pending: boolean;
+  available_actions: readonly MobileWorkstreamAction[];
+}
+
+export type MobileWorkstreamPipelineStatus =
+  | "queued"
+  | "running"
+  | "waiting_for_owner"
+  | "validating"
+  | "deploying_preview"
+  | "completed"
+  | "failed"
+  | "cancelled";
+
+export type MobileWorkstreamAction =
+  | "start"
+  | "pause"
+  | "resume"
+  | "cancel"
+  | "refresh";
+
+export interface MobileWorkstreamDetail extends MobileWorkstreamSummary {
+  owner_instruction: string;
+  requested_code_changes: boolean;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+  timeline: readonly { event: string; occurred_at: string }[];
+}
+
+export interface MobileWorkstreamActionResult {
+  command_id: string;
+  action: MobileWorkstreamAction;
+  desired_state: "active" | "paused" | "cancelled";
+  accepted: boolean;
+  message: string;
+  updated_at: string;
 }
 
 export interface MobileWorkstreamPage {

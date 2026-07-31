@@ -46,6 +46,22 @@ export function MobileEngineeringListPage() {
         </Alert>
       )}
 
+      {query.data && query.data.items.length > 0 && (
+        <section className="grid grid-cols-2 gap-ui-3 sm:grid-cols-4" aria-label="Engineering dashboard summary">
+          {[
+            ["Active", query.data.items.filter((item) => !["completed", "failed", "cancelled"].includes(item.pipeline_status)).length],
+            ["Running", query.data.items.filter((item) => item.pipeline_status === "running").length],
+            ["Owner attention", query.data.items.filter((item) => item.owner_attention_required).length],
+            ["Completed", query.data.items.filter((item) => item.pipeline_status === "completed").length],
+          ].map(([label, value]) => (
+            <div key={label} className="rounded-xl border border-stroke bg-surface p-ui-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-content-muted">{label}</p>
+              <p className="mt-ui-1 text-2xl font-bold">{value}</p>
+            </div>
+          ))}
+        </section>
+      )}
+
       <section aria-label="Engineering workstreams">
         {query.isLoading && (
           <div className="flex min-h-48 items-center justify-center">
@@ -104,9 +120,7 @@ export function MobileEngineeringListPage() {
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-ui-2">
-                    <Badge>
-                      {mobileEngineeringLabel(workstream.lifecycle_state)}
-                    </Badge>
+                    <Badge>{mobileEngineeringLabel(workstream.pipeline_status)}</Badge>
                     {workstream.owner_attention_required && (
                       <Badge>Owner attention</Badge>
                     )}
@@ -115,6 +129,9 @@ export function MobileEngineeringListPage() {
                 <p className="mt-ui-3 text-sm">
                   {workstream.progress_summary}
                 </p>
+                {workstream.control_pending && (
+                  <p className="mt-ui-2 text-xs font-semibold text-amber-300">Owner control request awaiting worker acknowledgement</p>
+                )}
                 <dl className="mt-ui-4 grid min-w-0 gap-ui-3 text-sm sm:grid-cols-2">
                   <div>
                     <dt className="text-content-muted">Next safe action</dt>

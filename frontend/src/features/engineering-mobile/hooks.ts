@@ -6,6 +6,7 @@ import type {
   MobileReviewApproval,
   MobileReviewCancellation,
   MobileReviewQuery,
+  MobileWorkstreamAction,
 } from "./types";
 
 export const mobileEngineeringKeys = {
@@ -19,6 +20,8 @@ export const mobileEngineeringKeys = {
     ["engineering-mobile", "detail", reviewId] as const,
   status: (reviewId: string) =>
     ["engineering-mobile", "status", reviewId] as const,
+  workstream: (commandId: string) =>
+    ["engineering-mobile", "workstream", commandId] as const,
 };
 
 export function useMobileWorkstreams(query: MobileReviewQuery) {
@@ -26,6 +29,30 @@ export function useMobileWorkstreams(query: MobileReviewQuery) {
     queryKey: mobileEngineeringKeys.workstreams(query),
     queryFn: () => mobileApi.listMobileWorkstreams(query),
     retry: shouldRetryApiQuery,
+  });
+}
+
+export function useMobileWorkstream(commandId: string | undefined) {
+  return useQuery({
+    queryKey: mobileEngineeringKeys.workstream(commandId ?? ""),
+    queryFn: () => mobileApi.getMobileWorkstream(commandId as string),
+    enabled: Boolean(commandId),
+    retry: shouldRetryApiQuery,
+  });
+}
+
+export function useControlMobileWorkstream(commandId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ action, reason }: { action: MobileWorkstreamAction; reason?: string }) =>
+      mobileApi.controlMobileWorkstream(commandId, action, reason),
+    retry: false,
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: mobileEngineeringKeys.workstream(commandId) }),
+        queryClient.invalidateQueries({ queryKey: mobileEngineeringKeys.all }),
+      ]);
+    },
   });
 }
 

@@ -69,6 +69,10 @@ const workstream: MobileWorkstreamSummary = {
   repository_clean: null,
   owner_attention_required: true,
   updated_at: "2026-07-26T12:00:00Z",
+  pipeline_status: "waiting_for_owner",
+  desired_state: "active",
+  control_pending: false,
+  available_actions: ["pause", "refresh", "cancel"],
 };
 
 const disconnected = {
@@ -113,6 +117,7 @@ beforeEach(() => {
     isError: false,
     data: review,
   } as never);
+  vi.mocked(hooks.useControlMobileWorkstream).mockReturnValue(mutation());
 });
 
 afterEach(cleanup);
@@ -177,7 +182,7 @@ describe("mobile Engineering Control", () => {
     expect(
       screen.getByText(/No active authenticated worker session/i),
     ).toBeInTheDocument();
-    expect(screen.getByText("Owner attention")).toBeInTheDocument();
+    expect(screen.getAllByText("Owner attention").length).toBeGreaterThan(0);
     expect(screen.getByText("Review Execution Result")).toBeInTheDocument();
     expect(screen.getByText("worker-id")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Next page" }));
@@ -187,106 +192,28 @@ describe("mobile Engineering Control", () => {
     });
   });
 
-  it("submits exact reviewed evidence only after deliberate confirmation", async () => {
-    const approve = vi.fn();
-    vi.mocked(hooks.useMobileReview).mockReturnValue({
+  it("shows the pipeline and confirms owner control actions", async () => {
+    const mutate = vi.fn();
+    vi.mocked(hooks.useMobileWorkstream).mockReturnValue({
       isLoading: false,
-      data: review,
+      data: {
+        ...workstream,
+        owner_instruction: review.owner_instruction,
+        requested_code_changes: true,
+        created_at: review.created_at,
+        started_at: "2026-07-26T11:00:00Z",
+        finished_at: null,
+        timeline: [{ event: "execution_started", occurred_at: "2026-07-26T11:00:00Z" }],
+      },
     } as never);
-    vi.mocked(hooks.useApproveMobileReview).mockReturnValue(mutation(approve));
+    vi.mocked(hooks.useControlMobileWorkstream).mockReturnValue(mutation(mutate));
     renderDetail();
 
     expect(screen.getByText(review.owner_instruction)).toBeInTheDocument();
-    await userEvent.click(
-      screen.getByRole("button", { name: "Approve command" }),
-    );
-    expect(
-      screen.getByRole("dialog", { name: "Approve this command?" }),
-    ).toBeInTheDocument();
-    await userEvent.click(
-      screen.getAllByRole("button", { name: "Approve command" })[1],
-    );
-
-    expect(approve).toHaveBeenCalledWith(
-      {
-        expected_version: review.version,
-        instruction_digest: review.instruction_digest,
-        request_digest: review.request_digest,
-        repository_key: review.repository_key,
-        expected_branch: review.expected_branch,
-        expected_head: review.expected_head,
-        requested_code_changes: review.requested_code_changes,
-      },
-      expect.any(Object),
-    );
-  });
-
-  it("requires re-review after stale approval and never retries automatically", async () => {
-    const approve = vi.fn((_input, options) =>
-      (options as { onError: () => void }).onError(),
-    );
-    vi.mocked(hooks.useMobileReview).mockReturnValue({
-      isLoading: false,
-      data: review,
-    } as never);
-    vi.mocked(hooks.useApproveMobileReview).mockReturnValue(mutation(approve));
-    renderDetail();
-
-    await userEvent.click(
-      screen.getByRole("button", { name: "Approve command" }),
-    );
-    await userEvent.click(
-      screen.getAllByRole("button", { name: "Approve command" })[1],
-    );
-    expect(
-      await screen.findByText(/changed or its evidence did not match/i),
-    ).toBeInTheDocument();
-    expect(approve).toHaveBeenCalledOnce();
-  });
-
-  it("confirms cancellation and keeps unsupported rejection unavailable", async () => {
-    const cancel = vi.fn();
-    vi.mocked(hooks.useMobileReview).mockReturnValue({
-      isLoading: false,
-      data: review,
-    } as never);
-    vi.mocked(hooks.useCancelMobileReview).mockReturnValue(mutation(cancel));
-    renderDetail();
-
-    expect(screen.getByText("Rejection is not available yet")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /reject/i })).not.toBeInTheDocument();
-    await userEvent.selectOptions(
-      screen.getByLabelText("Cancellation reason"),
-      "scope_changed",
-    );
-    await userEvent.click(
-      screen.getByRole("button", { name: "Cancel command" }),
-    );
-    await userEvent.click(
-      screen.getAllByRole("button", { name: "Cancel command" })[1],
-    );
-    expect(cancel).toHaveBeenCalledWith(
-      { expected_version: review.version, reason_code: "scope_changed" },
-      expect.any(Object),
-    );
-  });
-
-  it("hides lifecycle mutations when the backend marks them unavailable", () => {
-    vi.mocked(hooks.useMobileReview).mockReturnValue({
-      isLoading: false,
-      data: {
-        ...review,
-        approval_state: "expired",
-        can_approve: false,
-        can_cancel: false,
-      },
-    } as never);
-    renderDetail();
-    expect(
-      screen.queryByRole("button", { name: "Approve command" }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: "Cancel command" }),
-    ).not.toBeInTheDocument();
+    expect(screen.getByRole("listitem", { current: "step" })).toHaveTextContent("Waiting For Owner");
+    await userEvent.click(screen.getByRole("button", { name: "Pause" }));
+    expect(screen.getByRole("dialog", { name: "Pause this workstream?" })).toBeInTheDocument();
+    await userEvent.click(screen.getAllByRole("button", { name: "Pause" })[1]);
+    expect(mutate).toHaveBeenCalledWith({ action: "pause" }, expect.any(Object));
   });
 });

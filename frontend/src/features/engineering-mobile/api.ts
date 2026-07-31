@@ -7,6 +7,9 @@ import type {
   MobileCommandStatus,
   MobileOwnerReviewPage,
   MobileWorkstreamPage,
+  MobileWorkstreamDetail,
+  MobileWorkstreamAction,
+  MobileWorkstreamActionResult,
 } from "./types";
 
 export const MOBILE_ENGINEERING_PATH = "/api/v1/engineering/mobile/reviews";
@@ -26,6 +29,14 @@ export async function listMobileWorkstreams(
       },
     })
   ).data;
+}
+
+export async function getMobileWorkstream(commandId: string): Promise<MobileWorkstreamDetail> {
+  return (await apiClient.get<MobileWorkstreamDetail>(`${MOBILE_WORKSTREAMS_PATH}/${commandId}`)).data;
+}
+
+export async function controlMobileWorkstream(commandId: string, action: MobileWorkstreamAction, reason?: string): Promise<MobileWorkstreamActionResult> {
+  return (await apiClient.post<MobileWorkstreamActionResult>(`${MOBILE_WORKSTREAMS_PATH}/${commandId}/actions`, { action, reason })).data;
 }
 
 export async function listMobileReviews(
