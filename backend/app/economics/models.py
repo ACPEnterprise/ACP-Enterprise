@@ -49,6 +49,24 @@ class BusinessFactRecord(Base):
             "period_end >= period_start",
             name="ck_business_economics_facts_period",
         ),
+        CheckConstraint(
+            "accounting_basis IN ('accrual', 'cash', 'operational')",
+            name="ck_business_economics_facts_accounting_basis",
+        ),
+        CheckConstraint(
+            "correction_kind IN ('original', 'reversal', 'supersession', 'effective_date')",
+            name="ck_business_economics_facts_correction_kind",
+        ),
+        CheckConstraint(
+            "(correction_kind = 'original' AND corrects_fact_id IS NULL) OR "
+            "(correction_kind <> 'original' AND corrects_fact_id IS NOT NULL)",
+            name="ck_business_economics_facts_correction_reference",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "input_digest",
+            name="uq_business_economics_facts_input_digest",
+        ),
         UniqueConstraint(
             "company_id",
             "subject_type",
@@ -99,6 +117,16 @@ class BusinessFactRecord(Base):
     period_start: Mapped[date] = mapped_column(Date, nullable=False)
     period_end: Mapped[date] = mapped_column(Date, nullable=False)
     measurement_method: Mapped[str] = mapped_column(String(80), nullable=False)
+    accounting_basis: Mapped[str] = mapped_column(String(16), nullable=False)
+    correction_kind: Mapped[str] = mapped_column(String(20), nullable=False)
+    corrects_fact_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("business_economics_facts.id", ondelete="RESTRICT"),
+    )
+    input_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    effective_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     recorded_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
@@ -354,6 +382,11 @@ class ProfitMeasurementRecord(Base):
             "version",
             name="uq_business_economics_profit_measurements_version",
         ),
+        UniqueConstraint(
+            "company_id",
+            "input_digest",
+            name="uq_business_economics_profit_measurements_input_digest",
+        ),
         Index(
             "ix_business_economics_profit_measurements_latest",
             "company_id",
@@ -394,8 +427,49 @@ class ProfitMeasurementRecord(Base):
     )
     input_fact_ids: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
     input_allocation_ids: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    input_digest: Mapped[str] = mapped_column(String(64), nullable=False)
     engine_version: Mapped[str] = mapped_column(String(64), nullable=False)
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     measured_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
     )
+
+
+class RecalculationScopeRecord(Base):
+    __tablename__ = "business_economics_recalculation_scopes"
+    __table_args__ = (
+        CheckConstraint(
+            "scope_type IN ('job', 'branch', 'company')",
+            name="ck_business_economics_recalculation_scope_type",
+        ),
+        Index(
+            "ix_business_economics_recalculation_pending",
+            "company_id",
+            "processed_at",
+            "requested_at",
+            "id",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    branch_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    scope_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    scope_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    period_start: Mapped[date] = mapped_column(Date, nullable=False)
+    period_end: Mapped[date] = mapped_column(Date, nullable=False)
+    reason_fact_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("business_economics_facts.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    requested_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

@@ -1,3 +1,6 @@
+import hashlib
+import json
+import string
 from dataclasses import asdict
 from uuid import UUID
 
@@ -23,7 +26,9 @@ from app.economics.models import (
     EvidenceReferenceRecord,
     FactEvidenceRecord,
     ProfitMeasurementRecord,
+    RecalculationScopeRecord,
 )
+from app.events.models import BusinessEvent
 
 
 class EconomicsLedgerError(ValueError):
@@ -50,6 +55,55 @@ def _evidence_snapshot(reference: EvidenceReference) -> dict[str, object]:
     }
 
 
+def _command_digest(command: RecordBusinessFact) -> str:
+    content = {
+        "branch_id": str(command.branch_id) if command.branch_id else None,
+        "subject_type": command.subject_type,
+        "subject_id": str(command.subject_id),
+        "category": command.category.value,
+        "fact_key": command.fact_key,
+        "amount_minor": command.amount_minor,
+        "currency": command.currency.upper(),
+        "confidence_status": command.confidence.status.value,
+        "confidence_percentage": command.confidence.percentage,
+        "evidence": sorted(item.content_digest for item in command.evidence),
+        "occurred_at": command.occurred_at.isoformat(),
+        "period_start": command.period_start.isoformat(),
+        "period_end": command.period_end.isoformat(),
+        "measurement_method": command.measurement_method,
+        "accounting_basis": command.accounting_basis,
+        "correction_kind": command.correction_kind,
+        "corrects_fact_id": (
+            str(command.corrects_fact_id) if command.corrects_fact_id else None
+        ),
+        "effective_at": (
+            command.effective_at.isoformat() if command.effective_at else None
+        ),
+    }
+    canonical = json.dumps(content, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode()).hexdigest()
+
+
+def _measurement_digest(company_id: UUID, measurement: ProfitMeasurement) -> str:
+    canonical = json.dumps(
+        {
+            "company_id": str(company_id),
+            "subject_type": measurement.subject_type,
+            "subject_id": str(measurement.subject_id),
+            "period_start": measurement.period_start.isoformat(),
+            "period_end": measurement.period_end.isoformat(),
+            "input_fact_ids": sorted(str(item) for item in measurement.input_fact_ids),
+            "input_allocation_ids": sorted(
+                str(item) for item in measurement.input_allocation_ids
+            ),
+            "engine_version": measurement.engine_version,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(canonical.encode()).hexdigest()
+
+
 class EconomicsLedgerService:
     """Stages immutable economics ledger records in the caller's transaction."""
 
@@ -57,8 +111,20 @@ class EconomicsLedgerService:
     async def _record_evidence(
         session: AsyncSession, company_id: UUID, item: EvidenceInput
     ) -> EvidenceReferenceRecord:
-        if len(item.content_digest) != 64:
+        if len(item.content_digest) != 64 or any(
+            character not in string.hexdigits for character in item.content_digest
+        ):
             raise EconomicsLedgerError("evidence content digest must be SHA-256")
+        if item.business_event_id is not None:
+            event_company_id = await session.scalar(
+                select(BusinessEvent.company_id).where(
+                    BusinessEvent.id == item.business_event_id
+                )
+            )
+            if event_company_id != company_id:
+                raise EconomicsLedgerError(
+                    "Business Event evidence does not match the economics Company"
+                )
         existing = await session.scalar(
             select(EvidenceReferenceRecord).where(
                 EvidenceReferenceRecord.company_id == company_id,
@@ -106,6 +172,75 @@ class EconomicsLedgerService:
             raise EconomicsLedgerError("a known fact requires evidence")
         if command.period_end < command.period_start:
             raise EconomicsLedgerError("fact period is invalid")
+        if command.accounting_basis not in {"accrual", "cash", "operational"}:
+            raise EconomicsLedgerError("accounting basis is invalid")
+        if len(command.currency) != 3 or not command.currency.isalpha():
+            raise EconomicsLedgerError("currency must be an ISO 4217 alpha code")
+        if command.confidence.status.value != "unknown" and not any(
+            item.business_event_id is not None for item in command.evidence
+        ):
+            raise EconomicsLedgerError("a known fact requires Business Event linkage")
+        if command.correction_kind not in {
+            "original",
+            "reversal",
+            "supersession",
+            "effective_date",
+        }:
+            raise EconomicsLedgerError("correction kind is invalid")
+        if (command.correction_kind == "original") != (
+            command.corrects_fact_id is None
+        ):
+            raise EconomicsLedgerError("correction reference is invalid")
+        corrected: BusinessFactRecord | None = None
+        if command.corrects_fact_id is not None:
+            corrected = await session.scalar(
+                select(BusinessFactRecord).where(
+                    BusinessFactRecord.company_id == company_id,
+                    BusinessFactRecord.id == command.corrects_fact_id,
+                )
+            )
+            if corrected is None:
+                raise EconomicsLedgerError("corrected fact does not exist")
+            if (
+                corrected.subject_type != command.subject_type
+                or corrected.subject_id != command.subject_id
+                or corrected.category != command.category.value
+                or corrected.fact_key != command.fact_key
+                or corrected.currency != command.currency.upper()
+            ):
+                raise EconomicsLedgerError("correction must preserve fact identity")
+            if command.correction_kind == "reversal" and command.amount_minor != -(
+                corrected.amount_minor or 0
+            ):
+                raise EconomicsLedgerError("reversal must negate the corrected fact")
+            if command.correction_kind == "effective_date" and (
+                corrected.period_start == command.period_start
+                and corrected.period_end == command.period_end
+            ):
+                raise EconomicsLedgerError(
+                    "effective-date correction must change the fact period"
+                )
+        input_digest = _command_digest(command)
+        existing_fact = await session.scalar(
+            select(BusinessFactRecord).where(
+                BusinessFactRecord.company_id == company_id,
+                BusinessFactRecord.input_digest == input_digest,
+            )
+        )
+        if existing_fact is not None:
+            return existing_fact
+        if command.corrects_fact_id is not None:
+            prior_correction = await session.scalar(
+                select(BusinessFactRecord.id).where(
+                    BusinessFactRecord.company_id == company_id,
+                    BusinessFactRecord.corrects_fact_id == command.corrects_fact_id,
+                    BusinessFactRecord.correction_kind == command.correction_kind,
+                )
+            )
+            if prior_correction is not None:
+                raise EconomicsLedgerError(
+                    "fact already has a different correction of this kind"
+                )
         version = (
             int(
                 await session.scalar(
@@ -160,6 +295,11 @@ class EconomicsLedgerService:
             measurement_method=_required(
                 command.measurement_method, "measurement method"
             ),
+            accounting_basis=command.accounting_basis,
+            correction_kind=command.correction_kind,
+            corrects_fact_id=command.corrects_fact_id,
+            input_digest=input_digest,
+            effective_at=command.effective_at or command.occurred_at,
             version=version,
         )
         session.add(fact)
@@ -169,6 +309,51 @@ class EconomicsLedgerService:
                 company_id=company_id, fact_id=fact.id, evidence_id=item.id
             )
             for item in evidence
+        )
+        if corrected is not None and (
+            corrected.period_start != command.period_start
+            or corrected.period_end != command.period_end
+        ):
+            corrected_scopes = [
+                (corrected.subject_type, corrected.subject_id, corrected.branch_id)
+            ]
+            if corrected.branch_id is not None and corrected.subject_type != "branch":
+                corrected_scopes.append(
+                    ("branch", corrected.branch_id, corrected.branch_id)
+                )
+            if corrected.subject_type != "company":
+                corrected_scopes.append(("company", company_id, corrected.branch_id))
+            session.add_all(
+                RecalculationScopeRecord(
+                    company_id=company_id,
+                    branch_id=branch_id,
+                    scope_type=scope_type,
+                    scope_id=scope_id,
+                    period_start=corrected.period_start,
+                    period_end=corrected.period_end,
+                    reason_fact_id=fact.id,
+                )
+                for scope_type, scope_id, branch_id in corrected_scopes
+                if scope_type in {"job", "branch", "company"}
+            )
+        await session.flush()
+        scopes = [(command.subject_type, command.subject_id, command.branch_id)]
+        if command.branch_id is not None and command.subject_type != "branch":
+            scopes.append(("branch", command.branch_id, command.branch_id))
+        if command.subject_type != "company":
+            scopes.append(("company", company_id, command.branch_id))
+        session.add_all(
+            RecalculationScopeRecord(
+                company_id=company_id,
+                branch_id=branch_id,
+                scope_type=scope_type,
+                scope_id=scope_id,
+                period_start=command.period_start,
+                period_end=command.period_end,
+                reason_fact_id=fact.id,
+            )
+            for scope_type, scope_id, branch_id in scopes
+            if scope_type in {"job", "branch", "company"}
         )
         await session.flush()
         return fact
@@ -277,6 +462,15 @@ class EconomicsLedgerService:
         branch_id: UUID | None,
         measurement: ProfitMeasurement,
     ) -> ProfitMeasurementRecord:
+        input_digest = _measurement_digest(company_id, measurement)
+        existing = await session.scalar(
+            select(ProfitMeasurementRecord).where(
+                ProfitMeasurementRecord.company_id == company_id,
+                ProfitMeasurementRecord.input_digest == input_digest,
+            )
+        )
+        if existing is not None:
+            return existing
         version = (
             int(
                 await session.scalar(
@@ -322,12 +516,52 @@ class EconomicsLedgerService:
             input_allocation_ids=[
                 str(item) for item in measurement.input_allocation_ids
             ],
+            input_digest=input_digest,
             engine_version=measurement.engine_version,
             version=version,
         )
         session.add(record)
         await session.flush()
         return record
+
+    @classmethod
+    async def record_correction(
+        cls,
+        session: AsyncSession,
+        company_id: UUID,
+        command: RecordBusinessFact,
+    ) -> BusinessFactRecord:
+        if command.correction_kind == "original":
+            raise EconomicsLedgerError("correction command must identify its kind")
+        return await cls.record_fact(session, company_id, command)
+
+    @classmethod
+    async def record_reversal(
+        cls, session: AsyncSession, company_id: UUID, command: RecordBusinessFact
+    ) -> BusinessFactRecord:
+        if command.correction_kind != "reversal":
+            raise EconomicsLedgerError("reversal command must use reversal kind")
+        return await cls.record_correction(session, company_id, command)
+
+    @classmethod
+    async def record_supersession(
+        cls, session: AsyncSession, company_id: UUID, command: RecordBusinessFact
+    ) -> BusinessFactRecord:
+        if command.correction_kind != "supersession":
+            raise EconomicsLedgerError(
+                "supersession command must use supersession kind"
+            )
+        return await cls.record_correction(session, company_id, command)
+
+    @classmethod
+    async def record_effective_date_correction(
+        cls, session: AsyncSession, company_id: UUID, command: RecordBusinessFact
+    ) -> BusinessFactRecord:
+        if command.correction_kind != "effective_date":
+            raise EconomicsLedgerError(
+                "effective-date command must use effective_date kind"
+            )
+        return await cls.record_correction(session, company_id, command)
 
 
 economics_ledger_service = EconomicsLedgerService()

@@ -33,6 +33,10 @@ class RecordBusinessFact:
     period_start: date
     period_end: date
     measurement_method: str
+    accounting_basis: str = "accrual"
+    correction_kind: str = "original"
+    corrects_fact_id: UUID | None = None
+    effective_at: datetime | None = None
 
 
 @dataclass(frozen=True, slots=True)
