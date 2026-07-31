@@ -123,17 +123,30 @@ export interface MobileWorkstreamSummary {
   desired_state: "active" | "paused" | "cancelled";
   control_pending: boolean;
   available_actions: readonly MobileWorkstreamAction[];
+  runtime_state: MobileWorkstreamRuntimeState;
+  runtime_version: number | null;
+  acknowledged_action: string | null;
+  acknowledged_at: string | null;
+  acknowledgement_expires_at: string | null;
+  worker_health: string | null;
+  progress_percent: number | null;
+  current_activity: string | null;
 }
+
+export type MobileWorkstreamRuntimeState = MobileWorkstreamPipelineStatus;
 
 export type MobileWorkstreamPipelineStatus =
   | "queued"
+  | "acknowledged"
   | "running"
+  | "paused"
   | "waiting_for_owner"
   | "validating"
   | "deploying_preview"
   | "completed"
   | "failed"
-  | "cancelled";
+  | "cancelled"
+  | "recovering";
 
 export type MobileWorkstreamAction =
   | "start"

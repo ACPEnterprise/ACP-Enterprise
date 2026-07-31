@@ -73,6 +73,14 @@ const workstream: MobileWorkstreamSummary = {
   desired_state: "active",
   control_pending: false,
   available_actions: ["pause", "refresh", "cancel"],
+  runtime_state: "waiting_for_owner",
+  runtime_version: null,
+  acknowledged_action: null,
+  acknowledged_at: null,
+  acknowledgement_expires_at: null,
+  worker_health: null,
+  progress_percent: null,
+  current_activity: null,
 };
 
 const disconnected = {
@@ -204,13 +212,24 @@ describe("mobile Engineering Control", () => {
         started_at: "2026-07-26T11:00:00Z",
         finished_at: null,
         timeline: [{ event: "execution_started", occurred_at: "2026-07-26T11:00:00Z" }],
+        runtime_state: "running",
+        pipeline_status: "running",
+        runtime_version: 3,
+        acknowledged_action: "start",
+        acknowledged_at: "2026-07-26T10:59:00Z",
+        acknowledgement_expires_at: "2026-07-26T11:04:00Z",
+        worker_health: "healthy",
+        progress_percent: 42,
+        current_activity: "Running validation",
       },
     } as never);
     vi.mocked(hooks.useControlMobileWorkstream).mockReturnValue(mutation(mutate));
     renderDetail();
 
     expect(screen.getByText(review.owner_instruction)).toBeInTheDocument();
-    expect(screen.getByRole("listitem", { current: "step" })).toHaveTextContent("Waiting For Owner");
+    expect(screen.getByText("42% · Running validation")).toBeInTheDocument();
+    expect(screen.getByText("Healthy")).toBeInTheDocument();
+    expect(screen.getByRole("listitem", { current: "step" })).toHaveTextContent("Running");
     await userEvent.click(screen.getByRole("button", { name: "Pause" }));
     expect(screen.getByRole("dialog", { name: "Pause this workstream?" })).toBeInTheDocument();
     await userEvent.click(screen.getAllByRole("button", { name: "Pause" })[1]);

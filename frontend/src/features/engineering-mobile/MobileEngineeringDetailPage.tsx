@@ -7,7 +7,7 @@ import { useControlMobileWorkstream, useMobileWorkstream } from "./hooks";
 import { mobileEngineeringLabel, mobileEngineeringTimestamp, shortExpectedHead } from "./presentation";
 import type { MobileWorkstreamAction } from "./types";
 
-const pipeline = ["queued", "running", "waiting_for_owner", "validating", "deploying_preview", "completed"] as const;
+const pipeline = ["queued", "acknowledged", "running", "paused", "waiting_for_owner", "validating", "deploying_preview", "completed"] as const;
 
 export function MobileEngineeringDetailPage() {
   const { commandId } = useParams();
@@ -42,10 +42,11 @@ export function MobileEngineeringDetailPage() {
     </Card>
 
     {workstream.control_pending && <Alert variant="warning" title="Control request pending">The owner intent is saved. Observed worker state remains authoritative until acknowledgement.</Alert>}
+    {workstream.runtime_state === "recovering" && <Alert variant="warning" title="Worker recovering">The last acknowledgement expired. The reconnected worker must acknowledge the current owner request before execution continues.</Alert>}
     {control.isError && <Alert variant="danger" announcement="assertive" title="Action not accepted">{getOperatorApiError(control.error, "Workstream action").message}</Alert>}
 
     <div className="grid gap-ui-4 lg:grid-cols-2">
-      <Card className="min-w-0 p-ui-4"><h2 className="font-bold">Current work</h2><p className="mt-ui-3 whitespace-pre-wrap break-words text-sm">{workstream.owner_instruction}</p><dl className="mt-ui-4 grid gap-ui-3 text-sm"><div><dt className="text-content-muted">Progress</dt><dd>{workstream.progress_summary}</dd></div><div><dt className="text-content-muted">Worker</dt><dd className="break-all">{workstream.assigned_worker_id ?? "Not assigned"}</dd></div><div><dt className="text-content-muted">Last heartbeat</dt><dd>{mobileEngineeringTimestamp(workstream.heartbeat_at)}</dd></div></dl></Card>
+      <Card className="min-w-0 p-ui-4"><h2 className="font-bold">Current work</h2><p className="mt-ui-3 whitespace-pre-wrap break-words text-sm">{workstream.owner_instruction}</p><dl className="mt-ui-4 grid gap-ui-3 text-sm"><div><dt className="text-content-muted">Progress</dt><dd>{workstream.progress_percent == null ? workstream.progress_summary : `${workstream.progress_percent}% · ${workstream.current_activity ?? workstream.progress_summary}`}</dd></div><div><dt className="text-content-muted">Worker health</dt><dd>{mobileEngineeringLabel(workstream.worker_health ?? "not_available")}</dd></div><div><dt className="text-content-muted">Worker</dt><dd className="break-all">{workstream.assigned_worker_id ?? "Not assigned"}</dd></div><div><dt className="text-content-muted">Last heartbeat</dt><dd>{mobileEngineeringTimestamp(workstream.heartbeat_at)}</dd></div><div><dt className="text-content-muted">Acknowledged</dt><dd>{mobileEngineeringTimestamp(workstream.acknowledged_at)}</dd></div></dl></Card>
       <Card className="min-w-0 p-ui-4"><h2 className="font-bold">Delivery</h2><dl className="mt-ui-3 grid gap-ui-3 text-sm"><div><dt className="text-content-muted">Expected HEAD</dt><dd className="break-all font-mono">{shortExpectedHead(workstream.expected_head)}</dd></div><div><dt className="text-content-muted">Change level</dt><dd>{workstream.requested_code_changes ? "Code changes" : "Inspection only"}</dd></div><div><dt className="text-content-muted">Preview operation</dt><dd>{mobileEngineeringLabel(workstream.repository_operation_status ?? "not_started")}</dd></div><div><dt className="text-content-muted">Result commit</dt><dd className="break-all font-mono">{workstream.resulting_commit_sha ?? "Not available"}</dd></div></dl></Card>
     </div>
 
