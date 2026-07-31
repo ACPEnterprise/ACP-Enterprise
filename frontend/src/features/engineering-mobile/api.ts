@@ -39,6 +39,19 @@ export async function acknowledgeMissionNotification(
   ).data;
 }
 
+export async function transitionMissionNotification(
+  notificationId: string,
+  expectedVersion: number,
+  action: "read" | "archive",
+): Promise<MissionNotificationItem> {
+  return (
+    await apiClient.post<MissionNotificationItem>(
+      `${MISSION_NOTIFICATIONS_PATH}/${notificationId}/transition`,
+      { expected_version: expectedVersion, action },
+    )
+  ).data;
+}
+
 export async function listPendingMobileReviews(): Promise<MobileReviewPage> {
   return (
     await apiClient.get<MobileReviewPage>(MOBILE_ENGINEERING_PATH, {

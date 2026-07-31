@@ -35,7 +35,7 @@ class EngineeringMissionNotification(Base):
             name="ck_mission_notification_severity",
         ),
         CheckConstraint(
-            "status IN ('unread','acknowledged')",
+            "status IN ('unread','read','acknowledged','archived')",
             name="ck_mission_notification_status",
         ),
         CheckConstraint("version >= 1", name="ck_mission_notification_version"),
@@ -74,6 +74,8 @@ class EngineeringMissionNotification(Base):
     escalated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     acknowledged_by_user_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
 
 
@@ -175,6 +177,47 @@ class MissionNotificationService:
             record.status = "acknowledged"
             record.acknowledged_at = acknowledged_at
             record.acknowledged_by_user_id = context.user.id
+            record.version += 1
+            await db.flush()
+        return record
+
+    async def transition(
+        self,
+        db: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        notification_id: UUID,
+        expected_version: int,
+        action: str,
+        now: datetime | None = None,
+    ) -> EngineeringMissionNotification:
+        if action not in {"read", "archive"}:
+            raise ValueError("Unsupported notification action.")
+        changed_at = now or datetime.now(timezone.utc)
+        async with db.begin():
+            record = await db.scalar(
+                select(EngineeringMissionNotification)
+                .where(
+                    EngineeringMissionNotification.company_id == context.company.id,
+                    EngineeringMissionNotification.id == notification_id,
+                )
+                .with_for_update()
+            )
+            if record is None:
+                raise LookupError("Mission Control notification was not found.")
+            target = "read" if action == "read" else "archived"
+            if record.status == target or (
+                action == "read" and record.status != "unread"
+            ):
+                return record
+            if record.version != expected_version:
+                raise ValueError("Mission Control notification version is stale.")
+            record.status = target
+            if action == "read":
+                record.read_at = changed_at
+            else:
+                record.archived_at = changed_at
+                record.read_at = record.read_at or changed_at
             record.version += 1
             await db.flush()
         return record

@@ -1,303 +1,119 @@
-import { ChevronLeft, ChevronRight } from "lucide-react";
-import { useState } from "react";
+import { Activity, CheckCircle2, ChevronRight, Clock3, HeartPulse, Inbox, Rocket, ShieldAlert, Sparkles } from "lucide-react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router";
 
 import { getOperatorApiError } from "../../api/errors";
-import { Alert, Badge, Button, EmptyState, Spinner } from "../../ui";
+import { Alert, Badge, Button, Card, EmptyState, Spinner } from "../../ui";
 import {
   useAcknowledgeMissionNotification,
   useMissionNotifications,
   useMobileWorkstreams,
   usePendingMobileReviews,
+  useTransitionMissionNotification,
 } from "./hooks";
+import { mobileEngineeringLabel, mobileEngineeringTimestamp } from "./presentation";
 import { useEngineeringRealtime } from "./realtime";
-import {
-  mobileEngineeringLabel,
-  mobileEngineeringTimestamp,
-} from "./presentation";
+import type { MissionNotificationItem, MobileWorkstreamSummary } from "./types";
+
+type View = "overview" | "inbox" | "briefing" | "analytics";
+type InboxFilter = "all" | "attention" | "failures" | "recovering" | "completed";
+
+const terminal = new Set(["completed", "failed", "cancelled"]);
+const today = new Date().toDateString();
+const isToday = (value: string) => new Date(value).toDateString() === today;
+
+function average(items: readonly MobileWorkstreamSummary[], field: keyof MobileWorkstreamSummary): string {
+  const values = items.map((item) => item[field]).filter((value): value is number => typeof value === "number");
+  if (!values.length) return "—";
+  const milliseconds = values.reduce((sum, value) => sum + value, 0) / values.length;
+  return milliseconds < 60_000 ? `${(milliseconds / 1000).toFixed(1)}s` : `${(milliseconds / 60_000).toFixed(1)}m`;
+}
+
+function Metric({ label, value, tone = "default" }: { label: string; value: string | number; tone?: "default" | "attention" | "success" }) {
+  return <Card className={`min-h-28 p-ui-4 ${tone === "attention" ? "border-amber-400/50" : tone === "success" ? "border-emerald-400/40" : ""}`}>
+    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-content-muted">{label}</p>
+    <p className="mt-ui-2 text-3xl font-bold tracking-tight">{value}</p>
+  </Card>;
+}
+
+function WorkstreamCard({ item }: { item: MobileWorkstreamSummary }) {
+  return <Link to={`/engineering/${item.command_id}`} className="group block rounded-2xl border border-stroke bg-surface p-ui-4 transition hover:border-blue-400/60 hover:bg-surface-muted">
+    <div className="flex items-start justify-between gap-ui-3">
+      <div className="min-w-0"><p className="truncate text-base font-bold">{item.ecid}</p><p className="mt-1 truncate text-sm text-content-muted">{item.repository_key} · {item.expected_branch}</p></div>
+      <ChevronRight className="mt-1 shrink-0 text-content-muted transition group-hover:translate-x-0.5" size={20} />
+    </div>
+    <div className="mt-ui-3 flex flex-wrap gap-ui-2"><Badge>{mobileEngineeringLabel(item.pipeline_status)}</Badge>{item.owner_attention_required && <Badge>Needs you</Badge>}</div>
+    <p className="mt-ui-3 text-sm leading-6">{item.current_activity ?? item.progress_summary}</p>
+    {item.progress_percent != null && <div className="mt-ui-3 h-2 overflow-hidden rounded-full bg-surface-muted" aria-label={`${item.progress_percent}% complete`}><div className="h-full rounded-full bg-blue-400" style={{ width: `${item.progress_percent}%` }} /></div>}
+  </Link>;
+}
+
+function NotificationRow({ item }: { item: MissionNotificationItem }) {
+  const acknowledge = useAcknowledgeMissionNotification();
+  const transition = useTransitionMissionNotification();
+  return <li className={`rounded-2xl border p-ui-4 ${item.status === "unread" ? "border-blue-400/50 bg-blue-400/5" : "border-stroke bg-surface"}`}>
+    <div className="flex items-start justify-between gap-ui-3">
+      <Link to={`/engineering/${item.command_id}`} className="min-w-0 font-bold hover:text-blue-400">{mobileEngineeringLabel(item.kind)}</Link>
+      <Badge>{item.escalated_at ? "Escalated" : mobileEngineeringLabel(item.severity)}</Badge>
+    </div>
+    <p className="mt-ui-1 text-sm text-content-muted">{mobileEngineeringTimestamp(item.created_at)}</p>
+    <div className="mt-ui-3 flex flex-wrap gap-ui-2">
+      {item.status === "unread" && <Button className="min-h-11" variant="outline" disabled={transition.isPending} onClick={() => transition.mutate({ id: item.id, version: item.version, action: "read" })}>Mark read</Button>}
+      {item.status !== "acknowledged" && item.status !== "archived" && <Button className="min-h-11" disabled={acknowledge.isPending} onClick={() => acknowledge.mutate({ id: item.id, version: item.version })}>Acknowledge</Button>}
+      {item.status !== "archived" && <Button className="min-h-11" variant="outline" disabled={transition.isPending} onClick={() => transition.mutate({ id: item.id, version: item.version, action: "archive" })}>Archive</Button>}
+    </div>
+  </li>;
+}
 
 export function MobileEngineeringListPage() {
-  const [page, setPage] = useState(1);
-  const query = useMobileWorkstreams({ page, pageSize: 10 });
+  const [view, setView] = useState<View>("overview");
+  const [filter, setFilter] = useState<InboxFilter>("all");
+  const workstreams = useMobileWorkstreams({ page: 1, pageSize: 100 });
   const notifications = useMissionNotifications();
-  const acknowledge = useAcknowledgeMissionNotification();
-  const approvalQueue = usePendingMobileReviews();
+  const approvals = usePendingMobileReviews();
   const realtime = useEngineeringRealtime();
+  const items = useMemo(() => workstreams.data?.items ?? [], [workstreams.data?.items]);
+  const counts = useMemo(() => ({
+    active: items.filter((item) => !terminal.has(item.pipeline_status)).length,
+    waiting: items.filter((item) => item.owner_attention_required || item.pipeline_status === "waiting_for_owner").length + (approvals.data?.total_count ?? 0),
+    running: items.filter((item) => ["acknowledged", "running", "validating", "deploying_preview"].includes(item.pipeline_status)).length,
+    completed: items.filter((item) => item.pipeline_status === "completed" && isToday(item.updated_at)).length,
+    failed: items.filter((item) => item.pipeline_status === "failed" && isToday(item.updated_at)).length,
+  }), [items, approvals.data?.total_count]);
+  const filteredNotifications = (notifications.data?.items ?? []).filter((item) => {
+    if (item.status === "archived") return false;
+    if (filter === "attention") return item.kind === "waiting_for_owner";
+    if (filter === "failures") return item.kind.includes("failed");
+    if (filter === "recovering") return ["recovering", "heartbeat_expired", "worker_disconnected"].includes(item.kind);
+    if (filter === "completed") return item.kind.includes("completed");
+    return true;
+  });
 
-  return (
-    <div className="mx-auto w-full max-w-5xl space-y-ui-5 overflow-x-hidden">
-      <header>
-        <p className="text-sm font-semibold text-blue-400">
-          Engineering Control
-        </p>
-        <h1 className="mt-ui-1 text-2xl font-bold sm:text-3xl">
-          Engineering workstreams
-        </h1>
-        <p className="mt-ui-2 text-sm text-content-muted">
-          See what is happening now, what needs your attention, and the next
-          bounded owner action.
-        </p>
-      </header>
+  if (workstreams.isLoading) return <div className="flex min-h-64 items-center justify-center"><Spinner label="Opening Mission Control" /></div>;
+  if (workstreams.isError) { const error = getOperatorApiError(workstreams.error, "Mission Control"); return <Alert variant="danger" announcement="assertive" title={error.title}>{error.message}</Alert>; }
 
-      <p className="text-xs font-semibold uppercase tracking-wide text-content-muted" role="status">
-        Live updates: {realtime}
-      </p>
+  return <div className="mx-auto w-full max-w-6xl space-y-ui-5 overflow-x-hidden pb-12">
+    <header className="rounded-3xl border border-blue-400/20 bg-gradient-to-br from-blue-500/15 via-surface to-violet-500/10 p-ui-5 sm:p-ui-6">
+      <div className="flex flex-wrap items-center justify-between gap-ui-3"><div><p className="text-sm font-semibold text-blue-400">Engineering Mission Control</p><h1 className="mt-1 text-3xl font-bold tracking-tight sm:text-4xl">Good {new Date().getHours() < 12 ? "morning" : new Date().getHours() < 18 ? "afternoon" : "evening"}.</h1></div><Badge>Live · {realtime}</Badge></div>
+      <p className="mt-ui-3 max-w-2xl text-base leading-7 text-content-muted">{counts.waiting ? `${counts.waiting} item${counts.waiting === 1 ? "" : "s"} need your attention.` : "Engineering is moving without anything waiting on you."} {counts.running ? `${counts.running} workstream${counts.running === 1 ? " is" : "s are"} in progress.` : "The worker is ready for its next assignment."}</p>
+    </header>
 
-      {query.data && (
-        <Alert
-          variant={
-            query.data.connectivity.state === "connected"
-              ? "information"
-              : "warning"
-          }
-          title={`Worker execution: ${mobileEngineeringLabel(query.data.connectivity.state)}`}
-        >
-          {query.data.connectivity.state === "connected"
-            ? "An authenticated worker session and fresh heartbeat are available. Individual execution still requires explicit approval and eligible durable state."
-            : query.data.connectivity.state === "connecting"
-              ? "An authenticated worker session exists without a fresh heartbeat. Execution is not connected."
-              : "No active authenticated worker session with a fresh heartbeat is available. Execution is not connected."}
-        </Alert>
-      )}
+    <nav className="grid grid-cols-4 gap-1 rounded-2xl border border-stroke bg-surface p-1" aria-label="Mission Control views">
+      {([ ["overview", Activity, "Overview"], ["inbox", Inbox, "Inbox"], ["briefing", Sparkles, "Briefing"], ["analytics", HeartPulse, "Analytics"] ] as const).map(([id, Icon, label]) => <button key={id} type="button" onClick={() => setView(id)} aria-current={view === id ? "page" : undefined} className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl px-1 text-xs font-semibold sm:flex-row sm:text-sm ${view === id ? "bg-blue-500 text-white" : "text-content-muted hover:bg-surface-muted"}`}><Icon size={18}/>{label}</button>)}
+    </nav>
 
-      {query.data && query.data.items.length > 0 && (
-        <section className="grid grid-cols-2 gap-ui-3 sm:grid-cols-4" aria-label="Engineering dashboard summary">
-          {[
-            ["Active", query.data.items.filter((item) => !["completed", "failed", "cancelled"].includes(item.pipeline_status)).length],
-            ["Running", query.data.items.filter((item) => item.pipeline_status === "running").length],
-            ["Owner attention", query.data.items.filter((item) => item.owner_attention_required).length],
-            ["Completed", query.data.items.filter((item) => item.pipeline_status === "completed").length],
-          ].map(([label, value]) => (
-            <div key={label} className="rounded-xl border border-stroke bg-surface p-ui-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-content-muted">{label}</p>
-              <p className="mt-ui-1 text-2xl font-bold">{value}</p>
-            </div>
-          ))}
-        </section>
-      )}
-
-      <section className="grid gap-ui-4 lg:grid-cols-2" aria-label="Owner mission queues">
-        <div className="rounded-xl border border-stroke bg-surface p-ui-4">
-          <div className="flex items-center justify-between gap-ui-3">
-            <h2 className="font-bold">Notification center</h2>
-            {notifications.data && <Badge>{notifications.data.unread_count} unread</Badge>}
-          </div>
-          {notifications.data?.items.length === 0 && <p className="mt-ui-3 text-sm text-content-muted">No mission notifications.</p>}
-          <ol className="mt-ui-3 space-y-ui-3">
-            {notifications.data?.items.slice(0, 5).map((item) => (
-              <li key={item.id} className="rounded-lg border border-stroke p-ui-3 text-sm">
-                <div className="flex flex-wrap items-start justify-between gap-ui-2">
-                  <Link className="font-semibold text-blue-400 hover:underline" to={`/engineering/${item.command_id}`}>{mobileEngineeringLabel(item.kind)}</Link>
-                  <Badge>{item.escalated_at ? "Escalated" : mobileEngineeringLabel(item.severity)}</Badge>
-                </div>
-                <p className="mt-ui-1 text-content-muted">{mobileEngineeringTimestamp(item.created_at)}</p>
-                {item.status === "unread" && <Button className="mt-ui-2" variant="outline" disabled={acknowledge.isPending} onClick={() => acknowledge.mutate({ id: item.id, version: item.version })}>Acknowledge</Button>}
-              </li>
-            ))}
-          </ol>
-        </div>
-
-        <div className="rounded-xl border border-stroke bg-surface p-ui-4">
-          <div className="flex items-center justify-between gap-ui-3">
-            <h2 className="font-bold">Owner approval queue</h2>
-            {approvalQueue.data && <Badge>{approvalQueue.data.total_count} pending</Badge>}
-          </div>
-          {approvalQueue.data?.items.length === 0 && <p className="mt-ui-3 text-sm text-content-muted">No commands await owner approval.</p>}
-          <ol className="mt-ui-3 space-y-ui-3">
-            {approvalQueue.data?.items.slice(0, 5).map((item) => (
-              <li key={item.id} className="rounded-lg border border-stroke p-ui-3 text-sm">
-                <Link className="break-all font-semibold text-blue-400 hover:underline" to={`/engineering/${item.id}`}>{item.ecid}</Link>
-                <p className="mt-ui-1 text-content-muted">{item.repository_key} · {item.expected_branch}</p>
-                <p className="mt-ui-1">Expires {mobileEngineeringTimestamp(item.expires_at)}</p>
-              </li>
-            ))}
-          </ol>
-        </div>
+    {view === "overview" && <>
+      <section className="grid grid-cols-2 gap-ui-3 lg:grid-cols-5" aria-label="Mission summary"><Metric label="Active" value={counts.active}/><Metric label="Waiting for you" value={counts.waiting} tone={counts.waiting ? "attention" : "default"}/><Metric label="Running" value={counts.running}/><Metric label="Completed today" value={counts.completed} tone="success"/><Metric label="Failed today" value={counts.failed} tone={counts.failed ? "attention" : "default"}/></section>
+      <section className="grid gap-ui-4 lg:grid-cols-3">
+        <Card className="p-ui-4 lg:col-span-2"><div className="flex items-center justify-between"><h2 className="text-lg font-bold">Current activity</h2><Activity size={20} className="text-blue-400"/></div><div className="mt-ui-4 grid gap-ui-3 sm:grid-cols-2">{items.filter((item) => !terminal.has(item.pipeline_status)).slice(0, 4).map((item) => <WorkstreamCard key={item.command_id} item={item}/>)}{!counts.active && <p className="text-sm text-content-muted">No workstreams are active right now.</p>}</div></Card>
+        <div className="space-y-ui-4"><Card className="p-ui-4"><h2 className="font-bold">Worker health</h2><div className="mt-ui-3 flex items-center gap-ui-3"><span className={`h-3 w-3 rounded-full ${workstreams.data?.connectivity.state === "connected" ? "bg-emerald-400" : "bg-amber-400"}`}/><span className="text-lg font-semibold">{workstreams.data?.connectivity.state === "connected" ? "Ready" : "Needs attention"}</span></div><p className="mt-ui-2 text-sm text-content-muted">Last signal {mobileEngineeringTimestamp(workstreams.data?.connectivity.heartbeat_at ?? null)}</p></Card><Card className="p-ui-4"><h2 className="font-bold">Preview health</h2><div className="mt-ui-3 flex items-center gap-ui-3"><Rocket className="text-blue-400" size={22}/><span className="font-semibold">{items.some((item) => item.pipeline_status === "failed" && item.failure_classification?.includes("deploy")) ? "Review needed" : "No deployment issues"}</span></div><p className="mt-ui-2 text-sm text-content-muted">Recent deployments: {items.filter((item) => item.repository_operation_status === "completed").length}</p></Card></div>
       </section>
+    </>}
 
-      <section aria-label="Engineering workstreams">
-        {query.isLoading && (
-          <div className="flex min-h-48 items-center justify-center">
-            <Spinner label="Loading engineering workstreams" />
-          </div>
-        )}
-        {query.isError &&
-          (() => {
-            const error = getOperatorApiError(
-              query.error,
-              "Engineering workstreams",
-            );
-            return (
-              <Alert
-                variant="danger"
-                announcement="assertive"
-                title={error.title}
-                action={
-                  error.retryable ? (
-                    <Button
-                      variant="outline"
-                      onClick={() => void query.refetch()}
-                    >
-                      Retry
-                    </Button>
-                  ) : undefined
-                }
-              >
-                {error.message}
-              </Alert>
-            );
-          })()}
-        {query.data?.items.length === 0 && (
-          <EmptyState
-            title="No engineering workstreams"
-            description="There are no Engineering Commands in the current Company scope."
-          />
-        )}
-        {query.data && query.data.items.length > 0 && (
-          <div className="grid gap-ui-3">
-            {query.data.items.map((workstream) => (
-              <article
-                key={workstream.command_id}
-                className="min-w-0 rounded-xl border border-stroke bg-surface p-ui-4"
-              >
-                <div className="flex min-w-0 flex-wrap items-start justify-between gap-ui-3">
-                  <div className="min-w-0">
-                    <Link
-                      to={`/engineering/${workstream.command_id}`}
-                      className="break-all text-lg font-bold text-blue-400 hover:underline"
-                    >
-                      {workstream.ecid}
-                    </Link>
-                    <p className="mt-ui-1 text-sm text-content-muted">
-                      {workstream.repository_key} · {workstream.expected_branch}
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap gap-ui-2">
-                    <Badge>{mobileEngineeringLabel(workstream.pipeline_status)}</Badge>
-                    {workstream.owner_attention_required && (
-                      <Badge>Owner attention</Badge>
-                    )}
-                  </div>
-                </div>
-                <p className="mt-ui-3 text-sm">
-                  {workstream.current_activity ?? workstream.progress_summary}
-                </p>
-                {workstream.progress_percent != null && (
-                  <div className="mt-ui-2" aria-label={`Progress ${workstream.progress_percent}%`}>
-                    <div className="h-2 overflow-hidden rounded-full bg-surface-muted">
-                      <div className="h-full bg-blue-400" style={{ width: `${workstream.progress_percent}%` }} />
-                    </div>
-                  </div>
-                )}
-                {workstream.control_pending && (
-                  <p className="mt-ui-2 text-xs font-semibold text-amber-300">Owner control request awaiting worker acknowledgement</p>
-                )}
-                <dl className="mt-ui-4 grid min-w-0 gap-ui-3 text-sm sm:grid-cols-2">
-                  <div>
-                    <dt className="text-content-muted">Next safe action</dt>
-                    <dd className="break-all">
-                      {mobileEngineeringLabel(workstream.next_owner_action)}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="text-content-muted">Worker</dt>
-                    <dd className="break-all">
-                      {workstream.assigned_worker_id ?? "Not assigned"}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="text-content-muted">Lease or offer</dt>
-                    <dd>
-                      {workstream.offer_or_lease_state
-                        ? mobileEngineeringLabel(workstream.offer_or_lease_state)
-                        : "Not available"}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="text-content-muted">Last heartbeat</dt>
-                    <dd>
-                      {mobileEngineeringTimestamp(workstream.heartbeat_at)}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="text-content-muted">Review</dt>
-                    <dd>
-                      {workstream.review_state
-                        ? mobileEngineeringLabel(workstream.review_state)
-                        : "Not available"}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="text-content-muted">Repository operation</dt>
-                    <dd>
-                      {workstream.repository_operation_status
-                        ? mobileEngineeringLabel(
-                            workstream.repository_operation_status,
-                          )
-                        : "Not available"}
-                    </dd>
-                  </div>
-                  {workstream.resulting_commit_sha && (
-                    <div>
-                      <dt className="text-content-muted">Completed commit</dt>
-                      <dd className="break-all font-mono">
-                        {workstream.resulting_commit_sha}
-                      </dd>
-                    </div>
-                  )}
-                  {workstream.failure_classification && (
-                    <div>
-                      <dt className="text-content-muted">Failure</dt>
-                      <dd className="break-all">
-                        {mobileEngineeringLabel(
-                          workstream.failure_classification,
-                        )}
-                      </dd>
-                    </div>
-                  )}
-                </dl>
-                <Link
-                  to={`/engineering/${workstream.command_id}`}
-                  className="mt-ui-4 inline-flex min-h-11 w-full items-center justify-center rounded-md border border-stroke-strong px-ui-4 text-sm font-semibold hover:bg-surface-muted sm:w-auto"
-                  aria-label={`Open ${workstream.ecid}`}
-                >
-                  Open workstream
-                </Link>
-              </article>
-            ))}
-          </div>
-        )}
-      </section>
+    {view === "inbox" && <section className="space-y-ui-4"><div><h2 className="text-2xl font-bold">Approval inbox</h2><p className="mt-1 text-sm text-content-muted">Decisions, recovery, and completed work in one place.</p></div><div className="flex gap-ui-2 overflow-x-auto pb-1">{(["all", "attention", "failures", "recovering", "completed"] as const).map((value) => <Button key={value} className="min-h-11 shrink-0" variant={filter === value ? "primary" : "outline"} onClick={() => setFilter(value)}>{mobileEngineeringLabel(value)}</Button>)}</div>{approvals.data && approvals.data.items.length > 0 && <Card className="p-ui-4"><div className="flex items-center gap-ui-2"><ShieldAlert className="text-amber-400"/><h3 className="font-bold">Waiting for approval</h3><Badge>{approvals.data.total_count}</Badge></div><ol className="mt-ui-3 space-y-ui-3">{approvals.data.items.map((item) => <li key={item.id} className="rounded-xl border border-stroke p-ui-4"><Link className="font-bold text-blue-400" to={`/engineering/${item.id}`}>{item.ecid}</Link><p className="mt-1 text-sm text-content-muted">{item.repository_key} · expires {mobileEngineeringTimestamp(item.expires_at)}</p><Link className="mt-ui-3 inline-flex min-h-11 items-center rounded-lg bg-blue-500 px-ui-4 text-sm font-semibold text-white" to={`/engineering/${item.id}`}>Review decision</Link></li>)}</ol></Card>}<ol className="space-y-ui-3">{filteredNotifications.map((item) => <NotificationRow key={item.id} item={item}/>)}</ol>{filteredNotifications.length === 0 && !approvals.data?.items.length && <EmptyState title="Inbox clear" description="Nothing in this group needs your attention."/>}</section>}
 
-      {query.data && query.data.total_pages > 0 && (
-        <nav
-          className="flex flex-wrap items-center justify-between gap-ui-3 border-t border-stroke pt-ui-4"
-          aria-label="Review pages"
-        >
-          <span className="text-sm text-content-muted">
-            Page {query.data.page} of {query.data.total_pages} ·{" "}
-            {query.data.total_count} workstreams
-          </span>
-          <div className="flex gap-ui-2">
-            <Button
-              variant="outline"
-              aria-label="Previous page"
-              disabled={query.data.page <= 1}
-              onClick={() => setPage(query.data.page - 1)}
-            >
-              <ChevronLeft size={18} />
-            </Button>
-            <Button
-              variant="outline"
-              aria-label="Next page"
-              disabled={query.data.page >= query.data.total_pages}
-              onClick={() => setPage(query.data.page + 1)}
-            >
-              <ChevronRight size={18} />
-            </Button>
-          </div>
-        </nav>
-      )}
-    </div>
-  );
+    {view === "briefing" && <section className="space-y-ui-4"><div><h2 className="text-2xl font-bold">Morning briefing</h2><p className="mt-1 text-sm text-content-muted">A concise readout of engineering since your last check-in.</p></div><Card className="p-ui-5"><div className="flex items-center gap-ui-3"><Sparkles className="text-violet-400"/><h3 className="text-xl font-bold">Executive summary</h3></div><ul className="mt-ui-4 space-y-ui-4 text-base leading-7"><li className="flex gap-ui-3"><CheckCircle2 className="mt-1 shrink-0 text-emerald-400" size={20}/><span><strong>{counts.completed} completed today.</strong> {items.filter((item) => item.pipeline_status === "completed").length} milestones are complete in the current view.</span></li><li className="flex gap-ui-3"><Inbox className="mt-1 shrink-0 text-amber-400" size={20}/><span><strong>{counts.waiting} waiting for you.</strong> Open the Inbox to review or acknowledge them.</span></li><li className="flex gap-ui-3"><HeartPulse className="mt-1 shrink-0 text-blue-400" size={20}/><span><strong>Worker {workstreams.data?.connectivity.state === "connected" ? "is healthy" : "needs attention"}.</strong> Last authenticated signal {mobileEngineeringTimestamp(workstreams.data?.connectivity.heartbeat_at ?? null)}.</span></li><li className="flex gap-ui-3"><Rocket className="mt-1 shrink-0 text-violet-400" size={20}/><span><strong>{items.filter((item) => item.repository_operation_status === "completed").length} recent deliveries.</strong> {counts.failed ? "Review failures before starting more work." : "No failed delivery needs escalation."}</span></li></ul></Card><Alert variant={counts.failed ? "warning" : "information"} title="Recommendation">{counts.failed ? "Review failed work first, then clear owner approvals in priority order." : counts.waiting ? "Clear the approval inbox so active engineering can continue." : "No owner action is required. Keep the worker available for the next priority."}</Alert></section>}
+
+    {view === "analytics" && <section className="space-y-ui-4"><div><h2 className="text-2xl font-bold">Engineering analytics</h2><p className="mt-1 text-sm text-content-muted">Delivery pace and reliability from authoritative runtime evidence.</p></div><div className="grid grid-cols-2 gap-ui-3 lg:grid-cols-4"><Metric label="Avg. execution" value={average(items, "execution_latency_ms")}/><Metric label="Avg. validation" value={average(items, "validation_latency_ms")}/><Metric label="Approval latency" value={average(items, "acknowledgement_latency_ms")}/><Metric label="Worker uptime" value={items.length ? `${Math.round(Math.max(...items.map((item) => item.worker_uptime_seconds ?? 0)) / 3600)}h` : "—"}/><Metric label="Completed milestones" value={items.filter((item) => item.pipeline_status === "completed").length} tone="success"/><Metric label="Failure rate" value={items.length ? `${Math.round(items.filter((item) => item.pipeline_status === "failed").length / items.length * 100)}%` : "—"}/><Metric label="Deployment success" value={items.some((item) => item.repository_operation_status) ? `${Math.round(items.filter((item) => item.repository_operation_status === "completed").length / items.filter((item) => item.repository_operation_status).length * 100)}%` : "—"}/><Metric label="Reconnects" value={items.reduce((sum, item) => sum + item.reconnect_count, 0)}/></div><Card className="p-ui-4"><div className="flex items-center gap-ui-2"><Clock3 className="text-blue-400"/><h3 className="font-bold">What these numbers mean</h3></div><p className="mt-ui-3 text-sm leading-6 text-content-muted">Metrics come from persisted execution events, validation evidence, deployments, and authenticated worker signals. Missing evidence is shown as an em dash, never estimated.</p></Card></section>}
+  </div>;
 }

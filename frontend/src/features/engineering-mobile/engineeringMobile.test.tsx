@@ -134,6 +134,7 @@ beforeEach(() => {
   } as never);
   vi.mocked(hooks.useControlMobileWorkstream).mockReturnValue(mutation());
   vi.mocked(hooks.useAcknowledgeMissionNotification).mockReturnValue(mutation());
+  vi.mocked(hooks.useTransitionMissionNotification).mockReturnValue(mutation());
   vi.mocked(hooks.useMissionNotifications).mockReturnValue({
     data: {
       items: [],
@@ -166,7 +167,7 @@ describe("mobile Engineering Control", () => {
     } as never);
     renderList();
     expect(
-      screen.getByRole("status", { name: "Loading engineering workstreams" }),
+      screen.getByRole("status", { name: "Opening Mission Control" }),
     ).toBeInTheDocument();
     cleanup();
 
@@ -182,9 +183,7 @@ describe("mobile Engineering Control", () => {
       },
     } as never);
     renderList();
-    expect(
-      screen.getByRole("heading", { name: "No engineering workstreams" }),
-    ).toBeInTheDocument();
+    expect(screen.getByText("No workstreams are active right now.")).toBeInTheDocument();
     cleanup();
 
     vi.mocked(hooks.useMobileWorkstreams).mockReturnValueOnce({
@@ -211,22 +210,16 @@ describe("mobile Engineering Control", () => {
       },
     } as never);
     renderList();
-    expect(screen.getByRole("link", { name: workstream.ecid })).toHaveAttribute(
+    expect(screen.getByText(workstream.ecid).closest("a")).toHaveAttribute(
       "href",
       `/engineering/${review.id}`,
     );
     expect(screen.queryByText(review.owner_instruction)).not.toBeInTheDocument();
-    expect(
-      screen.getByText(/No active authenticated worker session/i),
-    ).toBeInTheDocument();
-    expect(screen.getAllByText("Owner attention").length).toBeGreaterThan(0);
-    expect(screen.getByText("Review Execution Result")).toBeInTheDocument();
-    expect(screen.getByText("worker-id")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Next page" }));
-    expect(hooks.useMobileWorkstreams).toHaveBeenLastCalledWith({
-      page: 2,
-      pageSize: 10,
-    });
+    expect(screen.getAllByText("Needs you").length).toBeGreaterThan(0);
+    expect(screen.getByText("Needs attention")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /Analytics/ }));
+    expect(screen.getByRole("heading", { name: "Engineering analytics" })).toBeInTheDocument();
+    expect(hooks.useMobileWorkstreams).toHaveBeenLastCalledWith({ page: 1, pageSize: 100 });
   });
 
   it("shows the pipeline and confirms owner control actions", async () => {

@@ -22,6 +22,7 @@ from .schemas import (
     MissionNotificationAcknowledgement,
     MissionNotificationItem,
     MissionNotificationPage,
+    MissionNotificationTransition,
     MobileApprovalRequest,
     MobileCancellationRequest,
     MobileCommandDetail,
@@ -98,6 +99,32 @@ async def acknowledge_mission_notification(
             context=context,
             notification_id=notification_id,
             expected_version=request.expected_version,
+        )
+    except LookupError as error:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
+    return MissionNotificationItem.model_validate(record)
+
+
+@router.post(
+    "/notifications/{notification_id}/transition",
+    response_model=MissionNotificationItem,
+    summary="Mark a Mission Control notification read or archived",
+)
+async def transition_mission_notification(
+    notification_id: UUID,
+    request: MissionNotificationTransition,
+    context: ManageContext,
+    session: DatabaseSession,
+) -> MissionNotificationItem:
+    try:
+        record = await mission_notification_service.transition(
+            session,
+            context=context,
+            notification_id=notification_id,
+            expected_version=request.expected_version,
+            action=request.action,
         )
     except LookupError as error:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(error)) from error

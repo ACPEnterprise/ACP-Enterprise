@@ -46,6 +46,18 @@ export function useAcknowledgeMissionNotification() {
   });
 }
 
+export function useTransitionMissionNotification() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, version, action }: { id: string; version: number; action: "read" | "archive" }) =>
+      mobileApi.transitionMissionNotification(id, version, action),
+    retry: false,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: mobileEngineeringKeys.notifications() });
+    },
+  });
+}
+
 export function usePendingMobileReviews() {
   return useQuery({
     queryKey: mobileEngineeringKeys.approvalQueue(),

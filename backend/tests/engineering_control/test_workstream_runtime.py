@@ -229,6 +229,19 @@ async def test_worker_acknowledgement_is_idempotent_versioned_and_recoverable(
         )
         assert acknowledged.status == "acknowledged"
         assert acknowledged.acknowledged_by_user_id == worker_database.context.user.id
+        acknowledged_version = acknowledged.version
+
+    async with worker_database.factory() as session:
+        archived = await notifications.transition(
+            session,
+            context=worker_database.context,
+            notification_id=heartbeat_notice.id,
+            expected_version=acknowledged_version,
+            action="archive",
+        )
+        assert archived.status == "archived"
+        assert archived.archived_at is not None
+        assert archived.read_at == archived.archived_at
     recovery_payloads = await _events_after(
         worker_context.company_id, UUID(str(command_payloads[-1]["event_id"]))
     )

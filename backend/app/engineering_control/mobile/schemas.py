@@ -177,6 +177,8 @@ class MissionNotificationItem(MobileEngineeringSchema):
     created_at: datetime
     escalated_at: datetime | None
     acknowledged_at: datetime | None
+    read_at: datetime | None
+    archived_at: datetime | None
     version: int
 
 
@@ -192,6 +194,11 @@ class MissionNotificationPage(MobileEngineeringSchema):
 
 class MissionNotificationAcknowledgement(MobileEngineeringSchema):
     expected_version: int = Field(ge=1)
+
+
+class MissionNotificationTransition(MobileEngineeringSchema):
+    expected_version: int = Field(ge=1)
+    action: str = Field(pattern=r"^(read|archive)$")
 
 
 class MobileApprovalRequest(MobileEngineeringSchema):

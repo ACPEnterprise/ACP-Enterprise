@@ -5,6 +5,7 @@ import { getOperatorApiError } from "../../api/errors";
 import { Alert, Badge, Button, Card, ConfirmationDialog, Spinner } from "../../ui";
 import {
   useApproveMobileReview,
+  useCancelMobileReview,
   useControlMobileWorkstream,
   useMobileReview,
   useMobileWorkstream,
@@ -27,8 +28,10 @@ export function MobileEngineeringDetailPage() {
   const control = useControlMobileWorkstream(commandId ?? "");
   const review = useMobileReview(commandId);
   const approve = useApproveMobileReview(commandId ?? "");
+  const cancelReview = useCancelMobileReview(commandId ?? "");
   const realtime = useEngineeringRealtime();
   const [confirmation, setConfirmation] = useState<MobileWorkstreamAction | null>(null);
+  const [reviewDecision, setReviewDecision] = useState<"reject" | "revision" | null>(null);
 
   if (query.isLoading) return <div className="flex min-h-48 items-center justify-center"><Spinner label="Loading engineering workstream" /></div>;
   if (query.isError || !query.data) {
@@ -51,6 +54,13 @@ export function MobileEngineeringDetailPage() {
       requested_code_changes: review.data.requested_code_changes,
     });
   };
+  const declineCommand = () => {
+    if (!review.data || !reviewDecision) return;
+    cancelReview.mutate({
+      expected_version: review.data.version,
+      reason_code: reviewDecision === "revision" ? "scope_changed" : "owner_requested",
+    }, { onSuccess: () => setReviewDecision(null) });
+  };
 
   return <div className="mx-auto w-full max-w-5xl space-y-ui-5 overflow-x-hidden pb-24">
     <Link className="inline-flex min-h-11 items-center text-sm font-semibold text-blue-400 hover:underline" to="/engineering">← Workstreams</Link>
@@ -70,7 +80,7 @@ export function MobileEngineeringDetailPage() {
     {workstream.control_pending && <Alert variant="warning" title="Control request pending">The owner intent is saved. Observed worker state remains authoritative until acknowledgement.</Alert>}
     {workstream.runtime_state === "recovering" && <Alert variant="warning" title="Worker recovering">The last acknowledgement expired. The reconnected worker must acknowledge the current owner request before execution continues.</Alert>}
     {control.isError && <Alert variant="danger" announcement="assertive" title="Action not accepted">{getOperatorApiError(control.error, "Workstream action").message}</Alert>}
-    {review.data?.can_approve && <Alert variant="warning" title="Owner approval required" action={<Button disabled={approve.isPending} onClick={approveCommand}>{approve.isPending ? "Approving…" : "Approve exact command"}</Button>}>Review the owner instruction, repository, branch, expected HEAD, and change authority below. Approval does not itself grant unbounded worker authority.</Alert>}
+    {review.data?.can_approve && <Alert variant="warning" title="Your decision is needed"><p>Review the requested outcome, destination, and change authority below.</p><div className="mt-ui-3 flex flex-wrap gap-ui-2"><Button className="min-h-11" disabled={approve.isPending} onClick={approveCommand}>{approve.isPending ? "Approving…" : "Approve"}</Button><Button className="min-h-11" variant="outline" onClick={() => setReviewDecision("revision")}>Request revision</Button><Button className="min-h-11" variant="destructive" onClick={() => setReviewDecision("reject")}>Reject</Button></div></Alert>}
     {approve.isError && <Alert variant="danger" announcement="assertive" title="Approval not accepted">{getOperatorApiError(approve.error, "Owner approval").message}</Alert>}
 
     <div className="grid gap-ui-4 lg:grid-cols-2">
@@ -90,7 +100,7 @@ export function MobileEngineeringDetailPage() {
       </dl>
     </Card>
 
-    <Card className="p-ui-4"><h2 className="font-bold">Activity</h2>{workstream.timeline.length === 0 ? <p className="mt-ui-3 text-sm text-content-muted">No activity recorded.</p> : <ol className="mt-ui-3 space-y-ui-3">{[...workstream.timeline].reverse().map((item) => <li key={`${item.event}-${item.occurred_at}`} className="border-l-2 border-stroke pl-ui-3 text-sm"><p className="font-semibold">{mobileEngineeringLabel(item.event)}</p><time className="text-content-muted">{mobileEngineeringTimestamp(item.occurred_at)}</time></li>)}</ol>}</Card>
+    <Card className="p-ui-4"><h2 className="text-lg font-bold">Journey</h2><p className="mt-1 text-sm text-content-muted">A clear timeline of progress, validation, and delivery.</p>{workstream.timeline.length === 0 ? <p className="mt-ui-3 text-sm text-content-muted">No activity recorded.</p> : <ol className="relative mt-ui-5 space-y-0">{[...workstream.timeline].map((item, index, timeline) => { const previous = timeline[index - 1]; const elapsed = previous ? Math.max(0, new Date(item.occurred_at).getTime() - new Date(previous.occurred_at).getTime()) : null; return <li key={`${item.event}-${item.occurred_at}`} className="relative grid grid-cols-[2rem_1fr] gap-ui-3 pb-ui-5 last:pb-0"><div className="flex flex-col items-center"><span className="z-10 mt-1 h-3 w-3 rounded-full border-2 border-blue-400 bg-surface"/>{index < timeline.length - 1 && <span className="absolute bottom-0 top-4 w-px bg-stroke"/>}</div><div><div className="flex flex-wrap items-baseline justify-between gap-ui-2"><p className="font-semibold">{mobileEngineeringLabel(item.event)}</p>{elapsed != null && <span className="text-xs text-content-muted">+{duration(elapsed)}</span>}</div><time className="text-sm text-content-muted">{mobileEngineeringTimestamp(item.occurred_at)}</time></div></li>; })}</ol>}</Card>
 
     <section className="fixed inset-x-0 bottom-0 z-20 border-t border-stroke bg-surface/95 p-ui-3 backdrop-blur sm:static sm:rounded-xl sm:border" aria-label="Owner actions">
       <div className="mx-auto flex max-w-5xl flex-wrap gap-ui-2">
@@ -99,5 +109,6 @@ export function MobileEngineeringDetailPage() {
     </section>
 
     {confirmation && <ConfirmationDialog title={`${mobileEngineeringLabel(confirmation)} this workstream?`} confirmLabel={mobileEngineeringLabel(confirmation)} destructive={confirmation === "cancel"} pending={control.isPending} onCancel={() => setConfirmation(null)} onConfirm={() => act(confirmation)}><p><strong>{workstream.ecid}</strong></p><p>{confirmation === "start" ? "This requests execution through the existing controlled execution service." : "The owner intent is persisted; runtime status changes only after worker acknowledgement."}</p></ConfirmationDialog>}
+    {reviewDecision && <ConfirmationDialog title={reviewDecision === "revision" ? "Request a revised command?" : "Reject this command?"} confirmLabel={reviewDecision === "revision" ? "Request revision" : "Reject"} destructive={reviewDecision === "reject"} pending={cancelReview.isPending} onCancel={() => setReviewDecision(null)} onConfirm={declineCommand}><p>{reviewDecision === "revision" ? "This closes the current approval request because its scope must change. A revised command can then be submitted with fresh evidence." : "This closes the approval request without starting execution."}</p></ConfirmationDialog>}
   </div>;
 }

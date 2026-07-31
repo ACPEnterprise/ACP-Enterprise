@@ -58,10 +58,12 @@ export interface MissionNotificationItem {
   command_id: string;
   kind: string;
   severity: "information" | "warning" | "critical";
-  status: "unread" | "acknowledged";
+  status: "unread" | "read" | "acknowledged" | "archived";
   created_at: string;
   escalated_at: string | null;
   acknowledged_at: string | null;
+  read_at: string | null;
+  archived_at: string | null;
   version: number;
 }
 
