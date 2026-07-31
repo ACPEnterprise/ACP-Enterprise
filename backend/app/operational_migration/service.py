@@ -196,6 +196,7 @@ class OperationalMigrationService:
         source_system: str,
         source_customer_id: str,
         source_location_id: str,
+        persist_location_identity: bool,
     ) -> _ResolvedCustomer:
         assert context.active_branch is not None
         customer = await self._repository.get_customer_identity(
@@ -214,6 +215,26 @@ class OperationalMigrationService:
             source_system=source_system,
             source_location_id=source_location_id,
         )
+        expected_location_id = f"{source_customer_id}::service-location::1"
+        if location is None and source_location_id == expected_location_id:
+            target = await self._repository.get_only_customer_location(
+                session,
+                customer_id=customer.customer_id,
+            )
+            if target is not None:
+                location = ServiceLocationSourceIdentity(
+                    company_id=context.company.id,
+                    customer_source_identity_id=customer.id,
+                    service_location_id=target.id,
+                    customer_id=customer.customer_id,
+                    source_system=source_system,
+                    source_location_id=source_location_id,
+                    first_run_id=customer.first_run_id,
+                )
+                if persist_location_identity:
+                    location = await self._repository.add_location_identity(
+                        session, location
+                    )
         if location is None:
             raise ParentResolutionError(
                 "Migrated Service Location parent was not found."
@@ -467,6 +488,7 @@ class OperationalMigrationService:
                         source_system=source_system,
                         source_customer_id=record.source_customer_id,
                         source_location_id=record.source_service_location_id,
+                        persist_location_identity=persist_identity,
                     )
                     try:
                         priority = JobPriority(record.priority)
@@ -606,6 +628,7 @@ class OperationalMigrationService:
                         source_system=source_system,
                         source_customer_id=record.source_customer_id,
                         source_location_id=record.source_service_location_id,
+                        persist_location_identity=persist_identity,
                     )
                     job_identity = await self._repository.get_job_identity(
                         session,
