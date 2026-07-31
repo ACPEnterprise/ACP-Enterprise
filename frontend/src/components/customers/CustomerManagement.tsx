@@ -11,8 +11,9 @@ import { CustomerForm } from "./CustomerForm";
 const PAGE_SIZE = 20;
 
 function displayName(customer: { first_name: string | null; last_name: string | null; business_name: string | null }) {
-  return customer.business_name || `${customer.first_name ?? ""} ${customer.last_name ?? ""}`.trim();
+  return "display_name" in customer && typeof customer.display_name === "string" ? customer.display_name : customer.business_name || `${customer.first_name ?? ""} ${customer.last_name ?? ""}`.trim();
 }
+const label = (value: string | null | undefined) => value ? value.replaceAll("_", " ") : "Unknown";
 export function CustomerManagement() {
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
@@ -63,7 +64,7 @@ export function CustomerManagement() {
           <div className="divide-y divide-slate-800">
             {customers.data.items.map((customer) => (
               <button key={customer.id} type="button" onClick={() => setSelectedCustomerId(customer.id)} className="grid min-h-11 w-full min-w-0 gap-3 p-ui-4 text-left transition hover:bg-surface-subtle focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus sm:grid-cols-[1.5fr_1fr_1fr_auto] sm:items-center sm:p-ui-5">
-                <div className="min-w-0"><div className="flex min-w-0 items-center gap-2"><p className="break-words font-semibold text-content">{displayName(customer)}</p>{customer.is_vip && <Star size={15} className="shrink-0 fill-amber-400 text-amber-400" />}</div><p className="mt-1 break-words text-xs text-content-muted">{customer.customer_type} · {customer.source.replaceAll("_", " ")}</p></div>
+                <div className="min-w-0"><div className="flex min-w-0 items-center gap-2"><p className="break-words font-semibold text-content">{displayName(customer)}</p>{customer.is_vip && <Star size={15} className="shrink-0 fill-amber-400 text-amber-400" />}</div><p className="mt-1 break-words text-xs text-content-muted">{customer.customer_type} · {label(customer.source)}</p></div>
                 <p className="break-words text-sm text-content-secondary">{customer.primary_phone}</p><p className="break-all text-sm text-content-muted">{customer.email ?? "No email"}</p><span className={`w-fit rounded-full px-2.5 py-1 text-xs ${customer.status === "do_not_service" ? "bg-status-danger/15 text-status-danger" : "bg-status-success/15 text-status-success"}`}>{customer.status.replaceAll("_", " ")}</span>
               </button>
             ))}

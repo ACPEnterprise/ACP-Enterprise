@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 import { AuthenticationContext, type AuthenticationContextValue } from "../auth/AuthenticationContext";
 import { ThemeProvider } from "../theme/ThemeProvider";
 import { appRoutes } from "./router";
+import { RouteErrorBoundary } from "./RouteErrorBoundary";
 
 vi.mock("../routes/MissionControlRoute", () => ({ MissionControlRoute: () => <div>Mission route content</div> }));
 vi.mock("../routes/CommandCenterRoute", () => ({ CommandCenterRoute: () => <div>Command Center route content</div> }));
@@ -42,6 +43,14 @@ function renderRoute(path: string, context: AuthenticationContextValue = authent
 }
 
 describe("application routing", () => {
+  it("renders a user-facing route error instead of the router developer screen", async () => {
+    const Broken = () => { throw new Error("synthetic render failure"); };
+    const router = createMemoryRouter([{ path: "/", Component: Broken, ErrorBoundary: RouteErrorBoundary }]);
+    render(<RouterProvider router={router} />);
+    expect(await screen.findByRole("heading", { name: "Unable to display this page" })).toBeInTheDocument();
+    expect(screen.queryByText("Unexpected Application Error!")).not.toBeInTheDocument();
+  });
+
   it("redirects an unauthenticated user to login without looping", async () => {
     const router = renderRoute("/customers", { ...authenticatedContext, status: "unauthenticated", user: null });
     expect(await screen.findByRole("heading", { name: "Sign in" })).toBeInTheDocument();

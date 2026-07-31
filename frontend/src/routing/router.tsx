@@ -3,10 +3,12 @@ import { createBrowserRouter, type RouteObject } from "react-router";
 import { ApplicationShell } from "../layout";
 import { ProtectedRoute } from "../auth";
 import { appointmentsHandle, commandCenterHandle, customersHandle, dispatchHandle, engineeringHandle, jobsHandle, missionControlHandle, notFoundHandle } from "./routeMetadata";
+import { RouteErrorBoundary } from "./RouteErrorBoundary";
 
 export const appRoutes: RouteObject[] = [
   {
     path: "/login",
+    ErrorBoundary: RouteErrorBoundary,
     lazy: async () => {
       const module = await import("../routes/LoginRoute");
       return { Component: module.LoginRoute };
@@ -15,6 +17,7 @@ export const appRoutes: RouteObject[] = [
   {
     path: "/",
     Component: ProtectedRoute,
+    ErrorBoundary: RouteErrorBoundary,
     children: [
       {
         Component: ApplicationShell,

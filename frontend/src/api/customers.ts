@@ -12,23 +12,24 @@ import type {
   DuplicateCheckInput,
   DuplicateMatch,
 } from "../types/customers";
+import { normalizeCustomerDetail, normalizeCustomerList } from "./customerResponses";
 
 export async function listCustomers(
   search: string,
   limit: number,
   offset: number,
 ): Promise<CustomerListResponse> {
-  const response = await apiClient.get<CustomerListResponse>(
+  const response = await apiClient.get<unknown>(
     "/api/v1/customers",
     { params: { search: search || undefined, limit, offset } },
   );
-  return response.data;
+  return normalizeCustomerList(response.data);
 }
 export async function getCustomer(customerId: string): Promise<CustomerDetail> {
-  const response = await apiClient.get<CustomerDetail>(
+  const response = await apiClient.get<unknown>(
     `/api/v1/customers/${customerId}`,
   );
-  return response.data;
+  return normalizeCustomerDetail(response.data);
 }
 
 export async function createCustomer(

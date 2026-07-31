@@ -61,7 +61,7 @@ export function PropertyForm({ property, isSaving, onSubmit, onCancel }: Propert
           <label className="text-sm text-content-secondary">ZIP<input className={inputClass} required value={form.postal_code} onChange={(event) => update("postal_code", event.target.value)} /></label>
         </div>
         <label className="text-sm text-content-secondary">Property type
-          <select className={inputClass} value={form.property_type} onChange={(event) => update("property_type", event.target.value as CustomerPropertyInput["property_type"])}>
+          <select className={inputClass} value={form.property_type ?? "other"} onChange={(event) => update("property_type", event.target.value as CustomerPropertyInput["property_type"])}>
             <option value="single_family">Single family</option><option value="multi_family">Multi-family</option><option value="commercial">Commercial</option><option value="condo">Condo</option><option value="townhome">Townhome</option><option value="mobile_home">Mobile home</option><option value="other">Other</option>
           </select>
         </label>

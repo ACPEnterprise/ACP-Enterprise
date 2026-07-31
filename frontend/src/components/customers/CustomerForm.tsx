@@ -39,8 +39,8 @@ function editableCustomer(customer?: CustomerDetail): CustomerInput {
     email: customer.email ?? "",
     preferred_contact_method: customer.preferred_contact_method,
     status: customer.status,
-    source: customer.source,
-    is_vip: customer.is_vip,
+    source: customer.source ?? "",
+    is_vip: customer.is_vip ?? false,
     internal_notes: customer.internal_notes ?? "",
   };
 }
@@ -103,7 +103,7 @@ export function CustomerForm({
     email: nullable(form.email),
     internal_notes: nullable(form.internal_notes),
     primary_phone: form.primary_phone.trim(),
-    source: form.source.trim() || "unknown",
+    source: form.source?.trim() || "unknown",
   });
 
   const submit = (event: FormEvent) => {
@@ -226,7 +226,7 @@ export function CustomerForm({
           Customer source
           <input
             className={inputClass}
-            value={form.source}
+            value={form.source ?? ""}
             onChange={(event) => update("source", event.target.value)}
             required
             maxLength={50}

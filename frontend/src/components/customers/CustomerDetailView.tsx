@@ -25,8 +25,9 @@ function displayName(customer: {
   last_name: string | null;
   business_name: string | null;
 }) {
-  return customer.business_name || `${customer.first_name ?? ""} ${customer.last_name ?? ""}`.trim();
+  return "display_name" in customer && typeof customer.display_name === "string" ? customer.display_name : customer.business_name || `${customer.first_name ?? ""} ${customer.last_name ?? ""}`.trim();
 }
+const label = (value: string | null | undefined) => value ? value.replaceAll("_", " ") : "Unknown";
 
 export function CustomerDetailView({ customerId, onBack }: CustomerDetailViewProps) {
   const detail = useCustomerDetail(customerId);
@@ -78,7 +79,7 @@ export function CustomerDetailView({ customerId, onBack }: CustomerDetailViewPro
             <div className="mt-3 flex flex-wrap gap-2 text-xs">
               <span className="rounded-full bg-slate-800 px-3 py-1 text-content-secondary">{customer.customer_type}</span>
               <span className={`rounded-full px-3 py-1 ${archived ? "bg-red-950 text-red-300" : "bg-emerald-950 text-emerald-300"}`}>{archived ? "archived" : customer.status.replaceAll("_", " ")}</span>
-              <span className="rounded-full bg-blue-950 px-3 py-1 text-blue-300">Source: {customer.source.replaceAll("_", " ")}</span>
+              <span className="rounded-full bg-blue-950 px-3 py-1 text-blue-300">Source: {label(customer.source)}</span>
             </div>
           </div>
           {!archived && (
@@ -117,7 +118,7 @@ export function CustomerDetailView({ customerId, onBack }: CustomerDetailViewPro
           {customer.properties.map((property) => (
             <article key={property.id} className="min-w-0 rounded-xl border border-stroke bg-surface-subtle p-4">
               <div className="flex min-w-0 flex-wrap justify-between gap-3"><div className="flex min-w-0 gap-3"><MapPin size={18} className="mt-0.5 shrink-0 text-action-primary" /><div className="min-w-0 break-words"><p className="font-medium">{property.address_line_1}</p>{property.address_line_2 && <p className="text-sm text-content-muted">{property.address_line_2}</p>}<p className="text-sm text-content-muted">{property.city}, {property.state} {property.postal_code}</p></div></div>{property.is_primary && <span className="h-fit rounded-full bg-status-information/15 px-2 py-1 text-xs text-status-information">Primary</span>}</div>
-              <p className="mt-3 text-xs text-content-muted">{property.property_type.replaceAll("_", " ")} · {property.sewer_septic ?? "waste system unknown"}</p>
+              <p className="mt-3 text-xs text-content-muted">{label(property.property_type)} · {property.sewer_septic ?? "waste system unknown"}</p>
               {!archived && <button type="button" onClick={() => setEditingProperty(property)} className="mt-3 text-sm text-action-primary">Edit property</button>}
             </article>
           ))}

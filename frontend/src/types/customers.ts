@@ -21,12 +21,13 @@ export interface CustomerInput {
   email: string | null;
   preferred_contact_method: PreferredContactMethod;
   status: CustomerStatus;
-  source: string;
-  is_vip: boolean;
+  source: string | null;
+  is_vip?: boolean;
   internal_notes: string | null;
 }
 export interface CustomerSummary extends CustomerInput {
   id: string;
+  display_name?: string;
   created_at: string;
   updated_at: string;
   archived_at: string | null;
@@ -38,7 +39,7 @@ export interface CustomerPropertyInput {
   city: string;
   state: string;
   postal_code: string;
-  property_type: PropertyType;
+  property_type: PropertyType | null;
   gate_access_instructions: string | null;
   water_shutoff_location: string | null;
   sewer_septic: SewerSeptic | null;
