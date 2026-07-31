@@ -199,10 +199,17 @@ def parser() -> argparse.ArgumentParser:
     return result
 
 
+async def _execute_and_dispose(arguments: argparse.Namespace) -> int:
+    try:
+        return await execute(arguments)
+    finally:
+        await engine.dispose()
+
+
 def main() -> None:
     arguments = parser().parse_args()
     try:
-        result = asyncio.run(execute(arguments))
+        result = asyncio.run(_execute_and_dispose(arguments))
     except (
         AuthenticationError,
         AuthorizationError,
@@ -221,8 +228,6 @@ def main() -> None:
             file=sys.stderr,
         )
         result = 2
-    finally:
-        asyncio.run(engine.dispose())
     raise SystemExit(result)
 
 
