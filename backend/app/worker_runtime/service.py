@@ -64,6 +64,7 @@ class AuthenticatedWorkerRuntime:
         self._state = WorkerRuntimeState.STOPPED
         self._last_heartbeat_at: datetime | None = None
         self._workstream_versions: dict[UUID, int] = {}
+        self._workstream_actions: dict[UUID, str] = {}
         self._lock = asyncio.Lock()
 
     @classmethod
@@ -195,6 +196,9 @@ class AuthenticatedWorkerRuntime:
             if not offers:
                 return False
             offered = offers[0]
+            command_id = UUID(str(offered["command_id"]))
+            if self._workstream_actions.get(command_id) in {"pause", "cancel"}:
+                return False
             sent_at = datetime.now(timezone.utc)
             acquisition = ControlledOfferAcquisitionMessage(
                 offer_id=UUID(str(offered["offer_id"]))
@@ -219,7 +223,6 @@ class AuthenticatedWorkerRuntime:
             )
             self._advance(sent_at)
             started_at = datetime.now(timezone.utc)
-            command_id = UUID(str(offered["command_id"]))
             if command_id in self._workstream_versions:
                 await self._publish_workstream_state(
                     command_id=command_id,
@@ -332,6 +335,7 @@ class AuthenticatedWorkerRuntime:
             self._workstream_versions[UUID(str(control["command_id"]))] = (
                 runtime_version
             )
+            self._workstream_actions[UUID(str(control["command_id"]))] = action
             return True
 
     async def _publish_workstream_state(
