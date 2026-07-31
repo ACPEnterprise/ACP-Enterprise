@@ -92,7 +92,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile.preview
     environment:
-      ACP_WORKER_BASE_URL: http://backend:8000
+      ACP_WORKER_BASE_URL: ${ACP_WORKER_BASE_URL:-http://backend:8000}
       ACP_WORKER_ID: ${ACP_WORKER_ID:-00000000-0000-0000-0000-000000000000}
       ACP_WORKER_PRIVATE_KEY_FILE: /run/secrets/preview-worker.key
       ACP_WORKER_CAPABILITIES: ${ACP_WORKER_CAPABILITIES:-transport.connectivity}
