@@ -6,6 +6,14 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
+
 from app.core.config import settings
 from app.economics.contracts import EvidenceInput, RecordBusinessFact
 from app.economics.domain import (
@@ -26,13 +34,6 @@ from app.economics.models import (
 from app.economics.service import EconomicsQueryService
 from app.events.models import BusinessEvent
 from app.platform.company.models import Company
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import (
-    AsyncEngine,
-    AsyncSession,
-    async_sessionmaker,
-    create_async_engine,
-)
 
 
 @pytest_asyncio.fixture

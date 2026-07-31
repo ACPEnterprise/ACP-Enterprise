@@ -126,5 +126,9 @@ for _strategy in (
     "job_duration",
     "branch",
     "company",
+    "labor",
+    "truck",
+    "equipment",
+    "overhead",
 ):
     allocation_registry.register(_strategy, "1", proportional_allocation)

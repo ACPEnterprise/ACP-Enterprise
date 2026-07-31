@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
+
 from app.economics.adapters import (
     AdapterContext,
     AppointmentSourceAdapter,

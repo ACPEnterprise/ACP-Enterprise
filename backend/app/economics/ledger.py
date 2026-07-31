@@ -19,6 +19,7 @@ from app.economics.domain import (
     ProfitMeasurement,
 )
 from app.economics.models import (
+    AccountingPeriodRecord,
     AllocationPolicyRecord,
     AllocationRecord,
     AllocationRunRecord,
@@ -163,6 +164,21 @@ class EconomicsLedgerService:
     async def record_fact(
         cls, session: AsyncSession, company_id: UUID, command: RecordBusinessFact
     ) -> BusinessFactRecord:
+        accounting_period = await session.scalar(
+            select(AccountingPeriodRecord).where(
+                AccountingPeriodRecord.company_id == company_id,
+                AccountingPeriodRecord.period_start <= command.period_start,
+                AccountingPeriodRecord.period_end >= command.period_end,
+            )
+        )
+        if accounting_period is not None and accounting_period.status in {
+            "closing",
+            "closed",
+        }:
+            raise EconomicsLedgerError(
+                "closed or closing accounting periods cannot accept evidence; "
+                "use controlled reopening"
+            )
         if (
             command.amount_minor is None
             and command.confidence.status.value != "unknown"

@@ -45,3 +45,17 @@ class DefineAllocationPolicy:
     strategy: str
     driver_fact_key: str
     rationale: str
+
+
+@dataclass(frozen=True, slots=True)
+class OpenAccountingPeriod:
+    period_start: date
+    period_end: date
+    responsible_owner_id: UUID
+    reason: str
+
+
+@dataclass(frozen=True, slots=True)
+class TransitionAccountingPeriod:
+    responsible_owner_id: UUID
+    reason: str

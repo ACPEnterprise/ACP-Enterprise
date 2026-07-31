@@ -1,5 +1,6 @@
-from app.economics.router import router
 from fastapi import FastAPI
+
+from app.economics.router import router
 
 
 def test_economics_api_is_read_only() -> None:

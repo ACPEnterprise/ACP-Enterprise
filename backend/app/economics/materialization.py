@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from time import monotonic_ns
 from uuid import UUID
 
 from sqlalchemy import exists, select
@@ -138,6 +139,9 @@ class EconomicsMaterializationService:
 class EconomicsRecalculationService:
     @classmethod
     async def process_pending(cls, session: AsyncSession, *, limit: int = 100) -> int:
+        from app.economics.integrity import ProjectionPublicationService
+        from app.economics.models import OperationalMetricRecord
+
         pending = tuple(
             (
                 await session.scalars(
@@ -155,6 +159,7 @@ class EconomicsRecalculationService:
         processed_at = datetime.now(timezone.utc)
         processed = 0
         for scope in pending:
+            started = monotonic_ns()
             if scope.scope_type == "job":
                 await EconomicsMaterializationService.materialize_job(
                     session,
@@ -164,6 +169,26 @@ class EconomicsRecalculationService:
                     scope.period_start,
                     scope.period_end,
                 )
+            await ProjectionPublicationService.publish(
+                session,
+                scope.company_id,
+                scope.scope_type,
+                scope.scope_id,
+                scope.period_start,
+                scope.period_end,
+                scope.branch_id,
+            )
+            session.add(
+                OperationalMetricRecord(
+                    company_id=scope.company_id,
+                    name="materialization_duration_ms",
+                    value=max(0, (monotonic_ns() - started) // 1_000_000),
+                    labels={
+                        "scope_type": scope.scope_type,
+                        "scope_id": str(scope.scope_id),
+                    },
+                )
+            )
             scope.processed_at = processed_at
             processed += 1
         await session.flush()
