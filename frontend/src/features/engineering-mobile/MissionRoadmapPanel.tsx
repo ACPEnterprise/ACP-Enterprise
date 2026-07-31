@@ -71,6 +71,19 @@ function MilestoneCard({
       <p className="mt-ui-3 text-sm leading-6 text-content-muted">
         {item.objective}
       </p>
+      <p className="mt-ui-2 text-xs font-medium text-content-muted">
+        {item.owning_workstream} · {item.owning_branch}
+      </p>
+      {!item.requested_code_changes && (
+        <p className="mt-ui-2 text-xs font-semibold text-emerald-400">
+          Read-only · repository changes prohibited
+        </p>
+      )}
+      {item.status === "externally_running" && item.external_evidence && (
+        <p className="mt-ui-2 rounded-xl border border-violet-400/30 bg-violet-400/10 p-ui-3 text-sm text-content-muted">
+          Already underway outside Mission Control · {item.external_evidence}
+        </p>
+      )}
       {item.command_id && (
         <Link
           to={`/engineering/${item.command_id}`}

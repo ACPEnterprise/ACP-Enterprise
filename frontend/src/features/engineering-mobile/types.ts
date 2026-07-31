@@ -201,9 +201,11 @@ export interface MobileWorkstreamPage {
 }
 
 export type MilestoneStatus =
+  | "draft"
   | "planned"
   | "ready"
   | "running"
+  | "externally_running"
   | "waiting_review"
   | "waiting_approval"
   | "blocked"
@@ -241,14 +243,19 @@ export interface MilestoneItem {
   position: number;
   title: string;
   objective: string;
+  owning_workstream: string;
+  owning_branch: string;
   authority: readonly string[];
   constraints: readonly string[];
+  dependencies: readonly string[];
   validation: readonly string[];
   deliverables: readonly string[];
   stop_conditions: readonly string[];
   expected_completion_evidence: readonly string[];
   status: MilestoneStatus;
   definition_approved: boolean;
+  requested_code_changes: boolean;
+  external_evidence: string | null;
   command_id: string | null;
   version: number;
   started_at: string | null;

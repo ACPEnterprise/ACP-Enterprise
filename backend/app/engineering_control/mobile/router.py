@@ -87,7 +87,8 @@ async def list_roadmaps(context: ReadContext, session: DatabaseSession) -> Roadm
     current = tuple(
         item
         for item in milestones
-        if item.status in {"ready", "running", "paused", "waiting_review"}
+        if item.status
+        in {"ready", "running", "externally_running", "paused", "waiting_review"}
     )
     next_ids: set[UUID] = set()
     for roadmap in roadmaps:
@@ -107,7 +108,7 @@ async def list_roadmaps(context: ReadContext, session: DatabaseSession) -> Roadm
     future = tuple(
         item
         for item in milestones
-        if item.status == "planned" and item.id not in next_ids
+        if item.status in {"planned", "draft"} and item.id not in next_ids
     )
     completed = tuple(item for item in milestones if item.status == "completed")
     blocked = tuple(item for item in milestones if item.status == "blocked")

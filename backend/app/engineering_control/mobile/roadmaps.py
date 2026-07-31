@@ -87,7 +87,7 @@ class EngineeringMilestone(Base):
         CheckConstraint("position >= 1", name="ck_engineering_milestone_position"),
         CheckConstraint("version >= 1", name="ck_engineering_milestone_version"),
         CheckConstraint(
-            "status IN ('planned','ready','running','waiting_review','waiting_approval','blocked','completed','paused','cancelled','skipped','archived')",
+            "status IN ('draft','planned','ready','running','externally_running','waiting_review','waiting_approval','blocked','completed','paused','cancelled','skipped','archived')",
             name="ck_engineering_milestone_status",
         ),
         Index(
@@ -110,8 +110,11 @@ class EngineeringMilestone(Base):
     position: Mapped[int] = mapped_column(Integer, nullable=False)
     title: Mapped[str] = mapped_column(String(160), nullable=False)
     objective: Mapped[str] = mapped_column(Text, nullable=False)
+    owning_workstream: Mapped[str] = mapped_column(String(100), nullable=False)
+    owning_branch: Mapped[str] = mapped_column(String(255), nullable=False)
     authority: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
     constraints: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
+    dependencies: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
     validation: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
     deliverables: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
     stop_conditions: Mapped[list[str]] = mapped_column(
@@ -124,6 +127,10 @@ class EngineeringMilestone(Base):
     definition_approved: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False
     )
+    requested_code_changes: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True
+    )
+    external_evidence: Mapped[str | None] = mapped_column(Text)
     command_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("engineering_commands.id")
     )
@@ -215,8 +222,11 @@ class RoadmapService:
                     position=index,
                     title=definition.title,
                     objective=definition.objective,
+                    owning_workstream=definition.owning_workstream or data.title,
+                    owning_branch=definition.owning_branch or data.expected_branch,
                     authority=list(definition.authority),
                     constraints=list(definition.constraints),
+                    dependencies=list(definition.dependencies),
                     validation=list(definition.validation),
                     deliverables=list(definition.deliverables),
                     stop_conditions=list(definition.stop_conditions),
@@ -225,6 +235,7 @@ class RoadmapService:
                     ),
                     status=status,
                     definition_approved=definition.approved,
+                    requested_code_changes=definition.requested_code_changes,
                     created_at=now,
                     updated_at=now,
                 )
@@ -301,6 +312,7 @@ class RoadmapService:
         definition_approved = milestone.definition_approved
         roadmap_id = milestone.roadmap_id
         command_id = milestone.command_id
+        requested_code_changes = milestone.requested_code_changes
         instruction = self._instruction(milestone)
         await db.rollback()
         if action == "start":
@@ -320,7 +332,7 @@ class RoadmapService:
                     repository_key=repository_key,
                     expected_branch=expected_branch,
                     expected_head=expected_head,
-                    requested_code_changes=True,
+                    requested_code_changes=requested_code_changes,
                     expires_at=now + timedelta(days=7),
                     idempotency_key=f"milestone:{milestone_id}:v{expected_version}",
                 ),
@@ -423,6 +435,8 @@ class RoadmapService:
             "planned": "queued",
             "ready": "queued",
             "running": "running",
+            "externally_running": "running",
+            "draft": "queued",
             "paused": "paused",
             "waiting_review": "waiting_for_owner",
             "waiting_approval": "waiting_for_owner",
@@ -530,7 +544,13 @@ class RoadmapService:
                 EngineeringMilestone.company_id == company_id,
                 EngineeringMilestone.roadmap_id == roadmap_id,
                 EngineeringMilestone.status.in_(
-                    {"ready", "running", "paused", "waiting_review"}
+                    {
+                        "ready",
+                        "running",
+                        "externally_running",
+                        "paused",
+                        "waiting_review",
+                    }
                 ),
             )
         )
@@ -567,8 +587,11 @@ class RoadmapService:
     def _instruction(item: EngineeringMilestone) -> str:
         sections = [
             ("Objective", [item.objective]),
+            ("Owning workstream", [item.owning_workstream]),
+            ("Owning branch", [item.owning_branch]),
             ("Authority", item.authority),
             ("Constraints", item.constraints),
+            ("Dependencies", item.dependencies),
             ("Validation", item.validation),
             ("Deliverables", item.deliverables),
             ("Stop conditions", item.stop_conditions),

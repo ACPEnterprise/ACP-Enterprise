@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from app.core.config import settings
 from app.database.session import get_database_session
 from app.engineering_control.mobile.control import EngineeringWorkstreamControl
+from app.engineering_control.mobile.roadmap_initialization import ROADMAPS
 from app.engineering_control.mobile.roadmaps import EngineeringMilestone
 from app.engineering_control.mobile.router import router
 from app.engineering_control.mobile.service import MobileEngineeringControlService
@@ -349,6 +350,7 @@ async def test_roadmap_dispatch_and_safe_progression_owner_workflow(
                     "stop_conditions": ["Unrecoverable blocker"],
                     "expected_completion_evidence": ["Structured report"],
                     "approved": True,
+                    "requested_code_changes": False,
                 },
                 {
                     "title": "Milestone two",
@@ -375,6 +377,23 @@ async def test_roadmap_dispatch_and_safe_progression_owner_workflow(
     assert started.status_code == 200
     assert started.json()["status"] == "running"
     assert started.json()["command_id"] is not None
+    assert started.json()["requested_code_changes"] is False
+    async with mobile_api.factory() as session:
+        dispatched_command = await session.scalar(
+            select(EngineeringCommand).where(
+                EngineeringCommand.id == started.json()["command_id"]
+            )
+        )
+    assert dispatched_command is not None
+    assert dispatched_command.requested_code_changes is False
+
+    duplicate = await request(
+        app,
+        "POST",
+        f"/api/v1/engineering/mobile/milestones/{first['id']}/actions",
+        json={"action": "start", "expected_version": first["version"]},
+    )
+    assert duplicate.status_code == 409
 
     completed_at = utc_now()
     async with mobile_api.factory() as session, session.begin():
@@ -487,6 +506,37 @@ async def test_roadmap_dispatch_and_safe_progression_owner_workflow(
     assert len(command_ids) == 1
     assert len(control_ids) == 1
     assert len(runtime_ids) == 1
+
+
+def test_initial_roadmap_catalog_is_truthful_and_never_auto_dispatches() -> None:
+    by_title = {item["title"]: item for item in ROADMAPS}
+    assert set(by_title) == {
+        "Customer Migration",
+        "Business Economics",
+        "Beacon",
+        "Operations",
+        "Mission Control",
+    }
+    all_milestones = [
+        milestone for roadmap in ROADMAPS for milestone in roadmap["milestones"]
+    ]
+    ready = [item for item in all_milestones if item["status"] == "ready"]
+    assert [item["title"] for item in ready] == [
+        "Mission Control V2.1 Phone Acceptance Rehearsal"
+    ]
+    assert ready[0]["requested_code_changes"] is False
+    assert all(
+        item["status"] != "draft" or item["approved"] is False
+        for item in all_milestones
+    )
+    assert {
+        item["title"]
+        for item in all_milestones
+        if item["status"] == "externally_running"
+    } == {
+        "Operational Migration Phase 2 — Estimates, Invoices, and Payments",
+        "Phase 4 Accounting Integration and Financial Close",
+    }
 
 
 @pytest.mark.asyncio

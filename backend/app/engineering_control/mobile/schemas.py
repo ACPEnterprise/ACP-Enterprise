@@ -220,13 +220,17 @@ class MobileCancellationRequest(MobileEngineeringSchema):
 class MilestoneDefinitionCreate(MobileEngineeringSchema):
     title: str = Field(min_length=1, max_length=160)
     objective: str = Field(min_length=1, max_length=10000)
+    owning_workstream: str | None = Field(default=None, min_length=1, max_length=100)
+    owning_branch: str | None = Field(default=None, min_length=1, max_length=255)
     authority: tuple[str, ...] = ()
     constraints: tuple[str, ...] = ()
+    dependencies: tuple[str, ...] = ()
     validation: tuple[str, ...] = ()
     deliverables: tuple[str, ...] = ()
     stop_conditions: tuple[str, ...] = ()
     expected_completion_evidence: tuple[str, ...] = ()
     approved: bool = False
+    requested_code_changes: bool = True
 
 
 class RoadmapCreate(MobileEngineeringSchema):
@@ -255,14 +259,19 @@ class MilestoneItem(MobileEngineeringSchema):
     position: int
     title: str
     objective: str
+    owning_workstream: str
+    owning_branch: str
     authority: tuple[str, ...]
     constraints: tuple[str, ...]
+    dependencies: tuple[str, ...]
     validation: tuple[str, ...]
     deliverables: tuple[str, ...]
     stop_conditions: tuple[str, ...]
     expected_completion_evidence: tuple[str, ...]
     status: str
     definition_approved: bool
+    requested_code_changes: bool
+    external_evidence: str | None
     command_id: UUID | None
     version: int
     started_at: datetime | None
