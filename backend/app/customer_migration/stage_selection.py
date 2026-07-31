@@ -132,7 +132,25 @@ class CustomerMigrationStageSelectionService:
                 key=lambda item: item.source_identity_sha256,
             )
         )
-        selected = eligible if limit is None else eligible[:limit]
+        prior_hashes = (
+            prior_stage.ordered_customer_identity_sha256
+            if prior_stage is not None
+            else ()
+        )
+        by_hash = {item.source_identity_sha256: item for item in reviewed.aggregates}
+        try:
+            retained_prior = tuple(by_hash[identity] for identity in prior_hashes)
+        except KeyError as error:
+            raise ValueError(
+                "prior stage identity is absent from reviewed output"
+            ) from error
+        eligible_after_prior = tuple(
+            item
+            for item in eligible
+            if item.source_identity_sha256 not in set(prior_hashes)
+        )
+        cumulative = retained_prior + eligible_after_prior
+        selected = cumulative if limit is None else cumulative[:limit]
         if limit is not None and len(selected) != limit:
             raise ValueError("insufficient eligible Customer aggregates")
         hashes = tuple(item.source_identity_sha256 for item in selected)
@@ -141,8 +159,7 @@ class CustomerMigrationStageSelectionService:
             if (
                 prior_stage.source_sha256 != reviewed.source_sha256
                 or prior_stage.transformation_version != reviewed.transformation_sha256
-                or hashes[: prior_stage.expected_customers]
-                != prior_stage.ordered_customer_identity_sha256
+                or hashes[: prior_stage.expected_customers] != prior_hashes
             ):
                 raise ValueError("prior stage is not a cumulative prefix")
         values: dict[str, object] = {
@@ -174,7 +191,7 @@ class CustomerMigrationStageSelectionService:
             "ordered_customer_identity_sha256": hashes,
             "eligibility": PilotEligibilityStatistics(
                 reviewed=len(reviewed.aggregates),
-                eligible=len(eligible),
+                eligible=len(cumulative),
                 selected=len(selected),
                 rejected=len(rejected),
                 duplicate=len(duplicates),
