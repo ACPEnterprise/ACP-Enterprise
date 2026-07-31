@@ -81,6 +81,10 @@ class CountRepository:
         del factory
         return self.head
 
+    async def imported_source_identities(self, factory, **kwargs) -> frozenset[str]:
+        del factory
+        return frozenset(kwargs["source_identities"])
+
 
 class Facade:
     def __init__(self, report: CustomerAdapterImportReport | None = None) -> None:

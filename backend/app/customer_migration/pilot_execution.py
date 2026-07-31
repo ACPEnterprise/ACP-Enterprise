@@ -20,6 +20,7 @@ from app.customer_migration.adapter_import import (
     ExpectedCustomerImportCounts,
     ReviewedCustomerAdapterOutput,
 )
+from app.customer_migration.models import CustomerSourceIdentity
 from app.customer_migration.customer_import import (
     CustomerImportFacade,
     customer_import_facade,
@@ -233,6 +234,15 @@ class OperationalCountReader(Protocol):
 
     async def alembic_head(self, factory: async_sessionmaker[AsyncSession]) -> str: ...
 
+    async def imported_source_identities(
+        self,
+        factory: async_sessionmaker[AsyncSession],
+        *,
+        context: AuthorizationContext,
+        source_system: str,
+        source_identities: tuple[str, ...],
+    ) -> frozenset[str]: ...
+
 
 class CustomerPilotExecutionRepository:
     async def read(
@@ -268,6 +278,24 @@ class CustomerPilotExecutionRepository:
         if not isinstance(revision, str) or not revision:
             raise PilotExecutionError("database Alembic revision is unavailable")
         return revision
+
+    async def imported_source_identities(
+        self,
+        factory: async_sessionmaker[AsyncSession],
+        *,
+        context: AuthorizationContext,
+        source_system: str,
+        source_identities: tuple[str, ...],
+    ) -> frozenset[str]:
+        async with factory() as session:
+            values = await session.scalars(
+                select(CustomerSourceIdentity.source_customer_id).where(
+                    CustomerSourceIdentity.company_id == context.company.id,
+                    CustomerSourceIdentity.source_system == source_system,
+                    CustomerSourceIdentity.source_customer_id.in_(source_identities),
+                )
+            )
+        return frozenset(values.all())
 
 
 class CustomerPilotExecutionService:
@@ -313,9 +341,33 @@ class CustomerPilotExecutionService:
         if reviewed.schema_version != approval.schema_version:
             raise PilotExecutionError("schema version mismatch")
         expected_post_counts = self._expected_post_counts(approval)
-        if pre_counts not in (
-            approval.expected_pre_import_counts,
-            expected_post_counts,
+        initial = approval.expected_pre_import_counts
+        unchanged = (
+            "customer_notes",
+            "appointments",
+            "jobs",
+            "estimates",
+            "invoices",
+            "payments",
+        )
+        bounded = (
+            "customers",
+            "customer_contacts",
+            "service_locations",
+            "customer_billing_addresses",
+            "business_events",
+        )
+        if any(
+            getattr(pre_counts, field) != getattr(initial, field) for field in unchanged
+        ):
+            raise PilotExecutionError("pre-import operational counts changed")
+        if any(
+            not (
+                getattr(initial, field)
+                <= getattr(pre_counts, field)
+                <= getattr(expected_post_counts, field)
+            )
+            for field in bounded
         ):
             raise PilotExecutionError("pre-import operational counts changed")
         boundary = approval.import_boundary()
@@ -390,8 +442,38 @@ class CustomerPilotExecutionService:
             current_alembic_head=current_alembic_head,
             pre_counts=pre_counts,
         )
+        expected_post_counts = self._expected_post_counts(approval)
+        partial_resume = pre_counts not in (
+            approval.expected_pre_import_counts,
+            expected_post_counts,
+        )
+        if partial_resume:
+            existing = getattr(approval, "expected_already_imported", None)
+            if existing is None:
+                raise PilotExecutionError("pilot state is not a complete boundary")
+            selected_by_hash = {
+                aggregate.source_identity_sha256: aggregate
+                for aggregate in reviewed.aggregates
+            }
+            ordered = tuple(
+                selected_by_hash[identity].source_identity
+                for identity in approval.ordered_source_identity_allowlist
+            )
+            imported_count = existing.customers + (
+                pre_counts.customers - approval.expected_pre_import_counts.customers
+            )
+            actual_identities = await self.repository.imported_source_identities(
+                factory,
+                context=context,
+                source_system=reviewed.source_system,
+                source_identities=ordered,
+            )
+            if actual_identities != frozenset(ordered[:imported_count]):
+                raise PilotExecutionError(
+                    "partial stage is not the deterministic imported prefix"
+                )
         imported: CustomerAdapterImportReport | None = None
-        replay_expected = pre_counts == self._expected_post_counts(approval)
+        replay_expected = pre_counts == expected_post_counts
         if approval.mode == "import":
             imported = await self.facade.import_reviewed(
                 factory,
@@ -416,20 +498,29 @@ class CustomerPilotExecutionService:
             business_events=post_counts.business_events - pre_counts.business_events,
         )
         if imported is not None:
-            incremental = self._incremental_expected(approval)
-            existing = getattr(
-                approval, "expected_already_imported", None
-            ) or PilotExpectedCounts(
-                customers=0,
-                contacts=0,
-                service_locations=0,
-                billing_addresses=0,
-                business_events=0,
+            incremental = PilotExpectedCounts(
+                customers=expected_post_counts.customers - pre_counts.customers,
+                contacts=(
+                    expected_post_counts.customer_contacts
+                    - pre_counts.customer_contacts
+                ),
+                service_locations=(
+                    expected_post_counts.service_locations
+                    - pre_counts.service_locations
+                ),
+                billing_addresses=(
+                    expected_post_counts.customer_billing_addresses
+                    - pre_counts.customer_billing_addresses
+                ),
+                business_events=(
+                    expected_post_counts.business_events - pre_counts.business_events
+                ),
             )
+            recognized = approval.expected.customers - incremental.customers
             expected_delta = (
                 incremental
                 if imported.accepted == incremental.customers
-                and imported.duplicate == existing.customers
+                and imported.duplicate == recognized
                 else PilotExpectedCounts(
                     customers=0,
                     contacts=0,
