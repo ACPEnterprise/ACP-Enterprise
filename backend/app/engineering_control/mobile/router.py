@@ -21,6 +21,9 @@ from .schemas import (
     MobileCommandDetail,
     MobileCommandPage,
     MobileOwnerReviewPage,
+    MobileWorkstreamActionRequest,
+    MobileWorkstreamActionResult,
+    MobileWorkstreamDetail,
     MobileWorkstreamPage,
 )
 from .service import mobile_engineering_control_service
@@ -60,6 +63,51 @@ async def list_workstreams(
         page=page,
         page_size=page_size,
     )
+
+
+@router.get(
+    "/workstreams/{command_id}",
+    response_model=MobileWorkstreamDetail,
+    summary="Get an authoritative Engineering workstream",
+)
+async def get_workstream(
+    command_id: UUID, context: ReadContext, session: DatabaseSession
+) -> MobileWorkstreamDetail:
+    try:
+        return await mobile_engineering_control_service.workstream_detail(
+            session, context=context, command_id=command_id
+        )
+    except EngineeringControlError as error:
+        raise engineering_http_error(error) from error
+
+
+@router.post(
+    "/workstreams/{command_id}/actions",
+    response_model=MobileWorkstreamActionResult,
+    summary="Request an owner workstream control action",
+)
+async def control_workstream(
+    command_id: UUID,
+    request: MobileWorkstreamActionRequest,
+    context: ManageContext,
+    session: DatabaseSession,
+) -> MobileWorkstreamActionResult:
+    try:
+        return await mobile_engineering_control_service.control_workstream(
+            session,
+            context=context,
+            command_id=command_id,
+            action=request.action,
+            reason=request.reason,
+        )
+    except ValueError as error:
+        from fastapi import HTTPException, status
+
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail=str(error)
+        ) from error
+    except EngineeringControlError as error:
+        raise engineering_http_error(error) from error
 
 
 @router.get(

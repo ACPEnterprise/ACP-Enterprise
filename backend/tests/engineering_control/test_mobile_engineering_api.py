@@ -5,9 +5,6 @@ from datetime import datetime, timedelta, timezone
 import httpx
 import pytest
 import pytest_asyncio
-from fastapi import FastAPI
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-
 from app.core.config import settings
 from app.database.session import get_database_session
 from app.engineering_control.mobile.router import router
@@ -16,6 +13,9 @@ from app.engineering_control.review.service import EngineeringReviewService
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import EngineeringCommandPermission
 from app.platform.permissions.dependencies import get_authorization_context
+from fastapi import FastAPI
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
 from tests.engineering_control.review.test_engineering_review import completed_command
 from tests.engineering_control.test_engineering_command_service import (
     ServiceFixture,
@@ -258,8 +258,42 @@ async def test_workstream_projection_lists_authoritative_safe_next_action(
             "repository_clean": None,
             "owner_attention_required": True,
             "updated_at": body["items"][0]["updated_at"],
+            "pipeline_status": "waiting_for_owner",
+            "desired_state": "active",
+            "control_pending": False,
+            "available_actions": ["refresh", "cancel"],
         }
     ]
+
+    detail = await request(
+        app,
+        "GET",
+        f"/api/v1/engineering/mobile/workstreams/{command['id']}",
+    )
+    assert detail.status_code == 200
+    assert detail.json()["pipeline_status"] == "waiting_for_owner"
+    assert (
+        detail.json()["owner_instruction"]
+        == create_payload(suffix="workstream")["owner_instruction"]
+    )
+
+    paused = await request(
+        app,
+        "POST",
+        f"/api/v1/engineering/mobile/workstreams/{command['id']}/actions",
+        json={"action": "pause", "reason": "Owner review"},
+    )
+    assert paused.status_code == 200
+    assert paused.json()["desired_state"] == "paused"
+
+    refreshed = await request(
+        app,
+        "GET",
+        f"/api/v1/engineering/mobile/workstreams/{command['id']}",
+    )
+    assert refreshed.json()["desired_state"] == "paused"
+    assert refreshed.json()["control_pending"] is True
+    assert refreshed.json()["available_actions"] == ["resume", "refresh", "cancel"]
 
 
 @pytest.mark.asyncio

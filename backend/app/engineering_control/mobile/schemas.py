@@ -116,6 +116,33 @@ class MobileWorkstreamSummary(MobileEngineeringSchema):
     repository_clean: bool | None
     owner_attention_required: bool
     updated_at: datetime
+    pipeline_status: str
+    desired_state: str
+    control_pending: bool
+    available_actions: tuple[str, ...]
+
+
+class MobileWorkstreamDetail(MobileWorkstreamSummary):
+    owner_instruction: str
+    requested_code_changes: bool
+    created_at: datetime
+    started_at: datetime | None
+    finished_at: datetime | None
+    timeline: tuple[dict[str, object], ...]
+
+
+class MobileWorkstreamActionRequest(MobileEngineeringSchema):
+    action: str = Field(pattern=r"^(start|pause|resume|cancel)$")
+    reason: str | None = Field(default=None, max_length=240)
+
+
+class MobileWorkstreamActionResult(MobileEngineeringSchema):
+    command_id: UUID
+    action: str
+    desired_state: str
+    accepted: bool
+    message: str
+    updated_at: datetime
 
 
 class MobileWorkstreamPage(MobileEngineeringSchema):
