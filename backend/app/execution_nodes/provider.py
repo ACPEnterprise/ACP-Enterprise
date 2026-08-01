@@ -209,7 +209,7 @@ class ControlledExecutionProvider:
             enforce_changed_paths(request.boundary, files)
             self.journal.append(request, ProviderPhase.VALIDATING, files=list(files))
             validations = self._validate(
-                workspace, request.boundary.validation_requirements
+                workspace, request.boundary.validation_requirements, files
             )
             self.journal.append(
                 request,
@@ -245,7 +245,9 @@ class ControlledExecutionProvider:
             )
 
     @staticmethod
-    def _validate(workspace: Path, requirements: tuple[str, ...]) -> dict[str, bool]:
+    def _validate(
+        workspace: Path, requirements: tuple[str, ...], files: tuple[str, ...]
+    ) -> dict[str, bool]:
         allowed = {
             "git diff --check": (Path("."), ("git", "diff", "--check", "HEAD")),
             "ruff": (Path("backend"), (sys.executable, "-m", "ruff", "check", ".")),
@@ -257,9 +259,18 @@ class ControlledExecutionProvider:
             ),
             "typescript": (Path("frontend"), ("npm", "run", "build")),
         }
+        python_changed = any(path.endswith(".py") for path in files)
+        frontend_changed = any(path.startswith("frontend/") for path in files)
         results: dict[str, bool] = {}
         for requirement in requirements:
-            validation = allowed.get(requirement.casefold())
+            normalized = requirement.casefold()
+            if normalized in {"ruff", "mypy", "pytest"} and not python_changed:
+                results[requirement] = True
+                continue
+            if normalized in {"eslint", "typescript"} and not frontend_changed:
+                results[requirement] = True
+                continue
+            validation = allowed.get(normalized)
             if validation is None:
                 raise ProviderFailure(f"Validation is not allowlisted: {requirement}")
             relative_cwd, argv = validation
