@@ -3,6 +3,7 @@ from uuid import UUID, uuid4
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     CheckConstraint,
     Date,
     DateTime,
@@ -678,7 +679,7 @@ class OperationalMetricRecord(Base):
     __tablename__ = "business_economics_operational_metrics"
     __table_args__ = (
         CheckConstraint(
-            "name IN ('pending_recalculations', 'allocation_execution_ms', 'materialization_duration_ms', 'reconciliation_failures', 'stale_measurements', 'incomplete_periods')",
+            "name IN ('pending_recalculations', 'allocation_execution_ms', 'materialization_duration_ms', 'reconciliation_failures', 'stale_measurements', 'incomplete_periods', 'scheduled_processing_failures', 'scheduled_processing_duration_ms')",
             name="ck_business_economics_metrics_name",
         ),
         Index(
@@ -702,5 +703,415 @@ class OperationalMetricRecord(Base):
         JSONB, nullable=False, default=dict
     )
     observed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
+class EconomicsSourceBindingRecord(Base):
+    __tablename__ = "business_economics_source_bindings"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('bound', 'read_only', 'contract_ready', 'unavailable')",
+            name="ck_business_economics_source_bindings_status",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "source_type",
+            "version",
+            name="uq_business_economics_source_bindings_version",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    source_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    owner_domain: Mapped[str] = mapped_column(String(80), nullable=False)
+    source_table: Mapped[str | None] = mapped_column(String(100))
+    adapter_key: Mapped[str] = mapped_column(String(100), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False)
+    evidence_requirements: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    input_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
+class EconomicsProcessingWorkItem(Base):
+    __tablename__ = "business_economics_processing_work_items"
+    __table_args__ = (
+        CheckConstraint(
+            "kind IN ('recalculation', 'allocation', 'materialization', 'publication', 'reconciliation', 'monitoring')",
+            name="ck_business_economics_work_items_kind",
+        ),
+        CheckConstraint(
+            "status IN ('pending', 'processing', 'retry_scheduled', 'completed', 'failed')",
+            name="ck_business_economics_work_items_status",
+        ),
+        CheckConstraint(
+            "attempt_count >= 0 AND max_attempts >= 1",
+            name="ck_business_economics_work_items_attempts",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "idempotency_key",
+            name="uq_business_economics_work_items_idempotency",
+        ),
+        Index(
+            "ix_business_economics_work_items_claim",
+            "status",
+            "available_at",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    period_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("business_economics_accounting_periods.id", ondelete="RESTRICT"),
+    )
+    kind: Mapped[str] = mapped_column(String(24), nullable=False)
+    scope_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    scope_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(160), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False)
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    max_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
+    available_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+    claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_error: Mapped[str | None] = mapped_column(Text)
+    failure_evidence_digest: Mapped[str | None] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
+class AccountingMappingRecord(Base):
+    __tablename__ = "business_economics_accounting_mappings"
+    __table_args__ = (
+        CheckConstraint(
+            "classification IN ('revenue', 'labor', 'materials', 'equipment', 'truck', 'overhead', 'payment', 'allocation')",
+            name="ck_business_economics_accounting_mapping_class",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "mapping_key",
+            "version",
+            name="uq_business_economics_accounting_mapping_version",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    mapping_key: Mapped[str] = mapped_column(String(100), nullable=False)
+    classification: Mapped[str] = mapped_column(String(20), nullable=False)
+    account_code: Mapped[str] = mapped_column(String(100), nullable=False)
+    branch_dimension_key: Mapped[str | None] = mapped_column(String(100))
+    dimensions: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    rationale: Mapped[str] = mapped_column(Text, nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
+class AccountingExportRecord(Base):
+    __tablename__ = "business_economics_accounting_exports"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('prepared', 'exported', 'acknowledged', 'rejected', 'corrected')",
+            name="ck_business_economics_accounting_exports_status",
+        ),
+        CheckConstraint(
+            "debit_minor = credit_minor",
+            name="ck_business_economics_accounting_exports_balance",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "export_key",
+            "version",
+            name="uq_business_economics_accounting_exports_version",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "checksum",
+            name="uq_business_economics_accounting_exports_checksum",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    period_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("business_economics_accounting_periods.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    export_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    debit_minor: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    credit_minor: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    checksum: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_projection_ids: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    corrects_export_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("business_economics_accounting_exports.id", ondelete="RESTRICT"),
+    )
+    acknowledgement_reference: Mapped[str | None] = mapped_column(String(200))
+    rejection_reason: Mapped[str | None] = mapped_column(Text)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+    acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class AccountingJournalLineRecord(Base):
+    __tablename__ = "business_economics_accounting_journal_lines"
+    __table_args__ = (
+        CheckConstraint(
+            "side IN ('debit', 'credit')",
+            name="ck_business_economics_journal_lines_side",
+        ),
+        CheckConstraint(
+            "amount_minor > 0", name="ck_business_economics_journal_lines_amount"
+        ),
+        UniqueConstraint(
+            "export_id",
+            "line_number",
+            name="uq_business_economics_journal_lines_number",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    export_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("business_economics_accounting_exports.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    line_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    account_code: Mapped[str] = mapped_column(String(100), nullable=False)
+    side: Mapped[str] = mapped_column(String(8), nullable=False)
+    amount_minor: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    branch_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    source_reference: Mapped[str] = mapped_column(String(200), nullable=False)
+    evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    dimensions: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+
+
+class CloseReadinessRecord(Base):
+    __tablename__ = "business_economics_close_readiness"
+    __table_args__ = (
+        UniqueConstraint(
+            "company_id",
+            "period_id",
+            "version",
+            name="uq_business_economics_close_readiness_version",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "input_digest",
+            name="uq_business_economics_close_readiness_input",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    period_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("business_economics_accounting_periods.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    responsible_owner_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), nullable=False
+    )
+    ready: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    checks: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    blockers: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    input_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    evaluated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
+class GeneralLedgerReconciliationRecord(Base):
+    __tablename__ = "business_economics_gl_reconciliations"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('passed', 'failed', 'unknown')",
+            name="ck_business_economics_gl_reconciliation_status",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "period_id",
+            "version",
+            name="uq_business_economics_gl_reconciliation_version",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "input_digest",
+            name="uq_business_economics_gl_reconciliation_input",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    period_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("business_economics_accounting_periods.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    status: Mapped[str] = mapped_column(String(12), nullable=False)
+    source_represented_minor: Mapped[int | None] = mapped_column(BigInteger)
+    exported_minor: Mapped[int | None] = mapped_column(BigInteger)
+    journal_balance_minor: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    rejected_line_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    duplicate_export_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    correction_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    period_variance_minor: Mapped[int | None] = mapped_column(BigInteger)
+    ownership_mismatch_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    unexplained_residual_minor: Mapped[int | None] = mapped_column(BigInteger)
+    explanation: Mapped[str] = mapped_column(Text, nullable=False)
+    input_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    reconciled_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
+class PeriodAuditPackageRecord(Base):
+    __tablename__ = "business_economics_period_audit_packages"
+    __table_args__ = (
+        UniqueConstraint(
+            "company_id",
+            "period_id",
+            "version",
+            name="uq_business_economics_audit_packages_version",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "package_digest",
+            name="uq_business_economics_audit_packages_digest",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    period_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("business_economics_accounting_periods.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    manifest: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    package_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
+class FinancialIntegrityPublicationRecord(Base):
+    __tablename__ = "business_economics_integrity_publications"
+    __table_args__ = (
+        CheckConstraint(
+            "integrity_status IN ('reconciled', 'incomplete', 'stale', 'unknown')",
+            name="ck_business_economics_integrity_publication_status",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "projection_id",
+            "version",
+            name="uq_business_economics_integrity_publication_version",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "input_digest",
+            name="uq_business_economics_integrity_publication_input",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    projection_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey(
+            "business_economics_profitability_projections.id", ondelete="RESTRICT"
+        ),
+        nullable=False,
+    )
+    period_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("business_economics_accounting_periods.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    confidence_status: Mapped[str] = mapped_column(String(12), nullable=False)
+    confidence_percentage: Mapped[int] = mapped_column(Integer, nullable=False)
+    completeness_percentage: Mapped[int] = mapped_column(Integer, nullable=False)
+    freshness_status: Mapped[str] = mapped_column(String(12), nullable=False)
+    evidence_lineage: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    integrity_status: Mapped[str] = mapped_column(String(16), nullable=False)
+    input_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    published_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
     )

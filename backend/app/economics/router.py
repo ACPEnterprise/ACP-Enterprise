@@ -5,12 +5,23 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_database_session
+from app.economics.phase4_service import (
+    EconomicsPhase4NotFoundError,
+    EconomicsPhase4QueryService,
+)
 from app.economics.schemas import (
+    AllocationStatusResponse,
+    AuditPackageResponse,
     BusinessFactListResponse,
+    CloseReadinessResponse,
     EvidenceCompletenessResponse,
+    ExportStatusResponse,
+    FinancialIntegrityResponse,
     ProfitabilityProjectionResponse,
     ProfitMeasurementListResponse,
     ProfitMeasurementResponse,
+    ProjectionLineageResponse,
+    ReconciliationStatusResponse,
     StaleMeasurementResponse,
 )
 from app.economics.service import (
@@ -171,3 +182,112 @@ async def get_subject_profitability(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Profit measurement not found.",
         ) from error
+
+
+def _phase4_not_found(error: EconomicsPhase4NotFoundError) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="Financial integrity record not found.",
+    )
+
+
+@router.get(
+    "/periods/{period_id}/close-readiness", response_model=CloseReadinessResponse
+)
+async def get_close_readiness(
+    period_id: UUID,
+    session: DatabaseSession,
+    authorization: EconomicsReader,
+) -> CloseReadinessResponse:
+    try:
+        return await EconomicsPhase4QueryService.close_readiness(
+            session, authorization.company.id, period_id
+        )
+    except EconomicsPhase4NotFoundError as error:
+        raise _phase4_not_found(error) from error
+
+
+@router.get(
+    "/periods/{period_id}/reconciliation",
+    response_model=ReconciliationStatusResponse,
+)
+async def get_reconciliation_status(
+    period_id: UUID,
+    session: DatabaseSession,
+    authorization: EconomicsReader,
+) -> ReconciliationStatusResponse:
+    try:
+        return await EconomicsPhase4QueryService.reconciliation(
+            session, authorization.company.id, period_id
+        )
+    except EconomicsPhase4NotFoundError as error:
+        raise _phase4_not_found(error) from error
+
+
+@router.get("/periods/{period_id}/allocations", response_model=AllocationStatusResponse)
+async def get_allocation_status(
+    period_id: UUID,
+    session: DatabaseSession,
+    authorization: EconomicsReader,
+) -> AllocationStatusResponse:
+    return await EconomicsPhase4QueryService.allocation_status(
+        session, authorization.company.id, period_id
+    )
+
+
+@router.get("/periods/{period_id}/audit-package", response_model=AuditPackageResponse)
+async def get_audit_package(
+    period_id: UUID,
+    session: DatabaseSession,
+    authorization: EconomicsReader,
+) -> AuditPackageResponse:
+    try:
+        return await EconomicsPhase4QueryService.audit_package(
+            session, authorization.company.id, period_id
+        )
+    except EconomicsPhase4NotFoundError as error:
+        raise _phase4_not_found(error) from error
+
+
+@router.get("/periods/{period_id}/exports", response_model=list[ExportStatusResponse])
+async def get_export_status(
+    period_id: UUID,
+    session: DatabaseSession,
+    authorization: EconomicsReader,
+) -> list[ExportStatusResponse]:
+    return await EconomicsPhase4QueryService.export_status(
+        session, authorization.company.id, period_id
+    )
+
+
+@router.get(
+    "/projections/{projection_id}/lineage", response_model=ProjectionLineageResponse
+)
+async def get_projection_lineage(
+    projection_id: UUID,
+    session: DatabaseSession,
+    authorization: EconomicsReader,
+) -> ProjectionLineageResponse:
+    try:
+        return await EconomicsPhase4QueryService.projection_lineage(
+            session, authorization.company.id, projection_id
+        )
+    except EconomicsPhase4NotFoundError as error:
+        raise _phase4_not_found(error) from error
+
+
+@router.get(
+    "/periods/{period_id}/financial-integrity",
+    response_model=FinancialIntegrityResponse,
+)
+async def get_financial_integrity(
+    period_id: UUID,
+    session: DatabaseSession,
+    authorization: EconomicsReader,
+) -> FinancialIntegrityResponse:
+    try:
+        return await EconomicsPhase4QueryService.financial_integrity(
+            session, authorization.company.id, period_id
+        )
+    except EconomicsPhase4NotFoundError as error:
+        raise _phase4_not_found(error) from error

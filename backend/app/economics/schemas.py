@@ -116,3 +116,77 @@ class StaleMeasurementResponse(BaseModel):
     subject_id: UUID
     measured_at: datetime
     stale_since: datetime
+
+
+class CloseReadinessResponse(BaseModel):
+    period_id: UUID
+    responsible_owner_id: UUID
+    ready: bool
+    checks: dict[str, object]
+    blockers: list[str]
+    input_digest: str
+    version: int
+    evaluated_at: datetime
+
+
+class ReconciliationStatusResponse(BaseModel):
+    period_id: UUID
+    economics: dict[str, str]
+    general_ledger_status: Literal["passed", "failed", "unknown"]
+    period_variance_minor: int | None
+    unexplained_residual_minor: int | None
+    reconciled_at: datetime | None
+
+
+class AllocationStatusResponse(BaseModel):
+    period_id: UUID
+    run_count: int
+    balanced_run_count: int
+    residual_minor: int
+
+
+class AuditPackageResponse(BaseModel):
+    id: UUID
+    period_id: UUID
+    manifest: dict[str, object]
+    package_digest: str
+    version: int
+    created_at: datetime
+
+
+class ExportStatusResponse(BaseModel):
+    id: UUID
+    period_id: UUID
+    export_key: str
+    status: Literal["prepared", "exported", "acknowledged", "rejected", "corrected"]
+    currency: str
+    debit_minor: int
+    credit_minor: int
+    checksum: str
+    corrects_export_id: UUID | None
+    acknowledgement_reference: str | None
+    rejection_reason: str | None
+    version: int
+
+
+class ProjectionLineageResponse(BaseModel):
+    projection_id: UUID
+    period_id: UUID
+    confidence: ConfidenceResponse
+    completeness_percentage: int
+    freshness_status: str
+    evidence_lineage: list[UUID]
+    integrity_status: Literal["reconciled", "incomplete", "stale", "unknown"]
+    version: int
+    published_at: datetime
+
+
+class FinancialIntegrityResponse(BaseModel):
+    period_id: UUID
+    period_status: Literal["open", "closing", "closed", "reopened"]
+    ready_to_close: bool
+    integrity_status: Literal["reconciled", "incomplete", "stale", "unknown"]
+    blockers: list[str]
+    audit_package_digest: str | None
+    latest_export_status: str | None
+    as_of: datetime

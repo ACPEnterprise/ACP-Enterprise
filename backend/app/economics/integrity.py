@@ -23,8 +23,11 @@ from app.economics.models import (
     AllocationPolicyRecord,
     AllocationRunRecord,
     BusinessFactRecord,
+    CloseReadinessRecord,
+    EconomicsSourceBindingRecord,
     FactEvidenceRecord,
     OperationalMetricRecord,
+    PeriodAuditPackageRecord,
     ProfitabilityProjectionRecord,
     ProfitMeasurementRecord,
     RecalculationScopeRecord,
@@ -138,6 +141,39 @@ class AccountingPeriodService:
                 raise AccountingPeriodError(
                     "period cannot close with reconciliation failures or pending recalculations"
                 )
+            phase4_active = await session.scalar(
+                select(EconomicsSourceBindingRecord.id).where(
+                    EconomicsSourceBindingRecord.company_id == company_id
+                )
+            )
+            if phase4_active is not None:
+                readiness = await session.scalar(
+                    select(CloseReadinessRecord)
+                    .where(
+                        CloseReadinessRecord.company_id == company_id,
+                        CloseReadinessRecord.period_id == period.id,
+                    )
+                    .order_by(CloseReadinessRecord.version.desc())
+                    .limit(1)
+                )
+                audit_package = await session.scalar(
+                    select(PeriodAuditPackageRecord.id).where(
+                        PeriodAuditPackageRecord.company_id == company_id,
+                        PeriodAuditPackageRecord.period_id == period.id,
+                    )
+                )
+                readiness_period_version = (
+                    readiness.checks.get("period_version") if readiness else None
+                )
+                if (
+                    readiness is None
+                    or not readiness.ready
+                    or readiness_period_version != period.version
+                    or audit_package is None
+                ):
+                    raise AccountingPeriodError(
+                        "period requires ready financial-close evidence and an audit package"
+                    )
         previous = period.status
         period.status = target_status
         period.responsible_owner_id = command.responsible_owner_id
