@@ -32,12 +32,14 @@ from app.platform.permissions.models import (
 )
 from app.platform.users.models import User, UserCredential
 from app.worker_control.contracts import WorkerCapability, WorkerLifecycleState
+from app.worker_control.models import EngineeringWorker
 from app.worker_control.service import RegisterWorkerCommand, WorkerControlService
 from app.worker_identity.contracts import (
     IssuedCredentialMetadata,
     WorkerCredentialState,
     WorkerIdentityState,
 )
+from app.worker_identity.models import WorkerCredential, WorkerIdentity
 from app.worker_identity.service import WorkerIdentityService
 
 SAFE_CODE = re.compile(r"^[A-Z0-9][A-Z0-9_-]{0,49}$")
@@ -168,39 +170,84 @@ class PreviewWorkerProvisioningService:
         identity_service = WorkerIdentityService(
             issuer=Ed25519FileCredentialIssuer(config.private_key_file)
         )
-        worker = await worker_control.register_worker(
-            session,
-            context=context,
-            command=RegisterWorkerCommand(
-                provider_identifier=config.provider_identifier,
+        existing_worker = await session.scalar(
+            select(EngineeringWorker).where(
+                EngineeringWorker.company_id == context.company.id,
+                EngineeringWorker.provider_identifier == config.provider_identifier,
+                EngineeringWorker.name == config.worker_name,
+            )
+        )
+        if existing_worker is None:
+            created_worker = await worker_control.register_worker(
+                session,
+                context=context,
+                command=RegisterWorkerCommand(
+                    provider_identifier=config.provider_identifier,
+                    name=config.worker_name,
+                    worker_version="1",
+                    capabilities=config.capabilities,
+                ),
+            )
+            worker_id = created_worker.id
+        elif set(existing_worker.capabilities) != {
+            item.value for item in config.capabilities
+        }:
+            raise PermissionError(
+                "Existing worker capabilities do not match enrollment."
+            )
+        else:
+            worker_id = existing_worker.id
+
+        existing_identity = await session.scalar(
+            select(WorkerIdentity).where(
+                WorkerIdentity.company_id == context.company.id,
+                WorkerIdentity.name == config.worker_name,
+            )
+        )
+        if existing_identity is None:
+            created_identity = await identity_service.register(
+                session,
+                context=context,
                 name=config.worker_name,
-                worker_version="1",
-                capabilities=config.capabilities,
-            ),
+            )
+            activated_identity = await identity_service.transition_identity(
+                session,
+                context=context,
+                identity_id=created_identity.id,
+                expected_version=created_identity.version,
+                state=WorkerIdentityState.ACTIVE,
+            )
+            bound_identity = await identity_service.bind_orchestration_worker(
+                session,
+                context=context,
+                identity_id=activated_identity.id,
+                worker_id=worker_id,
+                expected_version=activated_identity.version,
+            )
+            identity_id = bound_identity.id
+        elif (
+            existing_identity.state != WorkerIdentityState.ACTIVE.value
+            or existing_identity.orchestration_worker_id != worker_id
+        ):
+            raise PermissionError("Existing worker identity binding is inconsistent.")
+        else:
+            identity_id = existing_identity.id
+
+        existing_credential = await session.scalar(
+            select(WorkerCredential).where(
+                WorkerCredential.company_id == context.company.id,
+                WorkerCredential.identity_id == identity_id,
+                WorkerCredential.state.in_(("pending", "active")),
+            )
         )
-        identity = await identity_service.register(
-            session,
-            context=context,
-            name=config.worker_name,
-        )
-        identity = await identity_service.transition_identity(
-            session,
-            context=context,
-            identity_id=identity.id,
-            expected_version=identity.version,
-            state=WorkerIdentityState.ACTIVE,
-        )
-        identity = await identity_service.bind_orchestration_worker(
-            session,
-            context=context,
-            identity_id=identity.id,
-            worker_id=worker.id,
-            expected_version=identity.version,
-        )
+        if existing_credential is not None:
+            raise PermissionError(
+                "Existing credential requires explicit reconciliation."
+            )
         credential = await identity_service.issue_credential(
             session,
             context=context,
-            identity_id=identity.id,
+            identity_id=identity_id,
             lifetime=timedelta(days=config.credential_days),
         )
         credential = await identity_service.activate_credential(
@@ -213,17 +260,25 @@ class PreviewWorkerProvisioningService:
         await worker_control.set_worker_lifecycle(
             session,
             context=context,
-            worker_id=worker.id,
+            worker_id=worker_id,
             lifecycle_state=WorkerLifecycleState.OFFLINE,
         )
         if config.provider_identifier == "controlled-code-execution":
             if WorkerCapability.ENGINEERING_EXECUTE not in config.capabilities:
                 raise ValueError("Execution node must declare engineering.execute.")
+            existing_node = await session.scalar(
+                select(EngineeringExecutionNode).where(
+                    EngineeringExecutionNode.company_id == context.company.id,
+                    EngineeringExecutionNode.worker_id == worker_id,
+                )
+            )
+            if existing_node is not None:
+                raise PermissionError("Execution node already exists.")
             async with session.begin():
                 session.add(
                     EngineeringExecutionNode(
                         company_id=context.company.id,
-                        worker_id=worker.id,
+                        worker_id=worker_id,
                         name=config.worker_name,
                         provider_identifier=config.provider_identifier,
                         credential_fingerprint=hashlib.sha256(
@@ -237,8 +292,8 @@ class PreviewWorkerProvisioningService:
                     )
                 )
         return ProvisioningResult(
-            worker_id=worker.id,
-            identity_id=identity.id,
+            worker_id=worker_id,
+            identity_id=identity_id,
             credential_id=credential.id,
         )
 
