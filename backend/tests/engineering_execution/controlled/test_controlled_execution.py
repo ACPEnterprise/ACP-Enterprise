@@ -3,7 +3,6 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
-
 from app.worker_runtime.execution import (
     AcquiredControlledOffer,
     IsolatedWorkspaceExecutionError,
@@ -109,10 +108,11 @@ def test_arbitrary_command_type_is_rejected(tmp_path: Path) -> None:
         IsolatedWorkspaceExecutor(tmp_path).execute(invalid)
 
 
-def test_runtime_module_exposes_no_shell_or_provider_execution() -> None:
+def test_runtime_module_exposes_no_shell_or_repository_authority() -> None:
     source = Path("app/worker_runtime/execution.py").read_text()
 
     assert "subprocess" not in source
     assert "shell=True" not in source
-    assert "ExecutionProvider" not in source
+    assert "git add" not in source
+    assert "git commit" not in source
     assert "docker" not in source.lower()

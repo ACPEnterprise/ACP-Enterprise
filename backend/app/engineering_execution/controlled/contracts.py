@@ -10,6 +10,7 @@ from app.worker_control.contracts import WorkerCapability
 
 class ControlledCommandType(StrEnum):
     INSPECT_WORKSPACE = "inspect_workspace"
+    EXECUTE_CODE = "execute_code"
 
 
 class ControlledOfferState(StrEnum):

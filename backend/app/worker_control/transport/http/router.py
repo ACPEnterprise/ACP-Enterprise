@@ -165,7 +165,7 @@ async def poll_offers(
                 expires_at=offer.expires_at,
                 command_id=UUID(str(offer.metadata["command_id"])),
                 workspace_id=str(offer.metadata["workspace_id"]),
-                command_type="inspect_workspace",
+                command_type=str(offer.metadata["command_type"]),
                 payload=dict(offer.metadata),
             )
             for offer in offers
@@ -211,7 +211,7 @@ async def acquire_controlled_offer(
         lease_id=offer.lease_id,
         lease_version=1,
         workspace_id=offer.workspace_id,
-        command_type="inspect_workspace",
+        command_type=offer.command_type.value,
         payload=dict(offer.payload),
     )
 

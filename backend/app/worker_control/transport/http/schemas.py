@@ -191,7 +191,7 @@ class OfferResponse(StrictModel):
     expires_at: datetime
     command_id: UUID
     workspace_id: str
-    command_type: Literal["inspect_workspace"]
+    command_type: Literal["inspect_workspace", "execute_code"]
     payload: dict[str, object]
 
 
@@ -201,7 +201,7 @@ class ControlledOfferAcquisitionResponse(StrictModel):
     lease_id: UUID
     lease_version: int
     workspace_id: str
-    command_type: Literal["inspect_workspace"]
+    command_type: Literal["inspect_workspace", "execute_code"]
     payload: dict[str, object]
 
 

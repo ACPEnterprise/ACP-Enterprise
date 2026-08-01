@@ -83,15 +83,14 @@ class WorkerTransportClient:
         )
         self._accepted(response, 200)
 
-    async def renew_lease(
-        self, *, session_id: UUID, payload: dict[str, object]
-    ) -> None:
+    async def renew_lease(self, *, session_id: UUID, payload: dict[str, object]) -> int:
         response = await self._client.post(
             "/api/v1/worker-transport/leases/refresh",
             headers={"X-Worker-Session-ID": str(session_id)},
             json=payload,
         )
         self._accepted(response, 200)
+        return int(response.json()["outcome_reference"].rsplit(":", 1)[1])
 
     async def poll_offers(self, *, session_id: UUID) -> tuple[dict[str, object], ...]:
         response = await self._client.get(

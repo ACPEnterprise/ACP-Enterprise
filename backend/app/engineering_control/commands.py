@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from uuid import UUID
 
@@ -19,6 +19,7 @@ class CreateEngineeringCommand:
     expires_at: datetime
     idempotency_key: str
     correlation_id: UUID | None = None
+    execution_boundary: dict[str, object] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -31,6 +32,7 @@ class ApproveEngineeringCommand:
     expected_branch: str
     expected_head: str
     requested_code_changes: bool
+    execution_boundary_digest: str | None = None
 
 
 @dataclass(frozen=True)

@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import hashlib
 import os
 import re
 import sys
@@ -14,6 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import AsyncSessionFactory, engine
+from app.execution_nodes.models import EngineeringExecutionNode
 from app.platform.branch.models import Branch
 from app.platform.company.membership_models import Membership, MembershipBranchAccess
 from app.platform.company.models import Company
@@ -214,6 +216,26 @@ class PreviewWorkerProvisioningService:
             worker_id=worker.id,
             lifecycle_state=WorkerLifecycleState.OFFLINE,
         )
+        if config.provider_identifier == "controlled-code-execution":
+            if WorkerCapability.ENGINEERING_EXECUTE not in config.capabilities:
+                raise ValueError("Execution node must declare engineering.execute.")
+            async with session.begin():
+                session.add(
+                    EngineeringExecutionNode(
+                        company_id=context.company.id,
+                        worker_id=worker.id,
+                        name=config.worker_name,
+                        provider_identifier=config.provider_identifier,
+                        credential_fingerprint=hashlib.sha256(
+                            credential.verifier.encode()
+                        ).hexdigest(),
+                        capabilities=[item.value for item in config.capabilities],
+                        status="active",
+                        enrolled_at=credential.issued_at,
+                        expires_at=credential.expires_at,
+                        version=1,
+                    )
+                )
         return ProvisioningResult(
             worker_id=worker.id,
             identity_id=identity.id,

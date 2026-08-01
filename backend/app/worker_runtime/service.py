@@ -33,6 +33,7 @@ from app.worker_runtime.config import WorkerRuntimeConfig
 from app.worker_runtime.execution import (
     IsolatedWorkspaceExecutionError,
     IsolatedWorkspaceExecutor,
+    NodeExecutionProviderClient,
 )
 from app.worker_runtime.recovery import RecoveryRecord, WorkerRecoveryJournal
 
@@ -295,15 +296,42 @@ class AuthenticatedWorkerRuntime:
                 )
             outcome = "succeeded"
             failure = None
+            renewal: asyncio.Task[None] | None = None
             try:
-                assert self.config.workspace_root is not None
-                output = IsolatedWorkspaceExecutor(self.config.workspace_root).execute(
-                    acquired
-                )
+                if acquired.command_type == "execute_code":
+                    if (
+                        self.config.provider_url is None
+                        or self.config.provider_token_file is None
+                    ):
+                        raise IsolatedWorkspaceExecutionError(
+                            "Node Execution Provider is unavailable."
+                        )
+                    renewal = asyncio.create_task(
+                        self._maintain_execution_lease(
+                            session=session,
+                            lease_id=acquired.lease_id,
+                            initial_version=acquired.lease_version,
+                        )
+                    )
+                    output = await NodeExecutionProviderClient(
+                        self.config.provider_url, self.config.provider_token_file
+                    ).execute(acquired)
+                else:
+                    assert self.config.workspace_root is not None
+                    output = IsolatedWorkspaceExecutor(
+                        self.config.workspace_root
+                    ).execute(acquired)
             except IsolatedWorkspaceExecutionError:
                 outcome = "failed"
                 failure = "workspace_validation_failed"
                 output = {"repository_mutated": False}
+            finally:
+                if renewal is not None:
+                    renewal.cancel()
+                    try:
+                        await renewal
+                    except asyncio.CancelledError:
+                        pass
             completed_at = datetime.now(timezone.utc)
             pending = RecoveryRecord(
                 phase="pending_result",
@@ -331,6 +359,44 @@ class AuthenticatedWorkerRuntime:
                     reason_code=failure,
                 )
             return True
+
+    async def _maintain_execution_lease(
+        self,
+        *,
+        session: Session,
+        lease_id: UUID,
+        initial_version: int,
+    ) -> None:
+        version = initial_version
+        while True:
+            await asyncio.sleep(240)
+            sent_at = datetime.now(timezone.utc)
+            payload = LeaseRenewalMessage(
+                lease_id=lease_id,
+                expected_lease_version=version,
+                lease_seconds=900,
+            )
+            envelope = self._envelope(
+                session=session,
+                sent_at=sent_at,
+                kind=TransportMessageKind.LEASE_RENEWAL,
+                payload=payload,
+            )
+            version = await self.client.renew_lease(
+                session_id=session.session_id,
+                payload={
+                    "message_id": str(envelope.message_id),
+                    "session_id": str(envelope.session_id),
+                    "sequence_number": envelope.sequence_number,
+                    "sent_at": envelope.sent_at.isoformat(),
+                    "authentication_proof": envelope.authentication_proof,
+                    "key_version": envelope.key_version,
+                    "lease_id": str(lease_id),
+                    "expected_lease_version": version,
+                    "lease_seconds": 900,
+                },
+            )
+            self._advance(sent_at)
 
     async def consume_workstream_control(self) -> bool:
         async with self._lock:

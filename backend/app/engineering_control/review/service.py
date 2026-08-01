@@ -101,7 +101,9 @@ def _evidence(source: EngineeringReviewSource) -> _ReviewEvidence:
         "validation_summary": {
             "controlled_execution": True,
             "workspace_id": source.controlled_offer.workspace_id,
-            "repository_mutated": False,
+            "repository_mutated": result.repository_mutated,
+            "validation": result.output.get("validation", {}),
+            "commit_sha": result.output.get("commit_sha"),
         },
         "output_references": (),
         "failure_classification": result.error_classification,
@@ -466,9 +468,20 @@ class EngineeringReviewService:
                 "Quarantined or rejected results cannot enter owner review."
             )
         if evidence["repository_mutated"]:
-            raise EngineeringReviewIneligibleError(
-                "Repository-mutating results cannot enter owner review."
-            )
+            summary = evidence["evidence_summary"]
+            commit = summary.get("commit_sha")
+            validation = summary.get("validation")
+            if (
+                not source.command.requested_code_changes
+                or not isinstance(commit, str)
+                or re.fullmatch(r"[0-9a-f]{40}", commit) is None
+                or not isinstance(validation, dict)
+                or not validation
+                or not all(value is True for value in validation.values())
+            ):
+                raise EngineeringReviewIneligibleError(
+                    "Repository mutation evidence is incomplete."
+                )
         if source.composition is not None and (
             source.command.instruction_digest != source.composition.instruction_digest
             or source.command.request_digest != source.composition.request_digest

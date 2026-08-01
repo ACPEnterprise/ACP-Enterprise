@@ -5,15 +5,15 @@ from datetime import timedelta
 import httpx
 import pytest
 import pytest_asyncio
-from fastapi import FastAPI
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-
 from app.core.config import settings
 from app.database.session import get_database_session
 from app.engineering_control.router import router
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import EngineeringCommandPermission
 from app.platform.permissions.dependencies import get_authorization_context
+from fastapi import FastAPI
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
 from tests.engineering_control.test_engineering_command_service import (
     ServiceFixture,
     context_with_permissions,
@@ -105,6 +105,15 @@ def create_payload(
         "requested_code_changes": True,
         "expires_at": (utc_now() + timedelta(hours=2)).isoformat(),
         "idempotency_key": f"http-{utc_now().timestamp()}",
+        "execution_boundary": {
+            "allowed_repository": "acp-enterprise",
+            "allowed_branch": "customer-management-v1",
+            "expected_head": "a" * 40,
+            "allowed_paths": ["backend/app/**"],
+            "forbidden_paths": [".git/**", ".env*", "**/.env*"],
+            "permitted_operations": ["inspect", "modify", "validate", "commit"],
+            "validation_requirements": ["git diff --check"],
+        },
     }
 
 
@@ -160,6 +169,7 @@ async def test_create_list_filter_page_detail_approve_and_cancel(
         "expected_branch": command["expected_branch"],
         "expected_head": command["expected_head"],
         "requested_code_changes": command["requested_code_changes"],
+        "execution_boundary_digest": command["execution_boundary_digest"],
     }
     mismatch = await request(
         app,
@@ -249,6 +259,7 @@ async def test_permission_inactive_membership_and_cross_company_concealment(
                 "expected_branch": created["expected_branch"],
                 "expected_head": created["expected_head"],
                 "requested_code_changes": True,
+                "execution_boundary_digest": created["execution_boundary_digest"],
             },
         ),
     )

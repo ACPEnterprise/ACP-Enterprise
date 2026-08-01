@@ -14,7 +14,8 @@ from sqlalchemy import (
     UniqueConstraint,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID as PGUUID
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -228,6 +229,12 @@ class EngineeringCommand(Base):
     expected_head: Mapped[str] = mapped_column(String(40), nullable=False)
     requested_code_changes: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False
+    )
+    execution_boundary: Mapped[dict[str, object]] = mapped_column(
+        JSONB, nullable=False, default=dict
+    )
+    execution_boundary_digest: Mapped[str] = mapped_column(
+        String(64), nullable=False, default=""
     )
     approval_state: Mapped[str] = mapped_column(
         String(24), nullable=False, default="awaiting_approval"

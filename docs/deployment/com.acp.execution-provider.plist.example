@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>com.acp.execution-provider</string>
+  <key>ProgramArguments</key><array>
+    <string>REPLACE_PYTHON</string><string>-m</string><string>uvicorn</string>
+    <string>app.execution_nodes.provider_service:app</string><string>--host</string><string>127.0.0.1</string><string>--port</string><string>8765</string>
+  </array>
+  <key>WorkingDirectory</key><string>REPLACE_BACKEND_DIRECTORY</string>
+  <key>EnvironmentVariables</key><dict>
+    <key>PYTHONPATH</key><string>REPLACE_BACKEND_DIRECTORY</string>
+    <key>ACP_PROVIDER_TOKEN_FILE</key><string>REPLACE_TOKEN_FILE</string>
+    <key>ACP_PROVIDER_REPOSITORIES_FILE</key><string>REPLACE_REPOSITORIES_FILE</string>
+    <key>ACP_PROVIDER_WORKSPACE_ROOT</key><string>REPLACE_WORKSPACE_ROOT</string>
+    <key>ACP_PROVIDER_STATE_ROOT</key><string>REPLACE_STATE_ROOT</string>
+    <key>ACP_PROVIDER_CODEX_EXECUTABLE</key><string>REPLACE_CODEX_EXECUTABLE</string>
+    <key>ACP_PROVIDER_CODEX_HOME</key><string>REPLACE_CODEX_HOME</string>
+    <key>ACP_PROVIDER_EVIDENCE_ROOT</key><string>REPLACE_EVIDENCE_ROOT</string>
+  </dict>
+  <key>RunAtLoad</key><true/><key>KeepAlive</key><true/><key>ProcessType</key><string>Background</string>
+  <key>StandardOutPath</key><string>REPLACE_LOG_DIRECTORY/provider.out.log</string>
+  <key>StandardErrorPath</key><string>REPLACE_LOG_DIRECTORY/provider.err.log</string>
+</dict></plist>

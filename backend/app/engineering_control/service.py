@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from collections.abc import Mapping
 from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
@@ -424,6 +425,14 @@ class EngineeringControlService:
         if not IDEMPOTENCY_KEY.fullmatch(idempotency_key):
             raise EngineeringCommandValidationError("Idempotency key is invalid.")
         instruction_digest = _digest(instruction)
+        boundary = self._normalize_execution_boundary(
+            command.execution_boundary,
+            repository_key=repository.repository_key,
+            expected_branch=command.expected_branch,
+            expected_head=command.expected_head,
+            requested_code_changes=command.requested_code_changes,
+        )
+        boundary_digest = _canonical_digest(boundary)
         request_payload = {
             "command_type": command_type,
             "owner_instruction": instruction,
@@ -431,6 +440,7 @@ class EngineeringControlService:
             "expected_branch": command.expected_branch,
             "expected_head": command.expected_head,
             "requested_code_changes": command.requested_code_changes,
+            "execution_boundary": boundary,
             "expires_at": command.expires_at.isoformat(),
         }
         return CreateEngineeringCommandRecord(
@@ -448,7 +458,83 @@ class EngineeringControlService:
             expires_at=command.expires_at,
             created_at=now,
             correlation_id=command.correlation_id or uuid4(),
+            execution_boundary=boundary,
+            execution_boundary_digest=boundary_digest,
         )
+
+    @staticmethod
+    def _normalize_execution_boundary(
+        value: Mapping[str, object],
+        *,
+        repository_key: str,
+        expected_branch: str,
+        expected_head: str,
+        requested_code_changes: bool,
+    ) -> dict[str, object]:
+        expected = {
+            "allowed_repository",
+            "allowed_branch",
+            "expected_head",
+            "allowed_paths",
+            "forbidden_paths",
+            "permitted_operations",
+            "validation_requirements",
+        }
+        if set(value) != expected:
+            raise EngineeringCommandValidationError(
+                "A complete machine-enforceable execution boundary is required."
+            )
+        if (
+            value["allowed_repository"] != repository_key
+            or value["allowed_branch"] != expected_branch
+            or value["expected_head"] != expected_head
+        ):
+            raise EngineeringCommandValidationError(
+                "Execution boundary repository coordinates do not match the command."
+            )
+        normalized: dict[str, object] = {
+            "allowed_repository": repository_key,
+            "allowed_branch": expected_branch,
+            "expected_head": expected_head,
+        }
+        for key, limit in (
+            ("allowed_paths", 500),
+            ("forbidden_paths", 100),
+            ("permitted_operations", 4),
+            ("validation_requirements", 50),
+        ):
+            raw_items = value[key]
+            if (
+                not isinstance(raw_items, (list, tuple))
+                or not raw_items
+                or len(raw_items) > limit
+                or any(
+                    not isinstance(item, str) or not item.strip() or len(item) > 500
+                    for item in raw_items
+                )
+            ):
+                raise EngineeringCommandValidationError(
+                    f"Execution boundary {key} is invalid."
+                )
+            normalized[key] = sorted({str(item) for item in raw_items})
+        operations = set(_boundary_strings(normalized["permitted_operations"]))
+        if not operations <= {"inspect", "modify", "validate", "commit"}:
+            raise EngineeringCommandValidationError(
+                "Execution operation is not permitted."
+            )
+        required = {"inspect", "validate"}
+        if requested_code_changes:
+            required |= {"modify", "commit"}
+        if not required <= operations:
+            raise EngineeringCommandValidationError(
+                "Execution operations are insufficient."
+            )
+        forbidden = set(_boundary_strings(normalized["forbidden_paths"]))
+        if not {".git/**", ".env*", "**/.env*"} <= forbidden:
+            raise EngineeringCommandValidationError(
+                "Mandatory forbidden paths are missing."
+            )
+        return normalized
 
     @staticmethod
     def _validate_instruction(instruction: str) -> None:
@@ -509,6 +595,11 @@ class EngineeringControlService:
             record.expected_branch != command.expected_branch
             or record.expected_head != command.expected_head
             or record.requested_code_changes != command.requested_code_changes
+            or (
+                command.execution_boundary_digest is not None
+                and record.execution_boundary_digest
+                != command.execution_boundary_digest
+            )
         ):
             raise EngineeringCommandApprovalMismatchError(
                 "Repository expectation or permission ceiling does not match."
@@ -596,6 +687,11 @@ class EngineeringControlService:
             and result.record.expected_branch == command.expected_branch
             and result.record.expected_head == command.expected_head
             and result.record.requested_code_changes == command.requested_code_changes
+            and (
+                command.execution_boundary_digest is None
+                or result.record.execution_boundary_digest
+                == command.execution_boundary_digest
+            )
         ):
             return result.record
         return self._resolve_mutation(result)
@@ -691,6 +787,12 @@ def _digest(value: str) -> str:
 def _canonical_digest(value: object) -> str:
     serialized = json.dumps(value, sort_keys=True, separators=(",", ":"))
     return _digest(serialized)
+
+
+def _boundary_strings(value: object) -> list[str]:
+    if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
+        raise EngineeringCommandValidationError("Execution boundary value is invalid.")
+    return [str(item) for item in value]
 
 
 engineering_control_service = EngineeringControlService()

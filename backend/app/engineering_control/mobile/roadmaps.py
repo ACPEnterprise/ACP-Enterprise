@@ -328,6 +328,8 @@ class RoadmapService:
         roadmap_id = milestone.roadmap_id
         command_id = milestone.command_id
         requested_code_changes = milestone.requested_code_changes
+        milestone_validation = tuple(milestone.validation)
+        owning_workstream = milestone.owning_workstream
         instruction = self._instruction(milestone)
         await db.rollback()
         if action == "start":
@@ -366,6 +368,14 @@ class RoadmapService:
                     requested_code_changes=requested_code_changes,
                     expires_at=now + timedelta(days=7),
                     idempotency_key=f"milestone:{milestone_id}:v{expected_version}",
+                    execution_boundary=self._execution_boundary(
+                        repository_key=repository_key,
+                        expected_branch=expected_branch,
+                        expected_head=expected_head,
+                        owning_workstream=owning_workstream,
+                        validation=milestone_validation,
+                        requested_code_changes=requested_code_changes,
+                    ),
                 ),
             )
             command = await self.commands.approve_command(
@@ -380,6 +390,7 @@ class RoadmapService:
                     expected_branch=command.expected_branch,
                     expected_head=command.expected_head,
                     requested_code_changes=command.requested_code_changes,
+                    execution_boundary_digest=command.execution_boundary_digest,
                 ),
             )
             await self.mobile.control_workstream(
@@ -632,6 +643,85 @@ class RoadmapService:
         for heading, values in sections:
             body.extend([f"\n## {heading}", *[f"- {value}" for value in values]])
         return "\n".join(body)
+
+    @staticmethod
+    def _execution_boundary(
+        *,
+        repository_key: str,
+        expected_branch: str,
+        expected_head: str,
+        owning_workstream: str,
+        validation: tuple[str, ...],
+        requested_code_changes: bool,
+    ) -> dict[str, object]:
+        name = owning_workstream.casefold()
+        roots = {
+            "beacon": ("backend/app/beacon/**", "backend/tests/beacon/**", "docs/**"),
+            "operations": (
+                "backend/app/scheduling/**",
+                "backend/tests/scheduling/**",
+                "docs/**",
+            ),
+            "business economics": (
+                "backend/app/business_economics/**",
+                "backend/tests/business_economics/**",
+                "docs/**",
+            ),
+            "customer migration": (
+                "backend/app/operational_migration/**",
+                "backend/tests/operational_migration/**",
+                "docs/**",
+            ),
+            "mission control": (
+                "backend/app/engineering_control/**",
+                "backend/app/engineering_execution/**",
+                "backend/tests/engineering_control/**",
+                "backend/tests/engineering_execution/**",
+                "frontend/src/features/engineering-control/**",
+                "docs/**",
+            ),
+        }
+        allowed = next((paths for key, paths in roots.items() if key in name), None)
+        if allowed is None and not requested_code_changes:
+            allowed = ("**",)
+        if allowed is None:
+            raise ValueError(
+                "This milestone has no approved machine-enforceable path boundary."
+            )
+        operations = ["inspect", "validate"]
+        if requested_code_changes:
+            operations.extend(("modify", "commit"))
+        normalized_validation = ["git diff --check"]
+        for item in validation:
+            lowered = item.casefold()
+            for token, command in (
+                ("ruff", "ruff"),
+                ("mypy", "mypy"),
+                ("pytest", "pytest"),
+                ("test", "pytest"),
+                ("eslint", "eslint"),
+                ("typescript", "typescript"),
+                ("production build", "typescript"),
+            ):
+                if token in lowered and command not in normalized_validation:
+                    normalized_validation.append(command)
+        return {
+            "allowed_repository": repository_key,
+            "allowed_branch": expected_branch,
+            "expected_head": expected_head,
+            "allowed_paths": list(allowed),
+            "forbidden_paths": [
+                ".git/**",
+                ".env*",
+                "**/.env*",
+                "**/*credential*",
+                "**/*private-key*",
+                "**/node_modules/**",
+                "**/__pycache__/**",
+            ],
+            "permitted_operations": operations,
+            "validation_requirements": normalized_validation,
+        }
 
     @staticmethod
     def _transition(

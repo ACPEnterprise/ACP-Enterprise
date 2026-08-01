@@ -143,6 +143,15 @@ async def create_command(
                 requested_code_changes=bool(payload["requested_code_changes"]),
                 expires_at=utc_now() + timedelta(hours=2),
                 idempotency_key=str(payload["idempotency_key"]),
+                execution_boundary={
+                    "allowed_repository": str(payload["repository_key"]),
+                    "allowed_branch": str(payload["expected_branch"]),
+                    "expected_head": str(payload["expected_head"]),
+                    "allowed_paths": ["backend/app/**"],
+                    "forbidden_paths": [".git/**", ".env*", "**/.env*"],
+                    "permitted_operations": ["inspect", "modify", "validate", "commit"],
+                    "validation_requirements": ["git diff --check"],
+                },
             ),
         )
     return {

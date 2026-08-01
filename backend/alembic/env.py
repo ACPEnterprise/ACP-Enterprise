@@ -41,6 +41,7 @@ from app.engineering_execution.supervision import (
     models as supervision_models,  # noqa: F401
 )
 from app.events import models as event_models  # noqa: F401
+from app.execution_nodes import models as execution_node_models  # noqa: F401
 from app.financials import models as financial_models  # noqa: F401
 from app.jobs import models as job_models  # noqa: F401
 from app.operational_migration import cutover_models  # noqa: F401

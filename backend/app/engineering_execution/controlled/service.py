@@ -16,6 +16,7 @@ from app.engineering_execution.models import EngineeringExecution
 from app.events.schemas import BusinessEventCreate
 from app.events.service import BusinessEventService
 from app.events.types import EventType
+from app.execution_nodes.models import ProviderExecutionTransition
 from app.platform.permissions.authorization import (
     AuthorizationContext,
     AuthorizationService,
@@ -33,6 +34,7 @@ from app.worker_control.service import WorkerControlService
 from app.worker_control.transport.contracts import WorkerSession
 
 from .contracts import (
+    ControlledCommandType,
     ControlledExecutionOffer,
     ControlledExecutionResult,
     ControlledOfferState,
@@ -49,7 +51,7 @@ from .repository import ControlledExecutionRepository
 
 SAFE_WORKSPACE = re.compile(r"^[a-z0-9][a-z0-9._-]{2,99}$")
 SAFE_ERROR = re.compile(r"^[a-z][a-z0-9_]{2,79}$")
-MAX_OUTPUT_BYTES = 8_000
+MAX_OUTPUT_BYTES = 128_000
 
 
 def utc_now() -> datetime:
@@ -158,6 +160,9 @@ class ControlledExecutionService:
     ) -> tuple[ExecutionOffer, ...]:
         if WorkerCapability.ENGINEERING_EXECUTE not in session.capabilities:
             return ()
+        await self.reconcile_acknowledged_code_commands(
+            database, worker_session=session
+        )
         offers = await self.repository.list_available(
             database,
             company_id=session.context.company_id,
@@ -183,6 +188,70 @@ class ControlledExecutionService:
             )
             for offer in offers
         )
+
+    async def reconcile_acknowledged_code_commands(
+        self, database: AsyncSession, *, worker_session: WorkerSession
+    ) -> int:
+        occurred_at = utc_now()
+        created = 0
+        async with database.begin():
+            node_id = await self.repository.active_node_id(
+                database,
+                company_id=worker_session.context.company_id,
+                worker_id=worker_session.context.worker_id,
+                now=occurred_at,
+            )
+            if node_id is None:
+                return 0
+            sources = await self.repository.list_acknowledged_code_executions(
+                database,
+                company_id=worker_session.context.company_id,
+                worker_id=worker_session.context.worker_id,
+                now=occurred_at,
+                limit=1,
+            )
+            for command, execution in sources:
+                boundary = dict(command.execution_boundary)
+                offer = await self.repository.create_offer(
+                    database,
+                    company_id=command.company_id,
+                    command_id=command.id,
+                    execution_id=execution.id,
+                    correlation_id=execution.correlation_id,
+                    workspace_id=f"execution-{execution.id}",
+                    command_type=ControlledCommandType.EXECUTE_CODE,
+                    payload={
+                        "node_id": str(node_id),
+                        "company_id": str(command.company_id),
+                        "command_id": str(command.id),
+                        "execution_id": str(execution.id),
+                        "repository_key": command.repository_key,
+                        "expected_branch": command.expected_branch,
+                        "expected_head": command.expected_head,
+                        "instruction": command.owner_instruction,
+                        "instruction_digest": command.instruction_digest,
+                        "request_digest": command.request_digest,
+                        "boundary": boundary,
+                        "boundary_digest": command.execution_boundary_digest,
+                        "commit_subject": _commit_subject(
+                            command.command_type, command.ecid
+                        ),
+                        "repository_mutation_allowed": True,
+                    },
+                    expires_at=min(
+                        command.expires_at, occurred_at + timedelta(minutes=15)
+                    ),
+                    lease_seconds=900,
+                    now=occurred_at,
+                )
+                self._stage(
+                    database,
+                    offer=offer,
+                    event_type=EventType.ENGINEERING_CONTROLLED_OFFER_CREATED,
+                    now=occurred_at,
+                )
+                created += 1
+        return created
 
     async def acquire_in_transaction(
         self,
@@ -263,9 +332,10 @@ class ControlledExecutionService:
         serialized = json.dumps(output, sort_keys=True, separators=(",", ":")).encode()
         if len(serialized) > MAX_OUTPUT_BYTES:
             raise ControlledExecutionPayloadError("Controlled result is too large.")
-        if output.get("repository_mutated") is not False:
+        mutation = output.get("repository_mutated")
+        if mutation not in {True, False}:
             raise ControlledExecutionPayloadError(
-                "Controlled result must prove repository_mutated=false."
+                "Controlled result must declare repository mutation truth."
             )
         if outcome is ControlledOutcome.SUCCEEDED:
             expected = {
@@ -278,6 +348,8 @@ class ControlledExecutionService:
                 "file_boundary",
                 "repository_mutated",
             }
+            if mutation is True:
+                expected |= {"starting_head", "commit_sha", "validation", "evidence"}
             boundary = output.get("file_boundary")
             if (
                 set(output) != expected
@@ -322,11 +394,26 @@ class ControlledExecutionService:
             raise ControlledExecutionIneligibleError(
                 "Execution result binding is invalid."
             )
+        validation_output = output.get("validation")
         if outcome is ControlledOutcome.SUCCEEDED and (
             output.get("workspace_id") != offer.workspace_id
             or output.get("repository_key") != offer.payload.get("repository_key")
             or output.get("branch") != offer.payload.get("expected_branch")
-            or output.get("head") != offer.payload.get("expected_head")
+            or (
+                mutation is False
+                and output.get("head") != offer.payload.get("expected_head")
+            )
+            or (
+                mutation is True
+                and (
+                    offer.command_type != "execute_code"
+                    or output.get("starting_head") != offer.payload.get("expected_head")
+                    or output.get("head") != output.get("commit_sha")
+                    or not re.fullmatch(r"[0-9a-f]{40}", str(output.get("commit_sha")))
+                    or not isinstance(validation_output, dict)
+                    or not all(value is True for value in validation_output.values())
+                )
+            )
         ):
             raise ControlledExecutionPayloadError(
                 "Controlled result does not match the immutable offer."
@@ -360,7 +447,45 @@ class ControlledExecutionService:
             error_classification=error_classification,
             started_at=started_at,
             completed_at=completed_at,
+            repository_mutated=bool(mutation),
         )
+        if mutation is True:
+            evidence = output.get("evidence")
+            phases = evidence.get("phases", []) if isinstance(evidence, dict) else []
+            expected_phases = [
+                "composed",
+                "workspace_ready",
+                "executing",
+                "validating",
+                "commit_ready",
+                "publishing_result",
+                "completed",
+            ]
+            if phases != expected_phases:
+                raise ControlledExecutionPayloadError(
+                    "Provider lifecycle evidence is incomplete."
+                )
+            for sequence, phase in enumerate(phases, start=1):
+                database.add(
+                    ProviderExecutionTransition(
+                        company_id=offer.company_id,
+                        node_id=UUID(str(offer.payload["node_id"])),
+                        command_id=offer.command_id,
+                        execution_id=offer.execution_id,
+                        lease_id=lease_id,
+                        sequence=sequence,
+                        phase=phase,
+                        evidence=(
+                            {
+                                "commit_sha": output.get("commit_sha"),
+                                "files": output.get("file_boundary"),
+                            }
+                            if phase == "completed"
+                            else {}
+                        ),
+                        occurred_at=completed_at,
+                    )
+                )
         await self.workers.release_lease_in_transaction(
             database,
             worker_context=worker_context,
@@ -458,3 +583,8 @@ def _safe_relative_path(value: str) -> bool:
         and not value.startswith("/")
         and all(part not in {"", ".", "..", ".git"} for part in parts)
     )
+
+
+def _commit_subject(command_type: str, ecid: str) -> str:
+    scope = "engineering" if command_type == "mission_control_milestone" else "devx"
+    return f"feat({scope}): complete {ecid.lower()} controlled execution"
