@@ -70,6 +70,8 @@ class CodexImplementation:
         self, workspace: Path, request: ProviderExecutionRequest, timeout: int
     ) -> dict[str, object]:
         output = self.evidence_root / f"{request.execution_id}.summary"
+        control_root = self.evidence_root / "control" / str(request.execution_id)
+        control_root.mkdir(parents=True, exist_ok=True, mode=0o700)
         writable_roots: list[str] = []
         for pattern in request.boundary.allowed_paths:
             prefix = pattern.split("*", 1)[0].rstrip("/")
@@ -97,7 +99,9 @@ class CodexImplementation:
                 "exec",
                 "--json",
                 "--sandbox",
-                "read-only",
+                "workspace-write",
+                "--cd",
+                str(control_root),
                 *writable_roots,
                 "--skip-git-repo-check",
                 "--output-last-message",
@@ -113,6 +117,8 @@ class CodexImplementation:
                     "bounded implementation now; do not ask for another Start.\n\n"
                     "The operating-system sandbox permits writes only under the "
                     f"following immutable boundary: {boundary_summary}\n\n"
+                    f"The enrolled repository root is {workspace}. Perform all "
+                    "repository inspection and allowed edits there.\n\n"
                     f"{request.instruction}"
                 ),
             ),
@@ -174,10 +180,10 @@ class ControlledExecutionProvider:
                 reason="verified_no_mutation_retry",
             )
             prior = ProviderPhase.QUEUED
-        if (
-            prior is ProviderPhase.EXECUTING
-            and self.workspaces.recovered_workspace_is_pristine(request)
-        ):
+        if prior in {
+            ProviderPhase.EXECUTING,
+            ProviderPhase.COMMIT_READY,
+        } and self.workspaces.recovered_workspace_is_pristine(request):
             self.journal.append(
                 request,
                 ProviderPhase.QUEUED,
