@@ -174,6 +174,16 @@ class ControlledExecutionProvider:
                 reason="verified_no_mutation_retry",
             )
             prior = ProviderPhase.QUEUED
+        if (
+            prior is ProviderPhase.EXECUTING
+            and self.workspaces.recovered_workspace_is_pristine(request)
+        ):
+            self.journal.append(
+                request,
+                ProviderPhase.QUEUED,
+                reason="verified_no_mutation_retry",
+            )
+            prior = ProviderPhase.QUEUED
         resume_after_implementation = (
             prior is ProviderPhase.EXECUTING
             and isinstance(prior_record.get("occurred_at"), str)
