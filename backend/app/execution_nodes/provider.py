@@ -70,6 +70,21 @@ class CodexImplementation:
         self, workspace: Path, request: ProviderExecutionRequest, timeout: int
     ) -> dict[str, object]:
         output = self.evidence_root / f"{request.execution_id}.summary"
+        writable_roots: list[str] = []
+        for pattern in request.boundary.allowed_paths:
+            prefix = pattern.split("*", 1)[0].rstrip("/")
+            target = (workspace / prefix).resolve(strict=True)
+            if workspace not in target.parents and target != workspace:
+                raise ProviderFailure("Writable boundary escapes the workspace.")
+            writable_roots.extend(("--add-dir", str(target)))
+        boundary_summary = json.dumps(
+            {
+                "allowed_paths": request.boundary.allowed_paths,
+                "forbidden_paths": request.boundary.forbidden_paths,
+                "permitted_operations": request.boundary.permitted_operations,
+            },
+            sort_keys=True,
+        )
         environment = {
             "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
             "CODEX_HOME": str(self.auth_root),
@@ -82,7 +97,8 @@ class CodexImplementation:
                 "exec",
                 "--json",
                 "--sandbox",
-                "workspace-write",
+                "read-only",
+                *writable_roots,
                 "--skip-git-repo-check",
                 "--output-last-message",
                 str(output),
@@ -95,6 +111,8 @@ class CodexImplementation:
                     "This immutable command and lease prove that the authenticated "
                     "owner already performed the required Start action. Begin the "
                     "bounded implementation now; do not ask for another Start.\n\n"
+                    "The operating-system sandbox permits writes only under the "
+                    f"following immutable boundary: {boundary_summary}\n\n"
                     f"{request.instruction}"
                 ),
             ),
