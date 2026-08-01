@@ -194,61 +194,60 @@ class ControlledExecutionService:
     ) -> int:
         occurred_at = utc_now()
         created = 0
-        async with database.begin():
-            node_id = await self.repository.active_node_id(
+        node_id = await self.repository.active_node_id(
+            database,
+            company_id=worker_session.context.company_id,
+            worker_id=worker_session.context.worker_id,
+            now=occurred_at,
+        )
+        if node_id is None:
+            return 0
+        sources = await self.repository.list_acknowledged_code_executions(
+            database,
+            company_id=worker_session.context.company_id,
+            worker_id=worker_session.context.worker_id,
+            now=occurred_at,
+            limit=1,
+        )
+        for command, execution in sources:
+            boundary = dict(command.execution_boundary)
+            offer = await self.repository.create_offer(
                 database,
-                company_id=worker_session.context.company_id,
-                worker_id=worker_session.context.worker_id,
+                company_id=command.company_id,
+                command_id=command.id,
+                execution_id=execution.id,
+                correlation_id=execution.correlation_id,
+                workspace_id=f"execution-{execution.id}",
+                command_type=ControlledCommandType.EXECUTE_CODE,
+                payload={
+                    "node_id": str(node_id),
+                    "company_id": str(command.company_id),
+                    "command_id": str(command.id),
+                    "execution_id": str(execution.id),
+                    "repository_key": command.repository_key,
+                    "expected_branch": command.expected_branch,
+                    "expected_head": command.expected_head,
+                    "instruction": command.owner_instruction,
+                    "instruction_digest": command.instruction_digest,
+                    "request_digest": command.request_digest,
+                    "boundary": boundary,
+                    "boundary_digest": command.execution_boundary_digest,
+                    "commit_subject": _commit_subject(
+                        command.command_type, command.ecid
+                    ),
+                    "repository_mutation_allowed": True,
+                },
+                expires_at=command.expires_at,
+                lease_seconds=900,
                 now=occurred_at,
             )
-            if node_id is None:
-                return 0
-            sources = await self.repository.list_acknowledged_code_executions(
+            self._stage(
                 database,
-                company_id=worker_session.context.company_id,
-                worker_id=worker_session.context.worker_id,
+                offer=offer,
+                event_type=EventType.ENGINEERING_CONTROLLED_OFFER_CREATED,
                 now=occurred_at,
-                limit=1,
             )
-            for command, execution in sources:
-                boundary = dict(command.execution_boundary)
-                offer = await self.repository.create_offer(
-                    database,
-                    company_id=command.company_id,
-                    command_id=command.id,
-                    execution_id=execution.id,
-                    correlation_id=execution.correlation_id,
-                    workspace_id=f"execution-{execution.id}",
-                    command_type=ControlledCommandType.EXECUTE_CODE,
-                    payload={
-                        "node_id": str(node_id),
-                        "company_id": str(command.company_id),
-                        "command_id": str(command.id),
-                        "execution_id": str(execution.id),
-                        "repository_key": command.repository_key,
-                        "expected_branch": command.expected_branch,
-                        "expected_head": command.expected_head,
-                        "instruction": command.owner_instruction,
-                        "instruction_digest": command.instruction_digest,
-                        "request_digest": command.request_digest,
-                        "boundary": boundary,
-                        "boundary_digest": command.execution_boundary_digest,
-                        "commit_subject": _commit_subject(
-                            command.command_type, command.ecid
-                        ),
-                        "repository_mutation_allowed": True,
-                    },
-                    expires_at=command.expires_at,
-                    lease_seconds=900,
-                    now=occurred_at,
-                )
-                self._stage(
-                    database,
-                    offer=offer,
-                    event_type=EventType.ENGINEERING_CONTROLLED_OFFER_CREATED,
-                    now=occurred_at,
-                )
-                created += 1
+            created += 1
         return created
 
     async def acquire_in_transaction(
