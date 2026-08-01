@@ -252,16 +252,19 @@ class AuthenticatedWorkerRuntime:
                 return False
             offered = offers[0]
             command_id = UUID(str(offered["command_id"]))
+            offered_payload = offered.get("payload")
+            if not isinstance(offered_payload, dict):
+                raise IsolatedWorkspaceExecutionError("Offer payload is invalid.")
             if self._workstream_actions.get(command_id) in {"pause", "cancel"}:
                 return False
-            if "recovery_lease_id" in offered:
+            if "recovery_lease_id" in offered_payload:
                 acquired = AcquiredControlledOffer(
                     offer_id=UUID(str(offered["offer_id"])),
-                    lease_id=UUID(str(offered["recovery_lease_id"])),
-                    lease_version=int(str(offered["recovery_lease_version"])),
+                    lease_id=UUID(str(offered_payload["recovery_lease_id"])),
+                    lease_version=int(str(offered_payload["recovery_lease_version"])),
                     workspace_id=str(offered["workspace_id"]),
                     command_type=str(offered["command_type"]),
-                    payload=offered,
+                    payload=offered_payload,
                 )
             else:
                 sent_at = datetime.now(timezone.utc)
