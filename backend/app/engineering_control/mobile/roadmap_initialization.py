@@ -72,6 +72,7 @@ def approved_milestone(
     estimated_duration: str,
     *,
     ready: bool = False,
+    externally_adoptable: bool = False,
 ) -> dict[str, Any]:
     """Define approved roadmap work without granting execution authority."""
     return {
@@ -79,6 +80,7 @@ def approved_milestone(
         "objective": objective,
         "status": "ready" if ready else "draft",
         "approved": True,
+        "externally_adoptable": externally_adoptable,
         "branch": branch,
         "authority": [
             "Operate under milestone-level authority after an authenticated owner explicitly starts this milestone."
@@ -101,8 +103,10 @@ def approved_milestone(
 ROADMAPS: tuple[Mapping[str, Any], ...] = (
     {
         "title": "Customer Migration",
-        "branch": "customer-migration-workstream",
-        "head": "51f6d059c69c359761eb9aa63d081439a6e3d7d0",
+        # Future Mission Control dispatch uses the repository registry's approved
+        # execution branch. The adopted milestone retains its external branch.
+        "branch": "customer-management-v1",
+        "head": "eb63fe8ccbc936bcb38104d159bb3742bf967d31",
         "milestones": (
             completed(
                 "Deterministic Customer Migration", "customer-migration-workstream"
@@ -160,15 +164,16 @@ ROADMAPS: tuple[Mapping[str, Any], ...] = (
                 "Complete Historical Job Boundary",
                 "Complete the approved deterministic boundary for historical job migration without changing active migration execution.",
                 "customer-migration-workstream",
-                ["Operational Migration Phase 2 — Estimates, Invoices, and Payments"],
+                ["Remaining Customer/Location Owner Disposition"],
                 "5 engineering days",
             ),
             approved_milestone(
                 "Multi-Property Customer Expansion",
                 "Expand deterministic customer migration to approved multi-property relationships and reconciliation evidence.",
                 "customer-migration-workstream",
-                ["Complete Historical Job Boundary"],
+                [],
                 "5 engineering days",
+                externally_adoptable=True,
             ),
             approved_milestone(
                 "Historical Notes Migration",
@@ -184,12 +189,19 @@ ROADMAPS: tuple[Mapping[str, Any], ...] = (
                 ["Historical Notes Migration"],
                 "5 engineering days",
             ),
+            approved_milestone(
+                "Remaining Customer/Location Owner Disposition",
+                "Resolve remaining customer and location ownership dispositions with durable owner evidence.",
+                "customer-migration-workstream",
+                ["Attachment Migration"],
+                "4 engineering days",
+            ),
         ),
     },
     {
         "title": "Business Economics",
-        "branch": "business-economics-foundation",
-        "head": "3940d1d076649a2e2f83ff614a5a228fbaa0a8b4",
+        "branch": "customer-management-v1",
+        "head": "eb63fe8ccbc936bcb38104d159bb3742bf967d31",
         "milestones": (
             completed("Foundation Phase 1", "business-economics-foundation"),
             completed("ECON.1R Reconciliation", "business-economics-foundation"),
@@ -201,10 +213,11 @@ ROADMAPS: tuple[Mapping[str, Any], ...] = (
                 "business-economics-foundation",
             ),
             {
-                "title": "Phase 4 Accounting Integration and Financial Close",
+                "title": "Phase 4 — Accounting Integration and Financial Close",
                 "objective": "Integrate approved accounting boundaries and establish a controlled financial-close workflow on authoritative economic facts.",
-                "status": "externally_running",
+                "status": "planned",
                 "approved": True,
+                "externally_adoptable": True,
                 "branch": "business-economics-foundation",
                 "authority": [
                     "Operate within the approved Business Economics workstream."
@@ -232,7 +245,7 @@ ROADMAPS: tuple[Mapping[str, Any], ...] = (
                 "Financial Integrity Readiness Gate for Beacon",
                 "Define the integrity gate required before economics facts can drive Beacon decisions.",
                 "business-economics-foundation",
-                ["Phase 4 Accounting Integration and Financial Close"],
+                ["Phase 4 — Accounting Integration and Financial Close"],
             ),
             draft(
                 "Profitability Intelligence Projections",
@@ -244,8 +257,36 @@ ROADMAPS: tuple[Mapping[str, Any], ...] = (
                 "Accounting Integration",
                 "Complete the approved accounting integration boundary after the active Phase 4 work is reconciled.",
                 "business-economics-foundation",
-                ["Phase 4 Accounting Integration and Financial Close"],
+                ["Phase 4 — Accounting Integration and Financial Close"],
                 "5 engineering days",
+            ),
+            approved_milestone(
+                "Phase 5 — Accounting Operationalization",
+                "Operationalize approved accounting and close controls without creating production ledger authority.",
+                "business-economics-foundation",
+                ["Phase 4 — Accounting Integration and Financial Close"],
+                "5 engineering days",
+            ),
+            approved_milestone(
+                "General Ledger Reconciliation and Export Readiness",
+                "Prove reconciled general-ledger boundaries and bounded export readiness.",
+                "business-economics-foundation",
+                ["Phase 5 — Accounting Operationalization"],
+                "5 engineering days",
+            ),
+            approved_milestone(
+                "Period Audit and Projection Publication",
+                "Publish versioned period-audit evidence and approved projections.",
+                "business-economics-foundation",
+                ["General Ledger Reconciliation and Export Readiness"],
+                "4 engineering days",
+            ),
+            approved_milestone(
+                "Financial Integrity Gate for Beacon",
+                "Establish the approved financial-integrity gate before Beacon consumes economics facts.",
+                "business-economics-foundation",
+                ["Period Audit and Projection Publication"],
+                "4 engineering days",
             ),
             approved_milestone(
                 "Financial Close",
@@ -469,6 +510,7 @@ async def _add_milestone(
         status=status,
         definition_approved=definition["approved"],
         requested_code_changes=definition.get("requested_code_changes", True),
+        externally_adoptable=definition.get("externally_adoptable", False),
         external_evidence=evidence[0] if status == "externally_running" else None,
         completed_at=now if status == "completed" else None,
         reviewed_at=now if status == "completed" else None,
@@ -515,7 +557,27 @@ async def initialize(company_code: str = "ACP") -> tuple[int, int]:
         for definition in ROADMAPS:
             current = existing.get(definition["title"])
             if current is not None:
-                if current.title in {"Mission Control", "Beacon"}:
+                if current.title == "Business Economics":
+                    legacy_phase4 = await session.scalar(
+                        select(EngineeringMilestone).where(
+                            EngineeringMilestone.company_id == company.id,
+                            EngineeringMilestone.roadmap_id == current.id,
+                            EngineeringMilestone.title
+                            == "Phase 4 Accounting Integration and Financial Close",
+                        )
+                    )
+                    if legacy_phase4 is not None:
+                        legacy_phase4.title = (
+                            "Phase 4 — Accounting Integration and Financial Close"
+                        )
+                        legacy_phase4.version += 1
+                        legacy_phase4.updated_at = now
+                if current.title in {
+                    "Customer Migration",
+                    "Business Economics",
+                    "Mission Control",
+                    "Beacon",
+                }:
                     dispatched = await session.scalar(
                         select(EngineeringMilestone.id).where(
                             EngineeringMilestone.company_id == company.id,
@@ -584,6 +646,126 @@ async def initialize(company_code: str = "ACP") -> tuple[int, int]:
                     current.version += 1
                     current.updated_at = now
                     created_milestones += added
+                continuation = {
+                    "Customer Migration": (
+                        ("Multi-Property Customer Expansion", [], "draft", True),
+                        (
+                            "Historical Notes Migration",
+                            ["Multi-Property Customer Expansion"],
+                            "draft",
+                            False,
+                        ),
+                        (
+                            "Attachment Migration",
+                            ["Historical Notes Migration"],
+                            "draft",
+                            False,
+                        ),
+                        (
+                            "Remaining Customer/Location Owner Disposition",
+                            ["Attachment Migration"],
+                            "draft",
+                            False,
+                        ),
+                        (
+                            "Complete Historical Job Boundary",
+                            ["Remaining Customer/Location Owner Disposition"],
+                            "blocked",
+                            False,
+                        ),
+                    ),
+                    "Business Economics": (
+                        (
+                            "Phase 4 — Accounting Integration and Financial Close",
+                            [
+                                "Phase 3 Allocation Integrity and Accounting Period Control"
+                            ],
+                            "planned",
+                            True,
+                        ),
+                        (
+                            "Phase 5 — Accounting Operationalization",
+                            ["Phase 4 — Accounting Integration and Financial Close"],
+                            "draft",
+                            False,
+                        ),
+                        (
+                            "General Ledger Reconciliation and Export Readiness",
+                            ["Phase 5 — Accounting Operationalization"],
+                            "draft",
+                            False,
+                        ),
+                        (
+                            "Period Audit and Projection Publication",
+                            ["General Ledger Reconciliation and Export Readiness"],
+                            "draft",
+                            False,
+                        ),
+                        (
+                            "Financial Integrity Gate for Beacon",
+                            ["Period Audit and Projection Publication"],
+                            "draft",
+                            False,
+                        ),
+                    ),
+                }.get(current.title)
+                if continuation is not None:
+                    from .external_adoption import ExternalMilestoneAdoption
+
+                    continuation_titles = [item[0] for item in continuation]
+                    base_position = (
+                        await session.scalar(
+                            select(func.max(EngineeringMilestone.position)).where(
+                                EngineeringMilestone.roadmap_id == current.id,
+                                EngineeringMilestone.title.not_in(continuation_titles),
+                            )
+                        )
+                        or 0
+                    ) + 1
+                    continuation_items = []
+                    for definition_item in continuation:
+                        title = definition_item[0]
+                        item = await session.scalar(
+                            select(EngineeringMilestone).where(
+                                EngineeringMilestone.company_id == company.id,
+                                EngineeringMilestone.roadmap_id == current.id,
+                                EngineeringMilestone.title == title,
+                            )
+                        )
+                        assert item is not None
+                        adoption = await session.scalar(
+                            select(ExternalMilestoneAdoption.id).where(
+                                ExternalMilestoneAdoption.company_id == company.id,
+                                ExternalMilestoneAdoption.milestone_id == item.id,
+                            )
+                        )
+                        continuation_items.append((item, definition_item, adoption))
+                    needs_reorder = any(
+                        item.position != base_position + offset
+                        for offset, (item, _, _) in enumerate(continuation_items)
+                    )
+                    if needs_reorder:
+                        temporary = base_position + len(continuation_items) + 100
+                        for offset, (item, _, _) in enumerate(continuation_items):
+                            item.position = temporary + offset
+                        await session.flush()
+                    for offset, (item, definition_item, adoption_id) in enumerate(
+                        continuation_items
+                    ):
+                        _, dependencies, status, adoptable = definition_item
+                        changed = (
+                            item.position != base_position + offset
+                            or item.dependencies != dependencies
+                            or item.status != status
+                            or item.externally_adoptable != adoptable
+                        )
+                        if changed and item.command_id is None and adoption_id is None:
+                            item.position = base_position + offset
+                            item.dependencies = dependencies
+                            item.status = status
+                            item.externally_adoptable = adoptable
+                            item.version += 1
+                            item.updated_at = now
                 continue
             roadmap = EngineeringRoadmap(
                 company_id=company.id,

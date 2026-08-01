@@ -62,7 +62,9 @@ class EngineeringRoadmap(Base):
         PGUUID(as_uuid=True), primary_key=True, default=uuid4
     )
     company_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), ForeignKey("companies.id"), nullable=False
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        nullable=False,
     )
     title: Mapped[str] = mapped_column(String(160), nullable=False)
     repository_key: Mapped[str] = mapped_column(String(100), nullable=False)
@@ -102,10 +104,14 @@ class EngineeringMilestone(Base):
         PGUUID(as_uuid=True), primary_key=True, default=uuid4
     )
     company_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), ForeignKey("companies.id"), nullable=False
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        nullable=False,
     )
     roadmap_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), ForeignKey("engineering_roadmaps.id"), nullable=False
+        PGUUID(as_uuid=True),
+        ForeignKey("engineering_roadmaps.id", ondelete="RESTRICT"),
+        nullable=False,
     )
     position: Mapped[int] = mapped_column(Integer, nullable=False)
     title: Mapped[str] = mapped_column(String(160), nullable=False)
@@ -130,9 +136,12 @@ class EngineeringMilestone(Base):
     requested_code_changes: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True
     )
+    externally_adoptable: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
     external_evidence: Mapped[str | None] = mapped_column(Text)
     command_id: Mapped[UUID | None] = mapped_column(
-        PGUUID(as_uuid=True), ForeignKey("engineering_commands.id")
+        PGUUID(as_uuid=True), ForeignKey("engineering_commands.id", ondelete="RESTRICT")
     )
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -161,13 +170,19 @@ class EngineeringMilestoneEvent(Base):
         PGUUID(as_uuid=True), primary_key=True, default=uuid4
     )
     company_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), ForeignKey("companies.id"), nullable=False
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        nullable=False,
     )
     roadmap_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), ForeignKey("engineering_roadmaps.id"), nullable=False
+        PGUUID(as_uuid=True),
+        ForeignKey("engineering_roadmaps.id", ondelete="RESTRICT"),
+        nullable=False,
     )
     milestone_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), ForeignKey("engineering_milestones.id"), nullable=False
+        PGUUID(as_uuid=True),
+        ForeignKey("engineering_milestones.id", ondelete="RESTRICT"),
+        nullable=False,
     )
     event_type: Mapped[str] = mapped_column(String(40), nullable=False)
     prior_status: Mapped[str | None] = mapped_column(String(24))
@@ -318,6 +333,22 @@ class RoadmapService:
         if action == "start":
             if current_status != "ready" or not definition_approved:
                 raise ValueError("Only an approved ready milestone can start.")
+            from .external_adoption import (
+                ACTIVE_ADOPTIONS,
+                ExternalMilestoneAdoption,
+            )
+
+            active_external = await db.scalar(
+                select(ExternalMilestoneAdoption.id).where(
+                    ExternalMilestoneAdoption.company_id == context.company.id,
+                    ExternalMilestoneAdoption.roadmap_id == roadmap_id,
+                    ExternalMilestoneAdoption.status.in_(ACTIVE_ADOPTIONS),
+                )
+            )
+            if active_external is not None:
+                raise ValueError(
+                    "An adopted external milestone still owns this roadmap scope."
+                )
             roadmap = await self._roadmap(db, context.company.id, roadmap_id)
             repository_key = roadmap.repository_key
             expected_branch = roadmap.expected_branch

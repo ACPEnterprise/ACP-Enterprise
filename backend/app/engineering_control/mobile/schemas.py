@@ -271,6 +271,7 @@ class MilestoneItem(MobileEngineeringSchema):
     status: str
     definition_approved: bool
     requested_code_changes: bool
+    externally_adoptable: bool = False
     external_evidence: str | None
     command_id: UUID | None
     version: int
@@ -279,6 +280,67 @@ class MilestoneItem(MobileEngineeringSchema):
     reviewed_at: datetime | None
     created_at: datetime
     updated_at: datetime
+    external_adoption: "ExternalAdoptionItem | None" = None
+
+
+class ExternalAdoptionCreate(MobileEngineeringSchema):
+    repository_key: str = Field(min_length=1, max_length=100)
+    branch: str = Field(min_length=1, max_length=255)
+    starting_head: str = Field(pattern=r"^[0-9a-f]{40}$")
+    starting_repository_clean: bool
+    worktree_identity: str | None = Field(default=None, max_length=500)
+    owning_external_workstream: str = Field(min_length=1, max_length=160)
+    declared_scope: tuple[str, ...] = Field(min_length=1, max_length=50)
+    protected_boundaries: tuple[str, ...] = Field(min_length=1, max_length=50)
+    expected_deliverables: tuple[str, ...] = Field(min_length=1, max_length=50)
+    validation_requirements: tuple[str, ...] = Field(min_length=1, max_length=50)
+    evidence_format: str = Field(min_length=1, max_length=80)
+    responsible_source: str = Field(min_length=1, max_length=160)
+
+
+class ExternalEvidenceCreate(MobileEngineeringSchema):
+    expected_adoption_version: int = Field(ge=1)
+    status: str = Field(
+        pattern=r"^(pending_start|externally_running|externally_validating|externally_blocked|completed)$"
+    )
+    progress_percent: int = Field(ge=0, le=100)
+    current_activity: str | None = Field(default=None, max_length=500)
+    starting_head: str = Field(pattern=r"^[0-9a-f]{40}$")
+    current_head: str = Field(pattern=r"^[0-9a-f]{40}$")
+    commits: tuple[str, ...] = Field(max_length=100)
+    files_changed: tuple[str, ...] = Field(max_length=500)
+    validation_results: tuple[str, ...] = Field(max_length=100)
+    dependencies: tuple[str, ...] = Field(max_length=100)
+    blockers: tuple[str, ...] = Field(max_length=100)
+    completion_evidence: tuple[str, ...] = Field(max_length=100)
+    owner_action_required: bool
+    repository_state: str = Field(pattern=r"^(clean|dirty)$")
+    occurred_at: datetime
+    idempotency_key: str = Field(pattern=r"^[A-Za-z0-9._:-]{8,128}$")
+    correction: bool = False
+    evidence_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
+class ExternalAdoptionItem(MobileEngineeringSchema):
+    id: UUID
+    repository_key: str
+    branch: str
+    starting_head: str
+    current_head: str
+    worktree_identity: str | None
+    owning_external_workstream: str
+    status: str
+    progress_percent: int
+    current_activity: str | None
+    last_evidence_at: datetime | None
+    responsible_source: str
+    adopted_at: datetime
+    version: int
+    mission_control_dispatched: bool = False
+    validation_summary: tuple[str, ...] = ()
+    blockers: tuple[str, ...] = ()
+    evidence_stale: bool = False
+    next_owner_action: str = "none"
 
 
 class RoadmapPage(MobileEngineeringSchema):

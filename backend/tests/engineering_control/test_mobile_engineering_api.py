@@ -553,7 +553,6 @@ def test_initial_roadmap_catalog_is_truthful_and_never_auto_dispatches() -> None
         if item["status"] == "externally_running"
     } == {
         "Operational Migration Phase 2 — Estimates, Invoices, and Payments",
-        "Phase 4 Accounting Integration and Financial Close",
     }
 
 
@@ -563,12 +562,12 @@ def test_v22_catalog_has_ordered_approved_dependency_chains() -> None:
             (
                 "Complete Historical Job Boundary",
                 "draft",
-                ("Operational Migration Phase 2 — Estimates, Invoices, and Payments",),
+                ("Remaining Customer/Location Owner Disposition",),
             ),
             (
                 "Multi-Property Customer Expansion",
                 "draft",
-                ("Complete Historical Job Boundary",),
+                (),
             ),
             (
                 "Historical Notes Migration",
@@ -581,7 +580,7 @@ def test_v22_catalog_has_ordered_approved_dependency_chains() -> None:
             (
                 "Accounting Integration",
                 "draft",
-                ("Phase 4 Accounting Integration and Financial Close",),
+                ("Phase 4 — Accounting Integration and Financial Close",),
             ),
             ("Financial Close", "draft", ("Accounting Integration",)),
             ("General Ledger Reconciliation", "draft", ("Financial Close",)),

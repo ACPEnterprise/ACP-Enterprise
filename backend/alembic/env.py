@@ -13,6 +13,9 @@ from app.engineering_control import (
 from app.engineering_control.mobile import (
     control as workstream_control_models,  # noqa: F401
 )
+from app.engineering_control.mobile import (  # noqa: F401
+    external_adoption as external_adoption_models,
+)
 from app.engineering_control.mobile import (
     notifications as mission_notification_models,  # noqa: F401
 )

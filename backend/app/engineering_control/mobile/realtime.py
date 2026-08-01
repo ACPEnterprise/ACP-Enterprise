@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.database.session import AsyncSessionFactory
+from app.engineering_control.mobile.roadmaps import EngineeringMilestoneEvent
 from app.engineering_control.workstream_runtime import (
     EngineeringWorkstreamEvent,
     EngineeringWorkstreamRuntime,
@@ -52,7 +53,15 @@ async def validate_resume_token(
             EngineeringWorkstreamEvent.id == token,
         )
     )
+    milestone_found = None
     if found is None:
+        milestone_found = await db.scalar(
+            select(EngineeringMilestoneEvent.id).where(
+                EngineeringMilestoneEvent.company_id == company_id,
+                EngineeringMilestoneEvent.id == token,
+            )
+        )
+    if found is None and milestone_found is None:
         raise InvalidResumeToken(
             "The realtime resume token is unknown in this Company scope."
         )
@@ -63,6 +72,7 @@ async def _events_after(
 ) -> tuple[dict[str, object], ...]:
     async with AsyncSessionFactory() as db:
         boundary = None
+        milestone_boundary = None
         if token is not None:
             boundary = await db.scalar(
                 select(EngineeringWorkstreamEvent).where(
@@ -70,12 +80,23 @@ async def _events_after(
                     EngineeringWorkstreamEvent.id == token,
                 )
             )
+            if boundary is None:
+                milestone_boundary = await db.scalar(
+                    select(EngineeringMilestoneEvent).where(
+                        EngineeringMilestoneEvent.company_id == company_id,
+                        EngineeringMilestoneEvent.id == token,
+                    )
+                )
         statement = select(EngineeringWorkstreamEvent).where(
             EngineeringWorkstreamEvent.company_id == company_id
         )
         if boundary is not None:
             statement = statement.where(
                 EngineeringWorkstreamEvent.sequence_id > boundary.sequence_id
+            )
+        elif milestone_boundary is not None:
+            statement = statement.where(
+                EngineeringWorkstreamEvent.occurred_at > milestone_boundary.occurred_at
             )
         events = tuple(
             (
@@ -206,7 +227,70 @@ async def _events_after(
                     else None,
                 }
             )
-        return tuple(payloads)
+        milestone_statement = select(EngineeringMilestoneEvent).where(
+            EngineeringMilestoneEvent.company_id == company_id,
+            EngineeringMilestoneEvent.event_type.like("external_%"),
+        )
+        boundary_time = (
+            boundary.occurred_at
+            if boundary is not None
+            else milestone_boundary.occurred_at
+            if milestone_boundary is not None
+            else None
+        )
+        if boundary_time is not None:
+            milestone_statement = milestone_statement.where(
+                EngineeringMilestoneEvent.occurred_at > boundary_time
+            )
+        milestone_events = tuple(
+            (
+                await db.scalars(
+                    milestone_statement.order_by(
+                        EngineeringMilestoneEvent.occurred_at,
+                        EngineeringMilestoneEvent.id,
+                    ).limit(500)
+                )
+            ).all()
+        )
+        for milestone_event in milestone_events:
+            payloads.append(
+                {
+                    "event_id": str(milestone_event.id),
+                    "command_id": str(milestone_event.milestone_id),
+                    "event_type": milestone_event.event_type,
+                    "action": milestone_event.event_type.removeprefix("external_"),
+                    "runtime_state": milestone_event.new_status,
+                    "reason_code": None,
+                    "occurred_at": milestone_event.occurred_at.isoformat(),
+                    "notification": "waiting_for_owner"
+                    if milestone_event.new_status == "waiting_review"
+                    else None,
+                    "notifications": ("waiting_for_owner",)
+                    if milestone_event.new_status == "waiting_review"
+                    else (),
+                    "runtime_version": None,
+                    "worker_health": None,
+                    "progress_percent": None,
+                    "current_activity": None,
+                    "heartbeat_at": None,
+                    "heartbeat_age_seconds": None,
+                    "acknowledgement_latency_ms": None,
+                    "execution_latency_ms": None,
+                    "validation_latency_ms": None,
+                    "deployment_latency_ms": None,
+                    "worker_uptime_seconds": None,
+                    "current_worker": None,
+                    "current_session": None,
+                    "reconnect_count": 0,
+                    "worker_available": False,
+                    "recovery_state": None,
+                    "external_milestone_id": str(milestone_event.milestone_id),
+                }
+            )
+        payloads.sort(
+            key=lambda item: (str(item["occurred_at"]), str(item["event_id"]))
+        )
+        return tuple(payloads[:500])
 
 
 def _latency(

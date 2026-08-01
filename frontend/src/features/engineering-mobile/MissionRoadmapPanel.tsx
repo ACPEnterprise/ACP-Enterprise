@@ -84,6 +84,52 @@ function MilestoneCard({
           Already underway outside Mission Control · {item.external_evidence}
         </p>
       )}
+      {item.external_adoption && (
+        <div className="mt-ui-3 rounded-xl border border-violet-400/30 bg-violet-400/10 p-ui-3 text-sm">
+          <div className="flex items-center justify-between gap-ui-2">
+            <span className="font-semibold">External work</span>
+            <Badge>{mobileEngineeringLabel(item.external_adoption.status)}</Badge>
+          </div>
+          <p className="mt-ui-2 text-content-muted">
+            {item.external_adoption.current_activity ??
+              "Waiting for authenticated start evidence"}
+          </p>
+          {item.external_adoption.evidence_stale && (
+            <p className="mt-ui-2 font-semibold text-amber-300">
+              External evidence is stale. Worker availability is unaffected.
+            </p>
+          )}
+          {item.external_adoption.blockers.length > 0 && (
+            <p className="mt-ui-2 text-amber-300">
+              Blocked: {item.external_adoption.blockers.join(" · ")}
+            </p>
+          )}
+          <dl className="mt-ui-2 grid grid-cols-2 gap-ui-2 text-xs text-content-muted">
+            <div>
+              <dt>Progress</dt>
+              <dd className="font-semibold text-content">
+                {item.external_adoption.progress_percent}%
+              </dd>
+            </div>
+            <div>
+              <dt>Mission Control dispatched</dt>
+              <dd className="font-semibold text-content">No</dd>
+            </div>
+            <div className="col-span-2">
+              <dt>Source branch</dt>
+              <dd className="break-all font-mono text-content">
+                {item.external_adoption.branch}
+              </dd>
+            </div>
+            <div className="col-span-2">
+              <dt>Current HEAD</dt>
+              <dd className="break-all font-mono text-content">
+                {item.external_adoption.current_head.slice(0, 12)}
+              </dd>
+            </div>
+          </dl>
+        </div>
+      )}
       {item.command_id && (
         <Link
           to={`/engineering/${item.command_id}`}

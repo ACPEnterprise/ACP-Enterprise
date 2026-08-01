@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime, timedelta, timezone
 from typing import Annotated, TypeVar
 from uuid import UUID
 
@@ -18,10 +19,18 @@ from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import EngineeringCommandPermission
 from app.platform.permissions.dependencies import require_permission
 
+from .external_adoption import (
+    ExternalAdoptionError,
+    ExternalMilestoneAdoption,
+    external_adoption_service,
+)
 from .notifications import mission_notification_service
 from .realtime import InvalidResumeToken, event_stream, validate_resume_token
 from .roadmaps import roadmap_service
 from .schemas import (
+    ExternalAdoptionCreate,
+    ExternalAdoptionItem,
+    ExternalEvidenceCreate,
     MilestoneActionRequest,
     MilestoneItem,
     MissionNotificationAcknowledgement,
@@ -107,11 +116,56 @@ async def create_roadmap(
 async def list_roadmaps(context: ReadContext, session: DatabaseSession) -> RoadmapPage:
     roadmaps = await roadmap_service.list(session, context=context)
     milestones = await roadmap_service.milestones(session, context=context)
+    adoptions = {
+        item.milestone_id: item
+        for item in await external_adoption_service.list(
+            session, company_id=context.company.id
+        )
+    }
+    adoption_items: dict[UUID, ExternalAdoptionItem] = {}
+    for milestone_id, adoption in adoptions.items():
+        latest = await external_adoption_service.latest_evidence(
+            session,
+            company_id=context.company.id,
+            adoption_id=adoption.id,
+        )
+        stale = (
+            adoption.last_evidence_at is not None
+            and adoption.last_evidence_at
+            <= datetime.now(timezone.utc) - timedelta(hours=24)
+        )
+        next_action = {
+            "pending_start": "await_authenticated_start_evidence",
+            "externally_running": "monitor_external_progress",
+            "externally_validating": "monitor_external_validation",
+            "externally_blocked": "resolve_external_blocker",
+            "waiting_review": "review_external_completion",
+            "revision_requested": "await_external_revision",
+            "completed": "none",
+            "cancelled": "none",
+            "archived": "none",
+        }[adoption.status]
+        adoption_items[milestone_id] = ExternalAdoptionItem.model_validate(
+            adoption
+        ).model_copy(
+            update={
+                "validation_summary": tuple(latest.validation_results)
+                if latest
+                else (),
+                "blockers": tuple(latest.blockers) if latest else (),
+                "evidence_stale": stale,
+                "next_owner_action": next_action,
+            }
+        )
     roadmap_items, roadmap_warnings = _bounded_projection(
         roadmaps, RoadmapItem, "roadmap"
     )
     milestone_items, milestone_warnings = _bounded_projection(
         milestones, MilestoneItem, "milestone"
+    )
+    milestone_items = tuple(
+        item.model_copy(update={"external_adoption": adoption_items.get(item.id)})
+        for item in milestone_items
     )
     valid_milestone_ids = {item.id for item in milestone_items}
     milestones = tuple(item for item in milestones if item.id in valid_milestone_ids)
@@ -180,7 +234,7 @@ async def act_on_milestone(
     session: DatabaseSession,
 ) -> MilestoneItem:
     try:
-        item = await roadmap_service.action(
+        item = await external_adoption_service.owner_action(
             session,
             context=context,
             milestone_id=milestone_id,
@@ -188,6 +242,15 @@ async def act_on_milestone(
             expected_version=request.expected_version,
             reason=request.reason,
         )
+        if item is None:
+            item = await roadmap_service.action(
+                session,
+                context=context,
+                milestone_id=milestone_id,
+                action=request.action,
+                expected_version=request.expected_version,
+                reason=request.reason,
+            )
     except LookupError as error:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(error)) from error
     except ValueError as error:
@@ -195,6 +258,59 @@ async def act_on_milestone(
     except EngineeringControlError as error:
         raise engineering_http_error(error) from error
     return MilestoneItem.model_validate(item)
+
+
+@router.post(
+    "/milestones/{milestone_id}/external-adoptions",
+    response_model=ExternalAdoptionItem,
+    status_code=status.HTTP_201_CREATED,
+    summary="Adopt one eligible external milestone without dispatching it",
+)
+async def adopt_external_milestone(
+    milestone_id: UUID,
+    request: ExternalAdoptionCreate,
+    context: ManageContext,
+    session: DatabaseSession,
+) -> ExternalAdoptionItem:
+    try:
+        adoption = await external_adoption_service.adopt(
+            session,
+            context=context,
+            milestone_id=milestone_id,
+            payload=request,
+        )
+    except LookupError as error:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(error)) from error
+    except ExternalAdoptionError as error:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
+    return ExternalAdoptionItem.model_validate(adoption)
+
+
+@router.post(
+    "/external-adoptions/{adoption_id}/evidence",
+    response_model=ExternalAdoptionItem,
+    summary="Append authenticated bounded external workstream evidence",
+)
+async def handoff_external_evidence(
+    adoption_id: UUID,
+    request: ExternalEvidenceCreate,
+    context: ManageContext,
+    session: DatabaseSession,
+) -> ExternalAdoptionItem:
+    try:
+        await external_adoption_service.handoff(
+            session,
+            context=context,
+            adoption_id=adoption_id,
+            payload=request,
+        )
+        adoption = await session.get(ExternalMilestoneAdoption, adoption_id)
+        assert adoption is not None
+    except LookupError as error:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(error)) from error
+    except ExternalAdoptionError as error:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
+    return ExternalAdoptionItem.model_validate(adoption)
 
 
 @router.get(

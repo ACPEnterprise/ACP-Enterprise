@@ -255,7 +255,9 @@ export interface MilestoneItem {
   status: MilestoneStatus;
   definition_approved: boolean;
   requested_code_changes: boolean;
+  externally_adoptable: boolean;
   external_evidence: string | null;
+  external_adoption: ExternalAdoptionItem | null;
   command_id: string | null;
   version: number;
   started_at: string | null;
@@ -263,6 +265,37 @@ export interface MilestoneItem {
   reviewed_at: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface ExternalAdoptionItem {
+  id: string;
+  repository_key: string;
+  branch: string;
+  starting_head: string;
+  current_head: string;
+  worktree_identity: string | null;
+  owning_external_workstream: string;
+  status:
+    | "pending_start"
+    | "externally_running"
+    | "externally_validating"
+    | "externally_blocked"
+    | "waiting_review"
+    | "revision_requested"
+    | "completed"
+    | "cancelled"
+    | "archived";
+  progress_percent: number;
+  current_activity: string | null;
+  last_evidence_at: string | null;
+  responsible_source: string;
+  adopted_at: string;
+  version: number;
+  mission_control_dispatched: false;
+  validation_summary: readonly string[];
+  blockers: readonly string[];
+  evidence_stale: boolean;
+  next_owner_action: string;
 }
 
 export interface RoadmapPage {
