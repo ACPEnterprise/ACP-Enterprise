@@ -248,11 +248,47 @@ class ControlledExecutionProvider:
     def _validate(
         workspace: Path, requirements: tuple[str, ...], files: tuple[str, ...]
     ) -> dict[str, bool]:
+        python_files = tuple(
+            path.removeprefix("backend/")
+            for path in files
+            if path.startswith("backend/") and path.endswith(".py")
+        )
+        application_files = tuple(
+            path for path in python_files if path.startswith("app/")
+        )
+        test_files = tuple(path for path in python_files if path.startswith("tests/"))
+        component_tests = tuple(
+            sorted(
+                {
+                    f"tests/{path.split('/', 2)[1]}"
+                    for path in application_files
+                    if len(path.split("/", 2)) >= 2
+                    and (
+                        workspace / "backend" / f"tests/{path.split('/', 2)[1]}"
+                    ).is_dir()
+                }
+            )
+        )
         allowed = {
             "git diff --check": (Path("."), ("git", "diff", "--check", "HEAD")),
-            "ruff": (Path("backend"), (sys.executable, "-m", "ruff", "check", ".")),
-            "mypy": (Path("backend"), (sys.executable, "-m", "mypy", "app")),
-            "pytest": (Path("backend"), (sys.executable, "-m", "pytest", "-q")),
+            "ruff": (
+                Path("backend"),
+                (sys.executable, "-m", "ruff", "check", *python_files),
+            ),
+            "mypy": (
+                Path("backend"),
+                (sys.executable, "-m", "mypy", *application_files),
+            ),
+            "pytest": (
+                Path("backend"),
+                (
+                    sys.executable,
+                    "-m",
+                    "pytest",
+                    "-q",
+                    *(test_files or component_tests),
+                ),
+            ),
             "eslint": (
                 Path("frontend"),
                 ("npm", "run", "lint", "--", "--max-warnings=0"),
@@ -265,6 +301,12 @@ class ControlledExecutionProvider:
         for requirement in requirements:
             normalized = requirement.casefold()
             if normalized in {"ruff", "mypy", "pytest"} and not python_changed:
+                results[requirement] = True
+                continue
+            if normalized == "mypy" and not application_files:
+                results[requirement] = True
+                continue
+            if normalized == "pytest" and not (test_files or component_tests):
                 results[requirement] = True
                 continue
             if normalized in {"eslint", "typescript"} and not frontend_changed:
