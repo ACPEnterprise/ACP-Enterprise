@@ -557,6 +557,30 @@ async def initialize(company_code: str = "ACP") -> tuple[int, int]:
         for definition in ROADMAPS:
             current = existing.get(definition["title"])
             if current is not None:
+                if current.title == "Customer Migration":
+                    historical_phase = await session.scalar(
+                        select(EngineeringMilestone).where(
+                            EngineeringMilestone.company_id == company.id,
+                            EngineeringMilestone.roadmap_id == current.id,
+                            EngineeringMilestone.title
+                            == "Operational Migration Phase 2 — Estimates, Invoices, and Payments",
+                            EngineeringMilestone.command_id.is_(None),
+                        )
+                    )
+                    if (
+                        historical_phase is not None
+                        and historical_phase.status == "externally_running"
+                    ):
+                        historical_phase.status = "completed"
+                        historical_phase.external_evidence = (
+                            "Historical Phase 2 completion reconciled from committed "
+                            "workstream evidence at 1307b904 and 51f6d059; Mission "
+                            "Control did not dispatch this work."
+                        )
+                        historical_phase.completed_at = now
+                        historical_phase.reviewed_at = now
+                        historical_phase.version += 1
+                        historical_phase.updated_at = now
                 if current.title == "Business Economics":
                     legacy_phase4 = await session.scalar(
                         select(EngineeringMilestone).where(
@@ -766,6 +790,43 @@ async def initialize(company_code: str = "ACP") -> tuple[int, int]:
                             item.externally_adoptable = adoptable
                             item.version += 1
                             item.updated_at = now
+                    superseded_titles = {
+                        "Customer Migration": {
+                            "Notes and Attachments Migration",
+                            "Owner Disposition Resolution",
+                            "Cutover Reconciliation",
+                        },
+                        "Business Economics": {
+                            "Financial Integrity Readiness Gate for Beacon",
+                            "Profitability Intelligence Projections",
+                            "Accounting Integration",
+                            "Financial Close",
+                            "General Ledger Reconciliation",
+                            "Projection Publication",
+                        },
+                    }[current.title]
+                    superseded = tuple(
+                        (
+                            await session.scalars(
+                                select(EngineeringMilestone).where(
+                                    EngineeringMilestone.company_id == company.id,
+                                    EngineeringMilestone.roadmap_id == current.id,
+                                    EngineeringMilestone.title.in_(superseded_titles),
+                                    EngineeringMilestone.command_id.is_(None),
+                                    EngineeringMilestone.status.in_(
+                                        {"draft", "planned"}
+                                    ),
+                                )
+                            )
+                        ).all()
+                    )
+                    for item in superseded:
+                        item.status = "archived"
+                        item.external_evidence = (
+                            "Superseded by the approved V2.3 continuation chain."
+                        )
+                        item.version += 1
+                        item.updated_at = now
                 continue
             roadmap = EngineeringRoadmap(
                 company_id=company.id,
