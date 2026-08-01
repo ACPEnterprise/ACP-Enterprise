@@ -134,3 +134,45 @@ Operational observations persist pending recalculations, allocation and
 materialization duration, reconciliation failures, stale measurements, and
 incomplete periods. These records are operational evidence; they do not alter
 financial values.
+
+## Phase 4 accounting integration and financial close
+
+Phase 4 operationalizes the integrity boundary without transferring ownership of
+operational data to Economics. Versioned source bindings identify the owning
+domain, table when one exists, adapter contract, availability state, and evidence
+requirements. Invoices, payments, and Business Events are bound sources. Jobs and
+Appointments are read-only economics context. Labor, materials, equipment, fleet,
+and overhead retain measured-input contracts and remain `contract_ready` until an
+authoritative owning table exists; Economics does not invent one.
+
+Durable scheduled work items coordinate recalculation, allocation,
+materialization, publication, reconciliation, and monitoring. Idempotency keys,
+`FOR UPDATE SKIP LOCKED` claims, bounded attempts, exponential retry scheduling,
+abandoned-claim recovery, failure evidence digests, and duration/failure metrics
+make restart behavior explicit. Each service remains independently idempotent, so
+replaying a work item cannot create a second financial result.
+
+Close readiness is evidence-driven rather than clock-driven. It evaluates source
+record coverage, balanced allocations, complete measurements, pending/stale
+scopes, economics reconciliation, unresolved corrections, GL reconciliation, and
+the responsible owner. Once Phase 4 source bindings exist, a period cannot move
+from `closing` to `closed` without a current ready result and an immutable audit
+package. Closed-period facts remain blocked until a controlled, reasoned,
+owner-attributed reopening.
+
+Accounting integration is provider-neutral. Versioned chart mappings classify
+revenue, costs, payments, and allocation postings without embedding provider
+behavior. Journal exports carry balanced debit/credit lines, branch dimensions,
+payment/source references, evidence digests, projection lineage, a SHA-256
+checksum, acknowledgement or rejection evidence, replay identity, and correction
+lineage. General-ledger reconciliation reports represented source value, exported
+value, journal balance, rejected lines, duplicates, corrections, variance,
+ownership mismatch, and unexplained residual; unavailable evidence remains
+`unknown`.
+
+Period audit packages immutably snapshot transition history, fact and correction
+lineage, evidence digests, allocations, measurements and confidence explanations,
+projections, reconciliation, readiness, exports, and GL reconciliation. Downstream
+publication exposes only reconciled projection identity, confidence,
+completeness, freshness, evidence lineage, and integrity status. It exposes no
+Beacon, Luminary, LIA, or AI behavior.
