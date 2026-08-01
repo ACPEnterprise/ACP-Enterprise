@@ -203,7 +203,6 @@ class ControlledExecutionRepository:
                                 == ControlledOfferState.ACQUIRED.value
                             )
                             & (ControlledExecutionOfferModel.worker_id == worker_id)
-                            & (ControlledExecutionOfferModel.session_id == session_id)
                         ),
                     ),
                     ControlledExecutionOfferModel.expires_at > now,
@@ -216,6 +215,35 @@ class ControlledExecutionRepository:
             )
         ).all()
         return tuple(_offer(entity) for entity in entities)
+
+    @staticmethod
+    async def reattach_acquired_session(
+        session: AsyncSession,
+        *,
+        company_id: UUID,
+        offer_id: UUID,
+        worker_id: UUID,
+        session_id: UUID,
+        now: datetime,
+    ) -> ControlledExecutionOffer | None:
+        entity = await session.scalar(
+            select(ControlledExecutionOfferModel)
+            .where(
+                ControlledExecutionOfferModel.company_id == company_id,
+                ControlledExecutionOfferModel.id == offer_id,
+                ControlledExecutionOfferModel.state
+                == ControlledOfferState.ACQUIRED.value,
+                ControlledExecutionOfferModel.worker_id == worker_id,
+            )
+            .with_for_update()
+        )
+        if entity is None:
+            return None
+        entity.session_id = session_id
+        entity.updated_at = now
+        entity.version += 1
+        await session.flush()
+        return _offer(entity)
 
     @staticmethod
     async def bind_offer(

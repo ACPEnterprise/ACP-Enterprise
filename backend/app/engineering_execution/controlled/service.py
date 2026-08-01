@@ -175,6 +175,18 @@ class ControlledExecutionService:
         for offer in offers:
             recovery: dict[str, object] = {}
             if offer.state is ControlledOfferState.ACQUIRED and offer.lease_id:
+                if offer.session_id != session.session_id:
+                    attached = await self.repository.reattach_acquired_session(
+                        database,
+                        company_id=session.context.company_id,
+                        offer_id=offer.id,
+                        worker_id=session.context.worker_id,
+                        session_id=session.session_id,
+                        now=utc_now(),
+                    )
+                    if attached is None:
+                        continue
+                    offer = attached
                 lease = await database.get(WorkerLease, offer.lease_id)
                 if lease is None or lease.status != "active":
                     continue
