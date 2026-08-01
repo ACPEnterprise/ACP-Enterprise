@@ -411,12 +411,18 @@ class ControlledExecutionService:
         if (
             offer.state != ControlledOfferState.ACQUIRED.value
             or offer.worker_id != worker_context.worker_id
-            or offer.session_id != session_id
             or offer.lease_id != lease_id
         ):
             raise ControlledExecutionIneligibleError(
                 "Execution result binding is invalid."
             )
+        if offer.session_id != session_id:
+            # A signed pending result may be redelivered after reconnect by the
+            # same enrolled worker and original lease. Rebind only the session;
+            # command, offer, lease, execution, and result identity are unchanged.
+            offer.session_id = session_id
+            offer.updated_at = completed_at
+            offer.version += 1
         validation_output = output.get("validation")
         if outcome is ControlledOutcome.SUCCEEDED and (
             output.get("workspace_id") != offer.workspace_id

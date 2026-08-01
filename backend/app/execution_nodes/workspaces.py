@@ -118,7 +118,7 @@ class WorkspaceManager:
     @staticmethod
     def changed_files(workspace: Path) -> tuple[str, ...]:
         completed = subprocess.run(
-            ("git", "status", "--porcelain=v1", "-z"),
+            ("git", "status", "--porcelain=v1", "--untracked-files=all", "-z"),
             cwd=workspace,
             capture_output=True,
             text=True,
