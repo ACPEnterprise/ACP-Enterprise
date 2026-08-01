@@ -48,11 +48,15 @@ class ProviderJournal:
         return ProviderPhase(json.loads(rows[-1])["phase"]) if rows else None
 
     def latest_evidence(self, request: ProviderExecutionRequest) -> dict[str, object]:
+        evidence = self.latest_record(request).get("evidence", {})
+        return dict(evidence) if isinstance(evidence, dict) else {}
+
+    def latest_record(self, request: ProviderExecutionRequest) -> dict[str, object]:
         target = self.root / f"{request.execution_id}.jsonl"
         if not target.exists():
             return {}
         rows = target.read_text(encoding="utf-8").splitlines()
-        return dict(json.loads(rows[-1]).get("evidence", {})) if rows else {}
+        return dict(json.loads(rows[-1])) if rows else {}
 
 
 class CodexImplementation:
@@ -112,6 +116,15 @@ class CodexImplementation:
             "event_count": len(completed.stdout.splitlines()),
         }
 
+    def completed_after(
+        self, request: ProviderExecutionRequest, occurred_at: str
+    ) -> bool:
+        output = self.evidence_root / f"{request.execution_id}.summary"
+        if not output.is_file() or not output.read_text(encoding="utf-8").strip():
+            return False
+        completed_at = datetime.fromtimestamp(output.stat().st_mtime, timezone.utc)
+        return completed_at >= datetime.fromisoformat(occurred_at)
+
 
 class ControlledExecutionProvider:
     def __init__(
@@ -129,6 +142,7 @@ class ControlledExecutionProvider:
     ) -> ProviderExecutionResult:
         validate_request(request)
         prior = self.journal.latest_phase(request)
+        prior_record = self.journal.latest_record(request)
         if prior is ProviderPhase.COMPLETED:
             raise ProviderFailure("Duplicate completed execution is rejected.")
         if (
@@ -142,12 +156,23 @@ class ControlledExecutionProvider:
                 reason="verified_no_mutation_retry",
             )
             prior = ProviderPhase.QUEUED
-        if prior in {
-            ProviderPhase.EXECUTING,
-            ProviderPhase.VALIDATING,
-            ProviderPhase.COMMIT_READY,
-            ProviderPhase.PUBLISHING_RESULT,
-        }:
+        resume_after_implementation = (
+            prior is ProviderPhase.EXECUTING
+            and isinstance(prior_record.get("occurred_at"), str)
+            and self.implementation.completed_after(
+                request, str(prior_record["occurred_at"])
+            )
+        )
+        if (
+            prior
+            in {
+                ProviderPhase.EXECUTING,
+                ProviderPhase.VALIDATING,
+                ProviderPhase.COMMIT_READY,
+                ProviderPhase.PUBLISHING_RESULT,
+            }
+            and not resume_after_implementation
+        ):
             self.journal.append(
                 request,
                 ProviderPhase.RECONCILIATION_REQUIRED,
@@ -155,15 +180,24 @@ class ControlledExecutionProvider:
             )
             raise ProviderFailure("Interrupted mutation requires reconciliation.")
         with self.workspaces.locked(request):
-            self.journal.append(request, ProviderPhase.COMPOSED)
-            workspace = self.workspaces.prepare(request)
-            self.journal.append(
-                request,
-                ProviderPhase.WORKSPACE_READY,
-                head=request.boundary.expected_head,
-            )
-            self.journal.append(request, ProviderPhase.EXECUTING)
-            evidence = self.implementation.execute(workspace, request, timeout_seconds)
+            if resume_after_implementation:
+                workspace = self.workspaces.prepare(request)
+                evidence = {
+                    "implementation": "codex",
+                    "resumed_after_completed_implementation": True,
+                }
+            else:
+                self.journal.append(request, ProviderPhase.COMPOSED)
+                workspace = self.workspaces.prepare(request)
+                self.journal.append(
+                    request,
+                    ProviderPhase.WORKSPACE_READY,
+                    head=request.boundary.expected_head,
+                )
+                self.journal.append(request, ProviderPhase.EXECUTING)
+                evidence = self.implementation.execute(
+                    workspace, request, timeout_seconds
+                )
             files = self.workspaces.changed_files(workspace)
             enforce_changed_paths(request.boundary, files)
             self.journal.append(request, ProviderPhase.VALIDATING, files=list(files))

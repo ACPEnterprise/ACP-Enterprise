@@ -106,7 +106,17 @@ class WorkspaceManager:
 
     @staticmethod
     def changed_files(workspace: Path) -> tuple[str, ...]:
-        raw = WorkspaceManager._git(workspace, "status", "--porcelain=v1", "-z")
+        completed = subprocess.run(
+            ("git", "status", "--porcelain=v1", "-z"),
+            cwd=workspace,
+            capture_output=True,
+            text=True,
+            timeout=120,
+            check=False,
+        )
+        if completed.returncode:
+            raise WorkspaceFailure((completed.stderr or completed.stdout)[:800])
+        raw = completed.stdout
         return tuple(
             sorted({item[3:].split(" -> ")[-1] for item in raw.split("\0") if item})
         )

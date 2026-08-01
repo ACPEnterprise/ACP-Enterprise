@@ -257,7 +257,8 @@ class AuthenticatedWorkerRuntime:
                 raise IsolatedWorkspaceExecutionError("Offer payload is invalid.")
             if self._workstream_actions.get(command_id) in {"pause", "cancel"}:
                 return False
-            if "recovery_lease_id" in offered_payload:
+            recovered_lease = "recovery_lease_id" in offered_payload
+            if recovered_lease:
                 acquired = AcquiredControlledOffer(
                     offer_id=UUID(str(offered["offer_id"])),
                     lease_id=UUID(str(offered_payload["recovery_lease_id"])),
@@ -326,6 +327,7 @@ class AuthenticatedWorkerRuntime:
                             session=session,
                             lease_id=acquired.lease_id,
                             initial_version=acquired.lease_version,
+                            renew_immediately=recovered_lease,
                         )
                     )
                     output = await NodeExecutionProviderClient(
@@ -386,10 +388,13 @@ class AuthenticatedWorkerRuntime:
         session: Session,
         lease_id: UUID,
         initial_version: int,
+        renew_immediately: bool = False,
     ) -> None:
         version = initial_version
         while True:
-            await asyncio.sleep(240)
+            if not renew_immediately:
+                await asyncio.sleep(240)
+            renew_immediately = False
             sent_at = datetime.now(timezone.utc)
             payload = LeaseRenewalMessage(
                 lease_id=lease_id,
