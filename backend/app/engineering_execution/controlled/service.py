@@ -166,28 +166,42 @@ class ControlledExecutionService:
         offers = await self.repository.list_available(
             database,
             company_id=session.context.company_id,
+            worker_id=session.context.worker_id,
+            session_id=session.session_id,
             now=utc_now(),
             limit=limit,
         )
-        return tuple(
-            ExecutionOffer(
-                offer_id=offer.id,
-                execution_id=offer.execution_id,
-                correlation_id=offer.correlation_id,
-                capability_required=offer.capability_required,
-                lease_duration=timedelta(seconds=offer.lease_seconds),
-                expires_at=offer.expires_at,
-                metadata=immutable_mapping(
-                    {
-                        "command_id": str(offer.command_id),
-                        "workspace_id": offer.workspace_id,
-                        "command_type": offer.command_type.value,
-                        **offer.payload,
-                    }
-                ),
+        responses: list[ExecutionOffer] = []
+        for offer in offers:
+            recovery: dict[str, object] = {}
+            if offer.state is ControlledOfferState.ACQUIRED and offer.lease_id:
+                lease = await database.get(WorkerLease, offer.lease_id)
+                if lease is None or lease.status != "active":
+                    continue
+                recovery = {
+                    "recovery_lease_id": str(lease.id),
+                    "recovery_lease_version": lease.version,
+                }
+            responses.append(
+                ExecutionOffer(
+                    offer_id=offer.id,
+                    execution_id=offer.execution_id,
+                    correlation_id=offer.correlation_id,
+                    capability_required=offer.capability_required,
+                    lease_duration=timedelta(seconds=offer.lease_seconds),
+                    expires_at=offer.expires_at,
+                    metadata=immutable_mapping(
+                        {
+                            "command_id": str(offer.command_id),
+                            "workspace_id": offer.workspace_id,
+                            "command_type": offer.command_type.value,
+                            **recovery,
+                            **offer.payload,
+                        }
+                    ),
+                )
             )
-            for offer in offers
-        )
+        return tuple(responses)
 
     async def reconcile_acknowledged_code_commands(
         self, database: AsyncSession, *, worker_session: WorkerSession

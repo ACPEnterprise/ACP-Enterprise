@@ -47,6 +47,13 @@ class ProviderJournal:
         rows = target.read_text(encoding="utf-8").splitlines()
         return ProviderPhase(json.loads(rows[-1])["phase"]) if rows else None
 
+    def latest_evidence(self, request: ProviderExecutionRequest) -> dict[str, object]:
+        target = self.root / f"{request.execution_id}.jsonl"
+        if not target.exists():
+            return {}
+        rows = target.read_text(encoding="utf-8").splitlines()
+        return dict(json.loads(rows[-1]).get("evidence", {})) if rows else {}
+
 
 class CodexImplementation:
     def __init__(self, executable: Path, auth_root: Path, evidence_root: Path) -> None:
@@ -81,6 +88,9 @@ class CodexImplementation:
                     "Do not run git add, git commit, git push, deploy, or modify files "
                     "outside the supplied execution boundary. The provider alone owns "
                     "Git staging, validation, and commit creation.\n\n"
+                    "This immutable command and lease prove that the authenticated "
+                    "owner already performed the required Start action. Begin the "
+                    "bounded implementation now; do not ask for another Start.\n\n"
                     f"{request.instruction}"
                 ),
             ),
@@ -121,6 +131,17 @@ class ControlledExecutionProvider:
         prior = self.journal.latest_phase(request)
         if prior is ProviderPhase.COMPLETED:
             raise ProviderFailure("Duplicate completed execution is rejected.")
+        if (
+            prior is ProviderPhase.VALIDATING
+            and self.journal.latest_evidence(request).get("files") == []
+            and self.workspaces.recovered_workspace_is_pristine(request)
+        ):
+            self.journal.append(
+                request,
+                ProviderPhase.QUEUED,
+                reason="verified_no_mutation_retry",
+            )
+            prior = ProviderPhase.QUEUED
         if prior in {
             ProviderPhase.EXECUTING,
             ProviderPhase.VALIDATING,

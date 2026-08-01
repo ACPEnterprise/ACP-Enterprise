@@ -31,6 +31,7 @@ from app.worker_runtime.client import (
 )
 from app.worker_runtime.config import WorkerRuntimeConfig
 from app.worker_runtime.execution import (
+    AcquiredControlledOffer,
     AmbiguousProviderExecutionError,
     IsolatedWorkspaceExecutionError,
     IsolatedWorkspaceExecutor,
@@ -253,29 +254,39 @@ class AuthenticatedWorkerRuntime:
             command_id = UUID(str(offered["command_id"]))
             if self._workstream_actions.get(command_id) in {"pause", "cancel"}:
                 return False
-            sent_at = datetime.now(timezone.utc)
-            acquisition = ControlledOfferAcquisitionMessage(
-                offer_id=UUID(str(offered["offer_id"]))
-            )
-            envelope = self._envelope(
-                session=session,
-                sent_at=sent_at,
-                kind=TransportMessageKind.CONTROLLED_OFFER_ACQUISITION,
-                payload=acquisition,
-            )
-            acquired = await self.client.acquire_offer(
-                session_id=session.session_id,
-                payload={
-                    "message_id": str(envelope.message_id),
-                    "session_id": str(envelope.session_id),
-                    "sequence_number": envelope.sequence_number,
-                    "sent_at": envelope.sent_at.isoformat(),
-                    "authentication_proof": envelope.authentication_proof,
-                    "key_version": envelope.key_version,
-                    "offer_id": str(acquisition.offer_id),
-                },
-            )
-            self._advance(sent_at)
+            if "recovery_lease_id" in offered:
+                acquired = AcquiredControlledOffer(
+                    offer_id=UUID(str(offered["offer_id"])),
+                    lease_id=UUID(str(offered["recovery_lease_id"])),
+                    lease_version=int(str(offered["recovery_lease_version"])),
+                    workspace_id=str(offered["workspace_id"]),
+                    command_type=str(offered["command_type"]),
+                    payload=offered,
+                )
+            else:
+                sent_at = datetime.now(timezone.utc)
+                acquisition = ControlledOfferAcquisitionMessage(
+                    offer_id=UUID(str(offered["offer_id"]))
+                )
+                envelope = self._envelope(
+                    session=session,
+                    sent_at=sent_at,
+                    kind=TransportMessageKind.CONTROLLED_OFFER_ACQUISITION,
+                    payload=acquisition,
+                )
+                acquired = await self.client.acquire_offer(
+                    session_id=session.session_id,
+                    payload={
+                        "message_id": str(envelope.message_id),
+                        "session_id": str(envelope.session_id),
+                        "sequence_number": envelope.sequence_number,
+                        "sent_at": envelope.sent_at.isoformat(),
+                        "authentication_proof": envelope.authentication_proof,
+                        "key_version": envelope.key_version,
+                        "offer_id": str(acquisition.offer_id),
+                    },
+                )
+                self._advance(sent_at)
             started_at = datetime.now(timezone.utc)
             if self.journal is None:
                 raise RuntimeError("Execution-capable worker requires recovery state.")

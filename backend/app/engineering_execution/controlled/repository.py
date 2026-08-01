@@ -2,7 +2,7 @@ from datetime import datetime
 from types import MappingProxyType
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.engineering_control.models import EngineeringCommand
@@ -181,15 +181,31 @@ class ControlledExecutionRepository:
 
     @staticmethod
     async def list_available(
-        session: AsyncSession, *, company_id: UUID, now: datetime, limit: int
+        session: AsyncSession,
+        *,
+        company_id: UUID,
+        worker_id: UUID,
+        session_id: UUID,
+        now: datetime,
+        limit: int,
     ) -> tuple[ControlledExecutionOffer, ...]:
         entities = (
             await session.scalars(
                 select(ControlledExecutionOfferModel)
                 .where(
                     ControlledExecutionOfferModel.company_id == company_id,
-                    ControlledExecutionOfferModel.state
-                    == ControlledOfferState.AVAILABLE.value,
+                    or_(
+                        ControlledExecutionOfferModel.state
+                        == ControlledOfferState.AVAILABLE.value,
+                        (
+                            (
+                                ControlledExecutionOfferModel.state
+                                == ControlledOfferState.ACQUIRED.value
+                            )
+                            & (ControlledExecutionOfferModel.worker_id == worker_id)
+                            & (ControlledExecutionOfferModel.session_id == session_id)
+                        ),
+                    ),
                     ControlledExecutionOfferModel.expires_at > now,
                 )
                 .order_by(

@@ -92,6 +92,18 @@ class WorkspaceManager:
             raise
         return target
 
+    def recovered_workspace_is_pristine(
+        self, request: ProviderExecutionRequest
+    ) -> bool:
+        target = (
+            self.root / "executions" / str(request.company_id) / request.workspace_id
+        )
+        return (
+            target.is_dir()
+            and self._git(target, "rev-parse", "HEAD") == request.boundary.expected_head
+            and not self.changed_files(target)
+        )
+
     @staticmethod
     def changed_files(workspace: Path) -> tuple[str, ...]:
         raw = WorkspaceManager._git(workspace, "status", "--porcelain=v1", "-z")
