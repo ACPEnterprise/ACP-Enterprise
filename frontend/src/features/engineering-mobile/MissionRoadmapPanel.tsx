@@ -29,16 +29,9 @@ const actionLabels: Partial<Record<MilestoneAction, string>> = {
 };
 
 function actions(item: MilestoneItem): readonly MilestoneAction[] {
-  if (item.status === "ready") return ["start", "skip"];
-  if (item.status === "waiting_review")
-    return ["approve", "request_revision", "reject"];
-  if (item.status === "waiting_approval") return ["approve", "reject", "skip"];
-  if (item.status === "blocked") return ["request_revision", "skip", "archive"];
-  if (item.status === "running") return ["pause", "cancel"];
-  if (item.status === "paused") return ["resume", "cancel"];
-  if (["completed", "cancelled", "skipped"].includes(item.status))
-    return ["archive"];
-  return [];
+  return item.attention_class === "owner_action_required"
+    ? item.available_owner_actions
+    : [];
 }
 
 function MilestoneCard({
@@ -74,6 +67,33 @@ function MilestoneCard({
       <p className="mt-ui-2 text-xs font-medium text-content-muted">
         {item.owning_workstream} · {item.owning_branch}
       </p>
+      <p className="mt-ui-2 text-sm font-medium text-content-muted">
+        {item.attention_reason}
+      </p>
+      {item.attention_class === "waiting_on_capacity" && (
+        <dl className="mt-ui-3 grid grid-cols-2 gap-ui-2 rounded-xl border border-violet-400/30 bg-violet-400/10 p-ui-3 text-xs text-content-muted">
+          <div>
+            <dt>Queue position</dt>
+            <dd className="font-semibold text-content">
+              {item.queue_position ?? "Pending"}
+            </dd>
+          </div>
+          <div>
+            <dt>Estimated start</dt>
+            <dd className="font-semibold text-content">
+              {item.estimated_start_at
+                ? new Date(item.estimated_start_at).toLocaleString()
+                : "Not yet available"}
+            </dd>
+          </div>
+          <div className="col-span-2">
+            <dt>Worker capacity</dt>
+            <dd className="font-semibold text-content">
+              {item.worker_capacity_summary ?? "Capacity unavailable"}
+            </dd>
+          </div>
+        </dl>
+      )}
       {!item.requested_code_changes && (
         <p className="mt-ui-2 text-xs font-semibold text-emerald-400">
           Read-only · repository changes prohibited
@@ -125,6 +145,16 @@ function MilestoneCard({
               <dt>Current HEAD</dt>
               <dd className="break-all font-mono text-content">
                 {item.external_adoption.current_head.slice(0, 12)}
+              </dd>
+            </div>
+            <div className="col-span-2">
+              <dt>Last evidence</dt>
+              <dd className="font-semibold text-content">
+                {item.external_adoption.last_evidence_at
+                  ? new Date(
+                      item.external_adoption.last_evidence_at,
+                    ).toLocaleString()
+                  : "No authenticated evidence yet"}
               </dd>
             </div>
           </dl>
@@ -216,12 +246,38 @@ export function MissionRoadmapPanel() {
     );
   }
   const data = query.data;
-  const current = data.current_milestones.filter(
-    (item) => item.status !== "ready" && item.status !== "waiting_review",
-  );
-  const future = [...data.next_approved_milestones, ...data.future_milestones];
-  const completed = data.completed_milestones;
-  const blocked = data.blocked_milestones;
+  const sections = [
+    {
+      title: "Running",
+      icon: CircleDot,
+      color: "text-blue-400",
+      items: data.running_milestones,
+    },
+    {
+      title: "Waiting on Dependencies",
+      icon: LockKeyhole,
+      color: "text-amber-400",
+      items: data.dependency_waiting_milestones,
+    },
+    {
+      title: "Waiting on Capacity",
+      icon: Route,
+      color: "text-violet-400",
+      items: data.capacity_waiting_milestones,
+    },
+    {
+      title: "External Work",
+      icon: Route,
+      color: "text-violet-400",
+      items: data.external_work_milestones,
+    },
+    {
+      title: "Completed Recently",
+      icon: CheckCircle2,
+      color: "text-emerald-400",
+      items: data.completed_recently,
+    },
+  ] as const;
   return (
     <section className="space-y-ui-5">
       <header>
@@ -251,7 +307,7 @@ export function MissionRoadmapPanel() {
                 data.actionable_count ? "text-amber-400" : "text-emerald-400"
               }
             />
-            <h3 className="font-bold">Waiting for me</h3>
+            <h3 className="font-bold">Owner Attention</h3>
           </div>
           <Badge>{data.actionable_count}</Badge>
         </div>
@@ -261,7 +317,7 @@ export function MissionRoadmapPanel() {
           </p>
         ) : (
           <div className="mt-ui-4 grid gap-ui-3">
-            {data.waiting_for_me.map((item) => (
+            {data.owner_attention.map((item) => (
               <MilestoneCard key={item.id} item={item} prominent />
             ))}
           </div>
@@ -273,58 +329,28 @@ export function MissionRoadmapPanel() {
           description="No approved milestone library exists in this Company scope."
         />
       )}
-      {current.length > 0 && (
-        <div>
-          <div className="mb-ui-3 flex items-center gap-ui-2">
-            <CircleDot className="text-blue-400" size={20} />
-            <h3 className="font-bold">Current milestone</h3>
-          </div>
-          <div className="grid gap-ui-3">
-            {current.map((item) => (
-              <MilestoneCard key={item.id} item={item} />
-            ))}
-          </div>
-        </div>
-      )}
-      {future.length > 0 && (
-        <div>
-          <div className="mb-ui-3 flex items-center gap-ui-2">
-            <Route className="text-violet-400" size={20} />
-            <h3 className="font-bold">Next and future milestones</h3>
-          </div>
-          <div className="grid gap-ui-3">
-            {future.map((item) => (
-              <MilestoneCard key={item.id} item={item} />
-            ))}
-          </div>
-        </div>
-      )}
-      {blocked.length > 0 && (
-        <div>
-          <div className="mb-ui-3 flex items-center gap-ui-2">
-            <LockKeyhole className="text-rose-400" size={20} />
-            <h3 className="font-bold">Blocked milestones</h3>
-          </div>
-          <div className="grid gap-ui-3">
-            {blocked.map((item) => (
-              <MilestoneCard key={item.id} item={item} />
-            ))}
-          </div>
-        </div>
-      )}
-      {completed.length > 0 && (
-        <details className="rounded-2xl border border-stroke bg-surface p-ui-4">
+      {sections.map(({ title, icon: Icon, color, items }) => (
+        <details
+          key={title}
+          className="rounded-2xl border border-stroke bg-surface p-ui-4"
+          open={title === "Running" && items.length > 0}
+        >
           <summary className="flex min-h-11 cursor-pointer items-center gap-ui-2 font-bold">
-            <CheckCircle2 className="text-emerald-400" size={20} />
-            Completed milestones · {completed.length}
+            <Icon className={color} size={20} />
+            <span className="flex-1">{title}</span>
+            <Badge>{items.length}</Badge>
           </summary>
-          <div className="mt-ui-3 grid gap-ui-3">
-            {completed.map((item) => (
-              <MilestoneCard key={item.id} item={item} />
-            ))}
-          </div>
+          {items.length ? (
+            <div className="mt-ui-3 grid gap-ui-3">
+              {items.map((item) => (
+                <MilestoneCard key={item.id} item={item} />
+              ))}
+            </div>
+          ) : (
+            <p className="mt-ui-3 text-sm text-content-muted">None currently.</p>
+          )}
         </details>
-      )}
+      ))}
       <Card className="p-ui-4">
         <div className="flex items-center gap-ui-2">
           <Flag className="text-blue-400" />

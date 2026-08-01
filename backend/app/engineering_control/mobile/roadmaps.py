@@ -196,7 +196,7 @@ class EngineeringMilestoneEvent(Base):
 
 class RoadmapService:
     actionable: ClassVar[frozenset[str]] = frozenset(
-        {"ready", "waiting_review", "waiting_approval", "blocked"}
+        {"ready", "waiting_review", "waiting_approval"}
     )
 
     def __init__(self) -> None:

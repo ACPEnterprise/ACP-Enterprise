@@ -272,6 +272,15 @@ class MilestoneItem(MobileEngineeringSchema):
     definition_approved: bool
     requested_code_changes: bool
     externally_adoptable: bool = False
+    attention_class: str = Field(
+        default="informational",
+        pattern=r"^(owner_action_required|running|waiting_on_dependency|waiting_on_capacity|waiting_on_external|informational)$",
+    )
+    attention_reason: str = "No owner action is required."
+    available_owner_actions: tuple[str, ...] = ()
+    estimated_start_at: datetime | None = None
+    worker_capacity_summary: str | None = None
+    queue_position: int | None = Field(default=None, ge=1)
     external_evidence: str | None
     command_id: UUID | None
     version: int
@@ -347,6 +356,12 @@ class RoadmapPage(MobileEngineeringSchema):
     roadmaps: tuple[RoadmapItem, ...]
     milestones: tuple[MilestoneItem, ...]
     waiting_for_me: tuple[MilestoneItem, ...]
+    owner_attention: tuple[MilestoneItem, ...]
+    running_milestones: tuple[MilestoneItem, ...]
+    dependency_waiting_milestones: tuple[MilestoneItem, ...]
+    capacity_waiting_milestones: tuple[MilestoneItem, ...]
+    external_work_milestones: tuple[MilestoneItem, ...]
+    completed_recently: tuple[MilestoneItem, ...]
     current_milestones: tuple[MilestoneItem, ...]
     next_approved_milestones: tuple[MilestoneItem, ...]
     future_milestones: tuple[MilestoneItem, ...]

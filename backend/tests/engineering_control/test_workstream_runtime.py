@@ -1,11 +1,15 @@
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 from uuid import UUID, uuid4
 
 import pytest
 import pytest_asyncio
 from app.core.config import settings
 from app.engineering_control.mobile.control import WorkstreamControlRepository
-from app.engineering_control.mobile.notifications import MissionNotificationService
+from app.engineering_control.mobile.notifications import (
+    MissionNotificationService,
+    notification_kind,
+)
 from app.engineering_control.mobile.realtime import (
     InvalidResumeToken,
     _events_after,
@@ -24,6 +28,37 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from tests.engineering_control.test_engineering_command_service import (
     seed_service_fixture,
 )
+
+
+def test_notifications_exist_only_when_owner_action_can_change_state() -> None:
+    assert (
+        notification_kind(
+            SimpleNamespace(runtime_state="waiting_for_owner", reason_code=None)  # type: ignore[arg-type]
+        )
+        == "waiting_for_owner"
+    )
+    assert (
+        notification_kind(
+            SimpleNamespace(
+                runtime_state="recovering", reason_code="reconciliation_required"
+            )  # type: ignore[arg-type]
+        )
+        == "manual_recovery"
+    )
+    for state, reason in (
+        ("running", None),
+        ("completed", "deployment_completed"),
+        ("failed", "deployment_failed"),
+        ("recovering", "heartbeat_expired"),
+    ):
+        assert (
+            notification_kind(
+                SimpleNamespace(runtime_state=state, reason_code=reason)  # type: ignore[arg-type]
+            )
+            is None
+        )
+
+
 from tests.engineering_execution.test_engineering_execution import approved_command
 from tests.worker_control.test_worker_control import (
     register_available_worker,
@@ -250,47 +285,8 @@ async def test_worker_acknowledgement_is_idempotent_versioned_and_recoverable(
             page_size=25,
             now=datetime.now(timezone.utc),
         )
-        heartbeat_notice = next(item for item in rows if item.command_id == command.id)
-        assert total >= 1
-        assert heartbeat_notice.kind == "heartbeat_expired"
-        assert heartbeat_notice.severity == "warning"
-
-    async with worker_database.factory() as session:
-        escalated, _ = await notifications.list(
-            session,
-            context=worker_database.context,
-            page=1,
-            page_size=25,
-            now=datetime.now(timezone.utc) + timedelta(minutes=6),
-        )
-        heartbeat_notice = next(
-            item for item in escalated if item.command_id == command.id
-        )
-        assert heartbeat_notice.severity == "critical"
-        assert heartbeat_notice.escalated_at is not None
-
-    async with worker_database.factory() as session:
-        acknowledged = await notifications.acknowledge(
-            session,
-            context=worker_database.context,
-            notification_id=heartbeat_notice.id,
-            expected_version=heartbeat_notice.version,
-        )
-        assert acknowledged.status == "acknowledged"
-        assert acknowledged.acknowledged_by_user_id == worker_database.context.user.id
-        acknowledged_version = acknowledged.version
-
-    async with worker_database.factory() as session:
-        archived = await notifications.transition(
-            session,
-            context=worker_database.context,
-            notification_id=heartbeat_notice.id,
-            expected_version=acknowledged_version,
-            action="archive",
-        )
-        assert archived.status == "archived"
-        assert archived.archived_at is not None
-        assert archived.read_at == archived.archived_at
+        assert total == 0
+        assert not any(item.command_id == command.id for item in rows)
     recovery_payloads = await _events_after(
         worker_context.company_id, UUID(str(command_payloads[-1]["event_id"]))
     )
@@ -298,11 +294,7 @@ async def test_worker_acknowledgement_is_idempotent_versioned_and_recoverable(
         item for item in recovery_payloads if item["command_id"] == str(command.id)
     )
     assert recovery_payload["runtime_state"] == "recovering"
-    assert recovery_payload["notifications"] == (
-        "recovering",
-        "worker_offline",
-        "heartbeat_expired",
-    )
+    assert recovery_payload["notifications"] == ()
 
 
 @pytest.mark.asyncio

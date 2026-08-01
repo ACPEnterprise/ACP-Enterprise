@@ -6,6 +6,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ValidationError
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_database_session
@@ -15,9 +16,11 @@ from app.engineering_control.commands import (
 )
 from app.engineering_control.errors import EngineeringControlError
 from app.engineering_control.http_errors import engineering_http_error
+from app.engineering_control.workstream_runtime import EngineeringWorkstreamRuntime
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import EngineeringCommandPermission
 from app.platform.permissions.dependencies import require_permission
+from app.worker_control.models import EngineeringWorker
 
 from .external_adoption import (
     ExternalAdoptionError,
@@ -95,6 +98,75 @@ ApproveContext = Annotated[
 ]
 
 
+def _attention(
+    item: MilestoneItem,
+    adoption: ExternalAdoptionItem | None,
+    runtime: EngineeringWorkstreamRuntime | None,
+) -> tuple[str, str, tuple[str, ...]]:
+    if adoption is not None:
+        if adoption.status == "waiting_review":
+            return (
+                "owner_action_required",
+                "External completion is ready for your review.",
+                ("approve", "request_revision", "reject"),
+            )
+        if adoption.status not in {"completed", "cancelled", "archived"}:
+            reason = (
+                "Waiting for authenticated external evidence."
+                if adoption.status == "pending_start"
+                else "External work is progressing outside Mission Control."
+            )
+            return "waiting_on_external", reason, ()
+    if (
+        runtime is not None
+        and runtime.runtime_state == "recovering"
+        and runtime.reason_code
+        in {
+            "reconciliation_required",
+            "ambiguous_interrupted_execution",
+        }
+    ):
+        return (
+            "owner_action_required",
+            "A manual recovery decision is required.",
+            ("request_revision", "cancel"),
+        )
+    if item.status == "ready":
+        return (
+            "owner_action_required",
+            "This milestone is ready to start.",
+            ("start", "skip"),
+        )
+    if item.status == "waiting_review":
+        return (
+            "owner_action_required",
+            "Completed work is ready for your review.",
+            ("approve", "request_revision", "reject"),
+        )
+    if item.status == "waiting_approval":
+        return (
+            "owner_action_required",
+            "An approval decision is required.",
+            ("approve", "reject", "skip"),
+        )
+    if item.status == "running":
+        if runtime is None or runtime.runtime_state in {"queued", "recovering"}:
+            return (
+                "waiting_on_capacity",
+                "Execution is queued for authenticated worker capacity.",
+                (),
+            )
+        return "running", "Execution is in progress.", ()
+    if item.status in {"externally_running"}:
+        return "waiting_on_external", "External work is in progress.", ()
+    if item.status in {"draft", "planned", "blocked"}:
+        dependency = (
+            item.dependencies[-1] if item.dependencies else "an approved prerequisite"
+        )
+        return "waiting_on_dependency", f"Waiting for {dependency}.", ()
+    return "informational", "No owner action is required.", ()
+
+
 @router.post(
     "/roadmaps",
     response_model=RoadmapItem,
@@ -163,14 +235,77 @@ async def list_roadmaps(context: ReadContext, session: DatabaseSession) -> Roadm
     milestone_items, milestone_warnings = _bounded_projection(
         milestones, MilestoneItem, "milestone"
     )
+    command_ids = tuple(item.command_id for item in milestone_items if item.command_id)
+    runtimes = {
+        item.command_id: item
+        for item in (
+            (
+                await session.scalars(
+                    select(EngineeringWorkstreamRuntime).where(
+                        EngineeringWorkstreamRuntime.company_id == context.company.id,
+                        EngineeringWorkstreamRuntime.command_id.in_(command_ids),
+                    )
+                )
+            ).all()
+            if command_ids
+            else ()
+        )
+    }
     milestone_items = tuple(
-        item.model_copy(update={"external_adoption": adoption_items.get(item.id)})
+        item.model_copy(
+            update={
+                "external_adoption": adoption_items.get(item.id),
+                "attention_class": attention[0],
+                "attention_reason": attention[1],
+                "available_owner_actions": attention[2],
+            }
+        )
+        for item in milestone_items
+        for attention in (
+            _attention(
+                item,
+                adoption_items.get(item.id),
+                runtimes.get(item.command_id) if item.command_id else None,
+            ),
+        )
+    )
+    worker_counts: dict[str, int] = {
+        state: int(count)
+        for state, count in (
+            await session.execute(
+                select(EngineeringWorker.lifecycle_state, func.count())
+                .where(EngineeringWorker.company_id == context.company.id)
+                .group_by(EngineeringWorker.lifecycle_state)
+            )
+        ).tuples()
+    }
+    capacity_summary = (
+        f"{worker_counts.get('available', 0)} available · "
+        f"{worker_counts.get('leased', 0)} busy"
+    )
+    capacity_ids = [
+        item.id
+        for item in milestone_items
+        if item.attention_class == "waiting_on_capacity"
+    ]
+    milestone_items = tuple(
+        item.model_copy(
+            update={
+                "worker_capacity_summary": capacity_summary,
+                "queue_position": capacity_ids.index(item.id) + 1,
+            }
+        )
+        if item.id in capacity_ids
+        else item
         for item in milestone_items
     )
     valid_milestone_ids = {item.id for item in milestone_items}
     milestones = tuple(item for item in milestones if item.id in valid_milestone_ids)
+    item_by_id = {item.id: item for item in milestone_items}
     actionable = tuple(
-        item for item in milestones if item.status in roadmap_service.actionable
+        item
+        for item in milestone_items
+        if item.attention_class == "owner_action_required"
     )
     current = tuple(
         item
@@ -200,23 +335,47 @@ async def list_roadmaps(context: ReadContext, session: DatabaseSession) -> Roadm
     )
     completed = tuple(item for item in milestones if item.status == "completed")
     blocked = tuple(item for item in milestones if item.status == "blocked")
+    running_items = tuple(
+        item for item in milestone_items if item.attention_class == "running"
+    )
+    dependency_items = tuple(
+        item
+        for item in milestone_items
+        if item.attention_class == "waiting_on_dependency"
+    )
+    capacity_items = tuple(
+        item
+        for item in milestone_items
+        if item.attention_class == "waiting_on_capacity"
+    )
+    external_items = tuple(
+        item
+        for item in milestone_items
+        if item.attention_class == "waiting_on_external"
+    )
+    recent_boundary = datetime.now(timezone.utc) - timedelta(days=1)
+    completed_recently = tuple(
+        item
+        for item in milestone_items
+        if item.status == "completed"
+        and item.completed_at is not None
+        and item.completed_at >= recent_boundary
+    )
     return RoadmapPage(
         roadmaps=roadmap_items,
         milestones=milestone_items,
-        waiting_for_me=tuple(MilestoneItem.model_validate(item) for item in actionable),
-        current_milestones=tuple(
-            MilestoneItem.model_validate(item) for item in current
-        ),
-        next_approved_milestones=tuple(
-            MilestoneItem.model_validate(item) for item in next_approved
-        ),
-        future_milestones=tuple(MilestoneItem.model_validate(item) for item in future),
-        completed_milestones=tuple(
-            MilestoneItem.model_validate(item) for item in completed
-        ),
-        blocked_milestones=tuple(
-            MilestoneItem.model_validate(item) for item in blocked
-        ),
+        waiting_for_me=actionable,
+        owner_attention=actionable,
+        running_milestones=running_items,
+        dependency_waiting_milestones=dependency_items,
+        capacity_waiting_milestones=capacity_items,
+        external_work_milestones=external_items,
+        completed_recently=completed_recently,
+        current_milestones=tuple(item_by_id[item.id] for item in current),
+        next_approved_milestones=tuple(item_by_id[item.id] for item in next_approved),
+        future_milestones=tuple(item_by_id[item.id] for item in future),
+        completed_milestones=tuple(item_by_id[item.id] for item in completed),
+        blocked_milestones=tuple(item_by_id[item.id] for item in blocked),
         actionable_count=len(actionable),
         projection_warnings=roadmap_warnings + milestone_warnings,
     )

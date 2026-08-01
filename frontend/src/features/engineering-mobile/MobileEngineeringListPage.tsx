@@ -238,14 +238,11 @@ export function MobileEngineeringListPage() {
   const filteredNotifications = (notifications.data?.items ?? []).filter(
     (item) => {
       if (item.status === "archived") return false;
-      if (filter === "attention") return item.kind === "waiting_for_owner";
+      if (filter === "attention")
+        return ["waiting_for_owner", "manual_recovery"].includes(item.kind);
       if (filter === "failures") return item.kind.includes("failed");
       if (filter === "recovering")
-        return [
-          "recovering",
-          "heartbeat_expired",
-          "worker_disconnected",
-        ].includes(item.kind);
+        return item.kind === "manual_recovery";
       if (filter === "completed") return item.kind.includes("completed");
       return true;
     },
@@ -487,15 +484,13 @@ export function MobileEngineeringListPage() {
                     ).length ?? 0)
                   : (notifications.data?.items.filter((item) =>
                       value === "attention"
-                        ? item.kind === "waiting_for_owner"
+                        ? ["waiting_for_owner", "manual_recovery"].includes(
+                            item.kind,
+                          )
                         : value === "failures"
                           ? item.kind.includes("failed")
                           : value === "recovering"
-                            ? [
-                                "recovering",
-                                "heartbeat_expired",
-                                "worker_disconnected",
-                              ].includes(item.kind)
+                            ? item.kind === "manual_recovery"
                             : item.kind.includes("completed"),
                     ).length ?? 0);
               return (

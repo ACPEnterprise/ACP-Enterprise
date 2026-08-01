@@ -224,6 +224,13 @@ export type MilestoneAction =
   | "resume"
   | "cancel"
   | "archive";
+export type OwnerAttentionClass =
+  | "owner_action_required"
+  | "running"
+  | "waiting_on_dependency"
+  | "waiting_on_capacity"
+  | "waiting_on_external"
+  | "informational";
 
 export interface RoadmapItem {
   id: string;
@@ -256,6 +263,12 @@ export interface MilestoneItem {
   definition_approved: boolean;
   requested_code_changes: boolean;
   externally_adoptable: boolean;
+  attention_class: OwnerAttentionClass;
+  attention_reason: string;
+  available_owner_actions: readonly MilestoneAction[];
+  estimated_start_at: string | null;
+  worker_capacity_summary: string | null;
+  queue_position: number | null;
   external_evidence: string | null;
   external_adoption: ExternalAdoptionItem | null;
   command_id: string | null;
@@ -302,6 +315,12 @@ export interface RoadmapPage {
   roadmaps: readonly RoadmapItem[];
   milestones: readonly MilestoneItem[];
   waiting_for_me: readonly MilestoneItem[];
+  owner_attention: readonly MilestoneItem[];
+  running_milestones: readonly MilestoneItem[];
+  dependency_waiting_milestones: readonly MilestoneItem[];
+  capacity_waiting_milestones: readonly MilestoneItem[];
+  external_work_milestones: readonly MilestoneItem[];
+  completed_recently: readonly MilestoneItem[];
   current_milestones: readonly MilestoneItem[];
   next_approved_milestones: readonly MilestoneItem[];
   future_milestones: readonly MilestoneItem[];

@@ -22,23 +22,18 @@ class InvalidResumeToken(ValueError):
 
 
 def _notification(event: EngineeringWorkstreamEvent) -> str | None:
-    state = event.runtime_state
-    if event.reason_code in {
-        "deployment_completed",
-        "deployment_failed",
-        "worker_disconnected",
-        "heartbeat_expired",
+    if event.runtime_state == "waiting_for_owner":
+        return "waiting_for_owner"
+    if event.runtime_state == "recovering" and event.reason_code in {
+        "reconciliation_required",
+        "ambiguous_interrupted_execution",
     }:
-        return event.reason_code
-    if state in {"waiting_for_owner", "failed", "recovering", "completed"}:
-        return state
+        return "manual_recovery"
     return None
 
 
 def _notifications(event: EngineeringWorkstreamEvent) -> tuple[str, ...]:
     primary = _notification(event)
-    if event.reason_code == "heartbeat_expired":
-        return ("recovering", "worker_offline", "heartbeat_expired")
     return (primary,) if primary else ()
 
 
@@ -229,7 +224,12 @@ async def _events_after(
             )
         milestone_statement = select(EngineeringMilestoneEvent).where(
             EngineeringMilestoneEvent.company_id == company_id,
-            EngineeringMilestoneEvent.event_type.like("external_%"),
+            or_(
+                EngineeringMilestoneEvent.event_type.like("external_%"),
+                EngineeringMilestoneEvent.new_status.in_(
+                    {"ready", "waiting_review", "waiting_approval"}
+                ),
+            ),
         )
         boundary_time = (
             boundary.occurred_at
@@ -253,6 +253,11 @@ async def _events_after(
             ).all()
         )
         for milestone_event in milestone_events:
+            owner_notification = {
+                "ready": "ready",
+                "waiting_review": "waiting_for_review",
+                "waiting_approval": "waiting_for_approval",
+            }.get(milestone_event.new_status)
             payloads.append(
                 {
                     "event_id": str(milestone_event.id),
@@ -262,11 +267,9 @@ async def _events_after(
                     "runtime_state": milestone_event.new_status,
                     "reason_code": None,
                     "occurred_at": milestone_event.occurred_at.isoformat(),
-                    "notification": "waiting_for_owner"
-                    if milestone_event.new_status == "waiting_review"
-                    else None,
-                    "notifications": ("waiting_for_owner",)
-                    if milestone_event.new_status == "waiting_review"
+                    "notification": owner_notification,
+                    "notifications": (owner_notification,)
+                    if owner_notification
                     else (),
                     "runtime_version": None,
                     "worker_health": None,

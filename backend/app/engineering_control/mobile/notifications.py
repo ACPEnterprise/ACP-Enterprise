@@ -27,7 +27,7 @@ class EngineeringMissionNotification(Base):
         CheckConstraint(
             "kind IN ('waiting_for_owner','completed','failed','recovering',"
             "'heartbeat_expired','worker_disconnected','deployment_completed',"
-            "'deployment_failed')",
+            "'deployment_failed','manual_recovery')",
             name="ck_mission_notification_kind",
         ),
         CheckConstraint(
@@ -80,27 +80,18 @@ class EngineeringMissionNotification(Base):
 
 
 def notification_kind(event: EngineeringWorkstreamEvent) -> str | None:
-    if event.reason_code in {
-        "deployment_completed",
-        "deployment_failed",
-        "worker_disconnected",
-        "heartbeat_expired",
+    if event.runtime_state == "waiting_for_owner":
+        return "waiting_for_owner"
+    if event.runtime_state == "recovering" and event.reason_code in {
+        "reconciliation_required",
+        "ambiguous_interrupted_execution",
     }:
-        return event.reason_code
-    if event.runtime_state in {
-        "waiting_for_owner",
-        "failed",
-        "recovering",
-        "completed",
-    }:
-        return event.runtime_state
+        return "manual_recovery"
     return None
 
 
 def notification_severity(kind: str) -> str:
-    if kind in {"failed", "deployment_failed", "worker_disconnected"}:
-        return "critical"
-    if kind in {"waiting_for_owner", "recovering", "heartbeat_expired"}:
+    if kind in {"waiting_for_owner", "manual_recovery"}:
         return "warning"
     return "information"
 

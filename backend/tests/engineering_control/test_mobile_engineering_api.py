@@ -369,6 +369,13 @@ async def test_roadmap_dispatch_and_safe_progression_owner_workflow(
     body = roadmap.json()
     assert body["actionable_count"] == 1
     assert body["waiting_for_me"][0]["status"] == "ready"
+    assert body["owner_attention"][0]["attention_class"] == "owner_action_required"
+    assert body["owner_attention"][0]["available_owner_actions"] == [
+        "start",
+        "skip",
+    ]
+    assert body["dependency_waiting_milestones"][0]["title"] == "Milestone two"
+    assert body["dependency_waiting_milestones"][0]["available_owner_actions"] == []
     first = body["waiting_for_me"][0]
 
     started = await request(
@@ -381,6 +388,11 @@ async def test_roadmap_dispatch_and_safe_progression_owner_workflow(
     assert started.json()["status"] == "running"
     assert started.json()["command_id"] is not None
     assert started.json()["requested_code_changes"] is False
+    after_start = (
+        await request(app, "GET", "/api/v1/engineering/mobile/roadmaps")
+    ).json()
+    assert after_start["actionable_count"] == 0
+    assert after_start["capacity_waiting_milestones"][0]["title"] == "Milestone one"
     async with mobile_api.factory() as session:
         dispatched_command = await session.scalar(
             select(EngineeringCommand).where(
@@ -455,6 +467,7 @@ async def test_roadmap_dispatch_and_safe_progression_owner_workflow(
         item for item in review.json()["milestones"] if item["id"] == first["id"]
     )
     assert reviewed_first["status"] == "waiting_review"
+    assert reviewed_first["attention_class"] == "owner_action_required"
 
     approved = await request(
         app,
@@ -473,6 +486,11 @@ async def test_roadmap_dispatch_and_safe_progression_owner_workflow(
     assert advanced["waiting_for_me"][0]["title"] == "Milestone two"
     assert advanced["waiting_for_me"][0]["status"] == "ready"
     assert advanced["waiting_for_me"][0]["command_id"] is None
+    completed_first = next(
+        item for item in advanced["milestones"] if item["id"] == first["id"]
+    )
+    assert completed_first["attention_class"] == "informational"
+    assert completed_first["available_owner_actions"] == []
 
     # Advancement is promotion only. The sole command and control belong to the
     # milestone the owner explicitly started; the promoted milestone has no
