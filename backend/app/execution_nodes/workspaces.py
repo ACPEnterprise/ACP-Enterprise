@@ -104,6 +104,17 @@ class WorkspaceManager:
             and not self.changed_files(target)
         )
 
+    def recovered_workspace_head_is_unchanged(
+        self, request: ProviderExecutionRequest
+    ) -> bool:
+        target = (
+            self.root / "executions" / str(request.company_id) / request.workspace_id
+        )
+        return (
+            target.is_dir()
+            and self._git(target, "rev-parse", "HEAD") == request.boundary.expected_head
+        )
+
     @staticmethod
     def changed_files(workspace: Path) -> tuple[str, ...]:
         completed = subprocess.run(

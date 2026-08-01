@@ -163,6 +163,13 @@ class ControlledExecutionProvider:
                 request, str(prior_record["occurred_at"])
             )
         )
+        resume_at_validation = (
+            prior is ProviderPhase.VALIDATING
+            and self.workspaces.recovered_workspace_head_is_unchanged(request)
+        )
+        resume_after_implementation = (
+            resume_after_implementation or resume_at_validation
+        )
         if (
             prior
             in {
@@ -203,6 +210,12 @@ class ControlledExecutionProvider:
             self.journal.append(request, ProviderPhase.VALIDATING, files=list(files))
             validations = self._validate(
                 workspace, request.boundary.validation_requirements
+            )
+            self.journal.append(
+                request,
+                ProviderPhase.VALIDATING,
+                files=list(files),
+                validation=validations,
             )
             if not validations or not all(validations.values()):
                 raise ProviderFailure("Required validation failed.")
