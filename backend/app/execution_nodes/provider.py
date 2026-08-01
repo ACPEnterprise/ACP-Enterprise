@@ -350,9 +350,16 @@ class ControlledExecutionProvider:
             if validation is None:
                 raise ProviderFailure(f"Validation is not allowlisted: {requirement}")
             relative_cwd, argv = validation
+            environment = {
+                "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+                "LANG": "C.UTF-8",
+                "ENVIRONMENT": "test",
+                "PYTHONPATH": str(workspace / "backend"),
+            }
             completed = subprocess.run(
                 argv,
                 cwd=workspace / relative_cwd,
+                env=environment,
                 stdin=subprocess.DEVNULL,
                 capture_output=True,
                 timeout=1800,
