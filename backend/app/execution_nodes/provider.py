@@ -1,6 +1,7 @@
 import json
 import os
 import subprocess
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -75,7 +76,13 @@ class CodexImplementation:
                 "--output-last-message",
                 str(output),
                 "--",
-                request.instruction,
+                (
+                    "You are operating behind the ACP Controlled Execution Provider. "
+                    "Do not run git add, git commit, git push, deploy, or modify files "
+                    "outside the supplied execution boundary. The provider alone owns "
+                    "Git staging, validation, and commit creation.\n\n"
+                    f"{request.instruction}"
+                ),
             ),
             cwd=workspace,
             env=environment,
@@ -172,21 +179,25 @@ class ControlledExecutionProvider:
     @staticmethod
     def _validate(workspace: Path, requirements: tuple[str, ...]) -> dict[str, bool]:
         allowed = {
-            "git diff --check": ("git", "diff", "--check", "HEAD"),
-            "ruff": ("python", "-m", "ruff", "check", "."),
-            "mypy": ("python", "-m", "mypy", "app"),
-            "pytest": ("python", "-m", "pytest", "-q"),
-            "eslint": ("npm", "run", "lint", "--", "--max-warnings=0"),
-            "typescript": ("npm", "run", "build"),
+            "git diff --check": (Path("."), ("git", "diff", "--check", "HEAD")),
+            "ruff": (Path("backend"), (sys.executable, "-m", "ruff", "check", ".")),
+            "mypy": (Path("backend"), (sys.executable, "-m", "mypy", "app")),
+            "pytest": (Path("backend"), (sys.executable, "-m", "pytest", "-q")),
+            "eslint": (
+                Path("frontend"),
+                ("npm", "run", "lint", "--", "--max-warnings=0"),
+            ),
+            "typescript": (Path("frontend"), ("npm", "run", "build")),
         }
         results: dict[str, bool] = {}
         for requirement in requirements:
-            argv = allowed.get(requirement.casefold())
-            if argv is None:
+            validation = allowed.get(requirement.casefold())
+            if validation is None:
                 raise ProviderFailure(f"Validation is not allowlisted: {requirement}")
+            relative_cwd, argv = validation
             completed = subprocess.run(
                 argv,
-                cwd=workspace,
+                cwd=workspace / relative_cwd,
                 stdin=subprocess.DEVNULL,
                 capture_output=True,
                 timeout=1800,

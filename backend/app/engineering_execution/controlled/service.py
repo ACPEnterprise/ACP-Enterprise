@@ -238,9 +238,7 @@ class ControlledExecutionService:
                         ),
                         "repository_mutation_allowed": True,
                     },
-                    expires_at=min(
-                        command.expires_at, occurred_at + timedelta(minutes=15)
-                    ),
+                    expires_at=command.expires_at,
                     lease_seconds=900,
                     now=occurred_at,
                 )

@@ -14,6 +14,10 @@ class IsolatedWorkspaceExecutionError(Exception):
     pass
 
 
+class AmbiguousProviderExecutionError(Exception):
+    """Provider outcome is unknown and must never be converted into a retry."""
+
+
 SHA = re.compile(r"^[0-9a-f]{40}$")
 SAFE_ID = re.compile(r"^[a-z0-9][a-z0-9._-]{2,99}$")
 MAX_MANIFEST_BYTES = 32_000
@@ -165,7 +169,7 @@ class NodeExecutionProviderClient:
                 },
             )
         if response.status_code != 200:
-            raise IsolatedWorkspaceExecutionError(
+            raise AmbiguousProviderExecutionError(
                 "Node Execution Provider rejected work."
             )
         result = response.json()

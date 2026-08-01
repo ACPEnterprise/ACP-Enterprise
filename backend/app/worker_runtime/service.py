@@ -31,6 +31,7 @@ from app.worker_runtime.client import (
 )
 from app.worker_runtime.config import WorkerRuntimeConfig
 from app.worker_runtime.execution import (
+    AmbiguousProviderExecutionError,
     IsolatedWorkspaceExecutionError,
     IsolatedWorkspaceExecutor,
     NodeExecutionProviderClient,
@@ -321,6 +322,11 @@ class AuthenticatedWorkerRuntime:
                     output = IsolatedWorkspaceExecutor(
                         self.config.workspace_root
                     ).execute(acquired)
+            except AmbiguousProviderExecutionError:
+                # The provider may have mutated its isolated workspace. Keep the
+                # acquired journal entry for explicit reconciliation and never
+                # publish a retryable failure result.
+                raise
             except IsolatedWorkspaceExecutionError:
                 outcome = "failed"
                 failure = "workspace_validation_failed"
