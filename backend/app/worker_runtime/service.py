@@ -541,7 +541,10 @@ class AuthenticatedWorkerRuntime:
         )
         result_envelope = self._envelope(
             session=current,
-            sent_at=completed_at,
+            # The durable operation completion time remains in the payload. The
+            # transport envelope must prove freshness at redelivery time after a
+            # reconnect; replay protection still binds its new session/sequence.
+            sent_at=datetime.now(timezone.utc),
             kind=TransportMessageKind.CONTROLLED_EXECUTION_RESULT,
             payload=result_payload,
         )
