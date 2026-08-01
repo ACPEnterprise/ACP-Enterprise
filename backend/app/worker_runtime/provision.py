@@ -244,6 +244,9 @@ class PreviewWorkerProvisioningService:
             raise PermissionError(
                 "Existing credential requires explicit reconciliation."
             )
+        # The matching-state reconciliation queries opened a read transaction.
+        # Service methods below own their write transactions.
+        await session.rollback()
         credential = await identity_service.issue_credential(
             session,
             context=context,
@@ -274,6 +277,7 @@ class PreviewWorkerProvisioningService:
             )
             if existing_node is not None:
                 raise PermissionError("Execution node already exists.")
+            await session.rollback()
             async with session.begin():
                 session.add(
                     EngineeringExecutionNode(
