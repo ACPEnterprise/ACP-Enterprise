@@ -367,6 +367,13 @@ class WorkerTransportService:
                 health=payload.health,
                 now=envelope.sent_at,
             )
+            await self.workstreams.refresh_attached_heartbeats(
+                database,
+                context=session.context,
+                session_id=session.session_id,
+                health=payload.health.value,
+                now=envelope.sent_at,
+            )
             return f"heartbeat:{heartbeat.id}:worker:{worker.id}"
         if envelope.kind is TransportMessageKind.RESULT:
             if not isinstance(payload, ResultMessage):

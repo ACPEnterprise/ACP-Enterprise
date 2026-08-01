@@ -284,7 +284,11 @@ async def pending_workstream_controls(
         raise transport_http_error(
             TransportMessageError("Worker session binding is invalid.")
         )
-    controls = await service.workstreams.pending(database, context=identity.context)
+    controls = await service.workstreams.pending(
+        database,
+        context=identity.context,
+        session_id=identity.session_id,
+    )
     return PendingWorkstreamControlPage(
         items=tuple(
             PendingWorkstreamControl(

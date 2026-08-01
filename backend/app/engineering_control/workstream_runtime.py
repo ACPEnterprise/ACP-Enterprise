@@ -12,8 +12,10 @@ from sqlalchemy import (
     Integer,
     String,
     UniqueConstraint,
+    case,
     or_,
     select,
+    update,
 )
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -151,11 +153,48 @@ class WorkstreamRuntimeError(Exception):
 
 
 class WorkstreamRuntimeService:
+    async def refresh_attached_heartbeats(
+        self,
+        db: AsyncSession,
+        *,
+        context: AuthenticatedWorkerContext,
+        session_id: UUID,
+        health: str,
+        now: datetime,
+    ) -> int:
+        """Keep controls acknowledged by this exact authenticated session alive."""
+        result = await db.execute(
+            update(EngineeringWorkstreamRuntime)
+            .where(
+                EngineeringWorkstreamRuntime.company_id == context.company_id,
+                EngineeringWorkstreamRuntime.worker_id == context.worker_id,
+                EngineeringWorkstreamRuntime.worker_session_id == session_id,
+                EngineeringWorkstreamRuntime.runtime_state.notin_(
+                    {"completed", "failed", "cancelled", "recovering"}
+                ),
+            )
+            .values(
+                worker_health=health,
+                heartbeat_at=now,
+                acknowledgement_expires_at=now + ACK_TTL,
+                reason_code=case(
+                    (
+                        EngineeringWorkstreamRuntime.reason_code == "heartbeat_expired",
+                        None,
+                    ),
+                    else_=EngineeringWorkstreamRuntime.reason_code,
+                ),
+                updated_at=now,
+            )
+        )
+        return int(getattr(result, "rowcount", 0))
+
     async def pending(
         self,
         db: AsyncSession,
         *,
         context: AuthenticatedWorkerContext,
+        session_id: UUID | None = None,
         now: datetime | None = None,
     ) -> tuple[EngineeringWorkstreamControl, ...]:
         checked = now or datetime.now(timezone.utc)
@@ -179,6 +218,11 @@ class WorkstreamRuntimeService:
                     EngineeringWorkstreamRuntime.acknowledged_control_version
                     < EngineeringWorkstreamControl.version,
                     EngineeringWorkstreamRuntime.acknowledgement_expires_at <= checked,
+                    *(
+                        (EngineeringWorkstreamRuntime.worker_session_id != session_id,)
+                        if session_id is not None
+                        else ()
+                    ),
                 ),
             )
             .order_by(
@@ -263,12 +307,22 @@ class WorkstreamRuntimeService:
         else:
             if runtime.acknowledged_control_version > control.version:
                 raise WorkstreamRuntimeError("Owner request is stale.")
+            ambiguous_interruption = runtime.runtime_state == "recovering" and (
+                runtime.progress_percent is not None
+                or runtime.current_activity is not None
+            )
             runtime.control_id = control.id
             runtime.worker_id = context.worker_id
             runtime.worker_session_id = session_id
             runtime.acknowledged_control_version = control.version
             runtime.acknowledged_action = action
-            runtime.runtime_state = state
+            runtime.runtime_state = (
+                "waiting_for_owner" if ambiguous_interruption else state
+            )
+            runtime.worker_health = "healthy"
+            runtime.reason_code = (
+                "reconciliation_required" if ambiguous_interruption else reason_code
+            )
             runtime.acknowledged_at = now
             runtime.acknowledgement_expires_at = now + ACK_TTL
             runtime.heartbeat_at = now

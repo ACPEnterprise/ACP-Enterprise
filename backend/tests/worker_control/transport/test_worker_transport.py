@@ -5,8 +5,6 @@ from typing import cast
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.worker_control.contracts import (
     AuthenticatedWorkerContext,
     WorkerCapability,
@@ -48,6 +46,7 @@ from app.worker_control.transport.service import (
     SESSION_TTL,
     WorkerTransportService,
 )
+from sqlalchemy.ext.asyncio import AsyncSession
 
 NOW = datetime(2026, 7, 24, 12, tzinfo=timezone.utc)
 
@@ -205,6 +204,16 @@ class FakeWorkerControl:
     accept_result_in_transaction = accept_result
 
 
+class FakeWorkstreamRuntimeService:
+    def __init__(self) -> None:
+        self.heartbeat_refreshes = 0
+
+    async def refresh_attached_heartbeats(self, database, **kwargs) -> int:
+        del database, kwargs
+        self.heartbeat_refreshes += 1
+        return 0
+
+
 def worker_identity() -> WorkerIdentity:
     worker_id = uuid4()
     return WorkerIdentity(
@@ -243,6 +252,7 @@ def make_service() -> tuple[
         authenticator=authenticator,
         worker_control=cast(object, control),  # type: ignore[arg-type]
         sessions=InMemoryWorkerTransportSessionRepository(),
+        workstreams=cast(object, FakeWorkstreamRuntimeService()),  # type: ignore[arg-type]
     )
     return service, authenticator, control
 
@@ -398,6 +408,8 @@ async def test_heartbeat_is_authenticated_ordered_and_idempotent() -> None:
     assert replay.duplicate is True
     assert replay.outcome_reference == first.outcome_reference
     assert control.heartbeat_calls == 1
+    workstreams = cast(FakeWorkstreamRuntimeService, service.workstreams)
+    assert workstreams.heartbeat_refreshes == 1
 
     with pytest.raises(TransportSequenceError):
         await service.handle_message(

@@ -81,6 +81,8 @@ async def test_worker_acknowledgement_is_idempotent_versioned_and_recoverable(
             now=now,
         )
         assert runtime.runtime_state == "acknowledged"
+        assert runtime.worker_health == "healthy"
+        assert runtime.reason_code is None
         initial_version = runtime.version
 
     async with worker_database.factory() as session, session.begin():
@@ -114,6 +116,53 @@ async def test_worker_acknowledgement_is_idempotent_versioned_and_recoverable(
         )
         assert running.version == initial_version + 1
         assert running.progress_percent == 25
+        running.worker_health = "unhealthy"
+        running.reason_code = "heartbeat_expired"
+
+    heartbeat_at = now + timedelta(minutes=4)
+    async with worker_database.factory() as session, session.begin():
+        refreshed = await service.refresh_attached_heartbeats(
+            session,
+            context=worker_context,
+            session_id=session_id,
+            health="healthy",
+            now=heartbeat_at,
+        )
+        assert refreshed == 1
+
+    async with worker_database.factory() as session:
+        refreshed_runtime = await session.scalar(
+            select(EngineeringWorkstreamRuntime).where(
+                EngineeringWorkstreamRuntime.command_id == command.id
+            )
+        )
+        assert refreshed_runtime is not None
+        assert refreshed_runtime.version == initial_version + 1
+        assert refreshed_runtime.heartbeat_at == heartbeat_at
+        assert refreshed_runtime.worker_health == "healthy"
+        assert refreshed_runtime.reason_code is None
+        assert refreshed_runtime.acknowledgement_expires_at == (
+            heartbeat_at + timedelta(minutes=5)
+        )
+
+    async with worker_database.factory() as session, session.begin():
+        wrong_session = await service.refresh_attached_heartbeats(
+            session,
+            context=worker_context,
+            session_id=uuid4(),
+            health="healthy",
+            now=heartbeat_at + timedelta(seconds=1),
+        )
+        assert wrong_session == 0
+
+    async with worker_database.factory() as session:
+        reconnect_pending = await service.pending(
+            session,
+            context=worker_context,
+            session_id=uuid4(),
+            now=heartbeat_at + timedelta(seconds=1),
+        )
+        assert tuple(item.id for item in reconnect_pending) == (control.id,)
 
     async with worker_database.factory() as session, session.begin():
         with pytest.raises(WorkstreamRuntimeError, match="stale"):
@@ -134,7 +183,7 @@ async def test_worker_acknowledgement_is_idempotent_versioned_and_recoverable(
 
     async with worker_database.factory() as session:
         recovery = await service.pending(
-            session, context=worker_context, now=now + timedelta(minutes=6)
+            session, context=worker_context, now=heartbeat_at + timedelta(minutes=6)
         )
         event_count = await session.scalar(
             select(func.count(EngineeringWorkstreamEvent.id)).where(
@@ -254,3 +303,76 @@ async def test_worker_acknowledgement_is_idempotent_versioned_and_recoverable(
         "worker_offline",
         "heartbeat_expired",
     )
+
+
+@pytest.mark.asyncio
+async def test_reconnect_clears_stale_health_only_when_execution_never_began(
+    worker_database_fixture,
+) -> None:
+    worker_database = worker_database_fixture
+    command = await approved_command(worker_database)
+    _, _, worker_context, _ = await register_available_worker(worker_database)
+    now = worker_context.authenticated_at + timedelta(seconds=2)
+    service = WorkstreamRuntimeService()
+    async with worker_database.factory() as session, session.begin():
+        control = await WorkstreamControlRepository.set_state(
+            session,
+            company_id=worker_context.company_id,
+            command_id=command.id,
+            actor_user_id=worker_database.context.user.id,
+            desired_state="active",
+            requested_action="start",
+            reason="owner_start",
+            occurred_at=now,
+        )
+        runtime = await service.acknowledge(
+            session,
+            context=worker_context,
+            session_id=uuid4(),
+            control_id=control.id,
+            expected_control_version=control.version,
+            action="start",
+            idempotency_key="initial-session",
+            reason_code=None,
+            now=now,
+        )
+        runtime.runtime_state = "recovering"
+        runtime.worker_health = "unhealthy"
+        runtime.reason_code = "heartbeat_expired"
+
+    async with worker_database.factory() as session, session.begin():
+        recovered = await service.acknowledge(
+            session,
+            context=worker_context,
+            session_id=uuid4(),
+            control_id=control.id,
+            expected_control_version=control.version,
+            action="start",
+            idempotency_key="replacement-session",
+            reason_code=None,
+            now=now + timedelta(minutes=6),
+        )
+        assert recovered.runtime_state == "acknowledged"
+        assert recovered.worker_health == "healthy"
+        assert recovered.reason_code is None
+
+        recovered.runtime_state = "recovering"
+        recovered.worker_health = "unhealthy"
+        recovered.reason_code = "heartbeat_expired"
+        recovered.current_activity = "Executing controlled workstream"
+
+    async with worker_database.factory() as session, session.begin():
+        ambiguous = await service.acknowledge(
+            session,
+            context=worker_context,
+            session_id=uuid4(),
+            control_id=control.id,
+            expected_control_version=control.version,
+            action="start",
+            idempotency_key="ambiguous-replacement-session",
+            reason_code=None,
+            now=now + timedelta(minutes=12),
+        )
+        assert ambiguous.runtime_state == "waiting_for_owner"
+        assert ambiguous.worker_health == "healthy"
+        assert ambiguous.reason_code == "reconciliation_required"
