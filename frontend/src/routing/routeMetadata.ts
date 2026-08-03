@@ -60,6 +60,15 @@ export const engineeringHandle = {
   },
 } as const satisfies ShellRouteHandle;
 
+export const administrationHandle = {
+  workspace: {
+    pageTitle: "Administration",
+    breadcrumbs: [{ label: "Administration" }],
+    helpTopic: "role-administration",
+    aiContext: "role-administration",
+  },
+} as const satisfies ShellRouteHandle;
+
 export const notFoundHandle = {
   workspace: {
     pageTitle: "Page not found",

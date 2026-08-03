@@ -12,6 +12,7 @@ from app.platform.branch.models import Branch
 from app.platform.company.membership_models import Membership, MembershipBranchAccess
 from app.platform.company.models import Company
 from app.platform.permissions.authorization import AuthorizationContext
+from app.platform.permissions.catalog import PermissionScope, permission_catalog
 from app.platform.permissions.codes import AdministrationPermission
 from app.platform.permissions.models import (
     MembershipRole,
@@ -43,6 +44,69 @@ class FinalAdministratorError(AccessPolicyConflictError):
 
 
 class CompanyAdministrationService:
+    async def list_permission_catalog(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        role_id: UUID | None = None,
+    ) -> list[dict[str, object]]:
+        if role_id is not None:
+            role = await session.scalar(
+                select(Role).where(
+                    Role.id == role_id,
+                    Role.company_id == context.company.id,
+                )
+            )
+            if role is None:
+                raise AccessPolicyNotFoundError("Role was not found.")
+
+        definitions = {
+            definition.code: definition
+            for definition in permission_catalog.definitions
+            if definition.scope is PermissionScope.COMPANY
+        }
+        assignable = (
+            AdministrationPermission.PERMISSION_MANAGE in context.permission_codes
+        )
+        permissions = list(
+            (
+                await session.scalars(
+                    select(Permission)
+                    .where(
+                        Permission.code.in_(definitions),
+                        Permission.status == "active",
+                        Permission.retired_at.is_(None),
+                    )
+                    .order_by(Permission.code, Permission.id)
+                )
+            ).all()
+        )
+        assigned_ids: set[UUID] = set()
+        if role_id is not None:
+            assigned_ids = set(
+                (
+                    await session.scalars(
+                        select(RolePermission.permission_id).where(
+                            RolePermission.role_id == role_id
+                        )
+                    )
+                ).all()
+            )
+        return [
+            {
+                "id": permission.id,
+                "code": permission.code,
+                "name": permission.name,
+                "description": permission.description,
+                "scope": definitions[permission.code].scope.value,
+                "active": True,
+                "assignable": assignable,
+                "assigned": permission.id in assigned_ids,
+            }
+            for permission in permissions
+        ]
+
     async def list_memberships(
         self,
         session: AsyncSession,

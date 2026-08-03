@@ -15,8 +15,18 @@ function renderLogin(signIn: AuthenticationContextValue["signIn"]) {
     signIn,
     signOut: vi.fn(),
     signOutAll: vi.fn(),
+    requireReauthentication: vi.fn(),
   };
   const router = createMemoryRouter([{ path: "/login", Component: LoginRoute }, { path: "/mission-control", element: <p>Mission Control loaded</p> }], { initialEntries: ["/login"] });
+  render(<ThemeProvider preference="dark"><AuthenticationContext.Provider value={context}><RouterProvider router={router} /></AuthenticationContext.Provider></ThemeProvider>);
+}
+
+function renderAuthorizationRefresh(signIn: AuthenticationContextValue["signIn"]) {
+  const context: AuthenticationContextValue = {
+    status: "unauthenticated", activeCompany: null, user: null, signIn,
+    signOut: vi.fn(), signOutAll: vi.fn(), requireReauthentication: vi.fn(),
+  };
+  const router = createMemoryRouter([{ path: "/login", Component: LoginRoute }, { path: "/administration", element: <p>Administration loaded</p> }], { initialEntries: [{ pathname: "/login", state: { from: "/administration", authorizationChanged: true } }] });
   render(<ThemeProvider preference="dark"><AuthenticationContext.Provider value={context}><RouterProvider router={router} /></AuthenticationContext.Provider></ThemeProvider>);
 }
 
@@ -49,5 +59,15 @@ describe("LoginRoute", () => {
     await userEvent.click(screen.getByRole("button", { name: "Sign in" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("The email or password is incorrect");
     expect(screen.queryByText("specific backend detail")).not.toBeInTheDocument();
+  });
+
+  it("explains authorization refresh and returns to Administration after sign-in", async () => {
+    const signIn = vi.fn().mockResolvedValue(undefined);
+    renderAuthorizationRefresh(signIn);
+    expect(screen.getByText(/role permission changed/i)).toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText(/email address/i), "admin@example.com");
+    await userEvent.type(screen.getByLabelText(/^password/i), "valid-password");
+    await userEvent.click(screen.getByRole("button", { name: "Sign in" }));
+    expect(await screen.findByText("Administration loaded")).toBeInTheDocument();
   });
 });

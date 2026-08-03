@@ -40,6 +40,7 @@ from app.platform.permissions.authorization import (
 from app.platform.permissions.catalog_sync import PermissionCatalogSyncService
 from app.platform.permissions.codes import (
     AdministrationPermission,
+    EngineeringCapacityPermission,
     SchedulingPermission,
 )
 from app.platform.permissions.dependencies import get_authorization_context
@@ -855,3 +856,95 @@ async def test_synchronized_permission_is_assigned_through_admin_endpoint(
             )
         )
     assert assignment_count == 1
+
+
+@pytest.mark.asyncio
+async def test_permission_catalog_is_canonical_ordered_and_company_scoped(
+    admin_database: tuple[AsyncEngine, async_sessionmaker[AsyncSession]],
+) -> None:
+    _, factory = admin_database
+    fixture = await seed_admin_fixture(factory, "ADMINJ")
+    async with factory() as session:
+        await PermissionCatalogSyncService().synchronize(session)
+
+    app = FastAPI()
+    app.include_router(admin_router)
+
+    async def database_override() -> AsyncIterator[AsyncSession]:
+        async with factory() as session:
+            yield session
+
+    async def authorization_override() -> AuthorizationContext:
+        return fixture.context
+
+    app.dependency_overrides[get_database_session] = database_override
+    app.dependency_overrides[get_authorization_context] = authorization_override
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get(
+            "/api/v1/company-admin/permissions",
+            params={"role_id": str(fixture.admin_role_id)},
+        )
+        other_company = await client.get(
+            "/api/v1/company-admin/permissions",
+            params={"role_id": str(fixture.other_role_id)},
+        )
+
+    assert response.status_code == 200
+    records = response.json()
+    codes = [record["code"] for record in records]
+    assert codes == sorted(codes)
+    assert EngineeringCapacityPermission.READ in codes
+    assert EngineeringCapacityPermission.MANAGE in codes
+    assert all(record["scope"] == "company" for record in records)
+    assert all(
+        set(record)
+        == {
+            "id",
+            "code",
+            "name",
+            "description",
+            "scope",
+            "active",
+            "assignable",
+            "assigned",
+        }
+        for record in records
+    )
+    assert other_company.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_permission_catalog_requires_role_read_permission(
+    admin_database: tuple[AsyncEngine, async_sessionmaker[AsyncSession]],
+) -> None:
+    _, factory = admin_database
+    fixture = await seed_admin_fixture(factory, "ADMINK")
+    restricted_context = AuthorizationContext(
+        user=fixture.context.user,
+        company=fixture.context.company,
+        membership=fixture.context.membership,
+        authorized_branches=fixture.context.authorized_branches,
+        active_branch=None,
+        effective_roles=(),
+        effective_permissions=(),
+        credential_version=fixture.context.credential_version,
+        authorization_version=fixture.context.authorization_version,
+    )
+    app = FastAPI()
+    app.include_router(admin_router)
+
+    async def database_override() -> AsyncIterator[AsyncSession]:
+        async with factory() as session:
+            yield session
+
+    async def authorization_override() -> AuthorizationContext:
+        return restricted_context
+
+    app.dependency_overrides[get_database_session] = database_override
+    app.dependency_overrides[get_authorization_context] = authorization_override
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.get("/api/v1/company-admin/permissions")
+    assert response.status_code == 403

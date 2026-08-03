@@ -31,7 +31,7 @@ export const navigationCatalog = [
   { id: "invoices", label: "Invoices", path: "/invoices", icon: FileText, availability: "coming-soon" },
   { id: "inventory", label: "Inventory", path: "/inventory", icon: Boxes, availability: "coming-soon" },
   { id: "employees", label: "Employees", path: "/employees", icon: Users, availability: "coming-soon" },
-  { id: "administration", label: "Administration", path: "/administration", icon: ShieldCheck, availability: "coming-soon" },
+  { id: "administration", label: "Administration", path: "/administration", icon: ShieldCheck, availability: "available", requiredPermission: "COMPANY_ROLE_READ" },
   { id: "settings", label: "Settings", path: "/settings", icon: Settings, availability: "coming-soon" },
   { id: "dispatch-ai", label: "Dispatch AI", path: "/ai/dispatch", icon: Bot, availability: "coming-soon" },
   { id: "customer-care-ai", label: "Customer Care AI", path: "/ai/customer-care", icon: Headphones, availability: "coming-soon" },

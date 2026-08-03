@@ -10,6 +10,7 @@ export interface AuthenticationContextValue {
   signIn: (credentials: LoginCredentials) => Promise<void>;
   signOut: () => Promise<void>;
   signOutAll: () => Promise<void>;
+  requireReauthentication: () => void;
 }
 
 export const AuthenticationContext = createContext<AuthenticationContextValue | null>(null);

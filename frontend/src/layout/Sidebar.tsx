@@ -5,6 +5,7 @@ import { IconButton } from "../ui";
 import { BrandRegion } from "./BrandRegion";
 import { navigationGroups } from "./navigation";
 import { PrimaryNavigation } from "./PrimaryNavigation";
+import { useAdministrationAccess } from "../features/administration/hooks";
 
 interface SidebarProps {
   readonly brand: BrandConfiguration;
@@ -23,6 +24,11 @@ export function Sidebar({
   onNavigate,
   onClose,
 }: SidebarProps) {
+  const administrationAccess = useAdministrationAccess();
+  const visibleGroups = navigationGroups.map((group) => ({
+    ...group,
+    items: group.items.filter((item) => item.id !== "administration" || administrationAccess.isSuccess),
+  }));
   return (
     <aside
       aria-label={mobile ? "Mobile application navigation" : "Application navigation"}
@@ -44,7 +50,7 @@ export function Sidebar({
           />
         )}
       </div>
-      <PrimaryNavigation groups={navigationGroups} collapsed={collapsed} onNavigate={onNavigate} />
+      <PrimaryNavigation groups={visibleGroups} collapsed={collapsed} onNavigate={onNavigate} />
       {!mobile && (
         <div className="border-t border-stroke p-ui-3">
           <IconButton
