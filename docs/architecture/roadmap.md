@@ -32,6 +32,8 @@ Candidate capabilities:
 - Inventory tracking and replenishment
 - Configurable communications and workflow automation
 - Technician, campaign, call, conversion, and profitability analytics
+- Luminary Business Economics and Profitability Intelligence projections built
+  from authoritative revenue, cost, material, and workforce facts
 - Broader mobile resilience and offline-tolerant field workflows
 - Hardened integration and data-quality operations
 

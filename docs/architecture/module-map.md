@@ -71,6 +71,11 @@ Owns communication threads, messages, delivery attempts, templates, consent, and
 
 Owns read-optimized projections, KPI definitions, dashboards, exports, and operational reporting. Analytics consumes authoritative data and events but does not become the system of record for business workflows.
 
+Luminary is the Business Economics and Profitability Intelligence layer within
+this analytics boundary. It is not a separate AI persona. Luminary consumes
+authoritative operational and reconciled financial facts, exposes provenance
+and missing-data state, and never writes operational or accounting records.
+
 **Depends on:** Foundation and events from all business modules.
 **Primary consumers:** staff, managers, owners, Automation.
 
@@ -109,4 +114,13 @@ Arrows indicate a dependency or consumption relationship, not table access. Cycl
 
 ## Current implementation status
 
-The repository currently implements Foundation elements, a business-event journal, health endpoints, early Analytics endpoints, and a Mission Control frontend. Other modules are target boundaries, not claims of completed functionality. Product specifications should be added under `docs/product/modules/` before each module is implemented.
+The repository currently implements Foundation and Platform elements, a
+business-event journal, Customer workflows, substantial Jobs and Scheduling
+workflows, early Analytics and Beacon intelligence, a Mission Control frontend,
+Development Factory and engineering-control foundations, Workforce Capability
+persistence, and controlled migration foundations. Dispatch is currently a
+frontend projection over Jobs and Scheduling rather than an assignment domain.
+Operational Price Book, Estimates, Invoicing, Payments, Inventory,
+Communications delivery, Field Service, and Accounting remain incomplete or
+foundation-only according to their specific contracts. A persistence table or
+migration path alone is not a claim of operational product completion.
