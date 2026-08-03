@@ -14,7 +14,8 @@ from sqlalchemy import (
     UniqueConstraint,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID as PGUUID
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -155,6 +156,11 @@ class EngineeringCommand(Base):
             "company_id",
             "idempotency_key",
             name="uq_engineering_commands_company_idempotency",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "id",
+            name="uq_engineering_commands_company_id_capacity",
         ),
         UniqueConstraint(
             "company_id",

@@ -9,6 +9,7 @@ import {
   mobileEngineeringLabel,
   mobileEngineeringTimestamp,
 } from "./presentation";
+import { EngineeringCapacityPanel } from "./EngineeringCapacityPanel";
 
 export function MobileEngineeringListPage() {
   const [page, setPage] = useState(1);
@@ -28,6 +29,8 @@ export function MobileEngineeringListPage() {
           bounded owner action.
         </p>
       </header>
+
+      <EngineeringCapacityPanel />
 
       {query.data && (
         <Alert

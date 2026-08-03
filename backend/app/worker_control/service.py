@@ -6,6 +6,7 @@ from uuid import UUID, uuid4
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.engineering_capacity.service import engineering_capacity_service
 from app.engineering_control.records import EngineeringApprovalState
 from app.engineering_control.repository import (
     EngineeringCommandRepository,
@@ -188,9 +189,17 @@ class WorkerControlService:
         )
         if worker.lifecycle_state == WorkerLifecycleState.DISABLED.value:
             raise WorkerLifecycleError("Disabled worker cannot send heartbeats.")
-        return await self.repository.record_heartbeat(
+        result = await self.repository.record_heartbeat(
             session, worker=worker, health=health, occurred_at=now
         )
+        await engineering_capacity_service.observe_worker_health_in_transaction(
+            session,
+            company_id=worker_context.company_id,
+            worker_id=worker_context.worker_id,
+            health=health.value,
+            observed_at=now,
+        )
+        return result
 
     async def validate_worker(
         self,

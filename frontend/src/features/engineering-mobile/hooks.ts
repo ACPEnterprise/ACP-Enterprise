@@ -3,6 +3,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { shouldRetryApiQuery } from "../../api/errors";
 import * as mobileApi from "./api";
 import type {
+  CapacityAllocation,
+  CapacityReservation,
+  WorkerCapacity,
   MobileReviewApproval,
   MobileReviewCancellation,
   MobileReviewQuery,
@@ -19,7 +22,51 @@ export const mobileEngineeringKeys = {
     ["engineering-mobile", "detail", reviewId] as const,
   status: (reviewId: string) =>
     ["engineering-mobile", "status", reviewId] as const,
+  capacity: () => ["engineering-mobile", "capacity"] as const,
 };
+
+export function useEngineeringCapacity() {
+  return useQuery({
+    queryKey: mobileEngineeringKeys.capacity(),
+    queryFn: mobileApi.getCapacitySummary,
+    retry: shouldRetryApiQuery,
+  });
+}
+
+export function useCapacityMutation<T>(mutationFn: (input: T) => Promise<unknown>) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn,
+    retry: false,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: mobileEngineeringKeys.capacity() });
+    },
+  });
+}
+
+export function useWorkerLimitMutation() {
+  return useCapacityMutation<{ worker: WorkerCapacity; limit: number }>(({ worker, limit }) => mobileApi.updateWorkerCapacityLimit(worker, limit));
+}
+
+export function useWorkerStateMutation() {
+  return useCapacityMutation<{ worker: WorkerCapacity; action: "pause" | "restore" }>(({ worker, action }) => mobileApi.setWorkerCapacityState(worker, action));
+}
+
+export function useReservationMutation() {
+  return useCapacityMutation<string>(mobileApi.reserveWorkstreamCapacity);
+}
+
+export function useReservationReleaseMutation() {
+  return useCapacityMutation<CapacityReservation>(mobileApi.releaseCapacityReservation);
+}
+
+export function useAllocationReleaseMutation() {
+  return useCapacityMutation<CapacityAllocation>(mobileApi.releaseCapacityAllocation);
+}
+
+export function useAllocationReconciliationMutation() {
+  return useCapacityMutation<{ allocation: CapacityAllocation; resolution: "confirmed_active" | "confirmed_released" }>(({ allocation, resolution }) => mobileApi.reconcileCapacityAllocation(allocation, resolution));
+}
 
 export function useMobileWorkstreams(query: MobileReviewQuery) {
   return useQuery({
