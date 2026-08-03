@@ -19,6 +19,7 @@ import type {
   CapacitySummary,
   CapacityPolicy,
   WorkerCapacity,
+  EligibleCapacityWorker,
   CapacityReservation,
   CapacityAllocation,
 } from "./types";
@@ -107,6 +108,19 @@ export async function updateWorkerCapacityLimit(worker: WorkerCapacity, configur
   return (await apiClient.put<WorkerCapacity>(`${ENGINEERING_CAPACITY_PATH}/workers/${worker.worker_id}/limit`, {
     configured_limit: configuredLimit,
     expected_version: worker.version,
+  })).data;
+}
+
+export async function configureExistingWorkerCapacity(input: {
+  worker: EligibleCapacityWorker;
+  machineLabel: string;
+  configuredLimit: number;
+}): Promise<WorkerCapacity> {
+  return (await apiClient.post<WorkerCapacity>(`${ENGINEERING_CAPACITY_PATH}/workers/configure-existing`, {
+    worker_id: input.worker.worker_id,
+    machine_label: input.machineLabel,
+    configured_limit: input.configuredLimit,
+    idempotency_key: `owner-configure-worker:${input.worker.worker_id}`,
   })).data;
 }
 

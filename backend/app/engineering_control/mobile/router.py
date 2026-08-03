@@ -6,10 +6,11 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ValidationError
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_database_session
+from app.engineering_capacity.service import engineering_capacity_service
 from app.engineering_control.commands import (
     ApproveEngineeringCommand,
     CancelEngineeringCommand,
@@ -20,7 +21,6 @@ from app.engineering_control.workstream_runtime import EngineeringWorkstreamRunt
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import EngineeringCommandPermission
 from app.platform.permissions.dependencies import require_permission
-from app.worker_control.models import EngineeringWorker
 
 from .external_adoption import (
     ExternalAdoptionError,
@@ -102,6 +102,7 @@ def _attention(
     item: MilestoneItem,
     adoption: ExternalAdoptionItem | None,
     runtime: EngineeringWorkstreamRuntime | None,
+    capacity_state: str | None = None,
 ) -> tuple[str, str, tuple[str, ...]]:
     if adoption is not None:
         if adoption.status == "waiting_review":
@@ -150,10 +151,34 @@ def _attention(
             ("approve", "reject", "skip"),
         )
     if item.status == "running":
+        if capacity_state in {"waiting", "reserved"}:
+            return (
+                "waiting_on_capacity",
+                (
+                    "Authenticated capacity is reserved and awaiting allocation."
+                    if capacity_state == "reserved"
+                    else "Execution is queued for authenticated worker capacity."
+                ),
+                (),
+            )
+        if capacity_state == "allocated":
+            return "running", "Execution is in progress with tracked capacity.", ()
         if runtime is None or runtime.runtime_state in {"queued", "recovering"}:
             return (
                 "waiting_on_capacity",
                 "Execution is queued for authenticated worker capacity.",
+                (),
+            )
+        if runtime.runtime_state in {"running", "validating", "deploying_preview"}:
+            return (
+                "running",
+                "Running outside capacity tracking; no allocation is claimed.",
+                (),
+            )
+        if runtime.runtime_state == "acknowledged":
+            return (
+                "waiting_on_capacity",
+                "Owner Start is accepted, but no tracked capacity is allocated.",
                 (),
             )
         return "running", "Execution is in progress.", ()
@@ -251,6 +276,16 @@ async def list_roadmaps(context: ReadContext, session: DatabaseSession) -> Roadm
             else ()
         )
     }
+    capacity = await engineering_capacity_service.summary(session, context=context)
+    capacity_states = {
+        item.command_id: "waiting" for item in capacity.waiting_workstreams
+    }
+    capacity_states.update(
+        {item.command_id: "reserved" for item in capacity.active_reservations}
+    )
+    capacity_states.update(
+        {item.command_id: "allocated" for item in capacity.active_allocations}
+    )
     milestone_items = tuple(
         item.model_copy(
             update={
@@ -266,22 +301,14 @@ async def list_roadmaps(context: ReadContext, session: DatabaseSession) -> Roadm
                 item,
                 adoption_items.get(item.id),
                 runtimes.get(item.command_id) if item.command_id else None,
+                capacity_states.get(item.command_id) if item.command_id else None,
             ),
         )
     )
-    worker_counts: dict[str, int] = {
-        state: int(count)
-        for state, count in (
-            await session.execute(
-                select(EngineeringWorker.lifecycle_state, func.count())
-                .where(EngineeringWorker.company_id == context.company.id)
-                .group_by(EngineeringWorker.lifecycle_state)
-            )
-        ).tuples()
-    }
     capacity_summary = (
-        f"{worker_counts.get('available', 0)} available · "
-        f"{worker_counts.get('leased', 0)} busy"
+        f"{capacity.available_capacity} available · "
+        f"{capacity.allocated_capacity} allocated · "
+        f"{capacity.reserved_capacity} reserved"
     )
     capacity_ids = [
         item.id

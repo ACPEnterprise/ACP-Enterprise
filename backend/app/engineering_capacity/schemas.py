@@ -85,6 +85,25 @@ class WorkerCapacityRegister(CapacitySchema):
     idempotency_key: str = Field(min_length=8, max_length=128)
 
 
+class ExistingWorkerCapacitySetup(CapacitySchema):
+    worker_id: UUID
+    machine_label: str = Field(min_length=1, max_length=120)
+    configured_limit: int = Field(default=1, ge=1, le=20)
+    idempotency_key: str = Field(min_length=8, max_length=128)
+
+
+class EligibleWorkerResponse(CapacitySchema):
+    worker_id: UUID
+    worker_name: str
+    provider_identifier: str
+    lifecycle_state: str
+    identity_name: str
+    identity_state: str
+    last_heartbeat_at: datetime | None
+    health_state: str
+    capacity_configured: bool
+
+
 class WorkerStateUpdate(CapacitySchema):
     expected_version: int = Field(ge=1)
     reason: str = Field(min_length=1, max_length=200)
@@ -169,6 +188,7 @@ class CapacitySummaryResponse(CapacitySchema):
     unhealthy_workers: int
     reconciliation_required: int
     workers: tuple[WorkerCapacityResponse, ...]
+    eligible_workers: tuple[EligibleWorkerResponse, ...]
     machines: tuple[CapacityMachineResponse, ...]
     active_reservations: tuple[CapacityReservationResponse, ...]
     active_allocations: tuple[CapacityAllocationResponse, ...]

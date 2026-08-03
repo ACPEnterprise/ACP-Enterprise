@@ -6,6 +6,7 @@ import type {
   CapacityAllocation,
   CapacityReservation,
   WorkerCapacity,
+  EligibleCapacityWorker,
   MobileReviewApproval,
   MobileReviewCancellation,
   MobileReviewQuery,
@@ -138,6 +139,14 @@ export function useMilestoneAction() {
 
 export function useWorkerLimitMutation() {
   return useCapacityMutation<{ worker: WorkerCapacity; limit: number }>(({ worker, limit }) => mobileApi.updateWorkerCapacityLimit(worker, limit));
+}
+
+export function useExistingWorkerSetupMutation() {
+  return useCapacityMutation<{
+    worker: EligibleCapacityWorker;
+    machineLabel: string;
+    configuredLimit: number;
+  }>(mobileApi.configureExistingWorkerCapacity);
 }
 
 export function useWorkerStateMutation() {

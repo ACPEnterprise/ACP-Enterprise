@@ -14,6 +14,7 @@ from app.engineering_capacity.schemas import (
     CapacityReconciliationRequest,
     CapacityReleaseRequest,
     CapacityReservationRequest,
+    ExistingWorkerCapacitySetup,
     WorkerCapacityRegister,
     WorkerCapacityResponse,
     WorkerStateUpdate,
@@ -25,6 +26,7 @@ from app.engineering_control.commands import (
 )
 from app.engineering_control.service import EngineeringControlService
 from app.worker_control.models import EngineeringWorker
+from app.worker_identity.models import WorkerCredential, WorkerIdentity
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
@@ -136,6 +138,102 @@ async def configured_worker(
             observed_at=utc_now(),
         )
     return worker, capacity
+
+
+async def enrolled_worker(fixture: ServiceFixture) -> EngineeringWorker:
+    now = utc_now()
+    worker = EngineeringWorker(
+        id=uuid4(),
+        company_id=fixture.context.company.id,
+        provider_identifier=f"trusted-{uuid4()}",
+        name=f"Trusted Worker {uuid4()}",
+        worker_version="1",
+        capabilities=["engineering.execute"],
+        lifecycle_state="available",
+        registered_by_user_id=fixture.context.user.id,
+        registered_at=now,
+        last_heartbeat_at=now,
+    )
+    identity = WorkerIdentity(
+        id=uuid4(),
+        company_id=fixture.context.company.id,
+        name=f"Trusted identity {uuid4()}",
+        state="active",
+        registered_by_user_id=fixture.context.user.id,
+        orchestration_worker_id=worker.id,
+        version=1,
+        registered_at=now,
+        updated_at=now,
+    )
+    credential = WorkerCredential(
+        company_id=fixture.context.company.id,
+        identity_id=identity.id,
+        version=1,
+        state="active",
+        verifier="test-verifier",
+        verifier_algorithm="ed25519",
+        public_key_id=f"test-key-{uuid4()}",
+        issued_at=now,
+        expires_at=now + timedelta(days=1),
+        activated_at=now,
+        updated_at=now,
+    )
+    async with fixture.factory() as session, session.begin():
+        session.add(worker)
+        await session.flush()
+        session.add(identity)
+        await session.flush()
+        session.add(credential)
+    return worker
+
+
+@pytest.mark.asyncio
+async def test_existing_authenticated_worker_can_be_configured_without_enrollment(
+    capacity_database: ServiceFixture,
+) -> None:
+    fixture = capacity_database
+    service = EngineeringCapacityService()
+    async with fixture.factory() as session:
+        await service.update_policy(
+            session,
+            context=fixture.context,
+            data=CapacityPolicyUpdate(
+                maximum_concurrent_workstreams=2,
+                maximum_per_worker=1,
+                reserved_capacity=0,
+            ),
+        )
+    worker = await enrolled_worker(fixture)
+
+    async with fixture.factory() as session:
+        before = await service.summary(session, context=fixture.context)
+    assert [item.worker_id for item in before.eligible_workers] == [worker.id]
+    assert before.configured_capacity == 0
+
+    request = ExistingWorkerCapacitySetup(
+        worker_id=worker.id,
+        machine_label="Original Office Machine",
+        configured_limit=1,
+        idempotency_key=f"existing-worker-{worker.id}",
+    )
+    async with fixture.factory() as session:
+        configured = await service.configure_existing_worker(
+            session, context=fixture.context, data=request
+        )
+    async with fixture.factory() as session:
+        replay = await service.configure_existing_worker(
+            session, context=fixture.context, data=request
+        )
+        after = await service.summary(session, context=fixture.context)
+
+    assert configured.id == replay.id
+    assert configured.machine_label == "Original Office Machine"
+    assert configured.health_state == "healthy"
+    assert after.configured_capacity == 1
+    assert after.available_capacity == 1
+    assert after.active_reservations == ()
+    assert after.active_allocations == ()
+    assert after.eligible_workers[0].capacity_configured is True
 
 
 @pytest.mark.asyncio

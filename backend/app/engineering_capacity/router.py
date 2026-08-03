@@ -23,6 +23,8 @@ from .schemas import (
     CapacityReservationRequest,
     CapacityReservationResponse,
     CapacitySummaryResponse,
+    EligibleWorkerResponse,
+    ExistingWorkerCapacitySetup,
     WorkerCapacityRegister,
     WorkerCapacityResponse,
     WorkerCapacityUpdate,
@@ -63,6 +65,15 @@ async def read_worker_capacity(
     return (
         await engineering_capacity_service.summary(session, context=context)
     ).workers
+
+
+@router.get("/eligible-workers", response_model=tuple[EligibleWorkerResponse, ...])
+async def read_eligible_workers(
+    context: ReadContext, session: DatabaseSession
+) -> tuple[EligibleWorkerResponse, ...]:
+    return (
+        await engineering_capacity_service.summary(session, context=context)
+    ).eligible_workers
 
 
 @router.get("/reservations", response_model=tuple[CapacityReservationResponse, ...])
@@ -119,6 +130,20 @@ async def configure_worker_capacity(
 ) -> WorkerCapacityResponse:
     try:
         return await engineering_capacity_service.register_worker_capacity(
+            session, context=context, data=data
+        )
+    except EngineeringCapacityError as error:
+        raise capacity_http_error(error) from error
+
+
+@router.post("/workers/configure-existing", response_model=WorkerCapacityResponse)
+async def configure_existing_worker_capacity(
+    data: ExistingWorkerCapacitySetup,
+    context: ManageContext,
+    session: DatabaseSession,
+) -> WorkerCapacityResponse:
+    try:
+        return await engineering_capacity_service.configure_existing_worker(
             session, context=context, data=data
         )
     except EngineeringCapacityError as error:

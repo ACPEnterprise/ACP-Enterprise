@@ -375,6 +375,18 @@ export interface WorkerCapacity {
   version: number;
 }
 
+export interface EligibleCapacityWorker {
+  worker_id: string;
+  worker_name: string;
+  provider_identifier: string;
+  lifecycle_state: string;
+  identity_name: string;
+  identity_state: string;
+  last_heartbeat_at: string | null;
+  health_state: string;
+  capacity_configured: boolean;
+}
+
 export interface CapacityMachine {
   id: string;
   machine_label: string;
@@ -422,6 +434,7 @@ export interface CapacitySummary {
   unhealthy_workers: number;
   reconciliation_required: number;
   workers: readonly WorkerCapacity[];
+  eligible_workers: readonly EligibleCapacityWorker[];
   machines: readonly CapacityMachine[];
   active_reservations: readonly CapacityReservation[];
   active_allocations: readonly CapacityAllocation[];

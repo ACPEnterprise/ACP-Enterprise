@@ -1,14 +1,17 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.engineering_control.mobile.roadmaps import EngineeringMilestone
 from app.engineering_control.models import EngineeringCommand
+from app.engineering_control.workstream_runtime import EngineeringWorkstreamRuntime
 from app.platform.audit.service import AuditEntry, audit_service
 from app.platform.permissions.authorization import AuthorizationContext
 from app.worker_control.models import EngineeringWorker
+from app.worker_identity.models import WorkerCredential, WorkerIdentity
 
 from .errors import (
     CapacityConflictError,
@@ -38,6 +41,8 @@ from .schemas import (
     CapacityReservationRequest,
     CapacityReservationResponse,
     CapacitySummaryResponse,
+    EligibleWorkerResponse,
+    ExistingWorkerCapacitySetup,
     WorkerCapacityRegister,
     WorkerCapacityResponse,
     WorkerCapacityUpdate,
@@ -124,6 +129,7 @@ class EngineeringCapacityService:
         workers = tuple(
             self._worker_response(capacity, machine) for capacity, machine in rows
         )
+        eligible_workers = await self._eligible_workers(session, company_id, workers)
         reservations = await self._reservation_responses(session, company_id)
         allocations = await self._allocation_responses(session, company_id)
         queue = await self._queue(
@@ -151,6 +157,7 @@ class EngineeringCapacityService:
                 for worker in workers
             ),
             workers=workers,
+            eligible_workers=eligible_workers,
             machines=machines,
             active_reservations=reservations,
             active_allocations=allocations,
@@ -343,6 +350,123 @@ class EngineeringCapacityService:
                 "owner",
                 data.idempotency_key,
                 worker_capacity_id=capacity.id,
+            )
+        return self._worker_response(capacity, machine)
+
+    async def configure_existing_worker(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        data: ExistingWorkerCapacitySetup,
+    ) -> WorkerCapacityResponse:
+        now = utc_now()
+        label = " ".join(data.machine_label.split())
+        async with session.begin():
+            worker = await session.scalar(
+                select(EngineeringWorker)
+                .join(
+                    WorkerIdentity,
+                    WorkerIdentity.orchestration_worker_id == EngineeringWorker.id,
+                )
+                .join(
+                    WorkerCredential,
+                    WorkerCredential.identity_id == WorkerIdentity.id,
+                )
+                .where(
+                    EngineeringWorker.company_id == context.company.id,
+                    EngineeringWorker.id == data.worker_id,
+                    WorkerIdentity.company_id == context.company.id,
+                    WorkerIdentity.state == "active",
+                    WorkerCredential.company_id == context.company.id,
+                    WorkerCredential.state == "active",
+                    WorkerCredential.expires_at > now,
+                )
+                .with_for_update()
+            )
+            if worker is None:
+                raise CapacityConflictError(
+                    "Only an existing active enrolled worker may receive capacity."
+                )
+            policy = await self._require_policy(session, context.company.id, lock=True)
+            if data.configured_limit > min(
+                policy.maximum_per_worker, policy.maximum_concurrent_workstreams
+            ):
+                raise CapacityConflictError(
+                    "Worker limit exceeds Company capacity policy."
+                )
+            existing = await session.scalar(
+                select(EngineeringWorkerCapacity).where(
+                    EngineeringWorkerCapacity.company_id == context.company.id,
+                    EngineeringWorkerCapacity.worker_id == worker.id,
+                )
+            )
+            if existing is not None:
+                machine = await session.get(
+                    EngineeringCapacityMachine, existing.machine_id
+                )
+                if machine is None:
+                    raise CapacityReconciliationRequiredError(
+                        "Configured worker machine linkage is missing."
+                    )
+                return self._worker_response(existing, machine)
+            machine = await session.scalar(
+                select(EngineeringCapacityMachine)
+                .where(
+                    EngineeringCapacityMachine.company_id == context.company.id,
+                    EngineeringCapacityMachine.machine_label == label,
+                )
+                .with_for_update()
+            )
+            if machine is not None and machine.enrollment_state != "unenrolled":
+                raise CapacityConflictError(
+                    "Machine label is already associated with another worker."
+                )
+            if machine is None:
+                machine = EngineeringCapacityMachine(
+                    company_id=context.company.id,
+                    machine_label=label,
+                    enrollment_state="unenrolled",
+                    created_at=now,
+                    updated_at=now,
+                )
+                session.add(machine)
+                await session.flush()
+            machine.worker_id = worker.id
+            machine.enrollment_state = "enrolled"
+            machine.version += 1
+            machine.updated_at = now
+            heartbeat_fresh = bool(
+                worker.last_heartbeat_at
+                and now - worker.last_heartbeat_at <= timedelta(minutes=2)
+                and worker.lifecycle_state in {"available", "leased"}
+            )
+            capacity = EngineeringWorkerCapacity(
+                company_id=context.company.id,
+                worker_id=worker.id,
+                machine_id=machine.id,
+                configured_limit=data.configured_limit,
+                operational_state="available" if heartbeat_fresh else "offline",
+                health_state="healthy" if heartbeat_fresh else "unknown",
+                last_reconciled_at=(
+                    worker.last_heartbeat_at if heartbeat_fresh else None
+                ),
+                created_at=now,
+                updated_at=now,
+            )
+            session.add(capacity)
+            await session.flush()
+            self._event(
+                session,
+                context,
+                "capacity.existing_worker_configured",
+                "owner",
+                data.idempotency_key,
+                worker_capacity_id=capacity.id,
+                details={
+                    "machine_label": machine.machine_label,
+                    "identity_reused": True,
+                },
             )
         return self._worker_response(capacity, machine)
 
@@ -1056,10 +1180,26 @@ class EngineeringCapacityService:
         commands = (
             await session.scalars(
                 select(EngineeringCommand)
+                .join(
+                    EngineeringMilestone,
+                    EngineeringMilestone.command_id == EngineeringCommand.id,
+                )
+                .outerjoin(
+                    EngineeringWorkstreamRuntime,
+                    EngineeringWorkstreamRuntime.command_id == EngineeringCommand.id,
+                )
                 .where(
                     EngineeringCommand.company_id == company_id,
                     EngineeringCommand.approval_state == "approved",
                     EngineeringCommand.execution_state == "execution_not_connected",
+                    EngineeringMilestone.company_id == company_id,
+                    EngineeringMilestone.status == "running",
+                    or_(
+                        EngineeringWorkstreamRuntime.id.is_(None),
+                        EngineeringWorkstreamRuntime.runtime_state.in_(
+                            ("queued", "acknowledged", "recovering")
+                        ),
+                    ),
                 )
                 .order_by(EngineeringCommand.approved_at, EngineeringCommand.created_at)
             )
@@ -1081,6 +1221,57 @@ class EngineeringCapacityService:
                 )
             )
         return tuple(result)
+
+    async def _eligible_workers(
+        self,
+        session: AsyncSession,
+        company_id: UUID,
+        configured: tuple[WorkerCapacityResponse, ...],
+    ) -> tuple[EligibleWorkerResponse, ...]:
+        now = utc_now()
+        configured_ids = {item.worker_id for item in configured}
+        rows = (
+            await session.execute(
+                select(EngineeringWorker, WorkerIdentity)
+                .join(
+                    WorkerIdentity,
+                    WorkerIdentity.orchestration_worker_id == EngineeringWorker.id,
+                )
+                .join(
+                    WorkerCredential,
+                    WorkerCredential.identity_id == WorkerIdentity.id,
+                )
+                .where(
+                    EngineeringWorker.company_id == company_id,
+                    WorkerIdentity.company_id == company_id,
+                    WorkerIdentity.state == "active",
+                    WorkerCredential.company_id == company_id,
+                    WorkerCredential.state == "active",
+                    WorkerCredential.expires_at > now,
+                )
+                .order_by(EngineeringWorker.name, EngineeringWorker.id)
+            )
+        ).all()
+        return tuple(
+            EligibleWorkerResponse(
+                worker_id=worker.id,
+                worker_name=worker.name,
+                provider_identifier=worker.provider_identifier,
+                lifecycle_state=worker.lifecycle_state,
+                identity_name=identity.name,
+                identity_state=identity.state,
+                last_heartbeat_at=worker.last_heartbeat_at,
+                health_state=(
+                    "healthy"
+                    if worker.last_heartbeat_at
+                    and now - worker.last_heartbeat_at <= timedelta(minutes=2)
+                    and worker.lifecycle_state in {"available", "leased"}
+                    else "offline"
+                ),
+                capacity_configured=worker.id in configured_ids,
+            )
+            for worker, identity in rows
+        )
 
     @staticmethod
     def _decision(
