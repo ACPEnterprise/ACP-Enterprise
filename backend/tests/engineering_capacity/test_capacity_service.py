@@ -27,7 +27,7 @@ from app.engineering_control.commands import (
 from app.engineering_control.service import EngineeringControlService
 from app.worker_control.models import EngineeringWorker
 from app.worker_identity.models import WorkerCredential, WorkerIdentity
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from tests.engineering_control.test_engineering_command_service import (
@@ -234,6 +234,50 @@ async def test_existing_authenticated_worker_can_be_configured_without_enrollmen
     assert after.active_reservations == ()
     assert after.active_allocations == ()
     assert after.eligible_workers[0].capacity_configured is True
+
+
+@pytest.mark.asyncio
+async def test_worker_setup_does_not_wait_for_heartbeat_row_update(
+    capacity_database: ServiceFixture,
+) -> None:
+    fixture = capacity_database
+    service = EngineeringCapacityService()
+    async with fixture.factory() as session:
+        await service.update_policy(
+            session,
+            context=fixture.context,
+            data=CapacityPolicyUpdate(
+                maximum_concurrent_workstreams=2,
+                maximum_per_worker=1,
+                reserved_capacity=0,
+            ),
+        )
+    worker = await enrolled_worker(fixture)
+
+    async with fixture.factory() as heartbeat_session, heartbeat_session.begin():
+        await heartbeat_session.execute(
+            update(EngineeringWorker)
+            .where(EngineeringWorker.id == worker.id)
+            .values(last_heartbeat_at=utc_now())
+        )
+
+        async def configure() -> WorkerCapacityResponse:
+            async with fixture.factory() as session:
+                return await service.configure_existing_worker(
+                    session,
+                    context=fixture.context,
+                    data=ExistingWorkerCapacitySetup(
+                        worker_id=worker.id,
+                        machine_label="Office heartbeat machine",
+                        configured_limit=1,
+                        idempotency_key=f"heartbeat-safe-{worker.id}",
+                    ),
+                )
+
+        configured = await asyncio.wait_for(configure(), timeout=2)
+
+    assert configured.worker_id == worker.id
+    assert configured.configured_limit == 1
 
 
 @pytest.mark.asyncio

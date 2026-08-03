@@ -382,7 +382,6 @@ class EngineeringCapacityService:
                     WorkerCredential.state == "active",
                     WorkerCredential.expires_at > now,
                 )
-                .with_for_update()
             )
             if worker is None:
                 raise CapacityConflictError(
