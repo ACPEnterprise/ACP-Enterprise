@@ -349,3 +349,81 @@ export interface MobileReviewCancellation {
   expected_version: number;
   reason_code: MobileCancellationReason;
 }
+
+export interface CapacityPolicy {
+  id: string;
+  maximum_concurrent_workstreams: number;
+  maximum_per_worker: number;
+  reserved_capacity: number;
+  auto_allocate_released_capacity: boolean;
+  version: number;
+  updated_at: string;
+}
+
+export interface WorkerCapacity {
+  id: string;
+  worker_id: string;
+  machine_id: string;
+  machine_label: string;
+  configured_limit: number;
+  allocated_capacity: number;
+  reserved_capacity: number;
+  available_capacity: number;
+  operational_state: string;
+  health_state: string;
+  last_reconciled_at: string | null;
+  version: number;
+}
+
+export interface CapacityMachine {
+  id: string;
+  machine_label: string;
+  expected_available_on: string | null;
+  enrollment_state: string;
+  worker_id: string | null;
+}
+
+export interface CapacityReservation {
+  id: string;
+  command_id: string;
+  worker_capacity_id: string;
+  machine_label: string;
+  status: string;
+  version: number;
+  owner_intent_reference: string;
+}
+
+export interface CapacityAllocation {
+  id: string;
+  command_id: string;
+  worker_capacity_id: string;
+  machine_label: string;
+  status: string;
+  version: number;
+}
+
+export interface CapacityQueueItem {
+  command_id: string;
+  ecid: string;
+  repository_key: string;
+  expected_branch: string;
+  requested_at: string;
+  decision: string;
+  reason: string;
+}
+
+export interface CapacitySummary {
+  policy: CapacityPolicy | null;
+  configured_capacity: number;
+  allocated_capacity: number;
+  reserved_capacity: number;
+  available_capacity: number;
+  offline_workers: number;
+  unhealthy_workers: number;
+  reconciliation_required: number;
+  workers: readonly WorkerCapacity[];
+  machines: readonly CapacityMachine[];
+  active_reservations: readonly CapacityReservation[];
+  active_allocations: readonly CapacityAllocation[];
+  waiting_workstreams: readonly CapacityQueueItem[];
+}

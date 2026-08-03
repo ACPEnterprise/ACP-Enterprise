@@ -124,6 +124,32 @@ beforeEach(() => {
   vi.resetAllMocks();
   vi.mocked(hooks.useApproveMobileReview).mockReturnValue(mutation());
   vi.mocked(hooks.useCancelMobileReview).mockReturnValue(mutation());
+  vi.mocked(hooks.useEngineeringCapacity).mockReturnValue({
+    isLoading: false,
+    isError: false,
+    data: {
+      policy: null,
+      configured_capacity: 0,
+      allocated_capacity: 0,
+      reserved_capacity: 0,
+      available_capacity: 0,
+      offline_workers: 0,
+      unhealthy_workers: 0,
+      reconciliation_required: 0,
+      workers: [],
+      machines: [],
+      active_reservations: [],
+      active_allocations: [],
+      waiting_workstreams: [],
+    },
+  } as never);
+  vi.mocked(hooks.useCapacityMutation).mockReturnValue(mutation());
+  vi.mocked(hooks.useWorkerLimitMutation).mockReturnValue(mutation());
+  vi.mocked(hooks.useWorkerStateMutation).mockReturnValue(mutation());
+  vi.mocked(hooks.useReservationMutation).mockReturnValue(mutation());
+  vi.mocked(hooks.useReservationReleaseMutation).mockReturnValue(mutation());
+  vi.mocked(hooks.useAllocationReleaseMutation).mockReturnValue(mutation());
+  vi.mocked(hooks.useAllocationReconciliationMutation).mockReturnValue(mutation());
   vi.mocked(hooks.useMobileCommandStatus).mockReturnValue({
     isLoading: false,
     isError: false,
@@ -242,6 +268,39 @@ describe("mobile Engineering Control", () => {
       { id: milestone.id, version: 3, action: "start" },
       expect.any(Object),
     );
+  });
+
+  it("renders phone-safe capacity truth and owner controls", async () => {
+    vi.mocked(hooks.useMobileWorkstreams).mockReturnValue({
+      isLoading: false,
+      data: { items: [], connectivity: disconnected, page: 1, page_size: 10, total_count: 0, total_pages: 0 },
+    } as never);
+    vi.mocked(hooks.useEngineeringCapacity).mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: {
+        policy: { id: "policy", maximum_concurrent_workstreams: 2, maximum_per_worker: 1, reserved_capacity: 0, auto_allocate_released_capacity: false, version: 1, updated_at: "2026-08-03T12:00:00Z" },
+        configured_capacity: 2,
+        allocated_capacity: 1,
+        reserved_capacity: 0,
+        available_capacity: 1,
+        offline_workers: 0,
+        unhealthy_workers: 0,
+        reconciliation_required: 0,
+        workers: [{ id: "capacity", worker_id: "worker", machine_id: "machine", machine_label: "Original Office Machine", configured_limit: 1, allocated_capacity: 1, reserved_capacity: 0, available_capacity: 0, operational_state: "occupied", health_state: "healthy", last_reconciled_at: null, version: 1 }],
+        machines: [{ id: "planned", machine_label: "Laptop 1", expected_available_on: "2026-08-04", enrollment_state: "unenrolled", worker_id: null }],
+        active_reservations: [],
+        active_allocations: [],
+        waiting_workstreams: [],
+      },
+    } as never);
+    renderList();
+    await userEvent.click(screen.getByRole("button", { name: /Capacity/ }));
+    expect(screen.getByRole("heading", { name: "Machines and assignments" })).toBeInTheDocument();
+    expect(screen.getByText("Original Office Machine")).toBeInTheDocument();
+    expect(screen.getByText("Laptop 1")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save capacity limits" })).toHaveClass("min-h-11");
+    expect(screen.getByRole("button", { name: "Pause capacity" })).toHaveClass("min-h-11");
   });
 
   it("renders loading, empty, error, and phone-safe workstream cards", async () => {

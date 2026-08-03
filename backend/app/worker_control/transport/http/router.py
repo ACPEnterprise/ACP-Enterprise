@@ -1,5 +1,5 @@
 from types import MappingProxyType
-from typing import Annotated
+from typing import Annotated, Literal, cast
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, status
@@ -165,7 +165,10 @@ async def poll_offers(
                 expires_at=offer.expires_at,
                 command_id=UUID(str(offer.metadata["command_id"])),
                 workspace_id=str(offer.metadata["workspace_id"]),
-                command_type=str(offer.metadata["command_type"]),
+                command_type=cast(
+                    Literal["inspect_workspace", "execute_code"],
+                    str(offer.metadata["command_type"]),
+                ),
                 payload=dict(offer.metadata),
             )
             for offer in offers

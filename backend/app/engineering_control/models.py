@@ -160,6 +160,11 @@ class EngineeringCommand(Base):
         UniqueConstraint(
             "company_id",
             "id",
+            name="uq_engineering_commands_company_id_capacity",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "id",
             "ecid",
             "instruction_digest",
             name="uq_engineering_commands_company_id_ecid_digest",

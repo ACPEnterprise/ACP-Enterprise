@@ -29,11 +29,18 @@ import {
   mobileEngineeringTimestamp,
   workstreamDisplayName,
 } from "./presentation";
+import { EngineeringCapacityPanel } from "./EngineeringCapacityPanel";
 import { useEngineeringRealtime } from "./realtime";
 import { MissionRoadmapPanel } from "./MissionRoadmapPanel";
 import type { MissionNotificationItem, MobileWorkstreamSummary } from "./types";
 
-type View = "overview" | "roadmap" | "inbox" | "briefing" | "analytics";
+type View =
+  | "overview"
+  | "roadmap"
+  | "capacity"
+  | "inbox"
+  | "briefing"
+  | "analytics";
 type InboxFilter =
   "all" | "attention" | "failures" | "recovering" | "completed";
 
@@ -328,13 +335,14 @@ export function MobileEngineeringListPage() {
       </header>
 
       <nav
-        className="grid grid-cols-5 gap-1 rounded-2xl border border-stroke bg-surface p-1"
+        className="grid grid-cols-3 gap-1 rounded-2xl border border-stroke bg-surface p-1 sm:grid-cols-6"
         aria-label="Mission Control views"
       >
         {(
           [
             ["overview", Activity, "Overview"],
             ["roadmap", Route, "Roadmap"],
+            ["capacity", HeartPulse, "Capacity"],
             ["inbox", Inbox, "Inbox"],
             ["briefing", Sparkles, "Briefing"],
             ["analytics", HeartPulse, "Analytics"],
@@ -354,6 +362,8 @@ export function MobileEngineeringListPage() {
       </nav>
 
       {view === "roadmap" && <MissionRoadmapPanel />}
+
+      {view === "capacity" && <EngineeringCapacityPanel />}
 
       {view === "overview" && (
         <>

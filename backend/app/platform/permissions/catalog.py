@@ -7,6 +7,7 @@ from app.platform.permissions.codes import (
     AnalyticsPermission,
     BeaconPermission,
     CustomerPermission,
+    EngineeringCapacityPermission,
     EngineeringCommandPermission,
     EngineeringExecutionPermission,
     EngineeringRepositoryOperationPermission,
@@ -172,6 +173,17 @@ ENGINEERING_EXECUTION_DEFINITIONS = tuple(
     for code in sorted(EngineeringExecutionPermission.ALL)
 )
 
+ENGINEERING_CAPACITY_DEFINITIONS = tuple(
+    PermissionDefinition(
+        code=code,
+        name=code.replace("_", " ").title(),
+        resource="engineering_capacity",
+        action=code.rsplit("_", 1)[-1].lower(),
+        scope=PermissionScope.COMPANY,
+    )
+    for code in sorted(EngineeringCapacityPermission.ALL)
+)
+
 ENGINEERING_REPOSITORY_OPERATION_DEFINITIONS = tuple(
     PermissionDefinition(
         code=code,
@@ -214,6 +226,7 @@ permission_catalog = PermissionCatalog(
     + JOB_DEFINITIONS
     + ENGINEERING_COMMAND_DEFINITIONS
     + ENGINEERING_EXECUTION_DEFINITIONS
+    + ENGINEERING_CAPACITY_DEFINITIONS
     + ENGINEERING_REPOSITORY_OPERATION_DEFINITIONS
     + WORKER_CONTROL_DEFINITIONS
     + WORKER_IDENTITY_DEFINITIONS

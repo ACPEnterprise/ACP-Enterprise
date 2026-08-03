@@ -11,12 +11,16 @@ import {
   MOBILE_ENGINEERING_PATH,
   MOBILE_OWNER_REVIEWS_PATH,
   MOBILE_WORKSTREAMS_PATH,
+  ENGINEERING_CAPACITY_PATH,
+  getCapacitySummary,
+  updateCapacityPolicy,
 } from "./api";
 
 vi.mock("../../api/client", () => ({
   apiClient: {
     get: vi.fn(),
     post: vi.fn(),
+    put: vi.fn(),
   },
 }));
 
@@ -72,5 +76,22 @@ describe("mobile Engineering API client", () => {
       `${MOBILE_ENGINEERING_PATH}/command-id/cancel`,
       cancellation,
     );
+  });
+
+  it("uses the authenticated capacity summary and versioned policy paths", async () => {
+    vi.mocked(apiClient.get).mockResolvedValue({ data: { workers: [] } });
+    await getCapacitySummary();
+    expect(apiClient.get).toHaveBeenCalledWith(`${ENGINEERING_CAPACITY_PATH}/summary`);
+
+    vi.mocked(apiClient.put).mockResolvedValue({ data: { version: 2 } });
+    const policy = {
+      maximum_concurrent_workstreams: 2,
+      maximum_per_worker: 1,
+      reserved_capacity: 0,
+      auto_allocate_released_capacity: false,
+      expected_version: 1,
+    };
+    await updateCapacityPolicy(policy);
+    expect(apiClient.put).toHaveBeenCalledWith(`${ENGINEERING_CAPACITY_PATH}/policy`, policy);
   });
 });
