@@ -2,7 +2,7 @@ import { createBrowserRouter, type RouteObject } from "react-router";
 
 import { ApplicationShell } from "../layout";
 import { ProtectedRoute } from "../auth";
-import { administrationHandle, appointmentsHandle, commandCenterHandle, customerDetailHandle, customersHandle, dispatchHandle, engineeringHandle, jobsHandle, missionControlHandle, notFoundHandle } from "./routeMetadata";
+import { administrationHandle, appointmentsHandle, commandCenterHandle, customerDetailHandle, customersHandle, dispatchHandle, engineeringHandle, jobsHandle, missionControlHandle, notFoundHandle, priceBookHandle } from "./routeMetadata";
 
 export const appRoutes: RouteObject[] = [
   {
@@ -54,6 +54,11 @@ export const appRoutes: RouteObject[] = [
             path: "dispatch",
             handle: dispatchHandle,
             lazy: async () => ({ Component: (await import("../routes/DispatchRoute")).DispatchRoute }),
+          },
+          {
+            path: "price-book",
+            handle: priceBookHandle,
+            lazy: async () => ({ Component: (await import("../routes/PriceBookRoute")).PriceBookRoute }),
           },
           {
             path: "jobs",

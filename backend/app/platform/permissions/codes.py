@@ -61,6 +61,14 @@ class DispatchPermission:
     ALL = frozenset({READ, MANAGE})
 
 
+class PriceBookPermission:
+    READ = "COMPANY_PRICE_BOOK_READ"
+    MANAGE = "COMPANY_PRICE_BOOK_MANAGE"
+    ACTIVATE = "COMPANY_PRICE_BOOK_ACTIVATE"
+
+    ALL = frozenset({READ, MANAGE, ACTIVATE})
+
+
 class EngineeringCommandPermission:
     READ = "COMPANY_ENGINEERING_COMMAND_READ"
     MANAGE = "COMPANY_ENGINEERING_COMMAND_MANAGE"

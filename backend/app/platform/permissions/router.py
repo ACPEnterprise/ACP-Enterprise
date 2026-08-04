@@ -6,14 +6,26 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database.session import get_database_session
 from app.platform.auth.dependencies import AuthenticatedIdentity
 from app.platform.permissions.authorization import authorization_service
+from app.platform.permissions.dependencies import ResolvedAuthorization
 from app.platform.permissions.schemas import (
     AccessibleBranchResponse,
     AccessibleCompanyResponse,
+    EffectiveAuthorizationResponse,
 )
-
 
 router = APIRouter(prefix="/api/v1/authorization", tags=["Authorization"])
 DatabaseSession = Annotated[AsyncSession, Depends(get_database_session)]
+
+
+@router.get("/context", response_model=EffectiveAuthorizationResponse)
+async def effective_authorization(
+    context: ResolvedAuthorization,
+) -> EffectiveAuthorizationResponse:
+    return EffectiveAuthorizationResponse(
+        company_id=context.company.id,
+        active_branch_id=context.active_branch.id if context.active_branch else None,
+        permission_codes=sorted(context.permission_codes),
+    )
 
 
 @router.get("/companies", response_model=list[AccessibleCompanyResponse])

@@ -7,6 +7,7 @@ export interface AuthenticationContextValue {
   status: AuthenticationStatus;
   user: AuthenticatedUser | null;
   activeCompany: AccessibleCompany | null;
+  permissionCodes?: readonly string[];
   signIn: (credentials: LoginCredentials) => Promise<void>;
   signOut: () => Promise<void>;
   signOutAll: () => Promise<void>;

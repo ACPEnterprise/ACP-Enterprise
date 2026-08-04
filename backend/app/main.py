@@ -46,6 +46,7 @@ from app.platform.users.identity_router import (
 from app.platform.users.identity_router import (
     self_service_router as identity_self_service_router,
 )
+from app.price_book.router import router as price_book_router
 from app.scheduling.router import router as scheduling_router
 from app.worker_control.transport.http.router import router as worker_transport_router
 
@@ -108,6 +109,7 @@ app.include_router(identity_administration_router)
 app.include_router(scheduling_router)
 app.include_router(jobs_router)
 app.include_router(dispatch_router)
+app.include_router(price_book_router)
 app.include_router(engineering_commands_router)
 app.include_router(engineering_reviews_router)
 app.include_router(repository_authorizations_router)

@@ -14,7 +14,7 @@ vi.mock("../api/auth", () => ({
   logout: vi.fn(),
   logoutAll: vi.fn(),
 }));
-vi.mock("../api/authorization", () => ({ listAccessibleCompanies: vi.fn() }));
+vi.mock("../api/authorization", () => ({ listAccessibleCompanies: vi.fn(), getEffectiveAuthorization: vi.fn() }));
 
 const company = {
   id: "company-1",
@@ -65,6 +65,7 @@ describe("AuthProvider", () => {
     vi.mocked(authenticationApi.logout).mockReset();
     vi.mocked(authorizationApi.listAccessibleCompanies).mockReset();
     vi.mocked(authorizationApi.listAccessibleCompanies).mockResolvedValue([company]);
+    vi.mocked(authorizationApi.getEffectiveAuthorization).mockResolvedValue({ permission_codes: [] });
   });
 
   it("restores a session by rotating the session-scoped refresh token", async () => {

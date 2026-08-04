@@ -2,6 +2,9 @@ from enum import Enum
 
 
 class EventType(str, Enum):
+    # Price Book
+    PRICE_BOOK_PRICE_VERSION_ACTIVATED = "price_book.price_version_activated"
+
     # Dispatch
     DISPATCH_ASSIGNMENT_CREATED = "dispatch.assignment.created"
     DISPATCH_ASSIGNMENT_REPLACED = "dispatch.assignment.replaced"

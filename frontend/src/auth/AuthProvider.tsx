@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import * as authenticationApi from "../api/auth";
-import { listAccessibleCompanies } from "../api/authorization";
+import { getEffectiveAuthorization, listAccessibleCompanies } from "../api/authorization";
 import { configureAuthentication } from "../api/client";
 import { AuthenticationContext } from "./AuthenticationContext";
 import {
@@ -23,6 +23,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [status, setStatus] = useState<AuthenticationStatus>("restoring");
   const [user, setUser] = useState<AuthenticatedUser | null>(null);
   const [activeCompany, setActiveCompany] = useState<AccessibleCompany | null>(null);
+  const [permissionCodes, setPermissionCodes] = useState<readonly string[]>([]);
   const accessTokenRef = useRef<string | null>(null);
   const activeCompanyRef = useRef<AccessibleCompany | null>(null);
   const refreshPromiseRef = useRef<Promise<string | null> | null>(null);
@@ -33,6 +34,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     clearActiveCompanyId();
     activeCompanyRef.current = null;
     setActiveCompany(null);
+    setPermissionCodes([]);
     setUser(null);
     setStatus("unauthenticated");
   }, []);
@@ -55,6 +57,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
     activeCompanyRef.current = company;
     setActiveCompany(company);
     writeActiveCompanyId(company.id);
+    const authorization = await getEffectiveAuthorization();
+    setPermissionCodes(authorization.permission_codes);
     setStatus("authenticated");
   }, [clearAuthentication]);
 
@@ -117,8 +121,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, [clearAuthentication]);
 
   const value = useMemo(
-    () => ({ status, user, activeCompany, signIn, signOut, signOutAll, requireReauthentication: clearAuthentication }),
-    [activeCompany, clearAuthentication, signIn, signOut, signOutAll, status, user],
+    () => ({ status, user, activeCompany, permissionCodes, signIn, signOut, signOutAll, requireReauthentication: clearAuthentication }),
+    [activeCompany, clearAuthentication, permissionCodes, signIn, signOut, signOutAll, status, user],
   );
   return <AuthenticationContext.Provider value={value}>{children}</AuthenticationContext.Provider>;
 }

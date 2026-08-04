@@ -22,3 +22,9 @@ class AccessibleCompanyResponse(StrictSchema):
     default_branch_id: UUID | None
     has_all_branch_access: bool
     branches: list[AccessibleBranchResponse]
+
+
+class EffectiveAuthorizationResponse(StrictSchema):
+    company_id: UUID
+    active_branch_id: UUID | None
+    permission_codes: list[str]

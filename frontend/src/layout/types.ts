@@ -22,6 +22,7 @@ export type NavigationItemId =
   | "customers"
   | "scheduling"
   | "dispatch"
+  | "price-book"
   | "estimates"
   | "jobs"
   | "engineering"
