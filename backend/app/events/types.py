@@ -2,6 +2,17 @@ from enum import Enum
 
 
 class EventType(str, Enum):
+    # Dispatch
+    DISPATCH_ASSIGNMENT_CREATED = "dispatch.assignment.created"
+    DISPATCH_ASSIGNMENT_REPLACED = "dispatch.assignment.replaced"
+    DISPATCH_ASSIGNMENT_RELEASED = "dispatch.assignment.released"
+    DISPATCH_CREW_MEMBER_ADDED = "dispatch.crew_member.added"
+    DISPATCH_CREW_MEMBER_REMOVED = "dispatch.crew_member.removed"
+    DISPATCH_ASSIGNMENT_RECONCILIATION_REQUIRED = (
+        "dispatch.assignment.reconciliation_required"
+    )
+    DISPATCH_ASSIGNMENT_RECONCILED = "dispatch.assignment.reconciled"
+
     # System
     SYSTEM_STARTED = "system.started"
     MEMBERSHIP_CREATED = "membership.created"

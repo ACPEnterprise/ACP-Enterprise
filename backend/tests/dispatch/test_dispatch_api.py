@@ -1,0 +1,49 @@
+import httpx
+import pytest
+from app.main import app
+from app.platform.permissions.catalog import permission_catalog
+from app.platform.permissions.codes import DispatchPermission
+
+
+def test_dispatch_permissions_are_canonical_and_separate() -> None:
+    codes = {item.code for item in permission_catalog.definitions}
+    assert DispatchPermission.READ in codes
+    assert DispatchPermission.MANAGE in codes
+    assert DispatchPermission.READ != DispatchPermission.MANAGE
+
+
+@pytest.mark.asyncio
+async def test_dispatch_api_fails_closed_without_authentication() -> None:
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        board = await client.get(
+            "/api/v1/dispatch/board",
+            params={
+                "start_at": "2026-08-03T00:00:00Z",
+                "end_at": "2026-08-04T00:00:00Z",
+            },
+        )
+        assign = await client.post(
+            "/api/v1/dispatch/appointments/00000000-0000-0000-0000-000000000001/assignment",
+            json={
+                "employee_id": "00000000-0000-0000-0000-000000000002",
+                "reason": "test",
+                "idempotency_key": "dispatch-api-test",
+            },
+        )
+    assert board.status_code == 401
+    assert assign.status_code == 401
+
+
+def test_dispatch_openapi_contract_exposes_bounded_operations() -> None:
+    paths = app.openapi()["paths"]
+    assert "/api/v1/dispatch/board" in paths
+    assert (
+        "/api/v1/dispatch/appointments/{appointment_id}/eligible-technicians" in paths
+    )
+    assert "/api/v1/dispatch/appointments/{appointment_id}/assignment" in paths
+    assert "/api/v1/dispatch/appointments/{appointment_id}/assignment/crew" in paths
+    assert (
+        "/api/v1/dispatch/appointments/{appointment_id}/assignment/reconcile" in paths
+    )

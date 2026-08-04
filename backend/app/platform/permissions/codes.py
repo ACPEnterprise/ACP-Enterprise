@@ -54,6 +54,13 @@ class JobPermission:
     ALL = frozenset({READ, MANAGE, EXECUTE})
 
 
+class DispatchPermission:
+    READ = "COMPANY_DISPATCH_READ"
+    MANAGE = "COMPANY_DISPATCH_MANAGE"
+
+    ALL = frozenset({READ, MANAGE})
+
+
 class EngineeringCommandPermission:
     READ = "COMPANY_ENGINEERING_COMMAND_READ"
     MANAGE = "COMPANY_ENGINEERING_COMMAND_MANAGE"

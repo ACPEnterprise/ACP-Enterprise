@@ -12,6 +12,7 @@ from app.beacon.router import router as beacon_router
 from app.core.config import settings
 from app.customers.router import router as customers_router
 from app.database.session import AsyncSessionFactory, engine
+from app.dispatch.router import router as dispatch_router
 from app.engineering_capacity.router import router as engineering_capacity_router
 from app.engineering_control.mobile.router import router as mobile_engineering_router
 from app.engineering_control.repository_authorization.router import (
@@ -106,6 +107,7 @@ app.include_router(identity_self_service_router)
 app.include_router(identity_administration_router)
 app.include_router(scheduling_router)
 app.include_router(jobs_router)
+app.include_router(dispatch_router)
 app.include_router(engineering_commands_router)
 app.include_router(engineering_reviews_router)
 app.include_router(repository_authorizations_router)

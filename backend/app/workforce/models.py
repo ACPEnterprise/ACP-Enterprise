@@ -18,7 +18,6 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
 
-
 CODE_PATTERN = r"^[a-z][a-z0-9_.-]{0,63}$"
 LANGUAGE_CODE_PATTERN = r"^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$"
 LIFECYCLE_CHECK = "status IN ('active', 'inactive')"
@@ -510,6 +509,68 @@ class WorkforceBranchEligibility(Base):
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
     starts_on: Mapped[date | None] = mapped_column(Date)
     ends_on: Mapped[date | None] = mapped_column(Date)
+    concurrency_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now
+    )
+
+
+class WorkforceWorkingAvailability(Base):
+    __tablename__ = "workforce_working_availability"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "profile_id"],
+            [
+                "workforce_capability_profiles.company_id",
+                "workforce_capability_profiles.id",
+            ],
+            name="fk_workforce_availability_profile",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "branch_id"],
+            ["branches.company_id", "branches.id"],
+            name="fk_workforce_availability_branch",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint("end_at > start_at", name="ck_workforce_availability_window"),
+        CheckConstraint(
+            "status IN ('available','unavailable','cancelled')",
+            name="ck_workforce_availability_status",
+        ),
+        CheckConstraint(
+            "concurrency_version >= 1", name="ck_workforce_availability_version"
+        ),
+        UniqueConstraint(
+            "company_id",
+            "profile_id",
+            "branch_id",
+            "start_at",
+            "end_at",
+            name="uq_workforce_availability_window",
+        ),
+        Index(
+            "ix_workforce_availability_lookup",
+            "company_id",
+            "branch_id",
+            "start_at",
+            "end_at",
+            "status",
+        ),
+    )
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    profile_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    start_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    end_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="available")
+    source: Mapped[str] = mapped_column(String(80), nullable=False, default="workforce")
     concurrency_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
