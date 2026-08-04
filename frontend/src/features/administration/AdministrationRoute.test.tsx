@@ -16,6 +16,8 @@ const role = { id: "role-1", company_id: "company-1", code: "COMPANY_ADMINISTRAT
 const permissions = [
   { id: "permission-read", code: "COMPANY_ENGINEERING_CAPACITY_READ", name: "Capacity Read", description: "View engineering capacity.", scope: "company", active: true, assignable: true, assigned: false },
   { id: "permission-manage", code: "COMPANY_ENGINEERING_CAPACITY_MANAGE", name: "Capacity Manage", description: "Manage engineering capacity.", scope: "company", active: true, assignable: true, assigned: true },
+  { id: "dispatch-read", code: "COMPANY_DISPATCH_READ", name: "Company Dispatch Read", description: null, scope: "company", active: true, assignable: true, assigned: false },
+  { id: "dispatch-manage", code: "COMPANY_DISPATCH_MANAGE", name: "Company Dispatch Manage", description: null, scope: "company", active: true, assignable: true, assigned: false },
 ];
 
 const requireReauthentication = vi.fn();
@@ -48,9 +50,17 @@ describe("AdministrationRoute", () => {
     renderPage();
     expect(await screen.findByText("COMPANY_ENGINEERING_CAPACITY_READ")).toBeInTheDocument();
     expect(screen.getByText("COMPANY_ENGINEERING_CAPACITY_MANAGE")).toBeInTheDocument();
-    expect(screen.getByText("Not assigned")).toBeInTheDocument();
+    expect(screen.getAllByText("Not assigned")).toHaveLength(3);
     expect(screen.getByText("Assigned")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Grant" })).toHaveClass("min-h-11");
+    expect(screen.getAllByRole("button", { name: "Grant" })[0]).toHaveClass("min-h-11");
+  });
+
+  it("finds canonical Dispatch permissions by owner search", async () => {
+    renderPage();
+    await userEvent.type(await screen.findByPlaceholderText("Search permissions"), "dispatch");
+    expect(screen.getByText("COMPANY_DISPATCH_READ")).toBeInTheDocument();
+    expect(screen.getByText("COMPANY_DISPATCH_MANAGE")).toBeInTheDocument();
+    expect(screen.queryByText("COMPANY_ENGINEERING_CAPACITY_READ")).not.toBeInTheDocument();
   });
 
   it("fails closed with an explicit authorization message", async () => {
@@ -61,7 +71,7 @@ describe("AdministrationRoute", () => {
 
   it("confirms a grant then requires fresh authorization and preserves destination", async () => {
     const router = renderPage();
-    await userEvent.click(await screen.findByRole("button", { name: "Grant" }));
+    await userEvent.click((await screen.findAllByRole("button", { name: "Grant" }))[0]);
     expect(screen.getByRole("dialog", { name: "Grant permission?" })).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Grant permission" }));
     expect(await screen.findByText("Reauthentication required")).toBeInTheDocument();

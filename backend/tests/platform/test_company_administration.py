@@ -40,6 +40,7 @@ from app.platform.permissions.authorization import (
 from app.platform.permissions.catalog_sync import PermissionCatalogSyncService
 from app.platform.permissions.codes import (
     AdministrationPermission,
+    DispatchPermission,
     EngineeringCapacityPermission,
     SchedulingPermission,
 )
@@ -896,6 +897,15 @@ async def test_permission_catalog_is_canonical_ordered_and_company_scoped(
     assert codes == sorted(codes)
     assert EngineeringCapacityPermission.READ in codes
     assert EngineeringCapacityPermission.MANAGE in codes
+    assert DispatchPermission.READ in codes
+    assert DispatchPermission.MANAGE in codes
+    dispatch_records = [
+        record for record in records if record["code"] in DispatchPermission.ALL
+    ]
+    assert len(dispatch_records) == 2
+    assert all(record["active"] for record in dispatch_records)
+    assert all(record["assignable"] for record in dispatch_records)
+    assert all(not record["assigned"] for record in dispatch_records)
     assert all(record["scope"] == "company" for record in records)
     assert all(
         set(record)
