@@ -1,13 +1,14 @@
-from dataclasses import dataclass
-from datetime import datetime, timezone
 import hashlib
 import json
 import re
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from uuid import UUID
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.engineering_control.workstream_runtime import workstream_runtime_service
 from app.engineering_execution.composition.contracts import (
     CompositionIntegrityProvider,
     DigestOnlyCompositionIntegrityProvider,
@@ -62,7 +63,6 @@ from app.platform.permissions.authorization import (
 )
 from app.platform.permissions.codes import EngineeringExecutionPermission
 from app.worker_control.contracts import AuthenticatedWorkerContext
-
 
 SAFE_CODE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,99}$")
 MAX_OUTPUT_REFERENCES = 20
@@ -393,6 +393,25 @@ class ExecutionCompositionService:
                     created_at=occurred_at,
                 ),
             )
+            composition = await self.repository.get_composition(
+                session,
+                company_id=context.company.id,
+                composition_id=attempt.composition_id,
+            )
+            if composition is None:
+                raise CompositionNotFoundError("Composition was not found.")
+            await workstream_runtime_service.project_provider_progress(
+                session,
+                company_id=context.company.id,
+                command_id=composition.command_id,
+                attempt_id=attempt.id,
+                sequence_number=record.sequence_number,
+                phase=record.phase.value,
+                percentage=record.percentage,
+                summary=record.summary,
+                message_code=record.message_code,
+                occurred_at=occurred_at,
+            )
             self._stage(
                 session,
                 context=context,
@@ -630,6 +649,18 @@ class ExecutionCompositionService:
                 percentage=percentage,
                 created_at=now,
             ),
+        )
+        await workstream_runtime_service.project_provider_progress(
+            session,
+            company_id=worker_context.company_id,
+            command_id=composition.command_id,
+            attempt_id=attempt.id,
+            sequence_number=record.sequence_number,
+            phase=record.phase.value,
+            percentage=record.percentage,
+            summary=record.summary,
+            message_code=record.message_code,
+            occurred_at=now,
         )
         self._stage_worker_event(
             session,

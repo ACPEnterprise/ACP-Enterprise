@@ -19,6 +19,7 @@ export interface PermissionDefinition {
   active: boolean;
   assignable: boolean;
   assigned: boolean;
+  reconciliation_required: boolean;
 }
 
 const ADMIN_PATH = "/api/v1/company-admin";

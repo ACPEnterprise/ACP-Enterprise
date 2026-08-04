@@ -29,6 +29,7 @@ class Settings(BaseSettings):
         default_factory=lambda: ["localhost", "127.0.0.1", "test", "testserver"]
     )
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
+    platform_contract_expected_fingerprint: str | None = None
 
     password_min_length: int = 12
     password_max_length: int = 256
@@ -130,6 +131,10 @@ class Settings(BaseSettings):
         if self.hsts_max_age_seconds < 0:
             raise ValueError("HSTS_MAX_AGE_SECONDS cannot be negative")
         if self.environment in {"preview", "production"}:
+            if not self.platform_contract_expected_fingerprint:
+                raise ValueError(
+                    "Secure environments require PLATFORM_CONTRACT_EXPECTED_FINGERPRINT"
+                )
             insecure_markers = (
                 "development",
                 "not-for-production",

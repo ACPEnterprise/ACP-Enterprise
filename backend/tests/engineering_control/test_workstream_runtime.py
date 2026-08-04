@@ -4,6 +4,9 @@ from uuid import UUID, uuid4
 
 import pytest
 import pytest_asyncio
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
 from app.core.config import settings
 from app.engineering_control.mobile.control import WorkstreamControlRepository
 from app.engineering_control.mobile.notifications import (
@@ -22,9 +25,6 @@ from app.engineering_control.workstream_runtime import (
     WorkstreamRuntimeError,
     WorkstreamRuntimeService,
 )
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from tests.engineering_control.test_engineering_command_service import (
     seed_service_fixture,
 )
@@ -238,6 +238,7 @@ async def test_worker_acknowledgement_is_idempotent_versioned_and_recoverable(
     ]
     assert command_payloads[-1]["acknowledgement_latency_ms"] is None
     assert command_payloads[-1]["reconnect_count"] == 0
+
     replay = await _events_after(
         worker_context.company_id, UUID(str(command_payloads[0]["event_id"]))
     )
@@ -295,6 +296,96 @@ async def test_worker_acknowledgement_is_idempotent_versioned_and_recoverable(
     )
     assert recovery_payload["runtime_state"] == "recovering"
     assert recovery_payload["notifications"] == ()
+
+
+@pytest.mark.asyncio
+async def test_durable_provider_progress_advances_phone_runtime_monotonically(
+    worker_database_fixture,
+) -> None:
+    fixture = worker_database_fixture
+    command = await approved_command(fixture)
+    _, _, worker_context, _ = await register_available_worker(fixture)
+    service = WorkstreamRuntimeService()
+    now = worker_context.authenticated_at + timedelta(seconds=2)
+    async with fixture.factory() as session, session.begin():
+        control = await WorkstreamControlRepository.set_state(
+            session,
+            company_id=worker_context.company_id,
+            command_id=command.id,
+            actor_user_id=fixture.context.user.id,
+            desired_state="active",
+            requested_action="start",
+            reason="owner_start",
+            occurred_at=now,
+        )
+        await service.acknowledge(
+            session,
+            context=worker_context,
+            session_id=uuid4(),
+            control_id=control.id,
+            expected_control_version=control.version,
+            action="start",
+            idempotency_key="progress-ack",
+            reason_code=None,
+            now=now,
+        )
+    attempt_id = uuid4()
+    async with fixture.factory() as session, session.begin():
+        executing = await service.project_provider_progress(
+            session,
+            company_id=worker_context.company_id,
+            command_id=command.id,
+            attempt_id=attempt_id,
+            sequence_number=1,
+            phase="executing",
+            percentage=None,
+            summary="Applying bounded changes",
+            message_code="bounded_changes",
+            occurred_at=now + timedelta(seconds=1),
+        )
+        assert executing is not None
+        assert executing.runtime_state == "running"
+        assert executing.progress_percent == 25
+    async with fixture.factory() as session, session.begin():
+        validating = await service.project_provider_progress(
+            session,
+            company_id=worker_context.company_id,
+            command_id=command.id,
+            attempt_id=attempt_id,
+            sequence_number=2,
+            phase="validating",
+            percentage=72,
+            summary="Running validation",
+            message_code="validation_running",
+            occurred_at=now + timedelta(seconds=2),
+        )
+        assert validating is not None
+        assert validating.runtime_state == "validating"
+        assert validating.progress_percent == 80
+        version = validating.version
+    async with fixture.factory() as session, session.begin():
+        duplicate = await service.project_provider_progress(
+            session,
+            company_id=worker_context.company_id,
+            command_id=command.id,
+            attempt_id=attempt_id,
+            sequence_number=2,
+            phase="validating",
+            percentage=72,
+            summary="Running validation",
+            message_code="validation_running",
+            occurred_at=now + timedelta(seconds=3),
+        )
+        assert duplicate is not None
+        assert duplicate.version == version
+    async with fixture.factory() as session:
+        event_count = await session.scalar(
+            select(func.count(EngineeringWorkstreamEvent.id)).where(
+                EngineeringWorkstreamEvent.command_id == command.id,
+                EngineeringWorkstreamEvent.event_type == "provider_progress",
+            )
+        )
+    assert event_count == 2
 
 
 @pytest.mark.asyncio

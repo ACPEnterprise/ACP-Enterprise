@@ -74,7 +74,7 @@ class CompanyAdministrationService:
                 await session.scalars(
                     select(Permission)
                     .where(
-                        Permission.code.in_(definitions),
+                        Permission.code.like(r"COMPANY\_%", escape="\\"),
                         Permission.status == "active",
                         Permission.retired_at.is_(None),
                     )
@@ -99,10 +99,15 @@ class CompanyAdministrationService:
                 "code": permission.code,
                 "name": permission.name,
                 "description": permission.description,
-                "scope": definitions[permission.code].scope.value,
+                "scope": (
+                    definitions[permission.code].scope.value
+                    if permission.code in definitions
+                    else PermissionScope.COMPANY.value
+                ),
                 "active": True,
-                "assignable": assignable,
+                "assignable": assignable and permission.code in definitions,
                 "assigned": permission.id in assigned_ids,
+                "reconciliation_required": permission.code not in definitions,
             }
             for permission in permissions
         ]

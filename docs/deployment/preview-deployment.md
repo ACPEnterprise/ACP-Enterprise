@@ -104,6 +104,18 @@ Validate Compose interpolation without printing resolved configuration into shar
 docker compose --env-file .env.preview -f docker-compose.preview.yml config --quiet
 ```
 
+Set `PLATFORM_CONTRACT_EXPECTED_FINGERPRINT` from the approved release artifact:
+
+```bash
+cd backend
+python -m app.platform.contracts.print_manifest
+```
+
+The generic API and isolated Mission Control API must expose identical contract
+fingerprints. Startup fails closed when an image does not match its configured
+fingerprint, and `scripts/verify-mission-control-preview.sh` rejects cross-lineage
+drift before acceptance.
+
 ## 5. Build and migrate
 
 Build immutable application images:

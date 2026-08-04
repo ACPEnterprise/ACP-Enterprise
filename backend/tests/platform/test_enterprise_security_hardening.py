@@ -15,6 +15,7 @@ from app.platform.audit.models import AuditRecord
 from app.platform.audit.service import AuditEntry, AuditService
 from app.platform.auth.access_tokens import AccessTokenService
 from app.platform.auth.errors import InvalidTokenError
+from app.platform.contracts.manifest import platform_contract_manifest
 from app.platform.permissions.catalog import (
     PermissionCatalog,
     PermissionCatalogError,
@@ -23,8 +24,8 @@ from app.platform.permissions.catalog import (
     permission_catalog,
 )
 from app.platform.security.decisions import (
-    AuthorizationDenial,
     AuthorizationDecisionLogger,
+    AuthorizationDenial,
 )
 from app.platform.security.metrics import SecurityMetrics, security_metrics
 from app.platform.security.middleware import (
@@ -213,6 +214,7 @@ def test_production_configuration_fails_closed() -> None:
         cors_allowed_origins=["https://app.acp.example"],
         trust_forwarded_headers=True,
         trusted_proxy_cidrs=["10.0.0.0/8"],
+        platform_contract_expected_fingerprint=platform_contract_manifest.fingerprint,
     )
     assert production.hsts_enabled
 

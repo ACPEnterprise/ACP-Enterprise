@@ -42,6 +42,7 @@ from app.platform.permissions.codes import (
     AdministrationPermission,
     DispatchPermission,
     EngineeringCapacityPermission,
+    PriceBookPermission,
     SchedulingPermission,
 )
 from app.platform.permissions.dependencies import get_authorization_context
@@ -899,6 +900,7 @@ async def test_permission_catalog_is_canonical_ordered_and_company_scoped(
     assert EngineeringCapacityPermission.MANAGE in codes
     assert DispatchPermission.READ in codes
     assert DispatchPermission.MANAGE in codes
+    assert set(PriceBookPermission.ALL).issubset(codes)
     dispatch_records = [
         record for record in records if record["code"] in DispatchPermission.ALL
     ]
@@ -918,10 +920,50 @@ async def test_permission_catalog_is_canonical_ordered_and_company_scoped(
             "active",
             "assignable",
             "assigned",
+            "reconciliation_required",
         }
         for record in records
     )
     assert other_company.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_unknown_company_permission_is_visible_but_not_assignable(
+    admin_database: tuple[AsyncEngine, async_sessionmaker[AsyncSession]],
+) -> None:
+    _, factory = admin_database
+    fixture = await seed_admin_fixture(factory, "ADMINUNKNOWN")
+    async with factory() as session, session.begin():
+        unknown = Permission(
+            code="COMPANY_UNRECONCILED_READ",
+            name="Unreconciled Read",
+            description="Requires platform contract reconciliation.",
+            resource="unreconciled",
+            action="read",
+            status="active",
+        )
+        session.add(unknown)
+
+    app = FastAPI()
+    app.include_router(admin_router)
+
+    async def database_override() -> AsyncIterator[AsyncSession]:
+        async with factory() as session:
+            yield session
+
+    async def authorization_override() -> AuthorizationContext:
+        return fixture.context
+
+    app.dependency_overrides[get_database_session] = database_override
+    app.dependency_overrides[get_authorization_context] = authorization_override
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/api/v1/company-admin/permissions")
+
+    assert response.status_code == 200
+    record = next(item for item in response.json() if item["code"] == unknown.code)
+    assert record["reconciliation_required"] is True
+    assert record["assignable"] is False
 
 
 @pytest.mark.asyncio

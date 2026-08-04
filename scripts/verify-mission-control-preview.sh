@@ -4,7 +4,9 @@ set -eu
 preview_url="${PREVIEW_URL:-https://preview.allcountyhomeservices.com}"
 html_file="$(mktemp)"
 body_file="$(mktemp)"
-trap 'find "$html_file" "$body_file" -delete' EXIT HUP INT TERM
+enterprise_contract="$(mktemp)"
+mission_contract="$(mktemp)"
+trap 'find "$html_file" "$body_file" "$enterprise_contract" "$mission_contract" -delete' EXIT HUP INT TERM
 
 curl --fail --silent --show-error "$preview_url/engineering" > "$html_file"
 asset_path="$(sed -n 's/.*src="\([^\"]*index-[^\"]*\.js\)".*/\1/p' "$html_file" | head -1)"
@@ -26,7 +28,17 @@ if ! grep -q 'Authentication required' "$body_file"; then
   exit 1
 fi
 
+curl --fail --silent --show-error \
+  "$preview_url/api/v1/platform/contracts" > "$enterprise_contract"
+curl --fail --silent --show-error \
+  "$preview_url/api/v1/engineering/platform-contracts" > "$mission_contract"
+if ! cmp -s "$enterprise_contract" "$mission_contract"; then
+  echo "Enterprise and Mission Control platform contracts have drifted." >&2
+  exit 1
+fi
+
 echo "mission_control_html=healthy"
 echo "mission_control_assets=healthy"
 echo "mission_control_proxy=trusted"
 echo "mission_control_authentication=fail_closed"
+echo "platform_contracts=consistent"

@@ -74,6 +74,7 @@ class PermissionCatalogResponse(StrictAdminSchema):
     active: bool
     assignable: bool
     assigned: bool
+    reconciliation_required: bool = False
 
 
 class AssignmentResponse(StrictAdminSchema):

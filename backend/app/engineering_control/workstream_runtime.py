@@ -153,6 +153,72 @@ class WorkstreamRuntimeError(Exception):
 
 
 class WorkstreamRuntimeService:
+    async def project_provider_progress(
+        self,
+        db: AsyncSession,
+        *,
+        company_id: UUID,
+        command_id: UUID,
+        attempt_id: UUID,
+        sequence_number: int,
+        phase: str,
+        percentage: int | None,
+        summary: str | None,
+        message_code: str,
+        occurred_at: datetime,
+    ) -> EngineeringWorkstreamRuntime | None:
+        """Project durable provider truth into the phone-owned runtime projection."""
+        runtime = await db.scalar(
+            select(EngineeringWorkstreamRuntime)
+            .where(
+                EngineeringWorkstreamRuntime.company_id == company_id,
+                EngineeringWorkstreamRuntime.command_id == command_id,
+            )
+            .with_for_update()
+        )
+        if runtime is None:
+            return None
+        idempotency_key = f"provider-progress:{attempt_id}:{sequence_number}"
+        duplicate = await db.scalar(
+            select(EngineeringWorkstreamEvent.id).where(
+                EngineeringWorkstreamEvent.company_id == company_id,
+                EngineeringWorkstreamEvent.idempotency_key == idempotency_key,
+            )
+        )
+        if duplicate is not None:
+            return runtime
+        phase_floor = {
+            "preparing": 5,
+            "starting": 10,
+            "executing": 25,
+            "validating": 80,
+            "finalizing": 95,
+        }.get(phase, 0)
+        projected = max(phase_floor, percentage or 0)
+        runtime.progress_percent = max(runtime.progress_percent or 0, projected)
+        runtime.runtime_state = "validating" if phase == "validating" else "running"
+        runtime.current_activity = (summary or message_code.replace("_", " "))[:240]
+        runtime.updated_at = occurred_at
+        runtime.version += 1
+        db.add(
+            EngineeringWorkstreamEvent(
+                company_id=company_id,
+                command_id=command_id,
+                control_id=runtime.control_id,
+                control_version=runtime.acknowledged_control_version,
+                worker_id=runtime.worker_id,
+                worker_session_id=runtime.worker_session_id,
+                event_type="provider_progress",
+                action=runtime.acknowledged_action,
+                runtime_state=runtime.runtime_state,
+                reason_code=message_code,
+                idempotency_key=idempotency_key,
+                occurred_at=occurred_at,
+            )
+        )
+        await db.flush()
+        return runtime
+
     async def refresh_attached_heartbeats(
         self,
         db: AsyncSession,

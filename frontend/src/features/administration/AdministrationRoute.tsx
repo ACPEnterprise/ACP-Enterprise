@@ -85,7 +85,7 @@ export function AdministrationRoute() {
             <ul className="space-y-ui-3">
               {visiblePermissions.map((permission) => <li key={permission.id} className="rounded-lg border border-stroke p-ui-4">
                 <div className="flex flex-col gap-ui-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="min-w-0"><div className="flex flex-wrap items-center gap-ui-2"><code className="break-all text-body-s font-semibold">{permission.code}</code><Badge variant={permission.assigned ? "success" : "neutral"}>{permission.assigned ? "Assigned" : "Not assigned"}</Badge></div><p className="mt-ui-1 text-body-s text-content-muted">{permission.description || permission.name}</p></div>
+                  <div className="min-w-0"><div className="flex flex-wrap items-center gap-ui-2"><code className="break-all text-body-s font-semibold">{permission.code}</code><Badge variant={permission.reconciliation_required ? "warning" : permission.assigned ? "success" : "neutral"}>{permission.reconciliation_required ? "Reconciliation required" : permission.assigned ? "Assigned" : "Not assigned"}</Badge></div><p className="mt-ui-1 text-body-s text-content-muted">{permission.description || permission.name}</p></div>
                   <Button className="shrink-0 sm:min-w-28" variant={permission.assigned ? "outline" : "primary"} disabled={!permission.assignable} onClick={() => setPending({ action: permission.assigned ? "remove" : "grant", permission })}>{permission.assigned ? "Remove" : "Grant"}</Button>
                 </div>
               </li>)}

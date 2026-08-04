@@ -14,10 +14,11 @@ vi.mock("./api");
 
 const role = { id: "role-1", company_id: "company-1", code: "COMPANY_ADMINISTRATOR", name: "Company Administrator", description: null, status: "active", is_system: true };
 const permissions = [
-  { id: "permission-read", code: "COMPANY_ENGINEERING_CAPACITY_READ", name: "Capacity Read", description: "View engineering capacity.", scope: "company", active: true, assignable: true, assigned: false },
-  { id: "permission-manage", code: "COMPANY_ENGINEERING_CAPACITY_MANAGE", name: "Capacity Manage", description: "Manage engineering capacity.", scope: "company", active: true, assignable: true, assigned: true },
-  { id: "dispatch-read", code: "COMPANY_DISPATCH_READ", name: "Company Dispatch Read", description: null, scope: "company", active: true, assignable: true, assigned: false },
-  { id: "dispatch-manage", code: "COMPANY_DISPATCH_MANAGE", name: "Company Dispatch Manage", description: null, scope: "company", active: true, assignable: true, assigned: false },
+  { id: "permission-read", code: "COMPANY_ENGINEERING_CAPACITY_READ", name: "Capacity Read", description: "View engineering capacity.", scope: "company", active: true, assignable: true, assigned: false, reconciliation_required: false },
+  { id: "permission-manage", code: "COMPANY_ENGINEERING_CAPACITY_MANAGE", name: "Capacity Manage", description: "Manage engineering capacity.", scope: "company", active: true, assignable: true, assigned: true, reconciliation_required: false },
+  { id: "dispatch-read", code: "COMPANY_DISPATCH_READ", name: "Company Dispatch Read", description: null, scope: "company", active: true, assignable: true, assigned: false, reconciliation_required: false },
+  { id: "dispatch-manage", code: "COMPANY_DISPATCH_MANAGE", name: "Company Dispatch Manage", description: null, scope: "company", active: true, assignable: true, assigned: false, reconciliation_required: false },
+  { id: "unknown", code: "COMPANY_UNKNOWN_READ", name: "Unknown", description: null, scope: "company", active: true, assignable: false, assigned: false, reconciliation_required: true },
 ];
 
 const requireReauthentication = vi.fn();
@@ -51,6 +52,7 @@ describe("AdministrationRoute", () => {
     expect(await screen.findByText("COMPANY_ENGINEERING_CAPACITY_READ")).toBeInTheDocument();
     expect(screen.getByText("COMPANY_ENGINEERING_CAPACITY_MANAGE")).toBeInTheDocument();
     expect(screen.getAllByText("Not assigned")).toHaveLength(3);
+    expect(screen.getByText("Reconciliation required")).toBeInTheDocument();
     expect(screen.getByText("Assigned")).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "Grant" })[0]).toHaveClass("min-h-11");
   });
