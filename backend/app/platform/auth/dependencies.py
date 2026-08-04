@@ -12,10 +12,9 @@ from app.platform.auth.services import (
     authentication_service,
 )
 
-
 bearer_scheme = HTTPBearer(auto_error=False)
 SecurityDatabaseSession = Annotated[
-    AsyncSession, Depends(get_security_database_session)
+    AsyncSession, Depends(get_security_database_session, scope="function")
 ]
 
 

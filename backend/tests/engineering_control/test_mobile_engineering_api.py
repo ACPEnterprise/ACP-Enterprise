@@ -8,7 +8,7 @@ import httpx
 import pytest
 import pytest_asyncio
 from app.core.config import settings
-from app.database.session import get_database_session
+from app.database.session import get_database_session, get_security_database_session
 from app.engineering_capacity.service import EngineeringCapacityService
 from app.engineering_control.mobile.control import EngineeringWorkstreamControl
 from app.engineering_control.mobile.roadmap_initialization import ROADMAPS
@@ -28,6 +28,7 @@ from app.platform.permissions.codes import (
 from app.platform.permissions.dependencies import get_authorization_context
 from app.worker_control.models import EngineeringWorker
 from fastapi import FastAPI
+from fastapi.dependencies.models import Dependant
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
@@ -807,6 +808,26 @@ async def test_realtime_stream_rejects_unknown_company_resume_token(
     )
     assert response.status_code == 409
     assert "resume token" in response.json()["detail"]
+
+
+def test_realtime_authentication_sessions_close_before_streaming_response() -> None:
+    route = next(
+        item
+        for item in router.routes
+        if getattr(item, "path", "") == "/api/v1/engineering/mobile/events"
+    )
+
+    def dependencies(dependant: Dependant) -> list[Dependant]:
+        nested = list(dependant.dependencies)
+        return nested + [child for item in nested for child in dependencies(item)]
+
+    security_sessions = [
+        dependency
+        for dependency in dependencies(route.dependant)
+        if dependency.call is get_security_database_session
+    ]
+    assert len(security_sessions) == 2
+    assert all(dependency.scope == "function" for dependency in security_sessions)
 
 
 @pytest.mark.asyncio

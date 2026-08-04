@@ -18,9 +18,8 @@ from app.platform.security.decisions import (
     authorization_decision_logger,
 )
 
-
 SecurityDatabaseSession = Annotated[
-    AsyncSession, Depends(get_security_database_session)
+    AsyncSession, Depends(get_security_database_session, scope="function")
 ]
 
 
