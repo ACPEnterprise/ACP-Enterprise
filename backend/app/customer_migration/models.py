@@ -306,6 +306,91 @@ class ServiceLocationSourceIdentity(Base):
     )
 
 
+class ServiceLocationIdentityEvidence(Base):
+    """Append-only, migration-owned evidence for a provider-native location ID."""
+
+    __tablename__ = "service_location_identity_evidence"
+    __table_args__ = (
+        CheckConstraint(
+            "source_entity_type = 'service_location'",
+            name="ck_location_identity_evidence_entity_type",
+        ),
+        CheckConstraint("evidence_version >= 1", name="ck_location_identity_version"),
+        CheckConstraint(
+            "readiness IN ('ready', 'reconciliation_required', 'exception')",
+            name="ck_location_identity_evidence_readiness",
+        ),
+        ForeignKeyConstraint(
+            ["customer_source_identity_id", "company_id"],
+            ["customer_source_identities.id", "customer_source_identities.company_id"],
+            name="fk_location_identity_evidence_customer_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "branch_id"],
+            ["branches.company_id", "branches.id"],
+            name="fk_location_identity_evidence_branch_company",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "source_system",
+            "source_entity_type",
+            "observation_sha256",
+            "evidence_version",
+            name="uq_location_identity_evidence_observation_version",
+        ),
+        UniqueConstraint(
+            "id", "company_id", name="uq_location_identity_evidence_scope"
+        ),
+        Index(
+            "ix_location_identity_evidence_review",
+            "company_id",
+            "readiness",
+            "classification",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    customer_source_identity_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True)
+    )
+    prior_evidence_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("service_location_identity_evidence.id", ondelete="RESTRICT"),
+    )
+    recorded_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    source_system: Mapped[str] = mapped_column(String(50), nullable=False)
+    source_entity_type: Mapped[str] = mapped_column(
+        String(30), nullable=False, default="service_location"
+    )
+    observation_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_location_id_sha256: Mapped[str | None] = mapped_column(String(64))
+    source_customer_id_sha256: Mapped[str | None] = mapped_column(String(64))
+    source_artifact_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_record_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    address_evidence_sha256: Mapped[str | None] = mapped_column(String(64))
+    classification: Mapped[str] = mapped_column(String(80), nullable=False)
+    readiness: Mapped[str] = mapped_column(String(30), nullable=False)
+    evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    evidence_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
 class CustomerMigrationProgress(Base):
     __tablename__ = "customer_migration_progress"
     __table_args__ = (

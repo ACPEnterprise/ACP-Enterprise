@@ -9,6 +9,9 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from app.analytics.router import router as analytics_router
 from app.api.health import router as health_router
 from app.core.config import settings
+from app.customer_migration.native_location_review import (
+    router as location_identity_router,
+)
 from app.customers.router import router as customers_router
 from app.database.session import AsyncSessionFactory, engine
 from app.engineering_control.mobile.router import router as mobile_engineering_router
@@ -94,6 +97,7 @@ app.include_router(health_router)
 app.include_router(events_router)
 app.include_router(analytics_router)
 app.include_router(customers_router)
+app.include_router(location_identity_router)
 app.include_router(auth_router)
 app.include_router(authorization_router)
 app.include_router(company_admin_router)
