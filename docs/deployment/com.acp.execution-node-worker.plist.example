@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>com.acp.execution-node-worker</string>
+  <key>ProgramArguments</key><array><string>REPLACE_PYTHON</string><string>-m</string><string>app.worker_runtime</string></array>
+  <key>WorkingDirectory</key><string>REPLACE_BACKEND_DIRECTORY</string>
+  <key>EnvironmentVariables</key><dict>
+    <key>PYTHONPATH</key><string>REPLACE_BACKEND_DIRECTORY</string>
+    <key>ACP_WORKER_BASE_URL</key><string>https://preview.allcountyhomeservices.com</string>
+    <key>ACP_WORKER_ID</key><string>REPLACE_WORKER_ID</string>
+    <key>ACP_WORKER_PRIVATE_KEY_FILE</key><string>REPLACE_WORKER_KEY</string>
+    <key>ACP_WORKER_CAPABILITIES</key><string>transport.connectivity,engineering.execute</string>
+    <key>ACP_WORKER_STATE_DIRECTORY</key><string>REPLACE_WORKER_STATE</string>
+    <key>ACP_WORKER_SERVICE_VERSION</key><string>REPLACE_RELEASE_SHA</string>
+    <key>ACP_WORKER_PROVIDER_URL</key><string>http://127.0.0.1:8765</string>
+    <key>ACP_WORKER_PROVIDER_TOKEN_FILE</key><string>REPLACE_TOKEN_FILE</string>
+  </dict>
+  <key>RunAtLoad</key><true/><key>KeepAlive</key><true/><key>ProcessType</key><string>Background</string>
+  <key>StandardOutPath</key><string>REPLACE_LOG_DIRECTORY/worker.out.log</string>
+  <key>StandardErrorPath</key><string>REPLACE_LOG_DIRECTORY/worker.err.log</string>
+</dict></plist>

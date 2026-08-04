@@ -4,9 +4,6 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from app.core.config import settings
 from app.engineering_capacity.errors import CapacityUnavailableError
 from app.engineering_capacity.models import EngineeringCapacityEvent
@@ -17,6 +14,7 @@ from app.engineering_capacity.schemas import (
     CapacityReconciliationRequest,
     CapacityReleaseRequest,
     CapacityReservationRequest,
+    ExistingWorkerCapacitySetup,
     WorkerCapacityRegister,
     WorkerCapacityResponse,
     WorkerStateUpdate,
@@ -26,8 +24,16 @@ from app.engineering_control.commands import (
     ApproveEngineeringCommand,
     CreateEngineeringCommand,
 )
+from app.engineering_control.mobile.roadmaps import (
+    EngineeringMilestone,
+    EngineeringRoadmap,
+)
 from app.engineering_control.service import EngineeringControlService
 from app.worker_control.models import EngineeringWorker
+from app.worker_identity.models import WorkerCredential, WorkerIdentity
+from sqlalchemy import select, update
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
 from tests.engineering_control.test_engineering_command_service import (
     ServiceFixture,
     seed_service_fixture,
@@ -61,10 +67,24 @@ async def approved_command(fixture: ServiceFixture, suffix: str):
                 requested_code_changes=True,
                 expires_at=utc_now() + timedelta(hours=2),
                 idempotency_key=f"capacity-command-{suffix}-{uuid4()}",
+                execution_boundary={
+                    "allowed_repository": "acp-enterprise",
+                    "allowed_branch": "customer-management-v1",
+                    "expected_head": "a" * 40,
+                    "allowed_paths": ["backend/app/**"],
+                    "forbidden_paths": [".git/**", ".env*", "**/.env*"],
+                    "permitted_operations": [
+                        "inspect",
+                        "validate",
+                        "modify",
+                        "commit",
+                    ],
+                    "validation_requirements": ["git diff --check"],
+                },
             ),
         )
     async with fixture.factory() as session:
-        return await service.approve_command(
+        approved = await service.approve_command(
             session,
             context=fixture.context,
             command=ApproveEngineeringCommand(
@@ -78,6 +98,49 @@ async def approved_command(fixture: ServiceFixture, suffix: str):
                 requested_code_changes=created.requested_code_changes,
             ),
         )
+    now = utc_now()
+    roadmap = EngineeringRoadmap(
+        id=uuid4(),
+        company_id=fixture.context.company.id,
+        title=f"Capacity roadmap {suffix} {uuid4()}",
+        repository_key=approved.repository_key,
+        expected_branch=approved.expected_branch,
+        expected_head=approved.expected_head,
+        status="active",
+        version=1,
+        created_at=now,
+        updated_at=now,
+    )
+    milestone = EngineeringMilestone(
+        company_id=fixture.context.company.id,
+        roadmap_id=roadmap.id,
+        position=1,
+        title=f"Capacity milestone {suffix}",
+        objective="Exercise bounded capacity behavior.",
+        owning_workstream="Capacity tests",
+        owning_branch=approved.expected_branch,
+        authority=[],
+        constraints=[],
+        dependencies=[],
+        validation=[],
+        deliverables=[],
+        stop_conditions=[],
+        expected_completion_evidence=[],
+        status="running",
+        definition_approved=True,
+        requested_code_changes=approved.requested_code_changes,
+        externally_adoptable=False,
+        command_id=approved.id,
+        version=1,
+        started_at=now,
+        created_at=now,
+        updated_at=now,
+    )
+    async with fixture.factory() as session, session.begin():
+        session.add(roadmap)
+        await session.flush()
+        session.add(milestone)
+    return approved
 
 
 async def configured_worker(
@@ -122,6 +185,146 @@ async def configured_worker(
             observed_at=utc_now(),
         )
     return worker, capacity
+
+
+async def enrolled_worker(fixture: ServiceFixture) -> EngineeringWorker:
+    now = utc_now()
+    worker = EngineeringWorker(
+        id=uuid4(),
+        company_id=fixture.context.company.id,
+        provider_identifier=f"trusted-{uuid4()}",
+        name=f"Trusted Worker {uuid4()}",
+        worker_version="1",
+        capabilities=["engineering.execute"],
+        lifecycle_state="available",
+        registered_by_user_id=fixture.context.user.id,
+        registered_at=now,
+        last_heartbeat_at=now,
+    )
+    identity = WorkerIdentity(
+        id=uuid4(),
+        company_id=fixture.context.company.id,
+        name=f"Trusted identity {uuid4()}",
+        state="active",
+        registered_by_user_id=fixture.context.user.id,
+        orchestration_worker_id=worker.id,
+        version=1,
+        registered_at=now,
+        updated_at=now,
+    )
+    credential = WorkerCredential(
+        company_id=fixture.context.company.id,
+        identity_id=identity.id,
+        version=1,
+        state="active",
+        verifier="test-verifier",
+        verifier_algorithm="ed25519",
+        public_key_id=f"test-key-{uuid4()}",
+        issued_at=now,
+        expires_at=now + timedelta(days=1),
+        activated_at=now,
+        updated_at=now,
+    )
+    async with fixture.factory() as session, session.begin():
+        session.add(worker)
+        await session.flush()
+        session.add(identity)
+        await session.flush()
+        session.add(credential)
+    return worker
+
+
+@pytest.mark.asyncio
+async def test_existing_authenticated_worker_can_be_configured_without_enrollment(
+    capacity_database: ServiceFixture,
+) -> None:
+    fixture = capacity_database
+    service = EngineeringCapacityService()
+    async with fixture.factory() as session:
+        await service.update_policy(
+            session,
+            context=fixture.context,
+            data=CapacityPolicyUpdate(
+                maximum_concurrent_workstreams=2,
+                maximum_per_worker=1,
+                reserved_capacity=0,
+            ),
+        )
+    worker = await enrolled_worker(fixture)
+
+    async with fixture.factory() as session:
+        before = await service.summary(session, context=fixture.context)
+    assert [item.worker_id for item in before.eligible_workers] == [worker.id]
+    assert before.configured_capacity == 0
+
+    request = ExistingWorkerCapacitySetup(
+        worker_id=worker.id,
+        machine_label="Original Office Machine",
+        configured_limit=1,
+        idempotency_key=f"existing-worker-{worker.id}",
+    )
+    async with fixture.factory() as session:
+        configured = await service.configure_existing_worker(
+            session, context=fixture.context, data=request
+        )
+    async with fixture.factory() as session:
+        replay = await service.configure_existing_worker(
+            session, context=fixture.context, data=request
+        )
+        after = await service.summary(session, context=fixture.context)
+
+    assert configured.id == replay.id
+    assert configured.machine_label == "Original Office Machine"
+    assert configured.health_state == "healthy"
+    assert after.configured_capacity == 1
+    assert after.available_capacity == 1
+    assert after.active_reservations == ()
+    assert after.active_allocations == ()
+    assert after.eligible_workers[0].capacity_configured is True
+
+
+@pytest.mark.asyncio
+async def test_worker_setup_does_not_wait_for_heartbeat_row_update(
+    capacity_database: ServiceFixture,
+) -> None:
+    fixture = capacity_database
+    service = EngineeringCapacityService()
+    async with fixture.factory() as session:
+        await service.update_policy(
+            session,
+            context=fixture.context,
+            data=CapacityPolicyUpdate(
+                maximum_concurrent_workstreams=2,
+                maximum_per_worker=1,
+                reserved_capacity=0,
+            ),
+        )
+    worker = await enrolled_worker(fixture)
+
+    async with fixture.factory() as heartbeat_session, heartbeat_session.begin():
+        await heartbeat_session.execute(
+            update(EngineeringWorker)
+            .where(EngineeringWorker.id == worker.id)
+            .values(last_heartbeat_at=utc_now())
+        )
+
+        async def configure() -> WorkerCapacityResponse:
+            async with fixture.factory() as session:
+                return await service.configure_existing_worker(
+                    session,
+                    context=fixture.context,
+                    data=ExistingWorkerCapacitySetup(
+                        worker_id=worker.id,
+                        machine_label="Office heartbeat machine",
+                        configured_limit=1,
+                        idempotency_key=f"heartbeat-safe-{worker.id}",
+                    ),
+                )
+
+        configured = await asyncio.wait_for(configure(), timeout=2)
+
+    assert configured.worker_id == worker.id
+    assert configured.configured_limit == 1
 
 
 @pytest.mark.asyncio

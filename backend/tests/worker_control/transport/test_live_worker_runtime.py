@@ -26,6 +26,7 @@ from app.worker_control.transport.http.dependencies import (
 )
 from app.worker_runtime.client import Challenge, Session
 from app.worker_runtime.config import WorkerRuntimeConfig
+from app.worker_runtime.recovery import RecoveryRecord, WorkerRecoveryJournal
 from app.worker_runtime.service import AuthenticatedWorkerRuntime, WorkerRuntimeState
 
 NOW = datetime(2026, 7, 27, 20, 0, tzinfo=timezone.utc)
@@ -119,6 +120,7 @@ class FakeClient:
         self.heartbeats: list[dict[str, object]] = []
         self.renewals: list[dict[str, object]] = []
         self.closed = False
+        self.results: list[dict[str, object]] = []
 
     async def challenge(self, worker_id):
         del worker_id
@@ -144,9 +146,15 @@ class FakeClient:
     async def close(self):
         self.closed = True
 
+    async def submit_controlled_result(self, *, session_id, payload):
+        assert str(session_id) == payload["session_id"]
+        self.results.append(payload)
+
 
 @pytest.mark.asyncio
-async def test_runtime_establishes_heartbeats_and_renews_only_explicit_lease() -> None:
+async def test_runtime_establishes_heartbeats_and_renews_only_explicit_lease(
+    tmp_path: Path,
+) -> None:
     private = Ed25519PrivateKey.generate()
     client = FakeClient()
     client.private = private
@@ -156,9 +164,12 @@ async def test_runtime_establishes_heartbeats_and_renews_only_explicit_lease() -
             worker_id=uuid4(),
             private_key_file=Path("/not-read-by-injected-runtime"),
             capabilities=(WorkerCapability.ENGINEERING_EXECUTE,),
+            workspace_root=tmp_path,
+            state_directory=tmp_path / "state",
         ),
         client=client,  # type: ignore[arg-type]
         private_key=private,
+        journal=WorkerRecoveryJournal(tmp_path / "state"),
     )
 
     connected = await runtime.establish()
@@ -175,6 +186,64 @@ async def test_runtime_establishes_heartbeats_and_renews_only_explicit_lease() -
     assert runtime.snapshot.state is WorkerRuntimeState.CLOSED
     assert runtime.snapshot.session_id is None
     assert client.closed
+
+
+@pytest.mark.asyncio
+async def test_pending_result_is_redelivered_once_after_new_session(
+    tmp_path: Path,
+) -> None:
+    private = Ed25519PrivateKey.generate()
+    client = FakeClient()
+    client.private = private
+    journal = WorkerRecoveryJournal(tmp_path / "state")
+    pending = RecoveryRecord(
+        phase="pending_result",
+        offer_id=uuid4(),
+        lease_id=uuid4(),
+        started_at=NOW,
+        result={
+            "outcome": "succeeded",
+            "output": {"repository_mutated": False},
+            "error_classification": None,
+            "completed_at": NOW.isoformat(),
+        },
+    )
+    journal.store(pending)
+    runtime = AuthenticatedWorkerRuntime(
+        config=WorkerRuntimeConfig(
+            base_url="https://worker.invalid",
+            worker_id=uuid4(),
+            private_key_file=tmp_path / "unused.key",
+            capabilities=(WorkerCapability.ENGINEERING_EXECUTE,),
+            workspace_root=tmp_path,
+            state_directory=tmp_path / "state",
+        ),
+        client=client,  # type: ignore[arg-type]
+        private_key=private,
+        journal=journal,
+    )
+
+    await runtime.establish()
+    await runtime._deliver_pending_result(journal.load())  # type: ignore[arg-type]
+
+    assert len(client.results) == 1
+    assert journal.load() is None
+
+
+def test_acquired_execution_survives_restart_as_reconciliation_truth(
+    tmp_path: Path,
+) -> None:
+    journal = WorkerRecoveryJournal(tmp_path / "state")
+    acquired = RecoveryRecord(
+        phase="acquired",
+        offer_id=uuid4(),
+        lease_id=uuid4(),
+        started_at=NOW,
+    )
+    journal.store(acquired)
+
+    assert journal.load() == acquired
+    assert (tmp_path / "state" / "runtime-state.json").stat().st_mode & 0o077 == 0
 
 
 def test_private_key_file_must_be_owner_only(tmp_path: Path) -> None:

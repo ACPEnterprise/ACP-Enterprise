@@ -11,6 +11,7 @@ from app.platform.company.admin_schemas import (
     MembershipCreateRequest,
     MembershipResponse,
     MutationResponse,
+    PermissionCatalogResponse,
     RoleCreateRequest,
     RoleResponse,
     StatusUpdateRequest,
@@ -24,7 +25,6 @@ from app.platform.company.admin_service import (
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import AdministrationPermission
 from app.platform.permissions.dependencies import require_permission
-
 
 router = APIRouter(prefix="/api/v1/company-admin", tags=["Company Administration"])
 DatabaseSession = Annotated[AsyncSession, Depends(get_database_session)]
@@ -201,6 +201,21 @@ async def list_roles(
 ) -> list[RoleResponse]:
     records = await company_administration_service.list_roles(session, context=context)
     return [RoleResponse.model_validate(record) for record in records]
+
+
+@router.get("/permissions", response_model=list[PermissionCatalogResponse])
+async def list_permission_catalog(
+    context: RoleReadContext,
+    session: DatabaseSession,
+    role_id: UUID | None = None,
+) -> list[PermissionCatalogResponse]:
+    try:
+        records = await company_administration_service.list_permission_catalog(
+            session, context=context, role_id=role_id
+        )
+    except AccessPolicyAdministrationError as error:
+        raise translate_admin_error(error) from error
+    return [PermissionCatalogResponse.model_validate(record) for record in records]
 
 
 @router.post("/roles", response_model=RoleResponse, status_code=status.HTTP_201_CREATED)

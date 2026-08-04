@@ -83,15 +83,14 @@ class WorkerTransportClient:
         )
         self._accepted(response, 200)
 
-    async def renew_lease(
-        self, *, session_id: UUID, payload: dict[str, object]
-    ) -> None:
+    async def renew_lease(self, *, session_id: UUID, payload: dict[str, object]) -> int:
         response = await self._client.post(
             "/api/v1/worker-transport/leases/refresh",
             headers={"X-Worker-Session-ID": str(session_id)},
             json=payload,
         )
         self._accepted(response, 200)
+        return int(response.json()["outcome_reference"].rsplit(":", 1)[1])
 
     async def poll_offers(self, *, session_id: UUID) -> tuple[dict[str, object], ...]:
         response = await self._client.get(
@@ -101,6 +100,38 @@ class WorkerTransportClient:
         )
         self._accepted(response, 200)
         return tuple(response.json()["items"])
+
+    async def poll_workstream_controls(
+        self, *, session_id: UUID
+    ) -> tuple[dict[str, object], ...]:
+        response = await self._client.get(
+            f"/api/v1/worker-transport/sessions/{session_id}/workstream-controls",
+            headers={"X-Worker-Session-ID": str(session_id)},
+        )
+        self._accepted(response, 200)
+        return tuple(response.json()["items"])
+
+    async def acknowledge_workstream_control(
+        self, *, session_id: UUID, payload: dict[str, object]
+    ) -> int:
+        response = await self._client.post(
+            "/api/v1/worker-transport/workstream-controls/acknowledge",
+            headers={"X-Worker-Session-ID": str(session_id)},
+            json=payload,
+        )
+        self._accepted(response, 200)
+        return int(response.json()["outcome_reference"].rsplit(":", 1)[1])
+
+    async def publish_workstream_runtime(
+        self, *, session_id: UUID, payload: dict[str, object]
+    ) -> int:
+        response = await self._client.post(
+            "/api/v1/worker-transport/workstream-runtime",
+            headers={"X-Worker-Session-ID": str(session_id)},
+            json=payload,
+        )
+        self._accepted(response, 200)
+        return int(response.json()["outcome_reference"].rsplit(":", 1)[1])
 
     async def acquire_offer(
         self, *, session_id: UUID, payload: dict[str, object]

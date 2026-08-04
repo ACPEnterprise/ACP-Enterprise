@@ -1,21 +1,37 @@
 from collections.abc import AsyncIterator, Mapping
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
+from uuid import uuid4
 
 import httpx
 import pytest
 import pytest_asyncio
+from app.core.config import settings
+from app.database.session import get_database_session, get_security_database_session
+from app.engineering_capacity.service import EngineeringCapacityService
+from app.engineering_control.mobile.control import EngineeringWorkstreamControl
+from app.engineering_control.mobile.roadmap_initialization import ROADMAPS
+from app.engineering_control.mobile.roadmaps import EngineeringMilestone
+from app.engineering_control.mobile.router import _bounded_projection, router
+from app.engineering_control.mobile.schemas import MilestoneItem
+from app.engineering_control.mobile.service import MobileEngineeringControlService
+from app.engineering_control.models import EngineeringCommand
+from app.engineering_control.registry import engineering_repository_registry
+from app.engineering_control.review.service import EngineeringReviewService
+from app.engineering_control.workstream_runtime import EngineeringWorkstreamRuntime
+from app.platform.permissions.authorization import AuthorizationContext
+from app.platform.permissions.codes import (
+    EngineeringCommandPermission,
+    EngineeringExecutionPermission,
+)
+from app.platform.permissions.dependencies import get_authorization_context
+from app.worker_control.models import EngineeringWorker
 from fastapi import FastAPI
+from fastapi.dependencies.models import Dependant
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from app.core.config import settings
-from app.database.session import get_database_session
-from app.engineering_control.mobile.router import router
-from app.engineering_control.mobile.service import MobileEngineeringControlService
-from app.engineering_control.review.service import EngineeringReviewService
-from app.platform.permissions.authorization import AuthorizationContext
-from app.platform.permissions.codes import EngineeringCommandPermission
-from app.platform.permissions.dependencies import get_authorization_context
 from tests.engineering_control.review.test_engineering_review import completed_command
 from tests.engineering_control.test_engineering_command_service import (
     ServiceFixture,
@@ -129,6 +145,15 @@ async def create_command(
                 requested_code_changes=bool(payload["requested_code_changes"]),
                 expires_at=utc_now() + timedelta(hours=2),
                 idempotency_key=str(payload["idempotency_key"]),
+                execution_boundary={
+                    "allowed_repository": str(payload["repository_key"]),
+                    "allowed_branch": str(payload["expected_branch"]),
+                    "expected_head": str(payload["expected_head"]),
+                    "allowed_paths": ["backend/app/**"],
+                    "forbidden_paths": [".git/**", ".env*", "**/.env*"],
+                    "permitted_operations": ["inspect", "modify", "validate", "commit"],
+                    "validation_requirements": ["git diff --check"],
+                },
             ),
         )
     return {
@@ -234,6 +259,7 @@ async def test_workstream_projection_lists_authoritative_safe_next_action(
         {
             "command_id": command["id"],
             "ecid": body["items"][0]["ecid"],
+            "display_name": "Inspect the approved mobile API boundary",
             "repository_key": command["repository_key"],
             "expected_branch": command["expected_branch"],
             "expected_head": command["expected_head"],
@@ -258,8 +284,550 @@ async def test_workstream_projection_lists_authoritative_safe_next_action(
             "repository_clean": None,
             "owner_attention_required": True,
             "updated_at": body["items"][0]["updated_at"],
+            "pipeline_status": "waiting_for_owner",
+            "desired_state": "active",
+            "control_pending": False,
+            "available_actions": ["cancel"],
+            "runtime_state": "waiting_for_owner",
+            "runtime_version": None,
+            "acknowledged_action": None,
+            "acknowledged_at": None,
+            "acknowledgement_expires_at": None,
+            "worker_health": None,
+            "progress_percent": None,
+            "current_activity": None,
+            "acknowledgement_latency_ms": None,
+            "execution_latency_ms": None,
+            "validation_latency_ms": None,
+            "deployment_latency_ms": None,
+            "worker_uptime_seconds": None,
+            "reconnect_count": 0,
         }
     ]
+
+    detail = await request(
+        app,
+        "GET",
+        f"/api/v1/engineering/mobile/workstreams/{command['id']}",
+    )
+    assert detail.status_code == 200
+    assert detail.json()["pipeline_status"] == "waiting_for_owner"
+    assert (
+        detail.json()["owner_instruction"]
+        == create_payload(suffix="workstream")["owner_instruction"]
+    )
+
+    paused = await request(
+        app,
+        "POST",
+        f"/api/v1/engineering/mobile/workstreams/{command['id']}/actions",
+        json={"action": "pause", "reason": "Owner review"},
+    )
+    assert paused.status_code == 200
+    assert paused.json()["desired_state"] == "paused"
+
+    refreshed = await request(
+        app,
+        "GET",
+        f"/api/v1/engineering/mobile/workstreams/{command['id']}",
+    )
+    assert refreshed.json()["desired_state"] == "paused"
+    assert refreshed.json()["control_pending"] is True
+    assert refreshed.json()["available_actions"] == ["resume", "cancel"]
+
+
+@pytest.mark.asyncio
+async def test_roadmap_dispatch_and_safe_progression_owner_workflow(
+    mobile_api: MobileApiFixture,
+) -> None:
+    permissions = tuple(
+        EngineeringCommandPermission.ALL | EngineeringExecutionPermission.ALL
+    )
+    app = mobile_api.app_for(permissions)
+    created = await request(
+        app,
+        "POST",
+        "/api/v1/engineering/mobile/roadmaps",
+        json={
+            "title": "Mission Control",
+            "repository_key": "acp-enterprise",
+            "expected_branch": "customer-management-v1",
+            "expected_head": "a" * 40,
+            "milestones": [
+                {
+                    "title": "Milestone one",
+                    "objective": "Complete the bounded first milestone.",
+                    "authority": ["Milestone authority"],
+                    "constraints": ["Stay in scope"],
+                    "validation": ["Run focused tests"],
+                    "deliverables": ["Validated result"],
+                    "stop_conditions": ["Unrecoverable blocker"],
+                    "expected_completion_evidence": ["Structured report"],
+                    "approved": True,
+                    "requested_code_changes": False,
+                },
+                {
+                    "title": "Milestone two",
+                    "objective": "Continue without copying a prompt.",
+                    "approved": True,
+                },
+            ],
+        },
+    )
+    assert created.status_code == 200, created.text
+    roadmap = await request(app, "GET", "/api/v1/engineering/mobile/roadmaps")
+    assert roadmap.status_code == 200
+    body = roadmap.json()
+    assert body["actionable_count"] == 1
+    assert body["waiting_for_me"][0]["status"] == "ready"
+    assert body["owner_attention"][0]["attention_class"] == "owner_action_required"
+    assert body["owner_attention"][0]["available_owner_actions"] == [
+        "start",
+        "skip",
+    ]
+    assert body["dependency_waiting_milestones"][0]["title"] == "Milestone two"
+    assert body["dependency_waiting_milestones"][0]["available_owner_actions"] == []
+    first = body["waiting_for_me"][0]
+
+    started = await request(
+        app,
+        "POST",
+        f"/api/v1/engineering/mobile/milestones/{first['id']}/actions",
+        json={"action": "start", "expected_version": first["version"]},
+    )
+    assert started.status_code == 200
+    assert started.json()["status"] == "running"
+    assert started.json()["command_id"] is not None
+    assert started.json()["requested_code_changes"] is False
+    after_start = (
+        await request(app, "GET", "/api/v1/engineering/mobile/roadmaps")
+    ).json()
+    assert after_start["actionable_count"] == 0
+    assert after_start["capacity_waiting_milestones"][0]["title"] == "Milestone one"
+    async with mobile_api.factory() as session:
+        capacity = await EngineeringCapacityService().summary(
+            session, context=mobile_api.service_fixture.context
+        )
+        dispatched_command = await session.scalar(
+            select(EngineeringCommand).where(
+                EngineeringCommand.id == started.json()["command_id"]
+            )
+        )
+    assert dispatched_command is not None
+    queued = capacity.waiting_workstreams[0]
+    assert queued.command_id == dispatched_command.id
+    assert queued.milestone_title == "Milestone one"
+    assert queued.milestone_position == 1
+    assert queued.workstream == "Mission Control"
+    assert queued.roadmap_title == "Mission Control"
+    assert queued.owning_branch == "customer-management-v1"
+    assert queued.identity_state == "resolved"
+    assert dispatched_command.requested_code_changes is False
+
+    async with mobile_api.factory() as session, session.begin():
+        second_milestone = await session.scalar(
+            select(EngineeringMilestone).where(
+                EngineeringMilestone.title == "Milestone two"
+            )
+        )
+        assert second_milestone is not None
+        original_status = second_milestone.status
+        second_milestone.command_id = dispatched_command.id
+        second_milestone.status = "running"
+    async with mobile_api.factory() as session:
+        ambiguous_capacity = await EngineeringCapacityService().summary(
+            session, context=mobile_api.service_fixture.context
+        )
+    ambiguous = ambiguous_capacity.waiting_workstreams[0]
+    assert ambiguous.identity_state == "reconciliation_required"
+    assert ambiguous.milestone_title is None
+    assert ambiguous.decision == "reconciliation_required"
+    assert ambiguous.assigned_worker_id is None
+    async with mobile_api.factory() as session, session.begin():
+        second_milestone = await session.scalar(
+            select(EngineeringMilestone).where(
+                EngineeringMilestone.title == "Milestone two"
+            )
+        )
+        assert second_milestone is not None
+        second_milestone.command_id = None
+        second_milestone.status = original_status
+
+    duplicate = await request(
+        app,
+        "POST",
+        f"/api/v1/engineering/mobile/milestones/{first['id']}/actions",
+        json={"action": "start", "expected_version": first["version"]},
+    )
+    assert duplicate.status_code == 409
+
+    completed_at = utc_now()
+    async with mobile_api.factory() as session, session.begin():
+        item = await session.scalar(
+            select(EngineeringMilestone).where(
+                EngineeringMilestone.id == started.json()["id"]
+            )
+        )
+        assert item is not None
+        control = await session.scalar(
+            select(EngineeringWorkstreamControl).where(
+                EngineeringWorkstreamControl.command_id == item.command_id
+            )
+        )
+        assert control is not None
+        worker_id = uuid4()
+        session.add(
+            EngineeringWorker(
+                id=worker_id,
+                company_id=item.company_id,
+                provider_identifier="acceptance-worker",
+                name="Mission Control acceptance worker",
+                worker_version="1.0",
+                capabilities=["mission_control_milestone"],
+                lifecycle_state="available",
+                registered_by_user_id=mobile_api.service_fixture.context.user.id,
+                registered_at=completed_at,
+                last_heartbeat_at=completed_at,
+                created_at=completed_at,
+                updated_at=completed_at,
+            )
+        )
+        await session.flush()
+        session.add(
+            EngineeringWorkstreamRuntime(
+                company_id=item.company_id,
+                command_id=item.command_id,
+                control_id=control.id,
+                worker_id=worker_id,
+                worker_session_id=uuid4(),
+                acknowledged_control_version=control.version,
+                acknowledged_action="start",
+                runtime_state="completed",
+                worker_health="healthy",
+                progress_percent=100,
+                current_activity="Milestone validation completed",
+                acknowledged_at=completed_at,
+                acknowledgement_expires_at=completed_at + timedelta(minutes=5),
+                heartbeat_at=completed_at,
+                updated_at=completed_at,
+            )
+        )
+
+    review = await request(app, "GET", "/api/v1/engineering/mobile/roadmaps")
+    reviewed_first = next(
+        item for item in review.json()["milestones"] if item["id"] == first["id"]
+    )
+    assert reviewed_first["status"] == "waiting_review"
+    assert reviewed_first["attention_class"] == "owner_action_required"
+
+    approved = await request(
+        app,
+        "POST",
+        f"/api/v1/engineering/mobile/milestones/{first['id']}/actions",
+        json={
+            "action": "approve",
+            "expected_version": reviewed_first["version"],
+        },
+    )
+    assert approved.status_code == 200
+    assert approved.json()["status"] == "completed"
+
+    advanced = (await request(app, "GET", "/api/v1/engineering/mobile/roadmaps")).json()
+    assert advanced["actionable_count"] == 1
+    assert advanced["waiting_for_me"][0]["title"] == "Milestone two"
+    assert advanced["waiting_for_me"][0]["status"] == "ready"
+    assert advanced["waiting_for_me"][0]["command_id"] is None
+    completed_first = next(
+        item for item in advanced["milestones"] if item["id"] == first["id"]
+    )
+    assert completed_first["attention_class"] == "informational"
+    assert completed_first["available_owner_actions"] == []
+
+    # Advancement is promotion only. The sole command and control belong to the
+    # milestone the owner explicitly started; the promoted milestone has no
+    # execution state until a later owner Start action.
+    async with mobile_api.factory() as session:
+        company_id = mobile_api.service_fixture.context.company.id
+        command_ids = tuple(
+            (
+                await session.scalars(
+                    select(EngineeringCommand.id).where(
+                        EngineeringCommand.company_id == company_id
+                    )
+                )
+            ).all()
+        )
+        control_ids = tuple(
+            (
+                await session.scalars(
+                    select(EngineeringWorkstreamControl.id).where(
+                        EngineeringWorkstreamControl.company_id == company_id
+                    )
+                )
+            ).all()
+        )
+        runtime_ids = tuple(
+            (
+                await session.scalars(
+                    select(EngineeringWorkstreamRuntime.id).where(
+                        EngineeringWorkstreamRuntime.company_id == company_id
+                    )
+                )
+            ).all()
+        )
+    assert len(command_ids) == 1
+    assert len(control_ids) == 1
+    assert len(runtime_ids) == 1
+
+
+def test_initial_roadmap_catalog_is_truthful_and_never_auto_dispatches() -> None:
+    by_title = {item["title"]: item for item in ROADMAPS}
+    assert set(by_title) == {
+        "Customer Migration",
+        "Business Economics",
+        "Beacon",
+        "Operations",
+        "Mission Control",
+    }
+    all_milestones = [
+        milestone for roadmap in ROADMAPS for milestone in roadmap["milestones"]
+    ]
+    ready = [item for item in all_milestones if item["status"] == "ready"]
+    assert [item["title"] for item in ready] == [
+        "BEA.6 Economics Signal Definitions",
+        "Scheduling Readiness",
+        "Mission Control V2.1 Phone Acceptance Rehearsal",
+    ]
+    assert ready[-1]["requested_code_changes"] is False
+    assert (
+        by_title["Mission Control"]["branch"]
+        == engineering_repository_registry.resolve(
+            "acp-enterprise"
+        ).approved_active_branch
+    )
+    beacon = by_title["Beacon"]
+    bea6 = next(
+        item
+        for item in beacon["milestones"]
+        if item["title"] == "BEA.6 Economics Signal Definitions"
+    )
+    approved_branch = engineering_repository_registry.resolve(
+        "acp-enterprise"
+    ).approved_active_branch
+    assert beacon["branch"] == approved_branch
+    assert bea6["branch"] == approved_branch
+    assert {
+        item["title"]
+        for item in all_milestones
+        if item["status"] == "externally_running"
+    } == {
+        "Operational Migration Phase 2 — Estimates, Invoices, and Payments",
+    }
+
+
+def test_v22_catalog_has_ordered_approved_dependency_chains() -> None:
+    expected = {
+        "Customer Migration": (
+            (
+                "Complete Historical Job Boundary",
+                "draft",
+                ("Remaining Customer/Location Owner Disposition",),
+            ),
+            (
+                "Multi-Property Customer Expansion",
+                "draft",
+                (),
+            ),
+            (
+                "Historical Notes Migration",
+                "draft",
+                ("Multi-Property Customer Expansion",),
+            ),
+            ("Attachment Migration", "draft", ("Historical Notes Migration",)),
+        ),
+        "Business Economics": (
+            (
+                "Accounting Integration",
+                "draft",
+                ("Phase 4 — Accounting Integration and Financial Close",),
+            ),
+            ("Financial Close", "draft", ("Accounting Integration",)),
+            ("General Ledger Reconciliation", "draft", ("Financial Close",)),
+            ("Projection Publication", "draft", ("General Ledger Reconciliation",)),
+        ),
+        "Beacon": (
+            (
+                "BEA.6 Economics Signal Definitions",
+                "ready",
+                ("BEA.5 Business Economics Signal Integration",),
+            ),
+            (
+                "BEA.7 Signal Evaluation",
+                "draft",
+                ("BEA.6 Economics Signal Definitions",),
+            ),
+            ("BEA.8 Signal Lifecycle", "draft", ("BEA.7 Signal Evaluation",)),
+            ("BEA.9 Beacon Dashboard", "draft", ("BEA.8 Signal Lifecycle",)),
+        ),
+        "Operations": (
+            ("Scheduling Readiness", "ready", ()),
+            ("Dispatch Readiness", "draft", ("Scheduling Readiness",)),
+            ("Estimate Workspace", "draft", ("Dispatch Readiness",)),
+        ),
+    }
+    by_roadmap = {item["title"]: item for item in ROADMAPS}
+    populated = []
+    for roadmap_title, chain in expected.items():
+        milestones = {
+            item["title"]: item for item in by_roadmap[roadmap_title]["milestones"]
+        }
+        positions = []
+        for title, status, dependencies in chain:
+            item = milestones[title]
+            populated.append(item)
+            positions.append(
+                next(
+                    index
+                    for index, candidate in enumerate(
+                        by_roadmap[roadmap_title]["milestones"]
+                    )
+                    if candidate["title"] == title
+                )
+            )
+            assert item["status"] == status
+            assert item["approved"] is True
+            assert tuple(item["dependencies"]) == dependencies
+            assert any(
+                constraint.startswith("Estimated duration: ")
+                for constraint in item["constraints"]
+            )
+            assert any(
+                "explicit authenticated owner Start" in constraint
+                for constraint in item["constraints"]
+            )
+        assert positions == sorted(positions)
+        assert sum(item["status"] == "ready" for item in populated[-len(chain) :]) <= 1
+    assert len(populated) == 15
+
+
+def test_invalid_milestone_does_not_blank_roadmap_projection() -> None:
+    now = utc_now()
+    values = {
+        "id": uuid4(),
+        "roadmap_id": uuid4(),
+        "position": 1,
+        "title": "Valid milestone",
+        "objective": "Remain visible when an adjacent record is malformed.",
+        "owning_workstream": "Mission Control",
+        "owning_branch": "customer-management-v1",
+        "authority": [],
+        "constraints": [],
+        "dependencies": [],
+        "validation": [],
+        "deliverables": [],
+        "stop_conditions": [],
+        "expected_completion_evidence": [],
+        "status": "ready",
+        "definition_approved": True,
+        "requested_code_changes": False,
+        "external_evidence": None,
+        "command_id": None,
+        "version": 1,
+        "started_at": None,
+        "completed_at": None,
+        "reviewed_at": None,
+        "created_at": now,
+        "updated_at": now,
+    }
+    valid = SimpleNamespace(**values)
+    invalid = SimpleNamespace(**{**values, "id": uuid4(), "objective": None})
+
+    items, warnings = _bounded_projection((valid, invalid), MilestoneItem, "milestone")
+
+    assert [item.title for item in items] == ["Valid milestone"]
+    assert warnings == (
+        "One milestone record is unavailable because its stored definition is invalid.",
+    )
+
+
+@pytest.mark.asyncio
+async def test_start_reports_repository_policy_rejection_as_api_error(
+    mobile_api: MobileApiFixture,
+) -> None:
+    permissions = tuple(
+        EngineeringCommandPermission.ALL | EngineeringExecutionPermission.ALL
+    )
+    app = mobile_api.app_for(permissions)
+    created = await request(
+        app,
+        "POST",
+        "/api/v1/engineering/mobile/roadmaps",
+        json={
+            "title": "Invalid dispatch coordinates",
+            "repository_key": "acp-enterprise",
+            "expected_branch": "mission-control-v2.1",
+            "expected_head": "a" * 40,
+            "milestones": [
+                {
+                    "title": "Read-only inspection",
+                    "objective": "Prove policy failures are returned to the owner.",
+                    "approved": True,
+                    "requested_code_changes": False,
+                }
+            ],
+        },
+    )
+    assert created.status_code == 200
+    listing = (await request(app, "GET", "/api/v1/engineering/mobile/roadmaps")).json()
+    milestone = next(
+        item
+        for item in listing["milestones"]
+        if item["title"] == "Read-only inspection"
+    )
+
+    rejected = await request(
+        app,
+        "POST",
+        f"/api/v1/engineering/mobile/milestones/{milestone['id']}/actions",
+        json={"action": "start", "expected_version": milestone["version"]},
+    )
+
+    assert rejected.status_code == 422
+    assert rejected.json()["detail"]["code"] == "engineering_command_invalid"
+
+
+@pytest.mark.asyncio
+async def test_realtime_stream_rejects_unknown_company_resume_token(
+    mobile_api: MobileApiFixture,
+) -> None:
+    app = mobile_api.app_for(tuple(EngineeringCommandPermission.ALL))
+    response = await request(
+        app,
+        "GET",
+        f"/api/v1/engineering/mobile/events?after={uuid4()}",
+    )
+    assert response.status_code == 409
+    assert "resume token" in response.json()["detail"]
+
+
+def test_realtime_authentication_sessions_close_before_streaming_response() -> None:
+    route = next(
+        item
+        for item in router.routes
+        if getattr(item, "path", "") == "/api/v1/engineering/mobile/events"
+    )
+
+    def dependencies(dependant: Dependant) -> list[Dependant]:
+        nested = list(dependant.dependencies)
+        return nested + [child for item in nested for child in dependencies(item)]
+
+    security_sessions = [
+        dependency
+        for dependency in dependencies(route.dependant)
+        if dependency.call is get_security_database_session
+    ]
+    assert len(security_sessions) == 2
+    assert all(dependency.scope == "function" for dependency in security_sessions)
 
 
 @pytest.mark.asyncio

@@ -129,6 +129,51 @@ class ControlledExecutionResultRequest(EnvelopeEvidence):
     completed_at: datetime
 
 
+class WorkstreamAcknowledgementRequest(EnvelopeEvidence):
+    control_id: UUID
+    expected_control_version: Annotated[int, Field(ge=1)]
+    action: Literal["start", "pause", "resume", "cancel"]
+    idempotency_key: Annotated[str, Field(min_length=1, max_length=128)]
+    reason_code: Annotated[str | None, Field(max_length=100)] = None
+
+
+class WorkstreamRuntimeUpdateRequest(EnvelopeEvidence):
+    command_id: UUID
+    expected_runtime_version: Annotated[int, Field(ge=1)]
+    runtime_state: Literal[
+        "queued",
+        "acknowledged",
+        "running",
+        "paused",
+        "waiting_for_owner",
+        "validating",
+        "deploying_preview",
+        "completed",
+        "failed",
+        "cancelled",
+        "recovering",
+    ]
+    worker_health: Annotated[str, Field(min_length=1, max_length=24)]
+    progress_percent: Annotated[int | None, Field(ge=0, le=100)] = None
+    current_activity: Annotated[str | None, Field(max_length=240)] = None
+    reason_code: Annotated[str | None, Field(max_length=100)] = None
+    idempotency_key: Annotated[str, Field(min_length=1, max_length=128)]
+
+
+class PendingWorkstreamControl(StrictModel):
+    control_id: UUID
+    command_id: UUID
+    action: str
+    desired_state: str
+    version: int
+    reason: str | None
+    requested_at: datetime
+
+
+class PendingWorkstreamControlPage(StrictModel):
+    items: tuple[PendingWorkstreamControl, ...]
+
+
 class ReceiptResponse(StrictModel):
     message_id: UUID
     sequence_number: int
@@ -146,7 +191,7 @@ class OfferResponse(StrictModel):
     expires_at: datetime
     command_id: UUID
     workspace_id: str
-    command_type: Literal["inspect_workspace"]
+    command_type: Literal["inspect_workspace", "execute_code"]
     payload: dict[str, object]
 
 
@@ -156,7 +201,7 @@ class ControlledOfferAcquisitionResponse(StrictModel):
     lease_id: UUID
     lease_version: int
     workspace_id: str
-    command_type: Literal["inspect_workspace"]
+    command_type: Literal["inspect_workspace", "execute_code"]
     payload: dict[str, object]
 
 

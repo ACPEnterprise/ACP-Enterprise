@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -48,7 +47,7 @@ class EngineeringReviewPackageResponse(ReviewSchema):
     validation_summary: dict[str, object]
     output_references: tuple[str, ...]
     failure_classification: str | None
-    repository_mutated: Literal[False]
+    repository_mutated: bool
     result_received_at: datetime
     decision: EngineeringReviewDecisionResponse | None
 

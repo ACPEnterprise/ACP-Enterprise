@@ -33,7 +33,7 @@ class ControlledExecutionOfferModel(Base):
             ondelete="RESTRICT",
         ),
         CheckConstraint(
-            "command_type = 'inspect_workspace'",
+            "command_type IN ('inspect_workspace','execute_code')",
             name="ck_controlled_offers_command_type",
         ),
         CheckConstraint(
@@ -127,8 +127,8 @@ class ControlledExecutionResultModel(Base):
             name="ck_controlled_results_outcome",
         ),
         CheckConstraint(
-            "repository_mutated = false",
-            name="ck_controlled_results_repository_immutable",
+            "repository_mutated IN (true,false)",
+            name="ck_controlled_results_repository_mutation_boolean",
         ),
         CheckConstraint(
             "completed_at >= started_at", name="ck_controlled_results_timestamps"

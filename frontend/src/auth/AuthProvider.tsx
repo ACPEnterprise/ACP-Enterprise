@@ -117,8 +117,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, [clearAuthentication]);
 
   const value = useMemo(
-    () => ({ status, user, activeCompany, signIn, signOut, signOutAll }),
-    [activeCompany, signIn, signOut, signOutAll, status, user],
+    () => ({ status, user, activeCompany, signIn, signOut, signOutAll, requireReauthentication: clearAuthentication }),
+    [activeCompany, clearAuthentication, signIn, signOut, signOutAll, status, user],
   );
   return <AuthenticationContext.Provider value={value}>{children}</AuthenticationContext.Provider>;
 }

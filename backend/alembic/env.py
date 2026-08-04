@@ -1,7 +1,5 @@
 from logging.config import fileConfig
 
-from sqlalchemy import engine_from_config, pool
-
 from alembic import context
 from app.beacon import models as beacon_models  # noqa: F401
 from app.core.config import settings
@@ -10,6 +8,18 @@ from app.customer_migration import models as customer_migration_models  # noqa: 
 from app.customers import models as customer_models  # noqa: F401
 from app.engineering_capacity import models as engineering_capacity_models  # noqa: F401
 from app.engineering_control import models as engineering_control_models  # noqa: F401
+from app.engineering_control import (
+    workstream_runtime as workstream_runtime_models,  # noqa: F401
+)
+from app.engineering_control.mobile import (
+    control as workstream_control_models,  # noqa: F401
+)
+from app.engineering_control.mobile import (  # noqa: F401
+    external_adoption as external_adoption_models,
+)
+from app.engineering_control.mobile import (
+    notifications as mission_notification_models,  # noqa: F401
+)
 from app.engineering_control.repository_authorization import (
     models as repository_authorization_models,  # noqa: F401
 )
@@ -32,6 +42,7 @@ from app.engineering_execution.supervision import (
     models as supervision_models,  # noqa: F401
 )
 from app.events import models as event_models  # noqa: F401
+from app.execution_nodes import models as execution_node_models  # noqa: F401
 from app.financials import models as financial_models  # noqa: F401
 from app.jobs import models as job_models  # noqa: F401
 from app.operational_migration import cutover_models  # noqa: F401
@@ -55,6 +66,7 @@ from app.worker_control.transport.persistence import (
 )
 from app.worker_identity import models as worker_identity_models  # noqa: F401
 from app.workforce import models as workforce_models  # noqa: F401
+from sqlalchemy import engine_from_config, pool
 
 config = context.config
 

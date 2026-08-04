@@ -1,19 +1,18 @@
 """create engineering capacity management
 
-Revision ID: a3d8f1c6b904
-Revises: e6b2c8d0f374
+Revision ID: o0e2f4a6c931
+Revises: n9d1f3a5c820
 Create Date: 2026-08-03
 """
 
 from collections.abc import Sequence
 
 import sqlalchemy as sa
+from alembic import op
 from sqlalchemy.dialects import postgresql
 
-from alembic import op
-
-revision: str = "a3d8f1c6b904"
-down_revision: str | None = "e6b2c8d0f374"
+revision: str = "o0e2f4a6c931"
+down_revision: str | None = "n9d1f3a5c820"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

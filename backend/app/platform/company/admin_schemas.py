@@ -65,6 +65,17 @@ class RoleResponse(StrictAdminSchema):
     model_config = ConfigDict(from_attributes=True, extra="forbid")
 
 
+class PermissionCatalogResponse(StrictAdminSchema):
+    id: UUID
+    code: str
+    name: str
+    description: str | None
+    scope: str
+    active: bool
+    assignable: bool
+    assigned: bool
+
+
 class AssignmentResponse(StrictAdminSchema):
     id: UUID
     created: bool = True

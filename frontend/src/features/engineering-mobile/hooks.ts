@@ -5,10 +5,14 @@ import * as mobileApi from "./api";
 import type {
   CapacityAllocation,
   CapacityReservation,
+  CapacityQueueItem,
   WorkerCapacity,
+  EligibleCapacityWorker,
   MobileReviewApproval,
   MobileReviewCancellation,
   MobileReviewQuery,
+  MobileWorkstreamAction,
+  MilestoneAction,
 } from "./types";
 
 export const mobileEngineeringKeys = {
@@ -22,14 +26,41 @@ export const mobileEngineeringKeys = {
     ["engineering-mobile", "detail", reviewId] as const,
   status: (reviewId: string) =>
     ["engineering-mobile", "status", reviewId] as const,
+  workstream: (commandId: string) =>
+    ["engineering-mobile", "workstream", commandId] as const,
+  notifications: () => ["engineering-mobile", "notifications"] as const,
+  approvalQueue: () => ["engineering-mobile", "approval-queue"] as const,
+  roadmaps: () => ["engineering-mobile", "roadmaps"] as const,
   capacity: () => ["engineering-mobile", "capacity"] as const,
 };
+
+export function useMissionNotifications() {
+  return useQuery({
+    queryKey: mobileEngineeringKeys.notifications(),
+    queryFn: mobileApi.listMissionNotifications,
+    retry: shouldRetryApiQuery,
+  });
+}
 
 export function useEngineeringCapacity() {
   return useQuery({
     queryKey: mobileEngineeringKeys.capacity(),
     queryFn: mobileApi.getCapacitySummary,
     retry: shouldRetryApiQuery,
+  });
+}
+
+export function useAcknowledgeMissionNotification() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, version }: { id: string; version: number }) =>
+      mobileApi.acknowledgeMissionNotification(id, version),
+    retry: false,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: mobileEngineeringKeys.notifications(),
+      });
+    },
   });
 }
 
@@ -44,8 +75,79 @@ export function useCapacityMutation<T>(mutationFn: (input: T) => Promise<unknown
   });
 }
 
+export function useTransitionMissionNotification() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      version,
+      action,
+    }: {
+      id: string;
+      version: number;
+      action: "read" | "archive";
+    }) => mobileApi.transitionMissionNotification(id, version, action),
+    retry: false,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: mobileEngineeringKeys.notifications(),
+      });
+    },
+  });
+}
+
+export function usePendingMobileReviews() {
+  return useQuery({
+    queryKey: mobileEngineeringKeys.approvalQueue(),
+    queryFn: mobileApi.listPendingMobileReviews,
+    retry: shouldRetryApiQuery,
+  });
+}
+
+export function useRoadmaps() {
+  return useQuery({
+    queryKey: mobileEngineeringKeys.roadmaps(),
+    queryFn: mobileApi.listRoadmaps,
+    retry: shouldRetryApiQuery,
+  });
+}
+
+export function useMilestoneAction() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      version,
+      action,
+      reason,
+    }: {
+      id: string;
+      version: number;
+      action: MilestoneAction;
+      reason?: string;
+    }) => mobileApi.actOnMilestone(id, version, action, reason),
+    retry: false,
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: mobileEngineeringKeys.roadmaps(),
+        }),
+        queryClient.invalidateQueries({ queryKey: mobileEngineeringKeys.all }),
+      ]);
+    },
+  });
+}
+
 export function useWorkerLimitMutation() {
   return useCapacityMutation<{ worker: WorkerCapacity; limit: number }>(({ worker, limit }) => mobileApi.updateWorkerCapacityLimit(worker, limit));
+}
+
+export function useExistingWorkerSetupMutation() {
+  return useCapacityMutation<{
+    worker: EligibleCapacityWorker;
+    machineLabel: string;
+    configuredLimit: number;
+  }>(mobileApi.configureExistingWorkerCapacity);
 }
 
 export function useWorkerStateMutation() {
@@ -53,7 +155,7 @@ export function useWorkerStateMutation() {
 }
 
 export function useReservationMutation() {
-  return useCapacityMutation<string>(mobileApi.reserveWorkstreamCapacity);
+  return useCapacityMutation<CapacityQueueItem>(mobileApi.reserveWorkstreamCapacity);
 }
 
 export function useReservationReleaseMutation() {
@@ -73,6 +175,37 @@ export function useMobileWorkstreams(query: MobileReviewQuery) {
     queryKey: mobileEngineeringKeys.workstreams(query),
     queryFn: () => mobileApi.listMobileWorkstreams(query),
     retry: shouldRetryApiQuery,
+  });
+}
+
+export function useMobileWorkstream(commandId: string | undefined) {
+  return useQuery({
+    queryKey: mobileEngineeringKeys.workstream(commandId ?? ""),
+    queryFn: () => mobileApi.getMobileWorkstream(commandId as string),
+    enabled: Boolean(commandId),
+    retry: shouldRetryApiQuery,
+  });
+}
+
+export function useControlMobileWorkstream(commandId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      action,
+      reason,
+    }: {
+      action: MobileWorkstreamAction;
+      reason?: string;
+    }) => mobileApi.controlMobileWorkstream(commandId, action, reason),
+    retry: false,
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: mobileEngineeringKeys.workstream(commandId),
+        }),
+        queryClient.invalidateQueries({ queryKey: mobileEngineeringKeys.all }),
+      ]);
+    },
   });
 }
 

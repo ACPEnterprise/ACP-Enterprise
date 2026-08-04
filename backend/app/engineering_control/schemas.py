@@ -14,6 +14,16 @@ class EngineeringApiSchema(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, from_attributes=True)
 
 
+class ExecutionBoundarySchema(EngineeringApiSchema):
+    allowed_repository: str = Field(min_length=1, max_length=100)
+    allowed_branch: str = Field(min_length=1, max_length=255)
+    expected_head: str = Field(pattern=r"^[0-9a-f]{40}$")
+    allowed_paths: tuple[str, ...] = Field(min_length=1, max_length=500)
+    forbidden_paths: tuple[str, ...] = Field(min_length=1, max_length=100)
+    permitted_operations: tuple[Literal["inspect", "modify", "validate", "commit"], ...]
+    validation_requirements: tuple[str, ...] = Field(min_length=1, max_length=50)
+
+
 class EngineeringCommandCreateRequest(EngineeringApiSchema):
     command_type: str = Field(min_length=3, max_length=80)
     owner_instruction: str = Field(min_length=1, max_length=12_000)
@@ -23,6 +33,7 @@ class EngineeringCommandCreateRequest(EngineeringApiSchema):
     requested_code_changes: bool
     expires_at: AwareDatetime
     idempotency_key: str = Field(min_length=3, max_length=200)
+    execution_boundary: ExecutionBoundarySchema
 
 
 class EngineeringCommandApproveRequest(EngineeringApiSchema):
@@ -33,6 +44,7 @@ class EngineeringCommandApproveRequest(EngineeringApiSchema):
     expected_branch: str = Field(min_length=1, max_length=255)
     expected_head: str = Field(pattern=r"^[0-9a-f]{40}$")
     requested_code_changes: bool
+    execution_boundary_digest: str = Field(min_length=64, max_length=64)
 
 
 EngineeringCancellationReason = Literal[
@@ -58,6 +70,7 @@ class EngineeringCommandSummaryResponse(EngineeringApiSchema):
     created_at: datetime
     expires_at: datetime
     version: int
+    execution_boundary_digest: str
 
 
 class EngineeringCommandDetailResponse(EngineeringCommandSummaryResponse):
@@ -70,6 +83,7 @@ class EngineeringCommandDetailResponse(EngineeringCommandSummaryResponse):
     canceled_at: datetime | None
     canceled_by_user_id: UUID | None
     cancellation_reason_code: str | None
+    execution_boundary: dict[str, object]
 
 
 class EngineeringCommandPageResponse(EngineeringApiSchema):

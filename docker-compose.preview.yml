@@ -92,20 +92,27 @@ services:
       context: ./backend
       dockerfile: Dockerfile.preview
     environment:
-      ACP_WORKER_BASE_URL: http://backend:8000
+      ACP_WORKER_BASE_URL: ${ACP_WORKER_BASE_URL:-http://backend:8000}
       ACP_WORKER_ID: ${ACP_WORKER_ID:-00000000-0000-0000-0000-000000000000}
       ACP_WORKER_PRIVATE_KEY_FILE: /run/secrets/preview-worker.key
-      ACP_WORKER_CAPABILITIES: transport.connectivity
+      ACP_WORKER_CAPABILITIES: ${ACP_WORKER_CAPABILITIES:-transport.connectivity}
+      ACP_WORKER_WORKSPACE_ROOT: ${ACP_WORKER_WORKSPACE_ROOT_CONTAINER:-/workspace}
       ACP_WORKER_HEARTBEAT_SECONDS: "30"
       ACP_WORKER_REQUEST_TIMEOUT_SECONDS: "10"
+      ACP_WORKER_STATE_DIRECTORY: /var/lib/acp-worker
+      ACP_WORKER_SERVICE_VERSION: ${ACP_WORKER_SERVICE_VERSION:-unknown}
+      ACP_WORKER_RECONNECT_MIN_SECONDS: "2"
+      ACP_WORKER_RECONNECT_MAX_SECONDS: "30"
     command: ["python", "-m", "app.worker_runtime"]
     volumes:
       - ${ACP_WORKER_PRIVATE_KEY_FILE_HOST:-/opt/acp-enterprise/shared/secrets/preview-worker.key}:/run/secrets/preview-worker.key:ro
+      - ${ACP_WORKER_WORKSPACE_ROOT_HOST:-/opt/acp-enterprise/shared/worker-workspaces}:${ACP_WORKER_WORKSPACE_ROOT_CONTAINER:-/workspace}:ro
+      - preview_worker_state:/var/lib/acp-worker
     depends_on:
       backend:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "python", "-c", "import os; os.kill(1, 0)"]
+      test: ["CMD", "python", "-c", "import json,time,pathlib; p=pathlib.Path('/var/lib/acp-worker/health.json'); d=json.loads(p.read_text()); assert time.time()-p.stat().st_mtime < 90; assert d['worker_id']"]
       interval: 10s
       timeout: 3s
       retries: 3
@@ -113,6 +120,34 @@ services:
     read_only: true
     tmpfs:
       - /tmp:size=16m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      preview:
+
+  worker-provision:
+    profiles: ["worker-provision"]
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.preview
+    environment:
+      <<: *backend-environment
+      ACP_WORKER_COMPANY_CODE: ${ACP_WORKER_COMPANY_CODE:?Set ACP_WORKER_COMPANY_CODE}
+      ACP_WORKER_ADMINISTRATOR_EMAIL: ${ACP_WORKER_ADMINISTRATOR_EMAIL:?Set ACP_WORKER_ADMINISTRATOR_EMAIL}
+      ACP_WORKER_NAME: ${ACP_WORKER_NAME:-ACP Preview Engineering Worker}
+      ACP_WORKER_PROVIDER_IDENTIFIER: ${ACP_WORKER_PROVIDER_IDENTIFIER:-connectivity}
+      ACP_WORKER_CAPABILITIES: ${ACP_WORKER_CAPABILITIES:-transport.connectivity}
+      ACP_WORKER_PRIVATE_KEY_FILE: /run/secrets/preview-worker.key
+      ACP_WORKER_CREDENTIAL_DAYS: ${ACP_WORKER_CREDENTIAL_DAYS:-30}
+    command: ["python", "-m", "app.worker_runtime.provision"]
+    volumes:
+      - ${ACP_WORKER_SECRET_DIRECTORY_HOST:-/opt/acp-enterprise/shared/secrets/worker-preview}:/run/secrets
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
     cap_drop:
       - ALL
     security_opt:
@@ -143,6 +178,7 @@ services:
 volumes:
   preview_postgres_data:
   preview_redis_data:
+  preview_worker_state:
 
 networks:
   preview:

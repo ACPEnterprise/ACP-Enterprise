@@ -235,6 +235,12 @@ class EngineeringCommand(Base):
     requested_code_changes: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False
     )
+    execution_boundary: Mapped[dict[str, object]] = mapped_column(
+        JSONB, nullable=False, default=dict
+    )
+    execution_boundary_digest: Mapped[str] = mapped_column(
+        String(64), nullable=False, default=""
+    )
     approval_state: Mapped[str] = mapped_column(
         String(24), nullable=False, default="awaiting_approval"
     )

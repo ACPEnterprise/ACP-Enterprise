@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 from math import ceil
 from uuid import UUID
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.engineering_control.commands import (
@@ -17,10 +18,17 @@ from app.engineering_control.records import (
 from app.engineering_control.review.contracts import EngineeringReviewState
 from app.engineering_control.review.service import EngineeringReviewService
 from app.engineering_control.service import EngineeringControlService
+from app.engineering_control.workstream_runtime import (
+    EngineeringWorkstreamEvent,
+    EngineeringWorkstreamRuntime,
+)
+from app.engineering_execution.errors import EngineeringExecutionError
+from app.engineering_execution.service import EngineeringExecutionService
 from app.engineering_execution.status.schemas import MobileExecutionStatus
 from app.engineering_execution.status.service import MobileExecutionStatusService
 from app.platform.permissions.authorization import AuthorizationContext
 
+from .control import WorkstreamControlRepository
 from .repository import MobileConnectivityRepository
 from .schemas import (
     MobileCommandDetail,
@@ -29,6 +37,8 @@ from .schemas import (
     MobileEngineeringConnectivity,
     MobileOwnerReviewPage,
     MobileOwnerReviewSummary,
+    MobileWorkstreamActionResult,
+    MobileWorkstreamDetail,
     MobileWorkstreamPage,
     MobileWorkstreamSummary,
 )
@@ -45,11 +55,15 @@ class MobileEngineeringControlService:
         reviews: EngineeringReviewService | None = None,
         statuses: MobileExecutionStatusService | None = None,
         connectivity: type[MobileConnectivityRepository] = MobileConnectivityRepository,
+        executions: EngineeringExecutionService | None = None,
+        controls: type[WorkstreamControlRepository] = WorkstreamControlRepository,
     ) -> None:
         self.control = control or EngineeringControlService()
         self.reviews = reviews or EngineeringReviewService()
         self.statuses = statuses or MobileExecutionStatusService()
         self.connectivity = connectivity
+        self.executions = executions or EngineeringExecutionService()
+        self.controls = controls
 
     async def list_workstreams(
         self,
@@ -74,7 +88,24 @@ class MobileEngineeringControlService:
                 command_id=command.id,
                 now=current,
             )
-            items.append(self._workstream_summary(command=command, status=status))
+            control = await self.controls.get(
+                session, company_id=context.company.id, command_id=command.id
+            )
+            runtime = await session.scalar(
+                select(EngineeringWorkstreamRuntime).where(
+                    EngineeringWorkstreamRuntime.company_id == context.company.id,
+                    EngineeringWorkstreamRuntime.command_id == command.id,
+                )
+            )
+            items.append(
+                self._workstream_summary(
+                    command=command,
+                    status=status,
+                    desired_state=control.desired_state if control else "active",
+                    runtime=runtime,
+                    now=current,
+                )
+            )
         return MobileWorkstreamPage(
             items=tuple(items),
             connectivity=await self._connectivity(
@@ -84,6 +115,134 @@ class MobileEngineeringControlService:
             page_size=commands.page_size,
             total_count=commands.total_count,
             total_pages=commands.total_pages,
+        )
+
+    async def workstream_detail(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        command_id: UUID,
+        now: datetime | None = None,
+    ) -> MobileWorkstreamDetail:
+        command = await self.control.get_command(
+            session, context=context, command_id=command_id
+        )
+        status = await self.statuses.get(
+            session, context=context, command_id=command_id, now=now
+        )
+        control = await self.controls.get(
+            session, company_id=context.company.id, command_id=command_id
+        )
+        runtime = await session.scalar(
+            select(EngineeringWorkstreamRuntime).where(
+                EngineeringWorkstreamRuntime.company_id == context.company.id,
+                EngineeringWorkstreamRuntime.command_id == command_id,
+            )
+        )
+        current = now or datetime.now(timezone.utc)
+        summary = self._workstream_summary(
+            command=command,
+            status=status,
+            desired_state=control.desired_state if control else "active",
+            runtime=runtime,
+            now=current,
+        )
+        return MobileWorkstreamDetail(
+            **summary.model_dump(),
+            owner_instruction=command.owner_instruction,
+            requested_code_changes=command.requested_code_changes,
+            created_at=command.created_at,
+            started_at=status.started_at,
+            finished_at=status.finished_at,
+            timeline=tuple(
+                {"event": item.event, "occurred_at": item.occurred_at}
+                for item in status.timeline
+            ),
+        )
+
+    async def control_workstream(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        command_id: UUID,
+        action: str,
+        reason: str | None,
+        now: datetime | None = None,
+    ) -> MobileWorkstreamActionResult:
+        occurred_at = now or datetime.now(timezone.utc)
+        command = await self.control.get_command(
+            session, context=context, command_id=command_id
+        )
+        desired = "active"
+        message = "Control request accepted."
+        if action == "start":
+            if command.approval_state is not EngineeringApprovalState.APPROVED:
+                raise ValueError("Workstream must be approved before it can start.")
+            await session.rollback()
+            try:
+                await self.executions.request_execution(
+                    session, context=context, command_id=command_id, now=occurred_at
+                )
+            except EngineeringExecutionError as error:
+                raise ValueError(str(error)) from error
+            message = "Execution request queued through the existing execution service."
+        elif action == "pause":
+            status = await self.statuses.get(
+                session, context=context, command_id=command_id, now=occurred_at
+            )
+            if status.terminal:
+                raise ValueError("A terminal workstream cannot be paused.")
+            desired = "paused"
+            message = "Pause requested; observed execution status remains authoritative until the worker acknowledges it."
+        elif action == "resume":
+            desired = "active"
+            message = "Resume requested; the worker control plane may continue the workstream."
+        elif action == "cancel":
+            status = await self.statuses.get(
+                session, context=context, command_id=command_id, now=occurred_at
+            )
+            if status.terminal:
+                raise ValueError("The workstream is already terminal.")
+            desired = "cancelled"
+            message = "Cancellation requested; evidence and workspaces are preserved."
+        else:
+            raise ValueError("Unsupported workstream action.")
+        record = await self.controls.set_state(
+            session,
+            company_id=context.company.id,
+            command_id=command_id,
+            actor_user_id=context.user.id,
+            desired_state=desired,
+            requested_action=action,
+            reason=reason,
+            occurred_at=occurred_at,
+        )
+        session.add(
+            EngineeringWorkstreamEvent(
+                company_id=context.company.id,
+                command_id=command_id,
+                control_id=record.id,
+                control_version=record.version,
+                worker_id=None,
+                worker_session_id=None,
+                event_type="owner_request",
+                action=action,
+                runtime_state=None,
+                reason_code=reason,
+                idempotency_key=f"owner:{record.id}:{record.version}",
+                occurred_at=occurred_at,
+            )
+        )
+        await session.commit()
+        return MobileWorkstreamActionResult(
+            command_id=command_id,
+            action=action,
+            desired_state=record.desired_state,
+            accepted=True,
+            message=message,
+            updated_at=record.updated_at,
         )
 
     async def list_owner_reviews(
@@ -290,6 +449,9 @@ class MobileEngineeringControlService:
         *,
         command: EngineeringCommandRecord,
         status: MobileExecutionStatus,
+        desired_state: str = "active",
+        runtime: EngineeringWorkstreamRuntime | None = None,
+        now: datetime | None = None,
     ) -> MobileWorkstreamSummary:
         lifecycle, next_action, owner_action = cls._next_action(
             command=command, status=status
@@ -304,9 +466,20 @@ class MobileEngineeringControlService:
             and status.repository_operation_resulting_commit_sha is not None
             else None
         )
+        pipeline = cls._pipeline_status(
+            command=command,
+            status=status,
+            desired_state=desired_state,
+            runtime=runtime,
+            now=now or datetime.now(timezone.utc),
+        )
+        actions = cls._available_actions(
+            command=command, status=status, desired_state=desired_state
+        )
         return MobileWorkstreamSummary(
             command_id=command.id,
             ecid=command.ecid,
+            display_name=cls._display_name(command.owner_instruction),
             repository_key=command.repository_key,
             expected_branch=command.expected_branch,
             expected_head=command.expected_head,
@@ -335,7 +508,95 @@ class MobileEngineeringControlService:
                 or failure is not None
             ),
             updated_at=status.updated_at,
+            pipeline_status=pipeline,
+            desired_state=desired_state,
+            control_pending=(
+                desired_state != "active" and status.monitoring_state != "cancelled"
+            ),
+            available_actions=actions,
+            runtime_state=pipeline,
+            runtime_version=runtime.version if runtime else None,
+            acknowledged_action=runtime.acknowledged_action if runtime else None,
+            acknowledged_at=runtime.acknowledged_at if runtime else None,
+            acknowledgement_expires_at=runtime.acknowledgement_expires_at
+            if runtime
+            else None,
+            worker_health=runtime.worker_health if runtime else None,
+            progress_percent=runtime.progress_percent if runtime else None,
+            current_activity=runtime.current_activity if runtime else None,
         )
+
+    @staticmethod
+    def _display_name(owner_instruction: str) -> str:
+        normalized = " ".join(owner_instruction.split()).strip(" .")
+        if not normalized:
+            return "Engineering workstream"
+        first_sentence = normalized.split(". ", 1)[0]
+        if len(first_sentence) <= 72:
+            return first_sentence
+        return f"{first_sentence[:69].rstrip()}…"
+
+    @staticmethod
+    def _pipeline_status(
+        *,
+        command: EngineeringCommandRecord,
+        status: MobileExecutionStatus,
+        desired_state: str,
+        runtime: EngineeringWorkstreamRuntime | None,
+        now: datetime,
+    ) -> str:
+        if runtime is not None:
+            if (
+                runtime.acknowledgement_expires_at <= now
+                and runtime.runtime_state not in {"completed", "failed", "cancelled"}
+            ):
+                return "recovering"
+            return runtime.runtime_state
+        if desired_state == "cancelled" or status.monitoring_state == "cancelled":
+            return "cancelled"
+        if (
+            status.monitoring_state == "failed"
+            or status.repository_operation_status
+            in {"failed", "reconciliation_required"}
+        ):
+            return "failed"
+        if status.repository_operation_status == "succeeded":
+            return "completed"
+        if status.repository_operation_status in {"requested", "reserved", "executing"}:
+            return "deploying_preview"
+        if (
+            desired_state == "paused"
+            or status.review_state == "pending"
+            or command.approval_state is EngineeringApprovalState.AWAITING_APPROVAL
+        ):
+            return "waiting_for_owner"
+        if status.monitoring_state == "completed":
+            return "validating"
+        if status.monitoring_state == "running":
+            return "running"
+        return "queued"
+
+    @staticmethod
+    def _available_actions(
+        *,
+        command: EngineeringCommandRecord,
+        status: MobileExecutionStatus,
+        desired_state: str,
+    ) -> tuple[str, ...]:
+        if status.terminal or desired_state == "cancelled":
+            return ()
+        actions: list[str] = []
+        if (
+            command.approval_state is EngineeringApprovalState.APPROVED
+            and not status.execution_available
+        ):
+            actions.insert(0, "start")
+        if desired_state == "paused":
+            actions.insert(0, "resume")
+        elif status.execution_available:
+            actions.insert(0, "pause")
+        actions.append("cancel")
+        return tuple(actions)
 
     @staticmethod
     def _next_action(

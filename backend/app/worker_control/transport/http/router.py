@@ -1,5 +1,5 @@
 from types import MappingProxyType
-from typing import Annotated
+from typing import Annotated, Literal, cast
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, status
@@ -22,6 +22,8 @@ from app.worker_control.transport.contracts import (
     TransportMessageKind,
     TransportPayload,
     WorkerSessionRequest,
+    WorkstreamAcknowledgementMessage,
+    WorkstreamRuntimeUpdateMessage,
 )
 from app.worker_control.transport.errors import (
     TransportMessageError,
@@ -49,11 +51,15 @@ from app.worker_control.transport.http.schemas import (
     LeaseRenewalRequest,
     OfferPageResponse,
     OfferResponse,
+    PendingWorkstreamControl,
+    PendingWorkstreamControlPage,
     ProviderNormalizedResultRequest,
     ProviderProgressRequest,
     ReceiptResponse,
     ResultRequest,
     SessionResponse,
+    WorkstreamAcknowledgementRequest,
+    WorkstreamRuntimeUpdateRequest,
 )
 from app.worker_control.transport.http.service import WorkerPollingService
 from app.worker_control.transport.service import WorkerTransportService
@@ -159,7 +165,10 @@ async def poll_offers(
                 expires_at=offer.expires_at,
                 command_id=UUID(str(offer.metadata["command_id"])),
                 workspace_id=str(offer.metadata["workspace_id"]),
-                command_type="inspect_workspace",
+                command_type=cast(
+                    Literal["inspect_workspace", "execute_code"],
+                    str(offer.metadata["command_type"]),
+                ),
                 payload=dict(offer.metadata),
             )
             for offer in offers
@@ -205,7 +214,7 @@ async def acquire_controlled_offer(
         lease_id=offer.lease_id,
         lease_version=1,
         workspace_id=offer.workspace_id,
-        command_type="inspect_workspace",
+        command_type=offer.command_type.value,
         payload=dict(offer.payload),
     )
 
@@ -261,6 +270,105 @@ async def heartbeat(
         payload=HeartbeatMessage(health=data.health),
     )
     return await _handle(database, service, envelope)
+
+
+@router.get(
+    "/sessions/{session_id}/workstream-controls",
+    response_model=PendingWorkstreamControlPage,
+    summary="Fetch pending owner workstream controls",
+)
+async def pending_workstream_controls(
+    session_id: UUID,
+    identity: AuthenticatedIdentity,
+    database: Database,
+    service: TransportService,
+) -> PendingWorkstreamControlPage:
+    if session_id != identity.session_id:
+        raise transport_http_error(
+            TransportMessageError("Worker session binding is invalid.")
+        )
+    controls = await service.workstreams.pending(
+        database,
+        context=identity.context,
+        session_id=identity.session_id,
+    )
+    return PendingWorkstreamControlPage(
+        items=tuple(
+            PendingWorkstreamControl(
+                control_id=item.id,
+                command_id=item.command_id,
+                action=item.requested_action,
+                desired_state=item.desired_state,
+                version=item.version,
+                reason=item.reason,
+                requested_at=item.updated_at,
+            )
+            for item in controls
+        )
+    )
+
+
+@router.post(
+    "/workstream-controls/acknowledge",
+    response_model=ReceiptResponse,
+    summary="Acknowledge one owner workstream request",
+)
+async def acknowledge_workstream_control(
+    data: WorkstreamAcknowledgementRequest,
+    identity: AuthenticatedIdentity,
+    database: Database,
+    service: TransportService,
+) -> ReceiptResponse:
+    return await _handle(
+        database,
+        service,
+        _envelope(
+            data,
+            session_id=identity.session_id,
+            worker_id=identity.context.worker_id,
+            kind=TransportMessageKind.WORKSTREAM_ACKNOWLEDGEMENT,
+            payload=WorkstreamAcknowledgementMessage(
+                control_id=data.control_id,
+                expected_control_version=data.expected_control_version,
+                action=data.action,
+                idempotency_key=data.idempotency_key,
+                reason_code=data.reason_code,
+            ),
+        ),
+    )
+
+
+@router.post(
+    "/workstream-runtime",
+    response_model=ReceiptResponse,
+    summary="Publish live authoritative workstream runtime state",
+)
+async def publish_workstream_runtime(
+    data: WorkstreamRuntimeUpdateRequest,
+    identity: AuthenticatedIdentity,
+    database: Database,
+    service: TransportService,
+) -> ReceiptResponse:
+    return await _handle(
+        database,
+        service,
+        _envelope(
+            data,
+            session_id=identity.session_id,
+            worker_id=identity.context.worker_id,
+            kind=TransportMessageKind.WORKSTREAM_RUNTIME_UPDATE,
+            payload=WorkstreamRuntimeUpdateMessage(
+                command_id=data.command_id,
+                expected_runtime_version=data.expected_runtime_version,
+                runtime_state=data.runtime_state,
+                worker_health=data.worker_health,
+                progress_percent=data.progress_percent,
+                current_activity=data.current_activity,
+                reason_code=data.reason_code,
+                idempotency_key=data.idempotency_key,
+            ),
+        ),
+    )
 
 
 @router.post(

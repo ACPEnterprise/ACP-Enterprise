@@ -5,8 +5,6 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from app.core.config import settings
 from app.engineering_control.commands import CreateEngineeringCommand
 from app.engineering_control.service import EngineeringControlService
@@ -35,6 +33,8 @@ from app.platform.permissions.codes import (
     EngineeringCommandPermission,
     EngineeringExecutionPermission,
 )
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
 from tests.engineering_control.test_engineering_command_service import (
     ServiceFixture,
     context_with_permissions,
@@ -92,6 +92,15 @@ async def test_projection_is_honest_before_approval_and_without_execution(
                 requested_code_changes=False,
                 expires_at=utc_now() + timedelta(hours=2),
                 idempotency_key=uuid4().hex,
+                execution_boundary={
+                    "allowed_repository": "acp-enterprise",
+                    "allowed_branch": "customer-management-v1",
+                    "expected_head": "a" * 40,
+                    "allowed_paths": ["**"],
+                    "forbidden_paths": [".git/**", ".env*", "**/.env*"],
+                    "permitted_operations": ["inspect", "validate"],
+                    "validation_requirements": ["git diff --check"],
+                },
             ),
         )
 

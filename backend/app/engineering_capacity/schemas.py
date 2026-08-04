@@ -85,6 +85,25 @@ class WorkerCapacityRegister(CapacitySchema):
     idempotency_key: str = Field(min_length=8, max_length=128)
 
 
+class ExistingWorkerCapacitySetup(CapacitySchema):
+    worker_id: UUID
+    machine_label: str = Field(min_length=1, max_length=120)
+    configured_limit: int = Field(default=1, ge=1, le=20)
+    idempotency_key: str = Field(min_length=8, max_length=128)
+
+
+class EligibleWorkerResponse(CapacitySchema):
+    worker_id: UUID
+    worker_name: str
+    provider_identifier: str
+    lifecycle_state: str
+    identity_name: str
+    identity_state: str
+    last_heartbeat_at: datetime | None
+    health_state: str
+    capacity_configured: bool
+
+
 class WorkerStateUpdate(CapacitySchema):
     expected_version: int = Field(ge=1)
     reason: str = Field(min_length=1, max_length=200)
@@ -124,6 +143,11 @@ class CapacityReservationResponse(CapacitySchema):
     execution_id: UUID | None
     worker_capacity_id: UUID
     machine_label: str
+    ecid: str | None = None
+    milestone_title: str | None = None
+    milestone_position: int | None = None
+    workstream: str | None = None
+    owning_branch: str | None = None
     owner_intent_reference: str
     status: str
     transition_source: str
@@ -141,6 +165,11 @@ class CapacityAllocationResponse(CapacitySchema):
     execution_id: UUID | None
     worker_capacity_id: UUID
     machine_label: str
+    ecid: str | None = None
+    milestone_title: str | None = None
+    milestone_position: int | None = None
+    workstream: str | None = None
+    owning_branch: str | None = None
     status: str
     transition_source: str
     allocated_at: datetime
@@ -154,6 +183,17 @@ class CapacityQueueItem(CapacitySchema):
     ecid: str
     repository_key: str
     expected_branch: str
+    milestone_id: UUID | None
+    milestone_title: str | None
+    milestone_position: int | None
+    workstream: str | None
+    roadmap_title: str | None
+    owning_branch: str | None
+    identity_state: Literal["resolved", "reconciliation_required"]
+    assigned_worker_id: UUID | None
+    assigned_worker_name: str | None
+    machine_label: str | None
+    capacity_amount: int
     requested_at: datetime
     decision: CapacityDecision
     reason: str
@@ -169,6 +209,7 @@ class CapacitySummaryResponse(CapacitySchema):
     unhealthy_workers: int
     reconciliation_required: int
     workers: tuple[WorkerCapacityResponse, ...]
+    eligible_workers: tuple[EligibleWorkerResponse, ...]
     machines: tuple[CapacityMachineResponse, ...]
     active_reservations: tuple[CapacityReservationResponse, ...]
     active_allocations: tuple[CapacityAllocationResponse, ...]

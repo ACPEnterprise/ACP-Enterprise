@@ -5,10 +5,6 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import func, select
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from app.core.config import settings
 from app.engineering_control.commands import (
     ApproveEngineeringCommand,
@@ -41,6 +37,10 @@ from app.platform.permissions.codes import (
     EngineeringCommandPermission,
     EngineeringExecutionPermission,
 )
+from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
 from tests.engineering_control.test_engineering_command_service import (
     ServiceFixture,
     context_with_permissions,
@@ -134,6 +134,19 @@ async def approved_command(
                 requested_code_changes=requested_code_changes,
                 expires_at=now + timedelta(hours=expires_in_hours),
                 idempotency_key=uuid4().hex,
+                execution_boundary={
+                    "allowed_repository": "acp-enterprise",
+                    "allowed_branch": expected_branch,
+                    "expected_head": expected_head,
+                    "allowed_paths": ["backend/app/**"],
+                    "forbidden_paths": [".git/**", ".env*", "**/.env*"],
+                    "permitted_operations": [
+                        "inspect",
+                        "validate",
+                        *(["modify", "commit"] if requested_code_changes else []),
+                    ],
+                    "validation_requirements": ["git diff --check"],
+                },
             ),
             now=now,
         )
@@ -150,6 +163,7 @@ async def approved_command(
                 expected_branch=command.expected_branch,
                 expected_head=command.expected_head,
                 requested_code_changes=command.requested_code_changes,
+                execution_boundary_digest=command.execution_boundary_digest,
             ),
             now=now + timedelta(minutes=1),
         )
@@ -303,6 +317,15 @@ async def test_permission_membership_and_command_eligibility_fail_closed(
                 requested_code_changes=False,
                 expires_at=now + timedelta(hours=1),
                 idempotency_key=uuid4().hex,
+                execution_boundary={
+                    "allowed_repository": "acp-enterprise",
+                    "allowed_branch": "customer-management-v1",
+                    "expected_head": "b" * 40,
+                    "allowed_paths": ["**"],
+                    "forbidden_paths": [".git/**", ".env*", "**/.env*"],
+                    "permitted_operations": ["inspect", "validate"],
+                    "validation_requirements": ["git diff --check"],
+                },
             ),
             now=now,
         )

@@ -92,6 +92,7 @@ class MobileOwnerReviewPage(MobileEngineeringSchema):
 class MobileWorkstreamSummary(MobileEngineeringSchema):
     command_id: UUID
     ecid: str
+    display_name: str
     repository_key: str
     expected_branch: str
     expected_head: str
@@ -116,6 +117,47 @@ class MobileWorkstreamSummary(MobileEngineeringSchema):
     repository_clean: bool | None
     owner_attention_required: bool
     updated_at: datetime
+    pipeline_status: str
+    desired_state: str
+    control_pending: bool
+    available_actions: tuple[str, ...]
+    runtime_state: str
+    runtime_version: int | None
+    acknowledged_action: str | None
+    acknowledged_at: datetime | None
+    acknowledgement_expires_at: datetime | None
+    worker_health: str | None
+    progress_percent: int | None
+    current_activity: str | None
+    acknowledgement_latency_ms: int | None = None
+    execution_latency_ms: int | None = None
+    validation_latency_ms: int | None = None
+    deployment_latency_ms: int | None = None
+    worker_uptime_seconds: int | None = None
+    reconnect_count: int = 0
+
+
+class MobileWorkstreamDetail(MobileWorkstreamSummary):
+    owner_instruction: str
+    requested_code_changes: bool
+    created_at: datetime
+    started_at: datetime | None
+    finished_at: datetime | None
+    timeline: tuple[dict[str, object], ...]
+
+
+class MobileWorkstreamActionRequest(MobileEngineeringSchema):
+    action: str = Field(pattern=r"^(start|pause|resume|cancel)$")
+    reason: str | None = Field(default=None, max_length=240)
+
+
+class MobileWorkstreamActionResult(MobileEngineeringSchema):
+    command_id: UUID
+    action: str
+    desired_state: str
+    accepted: bool
+    message: str
+    updated_at: datetime
 
 
 class MobileWorkstreamPage(MobileEngineeringSchema):
@@ -125,6 +167,39 @@ class MobileWorkstreamPage(MobileEngineeringSchema):
     page_size: int = Field(ge=1, le=100)
     total_count: int = Field(ge=0)
     total_pages: int = Field(ge=0)
+
+
+class MissionNotificationItem(MobileEngineeringSchema):
+    id: UUID
+    command_id: UUID
+    kind: str
+    severity: str
+    status: str
+    created_at: datetime
+    escalated_at: datetime | None
+    acknowledged_at: datetime | None
+    read_at: datetime | None
+    archived_at: datetime | None
+    version: int
+
+
+class MissionNotificationPage(MobileEngineeringSchema):
+    items: tuple[MissionNotificationItem, ...]
+    unread_count: int = Field(ge=0)
+    escalated_count: int = Field(ge=0)
+    page: int = Field(ge=1)
+    page_size: int = Field(ge=1, le=100)
+    total_count: int = Field(ge=0)
+    total_pages: int = Field(ge=0)
+
+
+class MissionNotificationAcknowledgement(MobileEngineeringSchema):
+    expected_version: int = Field(ge=1)
+
+
+class MissionNotificationTransition(MobileEngineeringSchema):
+    expected_version: int = Field(ge=1)
+    action: str = Field(pattern=r"^(read|archive)$")
 
 
 class MobileApprovalRequest(MobileEngineeringSchema):
@@ -140,3 +215,165 @@ class MobileApprovalRequest(MobileEngineeringSchema):
 class MobileCancellationRequest(MobileEngineeringSchema):
     expected_version: int = Field(ge=1)
     reason_code: EngineeringCancellationReason
+
+
+class MilestoneDefinitionCreate(MobileEngineeringSchema):
+    title: str = Field(min_length=1, max_length=160)
+    objective: str = Field(min_length=1, max_length=10000)
+    owning_workstream: str | None = Field(default=None, min_length=1, max_length=100)
+    owning_branch: str | None = Field(default=None, min_length=1, max_length=255)
+    authority: tuple[str, ...] = ()
+    constraints: tuple[str, ...] = ()
+    dependencies: tuple[str, ...] = ()
+    validation: tuple[str, ...] = ()
+    deliverables: tuple[str, ...] = ()
+    stop_conditions: tuple[str, ...] = ()
+    expected_completion_evidence: tuple[str, ...] = ()
+    approved: bool = False
+    requested_code_changes: bool = True
+
+
+class RoadmapCreate(MobileEngineeringSchema):
+    title: str = Field(min_length=1, max_length=160)
+    repository_key: str = Field(min_length=1, max_length=100)
+    expected_branch: str = Field(min_length=1, max_length=255)
+    expected_head: str = Field(pattern=r"^[0-9a-f]{40}$")
+    milestones: tuple[MilestoneDefinitionCreate, ...] = Field(min_length=1)
+
+
+class RoadmapItem(MobileEngineeringSchema):
+    id: UUID
+    title: str
+    repository_key: str
+    expected_branch: str
+    expected_head: str
+    status: str
+    version: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class MilestoneItem(MobileEngineeringSchema):
+    id: UUID
+    roadmap_id: UUID
+    position: int
+    title: str
+    objective: str
+    owning_workstream: str
+    owning_branch: str
+    authority: tuple[str, ...]
+    constraints: tuple[str, ...]
+    dependencies: tuple[str, ...]
+    validation: tuple[str, ...]
+    deliverables: tuple[str, ...]
+    stop_conditions: tuple[str, ...]
+    expected_completion_evidence: tuple[str, ...]
+    status: str
+    definition_approved: bool
+    requested_code_changes: bool
+    externally_adoptable: bool = False
+    attention_class: str = Field(
+        default="informational",
+        pattern=r"^(owner_action_required|running|waiting_on_dependency|waiting_on_capacity|waiting_on_external|informational)$",
+    )
+    attention_reason: str = "No owner action is required."
+    available_owner_actions: tuple[str, ...] = ()
+    estimated_start_at: datetime | None = None
+    worker_capacity_summary: str | None = None
+    queue_position: int | None = Field(default=None, ge=1)
+    external_evidence: str | None
+    command_id: UUID | None
+    version: int
+    started_at: datetime | None
+    completed_at: datetime | None
+    reviewed_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+    external_adoption: "ExternalAdoptionItem | None" = None
+
+
+class ExternalAdoptionCreate(MobileEngineeringSchema):
+    repository_key: str = Field(min_length=1, max_length=100)
+    branch: str = Field(min_length=1, max_length=255)
+    starting_head: str = Field(pattern=r"^[0-9a-f]{40}$")
+    starting_repository_clean: bool
+    worktree_identity: str | None = Field(default=None, max_length=500)
+    owning_external_workstream: str = Field(min_length=1, max_length=160)
+    declared_scope: tuple[str, ...] = Field(min_length=1, max_length=50)
+    protected_boundaries: tuple[str, ...] = Field(min_length=1, max_length=50)
+    expected_deliverables: tuple[str, ...] = Field(min_length=1, max_length=50)
+    validation_requirements: tuple[str, ...] = Field(min_length=1, max_length=50)
+    evidence_format: str = Field(min_length=1, max_length=80)
+    responsible_source: str = Field(min_length=1, max_length=160)
+
+
+class ExternalEvidenceCreate(MobileEngineeringSchema):
+    expected_adoption_version: int = Field(ge=1)
+    status: str = Field(
+        pattern=r"^(pending_start|externally_running|externally_validating|externally_blocked|completed)$"
+    )
+    progress_percent: int = Field(ge=0, le=100)
+    current_activity: str | None = Field(default=None, max_length=500)
+    starting_head: str = Field(pattern=r"^[0-9a-f]{40}$")
+    current_head: str = Field(pattern=r"^[0-9a-f]{40}$")
+    commits: tuple[str, ...] = Field(max_length=100)
+    files_changed: tuple[str, ...] = Field(max_length=500)
+    validation_results: tuple[str, ...] = Field(max_length=100)
+    dependencies: tuple[str, ...] = Field(max_length=100)
+    blockers: tuple[str, ...] = Field(max_length=100)
+    completion_evidence: tuple[str, ...] = Field(max_length=100)
+    owner_action_required: bool
+    repository_state: str = Field(pattern=r"^(clean|dirty)$")
+    occurred_at: datetime
+    idempotency_key: str = Field(pattern=r"^[A-Za-z0-9._:-]{8,128}$")
+    correction: bool = False
+    evidence_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
+class ExternalAdoptionItem(MobileEngineeringSchema):
+    id: UUID
+    repository_key: str
+    branch: str
+    starting_head: str
+    current_head: str
+    worktree_identity: str | None
+    owning_external_workstream: str
+    status: str
+    progress_percent: int
+    current_activity: str | None
+    last_evidence_at: datetime | None
+    responsible_source: str
+    adopted_at: datetime
+    version: int
+    mission_control_dispatched: bool = False
+    validation_summary: tuple[str, ...] = ()
+    blockers: tuple[str, ...] = ()
+    evidence_stale: bool = False
+    next_owner_action: str = "none"
+
+
+class RoadmapPage(MobileEngineeringSchema):
+    roadmaps: tuple[RoadmapItem, ...]
+    milestones: tuple[MilestoneItem, ...]
+    waiting_for_me: tuple[MilestoneItem, ...]
+    owner_attention: tuple[MilestoneItem, ...]
+    running_milestones: tuple[MilestoneItem, ...]
+    dependency_waiting_milestones: tuple[MilestoneItem, ...]
+    capacity_waiting_milestones: tuple[MilestoneItem, ...]
+    external_work_milestones: tuple[MilestoneItem, ...]
+    completed_recently: tuple[MilestoneItem, ...]
+    current_milestones: tuple[MilestoneItem, ...]
+    next_approved_milestones: tuple[MilestoneItem, ...]
+    future_milestones: tuple[MilestoneItem, ...]
+    completed_milestones: tuple[MilestoneItem, ...]
+    blocked_milestones: tuple[MilestoneItem, ...]
+    actionable_count: int = Field(ge=0)
+    projection_warnings: tuple[str, ...] = ()
+
+
+class MilestoneActionRequest(MobileEngineeringSchema):
+    action: str = Field(
+        pattern=r"^(start|approve|reject|request_revision|skip|pause|resume|cancel|archive)$"
+    )
+    expected_version: int = Field(ge=1)
+    reason: str | None = Field(default=None, max_length=240)

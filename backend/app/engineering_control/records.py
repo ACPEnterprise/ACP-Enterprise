@@ -40,6 +40,8 @@ class CreateEngineeringCommand:
     expires_at: datetime
     created_at: datetime
     correlation_id: UUID = field(default_factory=uuid4)
+    execution_boundary: dict[str, object] = field(default_factory=dict)
+    execution_boundary_digest: str = ""
 
 
 @dataclass(frozen=True)
@@ -71,6 +73,8 @@ class EngineeringCommandRecord:
     canceled_at: datetime | None
     canceled_by_user_id: UUID | None
     result_reference: str | None
+    execution_boundary: Mapping[str, object] = field(default_factory=dict)
+    execution_boundary_digest: str = ""
 
 
 @dataclass(frozen=True)

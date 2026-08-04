@@ -2,7 +2,7 @@ import { createBrowserRouter, type RouteObject } from "react-router";
 
 import { ApplicationShell } from "../layout";
 import { ProtectedRoute } from "../auth";
-import { appointmentsHandle, commandCenterHandle, customerDetailHandle, customersHandle, dispatchHandle, engineeringHandle, jobsHandle, missionControlHandle, notFoundHandle } from "./routeMetadata";
+import { administrationHandle, appointmentsHandle, commandCenterHandle, customerDetailHandle, customersHandle, dispatchHandle, engineeringHandle, jobsHandle, missionControlHandle, notFoundHandle } from "./routeMetadata";
 
 export const appRoutes: RouteObject[] = [
   {
@@ -79,6 +79,11 @@ export const appRoutes: RouteObject[] = [
             path: "engineering/:commandId",
             handle: engineeringHandle,
             lazy: async () => ({ Component: (await import("../features/engineering-mobile/MobileEngineeringDetailPage")).MobileEngineeringDetailPage }),
+          },
+          {
+            path: "administration",
+            handle: administrationHandle,
+            lazy: async () => ({ Component: (await import("../features/administration/AdministrationRoute")).AdministrationRoute }),
           },
           {
             path: "*",

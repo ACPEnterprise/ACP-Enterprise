@@ -33,6 +33,7 @@ const authenticatedContext: AuthenticationContextValue = {
   signIn: vi.fn(),
   signOut: vi.fn(),
   signOutAll: vi.fn(),
+  requireReauthentication: vi.fn(),
 };
 
 function renderRoute(path: string, context: AuthenticationContextValue = authenticatedContext) {

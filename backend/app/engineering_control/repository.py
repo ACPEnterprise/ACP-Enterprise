@@ -63,6 +63,8 @@ class EngineeringCommandRepository:
             expected_branch=command.expected_branch,
             expected_head=command.expected_head,
             requested_code_changes=command.requested_code_changes,
+            execution_boundary=command.execution_boundary,
+            execution_boundary_digest=command.execution_boundary_digest,
             approval_state=EngineeringApprovalState.AWAITING_APPROVAL.value,
             execution_state=EngineeringExecutionState.EXECUTION_NOT_CONNECTED.value,
             idempotency_key=command.idempotency_key,
@@ -395,6 +397,8 @@ def _command_record(entity: EngineeringCommand) -> EngineeringCommandRecord:
         canceled_at=entity.canceled_at,
         canceled_by_user_id=entity.canceled_by_user_id,
         result_reference=entity.result_reference,
+        execution_boundary=MappingProxyType(dict(entity.execution_boundary)),
+        execution_boundary_digest=entity.execution_boundary_digest,
     )
 
 

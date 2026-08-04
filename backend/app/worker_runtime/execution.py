@@ -1,3 +1,5 @@
+import hashlib
+import hmac
 import json
 import re
 from collections.abc import Mapping
@@ -5,9 +7,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from uuid import UUID
 
+import httpx
+
 
 class IsolatedWorkspaceExecutionError(Exception):
     pass
+
+
+class AmbiguousProviderExecutionError(Exception):
+    """Provider outcome is unknown and must never be converted into a retry."""
 
 
 SHA = re.compile(r"^[0-9a-f]{40}$")
@@ -101,6 +109,83 @@ class IsolatedWorkspaceExecutor:
             "file_count": len(boundary),
             "file_boundary": tuple(sorted(boundary)),
             "repository_mutated": False,
+        }
+
+
+class NodeExecutionProviderClient:
+    """Forwards a leased immutable contract to the node-local provider only."""
+
+    def __init__(
+        self, base_url: str, token_file: Path, timeout_seconds: int = 7300
+    ) -> None:
+        stat = token_file.stat()
+        if stat.st_mode & 0o077:
+            raise PermissionError("Provider token permissions must be 600.")
+        self.base_url = base_url.rstrip("/")
+        self.token = token_file.read_bytes().strip()
+        self.timeout_seconds = timeout_seconds
+
+    async def execute(self, offer: AcquiredControlledOffer) -> dict[str, object]:
+        if offer.command_type != "execute_code":
+            raise IsolatedWorkspaceExecutionError("Provider command type is invalid.")
+        required = {
+            "node_id",
+            "command_id",
+            "execution_id",
+            "instruction",
+            "instruction_digest",
+            "request_digest",
+            "boundary",
+            "boundary_digest",
+            "commit_subject",
+        }
+        if not required <= set(offer.payload):
+            raise IsolatedWorkspaceExecutionError("Provider contract is incomplete.")
+        payload = {
+            "company_id": str(offer.payload["company_id"]),
+            "node_id": str(offer.payload["node_id"]),
+            "command_id": str(offer.payload["command_id"]),
+            "execution_id": str(offer.payload["execution_id"]),
+            "lease_id": str(offer.lease_id),
+            "workspace_id": offer.workspace_id,
+            "instruction": offer.payload["instruction"],
+            "instruction_digest": offer.payload["instruction_digest"],
+            "request_digest": offer.payload["request_digest"],
+            "boundary_digest": offer.payload["boundary_digest"],
+            "boundary": offer.payload["boundary"],
+            "commit_subject": offer.payload["commit_subject"],
+        }
+        canonical = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+        signature = hmac.new(self.token, canonical, hashlib.sha256).hexdigest()
+        async with httpx.AsyncClient(
+            base_url=self.base_url, timeout=self.timeout_seconds
+        ) as client:
+            response = await client.post(
+                "/execute",
+                content=canonical,
+                headers={
+                    "Content-Type": "application/json",
+                    "X-ACP-Provider-Signature": signature,
+                },
+            )
+        if response.status_code != 200:
+            raise AmbiguousProviderExecutionError(
+                "Node Execution Provider rejected work."
+            )
+        result = response.json()
+        return {
+            "workspace_id": offer.workspace_id,
+            "repository_key": offer.payload["repository_key"],
+            "branch": offer.payload["expected_branch"],
+            "head": result["result_head"],
+            "starting_head": result["starting_head"],
+            "commit_sha": result["commit_sha"],
+            "clean": True,
+            "file_count": len(result["files_changed"]),
+            "file_boundary": result["files_changed"],
+            "validation": result["validation"],
+            "evidence": result["evidence"],
+            "repository_mutated": True,
         }
 
 

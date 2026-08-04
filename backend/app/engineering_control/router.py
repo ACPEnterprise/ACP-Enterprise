@@ -27,7 +27,6 @@ from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import EngineeringCommandPermission
 from app.platform.permissions.dependencies import require_permission
 
-
 router = APIRouter(prefix="/api/v1/engineering-commands", tags=["Engineering Commands"])
 DatabaseSession = Annotated[AsyncSession, Depends(get_database_session)]
 ReadContext = Annotated[

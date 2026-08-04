@@ -31,6 +31,7 @@ const authentication: AuthenticationContextValue = {
   signIn: async () => undefined,
   signOut: async () => undefined,
   signOutAll: async () => undefined,
+  requireReauthentication: () => undefined,
 };
 
 function AuthenticatedHeader({ metadata }: { metadata: { pageTitle: string; breadcrumbs: Array<{ label: string; path?: string }> } }) {

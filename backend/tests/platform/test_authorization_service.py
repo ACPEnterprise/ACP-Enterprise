@@ -408,6 +408,7 @@ async def test_router_dependency_enforces_permission_and_branch_scope(
         return fixture.authenticated
 
     app.dependency_overrides[get_database_session] = database_override
+    app.dependency_overrides[get_security_database_session] = database_override
     app.dependency_overrides[get_authenticated_context] = identity_override
 
     @app.get("/allowed")
