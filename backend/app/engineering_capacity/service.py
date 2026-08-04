@@ -5,7 +5,10 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.engineering_control.mobile.roadmaps import EngineeringMilestone
+from app.engineering_control.mobile.roadmaps import (
+    EngineeringMilestone,
+    EngineeringRoadmap,
+)
 from app.engineering_control.models import EngineeringCommand
 from app.engineering_control.workstream_runtime import EngineeringWorkstreamRuntime
 from app.platform.audit.service import AuditEntry, audit_service
@@ -133,7 +136,13 @@ class EngineeringCapacityService:
         reservations = await self._reservation_responses(session, company_id)
         allocations = await self._allocation_responses(session, company_id)
         queue = await self._queue(
-            session, company_id, policy, workers, reservations, allocations
+            session,
+            company_id,
+            policy,
+            workers,
+            eligible_workers,
+            reservations,
+            allocations,
         )
         configured = sum(worker.configured_limit for worker in workers)
         allocated = sum(worker.allocated_capacity for worker in workers)
@@ -650,6 +659,9 @@ class EngineeringCapacityService:
                     raise CapacityConflictError(
                         "Only an approved Engineering Command may reserve capacity."
                     )
+                await self._require_unambiguous_milestone(
+                    session, context.company.id, command.id
+                )
                 policy = await self._require_policy(
                     session, context.company.id, lock=True
                 )
@@ -660,7 +672,7 @@ class EngineeringCapacityService:
                     raise CapacityUnavailableError(
                         "System capacity is fully reserved or allocated."
                     )
-                capacity, machine = await self._select_worker(
+                capacity, _ = await self._select_worker(
                     session,
                     context.company.id,
                     data.worker_id,
@@ -708,7 +720,7 @@ class EngineeringCapacityService:
                         "transition_source": data.transition_source,
                     },
                 )
-            return self._reservation_response_value(reservation, machine.machine_label)
+            return await self._reservation_response(session, reservation)
         except IntegrityError as error:
             await session.rollback()
             raise CapacityConflictError(
@@ -764,7 +776,7 @@ class EngineeringCapacityService:
                     raise CapacityConflictError(
                         "Reservation is not eligible for allocation."
                     )
-                capacity, machine = await self._require_capacity_id(
+                capacity, _ = await self._require_capacity_id(
                     session,
                     context.company.id,
                     reservation.worker_capacity_id,
@@ -811,7 +823,7 @@ class EngineeringCapacityService:
                     reservation_id=reservation.id,
                     allocation_id=allocation.id,
                 )
-            return self._allocation_response_value(allocation, machine.machine_label)
+            return await self._allocation_response(session, allocation)
         except IntegrityError as error:
             await session.rollback()
             raise CapacityConflictError(
@@ -846,7 +858,7 @@ class EngineeringCapacityService:
                 raise CapacityConflictError(
                     "Reservation state or version is not releasable."
                 )
-            capacity, machine = await self._require_capacity_id(
+            capacity, _ = await self._require_capacity_id(
                 session, context.company.id, reservation.worker_capacity_id, lock=True
             )
             capacity.reserved_capacity -= 1
@@ -866,7 +878,7 @@ class EngineeringCapacityService:
                 reservation_id=reservation.id,
                 details={"reason": data.reason},
             )
-        return self._reservation_response_value(reservation, machine.machine_label)
+        return await self._reservation_response(session, reservation)
 
     async def release_allocation(
         self,
@@ -896,7 +908,7 @@ class EngineeringCapacityService:
                 raise CapacityConflictError(
                     "Allocation state or version is not releasable."
                 )
-            capacity, machine = await self._require_capacity_id(
+            capacity, _ = await self._require_capacity_id(
                 session, context.company.id, allocation.worker_capacity_id, lock=True
             )
             capacity.allocated_capacity -= 1
@@ -916,7 +928,7 @@ class EngineeringCapacityService:
                 allocation_id=allocation.id,
                 details={"reason": data.reason},
             )
-        return self._allocation_response_value(allocation, machine.machine_label)
+        return await self._allocation_response(session, allocation)
 
     async def reconcile(
         self,
@@ -944,7 +956,7 @@ class EngineeringCapacityService:
                 raise CapacityReconciliationRequiredError(
                     "Allocation is not at the expected reconciliation state."
                 )
-            capacity, machine = await self._require_capacity_id(
+            capacity, _ = await self._require_capacity_id(
                 session, context.company.id, allocation.worker_capacity_id, lock=True
             )
             if data.resolution == "confirmed_released":
@@ -975,7 +987,7 @@ class EngineeringCapacityService:
                 allocation.id,
                 {"resolution": data.resolution, "reason": data.reason},
             )
-        return self._allocation_response_value(allocation, machine.machine_label)
+        return await self._allocation_response(session, allocation)
 
     async def reconcile_reservation(
         self,
@@ -1003,7 +1015,7 @@ class EngineeringCapacityService:
                 raise CapacityReconciliationRequiredError(
                     "Reservation is not at the expected reconciliation state."
                 )
-            capacity, machine = await self._require_capacity_id(
+            capacity, _ = await self._require_capacity_id(
                 session, context.company.id, reservation.worker_capacity_id, lock=True
             )
             if data.resolution == "confirmed_released":
@@ -1027,7 +1039,7 @@ class EngineeringCapacityService:
                 reservation_id=reservation.id,
                 details={"resolution": data.resolution, "reason": data.reason},
             )
-        return self._reservation_response_value(reservation, machine.machine_label)
+        return await self._reservation_response(session, reservation)
 
     async def _require_policy(
         self, session: AsyncSession, company_id: UUID, *, lock: bool
@@ -1170,18 +1182,23 @@ class EngineeringCapacityService:
         company_id: UUID,
         policy: EngineeringCapacityPolicy | None,
         workers: tuple[WorkerCapacityResponse, ...],
+        eligible_workers: tuple[EligibleWorkerResponse, ...],
         reservations: tuple[CapacityReservationResponse, ...],
         allocations: tuple[CapacityAllocationResponse, ...],
     ) -> tuple[CapacityQueueItem, ...]:
         held = {item.command_id for item in reservations} | {
             item.command_id for item in allocations
         }
-        commands = (
-            await session.scalars(
-                select(EngineeringCommand)
+        rows = (
+            await session.execute(
+                select(EngineeringCommand, EngineeringMilestone, EngineeringRoadmap)
                 .join(
                     EngineeringMilestone,
                     EngineeringMilestone.command_id == EngineeringCommand.id,
+                )
+                .join(
+                    EngineeringRoadmap,
+                    EngineeringRoadmap.id == EngineeringMilestone.roadmap_id,
                 )
                 .outerjoin(
                     EngineeringWorkstreamRuntime,
@@ -1192,6 +1209,7 @@ class EngineeringCapacityService:
                     EngineeringCommand.approval_state == "approved",
                     EngineeringCommand.execution_state == "execution_not_connected",
                     EngineeringMilestone.company_id == company_id,
+                    EngineeringRoadmap.company_id == company_id,
                     EngineeringMilestone.status == "running",
                     or_(
                         EngineeringWorkstreamRuntime.id.is_(None),
@@ -1203,23 +1221,117 @@ class EngineeringCapacityService:
                 .order_by(EngineeringCommand.approved_at, EngineeringCommand.created_at)
             )
         ).all()
+        identities: dict[
+            UUID,
+            list[tuple[EngineeringCommand, EngineeringMilestone, EngineeringRoadmap]],
+        ] = {}
+        for command, milestone, roadmap in rows:
+            identities.setdefault(command.id, []).append((command, milestone, roadmap))
         result: list[CapacityQueueItem] = []
-        for command in commands:
+        worker_names = {item.worker_id: item.worker_name for item in eligible_workers}
+        for command_id, matches in identities.items():
+            command = matches[0][0]
             if command.id in held:
                 continue
-            decision, reason = self._decision(policy, workers)
+            identity_resolved = len(matches) == 1
+            if identity_resolved:
+                _, milestone, roadmap = matches[0]
+                decision, reason = self._decision(policy, workers)
+                assigned = self._recommended_worker(workers, decision)
+            else:
+                milestone = None
+                roadmap = None
+                assigned = None
+                decision = "reconciliation_required"
+                reason = (
+                    "The Engineering Command is linked to multiple active milestones; "
+                    "milestone identity must be reconciled before capacity can be reserved."
+                )
             result.append(
                 CapacityQueueItem(
-                    command_id=command.id,
+                    command_id=command_id,
                     ecid=command.ecid,
                     repository_key=command.repository_key,
                     expected_branch=command.expected_branch,
+                    milestone_id=milestone.id if milestone else None,
+                    milestone_title=milestone.title if milestone else None,
+                    milestone_position=milestone.position if milestone else None,
+                    workstream=milestone.owning_workstream if milestone else None,
+                    roadmap_title=roadmap.title if roadmap else None,
+                    owning_branch=milestone.owning_branch if milestone else None,
+                    identity_state=(
+                        "resolved" if identity_resolved else "reconciliation_required"
+                    ),
+                    assigned_worker_id=assigned.worker_id if assigned else None,
+                    assigned_worker_name=(
+                        worker_names.get(assigned.worker_id) if assigned else None
+                    ),
+                    machine_label=assigned.machine_label if assigned else None,
+                    capacity_amount=1,
                     requested_at=command.approved_at or command.created_at,
                     decision=decision,
                     reason=reason,
                 )
             )
         return tuple(result)
+
+    async def _command_identity(
+        self, session: AsyncSession, company_id: UUID, command_id: UUID
+    ) -> tuple[EngineeringCommand, EngineeringMilestone, EngineeringRoadmap] | None:
+        rows = (
+            await session.execute(
+                select(EngineeringCommand, EngineeringMilestone, EngineeringRoadmap)
+                .join(
+                    EngineeringMilestone,
+                    EngineeringMilestone.command_id == EngineeringCommand.id,
+                )
+                .join(
+                    EngineeringRoadmap,
+                    EngineeringRoadmap.id == EngineeringMilestone.roadmap_id,
+                )
+                .where(
+                    EngineeringCommand.company_id == company_id,
+                    EngineeringCommand.id == command_id,
+                    EngineeringMilestone.company_id == company_id,
+                    EngineeringRoadmap.company_id == company_id,
+                )
+            )
+        ).all()
+        if len(rows) != 1:
+            return None
+        command, milestone, roadmap = rows[0]
+        return command, milestone, roadmap
+
+    async def _require_unambiguous_milestone(
+        self, session: AsyncSession, company_id: UUID, command_id: UUID
+    ) -> tuple[EngineeringCommand, EngineeringMilestone, EngineeringRoadmap]:
+        identity = await self._command_identity(session, company_id, command_id)
+        if identity is None:
+            raise CapacityReconciliationRequiredError(
+                "Engineering Command milestone identity must be reconciled before capacity can be reserved."
+            )
+        return identity
+
+    @staticmethod
+    def _recommended_worker(
+        workers: tuple[WorkerCapacityResponse, ...], decision: CapacityDecision
+    ) -> WorkerCapacityResponse | None:
+        if decision != "capacity_available":
+            return None
+        eligible = sorted(
+            (
+                worker
+                for worker in workers
+                if worker.operational_state in USABLE_STATES
+                and worker.health_state == "healthy"
+                and worker.available_capacity > 0
+            ),
+            key=lambda worker: (
+                worker.allocated_capacity + worker.reserved_capacity,
+                worker.machine_label,
+            ),
+        )
+        return eligible[0] if eligible else None
 
     async def _eligible_workers(
         self,
@@ -1341,8 +1453,12 @@ class EngineeringCapacityService:
             )
         ).all()
         return tuple(
-            self._reservation_response_value(item, machine.machine_label)
-            for item, machine in rows
+            [
+                await self._reservation_response_value(
+                    session, item, machine.machine_label
+                )
+                for item, machine in rows
+            ]
         )
 
     async def _allocation_responses(
@@ -1369,8 +1485,12 @@ class EngineeringCapacityService:
             )
         ).all()
         return tuple(
-            self._allocation_response_value(item, machine.machine_label)
-            for item, machine in rows
+            [
+                await self._allocation_response_value(
+                    session, item, machine.machine_label
+                )
+                for item, machine in rows
+            ]
         )
 
     async def _reservation_response(
@@ -1379,7 +1499,9 @@ class EngineeringCapacityService:
         _, machine = await self._require_capacity_id(
             session, reservation.company_id, reservation.worker_capacity_id, lock=False
         )
-        return self._reservation_response_value(reservation, machine.machine_label)
+        return await self._reservation_response_value(
+            session, reservation, machine.machine_label
+        )
 
     async def _allocation_response(
         self, session: AsyncSession, allocation: EngineeringCapacityAllocation
@@ -1387,7 +1509,9 @@ class EngineeringCapacityService:
         _, machine = await self._require_capacity_id(
             session, allocation.company_id, allocation.worker_capacity_id, lock=False
         )
-        return self._allocation_response_value(allocation, machine.machine_label)
+        return await self._allocation_response_value(
+            session, allocation, machine.machine_label
+        )
 
     @staticmethod
     def _worker_response(
@@ -1413,16 +1537,27 @@ class EngineeringCapacityService:
             version=capacity.version,
         )
 
-    @staticmethod
-    def _reservation_response_value(
-        item: EngineeringCapacityReservation, label: str
+    async def _reservation_response_value(
+        self,
+        session: AsyncSession,
+        item: EngineeringCapacityReservation,
+        label: str,
     ) -> CapacityReservationResponse:
+        identity = await self._command_identity(
+            session, item.company_id, item.command_id
+        )
+        command, milestone, _ = identity if identity else (None, None, None)
         return CapacityReservationResponse(
             id=item.id,
             command_id=item.command_id,
             execution_id=item.execution_id,
             worker_capacity_id=item.worker_capacity_id,
             machine_label=label,
+            ecid=command.ecid if command else None,
+            milestone_title=milestone.title if milestone else None,
+            milestone_position=milestone.position if milestone else None,
+            workstream=milestone.owning_workstream if milestone else None,
+            owning_branch=milestone.owning_branch if milestone else None,
             owner_intent_reference=item.owner_intent_reference,
             status=item.status,
             transition_source=item.transition_source,
@@ -1433,10 +1568,16 @@ class EngineeringCapacityService:
             version=item.version,
         )
 
-    @staticmethod
-    def _allocation_response_value(
-        item: EngineeringCapacityAllocation, label: str
+    async def _allocation_response_value(
+        self,
+        session: AsyncSession,
+        item: EngineeringCapacityAllocation,
+        label: str,
     ) -> CapacityAllocationResponse:
+        identity = await self._command_identity(
+            session, item.company_id, item.command_id
+        )
+        command, milestone, _ = identity if identity else (None, None, None)
         return CapacityAllocationResponse(
             id=item.id,
             reservation_id=item.reservation_id,
@@ -1444,6 +1585,11 @@ class EngineeringCapacityService:
             execution_id=item.execution_id,
             worker_capacity_id=item.worker_capacity_id,
             machine_label=label,
+            ecid=command.ecid if command else None,
+            milestone_title=milestone.title if milestone else None,
+            milestone_position=milestone.position if milestone else None,
+            workstream=milestone.owning_workstream if milestone else None,
+            owning_branch=milestone.owning_branch if milestone else None,
             status=item.status,
             transition_source=item.transition_source,
             allocated_at=item.allocated_at,

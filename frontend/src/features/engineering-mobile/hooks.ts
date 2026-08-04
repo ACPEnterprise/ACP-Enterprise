@@ -5,6 +5,7 @@ import * as mobileApi from "./api";
 import type {
   CapacityAllocation,
   CapacityReservation,
+  CapacityQueueItem,
   WorkerCapacity,
   EligibleCapacityWorker,
   MobileReviewApproval,
@@ -154,7 +155,7 @@ export function useWorkerStateMutation() {
 }
 
 export function useReservationMutation() {
-  return useCapacityMutation<string>(mobileApi.reserveWorkstreamCapacity);
+  return useCapacityMutation<CapacityQueueItem>(mobileApi.reserveWorkstreamCapacity);
 }
 
 export function useReservationReleaseMutation() {

@@ -400,6 +400,11 @@ export interface CapacityReservation {
   command_id: string;
   worker_capacity_id: string;
   machine_label: string;
+  ecid: string | null;
+  milestone_title: string | null;
+  milestone_position: number | null;
+  workstream: string | null;
+  owning_branch: string | null;
   status: string;
   version: number;
   owner_intent_reference: string;
@@ -410,6 +415,11 @@ export interface CapacityAllocation {
   command_id: string;
   worker_capacity_id: string;
   machine_label: string;
+  ecid: string | null;
+  milestone_title: string | null;
+  milestone_position: number | null;
+  workstream: string | null;
+  owning_branch: string | null;
   status: string;
   version: number;
 }
@@ -419,6 +429,17 @@ export interface CapacityQueueItem {
   ecid: string;
   repository_key: string;
   expected_branch: string;
+  milestone_id: string | null;
+  milestone_title: string | null;
+  milestone_position: number | null;
+  workstream: string | null;
+  roadmap_title: string | null;
+  owning_branch: string | null;
+  identity_state: "resolved" | "reconciliation_required";
+  assigned_worker_id: string | null;
+  assigned_worker_name: string | null;
+  machine_label: string | null;
+  capacity_amount: number;
   requested_at: string;
   decision: string;
   reason: string;

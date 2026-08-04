@@ -24,6 +24,10 @@ from app.engineering_control.commands import (
     ApproveEngineeringCommand,
     CreateEngineeringCommand,
 )
+from app.engineering_control.mobile.roadmaps import (
+    EngineeringMilestone,
+    EngineeringRoadmap,
+)
 from app.engineering_control.service import EngineeringControlService
 from app.worker_control.models import EngineeringWorker
 from app.worker_identity.models import WorkerCredential, WorkerIdentity
@@ -80,7 +84,7 @@ async def approved_command(fixture: ServiceFixture, suffix: str):
             ),
         )
     async with fixture.factory() as session:
-        return await service.approve_command(
+        approved = await service.approve_command(
             session,
             context=fixture.context,
             command=ApproveEngineeringCommand(
@@ -94,6 +98,49 @@ async def approved_command(fixture: ServiceFixture, suffix: str):
                 requested_code_changes=created.requested_code_changes,
             ),
         )
+    now = utc_now()
+    roadmap = EngineeringRoadmap(
+        id=uuid4(),
+        company_id=fixture.context.company.id,
+        title=f"Capacity roadmap {suffix} {uuid4()}",
+        repository_key=approved.repository_key,
+        expected_branch=approved.expected_branch,
+        expected_head=approved.expected_head,
+        status="active",
+        version=1,
+        created_at=now,
+        updated_at=now,
+    )
+    milestone = EngineeringMilestone(
+        company_id=fixture.context.company.id,
+        roadmap_id=roadmap.id,
+        position=1,
+        title=f"Capacity milestone {suffix}",
+        objective="Exercise bounded capacity behavior.",
+        owning_workstream="Capacity tests",
+        owning_branch=approved.expected_branch,
+        authority=[],
+        constraints=[],
+        dependencies=[],
+        validation=[],
+        deliverables=[],
+        stop_conditions=[],
+        expected_completion_evidence=[],
+        status="running",
+        definition_approved=True,
+        requested_code_changes=approved.requested_code_changes,
+        externally_adoptable=False,
+        command_id=approved.id,
+        version=1,
+        started_at=now,
+        created_at=now,
+        updated_at=now,
+    )
+    async with fixture.factory() as session, session.begin():
+        session.add(roadmap)
+        await session.flush()
+        session.add(milestone)
+    return approved
 
 
 async def configured_worker(

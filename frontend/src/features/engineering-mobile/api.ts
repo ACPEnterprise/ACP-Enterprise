@@ -22,6 +22,7 @@ import type {
   EligibleCapacityWorker,
   CapacityReservation,
   CapacityAllocation,
+  CapacityQueueItem,
 } from "./types";
 
 export const MOBILE_ENGINEERING_PATH = "/api/v1/engineering/mobile/reviews";
@@ -131,11 +132,12 @@ export async function setWorkerCapacityState(worker: WorkerCapacity, action: "pa
   })).data;
 }
 
-export async function reserveWorkstreamCapacity(commandId: string): Promise<CapacityReservation> {
+export async function reserveWorkstreamCapacity(item: CapacityQueueItem): Promise<CapacityReservation> {
   return (await apiClient.post<CapacityReservation>(`${ENGINEERING_CAPACITY_PATH}/reservations`, {
-    command_id: commandId,
-    owner_intent_reference: `owner-capacity:${commandId}`,
-    idempotency_key: `owner-reserve:${commandId}`,
+    command_id: item.command_id,
+    worker_id: item.assigned_worker_id,
+    owner_intent_reference: `owner-capacity:${item.command_id}`,
+    idempotency_key: `owner-reserve:${item.command_id}`,
     transition_source: "owner",
   })).data;
 }

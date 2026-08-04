@@ -9,6 +9,7 @@ import pytest
 import pytest_asyncio
 from app.core.config import settings
 from app.database.session import get_database_session
+from app.engineering_capacity.service import EngineeringCapacityService
 from app.engineering_control.mobile.control import EngineeringWorkstreamControl
 from app.engineering_control.mobile.roadmap_initialization import ROADMAPS
 from app.engineering_control.mobile.roadmaps import EngineeringMilestone
@@ -403,13 +404,53 @@ async def test_roadmap_dispatch_and_safe_progression_owner_workflow(
     assert after_start["actionable_count"] == 0
     assert after_start["capacity_waiting_milestones"][0]["title"] == "Milestone one"
     async with mobile_api.factory() as session:
+        capacity = await EngineeringCapacityService().summary(
+            session, context=mobile_api.service_fixture.context
+        )
         dispatched_command = await session.scalar(
             select(EngineeringCommand).where(
                 EngineeringCommand.id == started.json()["command_id"]
             )
         )
     assert dispatched_command is not None
+    queued = capacity.waiting_workstreams[0]
+    assert queued.command_id == dispatched_command.id
+    assert queued.milestone_title == "Milestone one"
+    assert queued.milestone_position == 1
+    assert queued.workstream == "Mission Control"
+    assert queued.roadmap_title == "Mission Control"
+    assert queued.owning_branch == "customer-management-v1"
+    assert queued.identity_state == "resolved"
     assert dispatched_command.requested_code_changes is False
+
+    async with mobile_api.factory() as session, session.begin():
+        second_milestone = await session.scalar(
+            select(EngineeringMilestone).where(
+                EngineeringMilestone.title == "Milestone two"
+            )
+        )
+        assert second_milestone is not None
+        original_status = second_milestone.status
+        second_milestone.command_id = dispatched_command.id
+        second_milestone.status = "running"
+    async with mobile_api.factory() as session:
+        ambiguous_capacity = await EngineeringCapacityService().summary(
+            session, context=mobile_api.service_fixture.context
+        )
+    ambiguous = ambiguous_capacity.waiting_workstreams[0]
+    assert ambiguous.identity_state == "reconciliation_required"
+    assert ambiguous.milestone_title is None
+    assert ambiguous.decision == "reconciliation_required"
+    assert ambiguous.assigned_worker_id is None
+    async with mobile_api.factory() as session, session.begin():
+        second_milestone = await session.scalar(
+            select(EngineeringMilestone).where(
+                EngineeringMilestone.title == "Milestone two"
+            )
+        )
+        assert second_milestone is not None
+        second_milestone.command_id = None
+        second_milestone.status = original_status
 
     duplicate = await request(
         app,

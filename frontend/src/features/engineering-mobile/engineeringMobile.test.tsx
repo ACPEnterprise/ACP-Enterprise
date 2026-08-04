@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -330,7 +330,7 @@ describe("mobile Engineering Control", () => {
         machines: [],
         active_reservations: [],
         active_allocations: [],
-        waiting_workstreams: Array.from({ length: 8 }, (_, index) => ({ command_id: `command-${index}`, ecid: `ECID-2026-${index}`, decision: "blocked_by_worker_health", reason: "No healthy operational worker has configured capacity.", queue_position: index + 1 })),
+        waiting_workstreams: Array.from({ length: 8 }, (_, index) => ({ command_id: `command-${index}`, ecid: `ECID-2026-${index}`, repository_key: "acp-enterprise", expected_branch: "customer-management-v1", milestone_id: `milestone-${index}`, milestone_title: `Milestone ${index}`, milestone_position: index + 1, workstream: "Operations", roadmap_title: "Operations", owning_branch: "customer-management-v1", identity_state: "resolved", assigned_worker_id: null, assigned_worker_name: null, machine_label: null, capacity_amount: 1, requested_at: "2026-08-03T12:00:00Z", decision: "blocked_by_worker_health", reason: "No healthy operational worker has configured capacity." })),
       },
     } as never);
 
@@ -351,6 +351,84 @@ describe("mobile Engineering Control", () => {
       machineLabel: "Original Office Machine",
       configuredLimit: 1,
     });
+  });
+
+  it("identifies a milestone and confirms its exact capacity reservation", async () => {
+    const reserve = vi.fn();
+    vi.mocked(hooks.useReservationMutation).mockReturnValue(mutation(reserve));
+    vi.mocked(hooks.useMobileWorkstreams).mockReturnValue({
+      isLoading: false,
+      data: { items: [], connectivity: disconnected, page: 1, page_size: 10, total_count: 0, total_pages: 0 },
+    } as never);
+    const queueItem = {
+      command_id: "command-bea6",
+      ecid: "ECID-2026-000006",
+      repository_key: "acp-enterprise",
+      expected_branch: "customer-management-v1",
+      milestone_id: "milestone-bea6",
+      milestone_title: "BEA.6 Economics Signal Definitions",
+      milestone_position: 6,
+      workstream: "Beacon",
+      roadmap_title: "Beacon",
+      owning_branch: "customer-management-v1",
+      identity_state: "resolved",
+      assigned_worker_id: "office-worker",
+      assigned_worker_name: "ACP Office Engineering Node",
+      machine_label: "ACP Office Engineering Node",
+      capacity_amount: 1,
+      requested_at: "2026-08-03T12:00:00Z",
+      decision: "capacity_available",
+      reason: "Healthy configured capacity is available; explicit dispatch remains required.",
+    } as const;
+    vi.mocked(hooks.useEngineeringCapacity).mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: {
+        policy: { id: "policy", maximum_concurrent_workstreams: 2, maximum_per_worker: 1, reserved_capacity: 0, auto_allocate_released_capacity: false, version: 2, updated_at: "2026-08-03T12:00:00Z" },
+        configured_capacity: 1,
+        allocated_capacity: 0,
+        reserved_capacity: 0,
+        available_capacity: 1,
+        offline_workers: 0,
+        unhealthy_workers: 0,
+        reconciliation_required: 0,
+        workers: [],
+        eligible_workers: [],
+        machines: [],
+        active_reservations: [],
+        active_allocations: [],
+        waiting_workstreams: [queueItem],
+      },
+    } as never);
+
+    renderList();
+    await userEvent.click(screen.getByRole("button", { name: /Capacity/ }));
+    expect(screen.getByText("BEA.6 Economics Signal Definitions")).toBeInTheDocument();
+    expect(screen.getByText("Beacon · Roadmap step 6")).toBeInTheDocument();
+    expect(screen.getByText("Branch: customer-management-v1")).toBeInTheDocument();
+    expect(screen.getByText("Engineering Command: ECID-2026-000006")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Reserve capacity" }));
+    expect(screen.getByRole("dialog")).toHaveTextContent("ACP Office Engineering Node");
+    expect(screen.getByRole("dialog")).toHaveTextContent("Reservation does not start execution");
+    await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Reserve capacity" }));
+    expect(reserve).toHaveBeenCalledWith(queueItem, expect.any(Object));
+  });
+
+  it("fails closed when a queued command has no unambiguous milestone", async () => {
+    vi.mocked(hooks.useMobileWorkstreams).mockReturnValue({ isLoading: false, data: { items: [], connectivity: disconnected, page: 1, page_size: 10, total_count: 0, total_pages: 0 } } as never);
+    vi.mocked(hooks.useEngineeringCapacity).mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: {
+        policy: null, configured_capacity: 0, allocated_capacity: 0, reserved_capacity: 0, available_capacity: 0, offline_workers: 0, unhealthy_workers: 0, reconciliation_required: 1, workers: [], eligible_workers: [], machines: [], active_reservations: [], active_allocations: [],
+        waiting_workstreams: [{ command_id: "ambiguous", ecid: "ECID-2026-000099", repository_key: "acp-enterprise", expected_branch: "customer-management-v1", milestone_id: null, milestone_title: null, milestone_position: null, workstream: null, roadmap_title: null, owning_branch: null, identity_state: "reconciliation_required", assigned_worker_id: null, assigned_worker_name: null, machine_label: null, capacity_amount: 1, requested_at: "2026-08-03T12:00:00Z", decision: "reconciliation_required", reason: "Milestone identity must be reconciled." }],
+      },
+    } as never);
+    renderList();
+    await userEvent.click(screen.getByRole("button", { name: /Capacity/ }));
+    expect(screen.getByText("Milestone identity unavailable")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Reserve capacity" })).toBeDisabled();
   });
 
   it("renders loading, empty, error, and phone-safe workstream cards", async () => {

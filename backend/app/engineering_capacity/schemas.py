@@ -143,6 +143,11 @@ class CapacityReservationResponse(CapacitySchema):
     execution_id: UUID | None
     worker_capacity_id: UUID
     machine_label: str
+    ecid: str | None = None
+    milestone_title: str | None = None
+    milestone_position: int | None = None
+    workstream: str | None = None
+    owning_branch: str | None = None
     owner_intent_reference: str
     status: str
     transition_source: str
@@ -160,6 +165,11 @@ class CapacityAllocationResponse(CapacitySchema):
     execution_id: UUID | None
     worker_capacity_id: UUID
     machine_label: str
+    ecid: str | None = None
+    milestone_title: str | None = None
+    milestone_position: int | None = None
+    workstream: str | None = None
+    owning_branch: str | None = None
     status: str
     transition_source: str
     allocated_at: datetime
@@ -173,6 +183,17 @@ class CapacityQueueItem(CapacitySchema):
     ecid: str
     repository_key: str
     expected_branch: str
+    milestone_id: UUID | None
+    milestone_title: str | None
+    milestone_position: int | None
+    workstream: str | None
+    roadmap_title: str | None
+    owning_branch: str | None
+    identity_state: Literal["resolved", "reconciliation_required"]
+    assigned_worker_id: UUID | None
+    assigned_worker_name: str | None
+    machine_label: str | None
+    capacity_amount: int
     requested_at: datetime
     decision: CapacityDecision
     reason: str
