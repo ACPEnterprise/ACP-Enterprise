@@ -187,3 +187,14 @@ quality, evidence, comparison, findings, and recommendations without persistence
 or execution. Operational-source implementation, migrations, Luminary, AI, Beacon
 rules, dashboards, provider transports, and scheduling remain unauthorized until
 the contract's dependencies and owner decisions are resolved and approved.
+
+## Phase 6 deterministic profitability computation
+
+The provider-neutral computation foundation is defined in
+[`business-economics-phase6-computation.md`](business-economics-phase6-computation.md).
+It deterministically converts immutable fact and allocation port inputs into the
+approved Phase 5 analysis and explanation contracts. Canonical ordering, SHA-256
+lineage, stable UUIDv5 identity, scope isolation, freshness enforcement, explicit
+missing values, and gross/net reconciliation form the fail-closed boundary. Phase
+6 adds no persistence, migration, runtime orchestration, Luminary, Beacon, AI,
+scheduler, API, or frontend implementation.
