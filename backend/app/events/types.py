@@ -202,8 +202,12 @@ class EventType(str, Enum):
     ESTIMATE_CREATED = "estimate.created"
     ESTIMATE_REVISION_CREATED = "estimate.revision_created"
     ESTIMATE_LIFECYCLE_CHANGED = "estimate.lifecycle_changed"
+    ESTIMATE_SENT = "estimate.sent"
+    ESTIMATE_VIEWED = "estimate.viewed"
     ESTIMATE_PRESENTED = "estimate.presented"
     ESTIMATE_APPROVED = "estimate.approved"
+    ESTIMATE_REJECTED = "estimate.rejected"
+    ESTIMATE_EXPIRED = "estimate.expired"
     ESTIMATE_DECLINED = "estimate.declined"
     ESTIMATE_MIGRATED = "estimate.migrated"
 

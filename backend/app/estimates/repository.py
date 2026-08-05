@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.customers.models import Customer, ServiceLocation
 from app.estimates.contracts import (
+    EstimateCustomerDecisionRecord,
     EstimateLineRecord,
     EstimateRecord,
     EstimateRevisionRecord,
@@ -14,6 +15,7 @@ from app.estimates.contracts import (
 from app.estimates.models import (
     Estimate,
     EstimateCommercialSnapshotReference,
+    EstimateCustomerDecision,
     EstimateLifecycleHistory,
     EstimateLineItem,
     EstimateNumberSequence,
@@ -165,6 +167,7 @@ class EstimateRepository:
         )
         revision_record = EstimateRevisionRecord(
             id=revision.id,
+            parent_revision_id=revision.parent_revision_id,
             revision_number=revision.revision_number,
             status=revision.status,
             proposal_title=revision.proposal_title,
@@ -177,6 +180,27 @@ class EstimateRepository:
             created_at=revision.created_at,
             lines=line_records,
         )
+        decision = await session.scalar(
+            select(EstimateCustomerDecision).where(
+                EstimateCustomerDecision.company_id == company_id,
+                EstimateCustomerDecision.revision_id == revision.id,
+            )
+        )
+        decision_record = (
+            EstimateCustomerDecisionRecord(
+                id=decision.id,
+                revision_id=decision.revision_id,
+                decision=decision.decision,
+                customer_name=decision.customer_name,
+                customer_email=decision.customer_email,
+                customer_comment=decision.customer_comment,
+                rejection_reason=decision.rejection_reason,
+                evidence_reference=decision.evidence_reference,
+                occurred_at=decision.occurred_at,
+            )
+            if decision is not None
+            else None
+        )
         return EstimateRecord(
             id=estimate.id,
             company_id=estimate.company_id,
@@ -188,21 +212,79 @@ class EstimateRepository:
             acceptance_status=estimate.acceptance_status,
             version=estimate.version,
             current_revision=revision_record,
+            customer_decision=decision_record,
         )
 
     @staticmethod
-    async def next_revision_number(
+    async def get_for_update(
         session: AsyncSession, *, company_id: UUID, estimate_id: UUID
-    ) -> int:
-        value = await session.scalar(
-            select(func.coalesce(func.max(EstimateRevision.revision_number), 0))
+    ) -> Estimate | None:
+        return await session.scalar(
+            select(Estimate)
+            .where(
+                Estimate.company_id == company_id,
+                Estimate.id == estimate_id,
+            )
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+
+    @staticmethod
+    async def get_revision(
+        session: AsyncSession, *, company_id: UUID, revision_id: UUID
+    ) -> EstimateRevision | None:
+        return await session.scalar(
+            select(EstimateRevision).where(
+                EstimateRevision.company_id == company_id,
+                EstimateRevision.id == revision_id,
+            )
+        )
+
+    @staticmethod
+    async def add_revision(
+        session: AsyncSession,
+        *,
+        estimate: Estimate,
+        revision: EstimateRevision,
+        lines: tuple[EstimateLineItem, ...],
+        references: tuple[EstimateCommercialSnapshotReference, ...],
+        history: EstimateLifecycleHistory,
+    ) -> None:
+        session.add(revision)
+        await session.flush()
+        session.add_all([*lines, history])
+        await session.flush()
+        session.add_all(references)
+        estimate.current_revision_id = revision.id
+        await session.flush()
+
+    @staticmethod
+    async def add_lifecycle_history(
+        session: AsyncSession, *, history: EstimateLifecycleHistory
+    ) -> None:
+        session.add(history)
+        await session.flush()
+
+    @staticmethod
+    async def add_customer_decision(
+        session: AsyncSession, *, decision: EstimateCustomerDecision
+    ) -> None:
+        session.add(decision)
+        await session.flush()
+
+    @staticmethod
+    async def list_revisions(
+        session: AsyncSession, *, company_id: UUID, estimate_id: UUID
+    ) -> tuple[EstimateRevision, ...]:
+        rows = await session.scalars(
+            select(EstimateRevision)
             .where(
                 EstimateRevision.company_id == company_id,
                 EstimateRevision.estimate_id == estimate_id,
             )
-            .with_for_update()
+            .order_by(EstimateRevision.revision_number)
         )
-        return int(value or 0) + 1
+        return tuple(rows.all())
 
     @staticmethod
     def snapshot_total(snapshots: tuple[PriceBookCommercialSnapshot, ...]) -> Decimal:

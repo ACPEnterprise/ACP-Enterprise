@@ -66,11 +66,13 @@ class Estimate(Base):
             "estimate_number ~ '^EST-[0-9]{6,}$'", name="ck_estimates_number"
         ),
         CheckConstraint(
-            "status IN ('draft','proposed','accepted','declined','expired','cancelled')",
+            "status IN ('draft','sent','viewed','approved','rejected','expired',"
+            "'proposed','accepted','declined','cancelled')",
             name="ck_estimates_status",
         ),
         CheckConstraint(
-            "acceptance_status IN ('not_requested','pending','accepted','declined','expired','withdrawn')",
+            "acceptance_status IN ('not_requested','pending','approved','rejected',"
+            "'expired','accepted','declined','withdrawn')",
             name="ck_estimates_acceptance_status",
         ),
         CheckConstraint("version >= 1", name="ck_estimates_version"),
@@ -131,6 +133,12 @@ class EstimateRevision(Base):
             name="fk_estimate_revisions_estimate",
             ondelete="RESTRICT",
         ),
+        ForeignKeyConstraint(
+            ["company_id", "parent_revision_id"],
+            ["estimate_revisions.company_id", "estimate_revisions.id"],
+            name="fk_estimate_revisions_parent",
+            ondelete="RESTRICT",
+        ),
         CheckConstraint("revision_number >= 1", name="ck_estimate_revisions_number"),
         CheckConstraint(
             "status IN ('draft','issued','superseded','withdrawn')",
@@ -170,6 +178,7 @@ class EstimateRevision(Base):
         nullable=False,
     )
     estimate_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    parent_revision_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
     revision_number: Mapped[int] = mapped_column(Integer, nullable=False)
     status: Mapped[str] = mapped_column(String(24), nullable=False, default="draft")
     proposal_title: Mapped[str] = mapped_column(String(240), nullable=False)
@@ -334,5 +343,71 @@ class EstimateLifecycleHistory(Base):
     )
     version: Mapped[int] = mapped_column(Integer, nullable=False)
     occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
+class EstimateCustomerDecision(Base):
+    __tablename__ = "estimate_customer_decisions"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "estimate_id"],
+            ["estimate_proposals.company_id", "estimate_proposals.id"],
+            name="fk_estimate_customer_decisions_estimate",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "revision_id"],
+            ["estimate_revisions.company_id", "estimate_revisions.id"],
+            name="fk_estimate_customer_decisions_revision",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "decision IN ('approved','rejected')",
+            name="ck_estimate_customer_decisions_type",
+        ),
+        CheckConstraint(
+            "(decision = 'approved' AND rejection_reason IS NULL) OR "
+            "(decision = 'rejected' AND rejection_reason IS NOT NULL "
+            "AND length(btrim(rejection_reason)) > 0)",
+            name="ck_estimate_customer_decisions_reason",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "revision_id",
+            name="uq_estimate_customer_decisions_revision",
+        ),
+        Index(
+            "ix_estimate_customer_decisions_estimate",
+            "company_id",
+            "estimate_id",
+            "occurred_at",
+        ),
+    )
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    estimate_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    revision_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    decision: Mapped[str] = mapped_column(String(24), nullable=False)
+    customer_name: Mapped[str] = mapped_column(String(240), nullable=False)
+    customer_email: Mapped[str | None] = mapped_column(String(320))
+    customer_comment: Mapped[str | None] = mapped_column(Text)
+    rejection_reason: Mapped[str | None] = mapped_column(Text)
+    evidence_reference: Mapped[str | None] = mapped_column(String(240))
+    recorded_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
     )
