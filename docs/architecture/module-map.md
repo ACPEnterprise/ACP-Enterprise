@@ -55,10 +55,27 @@ For version 1.0, owns operational invoices, payment requests, payment records, r
 
 ### Inventory
 
-Owns catalogued stock items, warehouse and vehicle quantities, reservations, transfers, adjustments, reorder thresholds, and job material consumption. Initial releases may implement a deliberately narrow material-tracking scope.
+Owns physical stock-item identity, warehouse and vehicle quantities, locations,
+movements, reservations, transfers, adjustments, reorder thresholds, and valuation
+evidence. Operations owns Jobs, and Jobs are authoritative for material requirements
+and actual consumption attribution. Field Service is the technician-facing recording
+experience and never duplicates Job ownership. Initial releases may capture Job
+materials without complete stock management. See the
+[Inventory Domain Architecture Brief](inventory/domain-architecture-brief.md).
 
-**Depends on:** Foundation, Sales, Operations.
-**Primary consumers:** Field Service, Financial, Analytics, Automation.
+**Depends on:** Foundation, Platform, Operations contracts.
+**Primary consumers:** Field Service, Purchasing, Financial, Analytics, Automation.
+
+### Purchasing
+
+Owns operational Vendor identity, purchase orders, receipts, discrepancies, and
+procurement lifecycle. It requests Inventory movements through owned contracts and
+provides evidence for accounting handoff; it does not own stock, accounts payable,
+ledger behavior, or QuickBooks records. See the
+[Purchasing Domain Architecture Brief](purchasing/domain-architecture-brief.md).
+
+**Depends on:** Foundation, Platform, Inventory contracts, Operations demand references.
+**Primary consumers:** Inventory, Financial, Analytics, Automation.
 
 ### Communications
 
@@ -106,6 +123,10 @@ CRM ──────► Sales ──────► Operations ─────
  │                            ├──────► Field Service ◄──── Inventory
  └────► Communications ◄──────┴──────────────────┘
 
+Operations ── material demand/use ──► Inventory ── reorder signal ──► Purchasing
+Purchasing ── receipt movement request ──► Inventory
+Inventory + Purchasing ── controlled evidence ──► Accounting / QuickBooks handoff
+
 Business-module events ──────► Analytics
 Business-module events ──────► Automation ──────► authorized module APIs
 ```
@@ -120,7 +141,12 @@ workflows, early Analytics and Beacon intelligence, a Mission Control frontend,
 Development Factory and engineering-control foundations, Workforce Capability
 persistence, and controlled migration foundations. Dispatch is currently a
 frontend projection over Jobs and Scheduling rather than an assignment domain.
-Operational Price Book, Estimates, Invoicing, Payments, Inventory,
-Communications delivery, Field Service, and Accounting remain incomplete or
-foundation-only according to their specific contracts. A persistence table or
-migration path alone is not a claim of operational product completion.
+The PRICEBOOK.1 foundation is implemented across backend and frontend behavior,
+including permissions, price-version activation, immutable commercial snapshots,
+and audit evidence. Planned enhancements include Inventory-item mappings,
+component units of measure, and later downstream commercial integrations; those
+extensions are not part of the current PRICEBOOK.1 contract. Estimates, Invoicing,
+Payments, Inventory, Purchasing, Communications delivery, Field Service, and
+Accounting remain incomplete, architecture-only, or foundation-only according to
+their specific contracts. A persistence table or migration path alone is not a
+claim of operational product completion.
