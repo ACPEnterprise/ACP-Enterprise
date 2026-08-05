@@ -1,6 +1,6 @@
 # Business Economics Phase 5 Architecture Contract
 
-Status: proposed for owner and architecture review; implementation is not authorized
+Status: approved architecture; immutable profitability contracts implemented
 
 Milestone: Operational Cost Sources and Luminary Profitability Intelligence
 
@@ -9,8 +9,10 @@ Milestone: Operational Cost Sources and Luminary Profitability Intelligence
 This contract defines how ACP Enterprise operational domains supply authoritative,
 measured facts to Business Economics and how Luminary turns reconciled economics
 into owner-understandable profitability intelligence. It is the implementation
-boundary for Phase 5, not an implementation of sources, AI, schedules, rules,
-dashboards, migrations, or provider integrations.
+boundary for Phase 5. The immutable contracts in
+`app.economics.profitability_intelligence` implement the shared vocabulary and
+validation invariants only; they do not implement sources, persistence, AI,
+schedules, rules, dashboards, migrations, or provider integrations.
 
 Luminary is the Business Economics and Profitability Intelligence layer. It
 answers owner business questions from authoritative Economics projections. It

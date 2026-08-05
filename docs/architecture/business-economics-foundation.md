@@ -179,9 +179,11 @@ Beacon, Luminary, LIA, or AI behavior.
 
 ## Phase 5 architecture contract
 
-The proposed Phase 5 operational-source and profitability-intelligence boundary
+The approved Phase 5 operational-source and profitability-intelligence boundary
 is defined in
 [`business-economics-phase5-contract.md`](business-economics-phase5-contract.md).
-It is a documentation contract only. Runtime implementation, migrations, AI,
-Beacon rules, dashboards, provider transports, and scheduling remain unauthorized
-until the contract's dependencies and owner decisions are resolved and approved.
+Its immutable Economics contracts define analysis, measured/allocation boundaries,
+quality, evidence, comparison, findings, and recommendations without persistence
+or execution. Operational-source implementation, migrations, Luminary, AI, Beacon
+rules, dashboards, provider transports, and scheduling remain unauthorized until
+the contract's dependencies and owner decisions are resolved and approved.
