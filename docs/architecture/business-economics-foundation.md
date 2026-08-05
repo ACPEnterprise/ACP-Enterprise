@@ -198,3 +198,15 @@ lineage, stable UUIDv5 identity, scope isolation, freshness enforcement, explici
 missing values, and gross/net reconciliation form the fail-closed boundary. Phase
 6 adds no persistence, migration, runtime orchestration, Luminary, Beacon, AI,
 scheduler, API, or frontend implementation.
+
+## Phase 7 operational fact acquisition
+
+The provider-neutral acquisition boundary is defined in
+[`business-economics-phase7-acquisition.md`](business-economics-phase7-acquisition.md).
+Immutable Jobs, Dispatch, Price Book, and Customer snapshots are translated by
+read-only adapters into canonically ordered, evidence-digested acquisition
+batches. Missing fields remain explicit and Company/Branch isolation fails
+closed. Operational domains retain transaction ownership. Phase 7 adds no
+persistence, migration, scheduler, runtime invocation, AI, Luminary, Beacon,
+frontend, or Production behavior and does not yet translate acquired context into
+ledger facts.
