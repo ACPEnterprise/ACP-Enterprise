@@ -1,4 +1,7 @@
+import asyncio
 import hashlib
+from dataclasses import replace
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -6,6 +9,16 @@ import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.core.config import settings
+from app.customer_migration.cutover_plan import (
+    CUTOVER_PLAN_VERSION,
+    CutoverPlanCompiler,
+    CutoverPlanVersion,
+)
+from app.customer_migration.cutover_plan_repository import (
+    CutoverPlanningEvidenceService,
+    CutoverPlanWrite,
+    cutover_plan_evidence_repository,
+)
 from app.customer_migration.cutover_readiness import (
     CutoverEvidenceSnapshot,
     CutoverPrerequisite,
@@ -15,6 +28,10 @@ from app.customer_migration.cutover_readiness import (
 from app.customer_migration.cutover_readiness_repository import (
     CutoverReadinessWrite,
     cutover_readiness_evidence_repository,
+)
+from app.customer_migration.cutover_rehearsal import (
+    CutoverRehearsalEvidence,
+    CutoverRehearsalService,
 )
 from app.customer_migration.native_customer_consolidation import (
     NativeCustomerObservation,
@@ -51,6 +68,7 @@ from app.customer_migration.native_location_review import (
 from app.platform.branch.models import Branch
 from app.platform.company.models import Company
 from app.platform.users.models import User
+from tests.customer_migration.test_cutover_plan import compiler_inputs
 
 
 def observation(
@@ -403,5 +421,104 @@ async def test_postgres_evidence_is_company_scoped_and_replay_safe() -> None:
             assert readiness_created is True
             assert replay_readiness_created is False
             assert replay_readiness.id == first_readiness.id
+
+            plan_inputs = compiler_inputs()
+            steps = plan_inputs["steps"]
+            dependencies = plan_inputs["dependencies"]
+            assert isinstance(steps, tuple)
+            assert isinstance(dependencies, tuple)
+            plan_inputs.update(
+                company_id=company.id,
+                branch_id=branch.id,
+                readiness=readiness,
+                created_by_user_id=user.id,
+                steps=tuple(
+                    replace(step, readiness_evidence_id=readiness.readiness_id)
+                    for step in steps
+                ),
+                dependencies=tuple(
+                    replace(item, company_id=company.id, branch_id=branch.id)
+                    for item in dependencies
+                ),
+            )
+            plan = CutoverPlanCompiler().compile(**plan_inputs)  # type: ignore[arg-type]
+            plan_write = CutoverPlanWrite(company.id, branch.id, user.id, plan)
+            first_plan, plan_created = await cutover_plan_evidence_repository.record(
+                session, evidence=plan_write
+            )
+            (
+                replay_plan,
+                replay_plan_created,
+            ) = await cutover_plan_evidence_repository.record(
+                session, evidence=plan_write
+            )
+            assert plan_created is True
+            assert replay_plan_created is False
+            assert replay_plan.id == first_plan.id
+            rehearsal = CutoverRehearsalService().rehearse(
+                plan=plan,
+                evidence=CutoverRehearsalEvidence(
+                    precondition_evidence=(("artifact", "c" * 64),),
+                    approval_evidence=(
+                        ("migration.readiness.approve", ("1" * 64,)),
+                        ("migration.disposition.approve", ("2" * 64,)),
+                        ("migration.pilot.approve", ("3" * 64,)),
+                        ("migration.rollback.approve", ("4" * 64,)),
+                        ("migration.cutover.approve", ("5" * 64,)),
+                    ),
+                ),
+                created_by_user_id=user.id,
+                created_at=datetime(2026, 8, 5, tzinfo=timezone.utc),
+            )
+            (
+                first_rehearsal,
+                rehearsal_created,
+            ) = await cutover_plan_evidence_repository.record_rehearsal(
+                session, rehearsal=rehearsal
+            )
+            (
+                replay_rehearsal,
+                replay_rehearsal_created,
+            ) = await cutover_plan_evidence_repository.record_rehearsal(
+                session, rehearsal=rehearsal
+            )
+            assert rehearsal_created is True
+            assert replay_rehearsal_created is False
+            assert replay_rehearsal.id == first_rehearsal.id
+
+        concurrent_inputs = dict(plan_inputs)
+        concurrent_inputs.update(
+            created_at=datetime(2026, 8, 5, 1, tzinfo=timezone.utc),
+            version=CutoverPlanVersion(
+                CUTOVER_PLAN_VERSION, 2, supersedes_plan_id=plan.plan_id
+            ),
+        )
+        concurrent_plan = CutoverPlanCompiler().compile(  # type: ignore[arg-type]
+            **concurrent_inputs
+        )
+        concurrent_write = CutoverPlanWrite(
+            company.id, branch.id, user.id, concurrent_plan
+        )
+        services = (
+            CutoverPlanningEvidenceService(factory),
+            CutoverPlanningEvidenceService(factory),
+        )
+        plan_results = await asyncio.gather(
+            *(service.record_plan(concurrent_write) for service in services)
+        )
+        assert sorted(created for _, created in plan_results) == [False, True]
+        concurrent_rehearsal = CutoverRehearsalService().rehearse(
+            plan=concurrent_plan,
+            evidence=CutoverRehearsalEvidence(
+                precondition_evidence=(("artifact", "c" * 64),),
+                approval_evidence=(),
+            ),
+            created_by_user_id=user.id,
+            created_at=datetime(2026, 8, 5, 2, tzinfo=timezone.utc),
+        )
+        rehearsal_results = await asyncio.gather(
+            *(service.record_rehearsal(concurrent_rehearsal) for service in services)
+        )
+        assert sorted(created for _, created in rehearsal_results) == [False, True]
     finally:
         await engine.dispose()

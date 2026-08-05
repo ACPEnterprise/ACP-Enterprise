@@ -266,6 +266,12 @@ class CustomerMigrationCutoverReadinessEvidence(Base):
             "evidence_digest",
             name="uq_customer_cutover_readiness_replay",
         ),
+        UniqueConstraint(
+            "id",
+            "company_id",
+            "branch_id",
+            name="uq_customer_cutover_readiness_scope",
+        ),
         Index(
             "ix_customer_cutover_readiness_latest",
             "company_id",
@@ -303,6 +309,200 @@ class CustomerMigrationCutoverReadinessEvidence(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
     )
+
+
+class CustomerMigrationCutoverPlanEvidence(Base):
+    """Immutable deterministic plan evidence with no execution behavior."""
+
+    __tablename__ = "customer_migration_cutover_plan_evidence"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('ready_for_owner_approval','blocked')",
+            name="ck_customer_cutover_plan_status",
+        ),
+        ForeignKeyConstraint(
+            ["readiness_evidence_id", "company_id", "branch_id"],
+            [
+                "customer_migration_cutover_readiness_evidence.id",
+                "customer_migration_cutover_readiness_evidence.company_id",
+                "customer_migration_cutover_readiness_evidence.branch_id",
+            ],
+            name="fk_customer_cutover_plan_readiness_scope",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "branch_id"],
+            ["branches.company_id", "branches.id"],
+            name="fk_customer_cutover_plan_branch_company",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "branch_id",
+            "plan_key",
+            name="uq_customer_cutover_plan_key",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "branch_id",
+            "evidence_digest",
+            name="uq_customer_cutover_plan_replay",
+        ),
+        UniqueConstraint(
+            "id",
+            "company_id",
+            "branch_id",
+            name="uq_customer_cutover_plan_scope",
+        ),
+        Index(
+            "ix_customer_cutover_plan_latest", "company_id", "branch_id", "created_at"
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True)
+    company_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    readiness_evidence_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), nullable=False
+    )
+    planned_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    plan_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    contract_version: Mapped[str] = mapped_column(String(100), nullable=False)
+    plan_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False)
+    plan_metadata: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    ordered_steps: Mapped[list[dict[str, object]]] = mapped_column(
+        JSONB, nullable=False
+    )
+    dependency_graph: Mapped[list[dict[str, object]]] = mapped_column(
+        JSONB, nullable=False
+    )
+    preconditions: Mapped[list[dict[str, object]]] = mapped_column(
+        JSONB, nullable=False
+    )
+    rollback_prerequisites: Mapped[list[dict[str, object]]] = mapped_column(
+        JSONB, nullable=False
+    )
+    owner_checkpoints: Mapped[list[dict[str, object]]] = mapped_column(
+        JSONB, nullable=False
+    )
+    blocking_conditions: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    required_approvals: Mapped[list[dict[str, object]]] = mapped_column(
+        JSONB, nullable=False
+    )
+    recovery_instructions: Mapped[list[dict[str, object]]] = mapped_column(
+        JSONB, nullable=False
+    )
+    evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
+class CustomerMigrationCutoverRehearsalEvidence(Base):
+    __tablename__ = "customer_migration_cutover_rehearsal_evidence"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('simulated_success','blocked','interrupted')",
+            name="ck_customer_cutover_rehearsal_status",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "branch_id"],
+            ["branches.company_id", "branches.id"],
+            name="fk_customer_cutover_rehearsal_branch_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["plan_id", "company_id", "branch_id"],
+            [
+                "customer_migration_cutover_plan_evidence.id",
+                "customer_migration_cutover_plan_evidence.company_id",
+                "customer_migration_cutover_plan_evidence.branch_id",
+            ],
+            name="fk_customer_cutover_rehearsal_plan_scope",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "id", "company_id", "branch_id", name="uq_customer_cutover_rehearsal_scope"
+        ),
+        UniqueConstraint(
+            "company_id",
+            "branch_id",
+            "plan_id",
+            "evidence_digest",
+            name="uq_customer_cutover_rehearsal_replay",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True)
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    plan_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    created_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    contract_version: Mapped[str] = mapped_column(String(100), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(30), nullable=False)
+    evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+
+
+class CustomerMigrationCutoverRehearsalStepEvidence(Base):
+    __tablename__ = "customer_migration_cutover_rehearsal_step_evidence"
+    __table_args__ = (
+        CheckConstraint(
+            "ordinal >= 0", name="ck_customer_cutover_rehearsal_step_ordinal"
+        ),
+        CheckConstraint(
+            "outcome IN ('eligible','simulated_success','blocked','skipped')",
+            name="ck_customer_cutover_rehearsal_step_outcome",
+        ),
+        ForeignKeyConstraint(
+            ["rehearsal_id", "company_id", "branch_id"],
+            [
+                "customer_migration_cutover_rehearsal_evidence.id",
+                "customer_migration_cutover_rehearsal_evidence.company_id",
+                "customer_migration_cutover_rehearsal_evidence.branch_id",
+            ],
+            name="fk_customer_cutover_rehearsal_step_scope",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "rehearsal_id", "ordinal", name="uq_customer_cutover_rehearsal_step_order"
+        ),
+        UniqueConstraint(
+            "rehearsal_id",
+            "step_id",
+            name="uq_customer_cutover_rehearsal_step_identity",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    rehearsal_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    step_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    step_code: Mapped[str] = mapped_column(String(100), nullable=False)
+    ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
+    outcome: Mapped[str] = mapped_column(String(30), nullable=False)
+    failure_code: Mapped[str | None] = mapped_column(String(100))
+    recovery_instruction_code: Mapped[str | None] = mapped_column(String(100))
+    evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
 
 
 class CustomerMigrationException(Base):
