@@ -406,3 +406,246 @@ class InventoryReservation(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
     )
+
+
+class InventoryAdjustment(Base):
+    __tablename__ = "inventory_adjustments"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "branch_id"],
+            ["branches.company_id", "branches.id"],
+            name="fk_inventory_adjustments_branch",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "item_id"],
+            ["inventory_items.company_id", "inventory_items.id"],
+            name="fk_inventory_adjustments_item",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "branch_id", "location_id"],
+            [
+                "inventory_stock_locations.company_id",
+                "inventory_stock_locations.branch_id",
+                "inventory_stock_locations.id",
+            ],
+            name="fk_inventory_adjustments_location",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "movement_id"],
+            ["inventory_stock_movements.company_id", "inventory_stock_movements.id"],
+            name="fk_inventory_adjustments_movement",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "cycle_count_entry_id"],
+            [
+                "inventory_cycle_count_entries.company_id",
+                "inventory_cycle_count_entries.id",
+            ],
+            name="fk_inventory_adjustments_cycle_entry",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "reason IN ('gain','loss','damaged','expired','found')",
+            name="ck_inventory_adjustments_reason",
+        ),
+        CheckConstraint("quantity_delta <> 0", name="ck_inventory_adjustments_delta"),
+        CheckConstraint(
+            "(reason IN ('gain','found') AND quantity_delta > 0) OR "
+            "(reason IN ('loss','damaged','expired') AND quantity_delta < 0)",
+            name="ck_inventory_adjustments_direction",
+        ),
+        CheckConstraint(
+            "length(btrim(stocking_unit)) > 0",
+            name="ck_inventory_adjustments_unit",
+        ),
+        CheckConstraint(
+            "length(btrim(note)) > 0", name="ck_inventory_adjustments_note"
+        ),
+        UniqueConstraint(
+            "company_id", "id", name="uq_inventory_adjustments_company_id"
+        ),
+        UniqueConstraint(
+            "company_id", "idempotency_key", name="uq_inventory_adjustments_idempotency"
+        ),
+        UniqueConstraint(
+            "company_id", "movement_id", name="uq_inventory_adjustments_movement"
+        ),
+        Index(
+            "ix_inventory_adjustments_history",
+            "company_id",
+            "branch_id",
+            "item_id",
+            "location_id",
+            "occurred_at",
+        ),
+    )
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    item_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    location_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    reason: Mapped[str] = mapped_column(String(20), nullable=False)
+    quantity_delta: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False)
+    stocking_unit: Mapped[str] = mapped_column(String(40), nullable=False)
+    note: Mapped[str] = mapped_column(String(500), nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    posted_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+    actor_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    movement_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    cycle_count_entry_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+
+
+class CycleCountSession(Base):
+    __tablename__ = "inventory_cycle_count_sessions"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "branch_id"],
+            ["branches.company_id", "branches.id"],
+            name="fk_inventory_cycle_sessions_branch",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "branch_id", "location_id"],
+            [
+                "inventory_stock_locations.company_id",
+                "inventory_stock_locations.branch_id",
+                "inventory_stock_locations.id",
+            ],
+            name="fk_inventory_cycle_sessions_location",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "status IN ('open','completed')", name="ck_inventory_cycle_sessions_status"
+        ),
+        CheckConstraint(
+            "length(btrim(name)) > 0", name="ck_inventory_cycle_sessions_name"
+        ),
+        CheckConstraint("version >= 1", name="ck_inventory_cycle_sessions_version"),
+        UniqueConstraint(
+            "company_id", "id", name="uq_inventory_cycle_sessions_company_id"
+        ),
+        UniqueConstraint(
+            "company_id",
+            "idempotency_key",
+            name="uq_inventory_cycle_sessions_idempotency",
+        ),
+        Index(
+            "ix_inventory_cycle_sessions_scope",
+            "company_id",
+            "branch_id",
+            "location_id",
+            "status",
+        ),
+    )
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    location_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    name: Mapped[str] = mapped_column(String(240), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="open")
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    started_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    completed_by_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT")
+    )
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class CycleCountEntry(Base):
+    __tablename__ = "inventory_cycle_count_entries"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "session_id"],
+            [
+                "inventory_cycle_count_sessions.company_id",
+                "inventory_cycle_count_sessions.id",
+            ],
+            name="fk_inventory_cycle_entries_session",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "item_id"],
+            ["inventory_items.company_id", "inventory_items.id"],
+            name="fk_inventory_cycle_entries_item",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "expected_quantity >= 0", name="ck_inventory_cycle_entries_expected"
+        ),
+        CheckConstraint(
+            "counted_quantity >= 0", name="ck_inventory_cycle_entries_counted"
+        ),
+        CheckConstraint(
+            "length(btrim(stocking_unit)) > 0", name="ck_inventory_cycle_entries_unit"
+        ),
+        UniqueConstraint(
+            "company_id", "id", name="uq_inventory_cycle_entries_company_id"
+        ),
+        UniqueConstraint(
+            "company_id",
+            "session_id",
+            "item_id",
+            name="uq_inventory_cycle_entries_item",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "idempotency_key",
+            name="uq_inventory_cycle_entries_idempotency",
+        ),
+        Index("ix_inventory_cycle_entries_session", "company_id", "session_id", "id"),
+    )
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    session_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    item_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    expected_quantity: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False)
+    counted_quantity: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False)
+    stocking_unit: Mapped[str] = mapped_column(String(40), nullable=False)
+    counted_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    counted_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)

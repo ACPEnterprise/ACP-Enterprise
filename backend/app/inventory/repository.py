@@ -1,18 +1,24 @@
 from datetime import datetime, timezone
 from decimal import Decimal
-from uuid import UUID
+from uuid import UUID, uuid4
 
-from sqlalchemy import select
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.inventory.contracts import (
+    AdjustmentRecord,
     CreateInventoryItem,
     CreateReservation,
     CreateStockLocation,
+    CycleCountEntryRecord,
+    CycleCountSessionRecord,
     InventoryItemRecord,
+    PostInventoryAdjustment,
     PostStockMovement,
     QuantityRecord,
+    RecordCycleCount,
     ReservationRecord,
+    StartCycleCount,
     StockLocationRecord,
     StockMovementRecord,
 )
@@ -22,6 +28,9 @@ from app.inventory.errors import (
     InventoryValidation,
 )
 from app.inventory.models import (
+    CycleCountEntry,
+    CycleCountSession,
+    InventoryAdjustment,
     InventoryItem,
     InventoryQuantity,
     InventoryReservation,
@@ -148,24 +157,17 @@ class InventoryRepository:
                 item_id=spec.item_id,
                 location_id=spec.source_location_id,
             )
-            if source.on_hand - spec.quantity < source.reserved:
-                raise InventoryConflict(
-                    "Movement would make available quantity negative"
-                )
-            source.on_hand -= spec.quantity
-            source.version += 1
-            source.updated_at = datetime.now(timezone.utc)
-        if spec.destination_location_id:
-            destination = await self._locked_quantity(
+            authoritative = await self._authoritative_on_hand(
                 session,
                 company_id=spec.company_id,
                 branch_id=spec.branch_id,
                 item_id=spec.item_id,
-                location_id=spec.destination_location_id,
+                location_id=spec.source_location_id,
             )
-            destination.on_hand += spec.quantity
-            destination.version += 1
-            destination.updated_at = datetime.now(timezone.utc)
+            if authoritative - spec.quantity < source.reserved:
+                raise InventoryConflict(
+                    "Movement would make available quantity negative"
+                )
         movement = StockMovement(
             company_id=spec.company_id,
             branch_id=spec.branch_id,
@@ -187,7 +189,278 @@ class InventoryRepository:
         )
         session.add(movement)
         await session.flush()
+        affected_locations = (
+            location_id
+            for location_id in (
+                spec.source_location_id,
+                spec.destination_location_id,
+            )
+            if location_id is not None
+        )
+        for location_id in affected_locations:
+            await self._reconcile_quantity(
+                session,
+                company_id=spec.company_id,
+                branch_id=spec.branch_id,
+                item_id=spec.item_id,
+                location_id=location_id,
+            )
         return self._movement_record(movement)
+
+    async def reconcile_projection(
+        self,
+        session: AsyncSession,
+        *,
+        company_id: UUID,
+        branch_id: UUID,
+        item_id: UUID,
+        location_id: UUID,
+    ) -> QuantityRecord:
+        await self._active_item(session, company_id=company_id, item_id=item_id)
+        await self._active_location(
+            session,
+            company_id=company_id,
+            branch_id=branch_id,
+            location_id=location_id,
+        )
+        quantity = await self._reconcile_quantity(
+            session,
+            company_id=company_id,
+            branch_id=branch_id,
+            item_id=item_id,
+            location_id=location_id,
+        )
+        return self._quantity_record(quantity)
+
+    async def post_adjustment(
+        self, session: AsyncSession, *, spec: PostInventoryAdjustment
+    ) -> AdjustmentRecord:
+        existing = await session.scalar(
+            select(InventoryAdjustment).where(
+                InventoryAdjustment.company_id == spec.company_id,
+                InventoryAdjustment.idempotency_key == spec.idempotency_key.strip(),
+            )
+        )
+        if existing:
+            self._assert_same_adjustment(existing, spec)
+            return self._adjustment_record(existing)
+        reason = spec.reason.strip().lower()
+        note = spec.note.strip()
+        key = spec.idempotency_key.strip()
+        if reason not in {"gain", "loss", "damaged", "expired", "found"}:
+            raise InventoryValidation("Unsupported adjustment reason")
+        if not note or not key:
+            raise InventoryValidation(
+                "Adjustment note and idempotency key are required"
+            )
+        if spec.quantity_delta == 0:
+            raise InventoryValidation("Adjustment quantity delta cannot be zero")
+        inbound = reason in {"gain", "found"}
+        if inbound != (spec.quantity_delta > 0):
+            raise InventoryValidation(
+                "Adjustment reason and quantity direction conflict"
+            )
+        item = await self._active_item(
+            session, company_id=spec.company_id, item_id=spec.item_id
+        )
+        self._validate_quantity(item, abs(spec.quantity_delta))
+        adjustment = InventoryAdjustment(
+            id=uuid4(),
+            company_id=spec.company_id,
+            branch_id=spec.branch_id,
+            item_id=spec.item_id,
+            location_id=spec.location_id,
+            reason=reason,
+            quantity_delta=spec.quantity_delta,
+            stocking_unit=item.stocking_unit,
+            note=note,
+            occurred_at=spec.occurred_at,
+            actor_user_id=spec.actor_user_id,
+            idempotency_key=key,
+            movement_id=UUID(int=0),
+            cycle_count_entry_id=spec.cycle_count_entry_id,
+        )
+        movement = await self.post_movement(
+            session,
+            spec=PostStockMovement(
+                company_id=spec.company_id,
+                branch_id=spec.branch_id,
+                item_id=spec.item_id,
+                movement_type="adjustment_in" if inbound else "adjustment_out",
+                quantity=abs(spec.quantity_delta),
+                occurred_at=spec.occurred_at,
+                actor_user_id=spec.actor_user_id,
+                idempotency_key=f"adjustment:{key}",
+                source_location_id=None if inbound else spec.location_id,
+                destination_location_id=spec.location_id if inbound else None,
+                provenance_type="inventory_adjustment",
+                provenance_id=adjustment.id,
+            ),
+        )
+        adjustment.movement_id = movement.id
+        session.add(adjustment)
+        await session.flush()
+        return self._adjustment_record(adjustment)
+
+    async def start_cycle_count(
+        self, session: AsyncSession, *, spec: StartCycleCount
+    ) -> CycleCountSessionRecord:
+        key = spec.idempotency_key.strip()
+        existing = await session.scalar(
+            select(CycleCountSession).where(
+                CycleCountSession.company_id == spec.company_id,
+                CycleCountSession.idempotency_key == key,
+            )
+        )
+        if existing:
+            if (
+                existing.branch_id,
+                existing.location_id,
+                existing.name,
+                existing.started_by_user_id,
+            ) != (
+                spec.branch_id,
+                spec.location_id,
+                spec.name.strip(),
+                spec.actor_user_id,
+            ):
+                raise InventoryConflict("Cycle count idempotency key was reused")
+            return self._cycle_session_record(existing)
+        if not key or not spec.name.strip():
+            raise InventoryValidation(
+                "Cycle count name and idempotency key are required"
+            )
+        await self._active_location(
+            session,
+            company_id=spec.company_id,
+            branch_id=spec.branch_id,
+            location_id=spec.location_id,
+        )
+        cycle = CycleCountSession(
+            company_id=spec.company_id,
+            branch_id=spec.branch_id,
+            location_id=spec.location_id,
+            name=spec.name.strip(),
+            status="open",
+            idempotency_key=key,
+            version=1,
+            started_by_user_id=spec.actor_user_id,
+        )
+        session.add(cycle)
+        await session.flush()
+        return self._cycle_session_record(cycle)
+
+    async def record_cycle_count(
+        self, session: AsyncSession, *, spec: RecordCycleCount
+    ) -> CycleCountEntryRecord:
+        key = spec.idempotency_key.strip()
+        existing = await session.scalar(
+            select(CycleCountEntry).where(
+                CycleCountEntry.company_id == spec.company_id,
+                CycleCountEntry.idempotency_key == key,
+            )
+        )
+        if existing:
+            if (
+                existing.session_id,
+                existing.item_id,
+                existing.counted_quantity,
+                existing.counted_at,
+                existing.counted_by_user_id,
+            ) != (
+                spec.session_id,
+                spec.item_id,
+                spec.counted_quantity,
+                spec.counted_at,
+                spec.actor_user_id,
+            ):
+                raise InventoryConflict("Cycle count entry idempotency key was reused")
+            return self._cycle_entry_record(existing)
+        cycle = await self._locked_cycle(session, spec.company_id, spec.session_id)
+        if cycle.status != "open":
+            raise InventoryConflict("Completed cycle count cannot accept entries")
+        item = await self._active_item(
+            session, company_id=spec.company_id, item_id=spec.item_id
+        )
+        if spec.counted_quantity < 0:
+            raise InventoryValidation("Counted quantity cannot be negative")
+        if (
+            not item.allow_fractional
+            and spec.counted_quantity != spec.counted_quantity.to_integral_value()
+        ):
+            raise InventoryValidation("Item does not allow fractional quantity")
+        if not key:
+            raise InventoryValidation("Cycle count entry idempotency key is required")
+        expected = await self._authoritative_on_hand(
+            session,
+            company_id=spec.company_id,
+            branch_id=cycle.branch_id,
+            item_id=spec.item_id,
+            location_id=cycle.location_id,
+        )
+        entry = CycleCountEntry(
+            company_id=spec.company_id,
+            session_id=cycle.id,
+            item_id=spec.item_id,
+            expected_quantity=expected,
+            counted_quantity=spec.counted_quantity,
+            stocking_unit=item.stocking_unit,
+            counted_at=spec.counted_at,
+            counted_by_user_id=spec.actor_user_id,
+            idempotency_key=key,
+        )
+        session.add(entry)
+        await session.flush()
+        return self._cycle_entry_record(entry)
+
+    async def complete_cycle_count(
+        self,
+        session: AsyncSession,
+        *,
+        company_id: UUID,
+        session_id: UUID,
+        actor_user_id: UUID,
+    ) -> CycleCountSessionRecord:
+        cycle = await self._locked_cycle(session, company_id, session_id)
+        if cycle.status == "completed":
+            return self._cycle_session_record(cycle)
+        entries = (
+            await session.scalars(
+                select(CycleCountEntry)
+                .where(
+                    CycleCountEntry.company_id == company_id,
+                    CycleCountEntry.session_id == session_id,
+                )
+                .order_by(CycleCountEntry.id)
+            )
+        ).all()
+        if not entries:
+            raise InventoryConflict("Cycle count requires at least one entry")
+        for entry in entries:
+            delta = entry.counted_quantity - entry.expected_quantity
+            if delta:
+                await self.post_adjustment(
+                    session,
+                    spec=PostInventoryAdjustment(
+                        company_id=company_id,
+                        branch_id=cycle.branch_id,
+                        item_id=entry.item_id,
+                        location_id=cycle.location_id,
+                        reason="gain" if delta > 0 else "loss",
+                        quantity_delta=delta,
+                        note=f"Cycle count variance: {cycle.name}",
+                        occurred_at=entry.counted_at,
+                        actor_user_id=actor_user_id,
+                        idempotency_key=f"cycle:{cycle.id}:{entry.id}",
+                        cycle_count_entry_id=entry.id,
+                    ),
+                )
+        cycle.status = "completed"
+        cycle.version += 1
+        cycle.completed_by_user_id = actor_user_id
+        cycle.completed_at = datetime.now(timezone.utc)
+        await session.flush()
+        return self._cycle_session_record(cycle)
 
     async def get_quantity(
         self,
@@ -399,6 +672,83 @@ class InventoryRepository:
             await session.flush()
         return quantity
 
+    async def _locked_cycle(
+        self, session: AsyncSession, company_id: UUID, session_id: UUID
+    ) -> CycleCountSession:
+        cycle = await session.scalar(
+            select(CycleCountSession)
+            .where(
+                CycleCountSession.company_id == company_id,
+                CycleCountSession.id == session_id,
+            )
+            .with_for_update()
+        )
+        if cycle is None:
+            raise InventoryNotFound("Company-scoped cycle count not found")
+        return cycle
+
+    async def _authoritative_on_hand(
+        self,
+        session: AsyncSession,
+        *,
+        company_id: UUID,
+        branch_id: UUID,
+        item_id: UUID,
+        location_id: UUID,
+    ) -> Decimal:
+        signed_quantity = case(
+            (
+                StockMovement.destination_location_id == location_id,
+                StockMovement.quantity,
+            ),
+            (StockMovement.source_location_id == location_id, -StockMovement.quantity),
+            else_=Decimal(0),
+        )
+        value = await session.scalar(
+            select(func.coalesce(func.sum(signed_quantity), 0)).where(
+                StockMovement.company_id == company_id,
+                StockMovement.branch_id == branch_id,
+                StockMovement.item_id == item_id,
+                (StockMovement.source_location_id == location_id)
+                | (StockMovement.destination_location_id == location_id),
+            )
+        )
+        return Decimal(value or 0)
+
+    async def _reconcile_quantity(
+        self,
+        session: AsyncSession,
+        *,
+        company_id: UUID,
+        branch_id: UUID,
+        item_id: UUID,
+        location_id: UUID,
+    ) -> InventoryQuantity:
+        quantity = await self._locked_quantity(
+            session,
+            company_id=company_id,
+            branch_id=branch_id,
+            item_id=item_id,
+            location_id=location_id,
+        )
+        authoritative = await self._authoritative_on_hand(
+            session,
+            company_id=company_id,
+            branch_id=branch_id,
+            item_id=item_id,
+            location_id=location_id,
+        )
+        if authoritative < quantity.reserved:
+            raise InventoryConflict(
+                "Authoritative movement evidence is below reserved quantity"
+            )
+        if quantity.on_hand != authoritative:
+            quantity.on_hand = authoritative
+            quantity.version += 1
+            quantity.updated_at = datetime.now(timezone.utc)
+            await session.flush()
+        return quantity
+
     @staticmethod
     def _validate_quantity(item: InventoryItem, quantity: Decimal) -> None:
         if quantity <= 0:
@@ -467,6 +817,24 @@ class InventoryRepository:
         )
         if not all(values):
             raise InventoryConflict("Reservation idempotency key was reused")
+
+    @staticmethod
+    def _assert_same_adjustment(
+        adjustment: InventoryAdjustment, spec: PostInventoryAdjustment
+    ) -> None:
+        values = (
+            adjustment.branch_id == spec.branch_id,
+            adjustment.item_id == spec.item_id,
+            adjustment.location_id == spec.location_id,
+            adjustment.reason == spec.reason.strip().lower(),
+            adjustment.quantity_delta == spec.quantity_delta,
+            adjustment.note == spec.note.strip(),
+            adjustment.occurred_at == spec.occurred_at,
+            adjustment.actor_user_id == spec.actor_user_id,
+            adjustment.cycle_count_entry_id == spec.cycle_count_entry_id,
+        )
+        if not all(values):
+            raise InventoryConflict("Adjustment idempotency key was reused")
 
     @staticmethod
     def _item_record(item: InventoryItem) -> InventoryItemRecord:
@@ -555,4 +923,57 @@ class InventoryRepository:
             version=reservation.version,
             created_at=reservation.created_at,
             updated_at=reservation.updated_at,
+        )
+
+    @staticmethod
+    def _adjustment_record(adjustment: InventoryAdjustment) -> AdjustmentRecord:
+        return AdjustmentRecord(
+            id=adjustment.id,
+            company_id=adjustment.company_id,
+            branch_id=adjustment.branch_id,
+            item_id=adjustment.item_id,
+            location_id=adjustment.location_id,
+            reason=adjustment.reason,
+            quantity_delta=adjustment.quantity_delta,
+            stocking_unit=adjustment.stocking_unit,
+            note=adjustment.note,
+            occurred_at=adjustment.occurred_at,
+            posted_at=adjustment.posted_at,
+            actor_user_id=adjustment.actor_user_id,
+            idempotency_key=adjustment.idempotency_key,
+            movement_id=adjustment.movement_id,
+            cycle_count_entry_id=adjustment.cycle_count_entry_id,
+        )
+
+    @staticmethod
+    def _cycle_entry_record(entry: CycleCountEntry) -> CycleCountEntryRecord:
+        return CycleCountEntryRecord(
+            id=entry.id,
+            company_id=entry.company_id,
+            session_id=entry.session_id,
+            item_id=entry.item_id,
+            expected_quantity=entry.expected_quantity,
+            counted_quantity=entry.counted_quantity,
+            variance=entry.counted_quantity - entry.expected_quantity,
+            stocking_unit=entry.stocking_unit,
+            counted_at=entry.counted_at,
+            counted_by_user_id=entry.counted_by_user_id,
+            idempotency_key=entry.idempotency_key,
+        )
+
+    @staticmethod
+    def _cycle_session_record(cycle: CycleCountSession) -> CycleCountSessionRecord:
+        return CycleCountSessionRecord(
+            id=cycle.id,
+            company_id=cycle.company_id,
+            branch_id=cycle.branch_id,
+            location_id=cycle.location_id,
+            name=cycle.name,
+            status=cycle.status,
+            idempotency_key=cycle.idempotency_key,
+            version=cycle.version,
+            started_by_user_id=cycle.started_by_user_id,
+            completed_by_user_id=cycle.completed_by_user_id,
+            started_at=cycle.started_at,
+            completed_at=cycle.completed_at,
         )
