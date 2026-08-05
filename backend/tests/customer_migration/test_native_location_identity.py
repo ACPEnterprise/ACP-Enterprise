@@ -14,12 +14,21 @@ from app.customer_migration.native_location_identity import (
     reconcile_native_locations,
     scoped_identity,
 )
+from app.customer_migration.native_location_matching import (
+    AcquiredNativeLocation,
+    match_native_location,
+)
+from app.customer_migration.native_location_reconciliation import (
+    ReconciliationWrite,
+    native_location_reconciliation_repository,
+)
 from app.customer_migration.native_location_repository import (
     EvidenceWrite,
     native_location_evidence_repository,
 )
 from app.customer_migration.native_location_review import (
     list_location_identity_evidence,
+    list_location_reconciliation_evidence,
 )
 from app.platform.branch.models import Branch
 from app.platform.company.models import Company
@@ -269,5 +278,44 @@ async def test_postgres_evidence_is_company_scoped_and_replay_safe() -> None:
                 projection.items[0].source_location_id_sha256
                 == result.source_location_id_sha256
             )
+            acquired = AcquiredNativeLocation(
+                identity_evidence_id=first.id,
+                company_id=company.id,
+                branch_id=branch.id,
+                source_location_id_sha256=result.source_location_id_sha256,
+                source_customer_id_sha256=result.source_customer_id_sha256,
+                customer_source_identity_id=None,
+                normalized_address_sha256="c" * 64,
+                readiness=result.readiness,
+                evidence_digest=result.evidence_digest,
+            )
+            reconciliation = match_native_location(acquired, ())
+            reconciliation_write = ReconciliationWrite(
+                company.id, branch.id, user.id, reconciliation
+            )
+            (
+                first_reconciliation,
+                reconciliation_created,
+            ) = await native_location_reconciliation_repository.record(
+                session, evidence=reconciliation_write
+            )
+            (
+                replay_reconciliation,
+                replay_reconciliation_created,
+            ) = await native_location_reconciliation_repository.record(
+                session, evidence=reconciliation_write
+            )
+            assert reconciliation_created is True
+            assert replay_reconciliation_created is False
+            assert replay_reconciliation.id == first_reconciliation.id
+            reconciliation_projection = await list_location_reconciliation_evidence(
+                SimpleNamespace(company=company, active_branch=branch),
+                session,
+                outcome=None,
+                limit=50,
+                offset=0,
+            )
+            assert reconciliation_projection.total == 1
+            assert reconciliation_projection.items[0].outcome == "no_match"
     finally:
         await engine.dispose()

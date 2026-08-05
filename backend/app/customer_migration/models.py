@@ -343,6 +343,12 @@ class ServiceLocationIdentityEvidence(Base):
         UniqueConstraint(
             "id", "company_id", name="uq_location_identity_evidence_scope"
         ),
+        UniqueConstraint(
+            "id",
+            "company_id",
+            "branch_id",
+            name="uq_location_identity_evidence_branch_scope",
+        ),
         Index(
             "ix_location_identity_evidence_review",
             "company_id",
@@ -386,6 +392,90 @@ class ServiceLocationIdentityEvidence(Base):
     readiness: Mapped[str] = mapped_column(String(30), nullable=False)
     evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
     evidence_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
+class ServiceLocationReconciliationEvidence(Base):
+    """Append-only result of matching native evidence to an Enterprise location."""
+
+    __tablename__ = "service_location_reconciliation_evidence"
+    __table_args__ = (
+        CheckConstraint(
+            "candidate_count >= 0", name="ck_location_reconciliation_candidate_count"
+        ),
+        CheckConstraint(
+            "outcome IN ('matched','no_match','identity_not_ready','duplicate_native_identity',"
+            "'ambiguous_address','address_review_required','parent_mismatch',"
+            "'existing_binding_conflict','company_branch_scope_conflict')",
+            name="ck_location_reconciliation_outcome",
+        ),
+        CheckConstraint(
+            "(outcome = 'matched') = (service_location_id IS NOT NULL)",
+            name="ck_location_reconciliation_matched_target",
+        ),
+        CheckConstraint(
+            "(service_location_id IS NULL) = (customer_id IS NULL)",
+            name="ck_location_reconciliation_target_pair",
+        ),
+        ForeignKeyConstraint(
+            ["identity_evidence_id", "company_id", "branch_id"],
+            [
+                "service_location_identity_evidence.id",
+                "service_location_identity_evidence.company_id",
+                "service_location_identity_evidence.branch_id",
+            ],
+            name="fk_location_reconciliation_identity_scope",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "branch_id"],
+            ["branches.company_id", "branches.id"],
+            name="fk_location_reconciliation_branch_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["service_location_id", "customer_id"],
+            ["service_locations.id", "service_locations.customer_id"],
+            name="fk_location_reconciliation_target_customer",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "identity_evidence_id",
+            "evidence_digest",
+            name="uq_location_reconciliation_replay",
+        ),
+        Index(
+            "ix_location_reconciliation_review", "company_id", "branch_id", "outcome"
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    identity_evidence_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), nullable=False
+    )
+    service_location_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    customer_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    evaluated_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    matching_contract_version: Mapped[str] = mapped_column(String(100), nullable=False)
+    outcome: Mapped[str] = mapped_column(String(50), nullable=False)
+    candidate_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    input_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
     )
