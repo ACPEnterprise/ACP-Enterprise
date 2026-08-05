@@ -6,6 +6,16 @@ import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.core.config import settings
+from app.customer_migration.cutover_readiness import (
+    CutoverEvidenceSnapshot,
+    CutoverPrerequisite,
+    PrerequisiteStatus,
+    assess_cutover_readiness,
+)
+from app.customer_migration.cutover_readiness_repository import (
+    CutoverReadinessWrite,
+    cutover_readiness_evidence_repository,
+)
 from app.customer_migration.native_customer_consolidation import (
     NativeCustomerObservation,
     consolidate_native_customers,
@@ -356,5 +366,42 @@ async def test_postgres_evidence_is_company_scoped_and_replay_safe() -> None:
             assert customer_created is True
             assert replay_customer_created is False
             assert replay_customer.id == first_customer.id
+            readiness = assess_cutover_readiness(
+                CutoverEvidenceSnapshot(
+                    company_id=company.id,
+                    branch_id=branch.id,
+                    prerequisites=(
+                        CutoverPrerequisite(
+                            "source5",
+                            PrerequisiteStatus.COMPLETE,
+                            True,
+                            "9" * 64,
+                        ),
+                    ),
+                    owner_dispositions=(),
+                    reconciliation_items=(),
+                    source_evidence_digests=("8" * 64,),
+                    total_evidence_items=1,
+                    deterministically_resolved_items=1,
+                )
+            )
+            readiness_write = CutoverReadinessWrite(
+                company.id, branch.id, user.id, readiness
+            )
+            (
+                first_readiness,
+                readiness_created,
+            ) = await cutover_readiness_evidence_repository.record(
+                session, evidence=readiness_write
+            )
+            (
+                replay_readiness,
+                replay_readiness_created,
+            ) = await cutover_readiness_evidence_repository.record(
+                session, evidence=readiness_write
+            )
+            assert readiness_created is True
+            assert replay_readiness_created is False
+            assert replay_readiness.id == first_readiness.id
     finally:
         await engine.dispose()

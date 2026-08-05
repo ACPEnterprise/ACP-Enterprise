@@ -234,6 +234,77 @@ class CustomerIdentityConsolidationEvidence(Base):
     )
 
 
+class CustomerMigrationCutoverReadinessEvidence(Base):
+    """Immutable deterministic cutover-readiness snapshot; never a cutover command."""
+
+    __tablename__ = "customer_migration_cutover_readiness_evidence"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('ready_for_owner_review','not_ready')",
+            name="ck_customer_cutover_readiness_status",
+        ),
+        CheckConstraint(
+            "confidence_basis_points BETWEEN 0 AND 10000 AND "
+            "completeness_basis_points BETWEEN 0 AND 10000",
+            name="ck_customer_cutover_readiness_scores",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "branch_id"],
+            ["branches.company_id", "branches.id"],
+            name="fk_customer_cutover_readiness_branch_company",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "branch_id",
+            "readiness_key",
+            name="uq_customer_cutover_readiness_key",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "branch_id",
+            "evidence_digest",
+            name="uq_customer_cutover_readiness_replay",
+        ),
+        Index(
+            "ix_customer_cutover_readiness_latest",
+            "company_id",
+            "branch_id",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True)
+    company_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    evaluated_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    readiness_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    contract_version: Mapped[str] = mapped_column(String(100), nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False)
+    ready: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    completed_prerequisites: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    missing_prerequisites: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    blocking_conditions: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    owner_disposition_counts: Mapped[dict[str, int]] = mapped_column(
+        JSONB, nullable=False
+    )
+    reconciliation_counts: Mapped[dict[str, int]] = mapped_column(JSONB, nullable=False)
+    confidence_basis_points: Mapped[int] = mapped_column(Integer, nullable=False)
+    completeness_basis_points: Mapped[int] = mapped_column(Integer, nullable=False)
+    evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
 class CustomerMigrationException(Base):
     __tablename__ = "customer_migration_exceptions"
     __table_args__ = (
