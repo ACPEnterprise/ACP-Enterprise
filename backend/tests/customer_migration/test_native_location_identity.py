@@ -6,6 +6,14 @@ import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.core.config import settings
+from app.customer_migration.native_customer_consolidation import (
+    NativeCustomerObservation,
+    consolidate_native_customers,
+)
+from app.customer_migration.native_customer_repository import (
+    CustomerConsolidationWrite,
+    native_customer_consolidation_repository,
+)
 from app.customer_migration.native_location_identity import (
     AcceptedLocationIdentity,
     LocationIdentityClassification,
@@ -317,5 +325,36 @@ async def test_postgres_evidence_is_company_scoped_and_replay_safe() -> None:
             )
             assert reconciliation_projection.total == 1
             assert reconciliation_projection.items[0].outcome == "no_match"
+            customer_result = consolidate_native_customers(
+                (
+                    NativeCustomerObservation(
+                        company_id=company.id,
+                        branch_id=branch.id,
+                        provider="provider-a",
+                        native_customer_id="unresolved-customer",
+                        source_artifact_sha256="e" * 64,
+                        source_record_sha256="f" * 64,
+                    ),
+                ),
+                (),
+            )[0]
+            customer_write = CustomerConsolidationWrite(
+                company.id, branch.id, user.id, "provider-a", customer_result
+            )
+            (
+                first_customer,
+                customer_created,
+            ) = await native_customer_consolidation_repository.record(
+                session, evidence=customer_write
+            )
+            (
+                replay_customer,
+                replay_customer_created,
+            ) = await native_customer_consolidation_repository.record(
+                session, evidence=customer_write
+            )
+            assert customer_created is True
+            assert replay_customer_created is False
+            assert replay_customer.id == first_customer.id
     finally:
         await engine.dispose()

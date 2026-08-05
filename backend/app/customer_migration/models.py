@@ -103,6 +103,13 @@ class CustomerSourceIdentity(Base):
             "customer_id",
             name="uq_customer_source_identities_parent_scope",
         ),
+        UniqueConstraint(
+            "id",
+            "company_id",
+            "branch_id",
+            "customer_id",
+            name="uq_customer_source_identities_branch_scope",
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(
@@ -130,6 +137,98 @@ class CustomerSourceIdentity(Base):
         ForeignKey("customer_migration_runs.id", ondelete="RESTRICT"),
         nullable=False,
     )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
+class CustomerIdentityConsolidationEvidence(Base):
+    """Append-only consolidation result for one provider-native Customer identity."""
+
+    __tablename__ = "customer_identity_consolidation_evidence"
+    __table_args__ = (
+        CheckConstraint(
+            "observation_count >= 1", name="ck_customer_identity_consolidation_count"
+        ),
+        CheckConstraint(
+            "outcome IN ('resolved','unresolved','missing_source_identifier',"
+            "'duplicate_source_evidence','conflicting_source_evidence','ambiguous_target',"
+            "'existing_binding_conflict','company_branch_scope_conflict',"
+            "'multiple_native_identities_one_customer')",
+            name="ck_customer_identity_consolidation_outcome",
+        ),
+        CheckConstraint(
+            "(outcome = 'resolved') = (customer_source_identity_id IS NOT NULL)",
+            name="ck_customer_identity_consolidation_resolved_target",
+        ),
+        CheckConstraint(
+            "(customer_source_identity_id IS NULL) = (customer_id IS NULL)",
+            name="ck_customer_identity_consolidation_target_pair",
+        ),
+        ForeignKeyConstraint(
+            ["customer_source_identity_id", "company_id", "branch_id", "customer_id"],
+            [
+                "customer_source_identities.id",
+                "customer_source_identities.company_id",
+                "customer_source_identities.branch_id",
+                "customer_source_identities.customer_id",
+            ],
+            name="fk_customer_identity_consolidation_target_scope",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "branch_id"],
+            ["branches.company_id", "branches.id"],
+            name="fk_customer_identity_consolidation_branch_company",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "branch_id",
+            "source_system",
+            "source_identity_key",
+            "evidence_digest",
+            name="uq_customer_identity_consolidation_replay",
+        ),
+        Index(
+            "ix_customer_identity_consolidation_review",
+            "company_id",
+            "branch_id",
+            "outcome",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    customer_source_identity_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True)
+    )
+    customer_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    evaluated_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    source_system: Mapped[str] = mapped_column(String(50), nullable=False)
+    source_entity_type: Mapped[str] = mapped_column(
+        String(30), nullable=False, default="customer"
+    )
+    source_identity_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_customer_id_sha256: Mapped[str | None] = mapped_column(String(64))
+    consolidation_contract_version: Mapped[str] = mapped_column(
+        String(100), nullable=False
+    )
+    outcome: Mapped[str] = mapped_column(String(60), nullable=False)
+    observation_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    input_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
     )
