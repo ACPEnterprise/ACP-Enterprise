@@ -103,6 +103,35 @@ class EstimateDecisionSpec(EstimateTransitionSpec):
 
 
 @dataclass(frozen=True, slots=True)
+class ConvertEstimateToJobSpec:
+    company_id: UUID
+    branch_id: UUID
+    estimate_id: UUID
+    expected_version: int
+    actor_user_id: UUID
+    idempotency_key: str
+    job_type_code: str | None = None
+    customer_reported_problem: str | None = None
+    internal_description: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class EstimateConversionRecord:
+    id: UUID
+    company_id: UUID
+    branch_id: UUID
+    estimate_id: UUID
+    estimate_revision_id: UUID
+    job_id: UUID
+    job_number: str
+    estimate_version: int
+    snapshot_lineage_digest: str
+    idempotency_key: str
+    converted_by_user_id: UUID
+    converted_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
 class EstimateRecord:
     id: UUID
     company_id: UUID

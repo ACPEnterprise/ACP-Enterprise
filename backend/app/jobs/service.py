@@ -120,6 +120,50 @@ class JobService:
             )
         return job
 
+    async def stage_estimate_conversion_job(
+        self,
+        session: AsyncSession,
+        *,
+        company_id: UUID,
+        branch_id: UUID,
+        customer_id: UUID,
+        service_location_id: UUID,
+        actor_user_id: UUID,
+        job_type_code: str | None,
+        customer_reported_problem: str | None,
+        internal_description: str | None,
+        occurred_at: datetime,
+    ) -> Job:
+        """Stage a draft Job in the caller's atomic Estimate conversion."""
+        metadata = self._validate_creation_metadata(
+            CreateJob(
+                branch_id=branch_id,
+                customer_id=customer_id,
+                service_location_id=service_location_id,
+                job_type_code=job_type_code,
+                customer_reported_problem=customer_reported_problem,
+                internal_description=internal_description,
+            )
+        )
+        job = Job(
+            id=uuid4(),
+            company_id=company_id,
+            branch_id=branch_id,
+            job_number=await self._repository.next_job_number(
+                session, company_id=company_id
+            ),
+            customer_id=customer_id,
+            service_location_id=service_location_id,
+            status=JobStatus.DRAFT.value,
+            concurrency_version=1,
+            created_at=occurred_at,
+            updated_at=occurred_at,
+            created_by_user_id=actor_user_id,
+            updated_by_user_id=actor_user_id,
+            **metadata,
+        )
+        return await self._repository.create_job(session, job=job)
+
     async def stage_migrated_job(
         self,
         session: AsyncSession,

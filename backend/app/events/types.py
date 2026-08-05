@@ -210,6 +210,7 @@ class EventType(str, Enum):
     ESTIMATE_EXPIRED = "estimate.expired"
     ESTIMATE_DECLINED = "estimate.declined"
     ESTIMATE_MIGRATED = "estimate.migrated"
+    ESTIMATE_CONVERTED = "estimate.converted"
 
     # Jobs
     JOB_CREATED = "job.created"

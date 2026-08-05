@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.customers.models import Customer, ServiceLocation
 from app.estimates.contracts import (
+    EstimateConversionRecord,
     EstimateCustomerDecisionRecord,
     EstimateLineRecord,
     EstimateRecord,
@@ -16,6 +17,7 @@ from app.estimates.models import (
     Estimate,
     EstimateCommercialSnapshotReference,
     EstimateCustomerDecision,
+    EstimateJobConversion,
     EstimateLifecycleHistory,
     EstimateLineItem,
     EstimateNumberSequence,
@@ -285,6 +287,57 @@ class EstimateRepository:
             .order_by(EstimateRevision.revision_number)
         )
         return tuple(rows.all())
+
+    @staticmethod
+    async def get_snapshot_lineage(
+        session: AsyncSession, *, company_id: UUID, revision_id: UUID
+    ) -> tuple[EstimateCommercialSnapshotReference, ...]:
+        rows = await session.scalars(
+            select(EstimateCommercialSnapshotReference)
+            .where(
+                EstimateCommercialSnapshotReference.company_id == company_id,
+                EstimateCommercialSnapshotReference.revision_id == revision_id,
+            )
+            .order_by(EstimateCommercialSnapshotReference.line_item_id)
+        )
+        return tuple(rows.all())
+
+    @staticmethod
+    async def get_conversion(
+        session: AsyncSession, *, company_id: UUID, estimate_id: UUID
+    ) -> EstimateJobConversion | None:
+        return await session.scalar(
+            select(EstimateJobConversion).where(
+                EstimateJobConversion.company_id == company_id,
+                EstimateJobConversion.estimate_id == estimate_id,
+            )
+        )
+
+    @staticmethod
+    async def add_conversion(
+        session: AsyncSession, *, conversion: EstimateJobConversion
+    ) -> None:
+        session.add(conversion)
+        await session.flush()
+
+    @staticmethod
+    def conversion_record(
+        conversion: EstimateJobConversion, *, job_number: str
+    ) -> EstimateConversionRecord:
+        return EstimateConversionRecord(
+            id=conversion.id,
+            company_id=conversion.company_id,
+            branch_id=conversion.branch_id,
+            estimate_id=conversion.estimate_id,
+            estimate_revision_id=conversion.estimate_revision_id,
+            job_id=conversion.job_id,
+            job_number=job_number,
+            estimate_version=conversion.estimate_version,
+            snapshot_lineage_digest=conversion.snapshot_lineage_digest,
+            idempotency_key=conversion.idempotency_key,
+            converted_by_user_id=conversion.converted_by_user_id,
+            converted_at=conversion.converted_at,
+        )
 
     @staticmethod
     def snapshot_total(snapshots: tuple[PriceBookCommercialSnapshot, ...]) -> Decimal:

@@ -3,6 +3,7 @@ from decimal import Decimal
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
+    JSON,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -410,4 +411,84 @@ class EstimateCustomerDecision(Base):
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
+class EstimateJobConversion(Base):
+    __tablename__ = "estimate_job_conversions"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "branch_id"],
+            ["branches.company_id", "branches.id"],
+            name="fk_estimate_conversions_company_branch",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "estimate_id"],
+            ["estimate_proposals.company_id", "estimate_proposals.id"],
+            name="fk_estimate_conversions_estimate",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "estimate_revision_id"],
+            ["estimate_revisions.company_id", "estimate_revisions.id"],
+            name="fk_estimate_conversions_revision",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "branch_id", "job_id"],
+            ["jobs.company_id", "jobs.branch_id", "jobs.id"],
+            name="fk_estimate_conversions_job",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "estimate_version >= 1", name="ck_estimate_conversions_version"
+        ),
+        CheckConstraint(
+            "snapshot_lineage_digest ~ '^[0-9a-f]{64}$'",
+            name="ck_estimate_conversions_digest",
+        ),
+        CheckConstraint(
+            "length(btrim(idempotency_key)) > 0",
+            name="ck_estimate_conversions_idempotency_key",
+        ),
+        UniqueConstraint(
+            "company_id", "estimate_id", name="uq_estimate_conversions_estimate"
+        ),
+        UniqueConstraint("company_id", "job_id", name="uq_estimate_conversions_job"),
+        UniqueConstraint(
+            "company_id", "idempotency_key", name="uq_estimate_conversions_idempotency"
+        ),
+        Index(
+            "ix_estimate_conversions_company_branch_time",
+            "company_id",
+            "branch_id",
+            "converted_at",
+        ),
+    )
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    estimate_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    estimate_revision_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), nullable=False
+    )
+    job_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    estimate_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    snapshot_lineage: Mapped[list[dict[str, str]]] = mapped_column(JSON, nullable=False)
+    snapshot_lineage_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(160), nullable=False)
+    converted_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    converted_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
     )

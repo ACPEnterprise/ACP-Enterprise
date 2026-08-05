@@ -1,3 +1,5 @@
+import hashlib
+import json
 from collections.abc import Mapping
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
@@ -5,8 +7,10 @@ from uuid import UUID, uuid4
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.estimates.contracts import (
+    ConvertEstimateToJobSpec,
     CreateEstimateRevisionSpec,
     CreateEstimateSpec,
+    EstimateConversionRecord,
     EstimateDecisionSpec,
     EstimateLineSpec,
     EstimateRecord,
@@ -21,6 +25,7 @@ from app.estimates.models import (
     Estimate,
     EstimateCommercialSnapshotReference,
     EstimateCustomerDecision,
+    EstimateJobConversion,
     EstimateLifecycleHistory,
     EstimateLineItem,
     EstimateRevision,
@@ -29,12 +34,122 @@ from app.estimates.repository import EstimateRepository
 from app.events.schemas import BusinessEventCreate
 from app.events.service import BusinessEventService
 from app.events.types import EventType
+from app.jobs.repository import job_repository
+from app.jobs.service import JobService
 from app.price_book.models import PriceBookCommercialSnapshot
 
 
 class EstimateService:
     def __init__(self, repository: EstimateRepository | None = None) -> None:
         self.repository = repository or EstimateRepository()
+
+    async def convert_to_job(
+        self, session: AsyncSession, *, spec: ConvertEstimateToJobSpec
+    ) -> EstimateConversionRecord:
+        if not spec.idempotency_key.strip():
+            raise EstimateValidationError("Conversion idempotency key is required.")
+        now = datetime.now(timezone.utc)
+        async with session.begin():
+            estimate = await self._locked_estimate(
+                session,
+                company_id=spec.company_id,
+                branch_id=spec.branch_id,
+                estimate_id=spec.estimate_id,
+                expected_version=spec.expected_version,
+            )
+            existing = await self.repository.get_conversion(
+                session, company_id=spec.company_id, estimate_id=spec.estimate_id
+            )
+            if existing is not None:
+                if existing.idempotency_key != spec.idempotency_key:
+                    raise EstimateConflictError(
+                        "Estimate has already been converted to a Job."
+                    )
+                job = await job_repository.get_job(
+                    session, company_id=spec.company_id, job_id=existing.job_id
+                )
+                if job is None:
+                    raise EstimateConflictError(
+                        "Converted Job evidence is unavailable."
+                    )
+                return self.repository.conversion_record(
+                    existing, job_number=job.job_number
+                )
+            if (
+                estimate.status != "approved"
+                or estimate.acceptance_status != "approved"
+            ):
+                raise EstimateValidationError(
+                    "Only an approved Estimate may be converted to a Job."
+                )
+            if estimate.current_revision_id is None:
+                raise EstimateConflictError(
+                    "Approved Estimate revision is unavailable."
+                )
+            if estimate.service_location_id is None:
+                raise EstimateValidationError(
+                    "Estimate conversion requires a Service Location."
+                )
+            lineage_refs = await self.repository.get_snapshot_lineage(
+                session,
+                company_id=spec.company_id,
+                revision_id=estimate.current_revision_id,
+            )
+            if not lineage_refs:
+                raise EstimateConflictError(
+                    "Approved Estimate has no commercial snapshot lineage."
+                )
+            lineage = [
+                {
+                    "line_item_id": str(ref.line_item_id),
+                    "snapshot_id": str(ref.snapshot_id),
+                    "snapshot_digest": ref.snapshot_digest,
+                }
+                for ref in lineage_refs
+            ]
+            lineage_digest = hashlib.sha256(
+                json.dumps(lineage, separators=(",", ":"), sort_keys=True).encode()
+            ).hexdigest()
+            job = await JobService().stage_estimate_conversion_job(
+                session,
+                company_id=estimate.company_id,
+                branch_id=estimate.branch_id,
+                customer_id=estimate.customer_id,
+                service_location_id=estimate.service_location_id,
+                actor_user_id=spec.actor_user_id,
+                job_type_code=spec.job_type_code,
+                customer_reported_problem=spec.customer_reported_problem,
+                internal_description=spec.internal_description,
+                occurred_at=now,
+            )
+            conversion = EstimateJobConversion(
+                id=uuid4(),
+                company_id=estimate.company_id,
+                branch_id=estimate.branch_id,
+                estimate_id=estimate.id,
+                estimate_revision_id=estimate.current_revision_id,
+                job_id=job.id,
+                estimate_version=estimate.version,
+                snapshot_lineage=lineage,
+                snapshot_lineage_digest=lineage_digest,
+                idempotency_key=spec.idempotency_key.strip(),
+                converted_by_user_id=spec.actor_user_id,
+                converted_at=now,
+            )
+            await self.repository.add_conversion(session, conversion=conversion)
+            self._stage_event(
+                session,
+                estimate=estimate,
+                revision_id=estimate.current_revision_id,
+                actor_user_id=spec.actor_user_id,
+                event_type=EventType.ESTIMATE_CONVERTED,
+                payload={
+                    "job_id": str(job.id),
+                    "job_number": job.job_number,
+                    "snapshot_lineage_digest": lineage_digest,
+                },
+            )
+        return self.repository.conversion_record(conversion, job_number=job.job_number)
 
     async def create(
         self, session: AsyncSession, *, spec: CreateEstimateSpec
