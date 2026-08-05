@@ -210,3 +210,14 @@ closed. Operational domains retain transaction ownership. Phase 7 adds no
 persistence, migration, scheduler, runtime invocation, AI, Luminary, Beacon,
 frontend, or Production behavior and does not yet translate acquired context into
 ledger facts.
+
+## Phase 8 deterministic allocation engine
+
+The pure allocation foundation is defined in
+[`business-economics-phase8-allocation.md`](business-economics-phase8-allocation.md).
+It allocates immutable cost pools through effective, versioned policies across
+direct, Technician, truck-day, Branch, and Company boundaries. Canonical ordering,
+stable SHA-256/UUIDv5 lineage, exact minor-unit balancing, deterministic remainder
+distribution, source and driver evidence, and zero residual are mandatory. It
+does not replace Phase 3 durable allocation runs and adds no persistence,
+migration, scheduler, runtime integration, AI, Luminary, Beacon, or frontend.
