@@ -445,6 +445,7 @@ class PriceBookCommercialSnapshot(Base):
         UniqueConstraint(
             "company_id", "idempotency_key", name="uq_price_book_snapshots_idempotency"
         ),
+        UniqueConstraint("company_id", "id", name="uq_price_book_snapshots_company_id"),
         Index("ix_price_book_snapshots_digest", "company_id", "digest"),
         Index(
             "ix_price_book_snapshots_lookup",
