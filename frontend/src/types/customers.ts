@@ -1,6 +1,17 @@
-export type CustomerType = "individual" | "business";
+export type CustomerType =
+  | "individual"
+  | "business"
+  | "residential"
+  | "commercial"
+  | "municipal"
+  | "hoa"
+  | "property_management";
 export type PreferredContactMethod = "phone" | "sms" | "email";
-export type CustomerStatus = "active" | "inactive" | "do_not_service";
+export type CustomerStatus =
+  | "prospect"
+  | "active"
+  | "inactive"
+  | "do_not_service";
 export type PropertyType =
   | "single_family"
   | "multi_family"
@@ -8,7 +19,8 @@ export type PropertyType =
   | "condo"
   | "townhome"
   | "mobile_home"
-  | "other";
+  | "other"
+  | "unknown";
 export type SewerSeptic = "sewer" | "septic" | "unknown";
 
 export function normalizeCustomerSource(value: unknown): string {

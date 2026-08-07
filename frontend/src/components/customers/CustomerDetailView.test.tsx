@@ -89,4 +89,51 @@ describe("CustomerDetailView", () => {
     await userEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(refetch).toHaveBeenCalledOnce();
   });
+
+  it("renders an adapted current-contract location with unknown legacy facts", () => {
+    vi.mocked(customerHooks.useCustomerDetail).mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: {
+        ...customer,
+        customer_type: "residential",
+        business_name: "Preview Customer",
+        properties: [
+          {
+            id: "location-1",
+            customer_id: customer.id,
+            address_line_1: "10 Preview Street",
+            address_line_2: null,
+            city: "Albany",
+            state: "NY",
+            postal_code: "12207",
+            property_type: "unknown",
+            gate_access_instructions: null,
+            water_shutoff_location: null,
+            sewer_septic: "unknown",
+            property_notes: null,
+            is_primary: false,
+            created_at: "2026-08-01T12:00:00Z",
+            updated_at: "2026-08-01T12:00:00Z",
+            archived_at: null,
+          },
+        ],
+      },
+    } as never);
+    vi.mocked(customerHooks.useCustomerMutations).mockReturnValue({
+      archive: mutation(),
+      update: mutation(),
+      addNote: mutation(),
+      addProperty: mutation(),
+      updateProperty: mutation(),
+      addContact: mutation(),
+      updateContact: mutation(),
+    } as never);
+
+    render(<CustomerDetailView customerId={customer.id} onBack={vi.fn()} />);
+
+    expect(screen.getByText("Preview Customer")).toBeInTheDocument();
+    expect(screen.getByText("10 Preview Street")).toBeInTheDocument();
+    expect(screen.getByText("unknown · unknown")).toBeInTheDocument();
+  });
 });
