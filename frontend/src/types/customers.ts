@@ -11,6 +11,21 @@ export type PropertyType =
   | "other";
 export type SewerSeptic = "sewer" | "septic" | "unknown";
 
+export function normalizeCustomerSource(value: unknown): string {
+  if (typeof value !== "string") return "unknown";
+
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  return normalized || "unknown";
+}
+
+export function formatCustomerSource(value: unknown): string {
+  return normalizeCustomerSource(value).replaceAll("_", " ");
+}
+
 export interface CustomerInput {
   customer_type: CustomerType;
   first_name: string | null;

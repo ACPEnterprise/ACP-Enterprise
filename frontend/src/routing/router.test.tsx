@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, RouterProvider } from "react-router";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AuthenticationContext, type AuthenticationContextValue } from "../auth/AuthenticationContext";
 import { ThemeProvider } from "../theme/ThemeProvider";
@@ -10,7 +10,14 @@ import { appRoutes } from "./router";
 
 vi.mock("../routes/MissionControlRoute", () => ({ MissionControlRoute: () => <div>Mission route content</div> }));
 vi.mock("../routes/CommandCenterRoute", () => ({ CommandCenterRoute: () => <div>Command Center route content</div> }));
-vi.mock("../routes/CustomersRoute", () => ({ CustomersRoute: () => <div>Customer route content</div> }));
+const routeFailure = vi.hoisted(() => ({ customers: false }));
+
+vi.mock("../routes/CustomersRoute", () => ({
+  CustomersRoute: () => {
+    if (routeFailure.customers) throw new Error("customer render failed");
+    return <div>Customer route content</div>;
+  },
+}));
 vi.mock("../routes/CustomerDetailRoute", () => ({ CustomerDetailRoute: () => <div>Customer detail route content</div> }));
 vi.mock("../routes/JobsRoute", () => ({ JobsRoute: () => <div>Jobs route content</div> }));
 vi.mock("../routes/JobDetailRoute", () => ({ JobDetailRoute: () => <div>Job detail route content</div> }));
@@ -44,6 +51,10 @@ function renderRoute(path: string, context: AuthenticationContextValue = authent
 }
 
 describe("application routing", () => {
+  beforeEach(() => {
+    routeFailure.customers = false;
+  });
+
   it("redirects an unauthenticated user to login without looping", async () => {
     const router = renderRoute("/customers", { ...authenticatedContext, status: "unauthenticated", user: null });
     expect(await screen.findByRole("heading", { name: "Sign in" })).toBeInTheDocument();
@@ -61,6 +72,22 @@ describe("application routing", () => {
     renderRoute("/customers");
     expect(await screen.findByText("Customer route content")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Customers" })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("uses the mobile-safe customer boundary instead of the developer screen", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    routeFailure.customers = true;
+
+    renderRoute("/customers");
+
+    expect(
+      await screen.findByText("This page could not be displayed"),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Reload page" })).toBeInTheDocument();
+    expect(
+      screen.queryByText(/Unexpected Application Error/i),
+    ).not.toBeInTheDocument();
+    consoleError.mockRestore();
   });
 
   it("supports direct Customer detail navigation through the protected shell", async () => {

@@ -84,4 +84,36 @@ describe("CustomerManagement", () => {
     ).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
   });
+
+  it("renders a safe source label when a migrated response contains null", () => {
+    vi.mocked(customerHooks.useCustomerList).mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: {
+        items: [
+          {
+            id: "customer-null-source",
+            customer_type: "business",
+            first_name: null,
+            last_name: null,
+            business_name: "Legacy Customer",
+            primary_phone: "555-0101",
+            email: null,
+            status: "active",
+            source: null,
+            is_vip: false,
+          },
+        ],
+        total: 1,
+      },
+    } as never);
+
+    render(
+      <MemoryRouter>
+        <CustomerManagement />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText("business · unknown")).toBeInTheDocument();
+  });
 });

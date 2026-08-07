@@ -9,64 +9,107 @@ import type {
   CustomerNote,
   CustomerProperty,
   CustomerPropertyInput,
+  CustomerSummary,
   DuplicateCheckInput,
   DuplicateMatch,
 } from "../types/customers";
+import { normalizeCustomerSource } from "../types/customers";
+
+type CustomerSummaryResponse = Omit<CustomerSummary, "source"> & {
+  source?: unknown;
+};
+type CustomerDetailResponse = Omit<CustomerDetail, "source"> & {
+  source?: unknown;
+};
+type DuplicateMatchResponse = Omit<DuplicateMatch, "source"> & {
+  source?: unknown;
+};
+
+function normalizeCustomerSummary(
+  customer: CustomerSummaryResponse,
+): CustomerSummary {
+  return { ...customer, source: normalizeCustomerSource(customer.source) };
+}
+
+function normalizeCustomerDetail(
+  customer: CustomerDetailResponse,
+): CustomerDetail {
+  return { ...customer, source: normalizeCustomerSource(customer.source) };
+}
+
+function normalizeDuplicateMatch(
+  customer: DuplicateMatchResponse,
+): DuplicateMatch {
+  return { ...customer, source: normalizeCustomerSource(customer.source) };
+}
 
 export async function listCustomers(
   search: string,
   limit: number,
   offset: number,
 ): Promise<CustomerListResponse> {
-  const response = await apiClient.get<CustomerListResponse>(
+  const response = await apiClient.get<
+    Omit<CustomerListResponse, "items"> & { items: CustomerSummaryResponse[] }
+  >(
     "/api/v1/customers",
     { params: { search: search || undefined, limit, offset } },
   );
-  return response.data;
+  return {
+    ...response.data,
+    items: response.data.items.map(normalizeCustomerSummary),
+  };
 }
 export async function getCustomer(customerId: string): Promise<CustomerDetail> {
-  const response = await apiClient.get<CustomerDetail>(
+  const response = await apiClient.get<CustomerDetailResponse>(
     `/api/v1/customers/${customerId}`,
   );
-  return response.data;
+  return normalizeCustomerDetail(response.data);
 }
 
 export async function createCustomer(
   input: CustomerInput,
 ): Promise<CustomerCreateResponse> {
-  const response = await apiClient.post<CustomerCreateResponse>(
+  const response = await apiClient.post<{
+    customer: CustomerDetailResponse;
+    duplicate_warnings: DuplicateMatchResponse[];
+  }>(
     "/api/v1/customers",
     input,
   );
-  return response.data;
+  return {
+    customer: normalizeCustomerDetail(response.data.customer),
+    duplicate_warnings: response.data.duplicate_warnings.map(
+      normalizeDuplicateMatch,
+    ),
+  };
 }
 
 export async function updateCustomer(
   customerId: string,
   input: Partial<CustomerInput>,
 ): Promise<CustomerDetail> {
-  const response = await apiClient.patch<CustomerDetail>(
+  const response = await apiClient.patch<CustomerDetailResponse>(
     `/api/v1/customers/${customerId}`,
     input,
   );
-  return response.data;
+  return normalizeCustomerDetail(response.data);
 }
 
 export async function archiveCustomer(customerId: string): Promise<CustomerDetail> {
-  const response = await apiClient.post<CustomerDetail>(
+  const response = await apiClient.post<CustomerDetailResponse>(
     `/api/v1/customers/${customerId}/archive`,
   );
-  return response.data;
+  return normalizeCustomerDetail(response.data);
 }
 
 export async function checkCustomerDuplicates(
   input: DuplicateCheckInput,
 ): Promise<DuplicateMatch[]> {
-  const response = await apiClient.post<{ matches: DuplicateMatch[] }>(
+  const response = await apiClient.post<{ matches: DuplicateMatchResponse[] }>(
     "/api/v1/customers/duplicate-check",
     input,
   );
-  return response.data.matches;
+  return response.data.matches.map(normalizeDuplicateMatch);
 }
 
 export async function addCustomerProperty(

@@ -3,6 +3,7 @@ import { createBrowserRouter, type RouteObject } from "react-router";
 import { ApplicationShell } from "../layout";
 import { ProtectedRoute } from "../auth";
 import { administrationHandle, appointmentsHandle, commandCenterHandle, customerDetailHandle, customersHandle, dispatchHandle, engineeringHandle, jobsHandle, missionControlHandle, notFoundHandle, priceBookHandle } from "./routeMetadata";
+import { RouteErrorBoundary } from "./RouteErrorBoundary";
 
 export const appRoutes: RouteObject[] = [
   {
@@ -37,6 +38,7 @@ export const appRoutes: RouteObject[] = [
           {
             path: "customers",
             handle: customersHandle,
+            ErrorBoundary: RouteErrorBoundary,
             lazy: async () => {
               const module = await import("../routes/CustomersRoute");
               return { Component: module.CustomersRoute };
@@ -45,6 +47,7 @@ export const appRoutes: RouteObject[] = [
           {
             path: "customers/:customerId",
             handle: customerDetailHandle,
+            ErrorBoundary: RouteErrorBoundary,
             lazy: async () => ({
               Component: (await import("../routes/CustomerDetailRoute"))
                 .CustomerDetailRoute,

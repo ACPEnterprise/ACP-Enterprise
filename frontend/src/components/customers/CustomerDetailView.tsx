@@ -3,7 +3,11 @@ import { ArrowLeft, Edit3, MapPin, Plus, Star, UserRound } from "lucide-react";
 
 import { getApiErrorMessage, getOperatorApiError } from "../../api/errors";
 import { useCustomerDetail, useCustomerMutations } from "../../hooks/useCustomers";
-import type { CustomerContact, CustomerProperty } from "../../types/customers";
+import {
+  formatCustomerSource,
+  type CustomerContact,
+  type CustomerProperty,
+} from "../../types/customers";
 import {
   Alert,
   Button,
@@ -83,7 +87,7 @@ export function CustomerDetailView({ customerId, onBack }: CustomerDetailViewPro
             <div className="mt-3 flex flex-wrap gap-2 text-xs">
               <span className="rounded-full bg-slate-800 px-3 py-1 text-content-secondary">{customer.customer_type}</span>
               <span className={`rounded-full px-3 py-1 ${archived ? "bg-red-950 text-red-300" : "bg-emerald-950 text-emerald-300"}`}>{archived ? "archived" : customer.status.replaceAll("_", " ")}</span>
-              <span className="rounded-full bg-blue-950 px-3 py-1 text-blue-300">Source: {customer.source.replaceAll("_", " ")}</span>
+              <span className="rounded-full bg-blue-950 px-3 py-1 text-blue-300">Source: {formatCustomerSource(customer.source)}</span>
             </div>
           </div>
           {!archived && (

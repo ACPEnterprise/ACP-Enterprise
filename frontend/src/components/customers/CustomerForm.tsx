@@ -2,10 +2,11 @@ import { useState, type FormEvent } from "react";
 import { AlertTriangle, Search } from "lucide-react";
 
 import { getApiErrorMessage } from "../../api/errors";
-import type {
-  CustomerDetail,
-  CustomerInput,
-  DuplicateMatch,
+import {
+  normalizeCustomerSource,
+  type CustomerDetail,
+  type CustomerInput,
+  type DuplicateMatch,
 } from "../../types/customers";
 
 const inputClass =
@@ -39,7 +40,7 @@ function editableCustomer(customer?: CustomerDetail): CustomerInput {
     email: customer.email ?? "",
     preferred_contact_method: customer.preferred_contact_method,
     status: customer.status,
-    source: customer.source,
+    source: normalizeCustomerSource(customer.source),
     is_vip: customer.is_vip,
     internal_notes: customer.internal_notes ?? "",
   };
@@ -103,7 +104,7 @@ export function CustomerForm({
     email: nullable(form.email),
     internal_notes: nullable(form.internal_notes),
     primary_phone: form.primary_phone.trim(),
-    source: form.source.trim() || "unknown",
+    source: normalizeCustomerSource(form.source),
   });
 
   const submit = (event: FormEvent) => {
