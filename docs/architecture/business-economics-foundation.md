@@ -2,6 +2,12 @@
 
 Status: authoritative after ECON.1R reconciliation
 
+The normative Version 1.0 KPI, source/financial ownership, attribution,
+QuickBooks, and reconciliation-tolerance contract is
+[`business-economics-v1-contract.md`](business-economics-v1-contract.md). Roadmap
+BE.8 is documentation-only and is distinct from the external Phase 8 engine
+described later in this document.
+
 ## Reconciliation decision
 
 The authoritative foundation combines Implementation A (`c1cfcd6`) and
