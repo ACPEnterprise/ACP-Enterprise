@@ -32,6 +32,7 @@ from app.events.schemas import BusinessEventCreate
 from app.events.service import BusinessEventService
 from app.events.types import EventType
 from app.jobs.router import router as jobs_router
+from app.platform.audit.router import router as platform_audit_router
 from app.platform.auth.router import router as auth_router
 from app.platform.company.admin_router import router as company_admin_router
 from app.platform.contracts.manifest import platform_contract_manifest
@@ -40,6 +41,7 @@ from app.platform.contracts.router import (
     engineering_router as engineering_platform_contracts_router,
 )
 from app.platform.contracts.router import router as platform_contracts_router
+from app.platform.launch_controls import validate_launch_role_matrix
 from app.platform.permissions.catalog import permission_catalog
 from app.platform.permissions.router import router as authorization_router
 from app.platform.security.middleware import (
@@ -65,6 +67,7 @@ logging.basicConfig(
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     permission_catalog.validate()
+    validate_launch_role_matrix(permission_catalog)
     platform_contract_manifest.assert_expected(
         settings.platform_contract_expected_fingerprint
     )
@@ -119,6 +122,7 @@ app.include_router(beacon_router)
 app.include_router(customers_router)
 app.include_router(auth_router)
 app.include_router(authorization_router)
+app.include_router(platform_audit_router)
 app.include_router(platform_contracts_router)
 app.include_router(engineering_platform_contracts_router)
 app.include_router(company_admin_router)

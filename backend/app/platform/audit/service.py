@@ -7,9 +7,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.platform.audit.models import AuditRecord
 from app.platform.security.metrics import security_metrics
 
-
 SENSITIVE_KEYS = frozenset(
-    {"password", "password_hash", "token", "token_hash", "secret", "credential"}
+    {
+        "api_key",
+        "authorization",
+        "cookie",
+        "credential",
+        "password",
+        "private_key",
+        "secret",
+        "session_cookie",
+        "token",
+    }
 )
 
 
@@ -61,7 +70,7 @@ class AuditService:
             raise ValueError("Audit outcome is invalid")
 
         def visit(value: object, key: str = "") -> None:
-            normalized = key.lower()
+            normalized = key.lower().replace("-", "_").replace(" ", "_")
             if any(marker in normalized for marker in SENSITIVE_KEYS):
                 raise ValueError("Sensitive values are prohibited in audit details")
             if isinstance(value, dict):

@@ -27,6 +27,12 @@ class CustomerPermission:
     ALL = frozenset({READ, MANAGE})
 
 
+class LaunchPlatformPermission:
+    AUDIT_READ = "COMPANY_AUDIT_READ"
+
+    ALL = frozenset({AUDIT_READ})
+
+
 class AnalyticsPermission:
     READ = "COMPANY_ANALYTICS_READ"
 

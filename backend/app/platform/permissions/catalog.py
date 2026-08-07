@@ -13,6 +13,7 @@ from app.platform.permissions.codes import (
     EngineeringExecutionPermission,
     EngineeringRepositoryOperationPermission,
     JobPermission,
+    LaunchPlatformPermission,
     PriceBookPermission,
     SchedulingPermission,
     WorkerControlPermission,
@@ -96,6 +97,18 @@ ADMINISTRATION_DEFINITIONS = tuple(
         reserved=True,
     )
     for code in sorted(AdministrationPermission.ALL)
+)
+
+LAUNCH_PLATFORM_DEFINITIONS = tuple(
+    PermissionDefinition(
+        code=code,
+        name="Company Audit Read",
+        resource="audit",
+        action="read",
+        scope=PermissionScope.COMPANY,
+        reserved=True,
+    )
+    for code in sorted(LaunchPlatformPermission.ALL)
 )
 
 CUSTOMER_DEFINITIONS = tuple(
@@ -243,6 +256,7 @@ WORKER_IDENTITY_DEFINITIONS = tuple(
 
 permission_catalog = PermissionCatalog(
     ADMINISTRATION_DEFINITIONS
+    + LAUNCH_PLATFORM_DEFINITIONS
     + CUSTOMER_DEFINITIONS
     + ANALYTICS_DEFINITIONS
     + BEACON_DEFINITIONS
