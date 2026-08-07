@@ -2,8 +2,9 @@
 
 ## Authority, scope, and status
 
-This roadmap is the Phase 2 planning architecture from the repository state at
-`7ebad9c90c7d511c0cca82395ef4210b0deea750` through ACP Enterprise Version 1.0.
+This roadmap is the Phase 2 planning architecture from the MMQ.5 repository
+baseline at `4dd2884a25bd1e86a11792a95239f58b88c6abe8` through ACP Enterprise
+Version 1.0.
 It is incorporated into the [Master Milestone Queue](master-milestone-queue.md)
 by `MMQ.4`. It refines the [Module Map](../architecture/module-map.md),
 [Platform Roadmap](../architecture/roadmap.md),
@@ -25,9 +26,10 @@ untouched until the independent release gates are approved.
 
 ## Planning assumptions
 
-- Current active milestones remain `EST.2`, `INV.1`, `CUTOVER.1`, and Business
-  Economics Phase 7; this roadmap does not change their status or assert their
-  completion.
+- Repository reconciliation records `EST.2`, `INV.1`, `INV.2`, and `EST.3` as
+  `COMPLETE` in authoritative Enterprise history. `CUTOVER.1` and Economics
+  external Phase 8 have isolated candidates waiting for owner review. The
+  Master Milestone Queue controls these states.
 - Existing Customer, Scheduling, Jobs, Dispatch, Price Book, Platform, event,
   notification, Development Factory, Mission Control, and early Analytics
   foundations are reused rather than re-created.
@@ -49,26 +51,28 @@ untouched until the independent release gates are approved.
 | `CRM.2` | Close launch CRM gaps | Intake, contacts, service locations, deduplication, notes, consent-safe history | Existing Customer and Location foundations | Approved CRM contract, APIs, UI, events, deduplication evidence | Scheduling, Jobs, Communications, Portal, Migration | `L` | `L` | `ACP-Enterprise`, isolated worktree | Office Machine 2 after identity confirmation |
 | `OPS.1` | Complete launch job lifecycle | Service request, job, appointment handoff, cancellation, reschedule, exceptions | `CRM.2`; existing Scheduling and Jobs foundations | End-to-end office workflow, state rules, events, acceptance tests | CRM, Dispatch, Technician, Estimates, Financial | `L` | `XL` | `ACP-Enterprise`, isolated worktree | Office Machine 1 after `EST.2` handoff |
 | `DISP.2` | Complete dispatch execution | Availability projection, assignment workflow, arrival states, exceptions | `OPS.1`; Dispatch Assignment V1 | Launch dispatch board, assignment APIs, events, dispatcher evidence | Operations, Workforce, Technician, Communications | `L` | `L` | `ACP-Enterprise`, isolated worktree | Office Machine 2 |
-| `EST.3` | Make estimates launch-ready | Options, discounts, approval evidence, conversion, responsive UX | `EST.2`; `CRM.2` | Accepted estimate journey and immutable authorization evidence | Price Book, Jobs, Technician, Portal, Invoicing | `L` | `XL` | `ACP-Enterprise`, isolated worktree | Office Machine 1 |
-| `INV.2` | Complete inventory control core | Locations, on-hand balances, adjustments, reservations, transfers | `INV.1`; `OPS.1` | Inventory services, APIs, UI, events, concurrency tests | Purchasing, Technician, Jobs, Reporting | `L` | `XL` | `ACP-Enterprise`, isolated worktree | Office Machine 2 |
-| `PUR.1` | Establish purchasing foundation | Vendors, purchase orders, lifecycle, authorization boundaries | Inventory & Purchasing Architecture V1; `INV.2` | Vendor and PO domain, repository, APIs, audit events | Inventory, Financial, Reporting | `L` | `L` | `ACP-Enterprise`, isolated worktree | Office Machine 1 |
+| `EST.3` | Deliver estimate-to-job conversion | Accepted estimate conversion, job creation, conversion evidence, and authorization | `EST.2` | Integrated estimate-to-job service, events, persistence, and regression evidence | Price Book, Jobs | `L` | `XL` | `ACP-Enterprise`, integrated authoritative history | Office Machine 1 |
+| `EST.4` | Complete the launch estimate experience | Remaining options, discounts, approval presentation, and responsive UX not delivered by `EST.3` | `EST.3`; `CRM.2` | Accepted end-to-end estimate journey and responsive authorization evidence | Price Book, CRM, Technician, Portal, Invoicing | `L` | `XL` | `ACP-Enterprise`, isolated worktree | Office Machine 1 |
+| `INV.2` | Deliver inventory adjustments and cycle counts | Adjustment and cycle-count persistence, services, repositories, contracts, and concurrency controls | `INV.1` | Integrated adjustment/count workflows, audit evidence, and regression coverage | Inventory foundation, audit | `L` | `XL` | `ACP-Enterprise`, integrated authoritative history | Office Machine 2 |
+| `INV.2A` | Complete the launch inventory control core | Remaining location/on-hand, reservation, and transfer workflows not delivered by `INV.2` | `INV.2`; `OPS.1` | Inventory services, APIs, UI, events, and concurrency evidence for the residual scope | Purchasing, Technician, Jobs, Reporting | `L` | `XL` | `ACP-Enterprise`, isolated worktree | Office Machine 2 |
+| `PUR.1` | Establish purchasing foundation | Vendors, purchase orders, lifecycle, authorization boundaries | Inventory & Purchasing Architecture V1; `INV.2A` | Vendor and PO domain, repository, APIs, audit events | Inventory, Financial, Reporting | `L` | `L` | `ACP-Enterprise`, isolated worktree | Office Machine 1 |
 | `TECH.1` | Establish technician application shell | Role-scoped itinerary, job context, navigation, responsive and accessible shell | `OPS.1`; `DISP.2`; Platform identity | Technician shell, route guards, API contracts, device acceptance | Jobs, Dispatch, CRM, Communications | `M` | `L` | `ACP-Enterprise`, isolated worktree | Office Machine 2 |
 | `COMMS.1` | Establish launch communications | Provider boundary, consent, templates, delivery history, retry contract | `CRM.2`; notification outbox | Messaging service boundary, delivery records, failure handling | CRM, Operations, Estimates, Financial, Portal | `L` | `XL` | `ACP-Enterprise`, isolated worktree | Office Machine 1 |
 | `BE.8` | Define Version 1.0 economics contract | KPI definitions, attribution, profitability inputs, QuickBooks boundary | Business Economics Phase 7 | Approved KPI catalog, ownership map, reconciliation tolerances | Reporting, Estimates, Jobs, Financial | `M` | `M` | Business Economics Repository | Business Economics capacity |
 | `MIG.1` | Freeze migration mapping and reconciliation | Launch entities, field maps, transforms, reject taxonomy, thresholds | `CUTOVER.1`; `CRM.2`; `OPS.1` contracts | Versioned mapping, synthetic dataset, reconciliation plan | CRM, Operations, Estimates, Financial, Reporting | `L` | `XL` | Migration Repository | Migration capacity |
 | `PLAT.1` | Close launch platform controls | Role matrix, branch enforcement, audit access, secrets and support boundaries | Existing Platform and security foundations | Accepted launch-role matrix, tenant tests, audit and support runbooks | Every protected module | `M` | `XL` | `ACP-Enterprise`, isolated worktree | Office Machine 1 |
-| `IC.1` | Integrate launch foundations | Review and serialize Phase 1 accepted outputs | `CRM.2`; `OPS.1`; `DISP.2`; `EST.3`; `INV.2`; `PUR.1`; `TECH.1`; `COMMS.1`; `BE.8`; `MIG.1`; `PLAT.1` | One reviewed commit set, one Alembic head, aggregate validation report | All Phase 1 boundaries | `L` | `XL` | `ACP-Enterprise` integration workspace | Laptop 1 |
+| `IC.1` | Integrate launch foundations | Review and serialize Phase 1 accepted outputs | `CRM.2`; `OPS.1`; `DISP.2`; `EST.4`; `INV.2A`; `PUR.1`; `TECH.1`; `COMMS.1`; `BE.8`; `MIG.1`; `PLAT.1` | One reviewed commit set, one Alembic head, aggregate validation report | All Phase 1 boundaries | `L` | `XL` | `ACP-Enterprise` integration workspace | Laptop 1 |
 
 ### Phase 2 — Revenue, field execution, and customer experience
 
 | Code | Purpose | Scope | Prerequisites | Expected outputs | Integration points | Implementation | Validation | Expected repository | Suggested machine |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `TECH.2` | Enable field work execution | Status, notes, photos, forms, customer approvals, completion evidence | `TECH.1`; `EST.3`; `IC.1` | Executable field journey, durable evidence, role and branch tests | Jobs, Dispatch, Estimates, Communications | `L` | `XL` | `ACP-Enterprise`, isolated worktree | Office Machine 2 |
-| `INV.3` | Capture job materials | Issue, return, consumption, reservation release, correction audit | `INV.2`; `TECH.2` | Material ledger and job consumption workflow | Technician, Jobs, Purchasing, Invoicing, Reporting | `L` | `XL` | `ACP-Enterprise`, isolated worktree | Office Machine 1 |
-| `PUR.2` | Receive and reconcile purchases | Receipts, partial receipts, discrepancies, stock updates | `PUR.1`; `INV.2`; `IC.1` | Receiving workflow, inventory postings, exception evidence | Inventory, Financial, Reporting | `L` | `XL` | `ACP-Enterprise`, isolated worktree | Office Machine 2 |
+| `TECH.2` | Enable field work execution | Status, notes, photos, forms, customer approvals, completion evidence | `TECH.1`; `EST.4`; `IC.1` | Executable field journey, durable evidence, role and branch tests | Jobs, Dispatch, Estimates, Communications | `L` | `XL` | `ACP-Enterprise`, isolated worktree | Office Machine 2 |
+| `INV.3` | Capture job materials | Issue, return, consumption, reservation release, correction audit | `INV.2A`; `TECH.2` | Material ledger and job consumption workflow | Technician, Jobs, Purchasing, Invoicing, Reporting | `L` | `XL` | `ACP-Enterprise`, isolated worktree | Office Machine 1 |
+| `PUR.2` | Receive and reconcile purchases | Receipts, partial receipts, discrepancies, stock updates | `PUR.1`; `INV.2A`; `IC.1` | Receiving workflow, inventory postings, exception evidence | Inventory, Financial, Reporting | `L` | `XL` | `ACP-Enterprise`, isolated worktree | Office Machine 2 |
 | `PUR.3` | Add replenishment controls | Reorder thresholds, recommendations, approval, PO linkage | `PUR.2`; `INV.3` | Replenishment queue and auditable recommendations | Inventory, Business Economics, Beacon | `M` | `L` | `ACP-Enterprise`, isolated worktree | Office Machine 1 |
 | `INV.4` | Prove inventory launch readiness | Counts, transfer/adjustment reconciliation, permissions, performance | `INV.3`; `PUR.3` | Reconciliation report, role evidence, accepted exceptions | Migration, Reporting, Release | `M` | `XL` | `ACP-Enterprise`, isolated worktree | Office Machine 2 |
-| `INVOICE.1` | Establish operational invoicing | Invoice facts, lines, tax boundary, totals, lifecycle, events | `EST.3`; `OPS.1`; `IC.1` | Invoice domain, repository, APIs, deterministic calculations | Estimates, Jobs, Inventory, Payments, Accounting | `L` | `XL` | `ACP-Enterprise`, isolated worktree | Office Machine 1 |
+| `INVOICE.1` | Establish operational invoicing | Invoice facts, lines, tax boundary, totals, lifecycle, events | `EST.4`; `OPS.1`; `IC.1` | Invoice domain, repository, APIs, deterministic calculations | Estimates, Jobs, Inventory, Payments, Accounting | `L` | `XL` | `ACP-Enterprise`, isolated worktree | Office Machine 1 |
 | `INVOICE.2` | Deliver invoice workflow | Generate from accepted work, present, send, receipt state, UI | `INVOICE.1`; `TECH.2`; `COMMS.1` | Office, technician, and customer invoice journey | Technician, Communications, Portal, Payments | `L` | `XL` | `ACP-Enterprise`, isolated worktree | Office Machine 2 |
 | `INVOICE.3` | Add controlled corrections | Void, adjustment, credit boundary, audit trail, balance recomputation | `INVOICE.2` | Correction workflows and immutable financial evidence | Payments, Accounting, Reporting | `M` | `XL` | `ACP-Enterprise`, isolated worktree | Office Machine 1 |
 | `PAY.1` | Establish payment provider boundary | Tokenization, idempotency, request/attempt model, webhook verification | `INVOICE.1`; `PLAT.1` | Provider adapter contract, threat model, failure-safe persistence | Invoicing, Platform, Communications | `L` | `XL` | `ACP-Enterprise`, isolated worktree | Office Machine 2 |
@@ -77,9 +81,9 @@ untouched until the independent release gates are approved.
 | `ACC.1` | Define QuickBooks handoff | Operational-to-accounting mapping, export ownership, idempotent references | `INVOICE.3`; `PAY.3`; `BE.8` | Approved QuickBooks contract and financial control matrix | Invoicing, Payments, Business Economics | `L` | `XL` | `ACP-Enterprise`, isolated worktree | Office Machine 1 with finance review |
 | `ACC.2` | Implement accounting reconciliation | Export/integration, acknowledgements, retry, variance workflow | `ACC.1` | QuickBooks handoff, reconciliation report, exception ownership | Reporting, Migration, Beacon | `XL` | `XL` | `ACP-Enterprise`, isolated worktree | Office Machine 1 with finance review |
 | `PORTAL.1` | Establish customer portal trust boundary | Customer authentication, account linking, consent, tenant isolation | `CRM.2`; `PLAT.1`; `IC.1` | Portal identity architecture, APIs, shell, security tests | CRM, Platform, Communications | `L` | `XL` | `ACP-Enterprise`, isolated worktree | Office Machine 2 |
-| `PORTAL.2` | Expose commercial self-service | Estimate review/approval, invoice view, payment request and receipt | `PORTAL.1`; `EST.3`; `INVOICE.2`; `PAY.2` | Customer commercial journey and accessibility evidence | Estimates, Invoicing, Payments, Communications | `L` | `XL` | `ACP-Enterprise`, isolated worktree | Office Machine 2 |
+| `PORTAL.2` | Expose commercial self-service | Estimate review/approval, invoice view, payment request and receipt | `PORTAL.1`; `EST.4`; `INVOICE.2`; `PAY.2` | Customer commercial journey and accessibility evidence | Estimates, Invoicing, Payments, Communications | `L` | `XL` | `ACP-Enterprise`, isolated worktree | Office Machine 2 |
 | `PORTAL.3` | Expose appointment self-service | Appointment view, bounded reschedule/cancel request, message history | `PORTAL.1`; `OPS.1`; `COMMS.1` | Customer appointment journey and safe request handoff | Scheduling, Operations, Communications | `L` | `XL` | `ACP-Enterprise`, isolated worktree | Office Machine 1 |
-| `COMMS.2` | Complete launch notification journeys | Appointment, dispatch, estimate, invoice, payment, receipt templates | `COMMS.1`; `DISP.2`; `EST.3`; `INVOICE.2`; `PAY.2` | Approved templates, consent tests, delivery observability | All customer-facing workflows | `M` | `XL` | `ACP-Enterprise`, isolated worktree | Office Machine 2 |
+| `COMMS.2` | Complete launch notification journeys | Appointment, dispatch, estimate, invoice, payment, receipt templates | `COMMS.1`; `DISP.2`; `EST.4`; `INVOICE.2`; `PAY.2` | Approved templates, consent tests, delivery observability | All customer-facing workflows | `M` | `XL` | `ACP-Enterprise`, isolated worktree | Office Machine 2 |
 | `IC.2` | Integrate revenue and experience | Serialize accepted Phase 2 migrations and contracts | `TECH.2`; `INV.3`; `PUR.2`; `PUR.3`; `INV.4`; `INVOICE.3`; `PAY.3`; `ACC.2`; `PORTAL.2`; `PORTAL.3`; `COMMS.2` | One head, full booked-to-cash journey, financial reconciliation evidence | All Phase 2 boundaries | `XL` | `XL` | `ACP-Enterprise` integration workspace | Laptop 1 |
 
 ### Phase 3 — Intelligence, economics, migration proof, and operations
@@ -117,20 +121,21 @@ serializes accepted work before the next phase. It does not authorize a merge,
 deployment, or milestone Start.
 
 ```text
-Current active work: EST.2   INV.1   CUTOVER.1   Economics Phase 7
-                         │      │         │              │
-                         └──────┴─────────┴──────────────┘
+Reconciled foundations: EST.2   INV.1   INV.2   EST.3
+Isolated review work:                    CUTOVER.1   Economics Phase 8
+                                                │              │
+                         └──────────────────────┴──────────────┘
                                       │
 Phase 1: CRM.2 → OPS.1 → DISP.2 ───────────────┐
-         CRM.2 → EST.3                          │
-         OPS.1 → INV.2 → PUR.1                  ├→ IC.1
+         CRM.2 + EST.3 → EST.4                  │
+         OPS.1 + INV.2 → INV.2A → PUR.1         ├→ IC.1
          OPS.1 + DISP.2 → TECH.1                │
          CRM.2 → COMMS.1; Phase 7 → BE.8        │
          CUTOVER.1 → MIG.1; Platform → PLAT.1 ──┘
                                       │
-Phase 2: TECH.1 + EST.3 → TECH.2 → INV.3 → INV.4 ─┐
-         INV.2 → PUR.2 → PUR.3 ────────────────────┤
-         EST.3 + OPS.1 → INVOICE.1 → .2 → .3       ├→ IC.2
+Phase 2: TECH.1 + EST.4 → TECH.2 → INV.3 → INV.4 ─┐
+         INV.2A → PUR.2 → PUR.3 ───────────────────┤
+         EST.4 + OPS.1 → INVOICE.1 → .2 → .3       ├→ IC.2
          INVOICE.1 → PAY.1 → PAY.2 → PAY.3          │
          INVOICE.3 + PAY.3 → ACC.1 → ACC.2          │
          PLAT.1 → PORTAL.1 → PORTAL.2 / PORTAL.3 ───┤
@@ -154,9 +159,9 @@ parallel.
 
 | Wave | Parallel-safe candidates after prerequisites | Required serialization |
 | --- | --- | --- |
-| 0 — current | Existing `EST.2`, `INV.1`, `CUTOVER.1`, and Economics Phase 7 remain isolated | Owner chooses `EST.2`/`INV.1` lineage order; Laptop 1 integrates one accepted commit set at a time |
+| 0 — current | `EST.2`, `INV.1`, `INV.2`, and `EST.3` are complete in authoritative history; `CUTOVER.1` and Economics external Phase 8 await owner review on isolated refs | Owner reviews isolated candidates; Laptop 1 integrates one accepted commit set at a time |
 | 1A | `CRM.2`, `BE.8`, `PLAT.1`, and migration mapping discovery for `MIG.1` | Any schema revisions; `MIG.1` cannot freeze until `CRM.2`/`OPS.1` contracts settle |
-| 1B | `EST.3`, `OPS.1`, and `COMMS.1` after `CRM.2`; `INV.2` after `OPS.1` | Shared CRM/Jobs contracts and Alembic lineage; `IC.1` is single-file-order integration |
+| 1B | `EST.4`, `OPS.1`, and `COMMS.1` after `CRM.2`; `INV.2A` after `OPS.1` | Shared CRM/Jobs contracts and Alembic lineage; `IC.1` is single-file-order integration |
 | 1C | `DISP.2`, `PUR.1`, and `TECH.1` after their prerequisites | Dispatch/Technician shared interfaces; `IC.1` aggregate validation |
 | 2A | `TECH.2`, `PUR.2`, `INVOICE.1`, `PAY.1`, and `PORTAL.1` on isolated boundaries | Invoice/Payment schema order and shared financial contracts |
 | 2B | `INV.3`, `INVOICE.2`, `PORTAL.3`; then `PUR.3`, `INVOICE.3`, `PAY.2`, `PORTAL.2` as edges clear | Financial totals, provider webhooks, portal authorization, and Alembic chain |
@@ -191,7 +196,7 @@ parallel.
 
 | Risk | Exposure | Required mitigation / decision |
 | --- | --- | --- |
-| Active-work truth is incomplete | `EST.2`, `INV.1`, `CUTOVER.1`, and Phase 7 lack exact handoff commits and acceptance boundaries | Reconcile each external repository before pulling roadmap work |
+| Isolated-work acceptance is incomplete | `CUTOVER.1` and Economics external Phase 8 lack owner acceptance; the phone candidate is too divergent to adopt directly | Review isolated candidates independently; freshly implement `PHONE-BUG.1` on authoritative Enterprise |
 | Alembic collision | Parallel schema work can fork `t5j7f9b1c386` or a later head | One migration owner at a time; record intended parent; serial integration and disposable-database proof |
 | Financial source-of-truth ambiguity | Operational totals can diverge from QuickBooks or provider settlement | Approve immutable ownership, rounding/tax, idempotency and reconciliation contracts before `INVOICE.1`/`PAY.1` |
 | Payment security and duplicate charge risk | Webhooks, retries, tokens, and partial failures are financially consequential | Tokenization, verified webhooks, idempotency keys, least privilege and failure-injection evidence |
@@ -241,7 +246,7 @@ an approved scope change.
 | --- | --- | --- |
 | Memberships and recurring service | Stable Jobs, Payments, Communications | Launch-critical workflow inventory has not approved it for Version 1.0 |
 | Route and capacity optimization | `DISP.2`; reliable travel inputs | Provider choice and operational acceptance criteria are undefined |
-| Advanced estimate financing and sales coaching | `EST.3`; `PAY.3` | Financing, compliance and business ownership are undefined |
+| Advanced estimate financing and sales coaching | `EST.4`; `PAY.3` | Financing, compliance and business ownership are undefined |
 | Warranty and equipment history depth | `TECH.3`; CRM asset model | Launch-critical data and workflow scope are not approved |
 | Campaign and attribution depth | `CRM.2`; `RPT.1` | Marketing-source and consent architecture needs separate approval |
 
