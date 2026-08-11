@@ -4,6 +4,7 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
+
 from app.execution_nodes.boundaries import BoundaryViolation, boundary_digest
 from app.execution_nodes.contracts import (
     ProviderBoundary,
@@ -46,6 +47,10 @@ def repository(tmp_path: Path) -> tuple[Path, str]:
     (root / "backend" / "app" / "beacon" / "initial.py").write_text("VALUE = 0\n")
     git(root, "add", ".")
     git(root, "commit", "-m", "initial")
+    remote = tmp_path / "remote.git"
+    subprocess.run(("git", "init", "--bare", str(remote)), check=True)
+    git(root, "remote", "add", "origin", str(remote))
+    git(root, "push", "-u", "origin", "main")
     return root, git(root, "rev-parse", "HEAD")
 
 
@@ -57,7 +62,14 @@ def make_request(head: str, **changes: object) -> ProviderExecutionRequest:
         expected_head=head,
         allowed_paths=("backend/app/beacon/**",),
         forbidden_paths=(".git/**", ".env*", "**/.env*"),
-        permitted_operations=("inspect", "modify", "validate", "commit"),
+        permitted_operations=(
+            "inspect",
+            "modify",
+            "validate",
+            "commit",
+            "mechanical_reconcile",
+            "push",
+        ),
         validation_requirements=("git diff --check",),
     )
     values = {
@@ -86,6 +98,30 @@ def service(tmp_path: Path, repository: Path) -> ControlledExecutionProvider:
     )
 
 
+def advance_remote(repository: Path, tmp_path: Path, relative: str) -> str:
+    clone = tmp_path / f"advance-{relative.replace('/', '-')}"
+    subprocess.run(
+        (
+            "git",
+            "clone",
+            "--branch",
+            "main",
+            str(repository.parent / "remote.git"),
+            str(clone),
+        ),
+        check=True,
+    )
+    git(clone, "config", "user.name", "Remote Test")
+    git(clone, "config", "user.email", "remote@example.invalid")
+    target = clone / relative
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text("REMOTE = 1\n")
+    git(clone, "add", relative)
+    git(clone, "commit", "-m", "remote advance")
+    git(clone, "push", "origin", "main")
+    return git(clone, "rev-parse", "HEAD")
+
+
 def test_provider_owns_workspace_validation_and_commit(
     repository: tuple[Path, str], tmp_path: Path
 ) -> None:
@@ -94,6 +130,7 @@ def test_provider_owns_workspace_validation_and_commit(
     assert result.phase is ProviderPhase.COMPLETED
     assert result.starting_head == head
     assert result.commit_sha and result.commit_sha != head
+    assert git(root, "ls-remote", "origin", "refs/heads/main").split()[0] == result.commit_sha
     assert result.files_changed == ("backend/app/beacon/result.py",)
     assert git(root, "status", "--porcelain") == ""
 
@@ -116,3 +153,23 @@ def test_duplicate_completed_execution_is_rejected(
     provider.execute(request)
     with pytest.raises(ProviderFailure, match="Duplicate"):
         provider.execute(request)
+
+
+def test_provider_mechanically_reconciles_disjoint_remote_advance(
+    repository: tuple[Path, str], tmp_path: Path
+) -> None:
+    root, head = repository
+    remote_head = advance_remote(root, tmp_path, "docs/remote.md")
+    result = service(tmp_path, root).execute(make_request(head))
+    assert result.evidence["mechanically_reconciled"] is True
+    assert result.evidence["remote_head_before"] == remote_head
+    assert git(root, "ls-remote", "origin", "refs/heads/main").split()[0] == result.commit_sha
+
+
+def test_provider_fails_closed_on_overlapping_remote_advance(
+    repository: tuple[Path, str], tmp_path: Path
+) -> None:
+    root, head = repository
+    advance_remote(root, tmp_path, "backend/app/beacon/result.py")
+    with pytest.raises(ProviderFailure, match="serialized owner-reviewed"):
+        service(tmp_path, root).execute(make_request(head))

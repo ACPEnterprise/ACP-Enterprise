@@ -1,8 +1,9 @@
+import asyncio
 import hashlib
 import hmac
 import json
 import re
-from collections.abc import Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from uuid import UUID
@@ -125,7 +126,11 @@ class NodeExecutionProviderClient:
         self.token = token_file.read_bytes().strip()
         self.timeout_seconds = timeout_seconds
 
-    async def execute(self, offer: AcquiredControlledOffer) -> dict[str, object]:
+    async def execute(
+        self,
+        offer: AcquiredControlledOffer,
+        progress: Callable[[str], Awaitable[None]] | None = None,
+    ) -> dict[str, object]:
         if offer.command_type != "execute_code":
             raise IsolatedWorkspaceExecutionError("Provider command type is invalid.")
         required = {
@@ -160,19 +165,45 @@ class NodeExecutionProviderClient:
         async with httpx.AsyncClient(
             base_url=self.base_url, timeout=self.timeout_seconds
         ) as client:
-            response = await client.post(
-                "/execute",
-                content=canonical,
-                headers={
-                    "Content-Type": "application/json",
-                    "X-ACP-Provider-Signature": signature,
-                },
+            request_task = asyncio.create_task(
+                client.post(
+                    "/execute",
+                    content=canonical,
+                    headers={
+                        "Content-Type": "application/json",
+                        "X-ACP-Provider-Signature": signature,
+                    },
+                )
             )
+            status_signature = hmac.new(
+                self.token,
+                str(offer.payload["execution_id"]).encode(),
+                hashlib.sha256,
+            ).hexdigest()
+            observed: str | None = None
+            while not request_task.done():
+                await asyncio.sleep(1)
+                try:
+                    status = await client.get(
+                        f"/executions/{offer.payload['execution_id']}/status",
+                        headers={"X-ACP-Provider-Signature": status_signature},
+                    )
+                    if status.status_code == 200:
+                        phase = str(status.json().get("phase", ""))
+                        if phase and phase != observed and progress is not None:
+                            await progress(phase)
+                            observed = phase
+                except httpx.HTTPError:
+                    # Status observation is advisory; the signed execution request
+                    # remains authoritative and its terminal result is still awaited.
+                    pass
+            response = await request_task
         if response.status_code != 200:
             raise AmbiguousProviderExecutionError(
                 "Node Execution Provider rejected work."
             )
         result = response.json()
+        evidence = result["evidence"]
         return {
             "workspace_id": offer.workspace_id,
             "repository_key": offer.payload["repository_key"],
@@ -180,11 +211,14 @@ class NodeExecutionProviderClient:
             "head": result["result_head"],
             "starting_head": result["starting_head"],
             "commit_sha": result["commit_sha"],
+            "published_commit_sha": evidence["published_commit_sha"],
+            "remote_head_before": evidence["remote_head_before"],
+            "mechanically_reconciled": evidence["mechanically_reconciled"],
             "clean": True,
             "file_count": len(result["files_changed"]),
             "file_boundary": result["files_changed"],
             "validation": result["validation"],
-            "evidence": result["evidence"],
+            "evidence": evidence,
             "repository_mutated": True,
         }
 

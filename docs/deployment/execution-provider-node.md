@@ -20,3 +20,25 @@ Required protected configuration:
 Bind the provider to `127.0.0.1` only. Do not expose it through Caddy, Preview, or the public network. Enroll and revoke its associated worker/node identity through Engineering administration. Revocation fails closed at offer and result validation.
 
 Every request is bound to Company, node, command, execution, lease, repository, branch, expected HEAD, allowed and forbidden paths, permitted operations, validation requirements, and immutable digests. Interrupted mutation phases become `reconciliation_required`; they are never automatically re-executed.
+
+## Unattended non-production publication
+
+An owner Start for a code-changing READY milestone grants the provider the bounded
+`modify`, `validate`, `commit`, `mechanical_reconcile`, and normal `push`
+operations recorded in the immutable execution boundary. It never grants deploy,
+Production, import, cutover, migration execution, force-push, or conflict-resolution
+authority.
+
+The worker observes the provider's authenticated, append-only journal and publishes
+monotonic workstream progress to Mission Control. The provider stages only the
+approved file boundary, creates one controlled commit, fetches the authoritative
+branch, and pushes normally. If origin advanced, automatic reconciliation is limited
+to a disjoint fast-forward descendant with no migration or shared control-plane
+files. Overlap, migration ancestry, shared security/control-plane changes, divergent
+history, or a push race produces `reconciliation_required` and preserves the local
+commit for review. Force-push is never used.
+
+The terminal controlled result records the starting head, prior remote head,
+published commit SHA, whether a mechanical rebase occurred, validation evidence,
+and the exact file boundary. Mobile Roadmap progression uses that published SHA as
+the next authoritative repository head before exposing subsequent work.

@@ -372,7 +372,15 @@ class ControlledExecutionService:
                 "repository_mutated",
             }
             if mutation is True:
-                expected |= {"starting_head", "commit_sha", "validation", "evidence"}
+                expected |= {
+                    "starting_head",
+                    "commit_sha",
+                    "published_commit_sha",
+                    "remote_head_before",
+                    "mechanically_reconciled",
+                    "validation",
+                    "evidence",
+                }
             boundary = output.get("file_boundary")
             if (
                 set(output) != expected
@@ -438,7 +446,12 @@ class ControlledExecutionService:
                     offer.command_type != "execute_code"
                     or output.get("starting_head") != offer.payload.get("expected_head")
                     or output.get("head") != output.get("commit_sha")
+                    or output.get("head") != output.get("published_commit_sha")
                     or not re.fullmatch(r"[0-9a-f]{40}", str(output.get("commit_sha")))
+                    or not re.fullmatch(
+                        r"[0-9a-f]{40}", str(output.get("remote_head_before"))
+                    )
+                    or not isinstance(output.get("mechanically_reconciled"), bool)
                     or not isinstance(validation_output, dict)
                     or not all(value is True for value in validation_output.values())
                 )

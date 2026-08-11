@@ -4,10 +4,11 @@ import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from uuid import UUID
 
 from .boundaries import enforce_changed_paths, validate_request
 from .contracts import ProviderExecutionRequest, ProviderExecutionResult, ProviderPhase
-from .workspaces import WorkspaceManager
+from .workspaces import WorkspaceManager, WorkspaceReconciliationRequired
 
 
 class ProviderFailure(RuntimeError):
@@ -52,7 +53,10 @@ class ProviderJournal:
         return dict(evidence) if isinstance(evidence, dict) else {}
 
     def latest_record(self, request: ProviderExecutionRequest) -> dict[str, object]:
-        target = self.root / f"{request.execution_id}.jsonl"
+        return self.latest_record_for_execution(request.execution_id)
+
+    def latest_record_for_execution(self, execution_id: UUID) -> dict[str, object]:
+        target = self.root / f"{execution_id}.jsonl"
         if not target.exists():
             return {}
         rows = target.read_text(encoding="utf-8").splitlines()
@@ -256,7 +260,43 @@ class ControlledExecutionProvider:
             self.journal.append(request, ProviderPhase.COMMIT_READY)
             commit = self.workspaces.commit(workspace, request, files)
             self.journal.append(request, ProviderPhase.PUBLISHING_RESULT, commit=commit)
-            self.journal.append(request, ProviderPhase.COMPLETED, commit=commit)
+            try:
+                remote_head, reconciled = self.workspaces.reconcile_for_publish(
+                    workspace, request
+                )
+                if reconciled:
+                    files = self.workspaces.committed_files(workspace)
+                    enforce_changed_paths(request.boundary, files)
+                    validations = self._validate(
+                        workspace, request.boundary.validation_requirements, files
+                    )
+                    if not validations or not all(validations.values()):
+                        raise ProviderFailure(
+                            "Validation failed after mechanical reconciliation."
+                        )
+                    commit = self.workspaces._git(workspace, "rev-parse", "HEAD")
+                published = self.workspaces.push(workspace, request, remote_head)
+            except WorkspaceReconciliationRequired as error:
+                self.journal.append(
+                    request,
+                    ProviderPhase.RECONCILIATION_REQUIRED,
+                    reason=str(error),
+                )
+                raise ProviderFailure(str(error)) from error
+            self.journal.append(
+                request,
+                ProviderPhase.COMPLETED,
+                commit=published,
+                remote_head_before=remote_head,
+                mechanically_reconciled=reconciled,
+            )
+            evidence.update(
+                {
+                    "published_commit_sha": published,
+                    "remote_head_before": remote_head,
+                    "mechanically_reconciled": reconciled,
+                }
+            )
             evidence["phases"] = [
                 "composed",
                 "workspace_ready",
@@ -271,8 +311,8 @@ class ControlledExecutionProvider:
                 request.lease_id,
                 ProviderPhase.COMPLETED,
                 request.boundary.expected_head,
-                commit,
-                commit,
+                published,
+                published,
                 files,
                 validations,
                 evidence,

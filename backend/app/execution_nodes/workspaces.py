@@ -13,6 +13,10 @@ class WorkspaceFailure(RuntimeError):
     pass
 
 
+class WorkspaceReconciliationRequired(WorkspaceFailure):
+    pass
+
+
 class WorkspaceManager:
     def __init__(self, root: Path, repositories: dict[str, Path]) -> None:
         self.root = root.resolve()
@@ -133,6 +137,19 @@ class WorkspaceManager:
         )
 
     @staticmethod
+    def committed_files(workspace: Path) -> tuple[str, ...]:
+        return tuple(
+            sorted(
+                filter(
+                    None,
+                    WorkspaceManager._git(
+                        workspace, "diff", "--name-only", "HEAD^", "HEAD"
+                    ).splitlines(),
+                )
+            )
+        )
+
+    @staticmethod
     def commit(
         workspace: Path, request: ProviderExecutionRequest, files: tuple[str, ...]
     ) -> str:
@@ -156,6 +173,93 @@ class WorkspaceManager:
             request.commit_subject,
         )
         return WorkspaceManager._git(workspace, "rev-parse", "HEAD")
+
+    @staticmethod
+    def reconcile_for_publish(
+        workspace: Path, request: ProviderExecutionRequest
+    ) -> tuple[str, bool]:
+        """Fetch and perform only a provably mechanical, disjoint rebase."""
+        WorkspaceManager._git(
+            workspace, "fetch", "--no-tags", "origin", request.boundary.allowed_branch
+        )
+        remote_head = WorkspaceManager._git(workspace, "rev-parse", "FETCH_HEAD")
+        if remote_head == request.boundary.expected_head:
+            return remote_head, False
+        merge_base = WorkspaceManager._git(
+            workspace, "merge-base", request.boundary.expected_head, remote_head
+        )
+        if merge_base != request.boundary.expected_head:
+            raise WorkspaceReconciliationRequired(
+                "Authoritative branch is not a descendant of the approved starting head."
+            )
+        local_files = set(
+            WorkspaceManager._git(
+                workspace,
+                "diff",
+                "--name-only",
+                request.boundary.expected_head,
+                "HEAD",
+            ).splitlines()
+        )
+        remote_files = set(
+            WorkspaceManager._git(
+                workspace,
+                "diff",
+                "--name-only",
+                request.boundary.expected_head,
+                remote_head,
+            ).splitlines()
+        )
+        migration_prefix = "backend/alembic/versions/"
+        serialized_prefixes = (
+            "backend/app/auth",
+            "backend/app/platform",
+            "backend/app/events",
+            "backend/app/engineering_control",
+            "backend/app/engineering_execution",
+            "backend/app/worker_",
+            ".github/",
+        )
+        all_files = local_files | remote_files
+        if (
+            local_files & remote_files
+            or any(path.startswith(migration_prefix) for path in all_files)
+            or any(path.startswith(serialized_prefixes) for path in all_files)
+        ):
+            raise WorkspaceReconciliationRequired(
+                "Authoritative changes require serialized owner-reviewed reconciliation."
+            )
+        WorkspaceManager._git(workspace, "rebase", remote_head)
+        return remote_head, True
+
+    @staticmethod
+    def push(
+        workspace: Path, request: ProviderExecutionRequest, remote_head: str
+    ) -> str:
+        current = WorkspaceManager._git(workspace, "rev-parse", "HEAD")
+        try:
+            WorkspaceManager._git(
+                workspace,
+                "push",
+                "origin",
+                f"{current}:refs/heads/{request.boundary.allowed_branch}",
+            )
+        except WorkspaceFailure as error:
+            raise WorkspaceReconciliationRequired(
+                "Normal push was rejected; authoritative state must be reconciled."
+            ) from error
+        published = WorkspaceManager._git(
+            workspace,
+            "ls-remote",
+            "--heads",
+            "origin",
+            f"refs/heads/{request.boundary.allowed_branch}",
+        ).split()[0]
+        if published != current:
+            raise WorkspaceReconciliationRequired(
+                "Published branch did not resolve to the controlled commit."
+            )
+        return published
 
     @staticmethod
     def _git(cwd: Path, *argv: str) -> str:

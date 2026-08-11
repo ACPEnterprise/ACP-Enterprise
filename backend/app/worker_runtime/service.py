@@ -330,9 +330,34 @@ class AuthenticatedWorkerRuntime:
                             renew_immediately=recovered_lease,
                         )
                     )
+                    phase_progress = {
+                        "queued": (1, "Acknowledged"),
+                        "composed": (5, "Preparing controlled execution"),
+                        "workspace_ready": (10, "Starting isolated workspace"),
+                        "executing": (20, "Executing approved milestone"),
+                        "validating": (70, "Validating approved milestone"),
+                        "commit_ready": (82, "Finalizing controlled commit"),
+                        "publishing_result": (92, "Reconciling and publishing result"),
+                    }
+
+                    async def publish_provider_progress(phase: str) -> None:
+                        progress, activity = phase_progress.get(
+                            phase, (1, "Controlled execution active")
+                        )
+                        if command_id in self._workstream_versions:
+                            await self._publish_workstream_state(
+                                command_id=command_id,
+                                state="validating"
+                                if phase in {"validating", "commit_ready"}
+                                else "running",
+                                health="healthy",
+                                progress=progress,
+                                activity=activity,
+                            )
+
                     output = await NodeExecutionProviderClient(
                         self.config.provider_url, self.config.provider_token_file
-                    ).execute(acquired)
+                    ).execute(acquired, progress=publish_provider_progress)
                 else:
                     assert self.config.workspace_root is not None
                     output = IsolatedWorkspaceExecutor(

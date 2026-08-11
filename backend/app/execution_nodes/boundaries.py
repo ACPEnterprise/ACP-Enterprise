@@ -39,7 +39,7 @@ def validate_request(request: ProviderExecutionRequest) -> None:
         raise BoundaryViolation("Execution boundary digest mismatch.")
     if not MANDATORY_FORBIDDEN <= set(boundary.forbidden_paths):
         raise BoundaryViolation("Mandatory forbidden paths are absent.")
-    if not {"inspect", "modify", "validate", "commit"} <= set(
+    if not {"inspect", "modify", "validate", "commit", "mechanical_reconcile", "push"} <= set(
         boundary.permitted_operations
     ):
         raise BoundaryViolation("Code-changing authority is incomplete.")

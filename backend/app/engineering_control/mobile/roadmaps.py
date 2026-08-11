@@ -29,6 +29,7 @@ from app.engineering_control.repository_operation.models import (
 )
 from app.engineering_control.service import EngineeringControlService
 from app.engineering_control.workstream_runtime import EngineeringWorkstreamEvent
+from app.engineering_execution.controlled.models import ControlledExecutionResultModel
 from app.platform.permissions.authorization import AuthorizationContext
 
 from .control import EngineeringWorkstreamControl
@@ -579,6 +580,25 @@ class RoadmapService:
                     .order_by(EngineeringRepositoryOperation.succeeded_at.desc())
                     .limit(1)
                 )
+                if resulting_head is None:
+                    controlled_result = await db.scalar(
+                        select(ControlledExecutionResultModel)
+                        .where(
+                            ControlledExecutionResultModel.company_id
+                            == context.company.id,
+                            ControlledExecutionResultModel.command_id
+                            == milestone.command_id,
+                            ControlledExecutionResultModel.outcome == "succeeded",
+                        )
+                        .order_by(ControlledExecutionResultModel.completed_at.desc())
+                        .limit(1)
+                    )
+                    if controlled_result is not None:
+                        candidate = controlled_result.output.get(
+                            "published_commit_sha"
+                        )
+                        if isinstance(candidate, str) and len(candidate) == 40:
+                            resulting_head = candidate
                 changes.append((milestone.id, "waiting_review", resulting_head))
             elif runtime and runtime.runtime_state in {"failed", "cancelled"}:
                 changes.append(
@@ -726,7 +746,7 @@ class RoadmapService:
             )
         operations = ["inspect", "validate"]
         if requested_code_changes:
-            operations.extend(("modify", "commit"))
+            operations.extend(("modify", "commit", "mechanical_reconcile", "push"))
         normalized_validation = ["git diff --check"]
         for item in validation:
             lowered = item.casefold()

@@ -51,12 +51,13 @@ def create_app() -> FastAPI:
     repositories = json.loads(
         Path(os.environ["ACP_PROVIDER_REPOSITORIES_FILE"]).read_text()
     )
+    journal = ProviderJournal(Path(os.environ["ACP_PROVIDER_STATE_ROOT"]))
     provider = ControlledExecutionProvider(
         WorkspaceManager(
             Path(os.environ["ACP_PROVIDER_WORKSPACE_ROOT"]),
             {key: Path(value) for key, value in repositories.items()},
         ),
-        ProviderJournal(Path(os.environ["ACP_PROVIDER_STATE_ROOT"])),
+        journal,
         CodexImplementation(
             Path(os.environ["ACP_PROVIDER_CODEX_EXECUTABLE"]),
             Path(os.environ["ACP_PROVIDER_CODEX_HOME"]),
@@ -109,6 +110,22 @@ def create_app() -> FastAPI:
             "validation": result.validation,
             "evidence": result.evidence,
         }
+
+    @app.get("/executions/{execution_id}/status")
+    def execution_status(
+        execution_id: UUID,
+        signature: Annotated[str, Header(alias="X-ACP-Provider-Signature")],
+    ) -> dict[str, object]:
+        canonical = str(execution_id).encode()
+        expected = hmac.new(token, canonical, hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(expected, signature):
+            raise HTTPException(
+                status_code=401, detail="Provider request authentication failed."
+            )
+        record = journal.latest_record_for_execution(execution_id)
+        if not record:
+            raise HTTPException(status_code=404, detail="Execution status unavailable.")
+        return record
 
     return app
 
