@@ -341,10 +341,48 @@ class SchedulerReconciliationService:
             for definition in contract.milestones
             for title in definition.legacy_titles
         }
+        explicitly_superseded_titles = {
+            title: definition.milestone_code
+            for definition in contract.milestones
+            for title in definition.superseded_legacy_titles
+        }
         for item in milestones:
             if item.id in matched_ids:
                 continue
-            if item.command_id is not None and item.status in {
+            superseded_by = explicitly_superseded_titles.get(item.title)
+            if superseded_by is not None:
+                if item.command_id is not None and item.status in {
+                    "ready",
+                    "running",
+                    "paused",
+                    "waiting_review",
+                }:
+                    classification = "ambiguous"
+                    reason = (
+                        "An explicitly superseded legacy identity still has a "
+                        "nonterminal command and requires owner reconciliation."
+                    )
+                else:
+                    classification = "superseded"
+                    reason = (
+                        f"The scheduler explicitly supersedes this legacy identity "
+                        f"in favor of {superseded_by}; history remains queryable."
+                    )
+                    if (
+                        item.reconciliation_state != "superseded"
+                        or item.scheduler_fingerprint != contract.fingerprint
+                    ):
+                        transitions.append(
+                            ProposedTransition(
+                                record_type="milestone_supersession",
+                                record_id=item.id,
+                                milestone_code=superseded_by,
+                                from_state=item.reconciliation_state,
+                                to_state="superseded",
+                                reason=reason,
+                            )
+                        )
+            elif item.command_id is not None and item.status in {
                 "ready",
                 "running",
                 "paused",
@@ -878,17 +916,16 @@ class SchedulerReconciliationService:
                     title="MMQ.5 Production Scheduler",
                     repository_key="acp-enterprise",
                     expected_branch="customer-management-v1",
-                    expected_head=str(
-                        next(
-                            item.starting_commit_evidence.get("commit")
-                            for item in contract.milestones
-                            if item.milestone_code == "PLAT.1"
-                        )
-                    ),
+                    expected_head=contract.authoritative_repository_head,
                     status="active",
                 )
                 session.add(roadmap)
                 await session.flush()
+                mutations += 1
+            elif roadmap.expected_head != contract.authoritative_repository_head:
+                roadmap.expected_head = contract.authoritative_repository_head
+                roadmap.version += 1
+                roadmap.updated_at = now
                 mutations += 1
             max_position = int(
                 await session.scalar(
@@ -1105,6 +1142,72 @@ class SchedulerReconciliationService:
                         )
                     )
                 mutations += 1
+
+            for definition in contract.milestones:
+                for title in definition.superseded_legacy_titles:
+                    superseded = tuple(
+                        (
+                            await session.scalars(
+                                select(EngineeringMilestone).where(
+                                    EngineeringMilestone.company_id == company_id,
+                                    EngineeringMilestone.title == title,
+                                )
+                            )
+                        ).all()
+                    )
+                    for milestone in superseded:
+                        if milestone.command_id is not None and milestone.status in {
+                            "ready",
+                            "running",
+                            "paused",
+                            "waiting_review",
+                        }:
+                            raise SchedulerReconciliationError(
+                                "A superseded legacy milestone has a nonterminal command."
+                            )
+                        if (
+                            milestone.reconciliation_state == "superseded"
+                            and milestone.scheduler_fingerprint == contract.fingerprint
+                        ):
+                            continue
+                        milestone.scheduler_version = contract.scheduler_version
+                        milestone.scheduler_fingerprint = contract.fingerprint
+                        milestone.reconciliation_state = "superseded"
+                        milestone.version += 1
+                        milestone.updated_at = now
+                        event_key = (
+                            f"scheduler:{contract.scheduler_version}:superseded:"
+                            f"{milestone.id}"
+                        )
+                        event = await session.scalar(
+                            select(EngineeringSchedulerEvent).where(
+                                EngineeringSchedulerEvent.company_id == company_id,
+                                EngineeringSchedulerEvent.idempotency_key == event_key,
+                            )
+                        )
+                        if event is None:
+                            session.add(
+                                EngineeringSchedulerEvent(
+                                    company_id=company_id,
+                                    event_type="scheduler.legacy_milestone_superseded",
+                                    scheduler_version=contract.scheduler_version,
+                                    milestone_code=definition.milestone_code,
+                                    permanent_capacity_identity=(
+                                        definition.permanent_capacity_identity
+                                    ),
+                                    record_id=milestone.id,
+                                    details={
+                                        "historical_record_preserved": True,
+                                        "canonical_milestone_code": (
+                                            definition.milestone_code
+                                        ),
+                                        "legacy_title": title,
+                                    },
+                                    actor_user_id=actor_user_id,
+                                    idempotency_key=event_key,
+                                )
+                            )
+                        mutations += 1
         result = await self.dry_run(session, company_id=company_id, manifest=contract)
         return result.model_copy(
             update={"mode": "apply", "mutations_performed": mutations}

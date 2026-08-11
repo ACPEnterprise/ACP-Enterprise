@@ -2,8 +2,6 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from app.core.config import settings
 from app.engineering_control.mobile.roadmaps import (
     EngineeringMilestone,
@@ -15,6 +13,9 @@ from app.engineering_control.scheduler.reconciliation import (
     SchedulerReconciliationService,
 )
 from app.engineering_control.service import EngineeringControlService
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
 from tests.engineering_control.test_engineering_command_service import (
     create_input,
     seed_service_fixture,
@@ -28,10 +29,14 @@ def manifest():
 
 
 def test_manifest_is_deterministic_complete_and_unique(manifest) -> None:
-    assert manifest.scheduler_version == "MMQ.5-2026-08-11.4"
+    assert manifest.scheduler_version == "MMQ.5-2026-08-11.5"
     assert (
         manifest.fingerprint
-        == "f6d8d902f047f8459de82bb1bf22f46f900e63533985d5b4e1a9450dc55f8fef"
+        == "16b9683b96d44de787e4972e40d832bd06987c089888c02a1bb4fe4debf0d646"
+    )
+    assert (
+        manifest.authoritative_repository_head
+        == "9c2b114cb658be0454bbb36bdf0e5929ecc7e0e5"
     )
     assert {item.identity for item in manifest.capacities} == {
         "OM1",
@@ -47,8 +52,21 @@ def test_manifest_is_deterministic_complete_and_unique(manifest) -> None:
         "CRM.2",
         "OPS.1",
         "COMMS.1",
-        "CUTOVER.1",
-        "CUTOVER.2",
+        "EST.4",
+        "DISP.2",
+        "INV.3-LEGACY",
+        "PHONE-WEEKEND.2",
+        "MIG.1",
+        "MIG.PREP.2",
+        "MIG.2",
+        "BE.8",
+        "BE.PLAN.1",
+        "BE.REVIEW.1",
+        "BE.EVIDENCE.1",
+        "BE.GAP.1",
+        "BE.9",
+        "INV.2A",
+        "TECH.1",
     }
     assert (
         next(
@@ -70,14 +88,24 @@ def test_manifest_is_deterministic_complete_and_unique(manifest) -> None:
             "CRM.2",
             "OPS.1",
             "COMMS.1",
-            "CUTOVER.1",
-            "CUTOVER.2",
+            "EST.4",
+            "DISP.2",
+            "INV.3-LEGACY",
+            "PHONE-WEEKEND.2",
+            "MIG.1",
+            "MIG.PREP.2",
+            "BE.8",
+            "BE.PLAN.1",
+            "BE.REVIEW.1",
+            "BE.EVIDENCE.1",
+            "BE.GAP.1",
         )
     )
-    assert any(
-        "u6k8f0h2j497" in warning and "re-parented onto u6k8g0c2d497" in warning
-        for warning in manifest.integration_warnings
+    pricebook = next(
+        item for item in manifest.milestones if item.milestone_code == "PRICEBOOK.1"
     )
+    assert pricebook.legacy_titles == ("Price Book Foundation V1",)
+    assert pricebook.superseded_legacy_titles == ("Price Book",)
 
 
 def test_manifest_codes_are_traceable_to_approved_mmq_documents(manifest) -> None:
@@ -155,6 +183,24 @@ async def test_dry_run_is_zero_write_deterministic_and_preserves_history(
                         definition_approved=True,
                         command_id=active_crm_command.id,
                     ),
+                    EngineeringMilestone(
+                        company_id=fixture.context.company.id,
+                        roadmap_id=roadmap.id,
+                        position=3,
+                        title="Price Book",
+                        objective="Legacy generic placeholder.",
+                        owning_workstream="Operations",
+                        owning_branch="customer-management-v1",
+                        authority=[],
+                        constraints=[],
+                        dependencies=[],
+                        validation=[],
+                        deliverables=[],
+                        stop_conditions=[],
+                        expected_completion_evidence=[],
+                        status="draft",
+                        definition_approved=False,
+                    ),
                 ]
             )
             await session.commit()
@@ -168,6 +214,7 @@ async def test_dry_run_is_zero_write_deterministic_and_preserves_history(
             assert first.mode == "dry_run"
             assert first.mutations_performed == 0
             assert first.destructive_operation_count == 0
+            assert not first.ambiguous_record_ids
             assert {
                 item.permanent_capacity_identity for item in first.capacity_mappings
             } == {"OM1", "OM2", "MIG", "ECO", "LAP"}
@@ -191,6 +238,18 @@ async def test_dry_run_is_zero_write_deterministic_and_preserves_history(
             stored = await session.get(EngineeringMilestone, pricebook_record_id)
             assert stored is not None
             assert stored.milestone_code is None
+            superseded = next(
+                item
+                for item in first.classifications
+                if item.classification == "superseded"
+                and item.reason.startswith("The scheduler explicitly supersedes")
+            )
+            assert any(
+                transition.record_id == superseded.record_id
+                and transition.record_type == "milestone_supersession"
+                and transition.to_state == "superseded"
+                for transition in first.proposed_transitions
+            )
     finally:
         await engine.dispose()
 
@@ -212,12 +271,118 @@ async def test_apply_requires_checkpoint_two_authority() -> None:
 
 def test_start_authority_states_are_fail_closed(manifest) -> None:
     states = {item.milestone_code: item.readiness_state for item in manifest.milestones}
-    assert all(state != "ready" for state in states.values())
+    assert {code for code, state in states.items() if state == "ready"} == {"TECH.1"}
     assert states["PRICEBOOK.1"] == "complete"
     assert states["PHONE-BUG.1"] == "complete"
     assert states["PLAT.1"] == "complete"
     assert states["CRM.2"] == "complete"
     assert states["OPS.1"] == "complete"
     assert states["COMMS.1"] == "complete"
-    assert states["CUTOVER.1"] == "complete"
-    assert states["CUTOVER.2"] == "complete"
+    assert states["EST.4"] == "complete"
+    assert states["DISP.2"] == "complete"
+    assert states["INV.3-LEGACY"] == "complete"
+    assert states["PHONE-WEEKEND.2"] == "complete"
+    assert states["MIG.2"] == "blocked"
+    assert states["BE.9"] == "blocked"
+    assert states["INV.2A"] == "blocked"
+
+
+@pytest.mark.asyncio
+async def test_apply_supersedes_legacy_pricebook_identity_idempotently(
+    manifest,
+) -> None:
+    engine = create_async_engine(settings.database_url)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    fixture = await seed_service_fixture(factory)
+    service = SchedulerReconciliationService()
+    try:
+        async with factory() as session, session.begin():
+            roadmap = EngineeringRoadmap(
+                company_id=fixture.context.company.id,
+                title="Legacy Price Book Roadmaps",
+                repository_key="acp-enterprise",
+                expected_branch="customer-management-v1",
+                expected_head="a" * 40,
+                status="active",
+            )
+            session.add(roadmap)
+            await session.flush()
+            session.add_all(
+                [
+                    EngineeringMilestone(
+                        company_id=fixture.context.company.id,
+                        roadmap_id=roadmap.id,
+                        position=1,
+                        title="Price Book Foundation V1",
+                        objective="Canonical completed milestone.",
+                        owning_workstream="Sales / Commercial Operations",
+                        owning_branch="customer-management-v1",
+                        authority=[],
+                        constraints=[],
+                        dependencies=[],
+                        validation=[],
+                        deliverables=[],
+                        stop_conditions=[],
+                        expected_completion_evidence=[],
+                        status="running",
+                        definition_approved=True,
+                    ),
+                    EngineeringMilestone(
+                        company_id=fixture.context.company.id,
+                        roadmap_id=roadmap.id,
+                        position=2,
+                        title="Price Book",
+                        objective="Historical generic placeholder.",
+                        owning_workstream="Operations",
+                        owning_branch="customer-management-v1",
+                        authority=[],
+                        constraints=[],
+                        dependencies=[],
+                        validation=[],
+                        deliverables=[],
+                        stop_conditions=[],
+                        expected_completion_evidence=[],
+                        status="draft",
+                        definition_approved=False,
+                    ),
+                ]
+            )
+        async with factory() as session:
+            first = await service.apply(
+                session,
+                company_id=fixture.context.company.id,
+                actor_user_id=fixture.context.user.id,
+                checkpoint_2_authorized=True,
+            )
+            second = await service.apply(
+                session,
+                company_id=fixture.context.company.id,
+                actor_user_id=fixture.context.user.id,
+                checkpoint_2_authorized=True,
+            )
+            assert first.mode == "apply"
+            assert first.mutations_performed > 0
+            assert second.mutations_performed == 0
+            milestones = tuple(
+                (
+                    await session.scalars(
+                        select(EngineeringMilestone).where(
+                            EngineeringMilestone.company_id
+                            == fixture.context.company.id,
+                            EngineeringMilestone.title.in_(
+                                ("Price Book Foundation V1", "Price Book")
+                            ),
+                        )
+                    )
+                ).all()
+            )
+            canonical = next(x for x in milestones if x.title.endswith("V1"))
+            historical = next(x for x in milestones if x.title == "Price Book")
+            assert canonical.milestone_code == "PRICEBOOK.1"
+            assert canonical.reconciliation_state == "current"
+            assert canonical.status == "completed"
+            assert historical.milestone_code is None
+            assert historical.status == "draft"
+            assert historical.reconciliation_state == "superseded"
+    finally:
+        await engine.dispose()

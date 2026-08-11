@@ -50,13 +50,23 @@ class MilestoneDefinition(SchedulerModel):
     owner_checkpoint: str = Field(min_length=1)
     completion_evidence: tuple[str, ...] = ()
     legacy_titles: tuple[str, ...] = ()
+    superseded_legacy_titles: tuple[str, ...] = ()
     preserve_active_execution: bool = False
+
+    @model_validator(mode="after")
+    def validate_legacy_identity(self) -> "MilestoneDefinition":
+        if set(self.legacy_titles) & set(self.superseded_legacy_titles):
+            raise ValueError("Canonical and superseded legacy titles must be disjoint.")
+        if self.title in self.superseded_legacy_titles:
+            raise ValueError("The canonical milestone title cannot be superseded.")
+        return self
 
 
 class SchedulerManifest(SchedulerModel):
     schema_version: Literal[1]
     scheduler_version: str = Field(min_length=1, max_length=80)
     fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
+    authoritative_repository_head: str = Field(pattern=r"^[0-9a-f]{40}$")
     source_documents: tuple[str, ...] = Field(min_length=1)
     integration_warnings: tuple[str, ...] = ()
     capacities: tuple[CapacityDefinition, ...]
@@ -75,6 +85,19 @@ class SchedulerManifest(SchedulerModel):
         codes = [item.milestone_code for item in self.milestones]
         if len(codes) != len(set(codes)):
             raise ValueError("Milestone codes must be unique.")
+        superseded_titles = [
+            title for item in self.milestones for title in item.superseded_legacy_titles
+        ]
+        if len(superseded_titles) != len(set(superseded_titles)):
+            raise ValueError("Superseded legacy titles must resolve to one milestone.")
+        canonical_titles = {
+            title for item in self.milestones for title in item.legacy_titles
+        }
+        overlap = canonical_titles.intersection(superseded_titles)
+        if overlap:
+            raise ValueError(
+                "A superseded legacy title cannot remain canonical for another milestone."
+            )
         return self
 
 

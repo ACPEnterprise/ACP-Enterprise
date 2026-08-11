@@ -23,6 +23,14 @@ operations, ambiguous records, or any plan that cannot preserve CRM.2.
 Reconciliation retains legacy records and records scheduler events rather than
 deleting history.
 
+An explicitly reviewed duplicate identity is represented by a manifest-owned
+`superseded_legacy_titles` mapping. The canonical record alone receives the
+stable milestone code. The historical record keeps its original roadmap,
+title, lifecycle, and command history, while reconciliation marks only its
+identity state `superseded` and appends a scheduler audit event. Active or
+review-pending command history still fails closed; title ordering is never used
+to select a canonical record.
+
 The representative report in
 [phone-weekend-2-dry-run.json](examples/phone-weekend-2-dry-run.json) uses
 synthetic identifiers and is not a Preview database report.
@@ -55,3 +63,21 @@ INV.3-LEGACY revision `u6k8f0h2j497` currently shares parent `t5j7f9b1c386` and
 must integrate second after re-parenting onto `u6k8g0c2d497`. It must repeat
 upgrade, downgrade, drift, single-head, and affected regression validation;
 sibling heads are prohibited.
+
+## Checkpoint 3C current-state contract
+
+Scheduler version `MMQ.5-2026-08-11.5` records the authoritative Enterprise
+head used for owner Start. It incorporates completed EST.4, DISP.2, the distinct
+INV.3-LEGACY inventory lineage, and PHONE-WEEKEND.2 Checkpoint 2, plus current
+Migration and Economics evidence. MIG.2, BE.9, and residual INV.2A remain
+blocked by their recorded gates.
+
+External evidence is retained under stable scheduler codes: `MIG.1`,
+`MIG.PREP.2`, `BE.8`, `BE.PLAN.1`, `BE.REVIEW.1`, `BE.EVIDENCE.1`, and
+`BE.GAP.1`. Preparation never promotes `MIG.2`, and Economics gap planning
+never promotes `BE.9`.
+
+TECH.1 is the sole Ready milestone: OPS.1, DISP.2, and PLAT.1 are complete; its
+Version 1 shell boundary requires no migration, Production operation, import,
+or cutover. Ready permits only the authenticated owner Start action and never
+dispatches automatically.

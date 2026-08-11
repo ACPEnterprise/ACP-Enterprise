@@ -1,14 +1,19 @@
 {
   "schema_version": 1,
-  "scheduler_version": "MMQ.5-2026-08-11.4",
-  "fingerprint": "f6d8d902f047f8459de82bb1bf22f46f900e63533985d5b4e1a9450dc55f8fef",
+  "scheduler_version": "MMQ.5-2026-08-11.5",
+  "fingerprint": "16b9683b96d44de787e4972e40d832bd06987c089888c02a1bb4fe4debf0d646",
+  "authoritative_repository_head": "9c2b114cb658be0454bbb36bdf0e5929ecc7e0e5",
   "source_documents": [
     "docs/project/master-milestone-queue.md",
     "docs/project/version-1-implementation-roadmap.md",
-    "docs/project/continuous-production-scheduler.md"
+    "docs/project/continuous-production-scheduler.md",
+    "docs/project/five-day-continuous-production-plan.md",
+    "docs/architecture/mission-control-mmq-reconciliation.md"
   ],
   "integration_warnings": [
-    "Owner-selected migration order is PHONE-WEEKEND.2 revision u6k8g0c2d497 first, followed by isolated INV.3-LEGACY revision u6k8f0h2j497. Both currently descend from t5j7f9b1c386, so INV.3-LEGACY must be re-parented onto u6k8g0c2d497 after this integration and fully revalidated; sibling heads are prohibited."
+    "MIG.2 remains blocked by IC.2, RPT.3, immutable non-Production input evidence, and separate TYPE C operation authority.",
+    "BE.9 remains blocked by RPT.1, ACC.2, source-authority closure, and Finance acceptance.",
+    "INV.3-LEGACY is historical integrated inventory evidence and is not the future roadmap milestone INV.3."
   ],
   "capacities": [
     {"identity": "OM1", "display_name": "Office Machine 1 Enterprise"},
@@ -19,165 +24,150 @@
   ],
   "milestones": [
     {
-      "milestone_code": "PRICEBOOK.1",
-      "title": "Price Book Foundation V1",
-      "workstream": "Enterprise",
-      "permanent_capacity_identity": "OM1",
-      "repository_key": "acp-enterprise",
-      "branch_strategy": "Historical completion evidence only; never redispatch.",
-      "starting_commit_rule": "Resolve the recorded completion commit from authoritative Enterprise history.",
-      "starting_commit_evidence": {"resolution": "authoritative_git_history"},
-      "implementation_classification": "TYPE_B",
-      "migration_classification": "required",
-      "shared_contract_classification": "serialized",
-      "integration_checkpoint": "historical_complete",
-      "readiness_state": "complete",
-      "dependency_evidence": [],
-      "owner_checkpoint": "Completed milestone; no Start authority.",
-      "completion_evidence": ["Authoritative Git history records PRICEBOOK.1 complete."],
-      "legacy_titles": ["Price Book Foundation V1", "Price Book"]
+      "milestone_code": "PRICEBOOK.1", "title": "Price Book Foundation V1", "workstream": "Sales / Commercial Operations", "permanent_capacity_identity": "OM1", "repository_key": "acp-enterprise",
+      "branch_strategy": "Historical authoritative Enterprise completion; never redispatch.", "starting_commit_rule": "Use the accepted Price Book implementation commit in authoritative Enterprise history.",
+      "starting_commit_evidence": {"commit": "e97dc408742e0037330b79156cd0a5ba583c6649", "subject": "feat(price-book): establish price book foundation", "historical_execution": "ECID-2026-000007 failed independently with required_validation_failed"},
+      "implementation_classification": "TYPE_B", "migration_classification": "required", "shared_contract_classification": "serialized", "integration_checkpoint": "historical_complete", "readiness_state": "complete", "dependency_evidence": [],
+      "owner_checkpoint": "Completed milestone; no Start authority remains.", "completion_evidence": ["Authoritative Price Book implementation e97dc408742e0037330b79156cd0a5ba583c6649 is integrated; ECID-2026-000007 remains failed."],
+      "legacy_titles": ["Price Book Foundation V1"], "superseded_legacy_titles": ["Price Book"]
     },
     {
-      "milestone_code": "PHONE-BUG.1",
-      "title": "Mobile error-boundary / nullable source crash",
-      "workstream": "Enterprise",
-      "permanent_capacity_identity": "OM2",
-      "repository_key": "acp-enterprise",
-      "branch_strategy": "Historical completion evidence only; never redispatch.",
-      "starting_commit_rule": "Use accepted deployment commit 7d55ba5e76592a81dd42c7e2b77f60729f8848c2.",
-      "starting_commit_evidence": {"commit": "7d55ba5e76592a81dd42c7e2b77f60729f8848c2", "preview_release": "phone-bug1-detail-7d55ba5", "physical_iphone_accepted": true},
-      "implementation_classification": "TYPE_B",
-      "migration_classification": "none",
-      "shared_contract_classification": "serialized",
-      "integration_checkpoint": "IC.1",
-      "readiness_state": "complete",
-      "dependency_evidence": [],
-      "owner_checkpoint": "Owner accepted on physical iPhone.",
-      "completion_evidence": ["Physical iPhone Safari validation passed on phone-bug1-detail-7d55ba5."],
-      "legacy_titles": ["Mobile error-boundary / nullable source crash"]
+      "milestone_code": "PHONE-BUG.1", "title": "Mobile error-boundary / nullable source crash", "workstream": "Enterprise", "permanent_capacity_identity": "OM2", "repository_key": "acp-enterprise",
+      "branch_strategy": "Historical completion evidence only; never redispatch.", "starting_commit_rule": "Use accepted deployment commit 7d55ba5e76592a81dd42c7e2b77f60729f8848c2.",
+      "starting_commit_evidence": {"commit": "7d55ba5e76592a81dd42c7e2b77f60729f8848c2", "physical_iphone_accepted": true},
+      "implementation_classification": "TYPE_B", "migration_classification": "none", "shared_contract_classification": "serialized", "integration_checkpoint": "IC.1", "readiness_state": "complete", "dependency_evidence": [],
+      "owner_checkpoint": "Owner accepted on physical iPhone.", "completion_evidence": ["Physical iPhone customer list/detail acceptance passed."], "legacy_titles": ["Mobile error-boundary / nullable source crash"]
     },
     {
-      "milestone_code": "PLAT.1",
-      "title": "Close launch platform controls",
-      "workstream": "Enterprise",
-      "permanent_capacity_identity": "OM1",
-      "repository_key": "acp-enterprise",
-      "branch_strategy": "Integrated on customer-management-v1; preserve review boundary.",
-      "starting_commit_rule": "Resolve completion at bd034a393f045c8b66bd2e48e37f996c809b50c0 in authoritative Enterprise history.",
-      "starting_commit_evidence": {"commit": "bd034a393f045c8b66bd2e48e37f996c809b50c0", "subject": "feat(platform): close launch platform controls", "owner_acceptance": "recorded_complete"},
-      "implementation_classification": "TYPE_B",
-      "migration_classification": "none",
-      "shared_contract_classification": "serialized",
-      "integration_checkpoint": "IC.1",
-      "readiness_state": "complete",
-      "dependency_evidence": [],
-      "owner_checkpoint": "Owner acceptance is recorded complete; no Start authority remains.",
-      "completion_evidence": ["PLAT.1 is complete and pushed in authoritative Enterprise history at bd034a393f045c8b66bd2e48e37f996c809b50c0."],
-      "legacy_titles": ["Close launch platform controls"]
+      "milestone_code": "PLAT.1", "title": "Close launch platform controls", "workstream": "Enterprise", "permanent_capacity_identity": "OM1", "repository_key": "acp-enterprise",
+      "branch_strategy": "Integrated on customer-management-v1.", "starting_commit_rule": "Use authoritative completion commit.", "starting_commit_evidence": {"commit": "bd034a393f045c8b66bd2e48e37f996c809b50c0"},
+      "implementation_classification": "TYPE_B", "migration_classification": "none", "shared_contract_classification": "serialized", "integration_checkpoint": "IC.1", "readiness_state": "complete", "dependency_evidence": [],
+      "owner_checkpoint": "Complete; no Start authority remains.", "completion_evidence": ["PLAT.1 is integrated at bd034a393f045c8b66bd2e48e37f996c809b50c0."], "legacy_titles": ["Close launch platform controls"]
     },
     {
-      "milestone_code": "CRM.2",
-      "title": "Close launch CRM gaps",
-      "workstream": "Enterprise",
-      "permanent_capacity_identity": "OM2",
-      "repository_key": "acp-enterprise",
-      "branch_strategy": "Integrated on customer-management-v1; preserve any durable command/runtime history during scheduler adoption.",
-      "starting_commit_rule": "Resolve completion at b75f9b6507f51c1e60dc23861012a77cad2ce804 in authoritative Enterprise history.",
-      "starting_commit_evidence": {"commit": "b75f9b6507f51c1e60dc23861012a77cad2ce804", "subject": "feat(customers): close launch CRM gaps", "owner_acceptance": "recorded_complete"},
-      "implementation_classification": "TYPE_B",
-      "migration_classification": "none",
-      "shared_contract_classification": "serialized",
-      "integration_checkpoint": "IC.1",
-      "readiness_state": "complete",
+      "milestone_code": "CRM.2", "title": "Close launch CRM gaps", "workstream": "CRM", "permanent_capacity_identity": "OM2", "repository_key": "acp-enterprise",
+      "branch_strategy": "Integrated on customer-management-v1.", "starting_commit_rule": "Use authoritative completion commit.", "starting_commit_evidence": {"commit": "b75f9b6507f51c1e60dc23861012a77cad2ce804"},
+      "implementation_classification": "TYPE_B", "migration_classification": "none", "shared_contract_classification": "serialized", "integration_checkpoint": "IC.1", "readiness_state": "complete", "dependency_evidence": [],
+      "owner_checkpoint": "Complete; no Start authority remains.", "completion_evidence": ["CRM.2 is integrated at b75f9b6507f51c1e60dc23861012a77cad2ce804."], "legacy_titles": ["Close launch CRM gaps", "CRM.2"]
+    },
+    {
+      "milestone_code": "OPS.1", "title": "Complete launch job lifecycle", "workstream": "Operations", "permanent_capacity_identity": "OM2", "repository_key": "acp-enterprise",
+      "branch_strategy": "Integrated on customer-management-v1.", "starting_commit_rule": "Use authoritative completion commit.", "starting_commit_evidence": {"commit": "c89396546a6ba6012e48694ba7737bd30e316637"},
+      "implementation_classification": "TYPE_B", "migration_classification": "none", "shared_contract_classification": "serialized", "integration_checkpoint": "IC.1", "readiness_state": "complete",
+      "dependency_evidence": [{"milestone_code": "CRM.2", "state": "complete", "evidence": "CRM.2 is integrated."}], "owner_checkpoint": "Complete; no Start authority remains.",
+      "completion_evidence": ["OPS.1 is integrated at c89396546a6ba6012e48694ba7737bd30e316637."], "legacy_titles": ["Complete launch job lifecycle", "OPS.1"]
+    },
+    {
+      "milestone_code": "COMMS.1", "title": "Establish launch communications", "workstream": "Communications", "permanent_capacity_identity": "OM1", "repository_key": "acp-enterprise",
+      "branch_strategy": "Integrated on customer-management-v1.", "starting_commit_rule": "Use authoritative completion commit.", "starting_commit_evidence": {"commit": "06ba0f39b85b0eeda7e5a4d1747bb326bd28668a"},
+      "implementation_classification": "TYPE_B", "migration_classification": "none", "shared_contract_classification": "serialized", "integration_checkpoint": "IC.1", "readiness_state": "complete",
+      "dependency_evidence": [{"milestone_code": "CRM.2", "state": "complete", "evidence": "CRM.2 is integrated."}], "owner_checkpoint": "Complete; no Start authority remains.",
+      "completion_evidence": ["COMMS.1 is integrated at 06ba0f39b85b0eeda7e5a4d1747bb326bd28668a."], "legacy_titles": ["Establish launch communications", "COMMS.1"]
+    },
+    {
+      "milestone_code": "EST.4", "title": "Estimate Options, Discounts & Customer Presentation", "workstream": "Sales", "permanent_capacity_identity": "OM1", "repository_key": "acp-enterprise",
+      "branch_strategy": "Integrated on customer-management-v1.", "starting_commit_rule": "Use authoritative completion commit.", "starting_commit_evidence": {"commit": "62c0d84cd33cd5851a9a70db3dfbde67a09ce343", "subject": "feat(estimates): add options discounts and presentation"},
+      "implementation_classification": "TYPE_B", "migration_classification": "required", "shared_contract_classification": "serialized", "integration_checkpoint": "IC.1", "readiness_state": "complete",
+      "dependency_evidence": [{"milestone_code": "CRM.2", "state": "complete", "evidence": "CRM.2 is integrated."}], "owner_checkpoint": "Complete; no Start authority remains.",
+      "completion_evidence": ["EST.4 is integrated at 62c0d84cd33cd5851a9a70db3dfbde67a09ce343."], "legacy_titles": ["Estimate Options, Discounts & Customer Presentation", "Complete the launch estimate experience"]
+    },
+    {
+      "milestone_code": "DISP.2", "title": "Complete dispatch execution", "workstream": "Dispatch", "permanent_capacity_identity": "OM2", "repository_key": "acp-enterprise",
+      "branch_strategy": "Integrated on customer-management-v1.", "starting_commit_rule": "Use authoritative completion commit.", "starting_commit_evidence": {"commit": "98ae82579d23d8b3737cce590186b93b865ef022", "subject": "feat(dispatch): complete launch dispatch execution"},
+      "implementation_classification": "TYPE_B", "migration_classification": "none", "shared_contract_classification": "serialized", "integration_checkpoint": "IC.1", "readiness_state": "complete",
+      "dependency_evidence": [{"milestone_code": "OPS.1", "state": "complete", "evidence": "OPS.1 is integrated."}], "owner_checkpoint": "Complete; no Start authority remains.",
+      "completion_evidence": ["DISP.2 is integrated at 98ae82579d23d8b3737cce590186b93b865ef022."], "legacy_titles": ["Complete dispatch execution", "Dispatch Readiness"]
+    },
+    {
+      "milestone_code": "INV.3-LEGACY", "title": "Legacy inventory scope reconciliation", "workstream": "Inventory", "permanent_capacity_identity": "OM2", "repository_key": "acp-enterprise",
+      "branch_strategy": "Integrated historical inventory lineage; distinct from roadmap INV.3.", "starting_commit_rule": "Use both authoritative inventory completion commits.",
+      "starting_commit_evidence": {"domain_commit": "d892cf96249083908317bc814f6b460940a91def", "application_commit": "9c2b114cb658be0454bbb36bdf0e5929ecc7e0e5"},
+      "implementation_classification": "TYPE_B", "migration_classification": "required", "shared_contract_classification": "serialized", "integration_checkpoint": "IC.1", "readiness_state": "complete",
+      "dependency_evidence": [{"milestone_code": "OPS.1", "state": "complete", "evidence": "OPS.1 is integrated."}], "owner_checkpoint": "Historical integration complete; no Start authority remains.",
+      "completion_evidence": ["Inventory reservation/material issue and launch stock-control application are integrated through 9c2b114cb658be0454bbb36bdf0e5929ecc7e0e5."], "legacy_titles": ["Legacy inventory scope reconciliation"]
+    },
+    {
+      "milestone_code": "PHONE-WEEKEND.2", "title": "Unattended phone execution lifecycle", "workstream": "Mission Control", "permanent_capacity_identity": "LAP", "repository_key": "acp-enterprise",
+      "branch_strategy": "Integrated on customer-management-v1; physical acceptance is a separate checkpoint.", "starting_commit_rule": "Use authoritative Checkpoint 2 implementation commit.",
+      "starting_commit_evidence": {"commit": "ff3db82eb8576e36734f3cd3098aaa3b0eb64741", "preview_deployed_in": "9c2b114cb658be0454bbb36bdf0e5929ecc7e0e5"},
+      "implementation_classification": "TYPE_B", "migration_classification": "none", "shared_contract_classification": "serialized", "integration_checkpoint": "PHONE-WEEKEND.2-3C", "readiness_state": "complete", "dependency_evidence": [],
+      "owner_checkpoint": "Checkpoint 2 implementation complete; physical Start remains owner-only.", "completion_evidence": ["PHONE-WEEKEND.2 Checkpoint 2 is integrated at ff3db82eb8576e36734f3cd3098aaa3b0eb64741."], "legacy_titles": ["Unattended phone execution lifecycle", "PHONE-WEEKEND.2"]
+    },
+    {
+      "milestone_code": "MIG.1", "title": "Freeze migration mapping and reconciliation", "workstream": "Migration", "permanent_capacity_identity": "MIG", "repository_key": "acp-enterprise",
+      "branch_strategy": "Completed external migration workstream evidence; never redispatch.", "starting_commit_rule": "Use authoritative migration branch commit.", "starting_commit_evidence": {"commit": "3158e587a2a386be7c645e963e50ead65d93e0c8", "branch": "customer-migration-workstream"},
+      "implementation_classification": "TYPE_B", "migration_classification": "none", "shared_contract_classification": "serialized", "integration_checkpoint": "IC.1", "readiness_state": "complete", "dependency_evidence": [],
+      "owner_checkpoint": "External milestone complete; no Start authority remains.", "completion_evidence": ["MIG.1 is complete in origin/customer-migration-workstream."], "legacy_titles": ["Freeze migration mapping and reconciliation", "MIG.1"]
+    },
+    {
+      "milestone_code": "MIG.PREP.2", "title": "Prepare representative migration dry run", "workstream": "Migration", "permanent_capacity_identity": "MIG", "repository_key": "acp-enterprise",
+      "branch_strategy": "Completed external preparation evidence; does not authorize import/cutover.", "starting_commit_rule": "Use current migration branch tip.", "starting_commit_evidence": {"commit": "ea857e4df7101111d1354becfba9d2ac238b1d1a", "branch": "customer-migration-workstream"},
+      "implementation_classification": "TYPE_B", "migration_classification": "none", "shared_contract_classification": "serialized", "integration_checkpoint": "migration_review", "readiness_state": "complete",
+      "dependency_evidence": [{"milestone_code": "MIG.1", "state": "complete", "evidence": "MIG.1 is complete."}], "owner_checkpoint": "Preparation complete; no import authority granted.",
+      "completion_evidence": ["MIG.PREP.2 readiness code and evidence are complete at ea857e4df7101111d1354becfba9d2ac238b1d1a."], "legacy_titles": ["Prepare representative migration dry run", "MIG.PREP.2"]
+    },
+    {
+      "milestone_code": "MIG.2", "title": "Execute representative migration dry run", "workstream": "Migration", "permanent_capacity_identity": "MIG", "repository_key": "acp-enterprise",
+      "branch_strategy": "Blocked TYPE C operation; no Start authority.", "starting_commit_rule": "Requires IC.2, RPT.3, immutable input/environment evidence, and explicit owner operation approval.", "starting_commit_evidence": {"blocked_by": ["IC.2", "RPT.3", "immutable_input_manifest", "explicit_type_c_authority"]},
+      "implementation_classification": "TYPE_C", "migration_classification": "none", "shared_contract_classification": "serialized", "integration_checkpoint": "IC.2", "readiness_state": "blocked",
+      "dependency_evidence": [{"milestone_code": "MIG.PREP.2", "state": "complete", "evidence": "Preparation exists but does not close operation gates."}], "owner_checkpoint": "Blocked; separate import/cutover authority required.", "completion_evidence": [], "legacy_titles": ["Execute representative migration dry run", "MIG.2"]
+    },
+    {
+      "milestone_code": "BE.8", "title": "Define Version 1.0 economics contract", "workstream": "Business Economics", "permanent_capacity_identity": "ECO", "repository_key": "acp-enterprise",
+      "branch_strategy": "Completed external economics evidence; never redispatch.", "starting_commit_rule": "Use authoritative economics commit.", "starting_commit_evidence": {"commit": "815954f827134fa21d003f1249f0117b4604454b", "branch": "business-economics-foundation"},
+      "implementation_classification": "TYPE_B", "migration_classification": "none", "shared_contract_classification": "serialized", "integration_checkpoint": "IC.1", "readiness_state": "complete", "dependency_evidence": [],
+      "owner_checkpoint": "Contract complete; no Start authority remains.", "completion_evidence": ["BE.8 contract is complete at 815954f827134fa21d003f1249f0117b4604454b."], "legacy_titles": ["Define Version 1.0 economics contract", "BE.8"]
+    },
+    {
+      "milestone_code": "BE.PLAN.1", "title": "Define economics execution queue and dependencies", "workstream": "Business Economics", "permanent_capacity_identity": "ECO", "repository_key": "acp-enterprise",
+      "branch_strategy": "Completed external planning evidence.", "starting_commit_rule": "Use authoritative economics commit.", "starting_commit_evidence": {"commit": "24781580ed130c67adee87e01342d062017d148b"},
+      "implementation_classification": "TYPE_B", "migration_classification": "none", "shared_contract_classification": "none", "integration_checkpoint": "economics_review", "readiness_state": "complete",
+      "dependency_evidence": [{"milestone_code": "BE.8", "state": "complete", "evidence": "BE.8 contract exists."}], "owner_checkpoint": "Planning complete.", "completion_evidence": ["BE.PLAN.1 is complete at 24781580ed130c67adee87e01342d062017d148b."], "legacy_titles": ["Define economics execution queue and dependencies", "BE.PLAN.1"]
+    },
+    {
+      "milestone_code": "BE.REVIEW.1", "title": "Resolve Phase 8 adoption strategy", "workstream": "Business Economics", "permanent_capacity_identity": "ECO", "repository_key": "acp-enterprise",
+      "branch_strategy": "Completed external review evidence.", "starting_commit_rule": "Use authoritative economics commit.", "starting_commit_evidence": {"commit": "bb27bca35d222cf2d4b06e809f2ca87ce028b007"},
+      "implementation_classification": "TYPE_B", "migration_classification": "none", "shared_contract_classification": "none", "integration_checkpoint": "economics_review", "readiness_state": "complete",
+      "dependency_evidence": [{"milestone_code": "BE.PLAN.1", "state": "complete", "evidence": "Planning evidence exists."}], "owner_checkpoint": "Review complete.", "completion_evidence": ["BE.REVIEW.1 is complete at bb27bca35d222cf2d4b06e809f2ca87ce028b007."], "legacy_titles": ["Resolve Phase 8 adoption strategy", "BE.REVIEW.1"]
+    },
+    {
+      "milestone_code": "BE.EVIDENCE.1", "title": "Map source authority evidence", "workstream": "Business Economics", "permanent_capacity_identity": "ECO", "repository_key": "acp-enterprise",
+      "branch_strategy": "Completed external evidence mapping.", "starting_commit_rule": "Use authoritative economics commit.", "starting_commit_evidence": {"commit": "8bf76da7672c3ab9caf25ca965f2e1591e16155e"},
+      "implementation_classification": "TYPE_B", "migration_classification": "none", "shared_contract_classification": "none", "integration_checkpoint": "economics_review", "readiness_state": "complete",
+      "dependency_evidence": [{"milestone_code": "BE.REVIEW.1", "state": "complete", "evidence": "Review strategy exists."}], "owner_checkpoint": "Evidence mapping complete.", "completion_evidence": ["BE.EVIDENCE.1 is complete at 8bf76da7672c3ab9caf25ca965f2e1591e16155e."], "legacy_titles": ["Map source authority evidence", "BE.EVIDENCE.1"]
+    },
+    {
+      "milestone_code": "BE.GAP.1", "title": "Plan source readiness closure", "workstream": "Business Economics", "permanent_capacity_identity": "ECO", "repository_key": "acp-enterprise",
+      "branch_strategy": "Completed external gap-planning evidence; successor still requires approval/Start.", "starting_commit_rule": "Use current economics branch tip.", "starting_commit_evidence": {"commit": "6a955a84a930f2ab0a7ed73a659a485934bfcd08", "branch": "business-economics-foundation"},
+      "implementation_classification": "TYPE_B", "migration_classification": "none", "shared_contract_classification": "none", "integration_checkpoint": "economics_review", "readiness_state": "complete",
+      "dependency_evidence": [{"milestone_code": "BE.EVIDENCE.1", "state": "complete", "evidence": "Source evidence matrix exists."}], "owner_checkpoint": "Gap plan complete; successor remains separately governed.",
+      "completion_evidence": ["BE.GAP.1 is complete at 6a955a84a930f2ab0a7ed73a659a485934bfcd08."], "legacy_titles": ["Plan source readiness closure", "BE.GAP.1"]
+    },
+    {
+      "milestone_code": "BE.9", "title": "Validate launch economics", "workstream": "Business Economics", "permanent_capacity_identity": "ECO", "repository_key": "acp-enterprise",
+      "branch_strategy": "Blocked until reporting, accounting, source, and Finance gates close.", "starting_commit_rule": "No executable starting commit until all dependency evidence is accepted.", "starting_commit_evidence": {"blocked_by": ["RPT.1", "ACC.2", "source_authority", "finance_acceptance"]},
+      "implementation_classification": "TYPE_B", "migration_classification": "none", "shared_contract_classification": "serialized", "integration_checkpoint": "IC.3", "readiness_state": "blocked",
+      "dependency_evidence": [{"milestone_code": "BE.GAP.1", "state": "complete", "evidence": "Gap planning does not close Finance or reporting dependencies."}], "owner_checkpoint": "Blocked; no Start authority.", "completion_evidence": [], "legacy_titles": ["Validate launch economics", "BE.9"]
+    },
+    {
+      "milestone_code": "INV.2A", "title": "Complete the launch inventory control core", "workstream": "Inventory", "permanent_capacity_identity": "OM2", "repository_key": "acp-enterprise",
+      "branch_strategy": "Blocked pending explicit scope reconciliation against integrated INV.3-LEGACY evidence.", "starting_commit_rule": "Do not Start until residual scope is proven non-duplicative.", "starting_commit_evidence": {"blocked_by": ["inventory_scope_reconciliation"]},
+      "implementation_classification": "TYPE_B", "migration_classification": "required", "shared_contract_classification": "serialized", "integration_checkpoint": "IC.1", "readiness_state": "blocked",
+      "dependency_evidence": [{"milestone_code": "INV.3-LEGACY", "state": "verification_required", "evidence": "Integrated legacy scope must be reconciled before residual work is defined."}], "owner_checkpoint": "Blocked; owner-reviewed residual scope required.", "completion_evidence": [], "legacy_titles": ["Complete the launch inventory control core", "INV.2A"]
+    },
+    {
+      "milestone_code": "TECH.1", "title": "Establish technician application shell", "workstream": "Field Service", "permanent_capacity_identity": "OM2", "repository_key": "acp-enterprise",
+      "branch_strategy": "Create an isolated worktree from the current authoritative customer-management-v1 head after owner Start.", "starting_commit_rule": "Fetch origin immediately before workspace creation; require zero behind and exact authoritative head.",
+      "starting_commit_evidence": {"authoritative_head": "9c2b114cb658be0454bbb36bdf0e5929ecc7e0e5", "dependencies_verified": ["OPS.1", "DISP.2", "PLAT.1"]},
+      "implementation_classification": "TYPE_B", "migration_classification": "none", "shared_contract_classification": "serialized", "integration_checkpoint": "IC.1", "readiness_state": "ready",
       "dependency_evidence": [
-        {"milestone_code": "CRM.1", "state": "complete", "evidence": "Existing Customer and Service Location foundations are recorded complete."}
+        {"milestone_code": "OPS.1", "state": "complete", "evidence": "OPS.1 is integrated at c89396546a6ba6012e48694ba7737bd30e316637."},
+        {"milestone_code": "DISP.2", "state": "complete", "evidence": "DISP.2 is integrated at 98ae82579d23d8b3737cce590186b93b865ef022."},
+        {"milestone_code": "PLAT.1", "state": "complete", "evidence": "Platform identity and launch controls are integrated."}
       ],
-      "owner_checkpoint": "Owner acceptance is recorded complete; any conflicting active durable execution requires explicit reconciliation.",
-      "completion_evidence": ["CRM.2 is complete and pushed in authoritative Enterprise history at b75f9b6507f51c1e60dc23861012a77cad2ce804."],
-      "legacy_titles": ["Close launch CRM gaps", "CRM.2"],
-      "preserve_active_execution": false
-    },
-    {
-      "milestone_code": "OPS.1",
-      "title": "Complete launch job lifecycle",
-      "workstream": "Operations",
-      "permanent_capacity_identity": "OM2",
-      "repository_key": "acp-enterprise",
-      "branch_strategy": "Integrated on customer-management-v1; historical completion evidence only.",
-      "starting_commit_rule": "Resolve completion at c89396546a6ba6012e48694ba7737bd30e316637 in authoritative Enterprise history.",
-      "starting_commit_evidence": {"commit": "c89396546a6ba6012e48694ba7737bd30e316637", "subject": "feat(operations): complete launch job lifecycle", "owner_acceptance": "recorded_complete"},
-      "implementation_classification": "TYPE_B",
-      "migration_classification": "none",
-      "shared_contract_classification": "serialized",
-      "integration_checkpoint": "IC.1",
-      "readiness_state": "complete",
-      "dependency_evidence": [
-        {"milestone_code": "CRM.2", "state": "complete", "evidence": "CRM.2 is complete at b75f9b6507f51c1e60dc23861012a77cad2ce804."}
-      ],
-      "owner_checkpoint": "Completed and pushed; no Start authority remains.",
-      "completion_evidence": ["OPS.1 is complete in authoritative Enterprise history at c89396546a6ba6012e48694ba7737bd30e316637."],
-      "legacy_titles": ["Complete launch job lifecycle", "OPS.1"]
-    },
-    {
-      "milestone_code": "COMMS.1",
-      "title": "Establish launch communications",
-      "workstream": "Communications",
-      "permanent_capacity_identity": "OM1",
-      "repository_key": "acp-enterprise",
-      "branch_strategy": "Integrated on customer-management-v1; historical completion evidence only.",
-      "starting_commit_rule": "Resolve completion at 06ba0f39b85b0eeda7e5a4d1747bb326bd28668a in authoritative Enterprise history.",
-      "starting_commit_evidence": {"commit": "06ba0f39b85b0eeda7e5a4d1747bb326bd28668a", "subject": "feat(communications): establish launch communications", "owner_acceptance": "recorded_complete"},
-      "implementation_classification": "TYPE_B",
-      "migration_classification": "none",
-      "shared_contract_classification": "serialized",
-      "integration_checkpoint": "IC.1",
-      "readiness_state": "complete",
-      "dependency_evidence": [
-        {"milestone_code": "CRM.2", "state": "complete", "evidence": "CRM.2 is complete at b75f9b6507f51c1e60dc23861012a77cad2ce804."}
-      ],
-      "owner_checkpoint": "Completed and pushed; no Start authority remains.",
-      "completion_evidence": ["COMMS.1 is complete in authoritative Enterprise history at 06ba0f39b85b0eeda7e5a4d1747bb326bd28668a."],
-      "legacy_titles": ["Establish launch communications", "COMMS.1"]
-    },
-    {
-      "milestone_code": "CUTOVER.1",
-      "title": "Cutover readiness foundation",
-      "workstream": "Migration",
-      "permanent_capacity_identity": "MIG",
-      "repository_key": "acp-enterprise",
-      "branch_strategy": "Historical completion evidence on origin/customer-migration-workstream; never redispatch.",
-      "starting_commit_rule": "Resolve owner-accepted isolated completion commit f4e54775090b7c21afda079912a3729583662313 and its ancestry.",
-      "starting_commit_evidence": {"commit": "f4e54775090b7c21afda079912a3729583662313", "subject": "feat(migration): add cutover readiness foundation", "owner_acceptance": "recorded_complete", "remote_ancestor_of": "origin/customer-migration-workstream"},
-      "implementation_classification": "TYPE_B",
-      "migration_classification": "required",
-      "shared_contract_classification": "serialized",
-      "integration_checkpoint": "migration_isolated_history",
-      "readiness_state": "complete",
-      "dependency_evidence": [],
-      "owner_checkpoint": "Owner accepted the isolated readiness foundation; no Start authority remains.",
-      "completion_evidence": ["CUTOVER.1 is owner accepted and remains remotely visible in migration workstream ancestry."],
-      "legacy_titles": ["Cutover readiness foundation", "CUTOVER.1"]
-    },
-    {
-      "milestone_code": "CUTOVER.2",
-      "title": "Deterministic cutover planning",
-      "workstream": "Migration",
-      "permanent_capacity_identity": "MIG",
-      "repository_key": "acp-enterprise",
-      "branch_strategy": "Historical completion evidence on origin/customer-migration-workstream; never redispatch.",
-      "starting_commit_rule": "Resolve completion commit b66955f3df5b0daf62ee57d488d5f49e53338942 and prove it remains in remote ancestry.",
-      "starting_commit_evidence": {"commit": "b66955f3df5b0daf62ee57d488d5f49e53338942", "subject": "feat(migration): establish deterministic cutover planning", "remote_tip": "e9ab50d27f93a822ece1a3e7fb70db3268a1dd5e"},
-      "implementation_classification": "TYPE_B",
-      "migration_classification": "required",
-      "shared_contract_classification": "serialized",
-      "integration_checkpoint": "migration_isolated_history",
-      "readiness_state": "complete",
-      "dependency_evidence": [
-        {"milestone_code": "CUTOVER.1", "state": "complete", "evidence": "Owner-accepted CUTOVER.1 is the direct prerequisite in isolated migration history."}
-      ],
-      "owner_checkpoint": "Completed and remotely visible; no Start authority remains.",
-      "completion_evidence": ["CUTOVER.2 is complete at b66955f3df5b0daf62ee57d488d5f49e53338942 and is an ancestor of origin/customer-migration-workstream at e9ab50d27f93a822ece1a3e7fb70db3268a1dd5e."],
-      "legacy_titles": ["Deterministic cutover planning", "CUTOVER.2"]
+      "owner_checkpoint": "Explicit authenticated owner Start is required; no automatic dispatch.",
+      "completion_evidence": ["Responsive role-scoped technician shell", "Route and role guards", "Accessible mobile navigation", "Focused authorization and frontend validation"],
+      "legacy_titles": ["Establish technician application shell", "TECH.1"]
     }
   ]
 }
