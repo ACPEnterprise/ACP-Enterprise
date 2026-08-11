@@ -18,17 +18,17 @@ from app.scheduling.errors import (
     SchedulingVersionConflictError,
 )
 from app.scheduling.models import Appointment
+from app.scheduling.query import AppointmentQuery, AppointmentQueryRecord
+from app.scheduling.query_service import scheduling_query_service
 from app.scheduling.schemas import (
     AppointmentCancellationRequest,
     AppointmentCreateRequest,
     AppointmentDetail,
-    AppointmentResponse,
     AppointmentRescheduleRequest,
+    AppointmentResponse,
     AppointmentSummary,
     CalendarQueryResult,
 )
-from app.scheduling.query import AppointmentQuery, AppointmentQueryRecord
-from app.scheduling.query_service import scheduling_query_service
 from app.scheduling.service import (
     CancelAppointmentCommand,
     CreateAppointmentCommand,
@@ -36,7 +36,6 @@ from app.scheduling.service import (
     scheduling_service,
 )
 from app.scheduling.types import AppointmentCancellationReason, AppointmentStatus
-
 
 router = APIRouter(prefix="/api/v1/scheduling", tags=["Scheduling"])
 DatabaseSession = Annotated[AsyncSession, Depends(get_database_session)]
@@ -238,6 +237,7 @@ async def create_appointment(
             session,
             context=context,
             command=CreateAppointmentCommand(
+                idempotency_key=data.idempotency_key,
                 branch_id=data.branch_id,
                 customer_id=data.customer_id,
                 service_location_id=data.service_location_id,

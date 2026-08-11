@@ -31,12 +31,9 @@ from app.jobs.commands import (
 from app.jobs.errors import (
     AppointmentAlreadyLinkedError,
     AppointmentNotFoundError,
-    JobCancellationBlockedError,
-    JobCompletionBlockedError,
     JobInvalidTransitionError,
     JobNotFoundError,
     JobReferenceNotFoundError,
-    JobReopeningBlockedError,
     JobValidationError,
     JobVersionConflictError,
 )
@@ -363,6 +360,24 @@ class JobService:
                 occurred_at=occurred_at,
                 correlation_id=correlation_id,
             )
+            if command.service_request_id is not None:
+                self._stage_event(
+                    session,
+                    context=context,
+                    job=job,
+                    event_type=EventType.OPERATIONS_SERVICE_REQUEST_ACCEPTED,
+                    occurred_at=occurred_at,
+                    correlation_id=command.service_request_id,
+                    payload={
+                        "service_request_id": str(command.service_request_id),
+                        "customer_id": str(job.customer_id),
+                        "service_location_id": str(job.service_location_id),
+                        "appointment_id": str(appointment.id),
+                        "job_id": str(job.id),
+                        "status": "accepted",
+                        "schema_version": 1,
+                    },
+                )
         return job
 
     async def update_job(
@@ -593,12 +608,9 @@ class JobService:
             self._require_status(job, JobStatus.IN_PROGRESS)
             guard_context = self._guard_context(job)
             for guard in self._completion_guards:
-                try:
-                    await guard.validate_completion(
-                        session, context=context, job=guard_context
-                    )
-                except JobCompletionBlockedError:
-                    raise
+                await guard.validate_completion(
+                    session, context=context, job=guard_context
+                )
             self._repository.complete_job(
                 job, actor_user_id=context.user.id, occurred_at=occurred_at
             )
@@ -637,12 +649,9 @@ class JobService:
             old_status = job.status
             guard_context = self._guard_context(job)
             for guard in self._cancellation_guards:
-                try:
-                    await guard.validate_cancellation(
-                        session, context=context, job=guard_context
-                    )
-                except JobCancellationBlockedError:
-                    raise
+                await guard.validate_cancellation(
+                    session, context=context, job=guard_context
+                )
             self._repository.cancel_job(
                 job,
                 reason_code=command.reason_code.value,
@@ -681,12 +690,9 @@ class JobService:
             old_status = job.status
             guard_context = self._guard_context(job)
             for guard in self._reopening_guards:
-                try:
-                    await guard.validate_reopening(
-                        session, context=context, job=guard_context
-                    )
-                except JobReopeningBlockedError:
-                    raise
+                await guard.validate_reopening(
+                    session, context=context, job=guard_context
+                )
             self._repository.reopen_job(
                 job, actor_user_id=context.user.id, occurred_at=occurred_at
             )

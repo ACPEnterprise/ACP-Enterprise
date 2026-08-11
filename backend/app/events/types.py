@@ -2,6 +2,9 @@ from enum import Enum
 
 
 class EventType(str, Enum):
+    # Operations
+    OPERATIONS_SERVICE_REQUEST_ACCEPTED = "operations.service_request.accepted"
+
     # Price Book
     PRICE_BOOK_PRICE_VERSION_ACTIVATED = "price_book.price_version_activated"
 

@@ -32,6 +32,7 @@ from app.events.schemas import BusinessEventCreate
 from app.events.service import BusinessEventService
 from app.events.types import EventType
 from app.jobs.router import router as jobs_router
+from app.operations.router import router as operations_router
 from app.platform.audit.router import router as platform_audit_router
 from app.platform.auth.router import router as auth_router
 from app.platform.company.admin_router import router as company_admin_router
@@ -130,6 +131,7 @@ app.include_router(identity_self_service_router)
 app.include_router(identity_administration_router)
 app.include_router(scheduling_router)
 app.include_router(jobs_router)
+app.include_router(operations_router)
 app.include_router(dispatch_router)
 app.include_router(price_book_router)
 app.include_router(engineering_commands_router)

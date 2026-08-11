@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, time, timedelta, timezone
 from decimal import Decimal
 from typing import cast
-from uuid import uuid4
+from uuid import UUID, uuid4, uuid5
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -16,12 +16,17 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-from app.core.config import settings
 from app.analytics.service import AnalyticsService
+from app.core.config import settings
 from app.customers.models import Customer, ServiceLocation
 from app.events.models import BusinessEvent
 from app.events.schemas import BusinessEventCreate
 from app.events.service import BusinessEventService
+from app.jobs.commands import ActivateJob, CancelJob, ReopenJob
+from app.jobs.models import Job, JobAppointmentLink, JobNumberSequence
+from app.jobs.service import JobService
+from app.jobs.types import JobCancellationReason, JobPriority, JobReopeningReason
+from app.operations.service import OperationsService
 from app.platform.branch.models import Branch
 from app.platform.company.membership_models import Membership
 from app.platform.company.models import Company
@@ -29,6 +34,7 @@ from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.users.models import User
 from app.scheduling.errors import (
     SchedulingCapacityError,
+    SchedulingConflictError,
     SchedulingNotFoundError,
     SchedulingValidationError,
     SchedulingVersionConflictError,
@@ -52,7 +58,6 @@ from app.scheduling.types import (
     AppointmentCancellationReason,
     AppointmentRescheduleReason,
 )
-
 
 BUSINESS_TIMEZONE = ZoneInfo("America/New_York")
 BUSINESS_TODAY = datetime.now(timezone.utc).astimezone(BUSINESS_TIMEZONE).date()
@@ -202,6 +207,17 @@ async def service_database() -> AsyncIterator[
             )
             await session.execute(
                 delete(BusinessEvent).where(BusinessEvent.company_id.in_(company_ids))
+            )
+            await session.execute(
+                delete(JobAppointmentLink).where(
+                    JobAppointmentLink.company_id.in_(company_ids)
+                )
+            )
+            await session.execute(delete(Job).where(Job.company_id.in_(company_ids)))
+            await session.execute(
+                delete(JobNumberSequence).where(
+                    JobNumberSequence.company_id.in_(company_ids)
+                )
             )
             await session.execute(
                 delete(AppointmentCapacityReservation).where(
@@ -377,6 +393,229 @@ async def test_creation_is_tenant_scoped_and_numbering_is_company_scoped(
         "APT-000001",
         "APT-000002",
     )
+
+
+@pytest.mark.asyncio
+async def test_creation_retry_uses_deterministic_appointment_without_duplicate_evidence(
+    service_database: tuple[async_sessionmaker[AsyncSession], ServiceFixture],
+) -> None:
+    factory, fixture = service_database
+    request_id = uuid4()
+    command = CreateAppointmentCommand(
+        **{
+            **create_command(fixture).__dict__,
+            "idempotency_key": request_id,
+        }
+    )
+    service = SchedulingService(clock=lambda: FIXED_NOW)
+
+    async with factory() as session:
+        first = await service.create_appointment(
+            session, context=fixture.context, command=command
+        )
+        replay = await service.create_appointment(
+            session, context=fixture.context, command=command
+        )
+
+    assert (
+        first.id
+        == replay.id
+        == uuid5(fixture.company.id, f"operations.service_request:{request_id}")
+    )
+    assert first.appointment_number == replay.appointment_number == "APT-000001"
+    async with factory() as session:
+        assert (
+            await session.scalar(
+                select(func.count(Appointment.id)).where(
+                    Appointment.company_id == fixture.company.id
+                )
+            )
+            == 1
+        )
+        assert (
+            await session.scalar(
+                select(func.count(BusinessEvent.id)).where(
+                    BusinessEvent.entity_id == first.id
+                )
+            )
+            == 2
+        )
+
+
+@pytest.mark.asyncio
+async def test_creation_rejects_conflicting_idempotency_replay(
+    service_database: tuple[async_sessionmaker[AsyncSession], ServiceFixture],
+) -> None:
+    factory, fixture = service_database
+    request_id = uuid4()
+    original = CreateAppointmentCommand(
+        **{
+            **create_command(fixture).__dict__,
+            "idempotency_key": request_id,
+        }
+    )
+    conflict = CreateAppointmentCommand(
+        **{
+            **create_command(fixture, start=FIRST_START + timedelta(hours=2)).__dict__,
+            "idempotency_key": request_id,
+        }
+    )
+    async with factory() as session:
+        await SchedulingService(clock=lambda: FIXED_NOW).create_appointment(
+            session, context=fixture.context, command=original
+        )
+        with pytest.raises(SchedulingConflictError):
+            await SchedulingService(clock=lambda: FIXED_NOW).create_appointment(
+                session, context=fixture.context, command=conflict
+            )
+
+
+@pytest.mark.asyncio
+async def test_concurrent_idempotent_creation_returns_one_appointment(
+    service_database: tuple[async_sessionmaker[AsyncSession], ServiceFixture],
+) -> None:
+    factory, fixture = service_database
+    request_id = uuid4()
+    command = CreateAppointmentCommand(
+        **{
+            **create_command(fixture).__dict__,
+            "idempotency_key": request_id,
+        }
+    )
+    service = SchedulingService(clock=lambda: FIXED_NOW)
+
+    async def invoke() -> UUID:
+        async with factory() as session:
+            appointment = await service.create_appointment(
+                session, context=fixture.context, command=command
+            )
+            return appointment.id
+
+    first, second = await asyncio.gather(invoke(), invoke())
+    assert first == second
+    async with factory() as session:
+        assert (
+            await session.scalar(
+                select(func.count(Appointment.id)).where(
+                    Appointment.company_id == fixture.company.id
+                )
+            )
+            == 1
+        )
+
+
+@pytest.mark.asyncio
+async def test_launch_workflow_links_retries_reschedules_cancels_and_reopens(
+    service_database: tuple[async_sessionmaker[AsyncSession], ServiceFixture],
+) -> None:
+    factory, fixture = service_database
+    request_id = uuid4()
+    scheduling = SchedulingService(clock=lambda: FIXED_NOW)
+    jobs = JobService(clock=lambda: FIXED_NOW)
+    operations = OperationsService(scheduling=scheduling, jobs=jobs)
+    appointment_command = CreateAppointmentCommand(
+        **{
+            **create_command(fixture).__dict__,
+            "idempotency_key": request_id,
+        }
+    )
+
+    async with factory() as session:
+        first = await operations.accept_service_request(
+            session,
+            context=fixture.context,
+            request_id=request_id,
+            appointment=appointment_command,
+            job_type_code="repair",
+            priority=JobPriority.HIGH,
+            customer_reported_problem="No cooling",
+            internal_description=None,
+        )
+        replay = await operations.accept_service_request(
+            session,
+            context=fixture.context,
+            request_id=request_id,
+            appointment=appointment_command,
+            job_type_code="repair",
+            priority=JobPriority.HIGH,
+            customer_reported_problem="No cooling",
+            internal_description=None,
+        )
+    assert replay.appointment.id == first.appointment.id
+    assert replay.job.id == first.job.id
+
+    async with factory() as session:
+        rescheduled = await scheduling.reschedule_appointment(
+            session,
+            context=fixture.context,
+            command=RescheduleAppointmentCommand(
+                appointment_id=first.appointment.id,
+                expected_version=1,
+                arrival_window_start_at=FIRST_START + timedelta(hours=2),
+                arrival_window_end_at=FIRST_START + timedelta(hours=3),
+                expected_duration_minutes=60,
+                capacity_units=Decimal("1.00"),
+                reason_code=AppointmentRescheduleReason.CUSTOMER_REQUEST,
+            ),
+        )
+        activated = await jobs.activate_job(
+            session,
+            context=fixture.context,
+            command=ActivateJob(first.job.id, 1),
+        )
+    assert rescheduled.concurrency_version == 2
+    assert activated.status == "ready"
+
+    async with factory() as session:
+        cancelled_appointment = await scheduling.cancel_appointment(
+            session,
+            context=fixture.context,
+            command=CancelAppointmentCommand(
+                first.appointment.id,
+                rescheduled.concurrency_version,
+                AppointmentCancellationReason.CUSTOMER_REQUEST,
+            ),
+        )
+        cancelled_job = await jobs.cancel_job(
+            session,
+            context=fixture.context,
+            command=CancelJob(
+                first.job.id,
+                activated.concurrency_version,
+                JobCancellationReason.CUSTOMER_CANCELLED,
+            ),
+        )
+        assert cancelled_job.status == "cancelled"
+        reopened = await jobs.reopen_job(
+            session,
+            context=fixture.context,
+            command=ReopenJob(
+                first.job.id,
+                cancelled_job.concurrency_version,
+                JobReopeningReason.CUSTOMER_CALLBACK,
+            ),
+        )
+    assert cancelled_appointment.status == "cancelled"
+    assert reopened.status == "ready"
+
+    async with factory() as session:
+        assert (
+            await session.scalar(
+                select(func.count(JobAppointmentLink.id)).where(
+                    JobAppointmentLink.appointment_id == first.appointment.id
+                )
+            )
+            == 1
+        )
+        assert (
+            await session.scalar(
+                select(func.count(BusinessEvent.id)).where(
+                    BusinessEvent.event_type == "operations.service_request.accepted",
+                    BusinessEvent.correlation_id == request_id,
+                )
+            )
+            == 1
+        )
 
 
 @pytest.mark.asyncio

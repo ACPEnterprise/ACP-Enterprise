@@ -15,6 +15,10 @@ class SchedulingApiSchema(BaseModel):
 
 
 class AppointmentCreateRequest(SchedulingApiSchema):
+    idempotency_key: UUID | None = Field(
+        default=None,
+        description="Stable retry identity for deterministic Appointment creation.",
+    )
     branch_id: UUID = Field(description="Authorized Branch receiving the Appointment.")
     customer_id: UUID = Field(description="Customer receiving service.")
     service_location_id: UUID = Field(description="Customer Service Location.")

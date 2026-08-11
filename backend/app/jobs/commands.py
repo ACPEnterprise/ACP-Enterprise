@@ -47,6 +47,7 @@ class MigrateJob:
 @dataclass(frozen=True)
 class CreateJobFromAppointment:
     appointment_id: UUID
+    service_request_id: UUID | None = None
     job_type_code: str | None = None
     priority: JobPriority = JobPriority.NORMAL
     customer_reported_problem: str | None = None

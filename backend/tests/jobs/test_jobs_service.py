@@ -603,6 +603,52 @@ async def test_two_concurrent_create_from_appointment_calls_return_one_job(
         )
 
 
+@pytest.mark.asyncio
+async def test_service_request_job_creation_stages_one_linked_operations_event(
+    service_fixture: ServiceFixture,
+) -> None:
+    fixture = service_fixture
+    service = JobService()
+    request_id = uuid4()
+    command = CreateJobFromAppointment(
+        appointment_id=fixture.appointment_id,
+        service_request_id=request_id,
+        customer_reported_problem="No cooling",
+    )
+    async with fixture.factory() as session:
+        first = await service.create_job_from_appointment(
+            session, context=fixture.context, command=command
+        )
+    async with fixture.factory() as session:
+        replay = await service.create_job_from_appointment(
+            session, context=fixture.context, command=command
+        )
+        events = tuple(
+            (
+                await session.scalars(
+                    select(BusinessEvent).where(
+                        BusinessEvent.entity_id == first.id,
+                        BusinessEvent.event_type
+                        == "operations.service_request.accepted",
+                    )
+                )
+            ).all()
+        )
+
+    assert replay.id == first.id
+    assert len(events) == 1
+    assert events[0].correlation_id == request_id
+    assert events[0].payload == {
+        "service_request_id": str(request_id),
+        "customer_id": str(fixture.customer_id),
+        "service_location_id": str(fixture.location_id),
+        "appointment_id": str(fixture.appointment_id),
+        "job_id": str(first.id),
+        "status": "accepted",
+        "schema_version": 1,
+    }
+
+
 class BlockingCompletionGuard:
     async def validate_completion(
         self,

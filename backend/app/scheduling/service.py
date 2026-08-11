@@ -2,7 +2,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
-from uuid import UUID, uuid4
+from uuid import UUID, uuid4, uuid5
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -50,6 +50,7 @@ class CreateAppointmentCommand:
     arrival_window_end_at: datetime
     expected_duration_minutes: int
     capacity_units: Decimal = Decimal("1.00")
+    idempotency_key: UUID | None = None
 
 
 @dataclass(frozen=True)
@@ -115,7 +116,31 @@ class SchedulingService:
             command.capacity_units,
         )
         now = self._clock()
+        appointment_id = (
+            uuid5(
+                context.company.id,
+                f"operations.service_request:{command.idempotency_key}",
+            )
+            if command.idempotency_key is not None
+            else uuid4()
+        )
         async with session.begin():
+            existing = await self._repository.get_appointment_for_update(
+                session,
+                company_id=context.company.id,
+                appointment_id=appointment_id,
+            )
+            if existing is not None:
+                self._require_authorized_branch(context, existing.branch_id)
+                self._require_matching_creation(existing, command)
+                existing.capacity_reservation = (
+                    await self._repository.get_capacity_reservation(
+                        session,
+                        company_id=context.company.id,
+                        appointment_id=existing.id,
+                    )
+                )
+                return existing
             branch = await self._repository.get_schedulable_branch(
                 session,
                 company_id=context.company.id,
@@ -143,11 +168,27 @@ class SchedulingService:
                 capacity_units=command.capacity_units,
                 now=now,
             )
+            if command.idempotency_key is not None:
+                existing = await self._repository.get_appointment_for_update(
+                    session,
+                    company_id=context.company.id,
+                    appointment_id=appointment_id,
+                )
+                if existing is not None:
+                    self._require_matching_creation(existing, command)
+                    existing.capacity_reservation = (
+                        await self._repository.get_capacity_reservation(
+                            session,
+                            company_id=context.company.id,
+                            appointment_id=existing.id,
+                        )
+                    )
+                    return existing
             appointment_number = await self._repository.next_appointment_number(
                 session, company_id=context.company.id
             )
             appointment = Appointment(
-                id=uuid4(),
+                id=appointment_id,
                 company_id=context.company.id,
                 branch_id=branch.id,
                 appointment_number=appointment_number,
@@ -697,6 +738,29 @@ class SchedulingService:
         if not interval_capacity:
             raise SchedulingCapacityError("Requested interval is not available.")
         return min(min(interval_capacity), calendar.default_capacity_units)
+
+    @staticmethod
+    def _require_matching_creation(
+        appointment: Appointment, command: CreateAppointmentCommand
+    ) -> None:
+        reservation = appointment.capacity_reservation
+        matches = (
+            appointment.branch_id == command.branch_id
+            and appointment.customer_id == command.customer_id
+            and appointment.service_location_id == command.service_location_id
+            and appointment.arrival_window_start_at == command.arrival_window_start_at
+            and appointment.arrival_window_end_at == command.arrival_window_end_at
+            and appointment.expected_duration_minutes
+            == command.expected_duration_minutes
+            and (
+                reservation is None
+                or reservation.capacity_units == command.capacity_units
+            )
+        )
+        if not matches:
+            raise SchedulingConflictError(
+                "Idempotency key was already used for another Appointment request."
+            )
 
     @staticmethod
     def _validate_window(
