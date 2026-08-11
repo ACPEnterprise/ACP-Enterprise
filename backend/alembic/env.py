@@ -32,6 +32,7 @@ from app.engineering_control.repository_operation import (
 from app.engineering_control.review import (
     models as engineering_review_models,  # noqa: F401
 )
+from app.engineering_control.scheduler import models as scheduler_models  # noqa: F401
 from app.engineering_execution import (
     models as engineering_execution_models,  # noqa: F401
 )

@@ -1,0 +1,50 @@
+{
+  "representative_only": true,
+  "source": "synthetic local/test data; not Preview",
+  "mode": "dry_run",
+  "scheduler_version": "MMQ.5-2026-08-11.4",
+  "scheduler_fingerprint": "f6d8d902f047f8459de82bb1bf22f46f900e63533985d5b4e1a9450dc55f8fef",
+  "before_counts": {
+    "roadmaps": 5,
+    "milestones": 31,
+    "commands": 7,
+    "workstream_runtimes": 7,
+    "reservations": 0,
+    "allocations": 0,
+    "milestone_events": 31,
+    "capacity_events": 4,
+    "worker_capacities": 1,
+    "permanent_capacities": 0,
+    "capacity_bindings": 0
+  },
+  "proposed_after_counts": {
+    "roadmaps": 6,
+    "milestones": 31,
+    "commands": 7,
+    "workstream_runtimes": 7,
+    "reservations": 0,
+    "allocations": 0,
+    "milestone_events": 31,
+    "capacity_events": 4,
+    "worker_capacities": 1,
+    "permanent_capacities": 5,
+    "capacity_bindings": 0
+  },
+  "sample_classifications": [
+    {"record_id": "00000000-0000-4000-8000-000000000101", "milestone_code": "PRICEBOOK.1", "classification": "completed"},
+    {"record_id": "00000000-0000-4000-8000-000000000102", "milestone_code": "CRM.2", "classification": "completed"},
+    {"record_id": "00000000-0000-4000-8000-000000000103", "classification": "orphaned"}
+  ],
+  "crm2_preservation": {
+    "milestone_ids": ["00000000-0000-4000-8000-000000000102"],
+    "command_ids": ["00000000-0000-4000-8000-000000000202"],
+    "runtime_ids": ["00000000-0000-4000-8000-000000000302"],
+    "reservation_ids": [],
+    "allocation_ids": [],
+    "worker_capacity_ids": [],
+    "proposed_mutation_ids": [],
+    "preserved": true
+  },
+  "destructive_operation_count": 0,
+  "mutations_performed": 0
+}

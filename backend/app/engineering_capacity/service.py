@@ -10,6 +10,10 @@ from app.engineering_control.mobile.roadmaps import (
     EngineeringRoadmap,
 )
 from app.engineering_control.models import EngineeringCommand
+from app.engineering_control.scheduler.models import (
+    EngineeringCapacityBinding,
+    EngineeringPermanentCapacity,
+)
 from app.engineering_control.workstream_runtime import EngineeringWorkstreamRuntime
 from app.platform.audit.service import AuditEntry, audit_service
 from app.platform.permissions.authorization import AuthorizationContext
@@ -46,6 +50,8 @@ from .schemas import (
     CapacitySummaryResponse,
     EligibleWorkerResponse,
     ExistingWorkerCapacitySetup,
+    PermanentCapacityBindingResponse,
+    PermanentCapacityResponse,
     WorkerCapacityRegister,
     WorkerCapacityResponse,
     WorkerCapacityUpdate,
@@ -144,6 +150,26 @@ class EngineeringCapacityService:
             reservations,
             allocations,
         )
+        permanent_capacities = tuple(
+            PermanentCapacityResponse.model_validate(item)
+            for item in (
+                await session.scalars(
+                    select(EngineeringPermanentCapacity)
+                    .where(EngineeringPermanentCapacity.company_id == company_id)
+                    .order_by(EngineeringPermanentCapacity.identity_code)
+                )
+            ).all()
+        )
+        permanent_bindings = tuple(
+            PermanentCapacityBindingResponse.model_validate(item)
+            for item in (
+                await session.scalars(
+                    select(EngineeringCapacityBinding)
+                    .where(EngineeringCapacityBinding.company_id == company_id)
+                    .order_by(EngineeringCapacityBinding.created_at)
+                )
+            ).all()
+        )
         configured = sum(worker.configured_limit for worker in workers)
         allocated = sum(worker.allocated_capacity for worker in workers)
         reserved = sum(worker.reserved_capacity for worker in workers)
@@ -171,6 +197,8 @@ class EngineeringCapacityService:
             active_reservations=reservations,
             active_allocations=allocations,
             waiting_workstreams=queue,
+            permanent_capacities=permanent_capacities,
+            permanent_capacity_bindings=permanent_bindings,
         )
 
     async def update_policy(
@@ -1210,7 +1238,6 @@ class EngineeringCapacityService:
                     EngineeringCommand.execution_state == "execution_not_connected",
                     EngineeringMilestone.company_id == company_id,
                     EngineeringRoadmap.company_id == company_id,
-                    EngineeringMilestone.status == "running",
                     or_(
                         EngineeringWorkstreamRuntime.id.is_(None),
                         EngineeringWorkstreamRuntime.runtime_state.in_(
@@ -1227,13 +1254,30 @@ class EngineeringCapacityService:
         ] = {}
         for command, milestone, roadmap in rows:
             identities.setdefault(command.id, []).append((command, milestone, roadmap))
+        linked_count_rows = (
+            await session.execute(
+                select(
+                    EngineeringMilestone.command_id,
+                    func.count(EngineeringMilestone.id),
+                )
+                .where(
+                    EngineeringMilestone.command_id.in_(tuple(identities)),
+                )
+                .group_by(EngineeringMilestone.command_id)
+            )
+        ).all()
+        linked_counts: dict[UUID, int] = {
+            linked_command_id: linked_count
+            for linked_command_id, linked_count in linked_count_rows
+            if linked_command_id is not None
+        }
         result: list[CapacityQueueItem] = []
         worker_names = {item.worker_id: item.worker_name for item in eligible_workers}
         for command_id, matches in identities.items():
             command = matches[0][0]
             if command.id in held:
                 continue
-            identity_resolved = len(matches) == 1
+            identity_resolved = len(matches) == 1 and linked_counts.get(command_id) == 1
             if identity_resolved:
                 _, milestone, roadmap = matches[0]
                 decision, reason = self._decision(policy, workers)

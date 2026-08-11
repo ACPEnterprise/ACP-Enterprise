@@ -55,7 +55,7 @@ function MilestoneCard({
       <div className="flex items-start justify-between gap-ui-3">
         <div className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-wide text-content-muted">
-            Milestone {item.position}
+            {item.milestone_code ?? `Milestone ${item.position}`}
           </p>
           <h3 className="mt-1 text-lg font-bold leading-6">{item.title}</h3>
         </div>
@@ -66,6 +66,12 @@ function MilestoneCard({
       </p>
       <p className="mt-ui-2 text-xs font-medium text-content-muted">
         {item.owning_workstream} · {item.owning_branch}
+        {item.permanent_capacity_identity
+          ? ` · ${item.permanent_capacity_identity}`
+          : ""}
+      </p>
+      <p className="mt-1 text-xs font-medium text-content-muted">
+        {mobileEngineeringLabel(item.readiness_state ?? item.status)} · Reconciliation: {mobileEngineeringLabel(item.reconciliation_state ?? "legacy_unreconciled")}
       </p>
       <p className="mt-ui-2 text-sm font-medium text-content-muted">
         {item.attention_reason}

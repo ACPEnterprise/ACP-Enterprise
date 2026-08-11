@@ -148,6 +148,12 @@ export interface MobileWorkstreamSummary {
   worker_health: string | null;
   progress_percent: number | null;
   current_activity: string | null;
+  scheduler_milestone_code?: string | null;
+  scheduler_version?: string | null;
+  permanent_capacity_identity?: string | null;
+  authoritative_state?: string;
+  reconciliation_state?: string;
+  stale_runtime?: boolean;
   acknowledgement_latency_ms: number | null;
   execution_latency_ms: number | null;
   validation_latency_ms: number | null;
@@ -249,6 +255,19 @@ export interface MilestoneItem {
   roadmap_id: string;
   position: number;
   title: string;
+  milestone_code?: string | null;
+  scheduler_version?: string | null;
+  scheduler_fingerprint?: string | null;
+  permanent_capacity_identity?: string | null;
+  implementation_classification?: string | null;
+  integration_checkpoint?: string | null;
+  starting_commit_rule?: string | null;
+  starting_commit_evidence?: Record<string, unknown>;
+  migration_classification?: string | null;
+  shared_contract_classification?: string | null;
+  readiness_state?: string | null;
+  dependency_evidence?: readonly unknown[];
+  reconciliation_state?: string;
   objective: string;
   owning_workstream: string;
   owning_branch: string;
@@ -460,4 +479,20 @@ export interface CapacitySummary {
   active_reservations: readonly CapacityReservation[];
   active_allocations: readonly CapacityAllocation[];
   waiting_workstreams: readonly CapacityQueueItem[];
+  permanent_capacities?: readonly {
+    id: string;
+    identity_code: string;
+    display_name: string;
+    state: string;
+    reconciliation_reason: string | null;
+    version: number;
+  }[];
+  permanent_capacity_bindings?: readonly {
+    id: string;
+    permanent_capacity_id: string;
+    worker_capacity_id: string;
+    state: string;
+    evidence: Record<string, unknown>;
+    version: number;
+  }[];
 }

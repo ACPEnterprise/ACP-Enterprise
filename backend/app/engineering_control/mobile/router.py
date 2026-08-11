@@ -17,6 +17,10 @@ from app.engineering_control.commands import (
 )
 from app.engineering_control.errors import EngineeringControlError
 from app.engineering_control.http_errors import engineering_http_error
+from app.engineering_control.scheduler.reconciliation import (
+    scheduler_reconciliation_service,
+)
+from app.engineering_control.scheduler.schemas import SchedulerReconciliationReport
 from app.engineering_control.workstream_runtime import EngineeringWorkstreamRuntime
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import EngineeringCommandPermission
@@ -98,12 +102,35 @@ ApproveContext = Annotated[
 ]
 
 
+@router.get(
+    "/scheduler/reconciliation/dry-run",
+    response_model=SchedulerReconciliationReport,
+    summary="Build a zero-write MMQ scheduler reconciliation plan",
+)
+async def scheduler_reconciliation_dry_run(
+    context: ApproveContext,
+    session: DatabaseSession,
+) -> SchedulerReconciliationReport:
+    report = await scheduler_reconciliation_service.dry_run(
+        session, company_id=context.company.id
+    )
+    await session.rollback()
+    return report
+
+
 def _attention(
     item: MilestoneItem,
     adoption: ExternalAdoptionItem | None,
     runtime: EngineeringWorkstreamRuntime | None,
     capacity_state: str | None = None,
+    capacity_reason: str | None = None,
 ) -> tuple[str, str, tuple[str, ...]]:
+    if item.reconciliation_state != "current":
+        return (
+            "waiting_on_dependency",
+            f"Scheduler reconciliation required: {item.reconciliation_state}.",
+            (),
+        )
     if adoption is not None:
         if adoption.status == "waiting_review":
             return (
@@ -132,7 +159,7 @@ def _attention(
             "A manual recovery decision is required.",
             ("request_revision", "cancel"),
         )
-    if item.status == "ready":
+    if item.status == "ready" and item.readiness_state == "ready":
         return (
             "owner_action_required",
             "This milestone is ready to start.",
@@ -157,7 +184,8 @@ def _attention(
                 (
                     "Authenticated capacity is reserved and awaiting allocation."
                     if capacity_state == "reserved"
-                    else "Execution is queued for authenticated worker capacity."
+                    else capacity_reason
+                    or "Execution is queued for authenticated worker capacity."
                 ),
                 (),
             )
@@ -280,6 +308,9 @@ async def list_roadmaps(context: ReadContext, session: DatabaseSession) -> Roadm
     capacity_states = {
         item.command_id: "waiting" for item in capacity.waiting_workstreams
     }
+    capacity_reasons = {
+        item.command_id: item.reason for item in capacity.waiting_workstreams
+    }
     capacity_states.update(
         {item.command_id: "reserved" for item in capacity.active_reservations}
     )
@@ -302,6 +333,7 @@ async def list_roadmaps(context: ReadContext, session: DatabaseSession) -> Roadm
                 adoption_items.get(item.id),
                 runtimes.get(item.command_id) if item.command_id else None,
                 capacity_states.get(item.command_id) if item.command_id else None,
+                capacity_reasons.get(item.command_id) if item.command_id else None,
             ),
         )
     )

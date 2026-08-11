@@ -4,6 +4,9 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 import pytest_asyncio
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
 from app.core.config import settings
 from app.engineering_control.mobile.external_adoption import (
     ExternalAdoptionError,
@@ -22,9 +25,6 @@ from app.platform.permissions.codes import (
     EngineeringCommandPermission,
     EngineeringExecutionPermission,
 )
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from tests.engineering_control.test_engineering_command_service import (
     ServiceFixture,
     context_with_permissions,
@@ -101,6 +101,12 @@ async def seed_adoptable(factory) -> tuple[ServiceFixture, EngineeringMilestone]
             definition_approved=True,
             requested_code_changes=True,
             externally_adoptable=False,
+            milestone_code="TEST.SUCCESSOR",
+            scheduler_version="TEST.1",
+            scheduler_fingerprint="a" * 64,
+            permanent_capacity_identity="OM1",
+            readiness_state="ready",
+            reconciliation_state="current",
             created_at=now,
             updated_at=now,
         )

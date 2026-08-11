@@ -129,6 +129,12 @@ class MobileWorkstreamSummary(MobileEngineeringSchema):
     worker_health: str | None
     progress_percent: int | None
     current_activity: str | None
+    scheduler_milestone_code: str | None = None
+    scheduler_version: str | None = None
+    permanent_capacity_identity: str | None = None
+    authoritative_state: str = "active_command"
+    reconciliation_state: str = "legacy_unreconciled"
+    stale_runtime: bool = False
     acknowledgement_latency_ms: int | None = None
     execution_latency_ms: int | None = None
     validation_latency_ms: int | None = None
@@ -258,6 +264,19 @@ class MilestoneItem(MobileEngineeringSchema):
     roadmap_id: UUID
     position: int
     title: str
+    milestone_code: str | None = None
+    scheduler_version: str | None = None
+    scheduler_fingerprint: str | None = None
+    permanent_capacity_identity: str | None = None
+    implementation_classification: str | None = None
+    integration_checkpoint: str | None = None
+    starting_commit_rule: str | None = None
+    starting_commit_evidence: dict[str, object] = Field(default_factory=dict)
+    migration_classification: str | None = None
+    shared_contract_classification: str | None = None
+    readiness_state: str | None = None
+    dependency_evidence: tuple[object, ...] = ()
+    reconciliation_state: str = "legacy_unreconciled"
     objective: str
     owning_workstream: str
     owning_branch: str

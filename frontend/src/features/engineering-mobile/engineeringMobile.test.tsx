@@ -215,6 +215,11 @@ describe("mobile Engineering Control", () => {
       roadmap_id: "dd37ad9f-f32a-4dd7-9cb5-f25cf63a4870",
       position: 2,
       title: "Owner milestone dispatch",
+      milestone_code: "TEST.2",
+      scheduler_version: "TEST.1",
+      permanent_capacity_identity: "OM1",
+      readiness_state: "ready",
+      reconciliation_state: "current",
       objective: "Send the approved definition directly to Engineering Execution.",
       owning_workstream: "Mission Control",
       owning_branch: "mission-control-v2.1",
@@ -264,6 +269,9 @@ describe("mobile Engineering Control", () => {
     renderList();
     await userEvent.click(screen.getByRole("button", { name: /Roadmap/ }));
     expect(screen.getAllByText("Owner milestone dispatch").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("TEST.2").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Mission Control · mission-control-v2.1 · OM1/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Ready · Reconciliation: Current/).length).toBeGreaterThan(0);
     expect(screen.getAllByText("1").length).toBeGreaterThan(0);
     await userEvent.click(screen.getByRole("button", { name: "Start next milestone" }));
     expect(mutate).toHaveBeenCalledWith(

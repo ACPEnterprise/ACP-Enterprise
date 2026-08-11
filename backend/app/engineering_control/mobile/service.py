@@ -1,6 +1,7 @@
 from collections.abc import Mapping
 from datetime import datetime, timedelta, timezone
 from math import ceil
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 from sqlalchemy import select
@@ -43,6 +44,9 @@ from .schemas import (
     MobileWorkstreamSummary,
 )
 
+if TYPE_CHECKING:
+    from .roadmaps import EngineeringMilestone
+
 HEARTBEAT_FRESH_FOR = timedelta(seconds=90)
 
 
@@ -74,6 +78,8 @@ class MobileEngineeringControlService:
         page_size: int,
         now: datetime | None = None,
     ) -> MobileWorkstreamPage:
+        from .roadmaps import EngineeringMilestone
+
         current = now or datetime.now(timezone.utc)
         commands = await self.control.list_commands(
             session,
@@ -97,12 +103,19 @@ class MobileEngineeringControlService:
                     EngineeringWorkstreamRuntime.command_id == command.id,
                 )
             )
+            milestone = await session.scalar(
+                select(EngineeringMilestone).where(
+                    EngineeringMilestone.company_id == context.company.id,
+                    EngineeringMilestone.command_id == command.id,
+                )
+            )
             items.append(
                 self._workstream_summary(
                     command=command,
                     status=status,
                     desired_state=control.desired_state if control else "active",
                     runtime=runtime,
+                    milestone=milestone,
                     now=current,
                 )
             )
@@ -125,6 +138,8 @@ class MobileEngineeringControlService:
         command_id: UUID,
         now: datetime | None = None,
     ) -> MobileWorkstreamDetail:
+        from .roadmaps import EngineeringMilestone
+
         command = await self.control.get_command(
             session, context=context, command_id=command_id
         )
@@ -140,12 +155,19 @@ class MobileEngineeringControlService:
                 EngineeringWorkstreamRuntime.command_id == command_id,
             )
         )
+        milestone = await session.scalar(
+            select(EngineeringMilestone).where(
+                EngineeringMilestone.company_id == context.company.id,
+                EngineeringMilestone.command_id == command_id,
+            )
+        )
         current = now or datetime.now(timezone.utc)
         summary = self._workstream_summary(
             command=command,
             status=status,
             desired_state=control.desired_state if control else "active",
             runtime=runtime,
+            milestone=milestone,
             now=current,
         )
         return MobileWorkstreamDetail(
@@ -451,6 +473,7 @@ class MobileEngineeringControlService:
         status: MobileExecutionStatus,
         desired_state: str = "active",
         runtime: EngineeringWorkstreamRuntime | None = None,
+        milestone: "EngineeringMilestone | None" = None,
         now: datetime | None = None,
     ) -> MobileWorkstreamSummary:
         lifecycle, next_action, owner_action = cls._next_action(
@@ -466,13 +489,21 @@ class MobileEngineeringControlService:
             and status.repository_operation_resulting_commit_sha is not None
             else None
         )
+        observed_at = now or datetime.now(timezone.utc)
         pipeline = cls._pipeline_status(
             command=command,
             status=status,
             desired_state=desired_state,
             runtime=runtime,
-            now=now or datetime.now(timezone.utc),
+            now=observed_at,
         )
+        stale_runtime = bool(
+            runtime
+            and runtime.runtime_state not in {"completed", "failed", "cancelled"}
+            and observed_at - runtime.heartbeat_at > timedelta(minutes=2)
+        )
+        if stale_runtime:
+            pipeline = "reconciliation_required"
         actions = cls._available_actions(
             command=command, status=status, desired_state=desired_state
         )
@@ -524,7 +555,35 @@ class MobileEngineeringControlService:
             worker_health=runtime.worker_health if runtime else None,
             progress_percent=runtime.progress_percent if runtime else None,
             current_activity=runtime.current_activity if runtime else None,
+            scheduler_milestone_code=milestone.milestone_code if milestone else None,
+            scheduler_version=milestone.scheduler_version if milestone else None,
+            permanent_capacity_identity=(
+                milestone.permanent_capacity_identity if milestone else None
+            ),
+            authoritative_state=cls._authoritative_state(pipeline, milestone),
+            reconciliation_state=(
+                milestone.reconciliation_state if milestone else "legacy_unreconciled"
+            ),
+            stale_runtime=stale_runtime,
         )
+
+    @staticmethod
+    def _authoritative_state(
+        pipeline: str, milestone: "EngineeringMilestone | None"
+    ) -> str:
+        if milestone and milestone.reconciliation_state != "current":
+            return "reconciliation_required"
+        if pipeline == "waiting_for_owner":
+            return "waiting_for_owner_review"
+        if pipeline in {"acknowledged", "running", "validating", "deploying_preview"}:
+            return "executing_milestone" if milestone else "active_command"
+        if pipeline == "queued":
+            return "waiting_for_capacity"
+        if pipeline == "completed":
+            return "complete"
+        if pipeline in {"failed", "cancelled", "reconciliation_required", "recovering"}:
+            return "reconciliation_required"
+        return "active_command"
 
     @staticmethod
     def _display_name(owner_instruction: str) -> str:

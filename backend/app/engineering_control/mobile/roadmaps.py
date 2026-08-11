@@ -86,11 +86,18 @@ class EngineeringMilestone(Base):
         UniqueConstraint(
             "roadmap_id", "position", name="uq_engineering_milestone_position"
         ),
+        UniqueConstraint(
+            "company_id", "milestone_code", name="uq_engineering_milestone_code"
+        ),
         CheckConstraint("position >= 1", name="ck_engineering_milestone_position"),
         CheckConstraint("version >= 1", name="ck_engineering_milestone_version"),
         CheckConstraint(
             "status IN ('draft','planned','ready','running','externally_running','waiting_review','waiting_approval','blocked','completed','paused','cancelled','skipped','archived')",
             name="ck_engineering_milestone_status",
+        ),
+        CheckConstraint(
+            "reconciliation_state IN ('current','legacy_unreconciled','superseded','ambiguous','reconciliation_required')",
+            name="ck_engineering_milestone_reconciliation_state",
         ),
         Index(
             "ix_engineering_milestone_company_status",
@@ -115,6 +122,25 @@ class EngineeringMilestone(Base):
     )
     position: Mapped[int] = mapped_column(Integer, nullable=False)
     title: Mapped[str] = mapped_column(String(160), nullable=False)
+    milestone_code: Mapped[str | None] = mapped_column(String(80))
+    scheduler_version: Mapped[str | None] = mapped_column(String(80))
+    scheduler_fingerprint: Mapped[str | None] = mapped_column(String(64))
+    permanent_capacity_identity: Mapped[str | None] = mapped_column(String(8))
+    implementation_classification: Mapped[str | None] = mapped_column(String(16))
+    integration_checkpoint: Mapped[str | None] = mapped_column(String(80))
+    starting_commit_rule: Mapped[str | None] = mapped_column(Text)
+    starting_commit_evidence: Mapped[dict[str, object]] = mapped_column(
+        JSONB, nullable=False, default=dict
+    )
+    migration_classification: Mapped[str | None] = mapped_column(String(32))
+    shared_contract_classification: Mapped[str | None] = mapped_column(String(32))
+    readiness_state: Mapped[str | None] = mapped_column(String(32))
+    dependency_evidence: Mapped[list[object]] = mapped_column(
+        JSONB, nullable=False, default=list
+    )
+    reconciliation_state: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="legacy_unreconciled"
+    )
     objective: Mapped[str] = mapped_column(Text, nullable=False)
     owning_workstream: Mapped[str] = mapped_column(String(100), nullable=False)
     owning_branch: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -330,11 +356,21 @@ class RoadmapService:
         requested_code_changes = milestone.requested_code_changes
         milestone_validation = tuple(milestone.validation)
         owning_workstream = milestone.owning_workstream
+        reconciliation_state = milestone.reconciliation_state
+        readiness_state = milestone.readiness_state
         instruction = self._instruction(milestone)
         await db.rollback()
         if action == "start":
             if current_status != "ready" or not definition_approved:
                 raise ValueError("Only an approved ready milestone can start.")
+            if reconciliation_state != "current":
+                raise ValueError(
+                    "Only a scheduler-current milestone can start; reconciliation is required."
+                )
+            if readiness_state != "ready":
+                raise ValueError(
+                    "The durable scheduler has not authorized this milestone to start."
+                )
             from .external_adoption import (
                 ACTIVE_ADOPTIONS,
                 ExternalMilestoneAdoption,

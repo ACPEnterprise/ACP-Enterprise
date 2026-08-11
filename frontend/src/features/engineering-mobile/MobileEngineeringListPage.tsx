@@ -224,13 +224,14 @@ export function MobileEngineeringListPage() {
   );
   const counts = useMemo(
     () => ({
-      active: items.filter((item) => !terminal.has(item.pipeline_status))
-        .length,
+      active: items.filter(
+        (item) =>
+          !terminal.has(item.pipeline_status) &&
+          item.authoritative_state !== "reconciliation_required",
+      ).length,
       waiting: roadmaps.data?.actionable_count ?? 0,
-      running: items.filter((item) =>
-        ["acknowledged", "running", "validating", "deploying_preview"].includes(
-          item.pipeline_status,
-        ),
+      running: items.filter(
+        (item) => item.authoritative_state === "executing_milestone",
       ).length,
       completed: items.filter(
         (item) =>

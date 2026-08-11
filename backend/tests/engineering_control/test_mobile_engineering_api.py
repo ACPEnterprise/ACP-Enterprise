@@ -7,6 +7,11 @@ from uuid import uuid4
 import httpx
 import pytest
 import pytest_asyncio
+from fastapi import FastAPI
+from fastapi.dependencies.models import Dependant
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
 from app.core.config import settings
 from app.database.session import get_database_session, get_security_database_session
 from app.engineering_capacity.service import EngineeringCapacityService
@@ -27,11 +32,6 @@ from app.platform.permissions.codes import (
 )
 from app.platform.permissions.dependencies import get_authorization_context
 from app.worker_control.models import EngineeringWorker
-from fastapi import FastAPI
-from fastapi.dependencies.models import Dependant
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-
 from tests.engineering_control.review.test_engineering_review import completed_command
 from tests.engineering_control.test_engineering_command_service import (
     ServiceFixture,
@@ -168,6 +168,27 @@ async def create_command(
     }
 
 
+async def mark_scheduler_current(
+    mobile_api: MobileApiFixture, *, title: str, readiness_state: str = "ready"
+) -> None:
+    """Test-only adoption of a fully approved manifest-backed milestone."""
+    async with mobile_api.factory() as session, session.begin():
+        milestone = await session.scalar(
+            select(EngineeringMilestone).where(
+                EngineeringMilestone.company_id
+                == mobile_api.service_fixture.context.company.id,
+                EngineeringMilestone.title == title,
+            )
+        )
+        assert milestone is not None
+        milestone.milestone_code = f"TEST.{milestone.position}"
+        milestone.scheduler_version = "TEST.1"
+        milestone.scheduler_fingerprint = "a" * 64
+        milestone.permanent_capacity_identity = "OM1"
+        milestone.readiness_state = readiness_state
+        milestone.reconciliation_state = "current"
+
+
 @pytest.mark.asyncio
 async def test_pending_review_detail_approval_status_and_cancel(
     mobile_api: MobileApiFixture,
@@ -296,6 +317,12 @@ async def test_workstream_projection_lists_authoritative_safe_next_action(
             "worker_health": None,
             "progress_percent": None,
             "current_activity": None,
+            "scheduler_milestone_code": None,
+            "scheduler_version": None,
+            "permanent_capacity_identity": None,
+            "authoritative_state": "waiting_for_owner_review",
+            "reconciliation_state": "legacy_unreconciled",
+            "stale_runtime": False,
             "acknowledgement_latency_ms": None,
             "execution_latency_ms": None,
             "validation_latency_ms": None,
@@ -337,6 +364,33 @@ async def test_workstream_projection_lists_authoritative_safe_next_action(
 
 
 @pytest.mark.asyncio
+async def test_scheduler_dry_run_is_approve_scoped_and_company_isolated(
+    mobile_api: MobileApiFixture,
+) -> None:
+    read_only = mobile_api.app_for((EngineeringCommandPermission.READ,))
+    denied = await request(
+        read_only, "GET", "/api/v1/engineering/mobile/scheduler/reconciliation/dry-run"
+    )
+    assert denied.status_code == 403
+
+    authorized = mobile_api.app_for(tuple(EngineeringCommandPermission.ALL))
+    response = await request(
+        authorized,
+        "GET",
+        "/api/v1/engineering/mobile/scheduler/reconciliation/dry-run",
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["mode"] == "dry_run"
+    assert body["destructive_operation_count"] == 0
+    assert body["mutations_performed"] == 0
+    assert body["before_counts"]["commands"] == 0
+    assert {
+        item["permanent_capacity_identity"] for item in body["capacity_mappings"]
+    } == {"OM1", "OM2", "MIG", "ECO", "LAP"}
+
+
+@pytest.mark.asyncio
 async def test_roadmap_dispatch_and_safe_progression_owner_workflow(
     mobile_api: MobileApiFixture,
 ) -> None:
@@ -375,6 +429,8 @@ async def test_roadmap_dispatch_and_safe_progression_owner_workflow(
         },
     )
     assert created.status_code == 200, created.text
+    await mark_scheduler_current(mobile_api, title="Milestone one")
+    await mark_scheduler_current(mobile_api, title="Milestone two")
     roadmap = await request(app, "GET", "/api/v1/engineering/mobile/roadmaps")
     assert roadmap.status_code == 200
     body = roadmap.json()
@@ -435,6 +491,14 @@ async def test_roadmap_dispatch_and_safe_progression_owner_workflow(
         second_milestone.command_id = dispatched_command.id
         second_milestone.status = "running"
     async with mobile_api.factory() as session:
+        linked_milestones = (
+            await session.scalars(
+                select(EngineeringMilestone).where(
+                    EngineeringMilestone.command_id == dispatched_command.id
+                )
+            )
+        ).all()
+        assert len(linked_milestones) == 2
         ambiguous_capacity = await EngineeringCapacityService().summary(
             session, context=mobile_api.service_fixture.context
         )
@@ -778,6 +842,7 @@ async def test_start_reports_repository_policy_rejection_as_api_error(
         },
     )
     assert created.status_code == 200
+    await mark_scheduler_current(mobile_api, title="Read-only inspection")
     listing = (await request(app, "GET", "/api/v1/engineering/mobile/roadmaps")).json()
     milestone = next(
         item

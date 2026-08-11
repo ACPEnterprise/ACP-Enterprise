@@ -101,6 +101,17 @@ export function EngineeringCapacityPanel() {
         <Button className="mt-4 min-h-11 w-full sm:w-auto" disabled={policyMutation.isPending} onClick={() => policyMutation.mutate({ maximum_concurrent_workstreams: effectiveTotalLimit, maximum_per_worker: effectiveWorkerLimit, reserved_capacity: effectiveReserved, auto_allocate_released_capacity: false, expected_version: data.policy?.version ?? null })}>Save capacity limits</Button>
       </Card>
 
+      <section aria-labelledby="permanent-capacity-heading" className="space-y-3">
+        <div><h3 id="permanent-capacity-heading" className="font-semibold">Permanent scheduler capacities</h3><p className="text-sm text-content-muted">Scheduler identities remain stable when workers rotate.</p></div>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          {(data.permanent_capacities ?? []).map((capacity) => {
+            const binding = (data.permanent_capacity_bindings ?? []).find((item) => item.permanent_capacity_id === capacity.id && item.state === "active");
+            return <Card key={capacity.id}><div className="flex items-center justify-between gap-2"><strong>{capacity.identity_code}</strong><Badge>{mobileEngineeringLabel(capacity.state)}</Badge></div><p className="mt-2 text-sm">{capacity.display_name}</p><p className="mt-2 text-xs text-content-muted">{binding ? "Worker binding active" : capacity.reconciliation_reason ?? "Worker binding not established"}</p></Card>;
+          })}
+        </div>
+        {(data.permanent_capacities ?? []).length === 0 && <Alert variant="warning" title="Scheduler capacities not reconciled">Checkpoint 2 must establish the permanent capacity identities and audited worker bindings.</Alert>}
+      </section>
+
       <section aria-labelledby="capacity-workers-heading" className="space-y-3">
         <div><h3 id="capacity-workers-heading" className="font-semibold">Workers and machines</h3><p className="text-sm text-content-muted">Only previously enrolled, authenticated workers can be associated with an owner-visible machine label.</p></div>
         {data.eligible_workers.filter((worker) => !worker.capacity_configured).map((worker) => <ExistingWorkerSetupCard key={worker.worker_id} worker={worker} maximum={Math.max(1, Math.min(effectiveTotalLimit, effectiveWorkerLimit))} />)}

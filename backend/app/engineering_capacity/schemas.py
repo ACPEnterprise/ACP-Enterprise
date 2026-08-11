@@ -104,6 +104,24 @@ class EligibleWorkerResponse(CapacitySchema):
     capacity_configured: bool
 
 
+class PermanentCapacityResponse(CapacitySchema):
+    id: UUID
+    identity_code: str
+    display_name: str
+    state: str
+    reconciliation_reason: str | None
+    version: int
+
+
+class PermanentCapacityBindingResponse(CapacitySchema):
+    id: UUID
+    permanent_capacity_id: UUID
+    worker_capacity_id: UUID
+    state: str
+    evidence: dict[str, object]
+    version: int
+
+
 class WorkerStateUpdate(CapacitySchema):
     expected_version: int = Field(ge=1)
     reason: str = Field(min_length=1, max_length=200)
@@ -214,3 +232,5 @@ class CapacitySummaryResponse(CapacitySchema):
     active_reservations: tuple[CapacityReservationResponse, ...]
     active_allocations: tuple[CapacityAllocationResponse, ...]
     waiting_workstreams: tuple[CapacityQueueItem, ...]
+    permanent_capacities: tuple[PermanentCapacityResponse, ...] = ()
+    permanent_capacity_bindings: tuple[PermanentCapacityBindingResponse, ...] = ()
