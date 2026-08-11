@@ -1,10 +1,11 @@
-# MMQ.6 — Five-Day Continuous Production Plan
+# MMQ.6 / MMQ.6A — Five-Day Continuous Production Plan and Queue Refresh
 
-**Status:** `WAITING FOR OWNER REVIEW`
+**Status:** `MMQ.6A — IN PROGRESS`
 
-**Planning instant:** 2026-08-11, America/New_York
+**Refresh instant:** 2026-08-11, America/New_York
 
 **Operating window:** the next five continuous development days after owner acceptance
+
 **Environment boundary:** local development only; Preview and Production are prohibited
 
 ## Authority and safety boundary
@@ -14,13 +15,14 @@ capacity for production planning and queue management. It is a planning overlay,
 not a status mutation of the [Master Milestone Queue](master-milestone-queue.md),
 the [Version 1 roadmap](version-1-implementation-roadmap.md), or the
 [Continuous Production Scheduler](continuous-production-scheduler.md). Those files
-remain authoritative and are not changed by MMQ.6.
+remain authoritative and are not changed by MMQ.6 or MMQ.6A.
 
-The owner-supplied active assignments are preserved: `OM2-A: OPS.1`, `OM2-B:
-INV.3-LEGACY`, and `LAP-A: PHONE-WEEKEND.2`. MMQ.6 does not duplicate, inspect,
-modify, integrate, or interrupt their work. A future assignment shown here is not
-`READY` and does not authorize Start unless its packet says `STARTABLE`, all READY
-evidence remains true, and the owner issues milestone Start.
+The owner-supplied active assignments are preserved: `OM1-A: EST.4`, `OM2-B:
+INV.3-LEGACY`, `MIG: MIG.PREP.2`, `ECO: BE.GAP.1`, and `LAP-A:
+PHONE-WEEKEND.2 Checkpoint 2`. MMQ.6A does not duplicate, inspect, modify,
+integrate, or interrupt their work. A future assignment shown here is not
+executable unless its dependencies, complete execution contract, capacity and
+migration position remain current and its existing authorization permits Start.
 
 For a newly approved milestone during this five-day sprint, Start authorizes this
 routine non-Production lifecycle within the packet's exact boundary:
@@ -41,10 +43,9 @@ work, force-push, or an explicit roadmap checkpoint. These are mandatory STOPs.
 
 | Repository/ref | Fetched tip | Finding |
 | --- | --- | --- |
-| Enterprise `origin/customer-management-v1` | `06ba0f39b85b0eeda7e5a4d1747bb326bd28668a` | Authoritative Enterprise tip; linearly adds `OPS.1` at `c89396546a6ba6012e48694ba7737bd30e316637` and `COMMS.1` at the tip to the previously proven `PLAT.1`, `PHONE-BUG.1`, and `CRM.2` history |
-| Enterprise local `customer-management-v1` | `038ac6fd932de36d3f2961de59ba9992a5eb428c` | Four commits behind; scheduler/MMQ files have pre-existing unstaged LAP-A changes and are protected |
-| Migration `origin/customer-migration-workstream` | `3158e587a2a386be7c645e963e50ead65d93e0c8` | Linear descendant of `e9ab50d`; implements `MIG.1` mapping/reconciliation with code, tests, and bounded documentation. Branch documentation explicitly records CUTOVER.1 owner acceptance and CUTOVER.2 complete/pushed. |
-| Economics `origin/business-economics-foundation` | `8bf76da7672c3ab9caf25ca965f2e1591e16155e` | Linear descendant of `bb27bca`; adds a source-authority evidence matrix without changing `BE.8`, `BE.PLAN.1`, BE.9 dependencies, or the external Phase 8 owner gate |
+| Enterprise `origin/customer-management-v1` | `d218c12eaf3e8df158f85a2e3005e60abeb44056` | Linear descendant of the MMQ.6 commit; PHONE-WEEKEND.2 Checkpoint 1 adds the durable scheduler contract and migration `u6k8g0c2d497`. Product milestones remain unchanged. |
+| Migration `origin/customer-migration-workstream` | `ea857e4df7101111d1354becfba9d2ac238b1d1a` | Linear descendant of completed MIG.1; implements MIG.PREP.2 readiness contracts/tests for a future representative dry run but explicitly does not make MIG.2 READY or execute an import |
+| Economics `origin/business-economics-foundation` | `6a955a84a930f2ab0a7ed73a659a485934bfcd08` | Linear descendant of BE.EVIDENCE.1; completes the BE.GAP.1 source-readiness closure plan and identifies BE.VECTORS.1 as the next dependency-eligible ECO milestone after approval/Start |
 | Inventory architecture | `dd4a620aa93e209fee813f556bebefe9946cb12a` | Approved Inventory/Purchasing boundary evidence |
 | Commercial workflow architecture | `f418c368d41c713d1396086632c9d1431f15effc` | Approved commercial boundary evidence |
 | `origin/main` | `96dc3d0f5dadfc83728003093fc5f0ef654ae689` | Not the Enterprise delivery authority |
@@ -60,25 +61,28 @@ module writes another module's tables.
 
 | Area | Reconciled fact | Evidence grade / uncertainty |
 | --- | --- | --- |
-| Enterprise | `PLAT.1`, `PHONE-BUG.1`, `CRM.2`, `OPS.1`, and `COMMS.1` are complete in fetched authoritative history. | Git inspection proves OPS.1's Operations/Scheduling/Jobs implementation and focused tests at `c893965`; COMMS.1's domain, persistence, service/API, authorization, and focused tests are at `06ba0f3`. This is boundary evidence, not an inference from changed SHAs alone. |
-| Inventory | `INV.3-LEGACY` reconciliation is active on OM2-B and owns a pending Inventory migration. | Owner-supplied. No accessible ref/worktree exposes its SHA, exact revision ID, parent, or boundary. Preserve; do not duplicate. It is distinct from roadmap `INV.3`. |
-| Migration | `CUTOVER.1` is owner accepted/complete; `CUTOVER.2` is complete/pushed; `MIG.1` is implemented and pushed. `MIG.2` remains blocked by IC.2, RPT.3, and separate non-Production operation approval. | The migration branch explicitly names CUTOVER.2 in `docs/deployment/cutover-2-deterministic-planning-rehearsal.md` and records both cutover states in the MIG.PREP package. `3158e58` contains the bounded MIG.1 mapping, synthetic reconciliation tests, and freeze document; it performs no import. |
-| Economics | `BE.8` and `BE.PLAN.1` are complete/pushed. `BE.9` is blocked by `RPT.1` and `ACC.2`. External Phase 8 is separate and awaits owner disposition. | Git-proven through `8bf76da`; the new matrix confirms missing source authorities and does not promote BE.9. Owner disposition remains genuine. |
-| Laptop | LAP-A exclusively owns `PHONE-WEEKEND.2`, including its pending scheduler migration. LAP-B owns MMQ.6 planning. | Owner-supplied plus two preserved PHONE-WEEKEND worktrees; exact active one and migration revision/parent are uncertain. |
-| Worktrees | Primary dirty worktree at `038ac6f`; PHONE worktrees at `bd034a3` and `b75f9b6`. | Git-proven. No OM2-A or OM2-B worktree is visible from this repository. |
-| Alembic | Fetched Enterprise retains the recorded single head `t5j7f9b1c386`; LAP-A and OM2-B each have a pending unknown revision. | Enterprise head is static-history evidence. Runtime `alembic heads` was not available in this worktree; pending IDs/parents are unknown and block integration ordering by identity. |
+| Enterprise | `PLAT.1`, `PHONE-BUG.1`, `CRM.2`, `OPS.1`, and `COMMS.1` remain complete. EST.4 is active on OM1-A; DISP.2 is the next unclaimed dependency-ready Enterprise packet. | Completion commits remain ancestors of `d218c12`. EST.4 activity is owner-supplied; no accessible EST.4 ref/worktree is present, so its exact SHA and migration impact remain unverified. |
+| Inventory | `INV.3-LEGACY` reconciliation remains active on OM2-B. Its historical revision `u6k8f0h2j497` and implementation remain valid, but historical parents `t5j7e9g1i386` and `t5j7f9b1c386` are obsolete. | Authoritative PHONE-WEEKEND.2 architecture identifies the revision and required second position. It must be re-parented to the then-current Enterprise head immediately before integration and fully revalidated. |
+| Migration | MIG.PREP.2 is active and pushed at `ea857e4`; MIG.2 remains blocked by accepted IC.2, accepted RPT.3, an approved immutable non-Production input manifest/environment, and explicit TYPE C owner operation approval. | MIG.PREP.2 adds readiness code/tests/documentation only; it performs no import and cannot close any MIG.2 gate. |
+| Economics | BE.GAP.1 is complete in Git at `6a955a8` and is the active review boundary. BE.VECTORS.1 is dependency-eligible only after BE.GAP.1 approval and explicit Start. BE.9 remains blocked by RPT.1, ACC.2 and source/Finance closure; external Phase 8 remains separately owner-governed. | The closure plan explicitly labels proposed source milestones as not existing/approved/READY and identifies unresolved source and policy authorities. |
+| Laptop | PHONE-WEEKEND.2 Checkpoint 1 is complete at `d218c12`; LAP-A exclusively continues Checkpoint 2. LAP-B owns MMQ.6A queue reconciliation only. | Git/worktree evidence confirms dedicated Checkpoint 2 and integration worktrees at `d218c12`. MMQ.6A does not inspect or change them. |
+| Worktrees | LAP-B is isolated at the fetched Enterprise tip. Multiple PHONE-WEEKEND.2 worktrees are preserved. | Git-proven; no EST.4, INV.3-LEGACY, MIG.PREP.2 or BE.GAP.1 worktree is locally accessible, so active assignment details beyond their authoritative/owner evidence remain explicit uncertainty. |
+| Alembic | Authoritative Enterprise has exactly one head, `u6k8g0c2d497`. | Static revision-graph validation confirms the prior head `t5j7f9b1c386 → u6k8g0c2d497`. INV.3-LEGACY `u6k8f0h2j497` is isolated and must not be published as a sibling. |
 
 ## Permanent capacity model
 
 | Capacity | Permanent lane | Current | Scheduling authority |
 | --- | --- | --- | --- |
-| `OM1-A` | Enterprise product | Available/next approved Enterprise work | Owner Start + packet |
-| `OM1-B` | Migration | Available after `MIG.1`; `MIG.2` blocked | Owner Start + separate TYPE C operation packet |
-| `OM1-C` | Business Economics | Available; `BE.9` blocked | Owner Start + economics packet |
-| `OM2-A` | Enterprise Operations | Available after `OPS.1` completion evidence | New owner Start + packet before reassignment |
+| `OM1-A` | Enterprise product | `EST.4` active | Existing authorization; then only an independently eligible packet |
+| `OM1-B` | Additional Enterprise capacity | Available; no separate executable assignment proven | New assignment authority + complete packet |
+| `OM1-C` | Additional Enterprise/economics support | Available; no separate executable assignment proven | New assignment authority + complete packet |
+| `OM2-A` | Enterprise Operations | Available; `DISP.2` next dependency-ready candidate | Complete packet and Start authority |
 | `OM2-B` | Enterprise/Inventory | `INV.3-LEGACY` active | Existing owner Start; no reassignment until completion evidence |
-| `LAP-A` | scheduler runtime/integration | `PHONE-WEEKEND.2` active | Exclusively its existing execution contract |
-| `LAP-B` | production planning/queue management | `MMQ.6` | This document; no runtime or integration ownership |
+| `OM2-C` | Potential additional Enterprise capacity | Inactive standby | Activate only on measured load and an independently executable packet |
+| `MIG` | Customer Migration | `MIG.PREP.2` active/review boundary | Existing preparation authority; MIG.2 remains separately gated |
+| `ECO` | Business Economics | `BE.GAP.1` active/review boundary | Existing planning authority; BE.VECTORS.1 needs approval/Start |
+| `LAP-A` | scheduler runtime/integration | `PHONE-WEEKEND.2` Checkpoint 2 active | Exclusively its existing execution contract |
+| `LAP-B` | production planning/queue management | `MMQ.6A` | This document; no runtime or integration ownership |
 
 Capacity identity persists between assignments. No capacity may pull `PLANNED` or
 blocked work merely to avoid idleness.
@@ -104,13 +108,13 @@ CRM.2 complete → OPS.1 complete
 → [separate Production approval] REL.3
 ```
 
-The five-day throughput focus remains Phase 1. `EST.4` and `DISP.2` have satisfied
-Git-proven prerequisites and can start independently after owner Start. OPS.1 is
-complete; its completion also makes `INV.2A` dependency-eligible only after the
-active INV.3-LEGACY scope/migration reconciliation clears. `DISP.2` then unlocks
-`TECH.1`; `INV.2A` unlocks `PUR.1`. MIG.1 and COMMS.1 are already implemented.
-All new implementations may be isolated concurrently, but shared contracts and
-migrations serialize at `IC.1`.
+The five-day throughput focus remains Phase 1. `EST.4` is already active on
+OM1-A. `DISP.2` has satisfied roadmap dependencies and is the next unclaimed
+Enterprise candidate, but MMQ.6A does not itself Start it. `INV.2A` has roadmap
+dependency closure but remains non-startable until INV.3-LEGACY scope and
+migration reconciliation proves no duplicate ownership. `DISP.2` then unlocks
+`TECH.1`; an accepted `INV.2A` unlocks `PUR.1`. MIG.1 and COMMS.1 are complete.
+Shared contracts and all migrations serialize at `IC.1`.
 
 Business goals map to the graph as follows:
 
@@ -121,7 +125,7 @@ Business goals map to the graph as follows:
 | Communications | `COMMS.1` complete → `COMMS.2` after revenue dependencies |
 | Dispatch | `OPS.1 complete → DISP.2` |
 | Technician/field | `OPS.1 → DISP.2 → TECH.1 → IC.1 → TECH.2 → TECH.3 → TECH.4` |
-| Estimates | `CRM.2 + EST.3 → EST.4` |
+| Estimates | `CRM.2 + EST.3 → EST.4 active` |
 | Inventory/Purchasing | `OPS.1 → INV.2A → PUR.1 → {PUR.2, TECH.2→INV.3} → PUR.3 → INV.4` |
 | Invoicing/Payments | `IC.1 + EST.4 + OPS.1 → INVOICE.1`; then `PAY.1`, `INVOICE.2`, `PAY.2`, `INVOICE.3`, `PAY.3` |
 | Accounting/Reporting/Economics | `PAY.3 → ACC.1 → ACC.2 → IC.2 → RPT.1 → BE.9/RPT.2/RPT.3` |
@@ -163,7 +167,7 @@ requires a new separate approval. Production is always `NO`, except `REL.3` is
 | `OPS.1` | Complete launch job lifecycle; Operations | CRM.2, Scheduling/Jobs | historical OM2-A / none | ACP (integrated `c893965`) | B; N; C; B | IC.1; NO; NO | lifecycle, auth, events, E2E | complete; `DISP.2,INV.2A,INVOICE.1,PORTAL.3,MIG.1`; Git boundary/tests |
 | `DISP.2` | Complete dispatch execution; Dispatch | OPS.1, Dispatch Assignment V1 | OM2-A / OM1-A | ACP | B; U; C; B | IC.1; NO; NO | assignment, arrival, exceptions, roles | R; `TECH.1,COMMS.2`; OPS accepted + packet |
 | `EST.3` | Estimate-to-job conversion; Sales | EST.2 | historical OM1 | ACP integrated | B; Y; C; B | IC.1; NO; NO | conversion/persistence/events | complete; `EST.4`; Git evidence |
-| `EST.4` | Complete launch estimate experience; Sales | EST.3, CRM.2 | OM1-A / OM2-A | ACP | B; U; C; B | IC.1; NO; NO | options, discounts, approval, responsive/auth | R; `INVOICE.1,PORTAL.2,COMMS.2`; dependencies + approved packet |
+| `EST.4` | Complete launch estimate experience; Sales | EST.3, CRM.2 | OM1-A / OM2-A | ACP | B; U; C; B | IC.1; NO; NO | options, discounts, approval, responsive/auth | active on OM1-A; `INVOICE.1,PORTAL.2,COMMS.2`; immutable completion evidence pending |
 | `INV.2` | Adjustments/cycle counts; Inventory | INV.1 | historical OM2 | ACP integrated | B; Y; C; B | IC.1; NO; NO | concurrency/audit/regression | complete; `INV.2A`; Git evidence |
 | `INV.2A` | Launch inventory control core; Inventory | INV.2, OPS.1 | OM2-B / OM1-A | ACP | B; Y; C; B | IC.1; NO; NO | on-hand, reservation, transfer, concurrency | R; `PUR.1,INV.3,PUR.2`; OPS accepted + legacy reconciliation clear + packet |
 | `PUR.1` | Purchasing foundation; Purchasing | architecture, INV.2A | OM1-A / OM2-B | ACP | B; Y; C/F; B | IC.1; NO; NO | vendor/PO lifecycle, auth, audit | R; `PUR.2`; INV.2A accepted + packet |
@@ -219,12 +223,14 @@ Alembic head (when integrated) forms its completion evidence.
 ### Queue depth by capacity
 
 The registry provides 37 legitimate future Enterprise implementation candidates
-that can be routed between `OM1-A`, `OM2-A`, and `OM2-B` only after dependencies
+that can be routed between Enterprise capacities only after dependencies
 and file claims permit. Each of those Enterprise capacities therefore has a
-20-plus candidate deep queue without duplicating active work. Specialist depth is
-truthfully smaller: OM1-B has future `MIG.2`–`MIG.4` (3), OM1-C has `BE.9` plus finance
-review roles (3), LAP-A has five integration checkpoints plus four release gates
-(9), and LAP-B has MMQ.6 plus planning/review support. No filler is invented.
+deep candidate pool without duplicating active work; it is not permission to put
+the same milestone on multiple lanes. Specialist depth is truthfully smaller:
+MIG has future `MIG.2`–`MIG.4` (3), ECO has BE.VECTORS.1 followed by dependency-
+blocked Economics work, LAP-A has protected PHONE-WEEKEND.2 then integration/
+release gates, and LAP-B has MMQ.6A plus planning/review support. No filler is
+invented.
 
 The roadmap also names 12 explicitly deferred, non-Version-1 placeholders:
 `ACC.GL.1`, `ACC.AP.1`, `ACC.CLOSE.1`, `INV.5`, `TECH.5`, `PORTAL.4`, `BEA.8`,
@@ -235,29 +241,33 @@ scope and are deliberately not schedulable assignments or execution packets.
 
 | Capacity | CURRENT | NEXT | NEXT +1 | NEXT +2 | NEXT +3 | Deeper backlog | Blocker / migration risk / integration |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| OM1-A | Available | `EST.4` startable | `DISP.2` startable alternate | `PUR.1` conditional | `INVOICE.1` blocked | 31 Enterprise candidates | Owner Starts; PUR waits INV.2A; U/Y migrations serialize at IC.1 |
-| OM1-B | Available after `MIG.1` | `MIG.2` blocked | `MIG.3` blocked | `MIG.4` blocked | Evidence/review support only | 0 beyond three | IC.2 + RPT.3 + separate operation approval; IC.3/5 |
-| OM1-C | Available; external Phase 8 review pending | Finance contract review | `BE.9` blocked | ACC.1 review blocked | ACC.2 review blocked | 0 legitimate | RPT.1/ACC.2 and Phase 8 disposition; IC.3 |
-| OM2-A | Available after `OPS.1` | `DISP.2` startable | `TECH.1` conditional | `TECH.2` blocked | `PAY.1` blocked | 30 candidates | Owner Start; possible schema; IC.1/IC.2 |
-| OM2-B | `INV.3-LEGACY` active | `INV.2A` conditional | `PUR.1` conditional fallback | `PUR.2` blocked | roadmap `INV.3` blocked | 29 candidates | Legacy scope/migration reconciliation and OPS; IC.1/IC.2 |
-| LAP-A | `PHONE-WEEKEND.2` active | phone-selected successor only | `IC.1` blocked | `IC.2` blocked | `IC.3` blocked | 6 integration/release gates | Pending scheduler migration first/second slot by accepted order; protected |
-| LAP-B | `MMQ.6` | Owner-review batching | readiness refresh | integration-ledger audit | Day-5 rollover plan | registry maintenance only | No implementation; MMQ.6 owner review |
+| OM1-A | `EST.4` active | Completion/review | `DISP.2` only if still unclaimed and reassigned | `PUR.1` blocked | `INVOICE.1` blocked | 30 Enterprise candidates | EST migration impact unknown; next assignments require collision check |
+| OM1-B | Available | No proven executable assignment | `DISP.2` safe alternate only by explicit assignment | `TECH.1` blocked | `PAY.1` blocked | Candidate pool only | Do not invent work; avoid EST/Dispatch overlap |
+| OM1-C | Available | No proven executable assignment | Finance/source review only if separately assigned | `ACC.1` blocked | `BE.9` blocked | Candidate pool only | RPT.1/ACC.2/source and owner dependencies |
+| OM2-A | Available | `DISP.2` dependency-ready candidate | `TECH.1` after DISP.2 | `TECH.2` blocked | `PAY.1` blocked | 30 Enterprise candidates | Packet/Start required; schema impact unresolved; IC.1/IC.2 |
+| OM2-B | `INV.3-LEGACY` active | Mechanical re-parent/integrate after acceptance | `INV.2A` after scope reconciliation | `PUR.1` after INV.2A | `PUR.2` blocked | 29 Enterprise candidates | Must target then-current head, currently `u6k8g0c2d497`; never sibling head |
+| OM2-C | Inactive standby | No assignment | `DISP.2` only if activated and unclaimed | — | — | Candidate pool only | No load evidence or need justifies activation yet |
+| MIG | `MIG.PREP.2` active/review | MIG.PREP.2 completion evidence | `MIG.2` blocked | `MIG.3` blocked | `MIG.4` blocked | 0 beyond three | IC.2 + RPT.3 + input/environment/TYPE C approval |
+| ECO | `BE.GAP.1` active/review | `BE.VECTORS.1` dependency-eligible after approval/Start | `BE.POLICY.1` owner-evidence blocked | `BE.9` blocked | `BE.10` blocked | deeper BE.11–BE.20 | Source contracts and owner/Finance decisions remain open |
+| LAP-A | `PHONE-WEEKEND.2` Checkpoint 2 active | Checkpoint completion/owner review | independently READY phone successor | `IC.1` blocked | `IC.2` blocked | later IC/release gates | Exclusive LAP-A ownership; MMQ.6A makes no runtime/integration change |
+| LAP-B | `MMQ.6A` active | queue validation/commit | post-completion ref refresh | migration-ledger audit | owner batch preparation | registry maintenance only | No product execution or LAP-A work |
 
 ### Day-by-day control board
 
 | Day | Parallel production | Serialized/batched control |
 | --- | --- | --- |
-| 1 | Continue INV.3-LEGACY and PHONE-WEEKEND.2. Owner may Start EST.4 and DISP.2. | Capture immutable current SHAs and pending migration identities. Morning Start window; end-of-day evidence batch. |
-| 2 | Continue eligible work; reconcile INV.3-LEGACY boundary before any INV.2A Start. MIG.1 and COMMS.1 remain completed inputs. | First accepted migration enters Slot 1 only; shared CRM/Jobs contract review batch. |
-| 3 | If legacy reconciliation clears, Start INV.2A. If DISP.2 completes, prepare TECH.1 without starting before its own approval. OM1-B remains safely idle because MIG.2 is blocked. | Slot 2 migration after Slot 1 push and new head fetch; finance/security decision window if needed. |
+| 1 | Continue EST.4, INV.3-LEGACY, MIG.PREP.2, BE.GAP.1 review, and PHONE-WEEKEND.2 Checkpoint 2. Keep DISP.2 prepared for a separately authorized free Enterprise lane. | Record immutable SHAs and current `u6k8g0c2d497`; batch routine completion evidence. |
+| 2 | Continue active work. Before INV.3 integration, fetch and mechanically re-parent `u6k8f0h2j497` to the then-current head if still semantically safe. | INV.3 is the next migration slot; repeat migration and affected regression validation. |
+| 3 | If INV.3-LEGACY clears, reconcile scope before any INV.2A Start. If DISP.2 completes, prepare TECH.1 without premature Start. | Do not run MIG.2; its TYPE C and dependency gates remain open. |
 | 4 | If DISP accepted, Start TECH.1. If INV.2A accepted, Start PUR.1. | Shared Workforce/Jobs and Inventory contracts batch; next serialized migration slot. |
 | 5 | Complete/revalidate Phase 1 candidates; do not start IC.1 until every Phase 1 dependency is accepted. | Final evidence batch, one-head proof, owner rollover/Start decisions, MMQ.6 refresh. |
 
-Predicted starvation points are OM1-B until IC.2 and RPT.3 permit MIG.2; OM1-C until owner
-Phase 8 disposition and later RPT/Accounting dependencies; LAP-A after
+Predicted starvation points are OM1-B/OM1-C because no independent executable
+assignment is proven; MIG until IC.2/RPT.3 and TYPE C gates permit MIG.2; ECO
+after BE.GAP.1 if BE.VECTORS.1 is not approved; LAP-A after
 PHONE-WEEKEND.2 if its independently READY successor is absent; and OM2-B if
 legacy scope/migration identity is not reconciled before INV.2A. OM1-A is the
-near-term pressure relief through EST.4 and DISP.2.
+active estimate lane; OM2-A is the safest available lane for DISP.2.
 
 ## Reusable execution packets
 
@@ -269,7 +279,7 @@ evidence is changed-file list, immutable commit SHA, commands/results, affected
 regression, contract/migration impact, one-head proof where applicable, fetch/
 fast-forward push evidence, and final clean worktree. Owner Start remains required.
 
-### STARTABLE after owner Start — EST.4
+### ACTIVE under existing authorization — EST.4
 
 - Scope: remaining estimate options, controlled discounts, customer approval
   presentation, responsive end-to-end estimate UX, authorization and tests.
@@ -282,7 +292,7 @@ fast-forward push evidence, and final clean worktree. Owner Start remains requir
   affected EST/CRM regression.
 - Migration: `U`; STOP immediately if schema is necessary. Integration at IC.1.
 
-### STARTABLE after owner Start — DISP.2
+### DEPENDENCY-READY; requires assignment/Start — DISP.2
 
 - Scope: workforce availability projection consumption, durable assignment
   workflow, arrival states, dispatch exceptions, board/API/events and tests.
@@ -345,10 +355,11 @@ fast-forward push evidence, and final clean worktree. Owner Start remains requir
   migration upgrade/downgrade policy, exactly one head, immutable SHAs.
 - Migration: `M`; any semantic conflict or Alembic collision is STOP.
 
-Packets prepared: 6 total; 2 dependency-eligible/startable after owner Start and
-4 conditional `NOT STARTABLE`. Completed OPS.1, COMMS.1, and MIG.1 require no new
-packet. INV.3-LEGACY and PHONE-WEEKEND.2 receive no new packet because they remain
-active under separate contracts.
+Packets maintained: 6 total; EST.4 is active under its existing authorization,
+DISP.2 is dependency-ready but still requires assignment/Start, and 4 remain
+`NOT STARTABLE`. Completed OPS.1, COMMS.1, and MIG.1 require no new packet.
+INV.3-LEGACY and PHONE-WEEKEND.2 receive no new packet because they remain active
+under separate contracts.
 
 ## Migration serialization ledger
 
@@ -357,11 +368,10 @@ global queue; sibling heads are forbidden.
 
 | Slot | Candidate | Admission requirement | Current disposition |
 | --- | --- | --- | --- |
-| 0 | Authoritative Enterprise | fetched tip + current head | Baseline `06ba0f3`, recorded head `t5j7f9b1c386`; OPS.1 and COMMS.1 add no revision |
-| 1 | LAP-A PHONE-WEEKEND.2 or OM2-B INV.3-LEGACY | both immutable accepted commits, exact revision IDs/parents, owner-selected order based on acceptance/readiness | Order unresolved; neither may integrate until identities are recorded |
-| 2 | The other of PHONE-WEEKEND.2 / INV.3-LEGACY | Slot 1 pushed, fresh authoritative fetch/head | Must be re-parented mechanically to Slot 1 head if unapplied and semantically independent; otherwise STOP |
-| 3 | First accepted EST.4/INV.2A/DISP.2 schema change | prior slot pushed; approved schema boundary | Candidate order by acceptance, never by machine |
-| 4+ | PUR.1/TECH.1 and later schema-bearing work | same rule | One at a time through IC.1 and later checkpoints |
+| 0 | Authoritative Enterprise / PHONE-WEEKEND.2 Checkpoint 1 | fetched tip + current head | Baseline `d218c12`; single head `u6k8g0c2d497` is authoritative and already integrated |
+| 1 | OM2-B INV.3-LEGACY `u6k8f0h2j497` | immutable accepted implementation; fetch immediately before integration; re-parent to the then-current authoritative head; semantic independence | Next schema slot. Current target parent is `u6k8g0c2d497`; `t5j7e9g1i386` and `t5j7f9b1c386` are obsolete. STOP if Enterprise advances non-mechanically or semantics conflict. |
+| 2 | First accepted EST.4/INV.2A/DISP.2 schema change | Slot 1 pushed, fresh authoritative fetch/head, approved schema boundary | Candidate order by acceptance, never by machine; no candidate may preserve a stale parent |
+| 3+ | PUR.1/TECH.1 and later schema-bearing work | same rule | One at a time through IC.1 and later checkpoints |
 
 Every slot executes:
 
@@ -393,10 +403,10 @@ unrelated completed milestone.
 | D. Production/irreversible | Separate explicit action approval with immutable package and rollback; prohibited in this plan. |
 
 Genuine owner decisions currently queued are: external Economics Phase 8
-accept/reject/remediate; exact PHONE-WEEKEND.2 versus INV.3-LEGACY migration order
-after identities are known; any schema discovered in an `U` milestone; provider,
-tax, payment, QuickBooks, and accounting ownership choices when their milestones
-approach READY; and every IC/Preview/Production gate.
+accept/reject/remediate; the BE.GAP.1 Finance/source policy decisions; any semantic
+conflict discovered while re-parenting INV.3-LEGACY; any schema discovered in an
+`U` milestone; provider, tax, payment, QuickBooks, and accounting ownership choices
+when their milestones approach READY; and every IC/Preview/Production gate.
 
 ## Automatic successor and fallback rules
 
@@ -408,20 +418,24 @@ already authorized; if not, use the next owner window.
 
 | Capacity | Automatic eligibility test | Safe fallback if NEXT remains blocked |
 | --- | --- | --- |
-| OM1-A | EST.4 is dependency-eligible; DISP.2 may be routed here only if OM2-A does not own it and its separate Start names OM1-A | Approved domain-local tests/docs for the active milestone only; otherwise idle safely |
-| OM1-B | MIG.2 remains blocked until MIG.1, IC.2, and RPT.3 are complete and a separate non-Production operation is approved | Read-only completion-evidence review if explicitly approved; no import or speculative schema |
-| OM1-C | BE.9 only after RPT.1 + ACC.2 and Phase 8 disposition | Finance review of an independently READY ACC contract; otherwise idle |
-| OM2-A | DISP.2 is dependency-eligible after completed OPS.1; TECH.1 follows accepted DISP.2 | Owner may route EST.4 if still unclaimed and file claims are disjoint |
-| OM2-B | INV.2A has its roadmap dependencies but still requires legacy scope/migration reconciliation | PUR.1 only after INV.2A; otherwise a disjoint Enterprise packet routed by owner |
-| LAP-A | PHONE-WEEKEND-selected successor must independently be READY | No second phone Start; preserve telemetry and await owner direction |
-| LAP-B | MMQ.6 review → readiness refresh | Maintain ledger/board read-only; never absorb LAP-A runtime or integration work implicitly |
+| OM1-A | EST.4 remains CURRENT until immutable completion evidence; no successor is automatic | DISP.2 only if unclaimed and explicitly reassigned; otherwise idle safely |
+| OM1-B | No independent executable work is proven | A separately assigned DISP.2 is safe only if OM2-A has no claim; otherwise idle |
+| OM1-C | No independent executable work is proven | Separately approved Finance/source contract review only; never substitute for ECO ownership |
+| OM2-A | DISP.2 is dependency-ready after completed OPS.1; TECH.1 follows accepted DISP.2 | Remain available until assignment/Start rather than pulling blocked work |
+| OM2-B | Finish INV.3-LEGACY reconciliation and serialized integration; then reconcile INV.2A scope | PUR.1 only after accepted INV.2A; otherwise idle safely |
+| OM2-C | Inactive until measured load and a disjoint executable packet justify activation | No fallback assignment merely to use hardware |
+| MIG | MIG.PREP.2 completion/review does not unlock MIG.2 | MIG.2 waits for IC.2, RPT.3, immutable inputs/environment and TYPE C approval |
+| ECO | BE.GAP.1 approval makes BE.VECTORS.1 dependency-eligible, not automatically started | BE.POLICY.1 and BE.9 remain blocked; do not infer missing source policy |
+| LAP-A | Complete PHONE-WEEKEND.2 Checkpoint 2 under its exclusive contract | No second phone Start without an independently READY successor |
+| LAP-B | MMQ.6A completion → future authoritative ref refresh | Maintain ledger/board only; never absorb LAP-A runtime or integration work |
 
 No fallback duplicates active work. Before routing, fetch, confirm no active branch/
 worktree/assignment claims the code, and record the capacity change.
 
 ## PHONE-WEEKEND.2 readiness path
 
-LAP-A exclusively proves the fastest phone-control chain:
+LAP-A exclusively continues the phone-control chain; Checkpoint 1 is complete at
+`d218c12` and Checkpoint 2 remains its current assignment:
 
 ```text
 phone owner Start
@@ -434,17 +448,18 @@ phone owner Start
 ```
 
 The successor must have satisfied dependencies, a complete packet, isolated
-workspace, resolved starting SHA, migration position, and owner Start. MMQ.6 may
+workspace, resolved starting SHA, migration position, and owner Start. MMQ.6A may
 observe the evidence and keep the queue supplied; it may not edit PHONE-WEEKEND.2,
 its scheduler migration, runtime, worktree, or status. Failure to identify a
 successor is a STOP, not permission to start blocked work.
 
 ## OM2-C capacity decision
 
-Do not activate OM2-C during the initial window. Useful independent Phase 1 work
-exists, but current constraints are integration and dependency throughput, not raw
-implementation slots: two unknown pending migrations, OPS.1 as the main unlock,
-shared Docker/test contention, and high shared-contract collision risk. Reassess
+Do not activate OM2-C during this refresh. Current constraints are integration and
+dependency throughput, not raw implementation slots: EST.4 is active, DISP.2 has
+one safe free lane, INV.3-LEGACY owns the next migration slot, and other Phase 1
+successors are blocked. Shared Docker/test contention and contract collision risk
+remain. Reassess
 after 24–48 hours only if measurements show all of the following: sustained queue
 wait for at least two independently READY disjoint TYPE A/B packets, CPU/memory/
 I/O headroom during parallel builds, no increase in flaky/timeout tests, and the
@@ -455,24 +470,26 @@ collision and review load without shortening the critical path.
 
 | Check | Result |
 | --- | --- |
-| Unique codes | Passed for the 50 Version 1 roadmap nodes; the 12 explicitly deferred post-Version-1 placeholders are separately listed and not scheduled. `INV.3-LEGACY`, `PHONE-WEEKEND.2`, and `MMQ.6` are distinct control/preserved codes. |
+| Unique codes | Passed for the 50 Version 1 roadmap nodes; the 12 explicitly deferred post-Version-1 placeholders are separately listed and not scheduled. `INV.3-LEGACY`, `PHONE-WEEKEND.2`, `MIG.PREP.2`, `BE.GAP.1`, and `MMQ.6A` are distinct control/preserved codes. |
 | Dependency closure/cycles | Passed against the roadmap DAG; no new product dependency introduced. Active legacy/control codes are outside the product DAG and explicitly distinguished. |
-| Blocked assignment | Passed: blocked work is board visibility or `NOT STARTABLE`; only EST.4 and DISP.2 are dependency-eligible and still require Start. |
+| Blocked assignment | Passed: EST.4 alone is active; DISP.2 is dependency-ready but unassigned; INV.2A, MIG.2, BE.9 and later work remain explicitly blocked. |
 | Capacity consistency | Passed; one CURRENT per capacity, specialist depth not inflated, alternatives require reassignment and collision check. |
-| Repository/ref consistency | Passed with explicit uncertainty for inaccessible active refs and literal CUTOVER.2 label. |
-| Migration serialization | Passed structurally; actual Slot 1 order remains a STOP until pending revision identities and accepted commits are known. |
+| Repository/ref consistency | Passed with explicit uncertainty for inaccessible EST.4 and INV.3-LEGACY active refs; CUTOVER.2 is explicit in Migration history. |
+| Migration serialization | Passed: `u6k8g0c2d497` is authoritative; INV.3-LEGACY `u6k8f0h2j497` is next and must be re-parented to the then-current head. |
 | IC ordering | Passed: IC.1 → IC.2 → IC.3 → IC.4 → IC.5. |
 | Owner/Preview/Production gates | Preserved; Preview and Production are prohibited and TYPE C remains separately approved. |
 | Historical vs roadmap | Passed: INV.3-LEGACY is not INV.3; external Phase 8 is not BE.8/BE.9; completed foundations remain historical. |
 | Cross-domain ownership | Passed against inspected architecture; IDs/events/projections are integration seams and no foreign table writes are authorized. |
-| Duplicate active work/LAP-A collision | Passed by plan: OPS.1, INV.3-LEGACY, PHONE-WEEKEND.2 receive no duplicate packet; protected worktrees/files are excluded. |
+| Duplicate active work/LAP-A collision | Passed by plan: EST.4, INV.3-LEGACY, MIG.PREP.2, BE.GAP.1 and PHONE-WEEKEND.2 each have one owner; protected LAP-A worktrees/files are excluded. |
 | Markdown/relative links | Relative project links used; final mechanical validation required below. |
 
 ## Owner review package
 
-MMQ.6 stops here. Owner review should confirm the two startable packet choices,
-accept or change the migration Slot 1 ordering rule once identities arrive, decide
-external Economics Phase 8 disposition, and retain OM2-C inactive unless measured
-evidence crosses the activation threshold.
+MMQ.6A stops at the queue/control boundary. No immediate owner STOP is required
+for this documentation refresh. Future owner action is required to assign/Start
+DISP.2, approve BE.VECTORS.1 after BE.GAP.1, resolve the listed Economics/Finance
+decisions, approve every TYPE C/Preview/Production action, or judge any semantic
+INV.3-LEGACY integration conflict. Keep OM2-C inactive unless measured evidence
+crosses the activation threshold.
 
-**MMQ.6 — WAITING FOR OWNER REVIEW**
+**MMQ.6A — COMPLETE / PUSH AUTHORIZED AFTER CLEAN VALIDATION**
