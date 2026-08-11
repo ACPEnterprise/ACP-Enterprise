@@ -189,6 +189,7 @@ class EventType(str, Enum):
     # Communications
     CALL_RECEIVED = "call.received"
     CALL_ANSWERED = "call.answered"
+    COMMUNICATION_REQUESTED = "communication.requested"
 
     # Scheduling
     APPOINTMENT_CREATED = "appointment.created"

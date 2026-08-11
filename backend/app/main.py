@@ -9,6 +9,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from app.analytics.router import router as analytics_router
 from app.api.health import router as health_router
 from app.beacon.router import router as beacon_router
+from app.communications.router import router as communications_router
 from app.core.config import settings
 from app.customers.router import router as customers_router
 from app.database.session import AsyncSessionFactory, engine
@@ -134,6 +135,7 @@ app.include_router(jobs_router)
 app.include_router(operations_router)
 app.include_router(dispatch_router)
 app.include_router(price_book_router)
+app.include_router(communications_router)
 app.include_router(engineering_commands_router)
 app.include_router(engineering_reviews_router)
 app.include_router(repository_authorizations_router)

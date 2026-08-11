@@ -75,6 +75,13 @@ class PriceBookPermission:
     ALL = frozenset({READ, MANAGE, ACTIVATE})
 
 
+class CommunicationsPermission:
+    READ = "COMPANY_COMMUNICATIONS_READ"
+    MANAGE = "COMPANY_COMMUNICATIONS_MANAGE"
+
+    ALL = frozenset({READ, MANAGE})
+
+
 class EngineeringCommandPermission:
     READ = "COMPANY_ENGINEERING_COMMAND_READ"
     MANAGE = "COMPANY_ENGINEERING_COMMAND_MANAGE"
