@@ -160,4 +160,39 @@ describe("DispatchRoute", () => {
       screen.getByRole("button", { name: "Assign technician" }),
     ).toBeVisible();
   });
+
+  it("shows authoritative arrival and exception state", () => {
+    vi.mocked(useDispatchBoard).mockReturnValue({
+      isLoading: false,
+      error: null,
+      data: {
+        items: [
+          {
+            ...work,
+            assignment: {
+              id: "assignment-1",
+              primary_employee_name: "Technician One",
+              status: "reconciliation_required",
+              arrival_state: "arrived",
+              active_exception_code: "safety_condition",
+              crew_members: [],
+            },
+          },
+        ],
+        total_count: 1,
+      },
+      refetch: refetchDispatch,
+    } as never);
+    render(
+      <MemoryRouter>
+        <DispatchRoute />
+      </MemoryRouter>,
+    );
+    expect(
+      screen.getByText(/reconciliation required · arrived/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Exception: safety condition/i),
+    ).toBeInTheDocument();
+  });
 });

@@ -4,6 +4,9 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
 from app.core.config import settings
 from app.customers.models import Customer, ServiceLocation
 from app.dispatch.errors import DispatchConflict, DispatchNotFound
@@ -25,8 +28,6 @@ from app.workforce.models import (
     WorkforceCapabilityProfile,
     WorkforceWorkingAvailability,
 )
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 
 @pytest_asyncio.fixture
@@ -89,6 +90,16 @@ async def dispatch_fixture() -> AsyncIterator[
         )
         session.add_all([company, branch, customer, location, actor])
         await session.flush()
+        membership = Membership(
+            user_id=actor.id,
+            company_id=company.id,
+            status="active",
+            has_all_branch_access=True,
+            created_at=now,
+            updated_at=now,
+        )
+        session.add(membership)
+        await session.flush()
         employees = [
             Employee(
                 company_id=company.id,
@@ -103,6 +114,7 @@ async def dispatch_fixture() -> AsyncIterator[
             )
             for i in (1, 2)
         ]
+        employees[0].membership_id = membership.id
         session.add_all(employees)
         await session.flush()
         category = CapabilityCategory(
@@ -166,15 +178,6 @@ async def dispatch_fixture() -> AsyncIterator[
         )
         session.add(appointment)
         await session.flush()
-    membership = Membership(
-        id=uuid4(),
-        user_id=actor.id,
-        company_id=company.id,
-        status="active",
-        has_all_branch_access=True,
-        created_at=now,
-        updated_at=now,
-    )
     context = AuthorizationContext(
         user=actor,
         company=company,
@@ -336,6 +339,35 @@ async def test_missing_availability_is_reported_unknown(dispatch_fixture):
 
 
 @pytest.mark.asyncio
+async def test_job_title_does_not_substitute_for_workforce_capability(
+    dispatch_fixture,
+):
+    factory, context, appointment, technician, _ = dispatch_fixture
+    async with factory() as session, session.begin():
+        profile_id = await session.scalar(
+            select(WorkforceCapabilityProfile.id).where(
+                WorkforceCapabilityProfile.employee_id == technician.id
+            )
+        )
+        capability = await session.scalar(
+            select(WorkforceCapability).where(
+                WorkforceCapability.profile_id == profile_id
+            )
+        )
+        await session.delete(capability)
+    async with factory() as session:
+        option = next(
+            item
+            for item in await DispatchService().eligible(
+                session, context=context, appointment_id=appointment.id
+            )
+            if item.employee_id == technician.id
+        )
+    assert option.decision == "missing_required_capability"
+    assert not option.eligible
+
+
+@pytest.mark.asyncio
 async def test_crew_replacement_and_reconciliation_lifecycle(dispatch_fixture):
     factory, context, appointment, primary, crew = dispatch_fixture
     service = DispatchService()
@@ -402,3 +434,136 @@ async def test_crew_replacement_and_reconciliation_lifecycle(dispatch_fixture):
             resolution="restore_assigned",
         )
     assert reconciled.status == "assigned"
+
+
+@pytest.mark.asyncio
+async def test_arrival_and_controlled_exception_evidence_is_idempotent(
+    dispatch_fixture,
+):
+    factory, context, appointment, technician, _ = dispatch_fixture
+    service = DispatchService()
+    async with factory() as session:
+        assigned = await service.assign(
+            session,
+            context=context,
+            appointment_id=appointment.id,
+            employee_id=technician.id,
+            reason="Primary",
+            idempotency_key="dispatch-arrival-assign",
+        )
+    async with factory() as session:
+        en_route = await service.record_arrival(
+            session,
+            context=context,
+            appointment_id=appointment.id,
+            state="en_route",
+            expected_version=assigned.version,
+            idempotency_key="dispatch-arrival-en-route",
+        )
+    assert en_route.status == "acknowledged"
+    assert en_route.arrival_state == "en_route"
+    async with factory() as session:
+        replay = await service.record_arrival(
+            session,
+            context=context,
+            appointment_id=appointment.id,
+            state="en_route",
+            expected_version=assigned.version,
+            idempotency_key="dispatch-arrival-en-route",
+        )
+    assert replay.version == en_route.version
+    async with factory() as session:
+        arrived = await service.record_arrival(
+            session,
+            context=context,
+            appointment_id=appointment.id,
+            state="arrived",
+            expected_version=en_route.version,
+            idempotency_key="dispatch-arrival-arrived",
+        )
+    assert arrived.arrival_state == "arrived"
+
+    async with factory() as session:
+        exception = await service.report_exception(
+            session,
+            context=context,
+            appointment_id=appointment.id,
+            exception_code="safety_condition",
+            reason="Unsafe access",
+            idempotency_key="dispatch-exception-safety",
+            expected_version=arrived.version,
+        )
+    assert exception.status == "reconciliation_required"
+    assert exception.active_exception_code == "safety_condition"
+    async with factory() as session:
+        replay_exception = await service.report_exception(
+            session,
+            context=context,
+            appointment_id=appointment.id,
+            exception_code="safety_condition",
+            reason="Unsafe access",
+            idempotency_key="dispatch-exception-safety",
+            expected_version=arrived.version,
+        )
+    assert replay_exception.version == exception.version
+    async with factory() as session:
+        resolved = await service.reconcile(
+            session,
+            context=context,
+            appointment_id=appointment.id,
+            reason="Supervisor cleared access",
+            idempotency_key="dispatch-exception-resolved",
+            expected_version=exception.version,
+            resolution="restore_assigned",
+        )
+    assert resolved.active_exception_code is None
+    assert resolved.arrival_state == "arrived"
+
+    async with factory() as session:
+        history = await session.scalar(
+            select(func.count(DispatchAssignmentHistory.id)).where(
+                DispatchAssignmentHistory.assignment_id == assigned.id
+            )
+        )
+        events = await session.scalar(
+            select(func.count(BusinessEvent.id)).where(
+                BusinessEvent.entity_id == assigned.id
+            )
+        )
+    assert history == events == 5
+    async with factory() as session:
+        with pytest.raises(DispatchConflict, match="Idempotency key conflicts"):
+            await service.report_exception(
+                session,
+                context=context,
+                appointment_id=appointment.id,
+                exception_code="other",
+                reason="Contradictory replay",
+                idempotency_key="dispatch-arrival-en-route",
+                expected_version=resolved.version,
+            )
+
+
+@pytest.mark.asyncio
+async def test_unassigned_employee_cannot_record_arrival(dispatch_fixture):
+    factory, context, appointment, _, unlinked = dispatch_fixture
+    service = DispatchService()
+    async with factory() as session:
+        assigned = await service.assign(
+            session,
+            context=context,
+            appointment_id=appointment.id,
+            employee_id=unlinked.id,
+            reason="Primary",
+            idempotency_key="dispatch-unlinked-assign",
+        )
+    async with factory() as session:
+        with pytest.raises(DispatchNotFound):
+            await service.record_arrival(
+                session,
+                context=context,
+                appointment_id=appointment.id,
+                state="en_route",
+                expected_version=assigned.version,
+                idempotency_key="dispatch-unlinked-arrival",
+            )

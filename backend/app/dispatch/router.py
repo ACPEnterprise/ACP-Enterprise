@@ -13,17 +13,19 @@ from app.dispatch.errors import (
     DispatchValidation,
 )
 from app.dispatch.schemas import (
+    ArrivalStateRequest,
     AssignmentItem,
     AssignmentReasonRequest,
     AssignPrimaryRequest,
     CrewMutationRequest,
     DispatchBoardPage,
+    DispatchExceptionRequest,
     ReconcileRequest,
     TechnicianEligibilityItem,
 )
 from app.dispatch.service import dispatch_service
 from app.platform.permissions.authorization import AuthorizationContext
-from app.platform.permissions.codes import DispatchPermission
+from app.platform.permissions.codes import DispatchPermission, JobPermission
 from app.platform.permissions.dependencies import require_permission
 
 router = APIRouter(prefix="/api/v1/dispatch", tags=["Dispatch"])
@@ -33,6 +35,9 @@ ReadContext = Annotated[
 ]
 ManageContext = Annotated[
     AuthorizationContext, Depends(require_permission(DispatchPermission.MANAGE))
+]
+ExecuteContext = Annotated[
+    AuthorizationContext, Depends(require_permission(JobPermission.EXECUTE))
 ]
 
 
@@ -241,6 +246,48 @@ async def resolve_reconciliation(
 ) -> AssignmentItem:
     try:
         return await dispatch_service.reconcile(
+            session,
+            context=context,
+            appointment_id=appointment_id,
+            **request.model_dump(),
+        )
+    except DispatchError as error:
+        raise dispatch_http(error) from error
+
+
+@router.post(
+    "/appointments/{appointment_id}/assignment/exceptions",
+    response_model=AssignmentItem,
+)
+async def report_exception(
+    appointment_id: UUID,
+    request: DispatchExceptionRequest,
+    context: ManageContext,
+    session: DatabaseSession,
+) -> AssignmentItem:
+    try:
+        return await dispatch_service.report_exception(
+            session,
+            context=context,
+            appointment_id=appointment_id,
+            **request.model_dump(),
+        )
+    except DispatchError as error:
+        raise dispatch_http(error) from error
+
+
+@router.post(
+    "/appointments/{appointment_id}/assignment/arrival",
+    response_model=AssignmentItem,
+)
+async def record_arrival(
+    appointment_id: UUID,
+    request: ArrivalStateRequest,
+    context: ExecuteContext,
+    session: DatabaseSession,
+) -> AssignmentItem:
+    try:
+        return await dispatch_service.record_arrival(
             session,
             context=context,
             appointment_id=appointment_id,

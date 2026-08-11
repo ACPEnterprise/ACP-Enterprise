@@ -6,6 +6,7 @@ import {
 } from "../../hooks/useDispatch";
 import type {
   DispatchBoardItem,
+  DispatchExceptionCode,
   TechnicianEligibility,
 } from "../../types/dispatch";
 import {
@@ -29,6 +30,9 @@ export function DispatchAssignmentPanel({
   const mutations = useDispatchMutations();
   const [employeeId, setEmployeeId] = useState("");
   const [reason, setReason] = useState("Dispatcher assignment");
+  const [exceptionCode, setExceptionCode] = useState<DispatchExceptionCode>(
+    "assignment_ambiguous",
+  );
   const [removeEmployeeId, setRemoveEmployeeId] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<
     | "assign"
@@ -48,12 +52,14 @@ export function DispatchAssignmentPanel({
     mutations.assign.isPending ||
     mutations.release.isPending ||
     mutations.crew.isPending ||
-    mutations.reconcile.isPending;
+    mutations.reconcile.isPending ||
+    mutations.exception.isPending;
   const error =
     mutations.assign.error ||
     mutations.release.error ||
     mutations.crew.error ||
-    mutations.reconcile.error;
+    mutations.reconcile.error ||
+    mutations.exception.error;
   const complete = () => {
     setConfirm(null);
     onClose();
@@ -79,11 +85,12 @@ export function DispatchAssignmentPanel({
         { onSuccess: complete },
       );
     else if (confirm === "reconcile" && assignment)
-      mutations.reconcile.mutate(
+      mutations.exception.mutate(
         {
           appointmentId: item.appointment_id,
           version: assignment.version,
           reason,
+          exceptionCode,
         },
         { onSuccess: complete },
       );
@@ -133,6 +140,11 @@ export function DispatchAssignmentPanel({
             {new Date(item.window_start_at).toLocaleString()} ·{" "}
             {assignment?.primary_employee_name ?? "No primary technician"}
           </p>
+          {assignment && (
+            <p className="mt-1 text-sm capitalize text-content-muted">
+              Arrival: {label(assignment.arrival_state)}
+            </p>
+          )}
         </div>
         <Button variant="outline" onClick={onClose}>
           Close
@@ -141,7 +153,9 @@ export function DispatchAssignmentPanel({
       {assignment?.status === "reconciliation_required" && (
         <div className="space-y-3">
           <Alert variant="danger" title="Reconciliation required">
-            Assignment truth must be resolved before further changes.
+            {assignment.active_exception_code
+              ? `Dispatch exception: ${label(assignment.active_exception_code)}.`
+              : "Assignment truth must be resolved before further changes."}
           </Alert>
           <div className="grid gap-2 sm:grid-cols-2">
             <Button onClick={() => setConfirm("restore")}>
@@ -156,9 +170,27 @@ export function DispatchAssignmentPanel({
       {assignment &&
         assignment.status !== "reconciliation_required" &&
         assignment.status !== "released" && (
-          <Button variant="outline" onClick={() => setConfirm("reconcile")}>
-            Mark assignment ambiguous
-          </Button>
+          <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+            <Select
+              aria-label="Dispatch exception"
+              value={exceptionCode}
+              onChange={(event) =>
+                setExceptionCode(event.target.value as DispatchExceptionCode)
+              }
+            >
+              <option value="assignment_ambiguous">Assignment ambiguous</option>
+              <option value="technician_unavailable">
+                Technician unavailable
+              </option>
+              <option value="customer_unavailable">Customer unavailable</option>
+              <option value="safety_condition">Safety condition</option>
+              <option value="weather">Weather</option>
+              <option value="other">Other</option>
+            </Select>
+            <Button variant="outline" onClick={() => setConfirm("reconcile")}>
+              Report exception
+            </Button>
+          </div>
         )}
       {error && (
         <Alert variant="danger" title="Assignment not saved">
@@ -284,14 +316,14 @@ export function DispatchAssignmentPanel({
               : confirm === "restore"
                 ? "Confirm assignment remains active?"
                 : confirm === "reconcile"
-                  ? "Mark assignment as ambiguous?"
-              : confirm === "crew-remove"
-                ? "Remove crew member?"
-                : confirm === "crew"
-                  ? "Add crew member?"
-                  : assignment
-                    ? "Replace primary technician?"
-                    : "Assign primary technician?"
+                  ? "Report dispatch exception?"
+                  : confirm === "crew-remove"
+                    ? "Remove crew member?"
+                    : confirm === "crew"
+                      ? "Add crew member?"
+                      : assignment
+                        ? "Replace primary technician?"
+                        : "Assign primary technician?"
           }
           confirmLabel="Confirm assignment change"
           pending={pending}

@@ -3,6 +3,7 @@ import type {
   DispatchAssignment,
   DispatchBoardPage,
   TechnicianEligibility,
+  DispatchExceptionCode,
 } from "../types/dispatch";
 
 const ROOT = "/api/v1/dispatch";
@@ -100,6 +101,24 @@ export async function markReconciliation(
       `${ROOT}/appointments/${appointmentId}/assignment/reconciliation-required`,
       {
         reason,
+        idempotency_key: crypto.randomUUID(),
+        expected_version: version,
+      },
+    )
+  ).data;
+}
+export async function reportDispatchException(
+  appointmentId: string,
+  version: number,
+  reason: string,
+  exceptionCode: DispatchExceptionCode,
+): Promise<DispatchAssignment> {
+  return (
+    await apiClient.post<DispatchAssignment>(
+      `${ROOT}/appointments/${appointmentId}/assignment/exceptions`,
+      {
+        reason,
+        exception_code: exceptionCode,
         idempotency_key: crypto.randomUUID(),
         expected_version: version,
       },

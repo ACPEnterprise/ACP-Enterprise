@@ -40,6 +40,8 @@ class AssignmentItem(DispatchSchema):
     primary_employee_id: UUID | None
     primary_employee_name: str | None
     status: str
+    arrival_state: str
+    active_exception_code: str | None
     assignment_reason: str
     window_start_at: datetime
     window_end_at: datetime
@@ -88,3 +90,20 @@ class CrewMutationRequest(AssignmentReasonRequest):
 
 class ReconcileRequest(AssignmentReasonRequest):
     resolution: str = Field(pattern=r"^(restore_assigned|release)$")
+
+
+class DispatchExceptionRequest(AssignmentReasonRequest):
+    exception_code: str = Field(
+        pattern=(
+            r"^(assignment_ambiguous|technician_unavailable|customer_unavailable|"
+            r"safety_condition|weather|other)$"
+        )
+    )
+
+
+class ArrivalStateRequest(DispatchSchema):
+    state: str = Field(pattern=r"^(en_route|arrived)$")
+    expected_version: int = Field(ge=1)
+    idempotency_key: str = Field(
+        min_length=8, max_length=128, pattern=r"^[A-Za-z0-9._:-]+$"
+    )

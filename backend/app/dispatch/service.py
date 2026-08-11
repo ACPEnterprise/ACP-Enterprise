@@ -158,7 +158,13 @@ class DispatchService:
                 session, context.company.id, appointment_id, lock=True
             )
             if (
-                await self._duplicate(session, context.company.id, idempotency_key)
+                await self._duplicate(
+                    session,
+                    context.company.id,
+                    idempotency_key,
+                    appointment.id,
+                    ("created",),
+                )
                 and existing
             ):
                 return await self._item(
@@ -262,7 +268,13 @@ class DispatchService:
             assignment = await self._required_assignment(
                 session, context.company.id, appointment_id, lock=True
             )
-            if await self._duplicate(session, context.company.id, idempotency_key):
+            if await self._duplicate(
+                session,
+                context.company.id,
+                idempotency_key,
+                appointment.id,
+                ("replaced",),
+            ):
                 return await self._item(
                     session, assignment, appointment.appointment_number
                 )
@@ -317,7 +329,13 @@ class DispatchService:
                 session, context.company.id, appointment_id, lock=True
             )
             if (
-                await self._duplicate(session, context.company.id, idempotency_key)
+                await self._duplicate(
+                    session,
+                    context.company.id,
+                    idempotency_key,
+                    appointment.id,
+                    ("released",),
+                )
                 or assignment.status == "released"
             ):
                 return await self._item(
@@ -367,11 +385,18 @@ class DispatchService:
             assignment = await self._required_assignment(
                 session, context.company.id, appointment_id, lock=True
             )
-            self._version(assignment, expected_version)
-            if await self._duplicate(session, context.company.id, idempotency_key):
+            kind = "crew_removed" if remove else "crew_added"
+            if await self._duplicate(
+                session,
+                context.company.id,
+                idempotency_key,
+                appointment.id,
+                (kind,),
+            ):
                 return await self._item(
                     session, assignment, appointment.appointment_number
                 )
+            self._version(assignment, expected_version)
             member = await session.scalar(
                 select(DispatchCrewMember)
                 .where(
@@ -393,7 +418,6 @@ class DispatchService:
                 member.removal_reason = reason
                 member.version += 1
                 event = EventType.DISPATCH_CREW_MEMBER_REMOVED
-                kind = "crew_removed"
             else:
                 if employee_id == assignment.primary_employee_id:
                     raise DispatchConflict(
@@ -414,7 +438,6 @@ class DispatchService:
                     )
                 )
                 event = EventType.DISPATCH_CREW_MEMBER_ADDED
-                kind = "crew_added"
             assignment.version += 1
             assignment.updated_at = datetime.now(timezone.utc)
             self._history(
@@ -455,7 +478,16 @@ class DispatchService:
             assignment = await self._required_assignment(
                 session, context.company.id, appointment_id, lock=True
             )
-            if await self._duplicate(session, context.company.id, idempotency_key):
+            expected_kind = (
+                "reconciliation_required" if resolution is None else "reconciled"
+            )
+            if await self._duplicate(
+                session,
+                context.company.id,
+                idempotency_key,
+                appointment.id,
+                (expected_kind,),
+            ):
                 return await self._item(
                     session, assignment, appointment.appointment_number
                 )
@@ -496,6 +528,137 @@ class DispatchService:
             await session.flush()
             return await self._item(session, assignment, appointment.appointment_number)
 
+    async def report_exception(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        appointment_id: UUID,
+        exception_code: str,
+        reason: str,
+        idempotency_key: str,
+        expected_version: int,
+    ) -> AssignmentItem:
+        async with session.begin():
+            appointment = await self._appointment(
+                session, context, appointment_id, lock=True
+            )
+            assignment = await self._required_assignment(
+                session, context.company.id, appointment_id, lock=True
+            )
+            if await self._duplicate(
+                session,
+                context.company.id,
+                idempotency_key,
+                appointment.id,
+                (f"exception_reported:{exception_code}",),
+            ):
+                return await self._item(
+                    session, assignment, appointment.appointment_number
+                )
+            self._version(assignment, expected_version)
+            if assignment.status not in {"assigned", "acknowledged"}:
+                raise DispatchConflict(
+                    "Dispatch exception cannot be recorded in the current state."
+                )
+            prior = assignment.status
+            assignment.status = "reconciliation_required"
+            assignment.version += 1
+            assignment.updated_at = datetime.now(timezone.utc)
+            self._history(
+                session,
+                assignment,
+                f"exception_reported:{exception_code}",
+                prior,
+                assignment.status,
+                context.user.id,
+                reason,
+                idempotency_key,
+            )
+            self._event(
+                session,
+                assignment,
+                EventType.DISPATCH_ASSIGNMENT_RECONCILIATION_REQUIRED,
+                context.user.id,
+                {"exception_code": exception_code},
+            )
+            await session.flush()
+            return await self._item(session, assignment, appointment.appointment_number)
+
+    async def record_arrival(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        appointment_id: UUID,
+        state: str,
+        expected_version: int,
+        idempotency_key: str,
+    ) -> AssignmentItem:
+        async with session.begin():
+            appointment = await self._appointment(
+                session, context, appointment_id, lock=True
+            )
+            assignment = await self._required_assignment(
+                session, context.company.id, appointment_id, lock=True
+            )
+            if await self._duplicate(
+                session,
+                context.company.id,
+                idempotency_key,
+                appointment.id,
+                (f"technician_{state}",),
+            ):
+                return await self._item(
+                    session, assignment, appointment.appointment_number
+                )
+            self._version(assignment, expected_version)
+            await self._require_assigned_technician(
+                session, context=context, assignment=assignment
+            )
+            if assignment.status not in {"assigned", "acknowledged"}:
+                raise DispatchConflict(
+                    "Arrival cannot be recorded for an inactive assignment."
+                )
+            current = await self._arrival_state(session, assignment)
+            if current == state:
+                return await self._item(
+                    session, assignment, appointment.appointment_number
+                )
+            expected = "pending" if state == "en_route" else "en_route"
+            if current != expected:
+                raise DispatchConflict(
+                    "Arrival transition conflicts with current state."
+                )
+            prior = assignment.status
+            assignment.status = "acknowledged"
+            assignment.version += 1
+            assignment.updated_at = datetime.now(timezone.utc)
+            event = (
+                EventType.TECHNICIAN_EN_ROUTE
+                if state == "en_route"
+                else EventType.TECHNICIAN_ARRIVED
+            )
+            self._history(
+                session,
+                assignment,
+                f"technician_{state}",
+                prior,
+                assignment.status,
+                context.user.id,
+                state.replace("_", " "),
+                idempotency_key,
+            )
+            self._event(
+                session,
+                assignment,
+                event,
+                context.user.id,
+                {"arrival_state": state},
+            )
+            await session.flush()
+            return await self._item(session, assignment, appointment.appointment_number)
+
     async def _appointment(self, session, context, appointment_id, lock=False):
         stmt = select(Appointment).where(
             Appointment.company_id == context.company.id,
@@ -524,6 +687,40 @@ class DispatchService:
         if not option.eligible:
             raise DispatchConflict(f"Technician is not eligible: {option.decision}.")
 
+    @staticmethod
+    async def _require_assigned_technician(session, *, context, assignment) -> None:
+        employee_ids = set(
+            (
+                await session.scalars(
+                    select(Employee.id).where(
+                        Employee.company_id == context.company.id,
+                        Employee.membership_id == context.membership.id,
+                        Employee.archived_at.is_(None),
+                    )
+                )
+            ).all()
+        )
+        if not employee_ids:
+            raise DispatchNotFound("Assigned technician was not found.")
+        crew_ids = set(
+            (
+                await session.scalars(
+                    select(DispatchCrewMember.employee_id).where(
+                        DispatchCrewMember.company_id == context.company.id,
+                        DispatchCrewMember.assignment_id == assignment.id,
+                        DispatchCrewMember.status == "active",
+                    )
+                )
+            ).all()
+        )
+        assigned_ids = crew_ids | (
+            {assignment.primary_employee_id}
+            if assignment.primary_employee_id
+            else set()
+        )
+        if employee_ids.isdisjoint(assigned_ids):
+            raise DispatchNotFound("Assigned technician was not found.")
+
     async def _get_assignment(self, session, company_id, appointment_id, lock=False):
         stmt = select(DispatchAssignment).where(
             DispatchAssignment.company_id == company_id,
@@ -540,16 +737,41 @@ class DispatchService:
             raise DispatchNotFound("Assignment was not found.")
         return item
 
-    async def _duplicate(self, session, company_id, key):
-        return (
-            await session.scalar(
-                select(DispatchAssignmentHistory.id).where(
+    async def _duplicate(
+        self,
+        session,
+        company_id,
+        key,
+        appointment_id,
+        expected_event_types,
+    ):
+        record = (
+            await session.execute(
+                select(DispatchAssignmentHistory, DispatchAssignment.appointment_id)
+                .join(
+                    DispatchAssignment,
+                    and_(
+                        DispatchAssignment.company_id
+                        == DispatchAssignmentHistory.company_id,
+                        DispatchAssignment.id
+                        == DispatchAssignmentHistory.assignment_id,
+                    ),
+                )
+                .where(
                     DispatchAssignmentHistory.company_id == company_id,
                     DispatchAssignmentHistory.evidence_reference == key,
                 )
             )
-            is not None
-        )
+        ).one_or_none()
+        if record is None:
+            return False
+        history, recorded_appointment_id = record
+        if (
+            recorded_appointment_id != appointment_id
+            or history.event_type not in expected_event_types
+        ):
+            raise DispatchConflict("Idempotency key conflicts with prior evidence.")
+        return True
 
     @staticmethod
     def _version(item, expected):
@@ -658,6 +880,8 @@ class DispatchService:
             primary_employee_id=item.primary_employee_id,
             primary_employee_name=primary,
             status=item.status,
+            arrival_state=await self._arrival_state(session, item),
+            active_exception_code=await self._active_exception(session, item),
             assignment_reason=item.assignment_reason,
             window_start_at=item.window_start_at,
             window_end_at=item.window_end_at,
@@ -666,6 +890,41 @@ class DispatchService:
             version=item.version,
             crew_members=crew,
         )
+
+    @staticmethod
+    async def _arrival_state(session, item) -> str:
+        event_type = await session.scalar(
+            select(DispatchAssignmentHistory.event_type)
+            .where(
+                DispatchAssignmentHistory.company_id == item.company_id,
+                DispatchAssignmentHistory.assignment_id == item.id,
+                DispatchAssignmentHistory.event_type.in_(
+                    ("technician_en_route", "technician_arrived")
+                ),
+            )
+            .order_by(DispatchAssignmentHistory.version.desc())
+            .limit(1)
+        )
+        return {
+            "technician_en_route": "en_route",
+            "technician_arrived": "arrived",
+        }.get(event_type, "pending")
+
+    @staticmethod
+    async def _active_exception(session, item) -> str | None:
+        if item.status != "reconciliation_required":
+            return None
+        event_type = await session.scalar(
+            select(DispatchAssignmentHistory.event_type)
+            .where(
+                DispatchAssignmentHistory.company_id == item.company_id,
+                DispatchAssignmentHistory.assignment_id == item.id,
+                DispatchAssignmentHistory.event_type.like("exception_reported:%"),
+            )
+            .order_by(DispatchAssignmentHistory.version.desc())
+            .limit(1)
+        )
+        return event_type.partition(":")[2] if event_type else "assignment_ambiguous"
 
 
 dispatch_service = DispatchService()

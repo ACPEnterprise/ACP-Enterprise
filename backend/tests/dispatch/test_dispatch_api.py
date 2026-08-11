@@ -1,8 +1,10 @@
 import httpx
 import pytest
+
 from app.main import app
+from app.platform.launch_controls import LAUNCH_ROLE_MATRIX, LaunchRoleCode
 from app.platform.permissions.catalog import permission_catalog
-from app.platform.permissions.codes import DispatchPermission
+from app.platform.permissions.codes import DispatchPermission, JobPermission
 
 
 def test_dispatch_permissions_are_canonical_and_separate() -> None:
@@ -10,6 +12,11 @@ def test_dispatch_permissions_are_canonical_and_separate() -> None:
     assert DispatchPermission.READ in codes
     assert DispatchPermission.MANAGE in codes
     assert DispatchPermission.READ != DispatchPermission.MANAGE
+    technician = next(
+        role for role in LAUNCH_ROLE_MATRIX if role.code is LaunchRoleCode.TECHNICIAN
+    )
+    assert JobPermission.EXECUTE in technician.permission_codes
+    assert DispatchPermission.MANAGE not in technician.permission_codes
 
 
 @pytest.mark.asyncio
@@ -32,8 +39,17 @@ async def test_dispatch_api_fails_closed_without_authentication() -> None:
                 "idempotency_key": "dispatch-api-test",
             },
         )
+        arrival = await client.post(
+            "/api/v1/dispatch/appointments/00000000-0000-0000-0000-000000000001/assignment/arrival",
+            json={
+                "state": "en_route",
+                "expected_version": 1,
+                "idempotency_key": "dispatch-arrival-test",
+            },
+        )
     assert board.status_code == 401
     assert assign.status_code == 401
+    assert arrival.status_code == 401
 
 
 def test_dispatch_openapi_contract_exposes_bounded_operations() -> None:
@@ -47,3 +63,7 @@ def test_dispatch_openapi_contract_exposes_bounded_operations() -> None:
     assert (
         "/api/v1/dispatch/appointments/{appointment_id}/assignment/reconcile" in paths
     )
+    assert (
+        "/api/v1/dispatch/appointments/{appointment_id}/assignment/exceptions" in paths
+    )
+    assert "/api/v1/dispatch/appointments/{appointment_id}/assignment/arrival" in paths

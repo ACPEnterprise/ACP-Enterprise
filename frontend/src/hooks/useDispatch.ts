@@ -6,8 +6,10 @@ import {
   getEligibleTechnicians,
   markReconciliation,
   releasePrimary,
+  reportDispatchException,
   resolveReconciliation,
 } from "../api/dispatch";
+import type { DispatchExceptionCode } from "../types/dispatch";
 
 export const dispatchKeys = {
   all: ["dispatch"] as const,
@@ -82,6 +84,21 @@ export function useDispatchMutations() {
               x.resolution,
             )
           : markReconciliation(x.appointmentId, x.version, x.reason),
+      onSuccess: refresh,
+    }),
+    exception: useMutation({
+      mutationFn: (x: {
+        appointmentId: string;
+        version: number;
+        reason: string;
+        exceptionCode: DispatchExceptionCode;
+      }) =>
+        reportDispatchException(
+          x.appointmentId,
+          x.version,
+          x.reason,
+          x.exceptionCode,
+        ),
       onSuccess: refresh,
     }),
   };

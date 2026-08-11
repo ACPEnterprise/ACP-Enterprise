@@ -160,11 +160,7 @@ class WorkforceEligibilityService:
                 and employee.home_branch_id != query.branch_id
             ):
                 reasons.append("wrong_branch")
-            technician = (
-                "technician" in capabilities
-                or "technician" in (employee.job_title or "").lower()
-            )
-            if not technician:
+            if "technician" not in capabilities:
                 reasons.append("missing_required_capability")
             if not query.required_capability_codes.issubset(capabilities):
                 reasons.append("missing_required_capability")

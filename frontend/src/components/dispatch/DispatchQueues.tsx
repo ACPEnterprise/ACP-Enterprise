@@ -307,7 +307,19 @@ export function DispatchWorkQueue({
                   <p className="mt-1 text-xs font-semibold capitalize text-content-secondary">
                     {item.assignment?.status.replaceAll("_", " ") ??
                       "Assignment needed"}
+                    {item.assignment
+                      ? ` · ${item.assignment.arrival_state.replaceAll("_", " ")}`
+                      : ""}
                   </p>
+                  {item.assignment?.active_exception_code && (
+                    <p className="mt-1 text-xs font-semibold capitalize text-status-danger-text">
+                      Exception:{" "}
+                      {item.assignment.active_exception_code.replaceAll(
+                        "_",
+                        " ",
+                      )}
+                    </p>
+                  )}
                 </div>
                 <Button onClick={() => onSelect(item)}>
                   {item.assignment ? "Manage assignment" : "Assign technician"}
