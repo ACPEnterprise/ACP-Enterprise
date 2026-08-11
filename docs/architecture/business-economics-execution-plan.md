@@ -1,6 +1,6 @@
 # Business Economics Execution Plan
 
-Status: BE.PLAN.1 — WAITING FOR OWNER REVIEW
+Status: BE.PLAN.1 — COMPLETE; queue extended by BE.REVIEW.1
 
 Capacity: ECO — Business Economics
 
@@ -60,6 +60,11 @@ source-domain accepted contracts ----------------+
 BE.9 -> BE.10 -> BE.11 -> BE.12 -> BE.13 -> BE.14 -> BE.15 -> BE.16
                                                \
                                                 -> BE.17
+
+BE.REVIEW.1 -> BE.EVIDENCE.1 -> BE.VECTORS.1
+                              -> BE.POLICY.1
+
+BE.16 + BE.17 -> BE.18 -> BE.19 -> BE.20
 
 external Phase 8 -> owner disposition only
                   -> optional evidence selected by owner for a later milestone
@@ -354,6 +359,112 @@ completion evidence as opaque prerequisites and does not invent their work.
   runtime execution, or an attempt to weaken Economics authority.
 - **Successor:** separately planned consumer milestones, never automatic.
 
+#### BE.REVIEW.1 — External Phase 8 Adoption & Economics Readiness Resolution
+
+- **Objective:** classify each external Phase 8 capability, route unresolved
+  BE.8 decisions, and specify safe future adoption without integration.
+- **Dependency:** approved BE.8 and BE.PLAN.1 at immutable refs.
+- **Classification:** TYPE A.
+- **Persistence/migration impact:** none.
+- **Parallel safety:** safe while BE.9 dependencies progress; no shared runtime.
+- **Validation boundary:** exact candidate inspection, disposition/roadmap
+  traceability, normative consistency, ownership, graph, Markdown, tests, secrets.
+- **Owner gate:** review and approve the disposition and next READY candidate.
+- **Successor:** BE.EVIDENCE.1; it does not unblock BE.9 by itself.
+
+#### BE.EVIDENCE.1 — Source Authority Evidence Matrix
+
+- **Objective:** inventory versioned source-domain evidence against every BE.8
+  input field, identify gaps/owners, and create conformance-ready manifests
+  without selecting financial policy or implementing adapters.
+- **Dependency:** approved BE.REVIEW.1 and owner-provided frozen source refs.
+- **Classification:** TYPE A.
+- **Persistence/migration impact:** none.
+- **Parallel safety:** safe alongside ACC/RPT work; findings do not integrate
+  shared contracts.
+- **Validation boundary:** source ownership, field/version/effective-time/
+  correction availability, Company/Branch isolation, sensitive-data boundary,
+  explicit unknowns, link and terminology checks.
+- **Owner gate:** source owners confirm evidence accuracy; owner separately starts
+  any conformance or implementation milestone.
+- **Successor:** BE.VECTORS.1 and BE.POLICY.1; evidence may later support BE.9.
+
+#### BE.VECTORS.1 — Economics Reconciliation and Replay Test-Vector Contract
+
+- **Objective:** define provider-neutral golden vectors for exact source,
+  allocation, profitability, correction, replay, and close reconciliation.
+- **Dependency:** approved BE.EVIDENCE.1; normative BE.8 equations/tolerances.
+- **Classification:** TYPE A.
+- **Persistence/migration impact:** none.
+- **Parallel safety:** safe; vectors describe contracts and do not bind runtime.
+- **Validation boundary:** positive/negative amounts, deterministic remainder,
+  missing/stale/conflicting evidence, duplicates, actual/estimated separation,
+  Company/Branch isolation, canonical digests and ordering.
+- **Owner gate:** Economics/Finance approve vectors as future acceptance evidence.
+- **Successor:** BE.10 and BE.12 validation; neither becomes READY automatically.
+
+#### BE.POLICY.1 — Allocation Policy Decision Packets
+
+- **Objective:** turn BE.8 allocation uncertainties into bounded Finance decision
+  packets containing evidence, alternatives, invariants, impacts, and unanswered
+  questions without choosing a policy.
+- **Dependency:** approved BE.EVIDENCE.1 and external owner evidence available for
+  the specific pool/driver under review.
+- **Classification:** TYPE A.
+- **Persistence/migration impact:** none.
+- **Parallel safety:** packets may be prepared independently; policy adoption is
+  serialized with Finance at BE.12.
+- **Validation boundary:** pool ownership, eligible/excluded costs, driver source,
+  effective date, correction behavior, isolation, exact balance, quality impact.
+- **Owner gate:** Finance chooses or defers each policy; silence is not approval.
+- **Successor:** BE.12 readiness evidence after BE.11 and required decisions.
+
+#### BE.18 — Version 1 Economics Consumer Conformance Certification
+
+- **Objective:** certify that approved Reporting, Mission Control, Beacon, and
+  Luminary contracts consume authoritative Economics semantics without
+  recomputation, mutation, or authority leakage.
+- **Dependency:** BE.16 and BE.17 approvals plus frozen consumer contract refs.
+- **Classification:** TYPE A, with TYPE B remediation separately authorized.
+- **Persistence/migration impact:** none for certification.
+- **Parallel safety:** audits may run per consumer; certification integrates
+  findings serially.
+- **Validation boundary:** KPI identity, quality labels, lineage, permissions,
+  tenant isolation, QuickBooks authority, no guessed values.
+- **Owner gate:** Economics and each consumer owner accept findings/remediation.
+- **Successor:** BE.19.
+
+#### BE.19 — Economics Operational Acceptance and Parallel Accounting Validation
+
+- **Objective:** define and execute an owner-approved non-production acceptance
+  period comparing operational Economics with accepted accounting evidence before
+  any Production publication decision.
+- **Dependency:** BE.18, BE.15 close evidence, BE.14 handoff, approved environment
+  and representative non-production data policy.
+- **Classification:** TYPE B — serialized financial validation.
+- **Persistence/migration impact:** none presumed; stop for schema requirements.
+- **Parallel safety:** scenario analysis may parallelize; period acceptance and
+  discrepancy ownership are serialized.
+- **Validation boundary:** repeated periods, corrections/reopening, exact
+  reconciliation, materiality presentation, completeness/freshness, audit digest.
+- **Owner gate:** Finance/Economics accept results and separately decide launch.
+- **Successor:** Version 1 operationalization milestone only by explicit Start.
+
+#### BE.20 — Post-Version-1 Accounting Authority Decision Dossier
+
+- **Objective:** assemble evidence for the separate business/architecture decision
+  whether ACP Enterprise should ever assume accounting capabilities currently
+  owned by QuickBooks; it does not decide or implement replacement.
+- **Dependency:** sustained BE.19 evidence and Version 1 operational history.
+- **Classification:** TYPE A strategic decision support.
+- **Persistence/migration impact:** none.
+- **Parallel safety:** isolated research; no accounting-boundary change.
+- **Validation boundary:** control coverage, reconciliation history, auditability,
+  compliance/accounting expertise, cutover risk, rollback and ownership.
+- **Owner gate:** executive, Finance, Accounting, security, and architecture
+  decision; QuickBooks remains authoritative until explicitly changed.
+- **Successor:** none implied; any program requires a new roadmap approval.
+
 ## BE.9 readiness map and critical path
 
 BE.9 is **blocked**, not READY. Its critical path is:
@@ -475,15 +586,23 @@ of operational transactions or the general ledger.
 - **BE.PLAN.1:** implementation is complete only when its validation below
   passes; it then stops at `WAITING FOR OWNER REVIEW`, not READY for another
   action.
+- **BE.REVIEW.1:** review output is complete only after validation and then follows
+  its authorized commit/push boundary.
+- **BE.EVIDENCE.1:** may become the next READY candidate after BE.REVIEW.1 approval,
+  explicit Start, and frozen source refs; it does not require ACC.2/RPT.1 merely
+  to inventory evidence.
+- **BE.VECTORS.1 / BE.POLICY.1:** dependency-eligible only after BE.EVIDENCE.1.
 - **BE.9:** blocked by the critical path above.
 - **BE.10–BE.17:** blocked by their immediate predecessor and named evidence.
+- **BE.18–BE.20:** future; blocked by their named Version 1 predecessors.
 - **External Phase 8 disposition:** eligible for owner review, but it is not an
   ECO implementation milestone and is not approved or READY.
 
 Therefore **no subsequent Economics implementation milestone can become READY
-now** from evidence present at this ref. ECO can prepare bounded review material
-only when explicitly started; it may not bypass missing dependencies by relabeling
-planning as implementation.
+now** from evidence present at this ref. BE.EVIDENCE.1 is the only immediate
+bounded TYPE A READY candidate after the owner supplies its Start and frozen
+source refs. ECO may not bypass missing dependencies by relabeling planning as
+implementation.
 
 After each approved milestone, ECO follows:
 
@@ -531,6 +650,7 @@ BE.PLAN.1 is complete for review only when validation confirms:
 - [Phase 6 deterministic computation](business-economics-phase6-computation.md)
 - [Phase 7 acquisition boundary](business-economics-phase7-acquisition.md)
 - [External Phase 8 allocation foundation](business-economics-phase8-allocation.md)
+- [External Phase 8 adoption review](business-economics-phase8-adoption-review.md)
 - [Architecture module ownership](module-map.md)
 - [Version 1.0 release plan](../product/release-plan.md)
 - [Launch readiness checklist](../product/launch-checklist.md)
