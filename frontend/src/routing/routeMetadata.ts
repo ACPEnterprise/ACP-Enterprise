@@ -55,6 +55,10 @@ export const priceBookHandle = {
   workspace: { pageTitle: "Price Book", breadcrumbs: [{ label: "Price Book" }], helpTopic: "price-book", aiContext: "price-book" },
 } as const satisfies ShellRouteHandle;
 
+export const estimatesHandle = {
+  workspace: { pageTitle: "Estimates", breadcrumbs: [{ label: "Estimates" }], helpTopic: "estimates", aiContext: "estimates" },
+} as const satisfies ShellRouteHandle;
+
 export const engineeringHandle = {
   workspace: {
     pageTitle: "Engineering",

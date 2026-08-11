@@ -15,6 +15,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -153,6 +154,14 @@ class EstimateRevision(Base):
             name="ck_estimate_revisions_amounts",
         ),
         CheckConstraint(
+            "discount_amount >= 0 AND tax_amount >= 0 AND taxable_basis >= 0",
+            name="ck_estimate_revisions_calculation_amounts",
+        ),
+        CheckConstraint(
+            "discount_type IS NULL OR discount_type IN ('fixed','percentage')",
+            name="ck_estimate_revisions_discount_type",
+        ),
+        CheckConstraint(
             "expires_at IS NULL OR expires_at > created_at",
             name="ck_estimate_revisions_expiry",
         ),
@@ -187,7 +196,21 @@ class EstimateRevision(Base):
     terms: Mapped[str | None] = mapped_column(Text)
     currency: Mapped[str] = mapped_column(String(3), nullable=False)
     subtotal_amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
+    discount_type: Mapped[str | None] = mapped_column(String(20))
+    discount_value: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
+    discount_amount: Mapped[Decimal] = mapped_column(
+        Numeric(18, 2), nullable=False, default=Decimal("0.00")
+    )
+    taxable_basis: Mapped[Decimal] = mapped_column(
+        Numeric(18, 2), nullable=False, default=Decimal("0.00")
+    )
+    tax_amount: Mapped[Decimal] = mapped_column(
+        Numeric(18, 2), nullable=False, default=Decimal("0.00")
+    )
     total_amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
+    calculation_evidence: Mapped[dict[str, object]] = mapped_column(
+        JSONB, nullable=False, default=dict
+    )
     issued_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_by_user_id: Mapped[UUID] = mapped_column(
@@ -235,6 +258,20 @@ class EstimateLineItem(Base):
     quantity: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False)
     unit_price: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False)
     line_total: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
+    discount_allocation: Mapped[Decimal] = mapped_column(
+        Numeric(18, 2), nullable=False, default=Decimal("0.00")
+    )
+    discounted_basis: Mapped[Decimal] = mapped_column(
+        Numeric(18, 2), nullable=False, default=Decimal("0.00")
+    )
+    tax_amount: Mapped[Decimal] = mapped_column(
+        Numeric(18, 2), nullable=False, default=Decimal("0.00")
+    )
+    taxable: Mapped[bool] = mapped_column(nullable=False, default=False)
+    tax_classification_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    tax_policy_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    tax_policy_version: Mapped[int | None] = mapped_column(Integer)
+    applied_rate_basis_points: Mapped[int | None] = mapped_column(Integer)
     currency: Mapped[str] = mapped_column(String(3), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
@@ -294,6 +331,10 @@ class EstimateCommercialSnapshotReference(Base):
     line_item_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     snapshot_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     snapshot_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    option_group_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    option_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    minimum_selections: Mapped[int | None] = mapped_column(Integer)
+    maximum_selections: Mapped[int | None] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
     )

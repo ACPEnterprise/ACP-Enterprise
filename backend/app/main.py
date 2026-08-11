@@ -28,6 +28,7 @@ from app.engineering_execution.controlled.router import (
     router as controlled_execution_router,
 )
 from app.engineering_execution.status.router import router as execution_status_router
+from app.estimates.router import router as estimates_router
 from app.events.router import router as events_router
 from app.events.schemas import BusinessEventCreate
 from app.events.service import BusinessEventService
@@ -135,6 +136,7 @@ app.include_router(jobs_router)
 app.include_router(operations_router)
 app.include_router(dispatch_router)
 app.include_router(price_book_router)
+app.include_router(estimates_router)
 app.include_router(communications_router)
 app.include_router(engineering_commands_router)
 app.include_router(engineering_reviews_router)

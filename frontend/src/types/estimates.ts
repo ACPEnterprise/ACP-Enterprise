@@ -1,0 +1,57 @@
+export interface EstimateLine {
+  id: string;
+  title: string;
+  description: string | null;
+  snapshot_id: string;
+  snapshot_digest: string;
+  quantity: string;
+  unit_price: string;
+  line_total: string;
+  currency: string;
+  option_group_id: string | null;
+  option_id: string | null;
+  discount_allocation: string;
+  discounted_basis: string;
+  tax_amount: string;
+  taxable: boolean;
+}
+
+export interface EstimateRevision {
+  id: string;
+  revision_number: number;
+  proposal_title: string;
+  customer_message: string | null;
+  terms: string | null;
+  currency: string;
+  subtotal_amount: string;
+  discount_type: "fixed" | "percentage" | null;
+  discount_value: string | null;
+  discount_amount: string;
+  taxable_basis: string;
+  tax_amount: string;
+  total_amount: string;
+  lines: EstimateLine[];
+}
+
+export interface Estimate {
+  id: string;
+  branch_id: string;
+  customer_id: string;
+  estimate_number: string;
+  status: string;
+  acceptance_status: string;
+  version: number;
+  current_revision: EstimateRevision;
+}
+
+export interface EstimateProposalInput {
+  branch_id: string;
+  customer_id: string;
+  service_location_id?: string;
+  proposal_title: string;
+  customer_message?: string;
+  terms?: string;
+  lines: Array<{ snapshot_id: string; title: string; description?: string }>;
+  discount_type?: "fixed" | "percentage";
+  discount_value?: string;
+}

@@ -226,6 +226,8 @@ class PriceBookService:
                 company_id=context.company.id,
                 code=payload.code,
                 name=payload.name.strip(),
+                minimum_selections=payload.minimum_selections,
+                maximum_selections=payload.maximum_selections,
                 created_by_user_id=context.user.id,
             )
             session.add(group)
@@ -922,6 +924,7 @@ class PriceBookService:
                     "Option group and option must be supplied together."
                 )
             selected_option: PriceBookOption | None = None
+            selected_option_group: PriceBookOptionGroup | None = None
             if payload.option_id is not None and payload.option_group_id is not None:
                 selected_option = await session.scalar(
                     select(PriceBookOption).where(
@@ -933,13 +936,14 @@ class PriceBookService:
                 )
                 if selected_option is None:
                     raise PriceBookNotFound("Selected customer option was not found.")
-                if not await session.scalar(
-                    select(PriceBookOptionGroup.id).where(
+                selected_option_group = await session.scalar(
+                    select(PriceBookOptionGroup).where(
                         PriceBookOptionGroup.id == payload.option_group_id,
                         PriceBookOptionGroup.company_id == context.company.id,
                         PriceBookOptionGroup.status == "active",
                     )
-                ):
+                )
+                if selected_option_group is None:
                     raise PriceBookNotFound("Selected option group was not found.")
             eligible_statuses = (
                 ("active", "superseded") if payload.historical else ("active",)
@@ -1023,6 +1027,14 @@ class PriceBookService:
                 if payload.option_group_id
                 else None,
                 "option_id": str(selected_option.id) if selected_option else None,
+                "option_group_constraints": (
+                    {
+                        "minimum_selections": selected_option_group.minimum_selections,
+                        "maximum_selections": selected_option_group.maximum_selections,
+                    }
+                    if selected_option_group
+                    else None
+                ),
             }
             digest = hashlib.sha256(
                 json.dumps(data, sort_keys=True, separators=(",", ":")).encode()

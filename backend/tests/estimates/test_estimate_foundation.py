@@ -5,10 +5,6 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import select, update
-from sqlalchemy.exc import DBAPIError
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from app.core.config import settings
 from app.customers.models import Customer, ServiceLocation
 from app.estimates.contracts import CreateEstimateSpec, EstimateLineSpec
@@ -29,6 +25,10 @@ from app.price_book.models import (
     PriceBookServiceItem,
     PriceBookTaxClassification,
 )
+from app.tax_policy.models import OperationalTaxPolicy
+from sqlalchemy import select, update
+from sqlalchemy.exc import DBAPIError
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 
 @pytest_asyncio.fixture
@@ -200,6 +200,59 @@ async def test_create_uses_immutable_price_book_snapshot(estimate_fixture) -> No
             select(BusinessEvent).where(BusinessEvent.entity_id == record.id)
         )
         assert event is not None and event.event_type == "estimate.created"
+
+
+@pytest.mark.asyncio
+async def test_discount_captures_operational_tax_policy_evidence(
+    estimate_fixture,
+) -> None:
+    factory, company, branch, actor, customer, location, snapshot = estimate_fixture
+    classification_id = (
+        snapshot.price_version.tax_classification_id
+        if hasattr(snapshot, "price_version")
+        else None
+    )
+    async with factory() as session, session.begin():
+        if classification_id is None:
+            classification_id = await session.scalar(
+                select(PriceBookTaxClassification.id).where(
+                    PriceBookTaxClassification.company_id == company.id
+                )
+            )
+        assert classification_id is not None
+        snapshot.snapshot_data = {
+            "customer_description": "Customer service",
+            "tax_classification": {
+                "id": str(classification_id),
+                "taxable": True,
+            },
+        }
+        session.add(snapshot)
+        policy = OperationalTaxPolicy(
+            company_id=company.id,
+            branch_id=branch.id,
+            tax_classification_id=classification_id,
+            currency="USD",
+            rate_basis_points=800,
+            version=3,
+            effective_at=snapshot.effective_at - timedelta(days=1),
+            created_by_user_id=actor.id,
+        )
+        session.add(policy)
+    async with factory() as session:
+        record = await EstimateService().create(
+            session,
+            spec=replace(
+                make_spec(company, branch, actor, customer, location, snapshot),
+                discount_type="percentage",
+                discount_value=Decimal(10),
+            ),
+        )
+        revision = record.current_revision
+        assert revision.discount_amount == Decimal("25.00")
+        assert revision.taxable_basis == Decimal("225.00")
+        assert revision.tax_amount == Decimal("18.00")
+        assert revision.total_amount == Decimal("243.00")
 
 
 @pytest.mark.asyncio

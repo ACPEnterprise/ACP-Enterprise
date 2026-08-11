@@ -98,6 +98,16 @@ class SnapshotRequest(PriceBookSchema):
 class OptionGroupCreate(PriceBookSchema):
     code: str = Field(min_length=1, max_length=80)
     name: str = Field(min_length=1, max_length=200)
+    minimum_selections: int = Field(default=0, ge=0)
+    maximum_selections: int = Field(default=1, ge=1)
+
+    @field_validator("maximum_selections")
+    @classmethod
+    def validate_bounds(cls, value: int, info) -> int:
+        minimum = info.data.get("minimum_selections", 0)
+        if value < minimum:
+            raise ValueError("Maximum selections must be at least minimum selections.")
+        return value
 
     @field_validator("code")
     @classmethod
@@ -208,6 +218,8 @@ class OptionGroupItem(PriceBookSchema):
     code: str
     name: str
     status: str
+    minimum_selections: int
+    maximum_selections: int
 
 
 class OptionItem(PriceBookSchema):

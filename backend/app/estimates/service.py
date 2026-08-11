@@ -2,8 +2,10 @@ import hashlib
 import json
 from collections.abc import Mapping
 from datetime import datetime, timezone
+from decimal import Decimal
 from uuid import UUID, uuid4
 
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.estimates.contracts import (
@@ -30,6 +32,7 @@ from app.estimates.models import (
     EstimateLineItem,
     EstimateRevision,
 )
+from app.estimates.pricing import PricingLine, PricingResult, calculate
 from app.estimates.repository import EstimateRepository
 from app.events.schemas import BusinessEventCreate
 from app.events.service import BusinessEventService
@@ -37,6 +40,7 @@ from app.events.types import EventType
 from app.jobs.repository import job_repository
 from app.jobs.service import JobService
 from app.price_book.models import PriceBookCommercialSnapshot
+from app.tax_policy.models import OperationalTaxPolicy
 
 
 class EstimateService:
@@ -216,7 +220,14 @@ class EstimateService:
                 created_at=now,
                 updated_at=now,
             )
-            total = self.repository.snapshot_total(snapshots)
+            pricing = await self._price_snapshots(
+                session,
+                company_id=spec.company_id,
+                branch_id=spec.branch_id,
+                snapshots=snapshots,
+                discount_type=spec.discount_type,
+                discount_value=spec.discount_value,
+            )
             revision = EstimateRevision(
                 id=uuid4(),
                 company_id=spec.company_id,
@@ -228,16 +239,25 @@ class EstimateService:
                 customer_message=spec.customer_message,
                 terms=spec.terms,
                 currency=next(iter(currencies)),
-                subtotal_amount=total,
-                total_amount=total,
+                subtotal_amount=pricing.subtotal,
+                discount_type=spec.discount_type,
+                discount_value=spec.discount_value,
+                discount_amount=pricing.discount,
+                taxable_basis=pricing.taxable_basis,
+                tax_amount=pricing.tax,
+                total_amount=pricing.total,
+                calculation_evidence=self._calculation_evidence(pricing),
                 expires_at=spec.expires_at,
                 created_by_user_id=spec.actor_user_id,
                 created_at=now,
             )
             lines: list[EstimateLineItem] = []
             refs: list[EstimateCommercialSnapshotReference] = []
+            priced_by_id = {line.key: line for line in pricing.lines}
             for position, line_spec in enumerate(spec.lines, start=1):
                 snapshot = by_id[line_spec.snapshot_id]
+                priced = priced_by_id[snapshot.id]
+                tax_data = self._tax_data(snapshot)
                 line = EstimateLineItem(
                     id=uuid4(),
                     company_id=spec.company_id,
@@ -248,6 +268,18 @@ class EstimateService:
                     quantity=snapshot.quantity,
                     unit_price=snapshot.unit_price,
                     line_total=snapshot.extended_amount,
+                    discount_allocation=priced.discount,
+                    discounted_basis=priced.basis,
+                    tax_amount=priced.tax,
+                    taxable=bool(tax_data.get("taxable", False)),
+                    tax_classification_id=UUID(str(tax_data["id"]))
+                    if tax_data.get("id")
+                    else None,
+                    tax_policy_id=priced.tax_policy_id,
+                    tax_policy_version=priced.tax_policy_version,
+                    applied_rate_basis_points=priced.rate_basis_points
+                    if priced.taxable
+                    else None,
                     currency=snapshot.currency,
                     created_at=now,
                 )
@@ -260,6 +292,7 @@ class EstimateService:
                         line_item_id=line.id,
                         snapshot_id=snapshot.id,
                         snapshot_digest=snapshot.digest,
+                        **self._option_evidence(snapshot),
                         created_at=now,
                     )
                 )
@@ -362,6 +395,14 @@ class EstimateService:
             now = datetime.now(timezone.utc)
             if spec.expires_at is not None and spec.expires_at <= now:
                 raise EstimateValidationError("Estimate expiry must be in the future.")
+            pricing = await self._price_snapshots(
+                session,
+                company_id=spec.company_id,
+                branch_id=spec.branch_id,
+                snapshots=snapshots,
+                discount_type=spec.discount_type,
+                discount_value=spec.discount_value,
+            )
             revision = EstimateRevision(
                 id=uuid4(),
                 company_id=spec.company_id,
@@ -373,8 +414,14 @@ class EstimateService:
                 customer_message=spec.customer_message,
                 terms=spec.terms,
                 currency=next(iter(currencies)),
-                subtotal_amount=self.repository.snapshot_total(snapshots),
-                total_amount=self.repository.snapshot_total(snapshots),
+                subtotal_amount=pricing.subtotal,
+                discount_type=spec.discount_type,
+                discount_value=spec.discount_value,
+                discount_amount=pricing.discount,
+                taxable_basis=pricing.taxable_basis,
+                tax_amount=pricing.tax,
+                total_amount=pricing.total,
+                calculation_evidence=self._calculation_evidence(pricing),
                 expires_at=spec.expires_at,
                 created_by_user_id=spec.actor_user_id,
                 created_at=now,
@@ -385,6 +432,7 @@ class EstimateService:
                 line_specs=spec.lines,
                 snapshots=by_id,
                 created_at=now,
+                pricing=pricing,
             )
             old_status = estimate.status
             old_acceptance = estimate.acceptance_status
@@ -733,14 +781,18 @@ class EstimateService:
         line_specs: tuple[EstimateLineSpec, ...],
         snapshots: Mapping[UUID, PriceBookCommercialSnapshot],
         created_at: datetime,
+        pricing: PricingResult,
     ) -> tuple[
         tuple[EstimateLineItem, ...],
         tuple[EstimateCommercialSnapshotReference, ...],
     ]:
         lines: list[EstimateLineItem] = []
         references: list[EstimateCommercialSnapshotReference] = []
+        priced_by_id = {line.key: line for line in pricing.lines}
         for position, line_spec in enumerate(line_specs, start=1):
             snapshot = snapshots[line_spec.snapshot_id]
+            priced = priced_by_id[snapshot.id]
+            tax_data = EstimateService._tax_data(snapshot)
             line = EstimateLineItem(
                 id=uuid4(),
                 company_id=company_id,
@@ -751,6 +803,18 @@ class EstimateService:
                 quantity=snapshot.quantity,
                 unit_price=snapshot.unit_price,
                 line_total=snapshot.extended_amount,
+                discount_allocation=priced.discount,
+                discounted_basis=priced.basis,
+                tax_amount=priced.tax,
+                taxable=bool(tax_data.get("taxable", False)),
+                tax_classification_id=UUID(str(tax_data["id"]))
+                if tax_data.get("id")
+                else None,
+                tax_policy_id=priced.tax_policy_id,
+                tax_policy_version=priced.tax_policy_version,
+                applied_rate_basis_points=priced.rate_basis_points
+                if priced.taxable
+                else None,
                 currency=snapshot.currency,
                 created_at=created_at,
             )
@@ -763,6 +827,7 @@ class EstimateService:
                     line_item_id=line.id,
                     snapshot_id=snapshot.id,
                     snapshot_digest=snapshot.digest,
+                    **EstimateService._option_evidence(snapshot),
                     created_at=created_at,
                 )
             )
@@ -804,6 +869,186 @@ class EstimateService:
         if result is None:
             raise EstimateConflictError("Estimate could not be reloaded.")
         return result
+
+    @staticmethod
+    def _option_evidence(snapshot: PriceBookCommercialSnapshot) -> dict[str, object]:
+        data = snapshot.snapshot_data
+        constraints = data.get("option_group_constraints")
+        group_id = data.get("option_group_id")
+        option_id = data.get("option_id")
+        if group_id is None and option_id is None:
+            return {
+                "option_group_id": None,
+                "option_id": None,
+                "minimum_selections": None,
+                "maximum_selections": None,
+            }
+        if not isinstance(constraints, dict) or group_id is None or option_id is None:
+            raise EstimateValidationError("Price Book option evidence is incomplete.")
+        try:
+            minimum = int(constraints["minimum_selections"])
+            maximum = int(constraints["maximum_selections"])
+            group_uuid = UUID(str(group_id))
+            option_uuid = UUID(str(option_id))
+        except (KeyError, TypeError, ValueError) as exc:
+            raise EstimateValidationError(
+                "Price Book option selection constraints are invalid."
+            ) from exc
+        if minimum < 0 or maximum < 1 or minimum > maximum:
+            raise EstimateValidationError(
+                "Price Book option selection constraints are invalid."
+            )
+        return {
+            "option_group_id": group_uuid,
+            "option_id": option_uuid,
+            "minimum_selections": minimum,
+            "maximum_selections": maximum,
+        }
+
+    async def _price_snapshots(
+        self,
+        session: AsyncSession,
+        *,
+        company_id: UUID,
+        branch_id: UUID,
+        snapshots: tuple[PriceBookCommercialSnapshot, ...],
+        discount_type: str | None,
+        discount_value: Decimal | None,
+    ) -> PricingResult:
+        groups: dict[UUID, tuple[int, int, set[UUID]]] = {}
+        lines: list[PricingLine] = []
+        for snapshot in snapshots:
+            option = self._option_evidence(snapshot)
+            group_id = option["option_group_id"]
+            option_id = option["option_id"]
+            if isinstance(group_id, UUID) and isinstance(option_id, UUID):
+                minimum_value = option["minimum_selections"]
+                maximum_value = option["maximum_selections"]
+                if not isinstance(minimum_value, int) or not isinstance(
+                    maximum_value, int
+                ):
+                    raise EstimateValidationError(
+                        "Price Book option selection constraints are invalid."
+                    )
+                minimum = minimum_value
+                maximum = maximum_value
+                prior = groups.get(group_id)
+                if prior is not None and prior[:2] != (minimum, maximum):
+                    raise EstimateValidationError(
+                        "Selected Price Book options contain conflicting group evidence."
+                    )
+                selected = prior[2] if prior else set()
+                selected.add(option_id)
+                groups[group_id] = (minimum, maximum, selected)
+
+            tax_data = snapshot.snapshot_data.get("tax_classification")
+            taxable = isinstance(tax_data, dict) and bool(tax_data.get("taxable"))
+            policy: OperationalTaxPolicy | None = None
+            if taxable:
+                classification_id = (
+                    tax_data.get("id") if isinstance(tax_data, dict) else None
+                )
+                if classification_id is None:
+                    raise EstimateValidationError(
+                        "Taxable Price Book evidence is incomplete."
+                    )
+                effective_at = snapshot.effective_at
+                candidates = tuple(
+                    (
+                        await session.scalars(
+                            select(OperationalTaxPolicy)
+                            .where(
+                                OperationalTaxPolicy.company_id == company_id,
+                                OperationalTaxPolicy.tax_classification_id
+                                == UUID(str(classification_id)),
+                                OperationalTaxPolicy.currency == snapshot.currency,
+                                OperationalTaxPolicy.effective_at <= effective_at,
+                                or_(
+                                    OperationalTaxPolicy.expires_at.is_(None),
+                                    OperationalTaxPolicy.expires_at > effective_at,
+                                ),
+                                or_(
+                                    OperationalTaxPolicy.branch_id == branch_id,
+                                    OperationalTaxPolicy.branch_id.is_(None),
+                                ),
+                            )
+                            .order_by(
+                                OperationalTaxPolicy.branch_id.desc().nullslast(),
+                                OperationalTaxPolicy.effective_at.desc(),
+                            )
+                        )
+                    ).all()
+                )
+                if candidates:
+                    preferred_branch = candidates[0].branch_id
+                    same_scope = tuple(
+                        candidate
+                        for candidate in candidates
+                        if candidate.branch_id == preferred_branch
+                        and candidate.effective_at == candidates[0].effective_at
+                    )
+                    if len(same_scope) != 1:
+                        raise EstimateValidationError(
+                            "Tax policy resolution is ambiguous."
+                        )
+                    policy = candidates[0]
+                elif discount_type is not None or group_id is not None:
+                    raise EstimateValidationError(
+                        "No effective operational tax policy exists for taxable pricing."
+                    )
+            lines.append(
+                PricingLine(
+                    key=snapshot.id,
+                    amount=snapshot.extended_amount,
+                    taxable=taxable,
+                    rate_basis_points=policy.rate_basis_points if policy else 0,
+                    tax_policy_id=policy.id if policy else None,
+                    tax_policy_version=policy.version if policy else None,
+                )
+            )
+        for minimum, maximum, selected in groups.values():
+            if not minimum <= len(selected) <= maximum:
+                raise EstimateValidationError(
+                    "Price Book option selection violates its immutable group constraints."
+                )
+        try:
+            return calculate(tuple(lines), discount_type, discount_value)
+        except ValueError as exc:
+            raise EstimateValidationError(str(exc)) from exc
+
+    @staticmethod
+    def _calculation_evidence(pricing: PricingResult) -> dict[str, object]:
+        return {
+            "rounding": "ROUND_HALF_EVEN",
+            "calculation_order": [
+                "line_amounts",
+                "subtotal",
+                "proportional_estimate_discount",
+                "discounted_taxable_basis",
+                "tax",
+                "total",
+            ],
+            "lines": [
+                {
+                    "snapshot_id": str(line.key),
+                    "discount_allocation": str(line.discount),
+                    "discounted_basis": str(line.basis),
+                    "tax": str(line.tax),
+                    "taxable": line.taxable,
+                    "tax_policy_id": str(line.tax_policy_id)
+                    if line.tax_policy_id
+                    else None,
+                    "tax_policy_version": line.tax_policy_version,
+                    "rate_basis_points": line.rate_basis_points,
+                }
+                for line in pricing.lines
+            ],
+        }
+
+    @staticmethod
+    def _tax_data(snapshot: PriceBookCommercialSnapshot) -> Mapping[str, object]:
+        value = snapshot.snapshot_data.get("tax_classification")
+        return value if isinstance(value, dict) else {}
 
 
 estimate_service = EstimateService()

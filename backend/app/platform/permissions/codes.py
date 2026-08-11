@@ -82,6 +82,13 @@ class CommunicationsPermission:
     ALL = frozenset({READ, MANAGE})
 
 
+class EstimatePermission:
+    READ = "COMPANY_ESTIMATE_READ"
+    MANAGE = "COMPANY_ESTIMATE_MANAGE"
+
+    ALL = frozenset({READ, MANAGE})
+
+
 class EngineeringCommandPermission:
     READ = "COMPANY_ENGINEERING_COMMAND_READ"
     MANAGE = "COMPANY_ENGINEERING_COMMAND_MANAGE"

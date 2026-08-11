@@ -23,6 +23,8 @@ class CreateEstimateSpec:
     terms: str | None
     expires_at: datetime | None
     lines: tuple[EstimateLineSpec, ...]
+    discount_type: str | None = None
+    discount_value: Decimal | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,6 +39,12 @@ class EstimateLineRecord:
     unit_price: Decimal
     line_total: Decimal
     currency: str
+    option_group_id: UUID | None = None
+    option_id: UUID | None = None
+    discount_allocation: Decimal = Decimal("0.00")
+    discounted_basis: Decimal = Decimal("0.00")
+    tax_amount: Decimal = Decimal("0.00")
+    taxable: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,6 +58,11 @@ class EstimateRevisionRecord:
     terms: str | None
     currency: str
     subtotal_amount: Decimal
+    discount_type: str | None
+    discount_value: Decimal | None
+    discount_amount: Decimal
+    taxable_basis: Decimal
+    tax_amount: Decimal
     total_amount: Decimal
     expires_at: datetime | None
     created_at: datetime
@@ -81,6 +94,8 @@ class CreateEstimateRevisionSpec:
     terms: str | None
     expires_at: datetime | None
     lines: tuple[EstimateLineSpec, ...]
+    discount_type: str | None = None
+    discount_value: Decimal | None = None
 
 
 @dataclass(frozen=True, slots=True)

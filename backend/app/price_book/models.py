@@ -349,6 +349,11 @@ class PriceBookOptionGroup(Base):
         CheckConstraint(
             "status IN ('active','archived')", name="ck_price_book_option_groups_status"
         ),
+        CheckConstraint(
+            "minimum_selections >= 0 AND maximum_selections >= 1 "
+            "AND minimum_selections <= maximum_selections",
+            name="ck_price_book_option_groups_selection_bounds",
+        ),
         UniqueConstraint("company_id", "code", name="uq_price_book_option_groups_code"),
         UniqueConstraint(
             "company_id", "id", name="uq_price_book_option_groups_company_id"
@@ -365,6 +370,8 @@ class PriceBookOptionGroup(Base):
     code: Mapped[str] = mapped_column(String(80), nullable=False)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
+    minimum_selections: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    maximum_selections: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     created_by_user_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("users.id", ondelete="RESTRICT"),
