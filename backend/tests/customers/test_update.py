@@ -72,10 +72,12 @@ async def test_customer_update_service_contract_events_and_idempotency(
         assert unchanged.status_code == 200
         assert unchanged.json()["updated_at"] == updated["updated_at"]
 
-        unknown = await client.patch(
-            f"/api/v1/customers/{customer['id']}", json={"notes": "not allowed"}
+        context_update = await client.patch(
+            f"/api/v1/customers/{customer['id']}",
+            json={"notes": "Launch-safe internal context"},
         )
-        assert unknown.status_code == 422
+        assert context_update.status_code == 200
+        assert context_update.json()["notes"] == "Launch-safe internal context"
 
     async with factory() as session:
         events = list(
@@ -95,6 +97,7 @@ async def test_customer_update_service_contract_events_and_idempotency(
     assert [event.event_type for event in events] == [
         "customer.updated",
         "customer.status_changed",
+        "customer.updated",
     ]
     assert events[0].payload["changed_fields"] == [
         "customer_type",
@@ -103,6 +106,7 @@ async def test_customer_update_service_contract_events_and_idempotency(
         "preferred_contact_method",
         "status",
     ]
+    assert events[2].payload["changed_fields"] == ["notes"]
 
 
 @pytest.mark.asyncio

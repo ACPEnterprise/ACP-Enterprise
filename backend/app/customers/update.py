@@ -5,7 +5,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.customers.detail import CustomerDetailService, customer_detail_service
 from app.customers.errors import CustomerNotFoundError, CustomerStatusTransitionError
-from app.customers.normalization import normalize_search_text
+from app.customers.normalization import (
+    normalize_email,
+    normalize_phone,
+    normalize_search_text,
+)
 from app.customers.repository import CustomerRepository
 from app.customers.schemas import (
     CustomerDetailResponse,
@@ -16,7 +20,6 @@ from app.events.schemas import BusinessEventCreate
 from app.events.service import BusinessEventService
 from app.events.types import EventType
 from app.platform.permissions.authorization import AuthorizationContext
-
 
 ALLOWED_STATUS_TRANSITIONS: dict[CustomerStatus, frozenset[CustomerStatus]] = {
     CustomerStatus.PROSPECT: frozenset(
@@ -61,6 +64,24 @@ class CustomerUpdateService:
             if "display_name" in requested:
                 requested["normalized_name"] = normalize_search_text(
                     str(requested["display_name"])
+                )
+            if "primary_phone" in requested:
+                requested["normalized_primary_phone"] = (
+                    normalize_phone(str(requested["primary_phone"]))
+                    if requested["primary_phone"]
+                    else None
+                )
+            if "secondary_phone" in requested:
+                requested["normalized_secondary_phone"] = (
+                    normalize_phone(str(requested["secondary_phone"]))
+                    if requested["secondary_phone"]
+                    else None
+                )
+            if "email" in requested:
+                requested["normalized_email"] = (
+                    normalize_email(str(requested["email"]))
+                    if requested["email"]
+                    else None
                 )
             changed_fields = CustomerRepository.apply_updates(customer, requested)
             business_fields = sorted(

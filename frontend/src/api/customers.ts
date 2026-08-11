@@ -2,6 +2,8 @@ import { apiClient } from "./client";
 import type {
   CustomerContact,
   CustomerContactInput,
+  CustomerConsent,
+  CustomerConsentInput,
   CustomerCreateResponse,
   CustomerDetail,
   CustomerInput,
@@ -154,7 +156,11 @@ function normalizeCustomerDetail(
   const locations = Array.isArray(customer.properties)
     ? recordArray(customer.properties)
     : recordArray(customer.locations);
-  const notes = Array.isArray(customer.notes) ? recordArray(customer.notes) : [];
+  const notes = Array.isArray(customer.note_history)
+    ? recordArray(customer.note_history)
+    : Array.isArray(customer.notes)
+      ? recordArray(customer.notes)
+      : [];
   return {
     ...summary,
     properties: locations.map(normalizeProperty),
@@ -197,6 +203,15 @@ function customerUpdatePayload(
   if (input.preferred_contact_method !== undefined) {
     payload.preferred_contact_method = input.preferred_contact_method;
   }
+  if (input.source !== undefined) payload.marketing_source = normalizeCustomerSource(input.source);
+  if (input.internal_notes !== undefined) payload.notes = input.internal_notes;
+  if (input.first_name !== undefined) payload.first_name = input.first_name;
+  if (input.last_name !== undefined) payload.last_name = input.last_name;
+  if (input.business_name !== undefined) payload.business_name = input.business_name;
+  if (input.primary_phone !== undefined) payload.primary_phone = input.primary_phone;
+  if (input.secondary_phone !== undefined) payload.secondary_phone = input.secondary_phone;
+  if (input.email !== undefined) payload.email = input.email;
+  if (input.is_vip !== undefined) payload.is_vip = input.is_vip;
   if (
     input.status === "prospect" ||
     input.status === "active" ||
@@ -250,7 +265,7 @@ export async function createCustomer(
     customer: CustomerDetailResponse;
     duplicate_warnings: DuplicateMatchResponse[];
   }>(
-    "/api/v1/customers",
+    "/api/v1/customers/intake",
     input,
   );
   return {
@@ -272,11 +287,8 @@ export async function updateCustomer(
   return normalizeCustomerDetail(response.data);
 }
 
-export async function archiveCustomer(customerId: string): Promise<CustomerDetail> {
-  const response = await apiClient.post<CustomerDetailResponse>(
-    `/api/v1/customers/${customerId}/archive`,
-  );
-  return normalizeCustomerDetail(response.data);
+export async function archiveCustomer(customerId: string): Promise<void> {
+  await apiClient.post(`/api/v1/customers/${customerId}/archive`);
 }
 
 export async function checkCustomerDuplicates(
@@ -293,11 +305,11 @@ export async function addCustomerProperty(
   customerId: string,
   input: CustomerPropertyInput,
 ): Promise<CustomerProperty> {
-  const response = await apiClient.post<CustomerProperty>(
-    `/api/v1/customers/${customerId}/properties`,
-    input,
+  const response = await apiClient.post<CustomerResponseRecord>(
+    `/api/v1/customers/${customerId}/locations`,
+    propertyPayload(input),
   );
-  return response.data;
+  return normalizeProperty(response.data);
 }
 
 export async function updateCustomerProperty(
@@ -305,22 +317,22 @@ export async function updateCustomerProperty(
   propertyId: string,
   input: Partial<CustomerPropertyInput>,
 ): Promise<CustomerProperty> {
-  const response = await apiClient.patch<CustomerProperty>(
-    `/api/v1/customers/${customerId}/properties/${propertyId}`,
-    input,
+  const response = await apiClient.patch<CustomerResponseRecord>(
+    `/api/v1/customers/${customerId}/locations/${propertyId}`,
+    propertyPayload(input),
   );
-  return response.data;
+  return normalizeProperty(response.data);
 }
 
 export async function addCustomerContact(
   customerId: string,
   input: CustomerContactInput,
 ): Promise<CustomerContact> {
-  const response = await apiClient.post<CustomerContact>(
+  const response = await apiClient.post<CustomerResponseRecord>(
     `/api/v1/customers/${customerId}/contacts`,
-    input,
+    contactPayload(input),
   );
-  return response.data;
+  return normalizeContact(response.data);
 }
 
 export async function updateCustomerContact(
@@ -328,11 +340,11 @@ export async function updateCustomerContact(
   contactId: string,
   input: Partial<CustomerContactInput>,
 ): Promise<CustomerContact> {
-  const response = await apiClient.patch<CustomerContact>(
+  const response = await apiClient.patch<CustomerResponseRecord>(
     `/api/v1/customers/${customerId}/contacts/${contactId}`,
-    input,
+    contactPayload(input),
   );
-  return response.data;
+  return normalizeContact(response.data);
 }
 
 export async function addCustomerNote(
@@ -342,6 +354,64 @@ export async function addCustomerNote(
   const response = await apiClient.post<CustomerNote>(
     `/api/v1/customers/${customerId}/notes`,
     { body },
+  );
+  return response.data;
+}
+
+function contactPayload(
+  input: Partial<CustomerContactInput>,
+): CustomerResponseRecord {
+  const payload: CustomerResponseRecord = {};
+  if (input.first_name !== undefined) payload.first_name = input.first_name;
+  if (input.last_name !== undefined) payload.last_name = input.last_name ?? "Contact";
+  if (input.relationship_or_role !== undefined) {
+    payload.relationship_or_role = input.relationship_or_role;
+  }
+  if (input.phone !== undefined) payload.mobile_phone = input.phone;
+  if (input.email !== undefined) payload.email = input.email;
+  if (input.is_preferred !== undefined) payload.is_preferred = input.is_preferred;
+  if (input.can_approve_work !== undefined) {
+    payload.can_approve_work = input.can_approve_work;
+  }
+  return payload;
+}
+
+function propertyPayload(
+  input: Partial<CustomerPropertyInput>,
+): CustomerResponseRecord {
+  const payload: CustomerResponseRecord = {};
+  if (input.address_line_1 !== undefined) payload.address = input.address_line_1;
+  if (input.address_line_2 !== undefined) payload.address_line_2 = input.address_line_2;
+  if (input.city !== undefined) payload.city = input.city;
+  if (input.state !== undefined) payload.state = input.state;
+  if (input.postal_code !== undefined) payload.postal_code = input.postal_code;
+  if (input.gate_access_instructions !== undefined) {
+    payload.gate_access_instructions = input.gate_access_instructions;
+  }
+  if (input.property_notes !== undefined) payload.property_notes = input.property_notes;
+  if (input.property_type !== undefined) payload.property_type = input.property_type;
+  if (input.water_shutoff_location !== undefined) payload.water_shutoff_location = input.water_shutoff_location;
+  if (input.sewer_septic !== undefined) payload.sewer_septic = input.sewer_septic;
+  if (input.is_primary !== undefined) payload.is_primary = input.is_primary;
+  return payload;
+}
+
+export async function listCustomerConsents(
+  customerId: string,
+): Promise<CustomerConsent[]> {
+  const response = await apiClient.get<CustomerConsent[]>(
+    `/api/v1/customers/${customerId}/consents`,
+  );
+  return response.data;
+}
+
+export async function recordCustomerConsent(
+  customerId: string,
+  input: CustomerConsentInput,
+): Promise<CustomerConsent> {
+  const response = await apiClient.post<CustomerConsent>(
+    `/api/v1/customers/${customerId}/consents`,
+    input,
   );
   return response.data;
 }

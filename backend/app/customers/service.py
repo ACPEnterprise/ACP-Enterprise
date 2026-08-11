@@ -212,6 +212,8 @@ class CustomerService:
                 is_preferred=contact_data.is_preferred,
                 active=contact_data.active,
                 notes=contact_data.notes,
+                relationship_or_role=contact_data.relationship_or_role,
+                can_approve_work=contact_data.can_approve_work,
             )
             session.add(contact)
             await session.flush()
@@ -321,6 +323,8 @@ class CustomerService:
             is_preferred=data.is_preferred,
             active=data.active,
             notes=data.notes,
+            relationship_or_role=data.relationship_or_role,
+            can_approve_work=data.can_approve_work,
         )
         session.add(contact)
         await session.flush()
@@ -368,6 +372,8 @@ class CustomerService:
                 is_preferred=data.is_preferred,
                 active=data.active,
                 notes=data.notes,
+                relationship_or_role=data.relationship_or_role,
+                can_approve_work=data.can_approve_work,
             )
             session.add(contact)
             await session.flush()
@@ -525,6 +531,10 @@ class CustomerService:
     ) -> ServiceLocation:
         async with session.begin():
             customer = await self._customer_for_update(session, context, customer_id)
+            if data.is_primary:
+                await CustomerRepository.clear_primary_locations(
+                    session, customer_id=customer.id
+                )
             values = data.model_dump()
             location = ServiceLocation(
                 customer_id=customer.id,
@@ -577,6 +587,14 @@ class CustomerService:
                 }
             )
             validated = candidate.model_dump()
+            if validated["is_primary"] and validated["active"]:
+                await CustomerRepository.clear_primary_locations(
+                    session,
+                    customer_id=customer.id,
+                    exclude_id=location.id,
+                )
+            if not validated["active"]:
+                validated["is_primary"] = False
             changed_fields: list[str] = []
             was_active = location.active
             for field in changes:

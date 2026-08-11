@@ -107,10 +107,31 @@ export interface CustomerNote {
   created_at: string;
 }
 
+export type ConsentChannel = "sms" | "email";
+export type ConsentDecision = "granted" | "withdrawn";
+export interface CustomerConsent {
+  id: string;
+  customer_id: string;
+  channel: ConsentChannel;
+  decision: ConsentDecision;
+  source: string;
+  reason: string | null;
+  recorded_at: string;
+  recorded_by_user_id: string | null;
+  branch_id: string | null;
+}
+export interface CustomerConsentInput {
+  channel: ConsentChannel;
+  decision: ConsentDecision;
+  source: string;
+  reason: string | null;
+}
+
 export interface CustomerDetail extends CustomerSummary {
   properties: CustomerProperty[];
   contacts: CustomerContact[];
   notes: CustomerNote[];
+  consents?: CustomerConsent[];
 }
 
 export interface DuplicateMatch extends CustomerSummary {

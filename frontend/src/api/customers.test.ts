@@ -2,7 +2,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { normalizeCustomerSource } from "../types/customers";
 import { apiClient } from "./client";
-import { getCustomer, listCustomers, updateCustomer } from "./customers";
+import {
+  addCustomerContact,
+  addCustomerProperty,
+  createCustomer,
+  getCustomer,
+  listCustomers,
+  updateCustomer,
+} from "./customers";
 
 const customerResponse = {
   id: "customer-1",
@@ -145,7 +152,7 @@ describe("customer response normalization", () => {
     ]);
   });
 
-  it("limits customer edits to the current authoritative update contract", async () => {
+  it("maps launch customer edits to the expanded authoritative update contract", async () => {
     const patch = vi.spyOn(apiClient, "patch").mockResolvedValue({
       data: { ...customerResponse, properties: [], contacts: [], notes: [] },
     } as never);
@@ -165,9 +172,40 @@ describe("customer response normalization", () => {
 
     expect(patch).toHaveBeenCalledWith("/api/v1/customers/customer-1", {
       customer_type: "residential",
+      business_name: "Preview Customer",
       display_name: "Preview Customer",
+      email: "preview@example.com",
+      first_name: null,
+      last_name: null,
+      marketing_source: "legacy_import",
+      notes: "Not part of the bounded update contract",
       preferred_contact_method: "phone",
+      primary_phone: "555-0100",
       status: "active",
     });
+  });
+
+  it("uses the launch intake and authoritative child-resource contracts", async () => {
+    const post = vi.spyOn(apiClient, "post").mockResolvedValueOnce({
+      data: {
+        customer: { ...customerResponse, locations: [], contacts: [], note_history: [] },
+        duplicate_warnings: [],
+      },
+    } as never).mockResolvedValueOnce({
+      data: { id: "contact-1", customer_id: "customer-1", first_name: "Alex", last_name: "Rivera", mobile_phone: "555-0100", email: null, is_preferred: true, can_approve_work: true, created_at: "now", updated_at: "now" },
+    } as never).mockResolvedValueOnce({
+      data: { id: "location-1", customer_id: "customer-1", address: "10 Main", city: "Albany", state: "NY", postal_code: "12207", country: "US", property_type: "condo", is_primary: true, active: true, created_at: "now", updated_at: "now" },
+    } as never);
+    await createCustomer({
+      customer_type: "individual", first_name: "Alex", last_name: "Rivera",
+      business_name: null, primary_phone: "555-0100", secondary_phone: null,
+      email: null, preferred_contact_method: "phone", status: "active",
+      source: "referral", is_vip: false, internal_notes: null,
+    });
+    await addCustomerContact("customer-1", { first_name: "Alex", last_name: "Rivera", relationship_or_role: "Owner", phone: "555-0100", email: null, is_preferred: true, can_approve_work: true });
+    await addCustomerProperty("customer-1", { address_line_1: "10 Main", address_line_2: null, city: "Albany", state: "NY", postal_code: "12207", property_type: "condo", gate_access_instructions: null, water_shutoff_location: null, sewer_septic: "sewer", property_notes: null, is_primary: true });
+    expect(post.mock.calls[0]?.[0]).toBe("/api/v1/customers/intake");
+    expect(post.mock.calls[1]).toEqual(["/api/v1/customers/customer-1/contacts", expect.objectContaining({ mobile_phone: "555-0100", relationship_or_role: "Owner", can_approve_work: true })]);
+    expect(post.mock.calls[2]).toEqual(["/api/v1/customers/customer-1/locations", expect.objectContaining({ address: "10 Main", property_type: "condo", is_primary: true })]);
   });
 });

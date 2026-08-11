@@ -44,6 +44,11 @@ describe("CustomerDetailView", () => {
       isError: false,
       data: customer,
     } as never);
+    vi.mocked(customerHooks.useCustomerConsents).mockReturnValue({
+      isError: false,
+      isSuccess: true,
+      data: [],
+    } as never);
   });
 
   it("uses the shared accessible confirmation before archiving", async () => {
@@ -52,6 +57,7 @@ describe("CustomerDetailView", () => {
       archive: mutation(archive),
       update: mutation(),
       addNote: mutation(),
+      recordConsent: mutation(),
       addProperty: mutation(),
       updateProperty: mutation(),
       addContact: mutation(),
@@ -124,6 +130,7 @@ describe("CustomerDetailView", () => {
       archive: mutation(),
       update: mutation(),
       addNote: mutation(),
+      recordConsent: mutation(),
       addProperty: mutation(),
       updateProperty: mutation(),
       addContact: mutation(),
@@ -135,5 +142,42 @@ describe("CustomerDetailView", () => {
     expect(screen.getByText("Preview Customer")).toBeInTheDocument();
     expect(screen.getByText("10 Preview Street")).toBeInTheDocument();
     expect(screen.getByText("unknown · unknown")).toBeInTheDocument();
+  });
+
+  it("records explicit consent and renders consent-safe history", async () => {
+    const recordConsent = vi.fn();
+    vi.mocked(customerHooks.useCustomerConsents).mockReturnValue({
+      isError: false,
+      isSuccess: true,
+      data: [
+        {
+          id: "consent-1",
+          customer_id: customer.id,
+          channel: "sms",
+          decision: "withdrawn",
+          source: "customer_request",
+          reason: null,
+          recorded_at: "2026-08-07T12:00:00Z",
+          recorded_by_user_id: "user-1",
+          branch_id: "branch-1",
+        },
+      ],
+    } as never);
+    vi.mocked(customerHooks.useCustomerMutations).mockReturnValue({
+      archive: mutation(), update: mutation(), addNote: mutation(),
+      recordConsent: mutation(recordConsent), addProperty: mutation(),
+      updateProperty: mutation(), addContact: mutation(), updateContact: mutation(),
+    } as never);
+
+    render(<CustomerDetailView customerId={customer.id} onBack={vi.fn()} />);
+    expect(screen.getByText("SMS")).toBeInTheDocument();
+    expect(screen.getByText(/withdrawn/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Record consent" }));
+    expect(recordConsent).toHaveBeenCalledWith({
+      channel: "sms",
+      decision: "granted",
+      source: "staff_confirmed",
+      reason: null,
+    });
   });
 });

@@ -27,6 +27,18 @@ class CustomerRepository:
             "preferred_contact_method",
             "normalized_name",
             "updated_at",
+            "marketing_source",
+            "notes",
+            "first_name",
+            "last_name",
+            "business_name",
+            "primary_phone",
+            "normalized_primary_phone",
+            "secondary_phone",
+            "normalized_secondary_phone",
+            "email",
+            "normalized_email",
+            "is_vip",
         }
         unexpected = changes.keys() - allowed_fields
         if unexpected:
@@ -104,6 +116,7 @@ class CustomerRepository:
             statement = statement.options(
                 selectinload(Customer.contacts),
                 selectinload(Customer.locations),
+                selectinload(Customer.notes_history),
             )
         if for_update:
             statement = statement.with_for_update()
@@ -128,6 +141,7 @@ class CustomerRepository:
                 joinedload(Customer.primary_contact),
                 selectinload(Customer.contacts),
                 selectinload(Customer.locations),
+                selectinload(Customer.notes_history),
             )
         )
         return await session.scalar(statement)
@@ -382,6 +396,30 @@ class CustomerRepository:
         if for_update:
             statement = statement.with_for_update()
         return await session.scalar(statement)
+
+    @staticmethod
+    async def clear_primary_locations(
+        session: AsyncSession,
+        *,
+        customer_id: UUID,
+        exclude_id: UUID | None = None,
+    ) -> None:
+        records = list(
+            (
+                await session.scalars(
+                    select(ServiceLocation)
+                    .where(
+                        ServiceLocation.customer_id == customer_id,
+                        ServiceLocation.is_primary.is_(True),
+                        ServiceLocation.active.is_(True),
+                    )
+                    .with_for_update()
+                )
+            ).all()
+        )
+        for record in records:
+            if record.id != exclude_id:
+                record.is_primary = False
 
     @staticmethod
     async def list_locations(

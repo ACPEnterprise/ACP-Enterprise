@@ -9,6 +9,7 @@ from app.customers.schemas import (
     ContactResponse,
     CustomerDetailMetadata,
     CustomerDetailResponse,
+    CustomerNoteResponse,
     CustomerResponse,
     CustomerStatus,
     CustomerType,
@@ -70,6 +71,14 @@ class CustomerDetailService:
                     location_responses, locations, strict=True
                 )
                 if not location.active or location.archived_at is not None
+            ],
+            note_history=[
+                CustomerNoteResponse.model_validate(note)
+                for note in sorted(
+                    customer.notes_history,
+                    key=lambda note: (note.created_at, note.id),
+                    reverse=True,
+                )
             ],
             metadata=CustomerDetailMetadata(
                 company_id=customer.company_id,

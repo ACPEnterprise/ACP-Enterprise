@@ -2,7 +2,7 @@ import { useState, type FormEvent } from "react";
 import { ArrowLeft, Edit3, MapPin, Plus, Star, UserRound } from "lucide-react";
 
 import { getApiErrorMessage, getOperatorApiError } from "../../api/errors";
-import { useCustomerDetail, useCustomerMutations } from "../../hooks/useCustomers";
+import { useCustomerConsents, useCustomerDetail, useCustomerMutations } from "../../hooks/useCustomers";
 import {
   formatCustomerSource,
   type CustomerContact,
@@ -35,12 +35,14 @@ function displayName(customer: {
 export function CustomerDetailView({ customerId, onBack }: CustomerDetailViewProps) {
   const detail = useCustomerDetail(customerId);
   const mutations = useCustomerMutations(customerId);
+  const consents = useCustomerConsents(customerId);
   const [isEditingCustomer, setIsEditingCustomer] = useState(false);
   const [editingProperty, setEditingProperty] = useState<CustomerProperty | "new" | null>(null);
   const [editingContact, setEditingContact] = useState<CustomerContact | "new" | null>(null);
   const [noteBody, setNoteBody] = useState("");
   const [actionError, setActionError] = useState<unknown>(null);
   const [confirmArchive, setConfirmArchive] = useState(false);
+  const [consentChannel, setConsentChannel] = useState<"sms" | "email">("sms");
 
   if (detail.isLoading) {
     return <Card className="p-ui-5 text-content-muted">Loading customer…</Card>;
@@ -115,6 +117,25 @@ export function CustomerDetailView({ customerId, onBack }: CustomerDetailViewPro
             />
           </div>
         )}
+      </Card>
+
+      <Card className="p-ui-4 sm:p-ui-6">
+        <p className="text-sm text-action-primary">Communication consent</p>
+        <h3 className="mt-1 text-xl font-semibold">Consent-safe history</h3>
+        {!archived && (
+          <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto_auto]">
+            <select className="min-h-11 rounded-lg border border-stroke-strong bg-surface px-3" value={consentChannel} onChange={(event) => setConsentChannel(event.target.value as "sms" | "email")} aria-label="Consent channel">
+              <option value="sms">SMS</option><option value="email">Email</option>
+            </select>
+            <Button type="button" disabled={mutations.recordConsent.isPending} onClick={() => mutations.recordConsent.mutate({ channel: consentChannel, decision: "granted", source: "staff_confirmed", reason: null })}>Record consent</Button>
+            <Button type="button" variant="outline" disabled={mutations.recordConsent.isPending} onClick={() => mutations.recordConsent.mutate({ channel: consentChannel, decision: "withdrawn", source: "customer_request", reason: null })}>Record withdrawal</Button>
+          </div>
+        )}
+        {consents.isError && <Alert variant="danger" title="Consent history unavailable">{getApiErrorMessage(consents.error)}</Alert>}
+        <div className="mt-4 space-y-2">
+          {(consents.data ?? []).map((consent) => <div key={consent.id} className="rounded-lg border border-stroke p-3 text-sm"><span className="font-medium uppercase">{consent.channel}</span> · {consent.decision.replaceAll("_", " ")}<p className="mt-1 text-xs text-content-muted">{new Date(consent.recorded_at).toLocaleString()} · {consent.source.replaceAll("_", " ")}</p></div>)}
+          {consents.isSuccess && consents.data.length === 0 && <p className="text-sm text-content-muted">No consent decisions have been recorded.</p>}
+        </div>
       </Card>
 
       {Boolean(actionError) && <Alert variant="danger" title="Customer update failed">{getApiErrorMessage(actionError)}</Alert>}

@@ -15,16 +15,18 @@ from app.events.models import BusinessEvent
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.users.models import User
 
-
 SAFE_METADATA_FIELDS = frozenset(
     {
         "changed_fields",
+        "channel",
         "customer_id",
         "customer_number",
         "customer_type",
+        "decision",
         "is_preferred",
         "previous_status",
         "status",
+        "source",
     }
 )
 
@@ -150,6 +152,12 @@ class CustomerTimelineService:
             return "Service Location updated"
         if event.event_type == "service_location.deactivated":
             return "Service Location deactivated"
+        if event.event_type == "customer.note_added":
+            return "Internal note added"
+        if event.event_type == "customer.consent_recorded":
+            channel = str(event.payload.get("channel", "communication")).upper()
+            decision = str(event.payload.get("decision", "updated")).replace("_", " ")
+            return f"{channel} consent {decision}"
         if event.event_type.startswith("authentication."):
             return "Customer access authentication event"
         return event.event_type.replace(".", " ").replace("_", " ").title()

@@ -178,6 +178,7 @@ class EventType(str, Enum):
     SERVICE_LOCATION_DEACTIVATED = "service_location.deactivated"
     CUSTOMER_BILLING_ADDRESS_CREATED = "customer.billing_address_created"
     CUSTOMER_NOTE_ADDED = "customer.note_added"
+    CUSTOMER_CONSENT_RECORDED = "customer.consent_recorded"
     LEAD_CREATED = "lead.created"
     LEAD_QUALIFIED = "lead.qualified"
     LEAD_CONVERTED = "lead.converted"

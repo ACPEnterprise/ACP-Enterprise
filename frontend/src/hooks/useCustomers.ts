@@ -9,6 +9,8 @@ import {
   createCustomer,
   getCustomer,
   listCustomers,
+  listCustomerConsents,
+  recordCustomerConsent,
   updateCustomer,
   updateCustomerContact,
   updateCustomerProperty,
@@ -24,6 +26,13 @@ export function useCustomerDetail(customerId: string | null) {
   return useQuery({
     queryKey: ["customer", customerId],
     queryFn: () => getCustomer(customerId as string),
+    enabled: Boolean(customerId),
+  });
+}
+export function useCustomerConsents(customerId: string | null) {
+  return useQuery({
+    queryKey: ["customer-consents", customerId],
+    queryFn: () => listCustomerConsents(customerId as string),
     enabled: Boolean(customerId),
   });
 }
@@ -85,6 +94,15 @@ export function useCustomerMutations(customerId?: string) {
     addNote: useMutation({
       mutationFn: (body: string) => addCustomerNote(customerId as string, body),
       onSuccess: () => refresh(customerId),
+    }),
+    recordConsent: useMutation({
+      mutationFn: (input: Parameters<typeof recordCustomerConsent>[1]) =>
+        recordCustomerConsent(customerId as string, input),
+      onSuccess: async () => {
+        await queryClient.invalidateQueries({
+          queryKey: ["customer-consents", customerId],
+        });
+      },
     }),
   };
 }

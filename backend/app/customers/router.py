@@ -6,22 +6,31 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.customers.detail import customer_detail_service
 from app.customers.errors import CustomerError, CustomerStatusTransitionError
+from app.customers.launch import customer_launch_service
 from app.customers.lifecycle import customer_lifecycle_service
 from app.customers.schemas import (
     ContactCreate,
     ContactResponse,
     ContactUpdate,
+    CustomerConsentCreate,
+    CustomerConsentResponse,
     CustomerCreate,
     CustomerDetail,
     CustomerDetailResponse,
-    CustomerListResponse,
+    CustomerIntakeCreate,
+    CustomerIntakeResponse,
     CustomerLifecycleResponse,
+    CustomerListResponse,
+    CustomerNoteCreate,
+    CustomerNoteResponse,
     CustomerResponse,
     CustomerSearchQuery,
     CustomerSearchResponse,
     CustomerStatusUpdate,
-    CustomerUpdateRequest,
     CustomerTimelineResponse,
+    CustomerUpdateRequest,
+    DuplicateCheckRequest,
+    DuplicateCheckResponse,
     ServiceLocationCreate,
     ServiceLocationResponse,
     ServiceLocationUpdate,
@@ -34,7 +43,6 @@ from app.database.session import get_database_session
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import CustomerPermission
 from app.platform.permissions.dependencies import require_permission
-
 
 router = APIRouter(prefix="/api/v1/customers", tags=["Customers"])
 DatabaseSession = Annotated[AsyncSession, Depends(get_database_session)]
@@ -93,6 +101,36 @@ async def create_customer(
 ) -> CustomerDetail:
     record = await customer_service.create_customer(session, context=context, data=data)
     return CustomerDetail.model_validate(record)
+
+
+@router.post(
+    "/intake",
+    response_model=CustomerIntakeResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def intake_customer(
+    data: CustomerIntakeCreate,
+    context: CustomerManageContext,
+    session: DatabaseSession,
+) -> CustomerIntakeResponse:
+    try:
+        return await customer_launch_service.intake(session, context=context, data=data)
+    except CustomerError as error:
+        raise not_found(error) from error
+
+
+@router.post("/duplicate-check", response_model=DuplicateCheckResponse)
+async def check_customer_duplicates(
+    data: DuplicateCheckRequest,
+    context: CustomerReadContext,
+    session: DatabaseSession,
+) -> DuplicateCheckResponse:
+    try:
+        return await customer_launch_service.duplicate_check(
+            session, context=context, data=data
+        )
+    except CustomerError as error:
+        raise not_found(error) from error
 
 
 @router.get("/search", response_model=CustomerSearchResponse)
@@ -326,3 +364,59 @@ async def update_location(
     except CustomerError as error:
         raise not_found(error) from error
     return ServiceLocationResponse.model_validate(record)
+
+
+@router.post(
+    "/{customer_id}/notes",
+    response_model=CustomerNoteResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def add_customer_note(
+    customer_id: UUID,
+    data: CustomerNoteCreate,
+    context: CustomerManageContext,
+    session: DatabaseSession,
+) -> CustomerNoteResponse:
+    try:
+        note = await customer_launch_service.add_note(
+            session,
+            context=context,
+            customer_id=customer_id,
+            data=data,
+        )
+    except CustomerError as error:
+        raise not_found(error) from error
+    return CustomerNoteResponse.model_validate(note)
+
+
+@router.get("/{customer_id}/consents", response_model=list[CustomerConsentResponse])
+async def list_customer_consents(
+    customer_id: UUID,
+    context: CustomerReadContext,
+    session: DatabaseSession,
+) -> list[CustomerConsentResponse]:
+    try:
+        return await customer_launch_service.list_consents(
+            session, context=context, customer_id=customer_id
+        )
+    except CustomerError as error:
+        raise not_found(error) from error
+
+
+@router.post(
+    "/{customer_id}/consents",
+    response_model=CustomerConsentResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def record_customer_consent(
+    customer_id: UUID,
+    data: CustomerConsentCreate,
+    context: CustomerManageContext,
+    session: DatabaseSession,
+) -> CustomerConsentResponse:
+    try:
+        return await customer_launch_service.record_consent(
+            session, context=context, customer_id=customer_id, data=data
+        )
+    except CustomerError as error:
+        raise not_found(error) from error

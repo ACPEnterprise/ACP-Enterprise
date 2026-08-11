@@ -220,7 +220,6 @@ export function CustomerForm({
           >
             <option value="active">Active</option>
             <option value="inactive">Inactive</option>
-            <option value="do_not_service">Do not service</option>
           </select>
         </label>
         <label className={labelClass}>
