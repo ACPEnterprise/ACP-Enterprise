@@ -30,7 +30,7 @@ export const navigationCatalog = [
   { id: "jobs", label: "Jobs", path: "/jobs", icon: BriefcaseBusiness, availability: "available" },
   { id: "engineering", label: "Engineering Factory", path: "/engineering", icon: Wrench, availability: "available" },
   { id: "invoices", label: "Invoices", path: "/invoices", icon: FileText, availability: "coming-soon" },
-  { id: "inventory", label: "Inventory", path: "/inventory", icon: Boxes, availability: "coming-soon" },
+  { id: "inventory", label: "Inventory", path: "/inventory", icon: Boxes, availability: "available", requiredPermission: "COMPANY_INVENTORY_READ" },
   { id: "employees", label: "Employees", path: "/employees", icon: Users, availability: "coming-soon" },
   { id: "administration", label: "Administration", path: "/administration", icon: ShieldCheck, availability: "available", requiredPermission: "COMPANY_ROLE_READ" },
   { id: "settings", label: "Settings", path: "/settings", icon: Settings, availability: "coming-soon" },

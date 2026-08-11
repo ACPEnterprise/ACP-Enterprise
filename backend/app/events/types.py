@@ -2,6 +2,12 @@ from enum import Enum
 
 
 class EventType(str, Enum):
+    # Inventory
+    INVENTORY_LOCATION_CREATED = "inventory.location_created"
+    INVENTORY_TRANSFER_POSTED = "inventory.transfer_posted"
+    INVENTORY_RESERVATION_CREATED = "inventory.reservation_created"
+    INVENTORY_RESERVATION_RELEASED = "inventory.reservation_released"
+
     # Operations
     OPERATIONS_SERVICE_REQUEST_ACCEPTED = "operations.service_request.accepted"
 

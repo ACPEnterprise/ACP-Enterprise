@@ -14,6 +14,7 @@ from app.platform.permissions.codes import (
     EngineeringExecutionPermission,
     EngineeringRepositoryOperationPermission,
     EstimatePermission,
+    InventoryPermission,
     JobPermission,
     LaunchPlatformPermission,
     PriceBookPermission,
@@ -179,6 +180,17 @@ DISPATCH_DEFINITIONS = tuple(
     for code in sorted(DispatchPermission.ALL)
 )
 
+INVENTORY_DEFINITIONS = tuple(
+    PermissionDefinition(
+        code=code,
+        name=code.replace("_", " ").title(),
+        resource="inventory",
+        action=code.rsplit("_", 1)[-1].lower(),
+        scope=PermissionScope.COMPANY,
+    )
+    for code in sorted(InventoryPermission.ALL)
+)
+
 PRICE_BOOK_DEFINITIONS = tuple(
     PermissionDefinition(
         code=code,
@@ -287,6 +299,7 @@ permission_catalog = PermissionCatalog(
     + SCHEDULING_DEFINITIONS
     + JOB_DEFINITIONS
     + DISPATCH_DEFINITIONS
+    + INVENTORY_DEFINITIONS
     + PRICE_BOOK_DEFINITIONS
     + COMMUNICATIONS_DEFINITIONS
     + ESTIMATE_DEFINITIONS

@@ -6,6 +6,7 @@ from app.platform.permissions.codes import (
     AnalyticsPermission,
     CustomerPermission,
     DispatchPermission,
+    InventoryPermission,
     JobPermission,
     LaunchPlatformPermission,
     PriceBookPermission,
@@ -57,6 +58,10 @@ LAUNCH_ROLE_MATRIX = (
                 PriceBookPermission.ACTIVATE,
                 AnalyticsPermission.READ,
                 LaunchPlatformPermission.AUDIT_READ,
+                InventoryPermission.READ,
+                InventoryPermission.MANAGE,
+                InventoryPermission.MOVE,
+                InventoryPermission.RESERVE,
             }
         ),
     ),
@@ -73,6 +78,8 @@ LAUNCH_ROLE_MATRIX = (
                 DispatchPermission.READ,
                 DispatchPermission.MANAGE,
                 PriceBookPermission.READ,
+                InventoryPermission.READ,
+                InventoryPermission.RESERVE,
             }
         ),
     ),

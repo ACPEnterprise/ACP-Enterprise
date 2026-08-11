@@ -2,7 +2,7 @@ import { createBrowserRouter, type RouteObject } from "react-router";
 
 import { ApplicationShell } from "../layout";
 import { ProtectedRoute } from "../auth";
-import { administrationHandle, appointmentsHandle, commandCenterHandle, customerDetailHandle, customersHandle, dispatchHandle, engineeringHandle, estimatesHandle, jobsHandle, missionControlHandle, notFoundHandle, priceBookHandle } from "./routeMetadata";
+import { administrationHandle, appointmentsHandle, commandCenterHandle, customerDetailHandle, customersHandle, dispatchHandle, engineeringHandle, estimatesHandle, inventoryHandle, jobsHandle, missionControlHandle, notFoundHandle, priceBookHandle } from "./routeMetadata";
 import { RouteErrorBoundary } from "./RouteErrorBoundary";
 
 export const appRoutes: RouteObject[] = [
@@ -67,6 +67,11 @@ export const appRoutes: RouteObject[] = [
             path: "price-book",
             handle: priceBookHandle,
             lazy: async () => ({ Component: (await import("../routes/PriceBookRoute")).PriceBookRoute }),
+          },
+          {
+            path: "inventory",
+            handle: inventoryHandle,
+            lazy: async () => ({ Component: (await import("../routes/InventoryRoute")).InventoryRoute }),
           },
           {
             path: "jobs",

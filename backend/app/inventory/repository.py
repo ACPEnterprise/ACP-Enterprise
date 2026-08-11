@@ -74,6 +74,16 @@ class InventoryRepository:
         await session.flush()
         return self._item_record(item)
 
+    async def list_items(
+        self, session: AsyncSession, *, company_id: UUID
+    ) -> tuple[InventoryItemRecord, ...]:
+        rows = await session.scalars(
+            select(InventoryItem)
+            .where(InventoryItem.company_id == company_id)
+            .order_by(InventoryItem.code, InventoryItem.id)
+        )
+        return tuple(self._item_record(row) for row in rows.all())
+
     async def get_item(
         self, session: AsyncSession, *, company_id: UUID, item_id: UUID
     ) -> InventoryItemRecord | None:
@@ -126,6 +136,25 @@ class InventoryRepository:
             )
         )
         return self._location_record(location) if location else None
+
+    async def list_locations(
+        self,
+        session: AsyncSession,
+        *,
+        company_id: UUID,
+        branch_ids: tuple[UUID, ...],
+    ) -> tuple[StockLocationRecord, ...]:
+        if not branch_ids:
+            return ()
+        rows = await session.scalars(
+            select(StockLocation)
+            .where(
+                StockLocation.company_id == company_id,
+                StockLocation.branch_id.in_(branch_ids),
+            )
+            .order_by(StockLocation.branch_id, StockLocation.code, StockLocation.id)
+        )
+        return tuple(self._location_record(row) for row in rows.all())
 
     async def post_movement(
         self, session: AsyncSession, *, spec: PostStockMovement
@@ -502,6 +531,29 @@ class InventoryRepository:
             )
         return self._quantity_record(quantity)
 
+    async def list_quantities(
+        self,
+        session: AsyncSession,
+        *,
+        company_id: UUID,
+        branch_ids: tuple[UUID, ...],
+    ) -> tuple[QuantityRecord, ...]:
+        if not branch_ids:
+            return ()
+        rows = await session.scalars(
+            select(InventoryQuantity)
+            .where(
+                InventoryQuantity.company_id == company_id,
+                InventoryQuantity.branch_id.in_(branch_ids),
+            )
+            .order_by(
+                InventoryQuantity.branch_id,
+                InventoryQuantity.location_id,
+                InventoryQuantity.item_id,
+            )
+        )
+        return tuple(self._quantity_record(row) for row in rows.all())
+
     async def list_movements(
         self,
         session: AsyncSession,
@@ -579,6 +631,27 @@ class InventoryRepository:
             )
         )
         return self._reservation_record(reservation) if reservation else None
+
+    async def list_reservations(
+        self,
+        session: AsyncSession,
+        *,
+        company_id: UUID,
+        branch_ids: tuple[UUID, ...],
+    ) -> tuple[ReservationRecord, ...]:
+        if not branch_ids:
+            return ()
+        rows = await session.scalars(
+            select(InventoryReservation)
+            .where(
+                InventoryReservation.company_id == company_id,
+                InventoryReservation.branch_id.in_(branch_ids),
+            )
+            .order_by(
+                InventoryReservation.created_at.desc(), InventoryReservation.id
+            )
+        )
+        return tuple(self._reservation_record(row) for row in rows.all())
 
     async def allocate_reservation(
         self, session: AsyncSession, *, spec: AllocateReservation

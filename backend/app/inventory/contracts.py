@@ -332,6 +332,18 @@ class CycleCountSessionRecord:
 
 
 class InventoryRepositoryContract(Protocol):
+    async def list_items(
+        self, session: AsyncSession, *, company_id: UUID
+    ) -> tuple[InventoryItemRecord, ...]: ...
+
+    async def list_locations(
+        self, session: AsyncSession, *, company_id: UUID, branch_ids: tuple[UUID, ...]
+    ) -> tuple[StockLocationRecord, ...]: ...
+
+    async def list_quantities(
+        self, session: AsyncSession, *, company_id: UUID, branch_ids: tuple[UUID, ...]
+    ) -> tuple[QuantityRecord, ...]: ...
+
     async def create_item(
         self, session: AsyncSession, *, spec: CreateInventoryItem
     ) -> InventoryItemRecord: ...
@@ -356,6 +368,10 @@ class InventoryRepositoryContract(Protocol):
         branch_id: UUID,
         reservation_id: UUID,
     ) -> ReservationRecord | None: ...
+
+    async def list_reservations(
+        self, session: AsyncSession, *, company_id: UUID, branch_ids: tuple[UUID, ...]
+    ) -> tuple[ReservationRecord, ...]: ...
 
     async def allocate_reservation(
         self, session: AsyncSession, *, spec: AllocateReservation
