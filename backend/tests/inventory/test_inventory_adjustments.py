@@ -157,7 +157,7 @@ async def test_projection_reconciliation_uses_only_movement_evidence(
 async def test_adjustment_cannot_impair_active_reservation(
     inventory_fixture,  # noqa: F811
 ) -> None:
-    from app.inventory.contracts import CreateReservation
+    from app.inventory.contracts import AllocateReservation, CreateReservation
 
     factory, company, branch, _, actor = inventory_fixture
     repository, item, warehouse, _ = await seed_foundation(
@@ -167,7 +167,7 @@ async def test_adjustment_cannot_impair_active_reservation(
         await repository.post_movement(
             session, spec=opening_spec(company, branch, actor, item, warehouse)
         )
-        await repository.create_reservation(
+        reservation = await repository.create_reservation(
             session,
             spec=CreateReservation(
                 company_id=company.id,
@@ -179,6 +179,20 @@ async def test_adjustment_cannot_impair_active_reservation(
                 demand_id=uuid4(),
                 actor_user_id=actor.id,
                 idempotency_key=f"reservation-{uuid4()}",
+            ),
+        )
+        await repository.allocate_reservation(
+            session,
+            spec=AllocateReservation(
+                company_id=company.id,
+                branch_id=branch.id,
+                reservation_id=reservation.id,
+                item_id=item.id,
+                location_id=warehouse.id,
+                actor_user_id=actor.id,
+                authorized_branch_ids=(branch.id,),
+                expected_version=reservation.version,
+                idempotency_key=f"allocation-{uuid4()}",
             ),
         )
         with pytest.raises(InventoryConflict, match="available quantity negative"):

@@ -7,20 +7,26 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.inventory.contracts import (
     AdjustmentRecord,
+    AllocateReservation,
+    AllocationRecord,
     CreateInventoryItem,
     CreateReservation,
     CreateStockLocation,
     CycleCountEntryRecord,
     CycleCountSessionRecord,
     InventoryItemRecord,
+    MaterialIssueRecord,
     PostInventoryAdjustment,
+    PostMaterialIssue,
     PostStockMovement,
     QuantityRecord,
     RecordCycleCount,
     ReservationRecord,
+    ReverseMaterialIssue,
     StartCycleCount,
     StockLocationRecord,
     StockMovementRecord,
+    TransitionReservation,
 )
 from app.inventory.errors import (
     InventoryConflict,
@@ -34,6 +40,9 @@ from app.inventory.models import (
     InventoryItem,
     InventoryQuantity,
     InventoryReservation,
+    MaterialIssue,
+    ReservationAllocation,
+    ReservationLifecycleEvent,
     StockLocation,
     StockMovement,
 )
@@ -532,28 +541,18 @@ class InventoryRepository:
             branch_id=spec.branch_id,
             location_id=spec.location_id,
         )
-        quantity = await self._locked_quantity(
-            session,
-            company_id=spec.company_id,
-            branch_id=spec.branch_id,
-            item_id=spec.item_id,
-            location_id=spec.location_id,
-        )
-        if quantity.on_hand - quantity.reserved < spec.quantity:
-            raise InventoryConflict("Insufficient available quantity")
-        quantity.reserved += spec.quantity
-        quantity.version += 1
-        quantity.updated_at = datetime.now(timezone.utc)
         reservation = InventoryReservation(
             company_id=spec.company_id,
             branch_id=spec.branch_id,
             item_id=spec.item_id,
             location_id=spec.location_id,
             quantity=spec.quantity,
+            allocated_quantity=Decimal(0),
+            issued_quantity=Decimal(0),
             stocking_unit=item.stocking_unit,
             demand_type=spec.demand_type.strip(),
             demand_id=spec.demand_id,
-            status="active",
+            status="requested",
             expires_at=spec.expires_at,
             idempotency_key=spec.idempotency_key.strip(),
             version=1,
@@ -563,6 +562,474 @@ class InventoryRepository:
         session.add(reservation)
         await session.flush()
         return self._reservation_record(reservation)
+
+    async def get_reservation(
+        self,
+        session: AsyncSession,
+        *,
+        company_id: UUID,
+        branch_id: UUID,
+        reservation_id: UUID,
+    ) -> ReservationRecord | None:
+        reservation = await session.scalar(
+            select(InventoryReservation).where(
+                InventoryReservation.company_id == company_id,
+                InventoryReservation.branch_id == branch_id,
+                InventoryReservation.id == reservation_id,
+            )
+        )
+        return self._reservation_record(reservation) if reservation else None
+
+    async def allocate_reservation(
+        self, session: AsyncSession, *, spec: AllocateReservation
+    ) -> AllocationRecord:
+        key = spec.idempotency_key.strip()
+        self._authorize_branch(spec.branch_id, spec.authorized_branch_ids)
+        existing = await session.scalar(
+            select(ReservationAllocation).where(
+                ReservationAllocation.company_id == spec.company_id,
+                ReservationAllocation.idempotency_key == key,
+            )
+        )
+        if existing:
+            self._assert_same_allocation(existing, spec)
+            return self._allocation_record(existing)
+        if not key:
+            raise InventoryValidation("Allocation idempotency key is required")
+        reservation = await self._locked_reservation(
+            session,
+            company_id=spec.company_id,
+            branch_id=spec.branch_id,
+            reservation_id=spec.reservation_id,
+            item_id=spec.item_id,
+            location_id=spec.location_id,
+        )
+        concurrent_replay = await session.scalar(
+            select(ReservationAllocation).where(
+                ReservationAllocation.company_id == spec.company_id,
+                ReservationAllocation.idempotency_key == key,
+            )
+        )
+        if concurrent_replay:
+            self._assert_same_allocation(concurrent_replay, spec)
+            return self._allocation_record(concurrent_replay)
+        self._assert_version(reservation.version, spec.expected_version)
+        if reservation.status not in {"requested", "partially_allocated"}:
+            raise InventoryConflict("Reservation is not available for allocation")
+        remaining = reservation.quantity - reservation.allocated_quantity
+        requested = remaining if spec.quantity is None else spec.quantity
+        if requested <= 0 or requested > remaining:
+            raise InventoryValidation(
+                "Allocation quantity exceeds reservation remainder"
+            )
+        if requested < remaining and not spec.allow_partial:
+            raise InventoryValidation("Partial allocation was not explicitly allowed")
+        quantity = await self._locked_quantity(
+            session,
+            company_id=spec.company_id,
+            branch_id=spec.branch_id,
+            item_id=spec.item_id,
+            location_id=spec.location_id,
+        )
+        available = quantity.on_hand - quantity.reserved
+        allocated = min(requested, available) if spec.allow_partial else requested
+        if allocated <= 0 or (not spec.allow_partial and available < requested):
+            raise InventoryConflict("Insufficient available quantity for allocation")
+        old_status = reservation.status
+        old_version = reservation.version
+        reservation.allocated_quantity += allocated
+        reservation.status = (
+            "allocated"
+            if reservation.allocated_quantity == reservation.quantity
+            else "partially_allocated"
+        )
+        reservation.version += 1
+        reservation.updated_by_user_id = spec.actor_user_id
+        reservation.updated_at = datetime.now(timezone.utc)
+        quantity.reserved += allocated
+        quantity.version += 1
+        quantity.updated_at = datetime.now(timezone.utc)
+        allocation = ReservationAllocation(
+            company_id=spec.company_id,
+            branch_id=spec.branch_id,
+            reservation_id=spec.reservation_id,
+            item_id=spec.item_id,
+            location_id=spec.location_id,
+            quantity=allocated,
+            requested_quantity=requested,
+            partial_allowed=spec.allow_partial,
+            stocking_unit=reservation.stocking_unit,
+            reservation_version=old_version,
+            idempotency_key=key,
+            allocated_by_user_id=spec.actor_user_id,
+        )
+        session.add(allocation)
+        if old_status != reservation.status:
+            self._add_lifecycle_event(
+                session,
+                reservation=reservation,
+                from_status=old_status,
+                from_version=old_version,
+                to_status=reservation.status,
+                actor_user_id=spec.actor_user_id,
+                idempotency_key=f"allocation:{key}",
+            )
+        await session.flush()
+        return self._allocation_record(allocation)
+
+    async def list_allocations(
+        self,
+        session: AsyncSession,
+        *,
+        company_id: UUID,
+        branch_id: UUID,
+        reservation_id: UUID,
+    ) -> tuple[AllocationRecord, ...]:
+        rows = await session.scalars(
+            select(ReservationAllocation)
+            .where(
+                ReservationAllocation.company_id == company_id,
+                ReservationAllocation.branch_id == branch_id,
+                ReservationAllocation.reservation_id == reservation_id,
+            )
+            .order_by(ReservationAllocation.allocated_at, ReservationAllocation.id)
+        )
+        return tuple(self._allocation_record(row) for row in rows.all())
+
+    async def transition_reservation(
+        self, session: AsyncSession, *, spec: TransitionReservation
+    ) -> ReservationRecord:
+        key = spec.idempotency_key.strip()
+        self._authorize_branch(spec.branch_id, spec.authorized_branch_ids)
+        existing = await session.scalar(
+            select(ReservationLifecycleEvent).where(
+                ReservationLifecycleEvent.company_id == spec.company_id,
+                ReservationLifecycleEvent.idempotency_key == f"transition:{key}",
+            )
+        )
+        if existing:
+            if (
+                existing.reservation_id != spec.reservation_id
+                or existing.to_status != spec.target_status
+                or existing.actor_user_id != spec.actor_user_id
+            ):
+                raise InventoryConflict(
+                    "Reservation transition idempotency key was reused"
+                )
+            reservation = await self._locked_reservation(
+                session,
+                company_id=spec.company_id,
+                branch_id=spec.branch_id,
+                reservation_id=spec.reservation_id,
+            )
+            return self._reservation_record(reservation)
+        if spec.target_status not in {"released", "cancelled"}:
+            raise InventoryValidation("Unsupported explicit reservation transition")
+        if not key:
+            raise InventoryValidation("Transition idempotency key is required")
+        reservation = await self._locked_reservation(
+            session,
+            company_id=spec.company_id,
+            branch_id=spec.branch_id,
+            reservation_id=spec.reservation_id,
+        )
+        concurrent_replay = await session.scalar(
+            select(ReservationLifecycleEvent).where(
+                ReservationLifecycleEvent.company_id == spec.company_id,
+                ReservationLifecycleEvent.idempotency_key == f"transition:{key}",
+            )
+        )
+        if concurrent_replay:
+            if concurrent_replay.to_status != spec.target_status:
+                raise InventoryConflict(
+                    "Reservation transition idempotency key was reused"
+                )
+            return self._reservation_record(reservation)
+        self._assert_version(reservation.version, spec.expected_version)
+        if reservation.status not in {"requested", "partially_allocated", "allocated"}:
+            raise InventoryConflict(
+                "Reservation transition is not valid from current state"
+            )
+        old_status = reservation.status
+        old_version = reservation.version
+        outstanding = reservation.allocated_quantity - reservation.issued_quantity
+        if outstanding:
+            quantity = await self._locked_quantity(
+                session,
+                company_id=reservation.company_id,
+                branch_id=reservation.branch_id,
+                item_id=reservation.item_id,
+                location_id=reservation.location_id,
+            )
+            quantity.reserved -= outstanding
+            quantity.version += 1
+            quantity.updated_at = datetime.now(timezone.utc)
+        reservation.status = spec.target_status
+        reservation.version += 1
+        reservation.updated_by_user_id = spec.actor_user_id
+        reservation.updated_at = datetime.now(timezone.utc)
+        self._add_lifecycle_event(
+            session,
+            reservation=reservation,
+            from_status=old_status,
+            from_version=old_version,
+            to_status=spec.target_status,
+            actor_user_id=spec.actor_user_id,
+            idempotency_key=f"transition:{key}",
+        )
+        await session.flush()
+        return self._reservation_record(reservation)
+
+    async def post_material_issue(
+        self, session: AsyncSession, *, spec: PostMaterialIssue
+    ) -> MaterialIssueRecord:
+        key = spec.idempotency_key.strip()
+        self._authorize_branch(spec.branch_id, spec.authorized_branch_ids)
+        existing = await session.scalar(
+            select(MaterialIssue).where(
+                MaterialIssue.company_id == spec.company_id,
+                MaterialIssue.idempotency_key == key,
+            )
+        )
+        if existing:
+            self._assert_same_issue(existing, spec)
+            return self._issue_record(existing)
+        self._validate_external_reference(
+            spec.external_reference_type, spec.external_reference_id
+        )
+        if not key:
+            raise InventoryValidation("Material issue idempotency key is required")
+        reservation = await self._locked_reservation(
+            session,
+            company_id=spec.company_id,
+            branch_id=spec.branch_id,
+            reservation_id=spec.reservation_id,
+            item_id=spec.item_id,
+            location_id=spec.location_id,
+        )
+        concurrent_replay = await session.scalar(
+            select(MaterialIssue).where(
+                MaterialIssue.company_id == spec.company_id,
+                MaterialIssue.idempotency_key == key,
+            )
+        )
+        if concurrent_replay:
+            self._assert_same_issue(concurrent_replay, spec)
+            return self._issue_record(concurrent_replay)
+        self._assert_version(reservation.version, spec.expected_reservation_version)
+        if reservation.status != "allocated":
+            raise InventoryConflict("Only allocated reservations can be issued")
+        allocation = await self._scoped_allocation(session, spec)
+        prior = await session.scalar(
+            select(MaterialIssue).where(
+                MaterialIssue.company_id == spec.company_id,
+                MaterialIssue.allocation_id == spec.allocation_id,
+                MaterialIssue.issue_type == "issue",
+            )
+        )
+        if prior:
+            raise InventoryConflict("Allocation already has material issue evidence")
+        quantity = await self._locked_quantity(
+            session,
+            company_id=reservation.company_id,
+            branch_id=reservation.branch_id,
+            item_id=reservation.item_id,
+            location_id=reservation.location_id,
+        )
+        if quantity.reserved < allocation.quantity:
+            raise InventoryConflict("Reservation projection is inconsistent")
+        issue = MaterialIssue(
+            id=uuid4(),
+            company_id=spec.company_id,
+            branch_id=spec.branch_id,
+            reservation_id=spec.reservation_id,
+            allocation_id=spec.allocation_id,
+            issue_type="issue",
+            item_id=spec.item_id,
+            location_id=spec.location_id,
+            quantity=allocation.quantity,
+            stocking_unit=allocation.stocking_unit,
+            occurred_at=spec.occurred_at,
+            actor_user_id=spec.actor_user_id,
+            idempotency_key=key,
+            movement_id=UUID(int=0),
+            external_reference_type=spec.external_reference_type,
+            external_reference_id=spec.external_reference_id,
+        )
+        quantity.reserved -= allocation.quantity
+        quantity.version += 1
+        quantity.updated_at = datetime.now(timezone.utc)
+        movement = await self.post_movement(
+            session,
+            spec=PostStockMovement(
+                company_id=spec.company_id,
+                branch_id=spec.branch_id,
+                item_id=spec.item_id,
+                movement_type="material_issue",
+                quantity=allocation.quantity,
+                occurred_at=spec.occurred_at,
+                actor_user_id=spec.actor_user_id,
+                idempotency_key=f"material-issue:{key}",
+                source_location_id=spec.location_id,
+                provenance_type="material_issue",
+                provenance_id=issue.id,
+            ),
+        )
+        issue.movement_id = movement.id
+        session.add(issue)
+        old_status = reservation.status
+        old_version = reservation.version
+        reservation.issued_quantity += allocation.quantity
+        if reservation.issued_quantity == reservation.quantity:
+            reservation.status = "fulfilled"
+        reservation.version += 1
+        reservation.updated_by_user_id = spec.actor_user_id
+        reservation.updated_at = datetime.now(timezone.utc)
+        if old_status != reservation.status:
+            self._add_lifecycle_event(
+                session,
+                reservation=reservation,
+                from_status=old_status,
+                from_version=old_version,
+                to_status=reservation.status,
+                actor_user_id=spec.actor_user_id,
+                idempotency_key=f"issue:{key}",
+            )
+        await session.flush()
+        return self._issue_record(issue)
+
+    async def reverse_material_issue(
+        self, session: AsyncSession, *, spec: ReverseMaterialIssue
+    ) -> MaterialIssueRecord:
+        key = spec.idempotency_key.strip()
+        self._authorize_branch(spec.branch_id, spec.authorized_branch_ids)
+        existing = await session.scalar(
+            select(MaterialIssue).where(
+                MaterialIssue.company_id == spec.company_id,
+                MaterialIssue.idempotency_key == key,
+            )
+        )
+        if existing:
+            if (
+                existing.issue_type != "reversal"
+                or existing.reversal_of_issue_id != spec.issue_id
+                or existing.actor_user_id != spec.actor_user_id
+                or existing.occurred_at != spec.occurred_at
+            ):
+                raise InventoryConflict("Issue reversal idempotency key was reused")
+            return self._issue_record(existing)
+        original = await session.scalar(
+            select(MaterialIssue).where(
+                MaterialIssue.company_id == spec.company_id,
+                MaterialIssue.branch_id == spec.branch_id,
+                MaterialIssue.id == spec.issue_id,
+                MaterialIssue.issue_type == "issue",
+            )
+        )
+        if original is None:
+            raise InventoryNotFound(
+                "Company- and Branch-scoped material issue not found"
+            )
+        if not key:
+            raise InventoryValidation("Issue reversal idempotency key is required")
+        prior = await session.scalar(
+            select(MaterialIssue).where(
+                MaterialIssue.company_id == spec.company_id,
+                MaterialIssue.reversal_of_issue_id == original.id,
+            )
+        )
+        if prior:
+            raise InventoryConflict("Material issue was already reversed")
+        reservation = await self._locked_reservation(
+            session,
+            company_id=spec.company_id,
+            branch_id=spec.branch_id,
+            reservation_id=original.reservation_id,
+            item_id=original.item_id,
+            location_id=original.location_id,
+        )
+        concurrent_replay = await session.scalar(
+            select(MaterialIssue).where(
+                MaterialIssue.company_id == spec.company_id,
+                MaterialIssue.idempotency_key == key,
+            )
+        )
+        if concurrent_replay:
+            if concurrent_replay.reversal_of_issue_id != spec.issue_id:
+                raise InventoryConflict("Issue reversal idempotency key was reused")
+            return self._issue_record(concurrent_replay)
+        self._assert_version(reservation.version, spec.expected_reservation_version)
+        if reservation.status not in {"allocated", "fulfilled"}:
+            raise InventoryConflict(
+                "Material issue cannot be reversed in current state"
+            )
+        reversal = MaterialIssue(
+            id=uuid4(),
+            company_id=original.company_id,
+            branch_id=original.branch_id,
+            reservation_id=original.reservation_id,
+            allocation_id=original.allocation_id,
+            issue_type="reversal",
+            item_id=original.item_id,
+            location_id=original.location_id,
+            quantity=original.quantity,
+            stocking_unit=original.stocking_unit,
+            occurred_at=spec.occurred_at,
+            actor_user_id=spec.actor_user_id,
+            idempotency_key=key,
+            movement_id=UUID(int=0),
+            reversal_of_issue_id=original.id,
+            external_reference_type=original.external_reference_type,
+            external_reference_id=original.external_reference_id,
+        )
+        movement = await self.post_movement(
+            session,
+            spec=PostStockMovement(
+                company_id=original.company_id,
+                branch_id=original.branch_id,
+                item_id=original.item_id,
+                movement_type="material_issue_reversal",
+                quantity=original.quantity,
+                occurred_at=spec.occurred_at,
+                actor_user_id=spec.actor_user_id,
+                idempotency_key=f"material-issue-reversal:{key}",
+                destination_location_id=original.location_id,
+                provenance_type="material_issue_reversal",
+                provenance_id=reversal.id,
+                reversal_of_id=original.movement_id,
+            ),
+        )
+        reversal.movement_id = movement.id
+        session.add(reversal)
+        quantity = await self._locked_quantity(
+            session,
+            company_id=original.company_id,
+            branch_id=original.branch_id,
+            item_id=original.item_id,
+            location_id=original.location_id,
+        )
+        quantity.reserved += original.quantity
+        quantity.version += 1
+        quantity.updated_at = datetime.now(timezone.utc)
+        old_status = reservation.status
+        old_version = reservation.version
+        reservation.issued_quantity -= original.quantity
+        reservation.status = "allocated"
+        reservation.version += 1
+        reservation.updated_by_user_id = spec.actor_user_id
+        reservation.updated_at = datetime.now(timezone.utc)
+        if old_status != reservation.status:
+            self._add_lifecycle_event(
+                session,
+                reservation=reservation,
+                from_status=old_status,
+                from_version=old_version,
+                to_status=reservation.status,
+                actor_user_id=spec.actor_user_id,
+                idempotency_key=f"reversal:{key}",
+            )
+        await session.flush()
+        return self._issue_record(reversal)
 
     async def release_reservation(
         self,
@@ -584,24 +1051,82 @@ class InventoryRepository:
             raise InventoryNotFound("Reservation not found")
         if reservation.status == "released":
             return self._reservation_record(reservation)
-        if reservation.status != "active":
-            raise InventoryConflict("Only active reservations can be released")
-        quantity = await self._locked_quantity(
-            session,
-            company_id=reservation.company_id,
-            branch_id=reservation.branch_id,
-            item_id=reservation.item_id,
-            location_id=reservation.location_id,
-        )
-        quantity.reserved -= reservation.quantity
-        quantity.version += 1
-        quantity.updated_at = datetime.now(timezone.utc)
+        if reservation.status not in {"requested", "partially_allocated", "allocated"}:
+            raise InventoryConflict("Reservation cannot be released from current state")
+        outstanding = reservation.allocated_quantity - reservation.issued_quantity
+        if outstanding:
+            quantity = await self._locked_quantity(
+                session,
+                company_id=reservation.company_id,
+                branch_id=reservation.branch_id,
+                item_id=reservation.item_id,
+                location_id=reservation.location_id,
+            )
+            quantity.reserved -= outstanding
+            quantity.version += 1
+            quantity.updated_at = datetime.now(timezone.utc)
+        old_status = reservation.status
+        old_version = reservation.version
         reservation.status = "released"
         reservation.version += 1
         reservation.updated_by_user_id = actor_user_id
         reservation.updated_at = datetime.now(timezone.utc)
+        self._add_lifecycle_event(
+            session,
+            reservation=reservation,
+            from_status=old_status,
+            from_version=old_version,
+            to_status="released",
+            actor_user_id=actor_user_id,
+            idempotency_key=f"legacy-release:{reservation.id}",
+        )
         await session.flush()
         return self._reservation_record(reservation)
+
+    async def _locked_reservation(
+        self,
+        session: AsyncSession,
+        *,
+        company_id: UUID,
+        branch_id: UUID,
+        reservation_id: UUID,
+        item_id: UUID | None = None,
+        location_id: UUID | None = None,
+    ) -> InventoryReservation:
+        conditions = [
+            InventoryReservation.company_id == company_id,
+            InventoryReservation.branch_id == branch_id,
+            InventoryReservation.id == reservation_id,
+        ]
+        if item_id is not None:
+            conditions.append(InventoryReservation.item_id == item_id)
+        if location_id is not None:
+            conditions.append(InventoryReservation.location_id == location_id)
+        reservation = await session.scalar(
+            select(InventoryReservation).where(*conditions).with_for_update()
+        )
+        if reservation is None:
+            raise InventoryNotFound(
+                "Company-, Branch-, item-, and location-scoped reservation not found"
+            )
+        return reservation
+
+    async def _scoped_allocation(
+        self, session: AsyncSession, spec: PostMaterialIssue
+    ) -> ReservationAllocation:
+        allocation = await session.scalar(
+            select(ReservationAllocation).where(
+                ReservationAllocation.company_id == spec.company_id,
+                ReservationAllocation.branch_id == spec.branch_id,
+                ReservationAllocation.reservation_id == spec.reservation_id,
+                ReservationAllocation.item_id == spec.item_id,
+                ReservationAllocation.location_id == spec.location_id,
+                ReservationAllocation.id == spec.allocation_id,
+            )
+        )
+        if allocation is None:
+            raise InventoryNotFound("Scoped reservation allocation not found")
+        return allocation
 
     async def _active_item(
         self, session: AsyncSession, *, company_id: UUID, item_id: UUID
@@ -760,8 +1285,13 @@ class InventoryRepository:
     def _validate_movement_shape(spec: PostStockMovement) -> None:
         if not spec.idempotency_key.strip():
             raise InventoryValidation("Movement idempotency key is required")
-        inbound = {"opening", "increase", "adjustment_in"}
-        outbound = {"decrease", "adjustment_out"}
+        inbound = {
+            "opening",
+            "increase",
+            "adjustment_in",
+            "material_issue_reversal",
+        }
+        outbound = {"decrease", "adjustment_out", "material_issue"}
         if spec.movement_type in inbound:
             valid = (
                 spec.source_location_id is None
@@ -817,6 +1347,89 @@ class InventoryRepository:
         )
         if not all(values):
             raise InventoryConflict("Reservation idempotency key was reused")
+
+    @staticmethod
+    def _authorize_branch(
+        branch_id: UUID, authorized_branch_ids: tuple[UUID, ...]
+    ) -> None:
+        if branch_id not in authorized_branch_ids:
+            raise InventoryNotFound("Authorized Branch-scoped Inventory access denied")
+
+    @staticmethod
+    def _assert_version(actual: int, expected: int) -> None:
+        if actual != expected:
+            raise InventoryConflict(
+                f"Stale reservation version: expected {expected}, found {actual}"
+            )
+
+    @staticmethod
+    def _validate_external_reference(
+        reference_type: str | None, reference_id: UUID | None
+    ) -> None:
+        if (reference_type is None) != (reference_id is None):
+            raise InventoryValidation("External material reference must be complete")
+        if reference_type is not None and not reference_type.strip():
+            raise InventoryValidation("External material reference type is required")
+
+    @staticmethod
+    def _add_lifecycle_event(
+        session: AsyncSession,
+        *,
+        reservation: InventoryReservation,
+        from_status: str,
+        from_version: int,
+        to_status: str,
+        actor_user_id: UUID,
+        idempotency_key: str,
+    ) -> None:
+        session.add(
+            ReservationLifecycleEvent(
+                company_id=reservation.company_id,
+                reservation_id=reservation.id,
+                from_status=from_status,
+                to_status=to_status,
+                from_version=from_version,
+                idempotency_key=idempotency_key,
+                actor_user_id=actor_user_id,
+            )
+        )
+
+    @staticmethod
+    def _assert_same_allocation(
+        allocation: ReservationAllocation, spec: AllocateReservation
+    ) -> None:
+        requested = (
+            allocation.requested_quantity if spec.quantity is None else spec.quantity
+        )
+        values = (
+            allocation.branch_id == spec.branch_id,
+            allocation.reservation_id == spec.reservation_id,
+            allocation.item_id == spec.item_id,
+            allocation.location_id == spec.location_id,
+            allocation.allocated_by_user_id == spec.actor_user_id,
+            allocation.reservation_version == spec.expected_version,
+            allocation.requested_quantity == requested,
+            allocation.partial_allowed == spec.allow_partial,
+        )
+        if not all(values):
+            raise InventoryConflict("Allocation idempotency key was reused")
+
+    @staticmethod
+    def _assert_same_issue(issue: MaterialIssue, spec: PostMaterialIssue) -> None:
+        values = (
+            issue.issue_type == "issue",
+            issue.branch_id == spec.branch_id,
+            issue.reservation_id == spec.reservation_id,
+            issue.allocation_id == spec.allocation_id,
+            issue.item_id == spec.item_id,
+            issue.location_id == spec.location_id,
+            issue.occurred_at == spec.occurred_at,
+            issue.actor_user_id == spec.actor_user_id,
+            issue.external_reference_type == spec.external_reference_type,
+            issue.external_reference_id == spec.external_reference_id,
+        )
+        if not all(values):
+            raise InventoryConflict("Material issue idempotency key was reused")
 
     @staticmethod
     def _assert_same_adjustment(
@@ -914,6 +1527,8 @@ class InventoryRepository:
             item_id=reservation.item_id,
             location_id=reservation.location_id,
             quantity=reservation.quantity,
+            allocated_quantity=reservation.allocated_quantity,
+            issued_quantity=reservation.issued_quantity,
             stocking_unit=reservation.stocking_unit,
             demand_type=reservation.demand_type,
             demand_id=reservation.demand_id,
@@ -923,6 +1538,48 @@ class InventoryRepository:
             version=reservation.version,
             created_at=reservation.created_at,
             updated_at=reservation.updated_at,
+        )
+
+    @staticmethod
+    def _allocation_record(allocation: ReservationAllocation) -> AllocationRecord:
+        return AllocationRecord(
+            id=allocation.id,
+            company_id=allocation.company_id,
+            branch_id=allocation.branch_id,
+            reservation_id=allocation.reservation_id,
+            item_id=allocation.item_id,
+            location_id=allocation.location_id,
+            quantity=allocation.quantity,
+            requested_quantity=allocation.requested_quantity,
+            partial_allowed=allocation.partial_allowed,
+            stocking_unit=allocation.stocking_unit,
+            reservation_version=allocation.reservation_version,
+            idempotency_key=allocation.idempotency_key,
+            allocated_by_user_id=allocation.allocated_by_user_id,
+            allocated_at=allocation.allocated_at,
+        )
+
+    @staticmethod
+    def _issue_record(issue: MaterialIssue) -> MaterialIssueRecord:
+        return MaterialIssueRecord(
+            id=issue.id,
+            company_id=issue.company_id,
+            branch_id=issue.branch_id,
+            reservation_id=issue.reservation_id,
+            allocation_id=issue.allocation_id,
+            issue_type=issue.issue_type,
+            item_id=issue.item_id,
+            location_id=issue.location_id,
+            quantity=issue.quantity,
+            stocking_unit=issue.stocking_unit,
+            occurred_at=issue.occurred_at,
+            posted_at=issue.posted_at,
+            actor_user_id=issue.actor_user_id,
+            idempotency_key=issue.idempotency_key,
+            movement_id=issue.movement_id,
+            reversal_of_issue_id=issue.reversal_of_issue_id,
+            external_reference_type=issue.external_reference_type,
+            external_reference_id=issue.external_reference_id,
         )
 
     @staticmethod

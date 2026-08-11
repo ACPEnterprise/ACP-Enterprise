@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.core.config import settings
 from app.inventory.contracts import (
+    AllocateReservation,
     CreateInventoryItem,
     CreateReservation,
     CreateStockLocation,
@@ -251,6 +252,22 @@ async def test_reservation_changes_availability_and_release_is_idempotent(
                 idempotency_key=f"reservation-{uuid4()}",
             ),
         )
+        assert reservation.status == "requested"
+        allocation = await repository.allocate_reservation(
+            session,
+            spec=AllocateReservation(
+                company_id=company.id,
+                branch_id=branch.id,
+                reservation_id=reservation.id,
+                item_id=item.id,
+                location_id=warehouse.id,
+                actor_user_id=actor.id,
+                authorized_branch_ids=(branch.id,),
+                expected_version=reservation.version,
+                idempotency_key=f"allocation-{uuid4()}",
+            ),
+        )
+        assert allocation.quantity == Decimal(6)
         reserved = await repository.get_quantity(
             session,
             company_id=company.id,

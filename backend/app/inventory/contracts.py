@@ -64,6 +64,62 @@ class CreateReservation:
 
 
 @dataclass(frozen=True, slots=True)
+class AllocateReservation:
+    company_id: UUID
+    branch_id: UUID
+    reservation_id: UUID
+    item_id: UUID
+    location_id: UUID
+    actor_user_id: UUID
+    authorized_branch_ids: tuple[UUID, ...]
+    expected_version: int
+    idempotency_key: str
+    quantity: Decimal | None = None
+    allow_partial: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class TransitionReservation:
+    company_id: UUID
+    branch_id: UUID
+    reservation_id: UUID
+    actor_user_id: UUID
+    authorized_branch_ids: tuple[UUID, ...]
+    expected_version: int
+    target_status: str
+    idempotency_key: str
+
+
+@dataclass(frozen=True, slots=True)
+class PostMaterialIssue:
+    company_id: UUID
+    branch_id: UUID
+    reservation_id: UUID
+    allocation_id: UUID
+    item_id: UUID
+    location_id: UUID
+    occurred_at: datetime
+    actor_user_id: UUID
+    authorized_branch_ids: tuple[UUID, ...]
+    expected_reservation_version: int
+    idempotency_key: str
+    external_reference_type: str | None = None
+    external_reference_id: UUID | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ReverseMaterialIssue:
+    company_id: UUID
+    branch_id: UUID
+    issue_id: UUID
+    occurred_at: datetime
+    actor_user_id: UUID
+    authorized_branch_ids: tuple[UUID, ...]
+    expected_reservation_version: int
+    idempotency_key: str
+
+
+@dataclass(frozen=True, slots=True)
 class PostInventoryAdjustment:
     company_id: UUID
     branch_id: UUID
@@ -172,6 +228,8 @@ class ReservationRecord:
     item_id: UUID
     location_id: UUID
     quantity: Decimal
+    allocated_quantity: Decimal
+    issued_quantity: Decimal
     stocking_unit: str
     demand_type: str
     demand_id: UUID
@@ -181,6 +239,46 @@ class ReservationRecord:
     version: int
     created_at: datetime
     updated_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class AllocationRecord:
+    id: UUID
+    company_id: UUID
+    branch_id: UUID
+    reservation_id: UUID
+    item_id: UUID
+    location_id: UUID
+    quantity: Decimal
+    requested_quantity: Decimal
+    partial_allowed: bool
+    stocking_unit: str
+    reservation_version: int
+    idempotency_key: str
+    allocated_by_user_id: UUID
+    allocated_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class MaterialIssueRecord:
+    id: UUID
+    company_id: UUID
+    branch_id: UUID
+    reservation_id: UUID
+    allocation_id: UUID
+    issue_type: str
+    item_id: UUID
+    location_id: UUID
+    quantity: Decimal
+    stocking_unit: str
+    occurred_at: datetime
+    posted_at: datetime
+    actor_user_id: UUID
+    idempotency_key: str
+    movement_id: UUID
+    reversal_of_issue_id: UUID | None
+    external_reference_type: str | None
+    external_reference_id: UUID | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -249,6 +347,40 @@ class InventoryRepositoryContract(Protocol):
     async def create_reservation(
         self, session: AsyncSession, *, spec: CreateReservation
     ) -> ReservationRecord: ...
+
+    async def get_reservation(
+        self,
+        session: AsyncSession,
+        *,
+        company_id: UUID,
+        branch_id: UUID,
+        reservation_id: UUID,
+    ) -> ReservationRecord | None: ...
+
+    async def allocate_reservation(
+        self, session: AsyncSession, *, spec: AllocateReservation
+    ) -> AllocationRecord: ...
+
+    async def list_allocations(
+        self,
+        session: AsyncSession,
+        *,
+        company_id: UUID,
+        branch_id: UUID,
+        reservation_id: UUID,
+    ) -> tuple[AllocationRecord, ...]: ...
+
+    async def transition_reservation(
+        self, session: AsyncSession, *, spec: TransitionReservation
+    ) -> ReservationRecord: ...
+
+    async def post_material_issue(
+        self, session: AsyncSession, *, spec: PostMaterialIssue
+    ) -> MaterialIssueRecord: ...
+
+    async def reverse_material_issue(
+        self, session: AsyncSession, *, spec: ReverseMaterialIssue
+    ) -> MaterialIssueRecord: ...
 
     async def post_adjustment(
         self, session: AsyncSession, *, spec: PostInventoryAdjustment
