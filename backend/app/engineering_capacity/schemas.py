@@ -222,6 +222,7 @@ class CapacitySummaryResponse(CapacitySchema):
     configured_capacity: int
     allocated_capacity: int
     reserved_capacity: int
+    numeric_available_capacity: int
     available_capacity: int
     offline_workers: int
     unhealthy_workers: int

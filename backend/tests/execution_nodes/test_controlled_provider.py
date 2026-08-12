@@ -4,7 +4,6 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
-
 from app.execution_nodes.boundaries import BoundaryViolation, boundary_digest
 from app.execution_nodes.contracts import (
     ProviderBoundary,
@@ -265,6 +264,28 @@ def test_frontend_validation_uses_prepared_pinned_toolchain(tmp_path: Path) -> N
     assert "run test:run|true|true" in calls
     assert "run lint -- --max-warnings=0|true|true" in calls
     assert "run build|true|true" in calls
+    assert not (frontend / "node_modules" / ".tmp").exists()
+    assert not (frontend / "dist").exists()
+
+
+def test_frontend_validation_discards_only_generated_build_artifacts(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path / "workspace"
+    frontend = workspace / "frontend"
+    (frontend / "node_modules" / ".tmp").mkdir(parents=True)
+    (frontend / "node_modules" / ".tmp" / "build.info").write_text("generated")
+    (frontend / "dist").mkdir()
+    (frontend / "dist" / "index.html").write_text("generated")
+    (frontend / "src").mkdir()
+    product = frontend / "src" / "product.ts"
+    product.write_text("export const value = 1;\n")
+
+    FrontendValidationEnvironment.clean_generated_artifacts(workspace)
+
+    assert not (frontend / "node_modules" / ".tmp").exists()
+    assert not (frontend / "dist").exists()
+    assert product.read_text() == "export const value = 1;\n"
 
 
 def test_frontend_validation_fails_before_execution_when_not_configured(

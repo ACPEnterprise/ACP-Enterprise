@@ -7,11 +7,6 @@ from uuid import uuid4
 import httpx
 import pytest
 import pytest_asyncio
-from fastapi import FastAPI
-from fastapi.dependencies.models import Dependant
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-
 from app.core.config import settings
 from app.database.session import get_database_session, get_security_database_session
 from app.engineering_capacity.service import EngineeringCapacityService
@@ -32,6 +27,11 @@ from app.platform.permissions.codes import (
 )
 from app.platform.permissions.dependencies import get_authorization_context
 from app.worker_control.models import EngineeringWorker
+from fastapi import FastAPI
+from fastapi.dependencies.models import Dependant
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
 from tests.engineering_control.review.test_engineering_review import completed_command
 from tests.engineering_control.test_engineering_command_service import (
     ServiceFixture,
@@ -1021,3 +1021,28 @@ def test_file_boundary_falls_back_to_controlled_workspace_evidence() -> None:
         {"controlled_execution": True},
         {"file_boundary": ("README.md",)},
     ) == ("README.md",)
+
+
+def test_expired_unresolved_lease_projects_reconciliation_not_running() -> None:
+    now = datetime(2026, 8, 12, 18, 0, tzinfo=timezone.utc)
+    status = SimpleNamespace(
+        lease=SimpleNamespace(
+            status="active", expires_at=now - timedelta(minutes=1)
+        ),
+        monitoring_state="running",
+    )
+    runtime = SimpleNamespace(runtime_state="acknowledged")
+
+    pipeline = MobileEngineeringControlService._pipeline_status(
+        command=SimpleNamespace(),
+        status=status,
+        desired_state="active",
+        runtime=runtime,
+        now=now,
+    )
+
+    assert pipeline == "reconciliation_required"
+    assert (
+        MobileEngineeringControlService._authoritative_state(pipeline, None)
+        == "reconciliation_required"
+    )

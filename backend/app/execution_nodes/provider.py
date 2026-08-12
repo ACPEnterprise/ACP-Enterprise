@@ -1,8 +1,10 @@
 import hashlib
 import json
 import os
+import shutil
 import subprocess
 import sys
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from uuid import UUID
@@ -106,6 +108,29 @@ class FrontendValidationEnvironment:
             "node_version": node_version,
             "npm_version": npm_version,
         }
+
+    def disposable_environment(self, workspace: Path) -> tuple[dict[str, str], Path]:
+        """Return a provider-owned temp environment outside the product boundary."""
+        temporary = Path(tempfile.mkdtemp(prefix="validation-", dir=self.cache_root))
+        environment = self.environment()
+        environment.update(
+            {
+                "TMPDIR": str(temporary),
+                "TMP": str(temporary),
+                "TEMP": str(temporary),
+            }
+        )
+        self.clean_generated_artifacts(workspace)
+        return environment, temporary
+
+    @staticmethod
+    def clean_generated_artifacts(workspace: Path) -> None:
+        frontend = (workspace / "frontend").resolve(strict=True)
+        for target in (frontend / "node_modules" / ".tmp", frontend / "dist"):
+            if target.is_symlink() or target.is_file():
+                target.unlink()
+            elif target.is_dir():
+                shutil.rmtree(target)
 
     @staticmethod
     def _version(executable: Path, environment: dict[str, str]) -> str:
@@ -566,22 +591,31 @@ class ControlledExecutionProvider:
                 "ENVIRONMENT": "test",
                 "PYTHONPATH": str(workspace / "backend"),
             }
+            temporary: Path | None = None
             if normalized in {"eslint", "typescript", "frontend tests"}:
                 if self.frontend_validation is None:
                     raise ProviderFailure(
                         "Frontend validation environment is not configured."
                     )
-                environment.update(self.frontend_validation.environment())
+                validation_environment, temporary = (
+                    self.frontend_validation.disposable_environment(workspace)
+                )
+                environment.update(validation_environment)
                 environment["PYTHONPATH"] = str(workspace / "backend")
-            completed = subprocess.run(
-                argv,
-                cwd=workspace / relative_cwd,
-                env=environment,
-                stdin=subprocess.DEVNULL,
-                capture_output=True,
-                timeout=1800,
-                check=False,
-            )
+            try:
+                completed = subprocess.run(
+                    argv,
+                    cwd=workspace / relative_cwd,
+                    env=environment,
+                    stdin=subprocess.DEVNULL,
+                    capture_output=True,
+                    timeout=1800,
+                    check=False,
+                )
+            finally:
+                if self.frontend_validation is not None and temporary is not None:
+                    self.frontend_validation.clean_generated_artifacts(workspace)
+                    shutil.rmtree(temporary)
             results[requirement] = completed.returncode == 0
         return results
 

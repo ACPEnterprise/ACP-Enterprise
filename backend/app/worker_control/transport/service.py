@@ -358,6 +358,11 @@ class WorkerTransportService:
         if envelope.kind is TransportMessageKind.HEARTBEAT:
             if not isinstance(payload, HeartbeatMessage):
                 raise TransportMessageError("Heartbeat payload is invalid.")
+            await self.controlled.reconcile_expired_worker_leases_in_transaction(
+                database,
+                worker_context=session.context,
+                now=envelope.sent_at,
+            )
             (
                 worker,
                 heartbeat,

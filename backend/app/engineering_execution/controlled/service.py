@@ -3,11 +3,13 @@ import re
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.engineering_control.models import EngineeringCommand
 from app.engineering_control.records import EngineeringApprovalState
+from app.engineering_control.workstream_runtime import EngineeringWorkstreamRuntime
 from app.engineering_execution.contracts import (
     EngineeringExecutionState,
     EngineeringExecutionStatus,
@@ -28,8 +30,9 @@ from app.worker_control.contracts import (
     AuthenticatedWorkerContext,
     ExecutionOffer,
     WorkerCapability,
+    WorkerLeaseStatus,
 )
-from app.worker_control.models import WorkerLease
+from app.worker_control.models import EngineeringWorker, WorkerLease
 from app.worker_control.service import WorkerControlService
 from app.worker_control.transport.contracts import WorkerSession
 
@@ -47,6 +50,7 @@ from .errors import (
     ControlledExecutionNotFoundError,
     ControlledExecutionPayloadError,
 )
+from .models import ControlledExecutionOfferModel
 from .repository import ControlledExecutionRepository
 
 SAFE_WORKSPACE = re.compile(r"^[a-z0-9][a-z0-9._-]{2,99}$")
@@ -214,6 +218,97 @@ class ControlledExecutionService:
                 )
             )
         return tuple(responses)
+
+    async def reconcile_expired_worker_leases_in_transaction(
+        self,
+        database: AsyncSession,
+        *,
+        worker_context: AuthenticatedWorkerContext,
+        now: datetime,
+    ) -> int:
+        """Quarantine unresolved acquired work after its lease expires.
+
+        Lease expiry is not terminal outcome evidence. The authenticated heartbeat
+        provides the existing maintenance cadence, so this closes stale dispatch
+        authority and records reconciliation truth without replaying or fabricating
+        a result.
+        """
+        rows = (
+            await database.execute(
+                select(
+                    ControlledExecutionOfferModel,
+                    WorkerLease,
+                    EngineeringExecution,
+                    EngineeringWorkstreamRuntime,
+                    EngineeringWorker,
+                )
+                .join(
+                    WorkerLease,
+                    WorkerLease.id == ControlledExecutionOfferModel.lease_id,
+                )
+                .join(
+                    EngineeringExecution,
+                    EngineeringExecution.id
+                    == ControlledExecutionOfferModel.execution_id,
+                )
+                .outerjoin(
+                    EngineeringWorkstreamRuntime,
+                    EngineeringWorkstreamRuntime.command_id
+                    == ControlledExecutionOfferModel.command_id,
+                )
+                .join(EngineeringWorker, EngineeringWorker.id == WorkerLease.worker_id)
+                .where(
+                    ControlledExecutionOfferModel.company_id
+                    == worker_context.company_id,
+                    ControlledExecutionOfferModel.worker_id == worker_context.worker_id,
+                    ControlledExecutionOfferModel.state
+                    == ControlledOfferState.ACQUIRED.value,
+                    WorkerLease.status == WorkerLeaseStatus.ACTIVE.value,
+                    WorkerLease.expires_at <= now,
+                )
+                .with_for_update(
+                    of=(
+                        ControlledExecutionOfferModel,
+                        WorkerLease,
+                        EngineeringExecution,
+                        EngineeringWorker,
+                    )
+                )
+            )
+        ).all()
+        for offer, lease, execution, runtime, worker in rows:
+            offer.state = ControlledOfferState.EXPIRED.value
+            offer.completed_at = now
+            offer.updated_at = now
+            offer.version += 1
+            await self.workers.repository.finish_lease(
+                database,
+                lease=lease,
+                worker=worker,
+                status=WorkerLeaseStatus.EXPIRED,
+                occurred_at=now,
+            )
+            execution.evidence_summary = {
+                **dict(execution.evidence_summary),
+                "reconciliation_required": True,
+                "reconciliation_reason": "expired_lease_unresolved_provider_outcome",
+                "expired_lease_id": str(lease.id),
+            }
+            execution.updated_at = now
+            execution.version += 1
+            if runtime is not None and runtime.runtime_state not in {
+                "completed",
+                "failed",
+                "cancelled",
+            }:
+                runtime.runtime_state = "recovering"
+                runtime.worker_health = "degraded"
+                runtime.reason_code = "reconciliation_required"
+                runtime.current_activity = "Execution outcome requires reconciliation"
+                runtime.updated_at = now
+                runtime.version += 1
+        await database.flush()
+        return len(rows)
 
     async def reconcile_acknowledged_code_commands(
         self, database: AsyncSession, *, worker_session: WorkerSession

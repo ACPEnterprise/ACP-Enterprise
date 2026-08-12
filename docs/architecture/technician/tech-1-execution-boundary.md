@@ -17,6 +17,12 @@ implied. Backend code, Alembic migrations,
 deployment and infrastructure files, credentials, environments, and unrelated
 product modules are outside the boundary.
 
+`frontend/src/layout/ApplicationShell.tsx` remains deliberately excluded. The
+pre-existing application-shell architecture requires feature routes to register
+beneath the shell and explicitly says shell structure must not change merely to
+add a module. Technician navigation scope therefore belongs in the approved
+route metadata, navigation catalog, Sidebar, and closed layout-type contract.
+
 The bounded execution may inspect, modify, validate, commit, perform safe
 mechanical reconciliation, and push normally. It may not deploy Preview or
 Production, import or cut over data, force-push, resolve semantic conflicts, or

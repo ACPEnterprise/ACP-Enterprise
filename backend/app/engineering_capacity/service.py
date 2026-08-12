@@ -174,12 +174,20 @@ class EngineeringCapacityService:
         allocated = sum(worker.allocated_capacity for worker in workers)
         reserved = sum(worker.reserved_capacity for worker in workers)
         system_limit = policy.maximum_concurrent_workstreams if policy else 0
-        available = max(0, min(configured, system_limit) - allocated - reserved)
+        numeric_available = max(0, min(configured, system_limit) - allocated - reserved)
+        usable_available = sum(
+            worker.available_capacity
+            for worker in workers
+            if worker.operational_state in USABLE_STATES
+            and worker.health_state == "healthy"
+        )
+        available = min(numeric_available, usable_available)
         return CapacitySummaryResponse(
             policy=CapacityPolicyResponse.model_validate(policy) if policy else None,
             configured_capacity=configured,
             allocated_capacity=allocated,
             reserved_capacity=reserved,
+            numeric_available_capacity=numeric_available,
             available_capacity=available,
             offline_workers=sum(
                 worker.operational_state == "offline" for worker in workers
@@ -1214,6 +1222,18 @@ class EngineeringCapacityService:
         reservations: tuple[CapacityReservationResponse, ...],
         allocations: tuple[CapacityAllocationResponse, ...],
     ) -> tuple[CapacityQueueItem, ...]:
+        reconciling_command_ids = set(
+            (
+                await session.scalars(
+                    select(EngineeringWorkstreamRuntime.command_id).where(
+                        EngineeringWorkstreamRuntime.company_id == company_id,
+                        EngineeringWorkstreamRuntime.runtime_state == "recovering",
+                        EngineeringWorkstreamRuntime.reason_code
+                        == "reconciliation_required",
+                    )
+                )
+            ).all()
+        )
         held = {item.command_id for item in reservations} | {
             item.command_id for item in allocations
         }
@@ -1277,10 +1297,18 @@ class EngineeringCapacityService:
             command = matches[0][0]
             if command.id in held:
                 continue
+            decision: CapacityDecision
             identity_resolved = len(matches) == 1 and linked_counts.get(command_id) == 1
             if identity_resolved:
                 _, milestone, roadmap = matches[0]
-                decision, reason = self._decision(policy, workers)
+                if command_id in reconciling_command_ids:
+                    decision = "reconciliation_required"
+                    reason = (
+                        "The prior execution outcome is ambiguous and requires "
+                        "authoritative reconciliation."
+                    )
+                else:
+                    decision, reason = self._decision(policy, workers)
                 assigned = self._recommended_worker(workers, decision)
             else:
                 milestone = None

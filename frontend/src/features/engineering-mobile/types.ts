@@ -469,6 +469,7 @@ export interface CapacitySummary {
   configured_capacity: number;
   allocated_capacity: number;
   reserved_capacity: number;
+  numeric_available_capacity: number;
   available_capacity: number;
   offline_workers: number;
   unhealthy_workers: number;

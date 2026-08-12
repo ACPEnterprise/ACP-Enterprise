@@ -604,6 +604,18 @@ class MobileEngineeringControlService:
         runtime: EngineeringWorkstreamRuntime | None,
         now: datetime,
     ) -> str:
+        if (
+            status.lease.status in {"active", "expired"}
+            and (
+                status.lease.status == "expired"
+                or (
+                    status.lease.expires_at is not None
+                    and status.lease.expires_at <= now
+                )
+            )
+            and status.monitoring_state not in {"completed", "failed", "cancelled"}
+        ):
+            return "reconciliation_required"
         if runtime is not None:
             if (
                 runtime.acknowledgement_expires_at <= now

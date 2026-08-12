@@ -125,6 +125,13 @@ def _attention(
     capacity_state: str | None = None,
     capacity_reason: str | None = None,
 ) -> tuple[str, str, tuple[str, ...]]:
+    if capacity_state == "reconciliation":
+        return (
+            "owner_action_required",
+            capacity_reason
+            or "Execution outcome requires authoritative reconciliation.",
+            ("request_revision", "cancel"),
+        )
     if item.reconciliation_state != "current":
         return (
             "waiting_on_dependency",
@@ -306,7 +313,12 @@ async def list_roadmaps(context: ReadContext, session: DatabaseSession) -> Roadm
     }
     capacity = await engineering_capacity_service.summary(session, context=context)
     capacity_states = {
-        item.command_id: "waiting" for item in capacity.waiting_workstreams
+        item.command_id: (
+            "reconciliation"
+            if item.decision == "reconciliation_required"
+            else "waiting"
+        )
+        for item in capacity.waiting_workstreams
     }
     capacity_reasons = {
         item.command_id: item.reason for item in capacity.waiting_workstreams

@@ -4,21 +4,25 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from app.core.config import settings
 from app.engineering_control.review.service import EngineeringReviewService
 from app.engineering_execution.controlled.repository import (
     ControlledExecutionRepository,
 )
 from app.engineering_execution.controlled.service import ControlledExecutionService
+from app.engineering_execution.models import EngineeringExecution
 from app.engineering_execution.service import EngineeringExecutionService
+from app.worker_control.contracts import WorkerHealth
+from app.worker_control.models import WorkerLease
 from app.worker_control.transport.contracts import (
     AuthenticatedMessageEnvelope,
     ControlledExecutionResultMessage,
     ControlledOfferAcquisitionMessage,
+    HeartbeatMessage,
     TransportMessageKind,
 )
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
 from tests.engineering_control.test_engineering_command_service import (
     ServiceFixture,
     seed_service_fixture,
@@ -132,3 +136,77 @@ async def test_authenticated_controlled_result_becomes_owner_review(
     assert package.review.provider_identifier == "authenticated-worker"
     assert package.repository_mutated is False
     assert package.review.controlled_result_id is not None
+
+
+@pytest.mark.asyncio
+async def test_heartbeat_quarantines_expired_ambiguous_controlled_execution(
+    controlled_database: ServiceFixture,
+) -> None:
+    fixture = controlled_database
+    transport, worker_session = await established_transport(fixture)
+    command = await approved_command(fixture, requested_code_changes=False)
+    async with fixture.factory() as database:
+        execution = await EngineeringExecutionService().request_execution(
+            database,
+            context=execution_context(fixture.context),
+            command_id=command.id,
+        )
+    now = utc_now()
+    controlled = ControlledExecutionService()
+    async with fixture.factory() as database:
+        offer = await controlled.prepare_offer(
+            database,
+            context=execution_context(fixture.context),
+            execution_id=execution.execution_id,
+            workspace_id="expired-test",
+            lease_seconds=30,
+            now=now,
+        )
+    acquisition = AuthenticatedMessageEnvelope(
+        message_id=uuid4(),
+        session_id=worker_session.session_id,
+        worker_id=worker_session.context.worker_id,
+        sequence_number=1,
+        sent_at=now + timedelta(seconds=1),
+        kind=TransportMessageKind.CONTROLLED_OFFER_ACQUISITION,
+        payload=ControlledOfferAcquisitionMessage(offer_id=offer.id),
+        authentication_proof="signed",
+        key_version=worker_session.key_version,
+    )
+    async with fixture.factory() as database:
+        await transport.handle_message(database, envelope=acquisition)
+    heartbeat_at = now + timedelta(seconds=32)
+    heartbeat = AuthenticatedMessageEnvelope(
+        message_id=uuid4(),
+        session_id=worker_session.session_id,
+        worker_id=worker_session.context.worker_id,
+        sequence_number=2,
+        sent_at=heartbeat_at,
+        kind=TransportMessageKind.HEARTBEAT,
+        payload=HeartbeatMessage(health=WorkerHealth.DEGRADED),
+        authentication_proof="signed",
+        key_version=worker_session.key_version,
+    )
+    async with fixture.factory() as database:
+        await transport.handle_message(database, envelope=heartbeat, now=heartbeat_at)
+    async with fixture.factory() as database:
+        expired_offer = await ControlledExecutionRepository.get_offer(
+            database,
+            company_id=fixture.context.company.id,
+            offer_id=offer.id,
+        )
+        lease = await database.get(WorkerLease, expired_offer.lease_id)
+        durable_execution = await database.get(
+            EngineeringExecution, execution.execution_id
+        )
+    assert expired_offer is not None and expired_offer.state.value == "expired"
+    assert lease is not None and lease.status == "expired"
+    assert durable_execution is not None
+    # The schema has no reconciliation state; terminal outcome remains unknown.
+    # Durable evidence and projections must therefore override this legacy state.
+    assert durable_execution.state == "running"
+    assert durable_execution.evidence_summary["reconciliation_required"] is True
+    assert (
+        durable_execution.evidence_summary["reconciliation_reason"]
+        == "expired_lease_unresolved_provider_outcome"
+    )

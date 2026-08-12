@@ -86,7 +86,8 @@ export function EngineeringCapacityPanel() {
           ["Configured", data.configured_capacity],
           ["In use", data.allocated_capacity],
           ["Reserved", data.reserved_capacity],
-          ["Available", data.available_capacity],
+          ["Usable now", data.available_capacity],
+          ["Unallocated", data.numeric_available_capacity],
         ].map(([label, value]) => <Card key={label}><p className="text-xs text-content-muted">{label}</p><p className="mt-1 text-2xl font-bold">{value}</p></Card>)}
       </div>
 
