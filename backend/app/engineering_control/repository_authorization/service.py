@@ -772,7 +772,7 @@ class EngineeringRepositoryAuthorizationService:
         reason_code: str | None,
         now: datetime,
     ) -> None:
-        safe: dict[str, object] = {
+        evidence: dict[str, object] = {
             "authorization_id": str(record.id),
             "capability_id": str(record.capability_id),
             "command_id": str(record.command_id),
@@ -784,6 +784,8 @@ class EngineeringRepositoryAuthorizationService:
             "reason_code": reason_code,
             "expires_at": record.expires_at.isoformat(),
         }
+        audit_evidence = {**evidence, "record_id": evidence["authorization_id"]}
+        del audit_evidence["authorization_id"]
         self.audit.stage(
             session,
             AuditEntry(
@@ -791,7 +793,7 @@ class EngineeringRepositoryAuthorizationService:
                 resource_type="engineering_repository_authorization",
                 company_id=context.company.id,
                 resource_id=record.id,
-                details=safe,
+                details=audit_evidence,
                 occurred_at=now,
             ),
         )
@@ -802,7 +804,7 @@ class EngineeringRepositoryAuthorizationService:
                 entity_type="engineering_repository_authorization",
                 entity_id=record.id,
                 company_id=context.company.id,
-                payload=safe,
+                payload=evidence,
                 occurred_at=now,
             ),
         )

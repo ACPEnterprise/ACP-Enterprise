@@ -648,7 +648,7 @@ class ControlledExecutionService:
         execution.evidence_summary = dict(output)
         execution.validation_summary = {
             "controlled_execution": True,
-            "repository_mutated": False,
+            "repository_mutated": bool(mutation),
         }
         execution.failure_classification = error_classification
         execution.finished_at = completed_at
@@ -664,6 +664,7 @@ class ControlledExecutionService:
             ),
             now=completed_at,
             result_id=result.id,
+            repository_mutated=bool(mutation),
         )
         return result
 
@@ -685,6 +686,7 @@ class ControlledExecutionService:
         event_type: EventType,
         now: datetime,
         result_id: UUID | None = None,
+        repository_mutated: bool = False,
     ) -> None:
         self.events.stage(
             session,
@@ -699,7 +701,7 @@ class ControlledExecutionService:
                     "execution_id": str(offer.execution_id),
                     "state": offer.state.value,
                     "capability": offer.capability_required.value,
-                    "repository_mutated": False,
+                    "repository_mutated": repository_mutated,
                 },
                 correlation_id=offer.correlation_id,
                 occurred_at=now,

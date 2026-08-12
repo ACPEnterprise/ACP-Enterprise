@@ -4,14 +4,18 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
 from app.core.config import settings
 from app.engineering_control.review.service import EngineeringReviewService
+from app.engineering_execution.controlled.contracts import ControlledCommandType
 from app.engineering_execution.controlled.repository import (
     ControlledExecutionRepository,
 )
 from app.engineering_execution.controlled.service import ControlledExecutionService
 from app.engineering_execution.models import EngineeringExecution
 from app.engineering_execution.service import EngineeringExecutionService
+from app.execution_nodes.models import EngineeringExecutionNode
 from app.worker_control.contracts import WorkerHealth
 from app.worker_control.models import WorkerLease
 from app.worker_control.transport.contracts import (
@@ -21,8 +25,6 @@ from app.worker_control.transport.contracts import (
     HeartbeatMessage,
     TransportMessageKind,
 )
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from tests.engineering_control.test_engineering_command_service import (
     ServiceFixture,
     seed_service_fixture,
@@ -55,7 +57,7 @@ async def test_authenticated_controlled_result_becomes_owner_review(
 ) -> None:
     fixture = controlled_database
     transport, worker_session = await established_transport(fixture)
-    command = await approved_command(fixture, requested_code_changes=False)
+    command = await approved_command(fixture, requested_code_changes=True)
     async with fixture.factory() as database:
         execution = await EngineeringExecutionService().request_execution(
             database,
@@ -63,13 +65,41 @@ async def test_authenticated_controlled_result_becomes_owner_review(
             command_id=command.id,
         )
     now = utc_now()
-    controlled = ControlledExecutionService()
-    async with fixture.factory() as database:
-        offer = await controlled.prepare_offer(
+    async with fixture.factory() as database, database.begin():
+        durable_execution = await database.get(
+            EngineeringExecution, execution.execution_id
+        )
+        assert durable_execution is not None
+        node = EngineeringExecutionNode(
+            company_id=fixture.context.company.id,
+            worker_id=worker_session.context.worker_id,
+            name="Controlled transport test node",
+            provider_identifier=worker_session.context.provider_identifier,
+            credential_fingerprint="f" * 64,
+            capabilities=["engineering.execute"],
+            status="active",
+            enrolled_at=now,
+            expires_at=now + timedelta(days=1),
+            version=1,
+        )
+        database.add(node)
+        await database.flush()
+        offer = await ControlledExecutionRepository.create_offer(
             database,
-            context=execution_context(fixture.context),
+            company_id=fixture.context.company.id,
+            command_id=command.id,
             execution_id=execution.execution_id,
+            correlation_id=durable_execution.correlation_id,
             workspace_id="df9c-test",
+            command_type=ControlledCommandType.EXECUTE_CODE,
+            payload={
+                "node_id": str(node.id),
+                "repository_key": command.repository_key,
+                "expected_branch": command.expected_branch,
+                "expected_head": command.expected_head,
+            },
+            expires_at=command.expires_at,
+            lease_seconds=300,
             now=now,
         )
     acquisition = AuthenticatedMessageEnvelope(
@@ -108,11 +138,28 @@ async def test_authenticated_controlled_result_becomes_owner_review(
                 "workspace_id": "df9c-test",
                 "repository_key": command.repository_key,
                 "branch": command.expected_branch,
-                "head": command.expected_head,
+                "starting_head": command.expected_head,
+                "head": "b" * 40,
+                "commit_sha": "b" * 40,
+                "published_commit_sha": "b" * 40,
+                "remote_head_before": command.expected_head,
+                "mechanically_reconciled": False,
                 "clean": True,
                 "file_count": 1,
-                "file_boundary": ["README.md"],
-                "repository_mutated": False,
+                "file_boundary": ["backend/app/result.py"],
+                "repository_mutated": True,
+                "validation": {"git diff --check": True},
+                "evidence": {
+                    "phases": [
+                        "composed",
+                        "workspace_ready",
+                        "executing",
+                        "validating",
+                        "commit_ready",
+                        "publishing_result",
+                        "completed",
+                    ]
+                },
             },
             error_classification=None,
             started_at=now + timedelta(seconds=2),
@@ -134,7 +181,8 @@ async def test_authenticated_controlled_result_becomes_owner_review(
         )
     assert package.result_status == "succeeded"
     assert package.review.provider_identifier == "authenticated-worker"
-    assert package.repository_mutated is False
+    assert package.repository_mutated is True
+    assert package.validation_summary["repository_mutated"] is True
     assert package.review.controlled_result_id is not None
 
 

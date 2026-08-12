@@ -758,7 +758,7 @@ class EngineeringRepositoryOperationService:
             event_type=history,
             now=now,
         )
-        safe: dict[str, object] = {
+        evidence: dict[str, object] = {
             "operation_id": str(operation.id),
             "authorization_id": str(operation.authorization_id),
             "command_id": str(operation.command_id),
@@ -768,6 +768,11 @@ class EngineeringRepositoryOperationService:
             "resulting_commit_sha": operation.resulting_commit_sha,
             "failure_classification": operation.failure_classification,
         }
+        audit_evidence = {
+            **evidence,
+            "approval_record_id": evidence["authorization_id"],
+        }
+        del audit_evidence["authorization_id"]
         self.audit.stage(
             session,
             AuditEntry(
@@ -775,7 +780,7 @@ class EngineeringRepositoryOperationService:
                 resource_type="engineering_repository_operation",
                 company_id=context.company.id,
                 resource_id=operation.id,
-                details=safe,
+                details=audit_evidence,
                 occurred_at=now,
             ),
         )
@@ -786,7 +791,7 @@ class EngineeringRepositoryOperationService:
                 entity_type="engineering_repository_operation",
                 entity_id=operation.id,
                 company_id=context.company.id,
-                payload=safe,
+                payload=evidence,
                 occurred_at=now,
             ),
         )
