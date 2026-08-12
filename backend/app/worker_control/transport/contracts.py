@@ -37,6 +37,7 @@ class TransportMessageKind(StrEnum):
     CONTROLLED_EXECUTION_RESULT = "controlled_execution_result"
     WORKSTREAM_ACKNOWLEDGEMENT = "workstream_acknowledgement"
     WORKSTREAM_RUNTIME_UPDATE = "workstream_runtime_update"
+    REPOSITORY_READINESS = "repository_readiness"
 
 
 @dataclass(frozen=True)
@@ -76,6 +77,19 @@ class WorkerSession:
 @dataclass(frozen=True)
 class HeartbeatMessage:
     health: WorkerHealth
+
+
+@dataclass(frozen=True)
+class RepositoryReadinessMessage:
+    milestone_id: UUID
+    repository_key: str
+    branch: str
+    candidate_head: str
+    observed_head: str
+    provider_software_sha: str
+    prepared_at: datetime
+    ready: bool
+    reason_code: str | None
 
 
 @dataclass(frozen=True)
@@ -193,6 +207,7 @@ TransportPayload = (
     | ControlledExecutionResultMessage
     | WorkstreamAcknowledgementMessage
     | WorkstreamRuntimeUpdateMessage
+    | RepositoryReadinessMessage
 )
 
 

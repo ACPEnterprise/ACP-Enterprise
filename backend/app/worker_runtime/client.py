@@ -83,6 +83,26 @@ class WorkerTransportClient:
         )
         self._accepted(response, 200)
 
+    async def repository_readiness_targets(
+        self, *, session_id: UUID
+    ) -> tuple[dict[str, object], ...]:
+        response = await self._client.get(
+            f"/api/v1/worker-transport/sessions/{session_id}/repository-readiness-targets",
+            headers={"X-Worker-Session-ID": str(session_id)},
+        )
+        self._accepted(response, 200)
+        return tuple(response.json()["items"])
+
+    async def publish_repository_readiness(
+        self, *, session_id: UUID, payload: dict[str, object]
+    ) -> None:
+        response = await self._client.post(
+            "/api/v1/worker-transport/repository-readiness",
+            headers={"X-Worker-Session-ID": str(session_id)},
+            json=payload,
+        )
+        self._accepted(response, 200)
+
     async def renew_lease(self, *, session_id: UUID, payload: dict[str, object]) -> int:
         response = await self._client.post(
             "/api/v1/worker-transport/leases/refresh",

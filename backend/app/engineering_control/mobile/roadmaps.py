@@ -411,6 +411,24 @@ class RoadmapService:
                 candidate_head=candidate_head,
                 authoritative_head=expected_head,
             )
+            if requested_code_changes:
+                from app.engineering_control.repository_readiness import (
+                    repository_readiness_service,
+                )
+
+                if not await repository_readiness_service.is_current_for_milestone(
+                    db,
+                    company_id=context.company.id,
+                    milestone_id=milestone_id,
+                    repository_key=repository_key,
+                    branch=expected_branch,
+                    candidate_head=expected_head,
+                    evidence=starting_commit_evidence,
+                    now=now,
+                ):
+                    raise ValueError(
+                        "The assigned provider repository is not prepared for the current execution base."
+                    )
             await db.rollback()
             command = await self.commands.create_command(
                 db,

@@ -18,6 +18,7 @@ from app.worker_control.transport.contracts import (
     LeaseRenewalMessage,
     ProviderProgressMessage,
     ProviderResultMessage,
+    RepositoryReadinessMessage,
     ResultMessage,
     TransportMessageKind,
     TransportPayload,
@@ -56,6 +57,9 @@ from app.worker_control.transport.http.schemas import (
     ProviderNormalizedResultRequest,
     ProviderProgressRequest,
     ReceiptResponse,
+    RepositoryReadinessRequest,
+    RepositoryReadinessTarget,
+    RepositoryReadinessTargetPage,
     ResultRequest,
     SessionResponse,
     WorkstreamAcknowledgementRequest,
@@ -270,6 +274,69 @@ async def heartbeat(
         payload=HeartbeatMessage(health=data.health),
     )
     return await _handle(database, service, envelope)
+
+
+@router.get(
+    "/sessions/{session_id}/repository-readiness-targets",
+    response_model=RepositoryReadinessTargetPage,
+    summary="List assigned repository candidates requiring provider preparation",
+)
+async def repository_readiness_targets(
+    session_id: UUID,
+    identity: AuthenticatedIdentity,
+    database: Database,
+) -> RepositoryReadinessTargetPage:
+    if session_id != identity.session_id:
+        raise transport_http_error(TransportMessageError("Worker session is invalid."))
+    from app.engineering_control.repository_readiness import (
+        repository_readiness_service,
+    )
+
+    items = await repository_readiness_service.targets(
+        database,
+        company_id=identity.context.company_id,
+        worker_id=identity.context.worker_id,
+    )
+    return RepositoryReadinessTargetPage(
+        items=tuple(
+            RepositoryReadinessTarget.model_validate(item, from_attributes=True)
+            for item in items
+        )
+    )
+
+
+@router.post(
+    "/repository-readiness",
+    response_model=ReceiptResponse,
+    summary="Publish authenticated provider repository readiness evidence",
+)
+async def publish_repository_readiness(
+    data: RepositoryReadinessRequest,
+    identity: AuthenticatedIdentity,
+    database: Database,
+    service: TransportService,
+) -> ReceiptResponse:
+    return await _handle(
+        database,
+        service,
+        _envelope(
+            data,
+            session_id=identity.session_id,
+            worker_id=identity.context.worker_id,
+            kind=TransportMessageKind.REPOSITORY_READINESS,
+            payload=RepositoryReadinessMessage(
+                milestone_id=data.milestone_id,
+                repository_key=data.repository_key,
+                branch=data.branch,
+                candidate_head=data.candidate_head,
+                observed_head=data.observed_head,
+                provider_software_sha=data.provider_software_sha,
+                prepared_at=data.prepared_at,
+                ready=data.ready,
+                reason_code=data.reason_code,
+            ),
+        ),
+    )
 
 
 @router.get(

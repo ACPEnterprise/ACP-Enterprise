@@ -138,6 +138,29 @@ def _attention(
             f"Scheduler reconciliation required: {item.reconciliation_state}.",
             (),
         )
+    if item.status == "ready" and item.requested_code_changes:
+        from app.engineering_control.repository_readiness import readiness_is_current
+
+        authoritative_head = str(
+            item.starting_commit_evidence.get("authoritative_head", "")
+        )
+        readiness = item.starting_commit_evidence.get("provider_repository_readiness")
+        repository_key = (
+            str(readiness.get("repository_key", ""))
+            if isinstance(readiness, dict)
+            else ""
+        )
+        if not readiness_is_current(
+            item.starting_commit_evidence,
+            repository_key=repository_key,
+            branch=item.owning_branch,
+            candidate_head=authoritative_head,
+        ):
+            return (
+                "waiting_on_dependency",
+                "Preparing execution environment for the current repository release.",
+                (),
+            )
     if adoption is not None:
         if adoption.status == "waiting_review":
             return (

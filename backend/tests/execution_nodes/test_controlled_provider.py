@@ -4,6 +4,7 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
+
 from app.execution_nodes.boundaries import BoundaryViolation, boundary_digest
 from app.execution_nodes.contracts import (
     ProviderBoundary,
@@ -17,7 +18,7 @@ from app.execution_nodes.provider import (
     ProviderJournal,
     prepare_writable_roots,
 )
-from app.execution_nodes.workspaces import WorkspaceManager
+from app.execution_nodes.workspaces import WorkspaceFailure, WorkspaceManager
 
 
 class Implementation:
@@ -92,11 +93,42 @@ def make_request(head: str, **changes: object) -> ProviderExecutionRequest:
 
 
 def service(tmp_path: Path, repository: Path) -> ControlledExecutionProvider:
+    git(
+        repository,
+        "update-ref",
+        "refs/acp/provider-ready/main",
+        git(repository, "rev-parse", "main"),
+    )
     return ControlledExecutionProvider(
         WorkspaceManager(tmp_path / "provider", {"acp-enterprise": repository}),
         ProviderJournal(tmp_path / "journal"),
         Implementation(),
     )
+
+
+def test_repository_readiness_prepares_provider_owned_ref_without_moving_branch(
+    repository: tuple[Path, str], tmp_path: Path
+) -> None:
+    root, head = repository
+    manager = WorkspaceManager(tmp_path / "provider", {"acp-enterprise": root})
+    evidence = manager.prepare_repository("acp-enterprise", "main", head)
+    assert evidence.ready is True
+    assert evidence.observed_head == head
+    assert git(root, "rev-parse", "main") == head
+    assert git(root, "rev-parse", "refs/acp/provider-ready/main") == head
+
+
+def test_repository_readiness_refuses_dirty_checkout_without_data_loss(
+    repository: tuple[Path, str], tmp_path: Path
+) -> None:
+    root, head = repository
+    marker = root / "local-evidence.txt"
+    marker.write_text("preserve me\n")
+    manager = WorkspaceManager(tmp_path / "provider", {"acp-enterprise": root})
+    with pytest.raises(WorkspaceFailure, match="dirty"):
+        manager.prepare_repository("acp-enterprise", "main", head)
+    assert marker.read_text() == "preserve me\n"
+    assert git(root, "rev-parse", "main") == head
 
 
 def advance_remote(repository: Path, tmp_path: Path, relative: str) -> str:

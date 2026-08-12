@@ -4,6 +4,8 @@ import shutil
 import subprocess
 from collections.abc import Iterator
 from contextlib import contextmanager
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 
 from .contracts import ProviderExecutionRequest
@@ -17,6 +19,16 @@ class WorkspaceReconciliationRequired(WorkspaceFailure):
     pass
 
 
+@dataclass(frozen=True)
+class RepositoryReadiness:
+    repository_key: str
+    branch: str
+    candidate_head: str
+    observed_head: str
+    ready: bool
+    prepared_at: datetime
+
+
 class WorkspaceManager:
     def __init__(self, root: Path, repositories: dict[str, Path]) -> None:
         self.root = root.resolve()
@@ -25,6 +37,61 @@ class WorkspaceManager:
         }
         (self.root / "executions").mkdir(parents=True, exist_ok=True, mode=0o700)
         (self.root / "locks").mkdir(parents=True, exist_ok=True, mode=0o700)
+
+    def readiness_snapshot(self) -> dict[str, dict[str, str]]:
+        snapshot: dict[str, dict[str, str]] = {}
+        for repository_key, repository in self.repositories.items():
+            rows = self._git(
+                repository,
+                "for-each-ref",
+                "--format=%(refname:strip=3)|%(objectname)",
+                "refs/acp/provider-ready/",
+            )
+            snapshot[repository_key] = {
+                branch: head
+                for row in rows.splitlines()
+                if "|" in row
+                for branch, head in (row.split("|", 1),)
+            }
+        return snapshot
+
+    def prepare_repository(
+        self, repository_key: str, branch: str, candidate_head: str
+    ) -> RepositoryReadiness:
+        """Prepare an immutable provider-owned ref without moving a human branch."""
+        repository = self.repositories.get(repository_key)
+        if repository is None:
+            raise WorkspaceFailure("Repository is not enrolled on this node.")
+        if not re.fullmatch(r"[a-z0-9][a-z0-9._-]{2,99}", repository_key):
+            raise WorkspaceFailure("Repository enrollment identity is invalid.")
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._/-]{0,254}", branch):
+            raise WorkspaceFailure("Repository branch is invalid.")
+        if not re.fullmatch(r"[0-9a-f]{40}", candidate_head):
+            raise WorkspaceFailure("Repository candidate HEAD is invalid.")
+        if self._git(repository, "status", "--porcelain=v1"):
+            raise WorkspaceFailure("Enrolled repository is dirty.")
+        self._git(repository, "fetch", "--no-tags", "origin", branch)
+        fetched = self._git(repository, "rev-parse", "FETCH_HEAD")
+        if fetched != candidate_head:
+            raise WorkspaceFailure(
+                "Authoritative remote does not match candidate HEAD."
+            )
+        current = self._git(repository, "rev-parse", f"refs/heads/{branch}")
+        if self._git(repository, "merge-base", current, candidate_head) != current:
+            raise WorkspaceReconciliationRequired(
+                "Provider repository requires non-fast-forward reconciliation."
+            )
+        ready_ref = f"refs/acp/provider-ready/{branch}"
+        self._git(repository, "update-ref", ready_ref, candidate_head)
+        observed = self._git(repository, "rev-parse", ready_ref)
+        return RepositoryReadiness(
+            repository_key=repository_key,
+            branch=branch,
+            candidate_head=candidate_head,
+            observed_head=observed,
+            ready=observed == candidate_head,
+            prepared_at=datetime.now(timezone.utc),
+        )
 
     @contextmanager
     def locked(self, request: ProviderExecutionRequest) -> Iterator[None]:
@@ -57,16 +124,14 @@ class WorkspaceManager:
             != request.boundary.expected_head
         ):
             raise WorkspaceFailure("Expected HEAD is unavailable.")
+        ready_ref = f"refs/acp/provider-ready/{request.boundary.allowed_branch}"
         if (
-            self._git(
-                repository,
-                "rev-parse",
-                "--verify",
-                f"refs/heads/{request.boundary.allowed_branch}",
-            )
+            self._git(repository, "rev-parse", "--verify", ready_ref)
             != request.boundary.expected_head
         ):
-            raise WorkspaceFailure("Approved branch no longer matches expected HEAD.")
+            raise WorkspaceFailure(
+                "Provider repository is not prepared for expected HEAD."
+            )
         target = (
             self.root / "executions" / str(request.company_id) / request.workspace_id
         )

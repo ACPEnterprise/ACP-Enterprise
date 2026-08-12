@@ -222,6 +222,33 @@ class NodeExecutionProviderClient:
             "repository_mutated": True,
         }
 
+    async def prepare_repository(
+        self, *, repository_key: str, branch: str, candidate_head: str
+    ) -> dict[str, object]:
+        payload = {
+            "repository_key": repository_key,
+            "branch": branch,
+            "candidate_head": candidate_head,
+        }
+        canonical = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+        signature = hmac.new(self.token, canonical, hashlib.sha256).hexdigest()
+        async with httpx.AsyncClient(
+            base_url=self.base_url, timeout=min(self.timeout_seconds, 120)
+        ) as client:
+            response = await client.post(
+                "/repositories/prepare",
+                content=canonical,
+                headers={
+                    "Content-Type": "application/json",
+                    "X-ACP-Provider-Signature": signature,
+                },
+            )
+        if response.status_code != 200:
+            raise IsolatedWorkspaceExecutionError(
+                "Provider repository preparation failed closed."
+            )
+        return dict(response.json())
+
 
 def _safe_relative_path(value: str) -> bool:
     parts = value.split("/")

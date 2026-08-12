@@ -438,6 +438,7 @@ async def test_roadmap_dispatch_and_safe_progression_owner_workflow(
                     "title": "Milestone two",
                     "objective": "Continue without copying a prompt.",
                     "approved": True,
+                    "requested_code_changes": False,
                 },
             ],
         },
@@ -1068,6 +1069,23 @@ def test_healthy_capacity_projects_authorized_automatic_dispatch() -> None:
     )
     assert attention == "running"
     assert reason == "Authorized — awaiting automatic worker dispatch."
+    assert actions == ()
+
+
+def test_code_milestone_without_repository_readiness_is_not_owner_startable() -> None:
+    item = SimpleNamespace(
+        reconciliation_state="current",
+        status="ready",
+        readiness_state="ready",
+        requested_code_changes=True,
+        starting_commit_evidence={"authoritative_head": "a" * 40},
+        owning_branch="customer-management-v1",
+    )
+    attention, reason, actions = _attention(item, None, None)
+    assert attention == "waiting_on_dependency"
+    assert (
+        reason == "Preparing execution environment for the current repository release."
+    )
     assert actions == ()
 
 

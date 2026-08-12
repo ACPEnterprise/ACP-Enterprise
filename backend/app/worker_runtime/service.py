@@ -15,6 +15,7 @@ from app.worker_control.transport.contracts import (
     ControlledOfferAcquisitionMessage,
     HeartbeatMessage,
     LeaseRenewalMessage,
+    RepositoryReadinessMessage,
     TransportMessageKind,
     WorkstreamAcknowledgementMessage,
     WorkstreamRuntimeUpdateMessage,
@@ -201,6 +202,14 @@ class AuthenticatedWorkerRuntime:
                     delay = self.config.reconnect_min_seconds
                     while not stop.is_set():
                         recovery = self.journal.load() if self.journal else None
+                        if (
+                            recovery is None
+                            and WorkerCapability.ENGINEERING_EXECUTE
+                            in self.config.capabilities
+                            and self.config.provider_url is not None
+                            and self.config.provider_token_file is not None
+                        ):
+                            await self.prepare_repository_readiness()
                         await self.heartbeat(
                             WorkerHealth.DEGRADED
                             if recovery is not None
@@ -243,6 +252,73 @@ class AuthenticatedWorkerRuntime:
                         delay = min(delay * 2, self.config.reconnect_max_seconds)
         finally:
             await self.close()
+
+    async def prepare_repository_readiness(self) -> None:
+        """Prepare assigned product refs before owner Start and publish evidence."""
+        session = self._require_session()
+        if self.config.provider_url is None or self.config.provider_token_file is None:
+            raise RuntimeError("Repository readiness requires the enrolled provider.")
+        targets = await self.client.repository_readiness_targets(
+            session_id=session.session_id
+        )
+        provider = NodeExecutionProviderClient(
+            self.config.provider_url, self.config.provider_token_file
+        )
+        for target in targets:
+            ready = False
+            observed = str(target["candidate_head"])
+            prepared_at = datetime.now(timezone.utc)
+            reason_code: str | None = None
+            try:
+                result = await provider.prepare_repository(
+                    repository_key=str(target["repository_key"]),
+                    branch=str(target["branch"]),
+                    candidate_head=str(target["candidate_head"]),
+                )
+                ready = result.get("ready") is True
+                observed = str(result["observed_head"])
+                prepared_at = datetime.fromisoformat(str(result["prepared_at"]))
+            except (IsolatedWorkspaceExecutionError, httpx.HTTPError, OSError):
+                reason_code = "provider_repository_preparation_failed"
+            sent_at = datetime.now(timezone.utc)
+            message = RepositoryReadinessMessage(
+                milestone_id=UUID(str(target["milestone_id"])),
+                repository_key=str(target["repository_key"]),
+                branch=str(target["branch"]),
+                candidate_head=str(target["candidate_head"]),
+                observed_head=observed,
+                provider_software_sha=self.config.service_version,
+                prepared_at=prepared_at,
+                ready=ready,
+                reason_code=reason_code,
+            )
+            envelope = self._envelope(
+                session=session,
+                sent_at=sent_at,
+                kind=TransportMessageKind.REPOSITORY_READINESS,
+                payload=message,
+            )
+            await self.client.publish_repository_readiness(
+                session_id=session.session_id,
+                payload={
+                    "message_id": str(envelope.message_id),
+                    "session_id": str(envelope.session_id),
+                    "sequence_number": envelope.sequence_number,
+                    "sent_at": envelope.sent_at.isoformat(),
+                    "authentication_proof": envelope.authentication_proof,
+                    "key_version": envelope.key_version,
+                    "milestone_id": str(message.milestone_id),
+                    "repository_key": message.repository_key,
+                    "branch": message.branch,
+                    "candidate_head": message.candidate_head,
+                    "observed_head": message.observed_head,
+                    "provider_software_sha": message.provider_software_sha,
+                    "prepared_at": message.prepared_at.isoformat(),
+                    "ready": message.ready,
+                    "reason_code": message.reason_code,
+                },
+            )
+            self._advance(sent_at)
 
     async def execute_available_offer(self) -> bool:
         async with self._lock:
@@ -632,6 +708,7 @@ class AuthenticatedWorkerRuntime:
             | LeaseRenewalMessage
             | ControlledOfferAcquisitionMessage
             | ControlledExecutionResultMessage
+            | RepositoryReadinessMessage
             | WorkstreamAcknowledgementMessage
             | WorkstreamRuntimeUpdateMessage
         ),

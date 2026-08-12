@@ -35,6 +35,7 @@ from app.worker_control.transport.contracts import (
     LeaseRenewalMessage,
     ProviderProgressMessage,
     ProviderResultMessage,
+    RepositoryReadinessMessage,
     ResultMessage,
     TransportMessageKind,
     TransportReceipt,
@@ -380,6 +381,32 @@ class WorkerTransportService:
                 now=envelope.sent_at,
             )
             return f"heartbeat:{heartbeat.id}:worker:{worker.id}"
+        if envelope.kind is TransportMessageKind.REPOSITORY_READINESS:
+            if not isinstance(payload, RepositoryReadinessMessage):
+                raise TransportMessageError("Repository readiness payload is invalid.")
+            if WorkerCapability.ENGINEERING_EXECUTE not in session.capabilities:
+                raise TransportCapabilityError("Session lacks execution capability.")
+            from app.engineering_control.repository_readiness import (
+                repository_readiness_service,
+            )
+
+            await repository_readiness_service.record(
+                database,
+                company_id=session.context.company_id,
+                worker_id=session.context.worker_id,
+                milestone_id=payload.milestone_id,
+                repository_key=payload.repository_key,
+                branch=payload.branch,
+                candidate_head=payload.candidate_head,
+                observed_head=payload.observed_head,
+                provider_software_sha=payload.provider_software_sha,
+                prepared_at=payload.prepared_at,
+                ready=payload.ready,
+                reason_code=payload.reason_code,
+            )
+            return (
+                f"repository-readiness:{payload.milestone_id}:{payload.candidate_head}"
+            )
         if envelope.kind is TransportMessageKind.RESULT:
             if not isinstance(payload, ResultMessage):
                 raise TransportMessageError("Result payload is invalid.")

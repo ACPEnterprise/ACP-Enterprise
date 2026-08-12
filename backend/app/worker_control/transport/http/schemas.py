@@ -60,6 +60,29 @@ class HeartbeatRequest(EnvelopeEvidence):
     health: WorkerHealth
 
 
+class RepositoryReadinessTarget(StrictModel):
+    milestone_id: UUID
+    repository_key: str
+    branch: str
+    candidate_head: str
+
+
+class RepositoryReadinessTargetPage(StrictModel):
+    items: tuple[RepositoryReadinessTarget, ...]
+
+
+class RepositoryReadinessRequest(EnvelopeEvidence):
+    milestone_id: UUID
+    repository_key: Annotated[str, Field(min_length=1, max_length=100)]
+    branch: Annotated[str, Field(min_length=1, max_length=255)]
+    candidate_head: Annotated[str, Field(pattern=r"^[0-9a-f]{40}$")]
+    observed_head: Annotated[str, Field(pattern=r"^[0-9a-f]{40}$")]
+    provider_software_sha: Annotated[str, Field(pattern=r"^[0-9a-f]{40}$")]
+    prepared_at: datetime
+    ready: bool
+    reason_code: Annotated[str | None, Field(max_length=100)] = None
+
+
 class LeaseRenewalRequest(EnvelopeEvidence):
     lease_id: UUID
     expected_lease_version: Annotated[int, Field(ge=1)]

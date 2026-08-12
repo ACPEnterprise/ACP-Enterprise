@@ -46,6 +46,13 @@ class ExecutionPayload(BaseModel):
     commit_subject: str
 
 
+class RepositoryPreparationPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    repository_key: str = Field(pattern=r"^[a-z0-9][a-z0-9._-]{2,99}$")
+    branch: str = Field(min_length=1, max_length=255)
+    candidate_head: str = Field(pattern=r"^[0-9a-f]{40}$")
+
+
 def create_app() -> FastAPI:
     token_path = Path(os.environ["ACP_PROVIDER_TOKEN_FILE"]).resolve(strict=True)
     if token_path.stat().st_mode & 0o077:
@@ -57,11 +64,15 @@ def create_app() -> FastAPI:
         Path(os.environ["ACP_PROVIDER_REPOSITORIES_FILE"]).read_text()
     )
     journal = ProviderJournal(Path(os.environ["ACP_PROVIDER_STATE_ROOT"]))
+    workspaces = WorkspaceManager(
+        Path(os.environ["ACP_PROVIDER_WORKSPACE_ROOT"]),
+        {key: Path(value) for key, value in repositories.items()},
+    )
+    provider_software_sha = os.environ.get(
+        "ACP_PROVIDER_SERVICE_VERSION", Path(__file__).resolve().parents[3].name
+    )
     provider = ControlledExecutionProvider(
-        WorkspaceManager(
-            Path(os.environ["ACP_PROVIDER_WORKSPACE_ROOT"]),
-            {key: Path(value) for key, value in repositories.items()},
-        ),
+        workspaces,
         journal,
         CodexImplementation(
             Path(os.environ["ACP_PROVIDER_CODEX_EXECUTABLE"]),
@@ -89,6 +100,8 @@ def create_app() -> FastAPI:
             "status": "healthy",
             "provider": "controlled-code-execution",
             "repositories": sorted(repositories),
+            "provider_software_sha": provider_software_sha,
+            "product_repository_readiness": workspaces.readiness_snapshot(),
         }
 
     @app.post("/execute")
@@ -121,6 +134,31 @@ def create_app() -> FastAPI:
             "files_changed": result.files_changed,
             "validation": result.validation,
             "evidence": result.evidence,
+        }
+
+    @app.post("/repositories/prepare")
+    def prepare_repository(
+        payload: RepositoryPreparationPayload,
+        signature: Annotated[str, Header(alias="X-ACP-Provider-Signature")],
+    ) -> dict[str, object]:
+        canonical = json.dumps(
+            payload.model_dump(mode="json"), sort_keys=True, separators=(",", ":")
+        ).encode()
+        expected = hmac.new(token, canonical, hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(expected, signature):
+            raise HTTPException(
+                status_code=401, detail="Provider request authentication failed."
+            )
+        evidence = workspaces.prepare_repository(
+            payload.repository_key, payload.branch, payload.candidate_head
+        )
+        return {
+            "repository_key": evidence.repository_key,
+            "branch": evidence.branch,
+            "candidate_head": evidence.candidate_head,
+            "observed_head": evidence.observed_head,
+            "ready": evidence.ready,
+            "prepared_at": evidence.prepared_at.isoformat(),
         }
 
     @app.get("/executions/{execution_id}/status")
