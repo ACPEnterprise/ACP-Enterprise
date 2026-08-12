@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "scheduler_version": "MMQ.5-2026-08-11.6",
-  "fingerprint": "998787a95140b26706e8d5a5f0646c5f7141d93e6b371d0820da195bac610eef",
+  "scheduler_version": "MMQ.5-2026-08-11.7",
+  "fingerprint": "b30f6fb383909f4d26a72c47c73b10e674f7241f30d8bb3df6fe91b3f8526325",
   "authoritative_repository_head": "9c2b114cb658be0454bbb36bdf0e5929ecc7e0e5",
   "source_documents": [
     "docs/project/master-milestone-queue.md",
@@ -170,8 +170,8 @@
       "legacy_titles": ["Establish technician application shell", "TECH.1"],
       "execution_boundary": {
         "boundary_id": "TECH.1",
-        "boundary_version": 1,
-        "fingerprint": "df075f08caf0cfedfc2ba32939a0a1f2b3a11be23a93776e58da721313b97aa1",
+        "boundary_version": 2,
+        "fingerprint": "04980ac90a5d1ed0e379600ab7e02cdc4f74fc767572c10cd35a79e3280442c9",
         "allowed_paths": [
           "frontend/src/features/technician/**",
           "frontend/src/routes/Technician*.tsx",
@@ -184,6 +184,8 @@
           "frontend/src/routing/routeMetadata.test.ts",
           "frontend/src/layout/navigation.ts",
           "frontend/src/layout/navigation.test.ts",
+          "frontend/src/layout/Sidebar.tsx",
+          "frontend/src/layout/types.ts",
           "docs/architecture/technician/**"
         ],
         "forbidden_paths": [
@@ -200,7 +202,7 @@
           "**/__pycache__/**"
         ],
         "permitted_operations": ["inspect", "modify", "validate", "commit", "mechanical_reconcile", "push"],
-        "validation_requirements": ["git diff --check", "eslint", "typescript"]
+        "validation_requirements": ["git diff --check", "frontend tests", "eslint", "typescript"]
       }
     }
   ]

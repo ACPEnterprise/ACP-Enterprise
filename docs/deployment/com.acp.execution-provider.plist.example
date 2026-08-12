@@ -16,6 +16,11 @@
     <key>ACP_PROVIDER_CODEX_EXECUTABLE</key><string>REPLACE_CODEX_EXECUTABLE</string>
     <key>ACP_PROVIDER_CODEX_HOME</key><string>REPLACE_CODEX_HOME</string>
     <key>ACP_PROVIDER_EVIDENCE_ROOT</key><string>REPLACE_EVIDENCE_ROOT</string>
+    <key>ACP_PROVIDER_NODE_EXECUTABLE</key><string>REPLACE_NODE_EXECUTABLE</string>
+    <key>ACP_PROVIDER_NPM_EXECUTABLE</key><string>REPLACE_NPM_EXECUTABLE</string>
+    <key>ACP_PROVIDER_NODE_VERSION</key><string>REPLACE_NODE_VERSION</string>
+    <key>ACP_PROVIDER_NPM_VERSION</key><string>REPLACE_NPM_VERSION</string>
+    <key>ACP_PROVIDER_NPM_CACHE_ROOT</key><string>REPLACE_NPM_CACHE_ROOT</string>
   </dict>
   <key>RunAtLoad</key><true/><key>KeepAlive</key><true/><key>ProcessType</key><string>Background</string>
   <key>StandardOutPath</key><string>REPLACE_LOG_DIRECTORY/provider.out.log</string>

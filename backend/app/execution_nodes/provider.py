@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import subprocess
@@ -13,6 +14,113 @@ from .workspaces import WorkspaceManager, WorkspaceReconciliationRequired
 
 class ProviderFailure(RuntimeError):
     pass
+
+
+class FrontendValidationEnvironment:
+    """Prepare the lockfile-pinned frontend toolchain without network or scripts."""
+
+    def __init__(
+        self,
+        node_executable: Path,
+        npm_executable: Path,
+        cache_root: Path,
+        *,
+        expected_node_version: str,
+        expected_npm_version: str,
+    ) -> None:
+        self.node_executable = node_executable.resolve(strict=True)
+        self.npm_executable = npm_executable.resolve(strict=True)
+        self.cache_root = cache_root.resolve()
+        self.cache_root.mkdir(parents=True, exist_ok=True, mode=0o700)
+        os.chmod(self.cache_root, 0o700)
+        self.user_config = self.cache_root / "provider.npmrc"
+        if not self.user_config.exists():
+            self.user_config.write_text("", encoding="utf-8")
+        os.chmod(self.user_config, 0o600)
+        self.expected_node_version = expected_node_version.removeprefix("v")
+        self.expected_npm_version = expected_npm_version.removeprefix("v")
+
+    def environment(self) -> dict[str, str]:
+        path = os.pathsep.join(
+            dict.fromkeys(
+                (
+                    str(self.node_executable.parent),
+                    str(self.npm_executable.parent),
+                    "/usr/bin",
+                    "/bin",
+                )
+            )
+        )
+        return {
+            "PATH": path,
+            "LANG": "C.UTF-8",
+            "ENVIRONMENT": "test",
+            "NPM_CONFIG_CACHE": str(self.cache_root),
+            "NPM_CONFIG_USERCONFIG": str(self.user_config),
+            "NPM_CONFIG_OFFLINE": "true",
+            "NPM_CONFIG_IGNORE_SCRIPTS": "true",
+            "NPM_CONFIG_AUDIT": "false",
+            "NPM_CONFIG_FUND": "false",
+        }
+
+    def prepare(self, workspace: Path) -> dict[str, object]:
+        frontend = workspace / "frontend"
+        package = frontend / "package.json"
+        lockfile = frontend / "package-lock.json"
+        if not package.is_file() or not lockfile.is_file():
+            raise ProviderFailure("Frontend validation lockfile is unavailable.")
+        environment = self.environment()
+        node_version = self._version(self.node_executable, environment)
+        npm_version = self._version(self.npm_executable, environment)
+        if node_version != self.expected_node_version:
+            raise ProviderFailure("Configured Node.js version is not approved.")
+        if npm_version != self.expected_npm_version:
+            raise ProviderFailure("Configured npm version is not approved.")
+        completed = subprocess.run(
+            (
+                str(self.npm_executable),
+                "ci",
+                "--ignore-scripts",
+                "--offline",
+                "--no-audit",
+                "--no-fund",
+            ),
+            cwd=frontend,
+            env=environment,
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            text=True,
+            timeout=1800,
+            check=False,
+        )
+        if completed.returncode:
+            raise ProviderFailure(
+                "Frontend validation dependencies are not available from the "
+                "approved offline cache."
+            )
+        if not (frontend / "node_modules" / ".package-lock.json").is_file():
+            raise ProviderFailure("Frontend validation dependencies are incomplete.")
+        return {
+            "mode": "npm-ci-offline-ignore-scripts",
+            "lockfile_sha256": hashlib.sha256(lockfile.read_bytes()).hexdigest(),
+            "node_version": node_version,
+            "npm_version": npm_version,
+        }
+
+    @staticmethod
+    def _version(executable: Path, environment: dict[str, str]) -> str:
+        completed = subprocess.run(
+            (str(executable), "--version"),
+            env=environment,
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        if completed.returncode or not completed.stdout.strip():
+            raise ProviderFailure("Configured frontend toolchain is unavailable.")
+        return completed.stdout.strip().removeprefix("v")
 
 
 def prepare_writable_roots(
@@ -213,10 +321,12 @@ class ControlledExecutionProvider:
         workspaces: WorkspaceManager,
         journal: ProviderJournal,
         implementation: CodexImplementation,
+        frontend_validation: FrontendValidationEnvironment | None = None,
     ) -> None:
         self.workspaces = workspaces
         self.journal = journal
         self.implementation = implementation
+        self.frontend_validation = frontend_validation
 
     def execute(
         self, request: ProviderExecutionRequest, *, timeout_seconds: int = 7200
@@ -287,10 +397,14 @@ class ControlledExecutionProvider:
             else:
                 self.journal.append(request, ProviderPhase.COMPOSED)
                 workspace = self.workspaces.prepare(request)
+                validation_environment = self._prepare_validation_environment(
+                    workspace, request.boundary.validation_requirements
+                )
                 self.journal.append(
                     request,
                     ProviderPhase.WORKSPACE_READY,
                     head=request.boundary.expected_head,
+                    validation_environment=validation_environment,
                 )
                 self.journal.append(request, ProviderPhase.EXECUTING)
                 evidence = self.implementation.execute(
@@ -371,9 +485,8 @@ class ControlledExecutionProvider:
                 evidence,
             )
 
-    @staticmethod
     def _validate(
-        workspace: Path, requirements: tuple[str, ...], files: tuple[str, ...]
+        self, workspace: Path, requirements: tuple[str, ...], files: tuple[str, ...]
     ) -> dict[str, bool]:
         python_files = tuple(
             path.removeprefix("backend/")
@@ -421,6 +534,7 @@ class ControlledExecutionProvider:
                 ("npm", "run", "lint", "--", "--max-warnings=0"),
             ),
             "typescript": (Path("frontend"), ("npm", "run", "build")),
+            "frontend tests": (Path("frontend"), ("npm", "run", "test:run")),
         }
         python_changed = any(path.endswith(".py") for path in files)
         frontend_changed = any(path.startswith("frontend/") for path in files)
@@ -436,7 +550,10 @@ class ControlledExecutionProvider:
             if normalized == "pytest" and not (test_files or component_tests):
                 results[requirement] = True
                 continue
-            if normalized in {"eslint", "typescript"} and not frontend_changed:
+            if (
+                normalized in {"eslint", "typescript", "frontend tests"}
+                and not frontend_changed
+            ):
                 results[requirement] = True
                 continue
             validation = allowed.get(normalized)
@@ -449,6 +566,13 @@ class ControlledExecutionProvider:
                 "ENVIRONMENT": "test",
                 "PYTHONPATH": str(workspace / "backend"),
             }
+            if normalized in {"eslint", "typescript", "frontend tests"}:
+                if self.frontend_validation is None:
+                    raise ProviderFailure(
+                        "Frontend validation environment is not configured."
+                    )
+                environment.update(self.frontend_validation.environment())
+                environment["PYTHONPATH"] = str(workspace / "backend")
             completed = subprocess.run(
                 argv,
                 cwd=workspace / relative_cwd,
@@ -461,10 +585,21 @@ class ControlledExecutionProvider:
             results[requirement] = completed.returncode == 0
         return results
 
+    def _prepare_validation_environment(
+        self, workspace: Path, requirements: tuple[str, ...]
+    ) -> dict[str, object]:
+        frontend_required = any(
+            item.casefold() in {"eslint", "typescript", "frontend tests"}
+            for item in requirements
+        )
+        if not frontend_required:
+            return {"frontend": "not-required"}
+        if self.frontend_validation is None:
+            raise ProviderFailure("Frontend validation environment is not configured.")
+        return self.frontend_validation.prepare(workspace)
+
 
 def _file_digest(path: Path) -> str | None:
     if not path.is_file():
         return None
-    import hashlib
-
     return hashlib.sha256(path.read_bytes()).hexdigest()

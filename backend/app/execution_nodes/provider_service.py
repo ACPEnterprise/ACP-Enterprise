@@ -10,7 +10,12 @@ from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
 from .contracts import ProviderBoundary, ProviderExecutionRequest
-from .provider import CodexImplementation, ControlledExecutionProvider, ProviderJournal
+from .provider import (
+    CodexImplementation,
+    ControlledExecutionProvider,
+    FrontendValidationEnvironment,
+    ProviderJournal,
+)
 from .workspaces import WorkspaceManager
 
 
@@ -62,6 +67,13 @@ def create_app() -> FastAPI:
             Path(os.environ["ACP_PROVIDER_CODEX_EXECUTABLE"]),
             Path(os.environ["ACP_PROVIDER_CODEX_HOME"]),
             Path(os.environ["ACP_PROVIDER_EVIDENCE_ROOT"]),
+        ),
+        FrontendValidationEnvironment(
+            Path(os.environ["ACP_PROVIDER_NODE_EXECUTABLE"]),
+            Path(os.environ["ACP_PROVIDER_NPM_EXECUTABLE"]),
+            Path(os.environ["ACP_PROVIDER_NPM_CACHE_ROOT"]),
+            expected_node_version=os.environ["ACP_PROVIDER_NODE_VERSION"],
+            expected_npm_version=os.environ["ACP_PROVIDER_NPM_VERSION"],
         ),
     )
     app = FastAPI(

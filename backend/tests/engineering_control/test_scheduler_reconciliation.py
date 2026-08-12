@@ -29,10 +29,10 @@ def manifest():
 
 
 def test_manifest_is_deterministic_complete_and_unique(manifest) -> None:
-    assert manifest.scheduler_version == "MMQ.5-2026-08-11.6"
+    assert manifest.scheduler_version == "MMQ.5-2026-08-11.7"
     assert (
         manifest.fingerprint
-        == "998787a95140b26706e8d5a5f0646c5f7141d93e6b371d0820da195bac610eef"
+        == "b30f6fb383909f4d26a72c47c73b10e674f7241f30d8bb3df6fe91b3f8526325"
     )
     assert (
         manifest.authoritative_repository_head
@@ -109,9 +109,9 @@ def test_manifest_is_deterministic_complete_and_unique(manifest) -> None:
     tech = next(item for item in manifest.milestones if item.milestone_code == "TECH.1")
     assert tech.execution_boundary is not None
     assert tech.execution_boundary.boundary_id == "TECH.1"
-    assert tech.execution_boundary.boundary_version == 1
+    assert tech.execution_boundary.boundary_version == 2
     assert tech.execution_boundary.fingerprint == (
-        "df075f08caf0cfedfc2ba32939a0a1f2b3a11be23a93776e58da721313b97aa1"
+        "04980ac90a5d1ed0e379600ab7e02cdc4f74fc767572c10cd35a79e3280442c9"
     )
 
 
@@ -401,9 +401,9 @@ async def test_apply_supersedes_legacy_pricebook_identity_idempotently(
             boundary = tech.starting_commit_evidence["execution_boundary"]
             assert isinstance(boundary, dict)
             assert boundary["boundary_id"] == "TECH.1"
-            assert boundary["boundary_version"] == 1
+            assert boundary["boundary_version"] == 2
             assert boundary["fingerprint"] == (
-                "df075f08caf0cfedfc2ba32939a0a1f2b3a11be23a93776e58da721313b97aa1"
+                "04980ac90a5d1ed0e379600ab7e02cdc4f74fc767572c10cd35a79e3280442c9"
             )
     finally:
         await engine.dispose()

@@ -4,6 +4,7 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
+
 from app.execution_nodes.boundaries import BoundaryViolation, boundary_digest
 from app.execution_nodes.contracts import (
     ProviderBoundary,
@@ -12,6 +13,7 @@ from app.execution_nodes.contracts import (
 )
 from app.execution_nodes.provider import (
     ControlledExecutionProvider,
+    FrontendValidationEnvironment,
     ProviderFailure,
     ProviderJournal,
     prepare_writable_roots,
@@ -193,6 +195,103 @@ def test_filename_boundaries_prepare_only_the_containing_directory(
     )
 
     assert roots == (routes.resolve(), router.parent.resolve())
+
+
+def _frontend_validation_environment(tmp_path: Path) -> FrontendValidationEnvironment:
+    tools = tmp_path / "tools"
+    tools.mkdir()
+    node = tools / "node"
+    node.write_text("#!/bin/sh\necho v22.23.1\n")
+    node.chmod(0o755)
+    npm = tools / "npm"
+    npm.write_text(
+        "#!/bin/sh\n"
+        'if [ "$1" = "--version" ]; then echo 10.9.8; exit 0; fi\n'
+        'printf \'%s\\n\' "$*|$NPM_CONFIG_OFFLINE|$NPM_CONFIG_IGNORE_SCRIPTS" >> "$NPM_CONFIG_CACHE/calls"\n'
+        'if [ "$1" = "ci" ]; then mkdir -p node_modules; : > node_modules/.package-lock.json; fi\n'
+    )
+    npm.chmod(0o755)
+    return FrontendValidationEnvironment(
+        node,
+        npm,
+        tmp_path / "npm-cache",
+        expected_node_version="22.23.1",
+        expected_npm_version="10.9.8",
+    )
+
+
+def test_frontend_dependencies_are_prepared_offline_without_scripts(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path / "workspace"
+    frontend = workspace / "frontend"
+    frontend.mkdir(parents=True)
+    (frontend / "package.json").write_text("{}\n")
+    (frontend / "package-lock.json").write_text('{"lockfileVersion":3}\n')
+    environment = _frontend_validation_environment(tmp_path)
+
+    evidence = environment.prepare(workspace)
+
+    assert evidence["mode"] == "npm-ci-offline-ignore-scripts"
+    assert evidence["node_version"] == "22.23.1"
+    assert evidence["npm_version"] == "10.9.8"
+    calls = (tmp_path / "npm-cache" / "calls").read_text()
+    assert "ci --ignore-scripts --offline --no-audit --no-fund|true|true" in calls
+
+
+def test_frontend_validation_uses_prepared_pinned_toolchain(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    frontend = workspace / "frontend"
+    frontend.mkdir(parents=True)
+    (frontend / "package.json").write_text("{}\n")
+    (frontend / "package-lock.json").write_text('{"lockfileVersion":3}\n')
+    environment = _frontend_validation_environment(tmp_path)
+    environment.prepare(workspace)
+    provider = ControlledExecutionProvider(
+        WorkspaceManager(tmp_path / "provider", {}),
+        ProviderJournal(tmp_path / "journal"),
+        Implementation(),
+        environment,
+    )
+
+    results = provider._validate(
+        workspace,
+        ("frontend tests", "eslint", "typescript"),
+        ("frontend/src/features/technician/TechnicianShell.tsx",),
+    )
+
+    assert results == {"frontend tests": True, "eslint": True, "typescript": True}
+    calls = (tmp_path / "npm-cache" / "calls").read_text()
+    assert "run test:run|true|true" in calls
+    assert "run lint -- --max-warnings=0|true|true" in calls
+    assert "run build|true|true" in calls
+
+
+def test_frontend_validation_fails_before_execution_when_not_configured(
+    repository: tuple[Path, str], tmp_path: Path
+) -> None:
+    root, head = repository
+    request = make_request(head)
+    boundary = ProviderBoundary(
+        **{
+            **request.boundary.__dict__,
+            "validation_requirements": ("typescript",),
+        }
+    )
+    request = ProviderExecutionRequest(
+        **{
+            **request.__dict__,
+            "boundary": boundary,
+            "boundary_digest": boundary_digest(boundary),
+        }
+    )
+
+    with pytest.raises(ProviderFailure, match="not configured"):
+        service(tmp_path, root).execute(request)
+
+    journal = ProviderJournal(tmp_path / "journal")
+    assert journal.latest_phase(request) is ProviderPhase.COMPOSED
+    assert git(root, "status", "--porcelain") == ""
 
 
 @pytest.mark.parametrize(

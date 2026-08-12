@@ -8,7 +8,12 @@ and fingerprint before composing an Engineering Command.
 
 The approved implementation surface is the technician feature, route, API, hook,
 and type modules, the exact shared router/navigation integration files, and this
-technician architecture documentation. Backend code, Alembic migrations,
+technician architecture documentation. The exact shared shell files are
+`frontend/src/layout/navigation.ts`, `frontend/src/layout/navigation.test.ts`,
+`frontend/src/layout/Sidebar.tsx`, and `frontend/src/layout/types.ts`. The type
+file is the closed navigation identity contract; the Sidebar is the established
+permission-aware projection boundary. No other `frontend/src/layout/**` path is
+implied. Backend code, Alembic migrations,
 deployment and infrastructure files, credentials, environments, and unrelated
 product modules are outside the boundary.
 
@@ -18,7 +23,7 @@ Production, import or cut over data, force-push, resolve semantic conflicts, or
 perform irreversible operations. Its provider validation contract is `git diff
 --check`, ESLint, and TypeScript production validation. Device-oriented and
 focused frontend tests remain required completion evidence in the milestone
-instruction even though they are not provider command primitives.
+instruction and provider completion evidence.
 
 Changing this scope requires a new boundary version and fingerprint in the
 authoritative scheduler manifest. A Ready code-changing scheduler milestone

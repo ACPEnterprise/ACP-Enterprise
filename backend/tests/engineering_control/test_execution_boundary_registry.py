@@ -52,6 +52,8 @@ def test_tech_boundary_resolves_and_composes_deterministically() -> None:
         "frontend/src/routing/routeMetadata.test.ts",
         "frontend/src/layout/navigation.ts",
         "frontend/src/layout/navigation.test.ts",
+        "frontend/src/layout/Sidebar.tsx",
+        "frontend/src/layout/types.ts",
         "docs/architecture/technician/**",
     ]
     normalized = EngineeringControlService._normalize_execution_boundary(
@@ -122,10 +124,16 @@ def test_tech_boundary_rejects_path_expansion_and_prohibited_operation() -> None
     )
     enforce_changed_paths(
         boundary,
-        ("frontend/src/features/technician/TechnicianShell.tsx",),
+        (
+            "frontend/src/features/technician/TechnicianShell.tsx",
+            "frontend/src/layout/Sidebar.tsx",
+            "frontend/src/layout/types.ts",
+        ),
     )
     with pytest.raises(BoundaryViolation, match="Changed path is forbidden"):
         enforce_changed_paths(boundary, ("backend/app/jobs/service.py",))
+    with pytest.raises(BoundaryViolation, match="outside the approved boundary"):
+        enforce_changed_paths(boundary, ("frontend/src/layout/ApplicationShell.tsx",))
 
     invalid = dict(resolved)
     invalid["permitted_operations"] = [

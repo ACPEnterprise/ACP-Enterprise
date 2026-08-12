@@ -16,6 +16,21 @@ Required protected configuration:
 - `ACP_PROVIDER_CODEX_EXECUTABLE`: pinned Codex executable;
 - `ACP_PROVIDER_CODEX_HOME`: existing protected node-local Codex credential directory;
 - `ACP_PROVIDER_EVIDENCE_ROOT`: bounded non-repository evidence directory.
+- `ACP_PROVIDER_NODE_EXECUTABLE` and `ACP_PROVIDER_NPM_EXECUTABLE`: pinned,
+  absolute frontend toolchain executables;
+- `ACP_PROVIDER_NODE_VERSION` and `ACP_PROVIDER_NPM_VERSION`: approved exact versions
+  verified before preparation or validation;
+- `ACP_PROVIDER_NPM_CACHE_ROOT`: provider-owned mode `0700` cache pre-warmed by
+  an administrator from the committed lockfile.
+
+Frontend validation dependencies are prepared before `executing` with `npm ci
+--ignore-scripts --offline`. The committed lockfile supplies package identities
+and integrity hashes, the provider supplies an empty private npm user config, and
+the offline cache supplies package bytes. No registry credentials, network access,
+or package lifecycle scripts are available to unattended execution. An incomplete
+cache or mismatched Node/npm major fails at workspace preparation rather than
+creating an ambiguous running execution. `node_modules` remains ignored workspace
+material and is never eligible for commit.
 
 Bind the provider to `127.0.0.1` only. Do not expose it through Caddy, Preview, or the public network. Enroll and revoke its associated worker/node identity through Engineering administration. Revocation fails closed at offer and result validation.
 
