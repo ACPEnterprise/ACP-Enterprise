@@ -2,6 +2,9 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
 from app.core.config import settings
 from app.engineering_control.mobile.roadmaps import (
     EngineeringMilestone,
@@ -13,9 +16,6 @@ from app.engineering_control.scheduler.reconciliation import (
     SchedulerReconciliationService,
 )
 from app.engineering_control.service import EngineeringControlService
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from tests.engineering_control.test_engineering_command_service import (
     create_input,
     seed_service_fixture,
@@ -29,10 +29,10 @@ def manifest():
 
 
 def test_manifest_is_deterministic_complete_and_unique(manifest) -> None:
-    assert manifest.scheduler_version == "MMQ.5-2026-08-11.5"
+    assert manifest.scheduler_version == "MMQ.5-2026-08-11.6"
     assert (
         manifest.fingerprint
-        == "16b9683b96d44de787e4972e40d832bd06987c089888c02a1bb4fe4debf0d646"
+        == "998787a95140b26706e8d5a5f0646c5f7141d93e6b371d0820da195bac610eef"
     )
     assert (
         manifest.authoritative_repository_head
@@ -106,6 +106,13 @@ def test_manifest_is_deterministic_complete_and_unique(manifest) -> None:
     )
     assert pricebook.legacy_titles == ("Price Book Foundation V1",)
     assert pricebook.superseded_legacy_titles == ("Price Book",)
+    tech = next(item for item in manifest.milestones if item.milestone_code == "TECH.1")
+    assert tech.execution_boundary is not None
+    assert tech.execution_boundary.boundary_id == "TECH.1"
+    assert tech.execution_boundary.boundary_version == 1
+    assert tech.execution_boundary.fingerprint == (
+        "df075f08caf0cfedfc2ba32939a0a1f2b3a11be23a93776e58da721313b97aa1"
+    )
 
 
 def test_manifest_codes_are_traceable_to_approved_mmq_documents(manifest) -> None:
@@ -384,5 +391,19 @@ async def test_apply_supersedes_legacy_pricebook_identity_idempotently(
             assert historical.milestone_code is None
             assert historical.status == "draft"
             assert historical.reconciliation_state == "superseded"
+            tech = await session.scalar(
+                select(EngineeringMilestone).where(
+                    EngineeringMilestone.company_id == fixture.context.company.id,
+                    EngineeringMilestone.milestone_code == "TECH.1",
+                )
+            )
+            assert tech is not None
+            boundary = tech.starting_commit_evidence["execution_boundary"]
+            assert isinstance(boundary, dict)
+            assert boundary["boundary_id"] == "TECH.1"
+            assert boundary["boundary_version"] == 1
+            assert boundary["fingerprint"] == (
+                "df075f08caf0cfedfc2ba32939a0a1f2b3a11be23a93776e58da721313b97aa1"
+            )
     finally:
         await engine.dispose()

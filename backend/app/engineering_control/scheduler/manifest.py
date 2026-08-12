@@ -6,6 +6,14 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 CapacityIdentity = Literal["OM1", "OM2", "MIG", "ECO", "LAP"]
+ExecutionOperation = Literal[
+    "inspect",
+    "modify",
+    "validate",
+    "commit",
+    "mechanical_reconcile",
+    "push",
+]
 SchedulerState = Literal[
     "planned",
     "ready",
@@ -32,6 +40,37 @@ class DependencyEvidence(SchedulerModel):
     evidence: str = Field(min_length=1)
 
 
+class ExecutionBoundaryDefinition(SchedulerModel):
+    boundary_id: str = Field(pattern=r"^[A-Z][A-Z0-9.-]+$")
+    boundary_version: int = Field(ge=1)
+    fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
+    allowed_paths: tuple[str, ...] = Field(min_length=1, max_length=500)
+    forbidden_paths: tuple[str, ...] = Field(min_length=1, max_length=100)
+    permitted_operations: tuple[ExecutionOperation, ...] = Field(
+        min_length=1, max_length=6
+    )
+    validation_requirements: tuple[str, ...] = Field(min_length=1, max_length=50)
+
+    @model_validator(mode="after")
+    def validate_fingerprint(self) -> "ExecutionBoundaryDefinition":
+        payload = self.model_dump(exclude={"fingerprint"}, mode="json")
+        if self.fingerprint != manifest_fingerprint(payload):
+            raise ValueError("Execution boundary fingerprint is invalid.")
+        required_operations = {
+            "inspect",
+            "modify",
+            "validate",
+            "commit",
+            "mechanical_reconcile",
+            "push",
+        }
+        if set(self.permitted_operations) != required_operations:
+            raise ValueError("Code-changing execution authority is incomplete.")
+        if not {".git/**", ".env*", "**/.env*"} <= set(self.forbidden_paths):
+            raise ValueError("Mandatory forbidden paths are absent.")
+        return self
+
+
 class MilestoneDefinition(SchedulerModel):
     milestone_code: str = Field(pattern=r"^[A-Z][A-Z0-9.-]+$")
     title: str = Field(min_length=1, max_length=160)
@@ -51,6 +90,7 @@ class MilestoneDefinition(SchedulerModel):
     completion_evidence: tuple[str, ...] = ()
     legacy_titles: tuple[str, ...] = ()
     superseded_legacy_titles: tuple[str, ...] = ()
+    execution_boundary: ExecutionBoundaryDefinition | None = None
     preserve_active_execution: bool = False
 
     @model_validator(mode="after")
@@ -59,6 +99,26 @@ class MilestoneDefinition(SchedulerModel):
             raise ValueError("Canonical and superseded legacy titles must be disjoint.")
         if self.title in self.superseded_legacy_titles:
             raise ValueError("The canonical milestone title cannot be superseded.")
+        if self.execution_boundary is not None:
+            if self.execution_boundary.boundary_id != self.milestone_code:
+                raise ValueError(
+                    "Execution boundary identity does not match milestone."
+                )
+            if self.migration_classification == "none" and not any(
+                path.startswith("backend/alembic/versions/")
+                for path in self.execution_boundary.forbidden_paths
+            ):
+                raise ValueError(
+                    "A migration-free milestone must explicitly forbid migrations."
+                )
+        if (
+            self.readiness_state == "ready"
+            and self.implementation_classification != "TYPE_C"
+            and self.execution_boundary is None
+        ):
+            raise ValueError(
+                "A Ready code-changing milestone needs an execution boundary."
+            )
         return self
 
 

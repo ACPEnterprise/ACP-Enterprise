@@ -4,6 +4,9 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
+from sqlalchemy import select, update
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
 from app.core.config import settings
 from app.engineering_capacity.errors import CapacityUnavailableError
 from app.engineering_capacity.models import EngineeringCapacityEvent
@@ -31,9 +34,6 @@ from app.engineering_control.mobile.roadmaps import (
 from app.engineering_control.service import EngineeringControlService
 from app.worker_control.models import EngineeringWorker
 from app.worker_identity.models import WorkerCredential, WorkerIdentity
-from sqlalchemy import select, update
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from tests.engineering_control.test_engineering_command_service import (
     ServiceFixture,
     seed_service_fixture,
@@ -78,6 +78,8 @@ async def approved_command(fixture: ServiceFixture, suffix: str):
                         "validate",
                         "modify",
                         "commit",
+                        "mechanical_reconcile",
+                        "push",
                     ],
                     "validation_requirements": ["git diff --check"],
                 },

@@ -20,7 +20,17 @@ class ExecutionBoundarySchema(EngineeringApiSchema):
     expected_head: str = Field(pattern=r"^[0-9a-f]{40}$")
     allowed_paths: tuple[str, ...] = Field(min_length=1, max_length=500)
     forbidden_paths: tuple[str, ...] = Field(min_length=1, max_length=100)
-    permitted_operations: tuple[Literal["inspect", "modify", "validate", "commit"], ...]
+    permitted_operations: tuple[
+        Literal[
+            "inspect",
+            "modify",
+            "validate",
+            "commit",
+            "mechanical_reconcile",
+            "push",
+        ],
+        ...,
+    ]
     validation_requirements: tuple[str, ...] = Field(min_length=1, max_length=50)
 
 

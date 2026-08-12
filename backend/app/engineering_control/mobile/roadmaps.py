@@ -2,6 +2,7 @@ from datetime import datetime, timedelta, timezone
 from typing import ClassVar
 from uuid import UUID, uuid4
 
+from pydantic import ValidationError
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
@@ -27,6 +28,7 @@ from app.engineering_control.commands import (
 from app.engineering_control.repository_operation.models import (
     EngineeringRepositoryOperation,
 )
+from app.engineering_control.scheduler.manifest import ExecutionBoundaryDefinition
 from app.engineering_control.service import EngineeringControlService
 from app.engineering_control.workstream_runtime import EngineeringWorkstreamEvent
 from app.engineering_execution.controlled.models import ControlledExecutionResultModel
@@ -357,6 +359,8 @@ class RoadmapService:
         requested_code_changes = milestone.requested_code_changes
         milestone_validation = tuple(milestone.validation)
         owning_workstream = milestone.owning_workstream
+        milestone_code = milestone.milestone_code
+        starting_commit_evidence = dict(milestone.starting_commit_evidence)
         reconciliation_state = milestone.reconciliation_state
         readiness_state = milestone.readiness_state
         instruction = self._instruction(milestone)
@@ -409,7 +413,9 @@ class RoadmapService:
                         repository_key=repository_key,
                         expected_branch=expected_branch,
                         expected_head=expected_head,
+                        milestone_code=milestone_code,
                         owning_workstream=owning_workstream,
+                        starting_commit_evidence=starting_commit_evidence,
                         validation=milestone_validation,
                         requested_code_changes=requested_code_changes,
                     ),
@@ -594,9 +600,7 @@ class RoadmapService:
                         .limit(1)
                     )
                     if controlled_result is not None:
-                        candidate = controlled_result.output.get(
-                            "published_commit_sha"
-                        )
+                        candidate = controlled_result.output.get("published_commit_sha")
                         if isinstance(candidate, str) and len(candidate) == 40:
                             resulting_head = candidate
                 changes.append((milestone.id, "waiting_review", resulting_head))
@@ -706,10 +710,38 @@ class RoadmapService:
         repository_key: str,
         expected_branch: str,
         expected_head: str,
+        milestone_code: str | None,
         owning_workstream: str,
+        starting_commit_evidence: dict[str, object],
         validation: tuple[str, ...],
         requested_code_changes: bool,
     ) -> dict[str, object]:
+        explicit = starting_commit_evidence.get("execution_boundary")
+        if explicit is not None:
+            if milestone_code is None:
+                raise ValueError(
+                    "This milestone boundary has no durable milestone identity."
+                )
+            try:
+                definition = ExecutionBoundaryDefinition.model_validate(explicit)
+            except ValidationError as error:
+                raise ValueError(
+                    "This milestone has an invalid machine-enforceable boundary."
+                ) from error
+            if definition.boundary_id != milestone_code:
+                raise ValueError(
+                    "This milestone boundary does not match the durable milestone identity."
+                )
+            return {
+                "allowed_repository": repository_key,
+                "allowed_branch": expected_branch,
+                "expected_head": expected_head,
+                "allowed_paths": list(definition.allowed_paths),
+                "forbidden_paths": list(definition.forbidden_paths),
+                "permitted_operations": list(definition.permitted_operations),
+                "validation_requirements": list(definition.validation_requirements),
+            }
+
         name = owning_workstream.casefold()
         roots = {
             "beacon": ("backend/app/beacon/**", "backend/tests/beacon/**", "docs/**"),

@@ -500,7 +500,7 @@ class EngineeringControlService:
         for key, limit in (
             ("allowed_paths", 500),
             ("forbidden_paths", 100),
-            ("permitted_operations", 4),
+            ("permitted_operations", 6),
             ("validation_requirements", 50),
         ):
             raw_items = value[key]
@@ -518,13 +518,20 @@ class EngineeringControlService:
                 )
             normalized[key] = sorted({str(item) for item in raw_items})
         operations = set(_boundary_strings(normalized["permitted_operations"]))
-        if not operations <= {"inspect", "modify", "validate", "commit"}:
+        if not operations <= {
+            "inspect",
+            "modify",
+            "validate",
+            "commit",
+            "mechanical_reconcile",
+            "push",
+        }:
             raise EngineeringCommandValidationError(
                 "Execution operation is not permitted."
             )
         required = {"inspect", "validate"}
         if requested_code_changes:
-            required |= {"modify", "commit"}
+            required |= {"modify", "commit", "mechanical_reconcile", "push"}
         if not required <= operations:
             raise EngineeringCommandValidationError(
                 "Execution operations are insufficient."

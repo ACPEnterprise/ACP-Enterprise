@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "scheduler_version": "MMQ.5-2026-08-11.5",
-  "fingerprint": "16b9683b96d44de787e4972e40d832bd06987c089888c02a1bb4fe4debf0d646",
+  "scheduler_version": "MMQ.5-2026-08-11.6",
+  "fingerprint": "998787a95140b26706e8d5a5f0646c5f7141d93e6b371d0820da195bac610eef",
   "authoritative_repository_head": "9c2b114cb658be0454bbb36bdf0e5929ecc7e0e5",
   "source_documents": [
     "docs/project/master-milestone-queue.md",
@@ -167,7 +167,41 @@
       ],
       "owner_checkpoint": "Explicit authenticated owner Start is required; no automatic dispatch.",
       "completion_evidence": ["Responsive role-scoped technician shell", "Route and role guards", "Accessible mobile navigation", "Focused authorization and frontend validation"],
-      "legacy_titles": ["Establish technician application shell", "TECH.1"]
+      "legacy_titles": ["Establish technician application shell", "TECH.1"],
+      "execution_boundary": {
+        "boundary_id": "TECH.1",
+        "boundary_version": 1,
+        "fingerprint": "df075f08caf0cfedfc2ba32939a0a1f2b3a11be23a93776e58da721313b97aa1",
+        "allowed_paths": [
+          "frontend/src/features/technician/**",
+          "frontend/src/routes/Technician*.tsx",
+          "frontend/src/api/technician*.ts",
+          "frontend/src/hooks/useTechnician*.ts",
+          "frontend/src/types/technician*.ts",
+          "frontend/src/routing/router.tsx",
+          "frontend/src/routing/router.test.tsx",
+          "frontend/src/routing/routeMetadata.ts",
+          "frontend/src/routing/routeMetadata.test.ts",
+          "frontend/src/layout/navigation.ts",
+          "frontend/src/layout/navigation.test.ts",
+          "docs/architecture/technician/**"
+        ],
+        "forbidden_paths": [
+          ".git/**",
+          ".env*",
+          "**/.env*",
+          "backend/**",
+          "backend/alembic/versions/**",
+          "deploy/**",
+          "infrastructure/**",
+          "**/*credential*",
+          "**/*private-key*",
+          "**/node_modules/**",
+          "**/__pycache__/**"
+        ],
+        "permitted_operations": ["inspect", "modify", "validate", "commit", "mechanical_reconcile", "push"],
+        "validation_requirements": ["git diff --check", "eslint", "typescript"]
+      }
     }
   ]
 }

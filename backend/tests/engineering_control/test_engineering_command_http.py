@@ -5,15 +5,15 @@ from datetime import timedelta
 import httpx
 import pytest
 import pytest_asyncio
+from fastapi import FastAPI
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
 from app.core.config import settings
 from app.database.session import get_database_session
 from app.engineering_control.router import router
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import EngineeringCommandPermission
 from app.platform.permissions.dependencies import get_authorization_context
-from fastapi import FastAPI
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-
 from tests.engineering_control.test_engineering_command_service import (
     ServiceFixture,
     context_with_permissions,
@@ -111,7 +111,14 @@ def create_payload(
             "expected_head": "a" * 40,
             "allowed_paths": ["backend/app/**"],
             "forbidden_paths": [".git/**", ".env*", "**/.env*"],
-            "permitted_operations": ["inspect", "modify", "validate", "commit"],
+            "permitted_operations": [
+                "inspect",
+                "modify",
+                "validate",
+                "commit",
+                "mechanical_reconcile",
+                "push",
+            ],
             "validation_requirements": ["git diff --check"],
         },
     }

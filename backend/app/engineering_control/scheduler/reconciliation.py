@@ -27,7 +27,7 @@ from app.engineering_control.workstream_runtime import EngineeringWorkstreamRunt
 from app.worker_control.models import EngineeringWorker
 from app.worker_identity.models import WorkerCredential, WorkerIdentity
 
-from .manifest import SchedulerManifest, load_scheduler_manifest
+from .manifest import MilestoneDefinition, SchedulerManifest, load_scheduler_manifest
 from .models import (
     EngineeringCapacityBinding,
     EngineeringPermanentCapacity,
@@ -46,6 +46,17 @@ from .schemas import (
 
 class SchedulerReconciliationError(RuntimeError):
     pass
+
+
+def _starting_commit_evidence(
+    definition: MilestoneDefinition,
+) -> dict[str, object]:
+    evidence = dict(definition.starting_commit_evidence)
+    if definition.execution_boundary is not None:
+        evidence["execution_boundary"] = definition.execution_boundary.model_dump(
+            mode="json"
+        )
+    return evidence
 
 
 class SchedulerReconciliationService:
@@ -1002,8 +1013,8 @@ class SchedulerReconciliationService:
                     )
                     milestone.integration_checkpoint = definition.integration_checkpoint
                     milestone.starting_commit_rule = definition.starting_commit_rule
-                    milestone.starting_commit_evidence = (
-                        definition.starting_commit_evidence
+                    milestone.starting_commit_evidence = _starting_commit_evidence(
+                        definition
                     )
                     milestone.migration_classification = (
                         definition.migration_classification
@@ -1103,7 +1114,9 @@ class SchedulerReconciliationService:
                 )
                 milestone.integration_checkpoint = definition.integration_checkpoint
                 milestone.starting_commit_rule = definition.starting_commit_rule
-                milestone.starting_commit_evidence = definition.starting_commit_evidence
+                milestone.starting_commit_evidence = _starting_commit_evidence(
+                    definition
+                )
                 milestone.migration_classification = definition.migration_classification
                 milestone.shared_contract_classification = (
                     definition.shared_contract_classification

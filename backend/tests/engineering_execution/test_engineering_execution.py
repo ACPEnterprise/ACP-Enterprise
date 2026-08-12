@@ -5,6 +5,10 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
+from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
 from app.core.config import settings
 from app.engineering_control.commands import (
     ApproveEngineeringCommand,
@@ -37,10 +41,6 @@ from app.platform.permissions.codes import (
     EngineeringCommandPermission,
     EngineeringExecutionPermission,
 )
-from sqlalchemy import func, select
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from tests.engineering_control.test_engineering_command_service import (
     ServiceFixture,
     context_with_permissions,
@@ -143,7 +143,16 @@ async def approved_command(
                     "permitted_operations": [
                         "inspect",
                         "validate",
-                        *(["modify", "commit"] if requested_code_changes else []),
+                        *(
+                            [
+                                "modify",
+                                "commit",
+                                "mechanical_reconcile",
+                                "push",
+                            ]
+                            if requested_code_changes
+                            else []
+                        ),
                     ],
                     "validation_requirements": ["git diff --check"],
                 },
