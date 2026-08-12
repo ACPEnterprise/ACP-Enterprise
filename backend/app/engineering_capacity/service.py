@@ -1496,7 +1496,7 @@ class EngineeringCapacityService:
             return "waiting_for_capacity", "Per-worker capacity is full."
         return (
             "capacity_available",
-            "Healthy configured capacity is available; explicit dispatch remains required.",
+            "Healthy assigned capacity is available; awaiting automatic worker dispatch.",
         )
 
     async def _reservation_responses(

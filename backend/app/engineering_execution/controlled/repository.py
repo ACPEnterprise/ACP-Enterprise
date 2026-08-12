@@ -5,7 +5,13 @@ from uuid import UUID
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.engineering_capacity.models import EngineeringWorkerCapacity
+from app.engineering_control.mobile.roadmaps import EngineeringMilestone
 from app.engineering_control.models import EngineeringCommand
+from app.engineering_control.scheduler.models import (
+    EngineeringCapacityBinding,
+    EngineeringPermanentCapacity,
+)
 from app.engineering_control.workstream_runtime import EngineeringWorkstreamRuntime
 from app.engineering_execution.models import EngineeringExecution
 from app.execution_nodes.models import EngineeringExecutionNode
@@ -126,6 +132,32 @@ class ControlledExecutionRepository:
                     ControlledExecutionOfferModel.execution_id
                     == EngineeringExecution.id,
                 )
+                .outerjoin(
+                    EngineeringMilestone,
+                    EngineeringMilestone.command_id == EngineeringCommand.id,
+                )
+                .outerjoin(
+                    EngineeringPermanentCapacity,
+                    (EngineeringPermanentCapacity.company_id == company_id)
+                    & (
+                        EngineeringPermanentCapacity.identity_code
+                        == EngineeringMilestone.permanent_capacity_identity
+                    ),
+                )
+                .outerjoin(
+                    EngineeringCapacityBinding,
+                    (EngineeringCapacityBinding.company_id == company_id)
+                    & (
+                        EngineeringCapacityBinding.permanent_capacity_id
+                        == EngineeringPermanentCapacity.id
+                    )
+                    & (EngineeringCapacityBinding.state == "active"),
+                )
+                .outerjoin(
+                    EngineeringWorkerCapacity,
+                    EngineeringWorkerCapacity.id
+                    == EngineeringCapacityBinding.worker_capacity_id,
+                )
                 .where(
                     EngineeringCommand.company_id == company_id,
                     EngineeringCommand.approval_state == "approved",
@@ -141,6 +173,17 @@ class ControlledExecutionRepository:
                         ("start", "resume")
                     ),
                     ControlledExecutionOfferModel.id.is_(None),
+                    or_(
+                        EngineeringMilestone.id.is_(None),
+                        (
+                            (EngineeringWorkerCapacity.worker_id == worker_id)
+                            & (
+                                EngineeringWorkerCapacity.operational_state
+                                == "available"
+                            )
+                            & (EngineeringWorkerCapacity.health_state == "healthy")
+                        ),
+                    ),
                 )
                 .order_by(
                     EngineeringWorkstreamRuntime.acknowledged_at.desc(),

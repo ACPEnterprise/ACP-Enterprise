@@ -42,6 +42,15 @@ def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def validate_candidate_execution_head(
+    *, requested_code_changes: bool, candidate_head: str, authoritative_head: str
+) -> None:
+    if requested_code_changes and candidate_head != authoritative_head:
+        raise ValueError(
+            "The milestone execution base is stale; scheduler reconciliation is required."
+        )
+
+
 class EngineeringRoadmap(Base):
     __tablename__ = "engineering_roadmaps"
     __table_args__ = (
@@ -396,6 +405,12 @@ class RoadmapService:
             repository_key = roadmap.repository_key
             expected_branch = roadmap.expected_branch
             expected_head = roadmap.expected_head
+            candidate_head = str(starting_commit_evidence.get("authoritative_head", ""))
+            validate_candidate_execution_head(
+                requested_code_changes=requested_code_changes,
+                candidate_head=candidate_head,
+                authoritative_head=expected_head,
+            )
             await db.rollback()
             command = await self.commands.create_command(
                 db,

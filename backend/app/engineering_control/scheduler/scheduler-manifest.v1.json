@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
-  "scheduler_version": "MMQ.5-2026-08-11.7",
-  "fingerprint": "b30f6fb383909f4d26a72c47c73b10e674f7241f30d8bb3df6fe91b3f8526325",
-  "authoritative_repository_head": "9c2b114cb658be0454bbb36bdf0e5929ecc7e0e5",
+  "scheduler_version": "MMQ.5-2026-08-11.8",
+  "fingerprint": "f08c2fbabaf852a156baab19d22fe9faa212ceebc519b80d5b1fe1ca9ceeec24",
+  "authoritative_repository_head": "7a9314b4647563eefaa48a755101e0f9cdf93602",
   "source_documents": [
     "docs/project/master-milestone-queue.md",
     "docs/project/version-1-implementation-roadmap.md",
@@ -16,7 +16,7 @@
     "INV.3-LEGACY is historical integrated inventory evidence and is not the future roadmap milestone INV.3."
   ],
   "capacities": [
-    {"identity": "OM1", "display_name": "Office Machine 1 Enterprise"},
+    {"identity": "OM1", "display_name": "Office Machine 1 Enterprise", "worker_id": "d4eeead4-455e-4c2d-a87a-7c2abba3db5a"},
     {"identity": "OM2", "display_name": "Office Machine 2 Enterprise"},
     {"identity": "MIG", "display_name": "Customer Migration"},
     {"identity": "ECO", "display_name": "Business Economics"},
@@ -156,16 +156,16 @@
       "dependency_evidence": [{"milestone_code": "INV.3-LEGACY", "state": "verification_required", "evidence": "Integrated legacy scope must be reconciled before residual work is defined."}], "owner_checkpoint": "Blocked; owner-reviewed residual scope required.", "completion_evidence": [], "legacy_titles": ["Complete the launch inventory control core", "INV.2A"]
     },
     {
-      "milestone_code": "TECH.1", "title": "Establish technician application shell", "workstream": "Field Service", "permanent_capacity_identity": "OM2", "repository_key": "acp-enterprise",
+      "milestone_code": "TECH.1", "title": "Establish technician application shell", "workstream": "Field Service", "permanent_capacity_identity": "OM1", "repository_key": "acp-enterprise",
       "branch_strategy": "Create an isolated worktree from the current authoritative customer-management-v1 head after owner Start.", "starting_commit_rule": "Fetch origin immediately before workspace creation; require zero behind and exact authoritative head.",
-      "starting_commit_evidence": {"authoritative_head": "9c2b114cb658be0454bbb36bdf0e5929ecc7e0e5", "dependencies_verified": ["OPS.1", "DISP.2", "PLAT.1"]},
+      "starting_commit_evidence": {"authoritative_head": "7a9314b4647563eefaa48a755101e0f9cdf93602", "dependencies_verified": ["OPS.1", "DISP.2", "PLAT.1"]},
       "implementation_classification": "TYPE_B", "migration_classification": "none", "shared_contract_classification": "serialized", "integration_checkpoint": "IC.1", "readiness_state": "ready",
       "dependency_evidence": [
         {"milestone_code": "OPS.1", "state": "complete", "evidence": "OPS.1 is integrated at c89396546a6ba6012e48694ba7737bd30e316637."},
         {"milestone_code": "DISP.2", "state": "complete", "evidence": "DISP.2 is integrated at 98ae82579d23d8b3737cce590186b93b865ef022."},
         {"milestone_code": "PLAT.1", "state": "complete", "evidence": "Platform identity and launch controls are integrated."}
       ],
-      "owner_checkpoint": "Explicit authenticated owner Start is required; no automatic dispatch.",
+      "owner_checkpoint": "Explicit authenticated owner Start is required; worker dispatch then proceeds automatically.",
       "completion_evidence": ["Responsive role-scoped technician shell", "Route and role guards", "Accessible mobile navigation", "Focused authorization and frontend validation"],
       "legacy_titles": ["Establish technician application shell", "TECH.1"],
       "execution_boundary": {

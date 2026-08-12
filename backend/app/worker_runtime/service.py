@@ -367,6 +367,28 @@ class AuthenticatedWorkerRuntime:
                 # The provider may have mutated its isolated workspace. Keep the
                 # acquired journal entry for explicit reconciliation and never
                 # publish a retryable failure result.
+                self.journal.store(
+                    RecoveryRecord(
+                        phase="reconciliation_required",
+                        offer_id=acquired.offer_id,
+                        lease_id=acquired.lease_id,
+                        started_at=started_at,
+                    )
+                )
+                if command_id in self._workstream_versions:
+                    try:
+                        await self._publish_workstream_state(
+                            command_id=command_id,
+                            state="recovering",
+                            health="degraded",
+                            progress=None,
+                            activity="Provider outcome requires reconciliation",
+                            reason_code="reconciliation_required",
+                        )
+                    except WorkerRuntimeTransportError:
+                        # Durable local evidence remains authoritative when the
+                        # authenticated control channel is temporarily unavailable.
+                        pass
                 raise
             except IsolatedWorkspaceExecutionError:
                 outcome = "failed"

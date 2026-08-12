@@ -7,13 +7,25 @@ from uuid import uuid4
 import httpx
 import pytest
 import pytest_asyncio
+from fastapi import FastAPI
+from fastapi.dependencies.models import Dependant
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
 from app.core.config import settings
 from app.database.session import get_database_session, get_security_database_session
 from app.engineering_capacity.service import EngineeringCapacityService
 from app.engineering_control.mobile.control import EngineeringWorkstreamControl
 from app.engineering_control.mobile.roadmap_initialization import ROADMAPS
-from app.engineering_control.mobile.roadmaps import EngineeringMilestone
-from app.engineering_control.mobile.router import _bounded_projection, router
+from app.engineering_control.mobile.roadmaps import (
+    EngineeringMilestone,
+    validate_candidate_execution_head,
+)
+from app.engineering_control.mobile.router import (
+    _attention,
+    _bounded_projection,
+    router,
+)
 from app.engineering_control.mobile.schemas import MilestoneItem
 from app.engineering_control.mobile.service import MobileEngineeringControlService
 from app.engineering_control.models import EngineeringCommand
@@ -27,11 +39,6 @@ from app.platform.permissions.codes import (
 )
 from app.platform.permissions.dependencies import get_authorization_context
 from app.worker_control.models import EngineeringWorker
-from fastapi import FastAPI
-from fastapi.dependencies.models import Dependant
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-
 from tests.engineering_control.review.test_engineering_review import completed_command
 from tests.engineering_control.test_engineering_command_service import (
     ServiceFixture,
@@ -1026,9 +1033,7 @@ def test_file_boundary_falls_back_to_controlled_workspace_evidence() -> None:
 def test_expired_unresolved_lease_projects_reconciliation_not_running() -> None:
     now = datetime(2026, 8, 12, 18, 0, tzinfo=timezone.utc)
     status = SimpleNamespace(
-        lease=SimpleNamespace(
-            status="active", expires_at=now - timedelta(minutes=1)
-        ),
+        lease=SimpleNamespace(status="active", expires_at=now - timedelta(minutes=1)),
         monitoring_state="running",
     )
     runtime = SimpleNamespace(runtime_state="acknowledged")
@@ -1045,4 +1050,60 @@ def test_expired_unresolved_lease_projects_reconciliation_not_running() -> None:
     assert (
         MobileEngineeringControlService._authoritative_state(pipeline, None)
         == "reconciliation_required"
+    )
+
+
+def test_healthy_capacity_projects_authorized_automatic_dispatch() -> None:
+    item = SimpleNamespace(
+        reconciliation_state="current",
+        status="running",
+        readiness_state="ready",
+    )
+    attention, reason, actions = _attention(
+        item,
+        None,
+        SimpleNamespace(runtime_state="acknowledged", reason_code=None),
+        "available",
+        "Healthy assigned capacity is available.",
+    )
+    assert attention == "running"
+    assert reason == "Authorized — awaiting automatic worker dispatch."
+    assert actions == ()
+
+
+def test_reconciliation_runtime_overrides_capacity_projection() -> None:
+    item = SimpleNamespace(
+        reconciliation_state="current",
+        status="running",
+        readiness_state="ready",
+    )
+    attention, reason, _ = _attention(
+        item,
+        None,
+        SimpleNamespace(
+            runtime_state="recovering", reason_code="reconciliation_required"
+        ),
+        "available",
+        "Healthy assigned capacity is available.",
+    )
+    assert attention == "owner_action_required"
+    assert "recovery" in reason.lower()
+
+
+def test_code_start_fails_closed_until_candidate_head_is_current() -> None:
+    with pytest.raises(ValueError, match="execution base is stale"):
+        validate_candidate_execution_head(
+            requested_code_changes=True,
+            candidate_head="9" * 40,
+            authoritative_head="a" * 40,
+        )
+    validate_candidate_execution_head(
+        requested_code_changes=True,
+        candidate_head="a" * 40,
+        authoritative_head="a" * 40,
+    )
+    validate_candidate_execution_head(
+        requested_code_changes=False,
+        candidate_head="",
+        authoritative_head="a" * 40,
     )

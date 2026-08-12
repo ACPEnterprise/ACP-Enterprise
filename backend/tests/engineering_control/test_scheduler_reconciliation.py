@@ -1,5 +1,5 @@
 from pathlib import Path
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy import select
@@ -10,7 +10,10 @@ from app.engineering_control.mobile.roadmaps import (
     EngineeringMilestone,
     EngineeringRoadmap,
 )
-from app.engineering_control.scheduler.manifest import load_scheduler_manifest
+from app.engineering_control.scheduler.manifest import (
+    load_scheduler_manifest,
+    release_bound_manifest,
+)
 from app.engineering_control.scheduler.reconciliation import (
     SchedulerReconciliationError,
     SchedulerReconciliationService,
@@ -29,14 +32,14 @@ def manifest():
 
 
 def test_manifest_is_deterministic_complete_and_unique(manifest) -> None:
-    assert manifest.scheduler_version == "MMQ.5-2026-08-11.7"
+    assert manifest.scheduler_version == "MMQ.5-2026-08-11.8"
     assert (
         manifest.fingerprint
-        == "b30f6fb383909f4d26a72c47c73b10e674f7241f30d8bb3df6fe91b3f8526325"
+        == "f08c2fbabaf852a156baab19d22fe9faa212ceebc519b80d5b1fe1ca9ceeec24"
     )
     assert (
         manifest.authoritative_repository_head
-        == "9c2b114cb658be0454bbb36bdf0e5929ecc7e0e5"
+        == "7a9314b4647563eefaa48a755101e0f9cdf93602"
     )
     assert {item.identity for item in manifest.capacities} == {
         "OM1",
@@ -108,10 +111,31 @@ def test_manifest_is_deterministic_complete_and_unique(manifest) -> None:
     assert pricebook.superseded_legacy_titles == ("Price Book",)
     tech = next(item for item in manifest.milestones if item.milestone_code == "TECH.1")
     assert tech.execution_boundary is not None
+    assert tech.permanent_capacity_identity == "OM1"
+    assert manifest.capacities[0].worker_id == UUID(
+        "d4eeead4-455e-4c2d-a87a-7c2abba3db5a"
+    )
     assert tech.execution_boundary.boundary_id == "TECH.1"
     assert tech.execution_boundary.boundary_version == 2
     assert tech.execution_boundary.fingerprint == (
         "04980ac90a5d1ed0e379600ab7e02cdc4f74fc767572c10cd35a79e3280442c9"
+    )
+
+
+def test_release_binding_refreshes_code_candidate_heads_without_mutating_history() -> (
+    None
+):
+    release = "a" * 40
+    manifest = release_bound_manifest(release)
+    tech = next(item for item in manifest.milestones if item.milestone_code == "TECH.1")
+    pricebook = next(
+        item for item in manifest.milestones if item.milestone_code == "PRICEBOOK.1"
+    )
+    assert manifest.authoritative_repository_head == release
+    assert manifest.scheduler_version.endswith("+aaaaaaaaaaaa")
+    assert tech.starting_commit_evidence["authoritative_head"] == release
+    assert pricebook.starting_commit_evidence["commit"] == (
+        "e97dc408742e0037330b79156cd0a5ba583c6649"
     )
 
 

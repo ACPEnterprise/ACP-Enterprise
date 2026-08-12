@@ -6,6 +6,7 @@ from uuid import UUID
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.engineering_capacity.models import (
     EngineeringCapacityAllocation,
     EngineeringCapacityEvent,
@@ -27,7 +28,11 @@ from app.engineering_control.workstream_runtime import EngineeringWorkstreamRunt
 from app.worker_control.models import EngineeringWorker
 from app.worker_identity.models import WorkerCredential, WorkerIdentity
 
-from .manifest import MilestoneDefinition, SchedulerManifest, load_scheduler_manifest
+from .manifest import (
+    MilestoneDefinition,
+    SchedulerManifest,
+    release_bound_manifest,
+)
 from .models import (
     EngineeringCapacityBinding,
     EngineeringPermanentCapacity,
@@ -83,7 +88,7 @@ class SchedulerReconciliationService:
         company_id: UUID,
         manifest: SchedulerManifest | None = None,
     ) -> SchedulerReconciliationReport:
-        contract = manifest or load_scheduler_manifest()
+        contract = manifest or release_bound_manifest(settings.app_version)
         before = {
             name: int(
                 await session.scalar(
@@ -805,13 +810,14 @@ class SchedulerReconciliationService:
         company_id: UUID,
         actor_user_id: UUID,
         checkpoint_2_authorized: bool = False,
+        manifest: SchedulerManifest | None = None,
     ) -> SchedulerReconciliationReport:
         """Idempotently apply non-destructive metadata after explicit Checkpoint 2 authority."""
         if not checkpoint_2_authorized:
             raise SchedulerReconciliationError(
                 "APPLY requires explicit Checkpoint 2 authorization."
             )
-        contract = load_scheduler_manifest()
+        contract = manifest or release_bound_manifest(settings.app_version)
         report = await self.dry_run(session, company_id=company_id, manifest=contract)
         if report.destructive_operation_count:
             raise SchedulerReconciliationError(
@@ -913,7 +919,93 @@ class SchedulerReconciliationService:
                         reconciliation_reason="Worker binding requires separate owner-reviewed evidence.",
                     )
                     session.add(capacity)
+                    await session.flush()
                     mutations += 1
+
+                if capacity_definition.worker_id is not None:
+                    worker_capacity = await session.scalar(
+                        select(EngineeringWorkerCapacity).where(
+                            EngineeringWorkerCapacity.company_id == company_id,
+                            EngineeringWorkerCapacity.worker_id
+                            == capacity_definition.worker_id,
+                        )
+                    )
+                    if worker_capacity is None:
+                        # The manifest records owner policy without fabricating
+                        # worker enrollment in environments where that identity
+                        # is not present.
+                        continue
+                    active_binding = await session.scalar(
+                        select(EngineeringCapacityBinding).where(
+                            EngineeringCapacityBinding.company_id == company_id,
+                            EngineeringCapacityBinding.permanent_capacity_id
+                            == capacity.id,
+                            EngineeringCapacityBinding.state == "active",
+                        )
+                    )
+                    conflicting_bindings = tuple(
+                        (
+                            await session.scalars(
+                                select(EngineeringCapacityBinding).where(
+                                    EngineeringCapacityBinding.company_id == company_id,
+                                    EngineeringCapacityBinding.worker_capacity_id
+                                    == worker_capacity.id,
+                                    EngineeringCapacityBinding.permanent_capacity_id
+                                    != capacity.id,
+                                    EngineeringCapacityBinding.state == "active",
+                                )
+                            )
+                        ).all()
+                    )
+                    for conflicting in conflicting_bindings:
+                        conflicting.state = "superseded"
+                        conflicting.evidence = {
+                            **dict(conflicting.evidence),
+                            "superseded_by_identity": capacity_definition.identity,
+                            "authority": "owner_checkpoint_3m",
+                            "scheduler_version": contract.scheduler_version,
+                        }
+                        conflicting.updated_at = now
+                        conflicting.version += 1
+                        prior_capacity = await session.get(
+                            EngineeringPermanentCapacity,
+                            conflicting.permanent_capacity_id,
+                        )
+                        if prior_capacity is not None:
+                            prior_capacity.state = "unavailable"
+                            prior_capacity.reconciliation_reason = (
+                                "No active worker is bound to this permanent capacity."
+                            )
+                            prior_capacity.updated_at = now
+                            prior_capacity.version += 1
+                        mutations += 1
+                    if active_binding is None:
+                        session.add(
+                            EngineeringCapacityBinding(
+                                company_id=company_id,
+                                permanent_capacity_id=capacity.id,
+                                worker_capacity_id=worker_capacity.id,
+                                state="active",
+                                evidence={
+                                    "authority": "owner_checkpoint_3m",
+                                    "worker_id": str(capacity_definition.worker_id),
+                                    "identity": capacity_definition.identity,
+                                    "scheduler_version": contract.scheduler_version,
+                                },
+                                bound_by_user_id=actor_user_id,
+                                created_at=now,
+                                updated_at=now,
+                            )
+                        )
+                        capacity.state = "available"
+                        capacity.reconciliation_reason = None
+                        capacity.updated_at = now
+                        capacity.version += 1
+                        mutations += 1
+                    elif active_binding.worker_capacity_id != worker_capacity.id:
+                        raise SchedulerReconciliationError(
+                            f"{capacity_definition.identity} is bound to a different worker."
+                        )
 
             roadmap = await session.scalar(
                 select(EngineeringRoadmap).where(

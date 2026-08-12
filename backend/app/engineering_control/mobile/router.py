@@ -185,6 +185,14 @@ def _attention(
             ("approve", "reject", "skip"),
         )
     if item.status == "running":
+        if capacity_state == "available" and (
+            runtime is None or runtime.runtime_state in {"queued", "acknowledged"}
+        ):
+            return (
+                "running",
+                "Authorized — awaiting automatic worker dispatch.",
+                (),
+            )
         if capacity_state in {"waiting", "reserved"}:
             return (
                 "waiting_on_capacity",
@@ -212,8 +220,8 @@ def _attention(
             )
         if runtime.runtime_state == "acknowledged":
             return (
-                "waiting_on_capacity",
-                "Owner Start is accepted, but no tracked capacity is allocated.",
+                "running",
+                "Authorized — awaiting automatic worker dispatch.",
                 (),
             )
         return "running", "Execution is in progress.", ()
@@ -316,6 +324,8 @@ async def list_roadmaps(context: ReadContext, session: DatabaseSession) -> Roadm
         item.command_id: (
             "reconciliation"
             if item.decision == "reconciliation_required"
+            else "available"
+            if item.decision == "capacity_available"
             else "waiting"
         )
         for item in capacity.waiting_workstreams

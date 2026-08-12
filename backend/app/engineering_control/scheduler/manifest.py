@@ -1,7 +1,9 @@
 import hashlib
 import json
+import re
 from importlib.resources import files
 from typing import Literal
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -32,6 +34,7 @@ class SchedulerModel(BaseModel):
 class CapacityDefinition(SchedulerModel):
     identity: CapacityIdentity
     display_name: str = Field(min_length=1, max_length=120)
+    worker_id: UUID | None = None
 
 
 class DependencyEvidence(SchedulerModel):
@@ -180,3 +183,32 @@ def load_scheduler_manifest() -> SchedulerManifest:
             "Scheduler manifest fingerprint does not match its canonical payload."
         )
     return SchedulerManifest.model_validate({**raw, "fingerprint": fingerprint})
+
+
+def release_bound_manifest(release: str) -> SchedulerManifest:
+    """Bind candidate execution evidence to the deployed authoritative release."""
+    contract = load_scheduler_manifest()
+    if not re.fullmatch(r"[0-9a-f]{40}", release):
+        return contract
+    if release == contract.authoritative_repository_head:
+        return contract
+    milestones = tuple(
+        item.model_copy(
+            update={
+                "starting_commit_evidence": {
+                    **item.starting_commit_evidence,
+                    "authoritative_head": release,
+                }
+            }
+        )
+        if item.readiness_state == "ready"
+        else item
+        for item in contract.milestones
+    )
+    payload = contract.model_dump(exclude={"fingerprint"}, mode="json")
+    payload["authoritative_repository_head"] = release
+    payload["scheduler_version"] = f"{contract.scheduler_version}+{release[:12]}"
+    payload["milestones"] = [item.model_dump(mode="json") for item in milestones]
+    return SchedulerManifest.model_validate(
+        {**payload, "fingerprint": manifest_fingerprint(payload)}
+    )
