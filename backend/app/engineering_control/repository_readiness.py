@@ -19,6 +19,41 @@ from app.worker_control.models import EngineeringWorker
 READINESS_TTL = timedelta(minutes=2)
 
 
+def readiness_semantics(readiness: object) -> dict[str, object] | None:
+    """Return only evidence that can change the meaning of an owner action.
+
+    ``prepared_at`` is observation metadata. Worker heartbeat persistence is the
+    authoritative operational-freshness signal, so refreshing it must not rotate
+    the milestone's optimistic-concurrency token.
+    """
+    if not isinstance(readiness, dict):
+        return None
+    keys = (
+        "repository_key",
+        "branch",
+        "candidate_head",
+        "observed_head",
+        "provider_software_sha",
+        "worker_id",
+        "ready",
+        "reason_code",
+    )
+    return {key: readiness.get(key) for key in keys}
+
+
+def readiness_requires_milestone_update(
+    existing: object,
+    incoming: object,
+    *,
+    current_readiness_state: str | None,
+    desired_readiness_state: str,
+) -> bool:
+    return (
+        readiness_semantics(existing) != readiness_semantics(incoming)
+        or current_readiness_state != desired_readiness_state
+    )
+
+
 @dataclass(frozen=True)
 class RepositoryReadinessTarget:
     milestone_id: UUID
@@ -40,10 +75,9 @@ def readiness_is_current(
     if not isinstance(readiness, dict):
         return False
     try:
-        prepared_at = datetime.fromisoformat(str(readiness["prepared_at"]))
+        datetime.fromisoformat(str(readiness["prepared_at"]))
     except (KeyError, TypeError, ValueError):
         return False
-    current = now or datetime.now(timezone.utc)
     return (
         readiness.get("ready") is True
         and readiness.get("repository_key") == repository_key
@@ -51,7 +85,6 @@ def readiness_is_current(
         and readiness.get("candidate_head") == candidate_head
         and readiness.get("observed_head") == candidate_head
         and (worker_id is None or readiness.get("worker_id") == str(worker_id))
-        and current - READINESS_TTL <= prepared_at <= current + timedelta(seconds=30)
     )
 
 
@@ -201,7 +234,7 @@ class RepositoryReadinessService:
         if milestone is None:
             raise ValueError("Repository readiness milestone was not found.")
         evidence = dict(milestone.starting_commit_evidence)
-        evidence["provider_repository_readiness"] = {
+        incoming = {
             "repository_key": repository_key,
             "branch": branch,
             "candidate_head": candidate_head,
@@ -212,12 +245,23 @@ class RepositoryReadinessService:
             "ready": ready and observed_head == candidate_head,
             "reason_code": reason_code,
         }
-        milestone.starting_commit_evidence = evidence
-        milestone.readiness_state = (
+        desired_readiness_state = (
             "ready"
             if ready and observed_head == candidate_head
             else "preparing_environment"
         )
+        if not readiness_requires_milestone_update(
+            evidence.get("provider_repository_readiness"),
+            incoming,
+            current_readiness_state=milestone.readiness_state,
+            desired_readiness_state=desired_readiness_state,
+        ):
+            # The authenticated worker heartbeat is updated in the same transport
+            # cycle. Keep the owner's concurrency token stable for identical truth.
+            return
+        evidence["provider_repository_readiness"] = incoming
+        milestone.starting_commit_evidence = evidence
+        milestone.readiness_state = desired_readiness_state
         milestone.updated_at = datetime.now(timezone.utc)
         milestone.version += 1
 

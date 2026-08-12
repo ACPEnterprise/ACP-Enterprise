@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import axios from "axios";
 
 import { shouldRetryApiQuery } from "../../api/errors";
 import * as mobileApi from "./api";
@@ -114,7 +115,7 @@ export function useRoadmaps() {
 
 export function useMilestoneAction() {
   const queryClient = useQueryClient();
-  return useMutation({
+  const mutation = useMutation({
     mutationFn: ({
       id,
       version,
@@ -135,7 +136,22 @@ export function useMilestoneAction() {
         queryClient.invalidateQueries({ queryKey: mobileEngineeringKeys.all }),
       ]);
     },
+    onError: (error) => {
+      const detail = axios.isAxiosError(error)
+        ? error.response?.data?.detail
+        : null;
+      if (
+        axios.isAxiosError(error) &&
+        error.response?.status === 409 &&
+        detail === "Milestone version is stale."
+      ) {
+        void queryClient
+          .refetchQueries({ queryKey: mobileEngineeringKeys.roadmaps() })
+          .then(() => mutation.reset());
+      }
+    },
   });
+  return mutation;
 }
 
 export function useWorkerLimitMutation() {
