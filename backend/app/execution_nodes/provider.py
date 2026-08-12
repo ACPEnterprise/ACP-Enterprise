@@ -3,7 +3,7 @@ import os
 import subprocess
 import sys
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from uuid import UUID
 
 from .boundaries import enforce_changed_paths, validate_request
@@ -13,6 +13,63 @@ from .workspaces import WorkspaceManager, WorkspaceReconciliationRequired
 
 class ProviderFailure(RuntimeError):
     pass
+
+
+def prepare_writable_roots(
+    workspace: Path, patterns: tuple[str, ...]
+) -> tuple[Path, ...]:
+    """Resolve explicit writable roots, including authorized absent directories.
+
+    Boundary patterns are validated before this function is called.  A glob suffix
+    describes files below its literal prefix, so creating that missing prefix does
+    not widen the boundary to its parent.  Every existing ancestor is resolved
+    before creation to prevent a symlink from escaping the enrolled workspace.
+    """
+    root = workspace.resolve(strict=True)
+    roots: list[Path] = []
+    for pattern in patterns:
+        literal_prefix = pattern.split("*", 1)[0]
+        if "*" in pattern and literal_prefix.endswith("/"):
+            prefix = literal_prefix.rstrip("/")
+        else:
+            prefix = str(PurePosixPath(literal_prefix or pattern).parent)
+        if not prefix:
+            target = root
+        else:
+            relative = PurePosixPath(prefix)
+            if relative.is_absolute() or any(
+                part in {"", ".", ".."} for part in relative.parts
+            ):
+                raise ProviderFailure("Writable boundary path is unsafe.")
+            descriptor = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC)
+            try:
+                for part in relative.parts:
+                    try:
+                        child = os.open(
+                            part,
+                            os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC,
+                            dir_fd=descriptor,
+                        )
+                    except FileNotFoundError:
+                        os.mkdir(part, mode=0o755, dir_fd=descriptor)
+                        child = os.open(
+                            part,
+                            os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC,
+                            dir_fd=descriptor,
+                        )
+                    os.close(descriptor)
+                    descriptor = child
+            except (FileExistsError, NotADirectoryError, OSError) as error:
+                raise ProviderFailure(
+                    "Writable boundary has an invalid existing ancestor."
+                ) from error
+            finally:
+                os.close(descriptor)
+            target = root.joinpath(*relative.parts).resolve(strict=True)
+        if target != root and root not in target.parents:
+            raise ProviderFailure("Writable boundary escapes the workspace.")
+        roots.append(target)
+    return tuple(dict.fromkeys(roots))
 
 
 class ProviderJournal:
@@ -77,11 +134,7 @@ class CodexImplementation:
         control_root = self.evidence_root / "control" / str(request.execution_id)
         control_root.mkdir(parents=True, exist_ok=True, mode=0o700)
         writable_roots: list[str] = []
-        for pattern in request.boundary.allowed_paths:
-            prefix = pattern.split("*", 1)[0].rstrip("/")
-            target = (workspace / prefix).resolve(strict=True)
-            if workspace not in target.parents and target != workspace:
-                raise ProviderFailure("Writable boundary escapes the workspace.")
+        for target in prepare_writable_roots(workspace, request.boundary.allowed_paths):
             writable_roots.extend(("--add-dir", str(target)))
         boundary_summary = json.dumps(
             {

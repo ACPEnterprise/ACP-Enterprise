@@ -4,7 +4,6 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
-
 from app.execution_nodes.boundaries import BoundaryViolation, boundary_digest
 from app.execution_nodes.contracts import (
     ProviderBoundary,
@@ -15,6 +14,7 @@ from app.execution_nodes.provider import (
     ControlledExecutionProvider,
     ProviderFailure,
     ProviderJournal,
+    prepare_writable_roots,
 )
 from app.execution_nodes.workspaces import WorkspaceManager
 
@@ -130,7 +130,10 @@ def test_provider_owns_workspace_validation_and_commit(
     assert result.phase is ProviderPhase.COMPLETED
     assert result.starting_head == head
     assert result.commit_sha and result.commit_sha != head
-    assert git(root, "ls-remote", "origin", "refs/heads/main").split()[0] == result.commit_sha
+    assert (
+        git(root, "ls-remote", "origin", "refs/heads/main").split()[0]
+        == result.commit_sha
+    )
     assert result.files_changed == ("backend/app/beacon/result.py",)
     assert git(root, "status", "--porcelain") == ""
 
@@ -142,6 +145,111 @@ def test_boundary_digest_tampering_fails_before_workspace(
     with pytest.raises(BoundaryViolation, match="digest"):
         service(tmp_path, root).execute(make_request(head, boundary_digest="0" * 64))
     assert not tuple((tmp_path / "provider" / "executions").glob("*"))
+
+
+def test_absent_authorized_directory_is_prepared_without_parent_expansion(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path / "workspace"
+    (workspace / "docs" / "architecture").mkdir(parents=True)
+
+    roots = prepare_writable_roots(workspace, ("docs/architecture/technician/**",))
+
+    technician = workspace / "docs" / "architecture" / "technician"
+    assert roots == (technician.resolve(),)
+    assert technician.is_dir()
+    assert workspace / "docs" / "architecture" not in roots
+
+
+def test_absent_authorized_directory_rejects_existing_symlink_escape(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path / "workspace"
+    outside = tmp_path / "outside"
+    workspace.mkdir()
+    outside.mkdir()
+    (workspace / "docs").symlink_to(outside, target_is_directory=True)
+
+    with pytest.raises(ProviderFailure, match="invalid existing ancestor"):
+        prepare_writable_roots(workspace, ("docs/architecture/technician/**",))
+
+
+def test_filename_boundaries_prepare_only_the_containing_directory(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path / "workspace"
+    routes = workspace / "frontend" / "src" / "routes"
+    routes.mkdir(parents=True)
+    router = workspace / "frontend" / "src" / "routing" / "router.tsx"
+    router.parent.mkdir(parents=True)
+    router.write_text("export {}\n")
+
+    roots = prepare_writable_roots(
+        workspace,
+        (
+            "frontend/src/routes/Technician*.tsx",
+            "frontend/src/routing/router.tsx",
+        ),
+    )
+
+    assert roots == (routes.resolve(), router.parent.resolve())
+
+
+@pytest.mark.parametrize(
+    "pattern",
+    ("../outside/**", "/tmp/outside/**", "docs/../outside/**"),
+)
+def test_writable_root_preparation_rejects_traversal_and_absolute_escape(
+    tmp_path: Path, pattern: str
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+
+    with pytest.raises(ProviderFailure, match="unsafe"):
+        prepare_writable_roots(workspace, (pattern,))
+
+
+@pytest.mark.parametrize(
+    "changed",
+    (
+        "docs/architecture/other-domain/file.md",
+        "docs/architecture/parent.md",
+        "backend/app/technician/service.py",
+        "backend/alembic/versions/unsafe.py",
+        "docker-compose.preview.yml",
+        ".env.preview",
+    ),
+)
+def test_tech_boundary_rejects_paths_outside_absent_authorized_root(
+    changed: str,
+) -> None:
+    boundary = ProviderBoundary(
+        allowed_repository="acp-enterprise",
+        allowed_branch="customer-management-v1",
+        expected_head="a" * 40,
+        allowed_paths=("docs/architecture/technician/**",),
+        forbidden_paths=(
+            ".git/**",
+            ".env*",
+            "**/.env*",
+            "backend/alembic/**",
+            "docker-compose*.yml",
+        ),
+        permitted_operations=(
+            "inspect",
+            "modify",
+            "validate",
+            "commit",
+            "mechanical_reconcile",
+            "push",
+        ),
+        validation_requirements=("git diff --check",),
+    )
+
+    from app.execution_nodes.boundaries import enforce_changed_paths
+
+    with pytest.raises(BoundaryViolation):
+        enforce_changed_paths(boundary, (changed,))
 
 
 def test_duplicate_completed_execution_is_rejected(
@@ -163,7 +271,10 @@ def test_provider_mechanically_reconciles_disjoint_remote_advance(
     result = service(tmp_path, root).execute(make_request(head))
     assert result.evidence["mechanically_reconciled"] is True
     assert result.evidence["remote_head_before"] == remote_head
-    assert git(root, "ls-remote", "origin", "refs/heads/main").split()[0] == result.commit_sha
+    assert (
+        git(root, "ls-remote", "origin", "refs/heads/main").split()[0]
+        == result.commit_sha
+    )
 
 
 def test_provider_fails_closed_on_overlapping_remote_advance(
