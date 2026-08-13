@@ -13,7 +13,7 @@ import { Link } from "react-router";
 import { getOperatorApiError } from "../../api/errors";
 import { Alert, Badge, Button, Card, EmptyState, Spinner } from "../../ui";
 import { useMilestoneAction, useRoadmaps } from "./hooks";
-import { mobileEngineeringLabel } from "./presentation";
+import { milestoneDisplayStatus, mobileEngineeringLabel } from "./presentation";
 import type { MilestoneAction, MilestoneItem } from "./types";
 
 const actionLabels: Partial<Record<MilestoneAction, string>> = {
@@ -48,6 +48,7 @@ function MilestoneCard({
       { id: item.id, version: item.version, action },
       { onSuccess: () => setConfirming(null) },
     );
+  const displayStatus = milestoneDisplayStatus(item);
   return (
     <article
       className={`rounded-2xl border p-ui-4 ${prominent ? "border-blue-400/50 bg-blue-400/5" : "border-stroke bg-surface"}`}
@@ -59,7 +60,7 @@ function MilestoneCard({
           </p>
           <h3 className="mt-1 text-lg font-bold leading-6">{item.title}</h3>
         </div>
-        <Badge>{mobileEngineeringLabel(item.status)}</Badge>
+        <Badge>{displayStatus}</Badge>
       </div>
       <p className="mt-ui-3 text-sm leading-6 text-content-muted">
         {item.objective}

@@ -1,6 +1,11 @@
 import json
 
-from app.engineering_control.revision_evidence import compose_revision_instruction
+import pytest
+
+from app.engineering_control.revision_evidence import (
+    compose_revision_instruction,
+    revision_evidence,
+)
 
 
 def test_revision_evidence_is_bounded_structured_and_non_authoritative() -> None:
@@ -26,3 +31,41 @@ def test_revision_evidence_is_bounded_structured_and_non_authoritative() -> None
     evidence = json.loads(payload)
     assert evidence["prior_execution_id"] == "execution-prior"
     assert evidence["validation_runs"][0]["exit_code"] == 1
+
+
+def test_historical_incomplete_validation_is_narrowly_revision_eligible() -> None:
+    evidence = revision_evidence(
+        failure_classification="required_validation_failed",
+        evidence_summary={
+            "repository_mutated": False,
+            "diagnostics_available": False,
+            "workspace_evidence_preserved": True,
+            "reconciliation_reason": "required_validation_failed_without_diagnostics",
+            "historical_validation": {"frontend_tests": False, "eslint": True},
+        },
+        validation_summary={"runs": []},
+    )
+    assert evidence is not None
+    assert evidence.diagnostic_completeness == "historical_incomplete"
+    assert evidence.validation_runs == ()
+
+
+@pytest.mark.parametrize(
+    ("failure_classification", "summary"),
+    [
+        ("provider_boundary_rejected", {}),
+        ("required_validation_failed", {"repository_mutated": True}),
+        ("required_validation_failed", {"repository_mutated": False}),
+    ],
+)
+def test_untrusted_or_modern_incomplete_failure_is_not_revision_eligible(
+    failure_classification: str, summary: dict[str, object]
+) -> None:
+    assert (
+        revision_evidence(
+            failure_classification=failure_classification,
+            evidence_summary=summary,
+            validation_summary={"runs": []},
+        )
+        is None
+    )

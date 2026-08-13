@@ -7,6 +7,11 @@ from uuid import uuid4
 import httpx
 import pytest
 import pytest_asyncio
+from fastapi import FastAPI
+from fastapi.dependencies.models import Dependant
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
 from app.core.config import settings
 from app.database.session import get_database_session, get_security_database_session
 from app.engineering_capacity.service import EngineeringCapacityService
@@ -35,11 +40,6 @@ from app.platform.permissions.codes import (
 )
 from app.platform.permissions.dependencies import get_authorization_context
 from app.worker_control.models import EngineeringWorker
-from fastapi import FastAPI
-from fastapi.dependencies.models import Dependant
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-
 from tests.engineering_control.review.test_engineering_review import completed_command
 from tests.engineering_control.test_engineering_command_service import (
     ServiceFixture,
@@ -660,9 +660,11 @@ async def test_roadmap_dispatch_and_safe_progression_owner_workflow(
     assert len(runtime_ids) == 1
 
 
+@pytest.mark.parametrize("historical_incomplete", [False, True])
 @pytest.mark.asyncio
 async def test_validation_failure_request_revision_creates_new_lineage_with_evidence(
     mobile_api: MobileApiFixture,
+    historical_incomplete: bool,
 ) -> None:
     permissions = tuple(
         EngineeringCommandPermission.ALL | EngineeringExecutionPermission.ALL
@@ -745,22 +747,110 @@ async def test_validation_failure_request_revision_creates_new_lineage_with_evid
         old_execution.provider_identifier = "authenticated-worker"
         old_execution.state = "failed"
         old_execution.status = "failed"
-        old_execution.evidence_summary = {
+        evidence_summary = {
             "file_boundary": ["frontend/src/features/technician/Shell.tsx"],
             "implementation_summary": "Added the bounded shell.",
-            "validation_runs": [run],
             "repository_mutated": False,
         }
-        old_execution.validation_summary = {
+        validation_summary = {
             "required": {"frontend tests": False},
-            "runs": [run],
+            "runs": [],
         }
+        if historical_incomplete:
+            evidence_summary.update(
+                {
+                    "diagnostics_available": False,
+                    "workspace_evidence_preserved": True,
+                    "reconciliation_reason": "required_validation_failed_without_diagnostics",
+                    "historical_validation": {
+                        "git_diff_check": True,
+                        "frontend_tests": False,
+                        "eslint": True,
+                        "typescript": True,
+                    },
+                }
+            )
+            milestone.status = "ready"
+        else:
+            evidence_summary["validation_runs"] = [run]
+            validation_summary["runs"] = [run]
+        old_execution.evidence_summary = evidence_summary
+        old_execution.validation_summary = validation_summary
         old_execution.failure_classification = "required_validation_failed"
         old_execution.started_at = now
         old_execution.finished_at = now + timedelta(seconds=1)
         old_execution.updated_at = now + timedelta(seconds=1)
         old_execution.version += 1
+        runtime = await session.scalar(
+            select(EngineeringWorkstreamRuntime).where(
+                EngineeringWorkstreamRuntime.command_id == command.id
+            )
+        )
+        if runtime is None:
+            control = await session.scalar(
+                select(EngineeringWorkstreamControl).where(
+                    EngineeringWorkstreamControl.command_id == command.id
+                )
+            )
+            assert control is not None
+            worker_id = uuid4()
+            session.add(
+                EngineeringWorker(
+                    id=worker_id,
+                    company_id=command.company_id,
+                    provider_identifier="revision-failure-worker",
+                    name="Revision failure worker",
+                    worker_version="1.0",
+                    capabilities=["mission_control_milestone"],
+                    lifecycle_state="available",
+                    registered_by_user_id=mobile_api.service_fixture.context.user.id,
+                    registered_at=now,
+                    last_heartbeat_at=now,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+            await session.flush()
+            runtime = EngineeringWorkstreamRuntime(
+                company_id=command.company_id,
+                command_id=command.id,
+                control_id=control.id,
+                worker_id=worker_id,
+                worker_session_id=uuid4(),
+                acknowledged_control_version=control.version,
+                acknowledged_action="start",
+                runtime_state="failed",
+                worker_health="healthy",
+                progress_percent=100,
+                current_activity="Validation failed: frontend tests",
+                reason_code="required_validation_failed",
+                acknowledged_at=now,
+                acknowledgement_expires_at=now + timedelta(minutes=5),
+                heartbeat_at=now,
+                updated_at=now,
+                version=1,
+            )
+            session.add(runtime)
+        runtime.runtime_state = "failed"
+        runtime.reason_code = "required_validation_failed"
+        runtime.current_activity = "Validation failed: frontend tests"
+        runtime.version += 1
         version = milestone.version
+
+    failed_projection = (
+        await request(app, "GET", "/api/v1/engineering/mobile/roadmaps")
+    ).json()
+    failed_item = next(
+        milestone
+        for milestone in failed_projection["milestones"]
+        if milestone["id"] == item["id"]
+    )
+    assert failed_item["available_owner_actions"] == ["request_revision", "cancel"]
+    assert "Revision available" in failed_item["attention_reason"]
+    assert (
+        "historical attempt" in failed_item["attention_reason"]
+    ) is historical_incomplete
+    version = failed_item["version"]
 
     revised = await request(
         app,
@@ -787,7 +877,13 @@ async def test_validation_failure_request_revision_creates_new_lineage_with_evid
     assert len(commands) == 2
     revision = commands[-1]
     assert str(old_execution_id) in revision.owner_instruction
-    assert "FAIL TechnicianShell" in revision.owner_instruction
+    assert (
+        "FAIL TechnicianShell" in revision.owner_instruction
+    ) is not historical_incomplete
+    assert (
+        '"diagnostic_completeness": "historical_incomplete"'
+        in revision.owner_instruction
+    ) is historical_incomplete
     assert "immutable historical evidence" in revision.owner_instruction
     assert revision.expected_head == commands[0].expected_head
 
@@ -1304,6 +1400,7 @@ def test_healthy_capacity_projects_authorized_automatic_dispatch() -> None:
         SimpleNamespace(runtime_state="acknowledged", reason_code=None),
         "available",
         "Healthy assigned capacity is available.",
+        True,
     )
     assert attention == "running"
     assert reason == "Authorized — awaiting automatic worker dispatch."
@@ -1341,6 +1438,7 @@ def test_reconciliation_runtime_overrides_capacity_projection() -> None:
         ),
         "available",
         "Healthy assigned capacity is available.",
+        True,
     )
     assert attention == "owner_action_required"
     assert "recovery" in reason.lower()
@@ -1362,6 +1460,7 @@ def test_required_validation_failure_projects_phone_revision_action() -> None:
         ),
         "available",
         "Healthy assigned capacity is available.",
+        True,
     )
     assert attention == "owner_action_required"
     assert (

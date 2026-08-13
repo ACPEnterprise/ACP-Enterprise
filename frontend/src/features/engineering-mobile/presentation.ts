@@ -5,6 +5,17 @@ export function mobileEngineeringLabel(value: string): string {
     .join(" ");
 }
 
+export function milestoneDisplayStatus(item: {
+  status: string;
+  attention_reason: string;
+  available_owner_actions: readonly string[];
+}): string {
+  return item.available_owner_actions.includes("request_revision")
+    && item.attention_reason.includes("Revision available")
+    ? "Validation Failed"
+    : mobileEngineeringLabel(item.status);
+}
+
 export function mobileEngineeringTimestamp(value: string | null): string {
   if (!value) return "Not available";
   return new Intl.DateTimeFormat(undefined, {

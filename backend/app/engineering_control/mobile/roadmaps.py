@@ -28,7 +28,10 @@ from app.engineering_control.commands import (
 from app.engineering_control.repository_operation.models import (
     EngineeringRepositoryOperation,
 )
-from app.engineering_control.revision_evidence import compose_revision_instruction
+from app.engineering_control.revision_evidence import (
+    compose_revision_instruction,
+    revision_evidence,
+)
 from app.engineering_control.scheduler.manifest import ExecutionBoundaryDefinition
 from app.engineering_control.service import EngineeringControlService
 from app.engineering_control.workstream_runtime import EngineeringWorkstreamEvent
@@ -378,7 +381,7 @@ class RoadmapService:
         await db.rollback()
         if action == "request_revision" and command_id is not None:
             if (
-                current_status not in {"running", "blocked", "waiting_review"}
+                current_status not in {"ready", "running", "blocked", "waiting_review"}
                 or not definition_approved
                 or reconciliation_state != "current"
                 or readiness_state != "ready"
@@ -397,16 +400,18 @@ class RoadmapService:
                 raise ValueError(
                     "Request Revision requires a terminal failed execution."
                 )
-            validation_runs = prior_execution.evidence_summary.get(
-                "validation_runs", []
-            )
-            if not isinstance(validation_runs, list) or not validation_runs:
-                raise ValueError(
-                    "Request Revision requires durable validation diagnostics."
-                )
             failure_classification = prior_execution.failure_classification
             if not failure_classification:
                 raise ValueError("Request Revision requires a failure classification.")
+            revision = revision_evidence(
+                failure_classification=failure_classification,
+                evidence_summary=prior_execution.evidence_summary,
+                validation_summary=prior_execution.validation_summary,
+            )
+            if revision is None:
+                raise ValueError(
+                    "Request Revision requires trustworthy bounded failure evidence."
+                )
             prior_execution_id = prior_execution.id
             changed_paths = prior_execution.evidence_summary.get("file_boundary", [])
             if not isinstance(changed_paths, list):
@@ -420,9 +425,10 @@ class RoadmapService:
                 )
                 or None,
                 changed_paths=tuple(str(path) for path in changed_paths),
-                validation_runs=tuple(
-                    item for item in validation_runs if isinstance(item, dict)
-                ),
+                validation_runs=revision.validation_runs,
+                diagnostic_completeness=revision.diagnostic_completeness,
+                historical_validation=revision.historical_validation,
+                evidence_references=revision.evidence_references,
             )
             await db.rollback()
             return await self._start_command(

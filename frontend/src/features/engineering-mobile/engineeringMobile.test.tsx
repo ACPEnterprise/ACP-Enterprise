@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as hooks from "./hooks";
 import { MobileEngineeringDetailPage } from "./MobileEngineeringDetailPage";
 import { MobileEngineeringListPage } from "./MobileEngineeringListPage";
+import { milestoneDisplayStatus } from "./presentation";
 import type { MobileReviewDetail, MobileWorkstreamSummary } from "./types";
 
 vi.mock("./hooks");
@@ -209,6 +210,14 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("mobile Engineering Control", () => {
+  it("shows validation failure instead of nominal Ready while revision controls", () => {
+    expect(milestoneDisplayStatus({
+      status: "ready",
+      attention_reason: "Required validation failed. Revision available; no work was published.",
+      available_owner_actions: ["request_revision", "cancel"],
+    })).toBe("Validation Failed");
+  });
+
   it("shows exactly the actionable milestone and dispatches it without a prompt", async () => {
     const mutate = vi.fn();
     const milestone = {

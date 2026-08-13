@@ -17,11 +17,13 @@ from app.engineering_control.commands import (
 )
 from app.engineering_control.errors import EngineeringControlError
 from app.engineering_control.http_errors import engineering_http_error
+from app.engineering_control.revision_evidence import revision_evidence
 from app.engineering_control.scheduler.reconciliation import (
     scheduler_reconciliation_service,
 )
 from app.engineering_control.scheduler.schemas import SchedulerReconciliationReport
 from app.engineering_control.workstream_runtime import EngineeringWorkstreamRuntime
+from app.engineering_execution.models import EngineeringExecution
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import EngineeringCommandPermission
 from app.platform.permissions.dependencies import require_permission
@@ -124,6 +126,8 @@ def _attention(
     runtime: EngineeringWorkstreamRuntime | None,
     capacity_state: str | None = None,
     capacity_reason: str | None = None,
+    revision_eligible: bool = False,
+    historical_diagnostics_incomplete: bool = False,
 ) -> tuple[str, str, tuple[str, ...]]:
     if capacity_state == "reconciliation":
         return (
@@ -137,6 +141,29 @@ def _attention(
             "waiting_on_dependency",
             f"Scheduler reconciliation required: {item.reconciliation_state}.",
             (),
+        )
+    if runtime is not None and runtime.runtime_state == "failed":
+        if runtime.reason_code == "required_validation_failed" and revision_eligible:
+            diagnostic = (
+                runtime.current_activity
+                if runtime.current_activity
+                and runtime.current_activity.startswith("Validation failed:")
+                else "Required validation failed"
+            )
+            detail = (
+                " Detailed diagnostics were not captured for this historical attempt."
+                if historical_diagnostics_incomplete
+                else ""
+            )
+            return (
+                "owner_action_required",
+                f"{diagnostic}. Revision available; no work was published.{detail}",
+                ("request_revision", "cancel"),
+            )
+        return (
+            "owner_action_required",
+            "Execution failed without publication and requires owner review.",
+            ("cancel",),
         )
     if item.status == "ready" and item.requested_code_changes:
         from app.engineering_control.repository_readiness import readiness_is_current
@@ -208,24 +235,6 @@ def _attention(
             ("approve", "reject", "skip"),
         )
     if item.status == "running":
-        if runtime is not None and runtime.runtime_state == "failed":
-            if runtime.reason_code == "required_validation_failed":
-                diagnostic = (
-                    runtime.current_activity
-                    if runtime.current_activity
-                    and runtime.current_activity.startswith("Validation failed:")
-                    else "Required validation failed"
-                )
-                return (
-                    "owner_action_required",
-                    f"{diagnostic}. Revision available; no work was published.",
-                    ("request_revision", "cancel"),
-                )
-            return (
-                "owner_action_required",
-                "Execution failed without publication and requires owner review.",
-                ("request_revision", "cancel"),
-            )
         if capacity_state == "available" and (
             runtime is None or runtime.runtime_state in {"queued", "acknowledged"}
         ):
@@ -360,6 +369,32 @@ async def list_roadmaps(context: ReadContext, session: DatabaseSession) -> Roadm
             else ()
         )
     }
+    failed_executions = (
+        (
+            await session.scalars(
+                select(EngineeringExecution)
+                .where(
+                    EngineeringExecution.company_id == context.company.id,
+                    EngineeringExecution.command_id.in_(command_ids),
+                    EngineeringExecution.state == "failed",
+                )
+                .order_by(EngineeringExecution.updated_at.desc())
+            )
+        ).all()
+        if command_ids
+        else ()
+    )
+    revision_evidence_by_command = {}
+    for execution in failed_executions:
+        if execution.command_id in revision_evidence_by_command:
+            continue
+        evidence = revision_evidence(
+            failure_classification=execution.failure_classification,
+            evidence_summary=execution.evidence_summary,
+            validation_summary=execution.validation_summary,
+        )
+        if evidence is not None:
+            revision_evidence_by_command[execution.command_id] = evidence
     capacity = await engineering_capacity_service.summary(session, context=context)
     capacity_states = {
         item.command_id: (
@@ -397,6 +432,17 @@ async def list_roadmaps(context: ReadContext, session: DatabaseSession) -> Roadm
                 runtimes.get(item.command_id) if item.command_id else None,
                 capacity_states.get(item.command_id) if item.command_id else None,
                 capacity_reasons.get(item.command_id) if item.command_id else None,
+                item.command_id in revision_evidence_by_command
+                if item.command_id
+                else False,
+                (
+                    revision_evidence_by_command[
+                        item.command_id
+                    ].diagnostic_completeness
+                    == "historical_incomplete"
+                    if item.command_id in revision_evidence_by_command
+                    else False
+                ),
             ),
         )
     )
