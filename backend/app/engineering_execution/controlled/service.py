@@ -56,10 +56,156 @@ from .repository import ControlledExecutionRepository
 SAFE_WORKSPACE = re.compile(r"^[a-z0-9][a-z0-9._-]{2,99}$")
 SAFE_ERROR = re.compile(r"^[a-z][a-z0-9_]{2,79}$")
 MAX_OUTPUT_BYTES = 128_000
+MAX_VALIDATION_RUNS = 32
+MAX_VALIDATION_TEXT = 20_000
+SENSITIVE_EVIDENCE_MARKERS = (
+    "authorization:",
+    "bearer ",
+    "private key",
+    "password=",
+    "token=",
+    "secret=",
+    "npm_auth_token",
+)
 
 
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _valid_validation_run(value: object) -> bool:
+    if not isinstance(value, dict):
+        return False
+    if value.get("skipped") is True:
+        return (
+            set(value) == {"identity", "skipped", "passed"}
+            and isinstance(value.get("identity"), str)
+            and value.get("passed") is True
+        )
+    expected = {
+        "identity",
+        "argv",
+        "working_directory",
+        "started_at",
+        "completed_at",
+        "duration_ms",
+        "exit_code",
+        "passed",
+        "failure_summary",
+        "toolchain",
+        "stdout",
+        "stderr",
+    }
+    if set(value) != expected:
+        return False
+    argv = value.get("argv")
+    if (
+        not isinstance(value.get("identity"), str)
+        or not isinstance(argv, list)
+        or not argv
+        or len(argv) > 64
+        or any(not isinstance(item, str) or len(item) > 500 for item in argv)
+        or not isinstance(value.get("working_directory"), str)
+        or (
+            value.get("working_directory") != "."
+            and not _safe_relative_path(str(value.get("working_directory")))
+        )
+        or not isinstance(value.get("duration_ms"), int)
+        or not isinstance(value.get("exit_code"), int)
+        or not isinstance(value.get("passed"), bool)
+        or (
+            value.get("failure_summary") is not None
+            and (
+                not isinstance(value.get("failure_summary"), str)
+                or len(str(value.get("failure_summary"))) > 2_000
+                or any(
+                    marker in str(value.get("failure_summary")).casefold()
+                    for marker in SENSITIVE_EVIDENCE_MARKERS
+                )
+            )
+        )
+        or not isinstance(value.get("toolchain"), dict)
+        or len(json.dumps(value.get("toolchain"), sort_keys=True)) > 4_000
+        or any(
+            marker in json.dumps(value.get("toolchain"), sort_keys=True).casefold()
+            for marker in SENSITIVE_EVIDENCE_MARKERS
+        )
+    ):
+        return False
+    for name in ("stdout", "stderr"):
+        stream = value.get(name)
+        if (
+            not isinstance(stream, dict)
+            or set(stream) != {"text", "truncated", "redacted"}
+            or not isinstance(stream.get("text"), str)
+            or len(stream["text"].encode()) > MAX_VALIDATION_TEXT
+            or any(
+                marker in stream["text"].casefold()
+                for marker in SENSITIVE_EVIDENCE_MARKERS
+            )
+            or not isinstance(stream.get("truncated"), bool)
+            or not isinstance(stream.get("redacted"), bool)
+        ):
+            return False
+    return True
+
+
+def _valid_failed_output(output: dict[str, object]) -> bool:
+    expected = {
+        "workspace_id",
+        "repository_key",
+        "branch",
+        "starting_head",
+        "file_count",
+        "file_boundary",
+        "validation",
+        "validation_runs",
+        "validation_environment",
+        "implementation_summary",
+        "repository_mutated",
+    }
+    boundary = output.get("file_boundary")
+    validation = output.get("validation")
+    runs = output.get("validation_runs")
+    return bool(
+        set(output) == expected
+        and output.get("repository_mutated") is False
+        and isinstance(output.get("file_count"), int)
+        and isinstance(boundary, list)
+        and output.get("file_count") == len(boundary)
+        and len(boundary) <= 500
+        and all(
+            isinstance(item, str) and len(item) <= 500 and _safe_relative_path(item)
+            for item in boundary
+        )
+        and boundary == sorted(set(boundary))
+        and isinstance(validation, dict)
+        and validation
+        and all(
+            isinstance(name, str) and isinstance(passed, bool)
+            for name, passed in validation.items()
+        )
+        and any(passed is False for passed in validation.values())
+        and isinstance(runs, list)
+        and 0 < len(runs) <= MAX_VALIDATION_RUNS
+        and all(_valid_validation_run(run) for run in runs)
+        and isinstance(output.get("validation_environment"), dict)
+        and len(json.dumps(output.get("validation_environment"), sort_keys=True))
+        <= 4_000
+        and not any(
+            marker
+            in json.dumps(
+                output.get("validation_environment"), sort_keys=True
+            ).casefold()
+            for marker in SENSITIVE_EVIDENCE_MARKERS
+        )
+        and isinstance(output.get("implementation_summary"), str)
+        and len(str(output.get("implementation_summary"))) <= 8_000
+        and not any(
+            marker in str(output.get("implementation_summary")).casefold()
+            for marker in SENSITIVE_EVIDENCE_MARKERS
+        )
+    )
 
 
 class ControlledExecutionService:
@@ -474,6 +620,8 @@ class ControlledExecutionService:
                     "remote_head_before",
                     "mechanically_reconciled",
                     "validation",
+                    "validation_runs",
+                    "validation_environment",
                     "evidence",
                 }
             boundary = output.get("file_boundary")
@@ -495,9 +643,9 @@ class ControlledExecutionService:
                 raise ControlledExecutionPayloadError(
                     "Successful controlled result shape is invalid."
                 )
-        elif set(output) != {"repository_mutated"}:
+        elif not _valid_failed_output(output):
             raise ControlledExecutionPayloadError(
-                "Failed controlled result must not include untrusted output."
+                "Failed controlled result diagnostics are invalid."
             )
         if (
             error_classification is not None
@@ -527,6 +675,16 @@ class ControlledExecutionService:
             offer.updated_at = completed_at
             offer.version += 1
         validation_output = output.get("validation")
+        validation_runs_output = output.get("validation_runs")
+        if outcome is not ControlledOutcome.SUCCEEDED and (
+            output.get("workspace_id") != offer.workspace_id
+            or output.get("repository_key") != offer.payload.get("repository_key")
+            or output.get("branch") != offer.payload.get("expected_branch")
+            or output.get("starting_head") != offer.payload.get("expected_head")
+        ):
+            raise ControlledExecutionPayloadError(
+                "Failed controlled result does not match the immutable offer."
+            )
         if outcome is ControlledOutcome.SUCCEEDED and (
             output.get("workspace_id") != offer.workspace_id
             or output.get("repository_key") != offer.payload.get("repository_key")
@@ -549,6 +707,13 @@ class ControlledExecutionService:
                     or not isinstance(output.get("mechanically_reconciled"), bool)
                     or not isinstance(validation_output, dict)
                     or not all(value is True for value in validation_output.values())
+                    or not isinstance(validation_runs_output, list)
+                    or not validation_runs_output
+                    or len(validation_runs_output) > MAX_VALIDATION_RUNS
+                    or not all(
+                        _valid_validation_run(run) for run in validation_runs_output
+                    )
+                    or not isinstance(output.get("validation_environment"), dict)
                 )
             )
         ):
@@ -646,9 +811,15 @@ class ControlledExecutionService:
             else EngineeringExecutionStatus.FAILED.value
         )
         execution.evidence_summary = dict(output)
+        required_evidence = output.get("validation")
+        run_evidence = output.get("validation_runs")
         execution.validation_summary = {
             "controlled_execution": True,
             "repository_mutated": bool(mutation),
+            "required": dict(required_evidence)
+            if isinstance(required_evidence, dict)
+            else {},
+            "runs": list(run_evidence) if isinstance(run_evidence, list) else [],
         }
         execution.failure_classification = error_classification
         execution.finished_at = completed_at

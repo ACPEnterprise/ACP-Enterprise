@@ -7,11 +7,6 @@ from uuid import uuid4
 import httpx
 import pytest
 import pytest_asyncio
-from fastapi import FastAPI
-from fastapi.dependencies.models import Dependant
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-
 from app.core.config import settings
 from app.database.session import get_database_session, get_security_database_session
 from app.engineering_capacity.service import EngineeringCapacityService
@@ -32,6 +27,7 @@ from app.engineering_control.models import EngineeringCommand
 from app.engineering_control.registry import engineering_repository_registry
 from app.engineering_control.review.service import EngineeringReviewService
 from app.engineering_control.workstream_runtime import EngineeringWorkstreamRuntime
+from app.engineering_execution.models import EngineeringExecution
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import (
     EngineeringCommandPermission,
@@ -39,6 +35,11 @@ from app.platform.permissions.codes import (
 )
 from app.platform.permissions.dependencies import get_authorization_context
 from app.worker_control.models import EngineeringWorker
+from fastapi import FastAPI
+from fastapi.dependencies.models import Dependant
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
 from tests.engineering_control.review.test_engineering_review import completed_command
 from tests.engineering_control.test_engineering_command_service import (
     ServiceFixture,
@@ -659,6 +660,243 @@ async def test_roadmap_dispatch_and_safe_progression_owner_workflow(
     assert len(runtime_ids) == 1
 
 
+@pytest.mark.asyncio
+async def test_validation_failure_request_revision_creates_new_lineage_with_evidence(
+    mobile_api: MobileApiFixture,
+) -> None:
+    permissions = tuple(
+        EngineeringCommandPermission.ALL | EngineeringExecutionPermission.ALL
+    )
+    app = mobile_api.app_for(permissions)
+    created = await request(
+        app,
+        "POST",
+        "/api/v1/engineering/mobile/roadmaps",
+        json={
+            "title": "Revision loop",
+            "repository_key": "acp-enterprise",
+            "expected_branch": "customer-management-v1",
+            "expected_head": "a" * 40,
+            "milestones": [
+                {
+                    "title": "Bounded revision fixture",
+                    "objective": "Correct a durably diagnosed failed validation.",
+                    "approved": True,
+                    "requested_code_changes": False,
+                    "validation": ["git diff --check"],
+                },
+                {
+                    "title": "Revision successor fixture",
+                    "objective": "Advance only after owner review.",
+                    "approved": True,
+                    "requested_code_changes": False,
+                },
+            ],
+        },
+    )
+    assert created.status_code == 200
+    await mark_scheduler_current(mobile_api, title="Bounded revision fixture")
+    await mark_scheduler_current(mobile_api, title="Revision successor fixture")
+    roadmap = (await request(app, "GET", "/api/v1/engineering/mobile/roadmaps")).json()
+    item = next(
+        milestone
+        for milestone in roadmap["milestones"]
+        if milestone["title"] == "Bounded revision fixture"
+    )
+    started = await request(
+        app,
+        "POST",
+        f"/api/v1/engineering/mobile/milestones/{item['id']}/actions",
+        json={"action": "start", "expected_version": item["version"]},
+    )
+    assert started.status_code == 200
+    old_command_id = started.json()["command_id"]
+    now = utc_now()
+    run = {
+        "identity": "frontend tests",
+        "argv": ["npm", "run", "test:run"],
+        "working_directory": "frontend",
+        "started_at": now.isoformat(),
+        "completed_at": (now + timedelta(seconds=1)).isoformat(),
+        "duration_ms": 1000,
+        "exit_code": 1,
+        "passed": False,
+        "failure_summary": "FAIL TechnicianShell > renders safe state",
+        "toolchain": {"node_version": "22.23.1", "npm_version": "10.9.8"},
+        "stdout": {
+            "text": "FAIL TechnicianShell",
+            "truncated": False,
+            "redacted": False,
+        },
+        "stderr": {"text": "expected Ready", "truncated": False, "redacted": False},
+    }
+    async with mobile_api.factory() as session, session.begin():
+        command = await session.get(EngineeringCommand, old_command_id)
+        milestone = await session.get(EngineeringMilestone, started.json()["id"])
+        assert command is not None and milestone is not None
+        old_execution = await session.scalar(
+            select(EngineeringExecution).where(
+                EngineeringExecution.company_id == command.company_id,
+                EngineeringExecution.command_id == command.id,
+            )
+        )
+        assert old_execution is not None
+        old_execution_id = old_execution.id
+        old_execution.provider_identifier = "authenticated-worker"
+        old_execution.state = "failed"
+        old_execution.status = "failed"
+        old_execution.evidence_summary = {
+            "file_boundary": ["frontend/src/features/technician/Shell.tsx"],
+            "implementation_summary": "Added the bounded shell.",
+            "validation_runs": [run],
+            "repository_mutated": False,
+        }
+        old_execution.validation_summary = {
+            "required": {"frontend tests": False},
+            "runs": [run],
+        }
+        old_execution.failure_classification = "required_validation_failed"
+        old_execution.started_at = now
+        old_execution.finished_at = now + timedelta(seconds=1)
+        old_execution.updated_at = now + timedelta(seconds=1)
+        old_execution.version += 1
+        version = milestone.version
+
+    revised = await request(
+        app,
+        "POST",
+        f"/api/v1/engineering/mobile/milestones/{item['id']}/actions",
+        json={"action": "request_revision", "expected_version": version},
+    )
+    assert revised.status_code == 200, revised.text
+    assert revised.json()["status"] == "running"
+    assert revised.json()["command_id"] != old_command_id
+    async with mobile_api.factory() as session:
+        old_execution = await session.get(EngineeringExecution, old_execution_id)
+        commands = (
+            await session.scalars(
+                select(EngineeringCommand)
+                .where(
+                    EngineeringCommand.company_id
+                    == mobile_api.service_fixture.context.company.id
+                )
+                .order_by(EngineeringCommand.created_at)
+            )
+        ).all()
+    assert old_execution is not None and old_execution.state == "failed"
+    assert len(commands) == 2
+    revision = commands[-1]
+    assert str(old_execution_id) in revision.owner_instruction
+    assert "FAIL TechnicianShell" in revision.owner_instruction
+    assert "immutable historical evidence" in revision.owner_instruction
+    assert revision.expected_head == commands[0].expected_head
+
+    completed_at = utc_now()
+    async with mobile_api.factory() as session, session.begin():
+        new_execution = await session.scalar(
+            select(EngineeringExecution).where(
+                EngineeringExecution.command_id == revision.id
+            )
+        )
+        runtime = await session.scalar(
+            select(EngineeringWorkstreamRuntime).where(
+                EngineeringWorkstreamRuntime.command_id == revision.id
+            )
+        )
+        assert new_execution is not None and new_execution.id != old_execution_id
+        if runtime is None:
+            control = await session.scalar(
+                select(EngineeringWorkstreamControl).where(
+                    EngineeringWorkstreamControl.command_id == revision.id
+                )
+            )
+            assert control is not None
+            worker_id = uuid4()
+            session.add(
+                EngineeringWorker(
+                    id=worker_id,
+                    company_id=revision.company_id,
+                    provider_identifier="revision-simulation-worker",
+                    name="Revision simulation worker",
+                    worker_version="1.0",
+                    capabilities=["mission_control_milestone"],
+                    lifecycle_state="available",
+                    registered_by_user_id=mobile_api.service_fixture.context.user.id,
+                    registered_at=completed_at,
+                    last_heartbeat_at=completed_at,
+                    created_at=completed_at,
+                    updated_at=completed_at,
+                )
+            )
+            await session.flush()
+            runtime = EngineeringWorkstreamRuntime(
+                company_id=revision.company_id,
+                command_id=revision.id,
+                control_id=control.id,
+                worker_id=worker_id,
+                worker_session_id=uuid4(),
+                acknowledged_control_version=control.version,
+                acknowledged_action="start",
+                runtime_state="completed",
+                worker_health="healthy",
+                progress_percent=100,
+                current_activity="Corrective revision published",
+                acknowledged_at=completed_at,
+                acknowledgement_expires_at=completed_at + timedelta(minutes=5),
+                heartbeat_at=completed_at,
+                updated_at=completed_at,
+            )
+            session.add(runtime)
+        new_execution.state = "completed"
+        new_execution.status = "succeeded"
+        new_execution.evidence_summary = {
+            "published_commit_sha": "b" * 40,
+            "repository_mutated": True,
+        }
+        new_execution.validation_summary = {"required": {"git diff --check": True}}
+        new_execution.started_at = completed_at
+        new_execution.finished_at = completed_at
+        new_execution.updated_at = completed_at
+        new_execution.version += 1
+        if runtime.id is not None:
+            runtime.runtime_state = "completed"
+            runtime.worker_health = "healthy"
+            runtime.progress_percent = 100
+            runtime.current_activity = "Corrective revision published"
+            runtime.heartbeat_at = completed_at
+            runtime.updated_at = completed_at
+            runtime.version += 1
+
+    review = (await request(app, "GET", "/api/v1/engineering/mobile/roadmaps")).json()
+    reviewed = next(
+        milestone for milestone in review["milestones"] if milestone["id"] == item["id"]
+    )
+    assert reviewed["status"] == "waiting_review"
+    approved = await request(
+        app,
+        "POST",
+        f"/api/v1/engineering/mobile/milestones/{item['id']}/actions",
+        json={"action": "approve", "expected_version": reviewed["version"]},
+    )
+    assert approved.status_code == 200
+    final = (await request(app, "GET", "/api/v1/engineering/mobile/roadmaps")).json()
+    successor = next(
+        milestone
+        for milestone in final["milestones"]
+        if milestone["title"] == "Revision successor fixture"
+    )
+    assert successor["status"] == "ready"
+    assert successor["command_id"] is None
+
+    duplicate = await request(
+        app,
+        "POST",
+        f"/api/v1/engineering/mobile/milestones/{item['id']}/actions",
+        json={"action": "request_revision", "expected_version": version},
+    )
+    assert duplicate.status_code == 409
+
+
 def test_initial_roadmap_catalog_is_truthful_and_never_auto_dispatches() -> None:
     by_title = {item["title"]: item for item in ROADMAPS}
     assert set(by_title) == {
@@ -1106,6 +1344,31 @@ def test_reconciliation_runtime_overrides_capacity_projection() -> None:
     )
     assert attention == "owner_action_required"
     assert "recovery" in reason.lower()
+
+
+def test_required_validation_failure_projects_phone_revision_action() -> None:
+    item = SimpleNamespace(
+        reconciliation_state="current",
+        status="running",
+        readiness_state="ready",
+    )
+    attention, reason, actions = _attention(
+        item,
+        None,
+        SimpleNamespace(
+            runtime_state="failed",
+            reason_code="required_validation_failed",
+            current_activity="Validation failed: frontend tests",
+        ),
+        "available",
+        "Healthy assigned capacity is available.",
+    )
+    assert attention == "owner_action_required"
+    assert (
+        reason
+        == "Validation failed: frontend tests. Revision available; no work was published."
+    )
+    assert actions == ("request_revision", "cancel")
 
 
 def test_code_start_fails_closed_until_candidate_head_is_current() -> None:

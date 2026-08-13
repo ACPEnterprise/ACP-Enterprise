@@ -434,6 +434,15 @@ class AuthenticatedWorkerRuntime:
                     output = await NodeExecutionProviderClient(
                         self.config.provider_url, self.config.provider_token_file
                     ).execute(acquired, progress=publish_provider_progress)
+                    validation = output.get("validation")
+                    if output.get("repository_mutated") is False and any(
+                        value is False
+                        for value in (
+                            validation.values() if isinstance(validation, dict) else ()
+                        )
+                    ):
+                        outcome = "failed"
+                        failure = "required_validation_failed"
                 else:
                     assert self.config.workspace_root is not None
                     output = IsolatedWorkspaceExecutor(
@@ -493,6 +502,22 @@ class AuthenticatedWorkerRuntime:
             self.journal.store(pending)
             await self._deliver_pending_result(pending)
             if command_id in self._workstream_versions:
+                failure_activity = "Controlled execution failed"
+                if failure == "required_validation_failed":
+                    validation = output.get("validation")
+                    failed_names = (
+                        sorted(
+                            str(name)
+                            for name, passed in validation.items()
+                            if passed is False
+                        )
+                        if isinstance(validation, dict)
+                        else []
+                    )
+                    if failed_names:
+                        failure_activity = (
+                            "Validation failed: " + ", ".join(failed_names)
+                        )[:240]
                 await self._publish_workstream_state(
                     command_id=command_id,
                     state="completed" if outcome == "succeeded" else "failed",
@@ -500,7 +525,7 @@ class AuthenticatedWorkerRuntime:
                     progress=100 if outcome == "succeeded" else None,
                     activity="Controlled execution completed"
                     if outcome == "succeeded"
-                    else "Controlled execution failed",
+                    else failure_activity,
                     reason_code=failure,
                 )
             return True

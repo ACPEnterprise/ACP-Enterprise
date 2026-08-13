@@ -3,6 +3,7 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
+from app.engineering_execution.controlled.service import _valid_failed_output
 from app.worker_runtime.execution import (
     AcquiredControlledOffer,
     IsolatedWorkspaceExecutionError,
@@ -116,3 +117,61 @@ def test_runtime_module_exposes_no_shell_or_repository_authority() -> None:
     assert "git add" not in source
     assert "git commit" not in source
     assert "docker" not in source.lower()
+
+
+def failed_output() -> dict[str, object]:
+    return {
+        "workspace_id": "df9c-demo",
+        "repository_key": "acp-enterprise",
+        "branch": "df9-demo",
+        "starting_head": HEAD,
+        "file_count": 1,
+        "file_boundary": ["frontend/src/features/technician/Shell.tsx"],
+        "validation": {"frontend tests": False},
+        "validation_runs": [
+            {
+                "identity": "frontend tests",
+                "argv": ["npm", "run", "test:run"],
+                "working_directory": "frontend",
+                "started_at": "2026-08-13T12:00:00+00:00",
+                "completed_at": "2026-08-13T12:00:01+00:00",
+                "duration_ms": 1000,
+                "exit_code": 1,
+                "passed": False,
+                "failure_summary": "FAIL TechnicianShell",
+                "toolchain": {"node_version": "22.23.1"},
+                "stdout": {
+                    "text": "FAIL TechnicianShell",
+                    "truncated": False,
+                    "redacted": False,
+                },
+                "stderr": {
+                    "text": "expected Ready",
+                    "truncated": False,
+                    "redacted": False,
+                },
+            }
+        ],
+        "validation_environment": {"lockfile_sha256": "a" * 64},
+        "implementation_summary": "Implemented bounded shell.",
+        "repository_mutated": False,
+    }
+
+
+def test_failed_controlled_result_requires_bounded_diagnostics() -> None:
+    assert _valid_failed_output(failed_output()) is True
+    missing = failed_output()
+    missing["validation_runs"] = []
+    assert _valid_failed_output(missing) is False
+
+
+def test_failed_controlled_result_rejects_unredacted_sensitive_output() -> None:
+    output = failed_output()
+    run = dict(output["validation_runs"][0])
+    run["stderr"] = {
+        "text": "TOKEN=should-not-persist",
+        "truncated": False,
+        "redacted": False,
+    }
+    output["validation_runs"] = [run]
+    assert _valid_failed_output(output) is False

@@ -28,10 +28,12 @@ from app.engineering_control.commands import (
 from app.engineering_control.repository_operation.models import (
     EngineeringRepositoryOperation,
 )
+from app.engineering_control.revision_evidence import compose_revision_instruction
 from app.engineering_control.scheduler.manifest import ExecutionBoundaryDefinition
 from app.engineering_control.service import EngineeringControlService
 from app.engineering_control.workstream_runtime import EngineeringWorkstreamEvent
 from app.engineering_execution.controlled.models import ControlledExecutionResultModel
+from app.engineering_execution.models import EngineeringExecution
 from app.platform.permissions.authorization import AuthorizationContext
 
 from .control import EngineeringWorkstreamControl
@@ -366,7 +368,7 @@ class RoadmapService:
         roadmap_id = milestone.roadmap_id
         command_id = milestone.command_id
         requested_code_changes = milestone.requested_code_changes
-        milestone_validation = tuple(milestone.validation)
+        milestone_validation = tuple(str(item) for item in milestone.validation)
         owning_workstream = milestone.owning_workstream
         milestone_code = milestone.milestone_code
         starting_commit_evidence = dict(milestone.starting_commit_evidence)
@@ -374,6 +376,73 @@ class RoadmapService:
         readiness_state = milestone.readiness_state
         instruction = self._instruction(milestone)
         await db.rollback()
+        if action == "request_revision" and command_id is not None:
+            if (
+                current_status not in {"running", "blocked", "waiting_review"}
+                or not definition_approved
+                or reconciliation_state != "current"
+                or readiness_state != "ready"
+            ):
+                raise ValueError(
+                    "Request Revision requires a current, approved failed milestone."
+                )
+            prior_execution = await db.scalar(
+                select(EngineeringExecution).where(
+                    EngineeringExecution.company_id == context.company.id,
+                    EngineeringExecution.command_id == command_id,
+                    EngineeringExecution.state == "failed",
+                )
+            )
+            if prior_execution is None:
+                raise ValueError(
+                    "Request Revision requires a terminal failed execution."
+                )
+            validation_runs = prior_execution.evidence_summary.get(
+                "validation_runs", []
+            )
+            if not isinstance(validation_runs, list) or not validation_runs:
+                raise ValueError(
+                    "Request Revision requires durable validation diagnostics."
+                )
+            failure_classification = prior_execution.failure_classification
+            if not failure_classification:
+                raise ValueError("Request Revision requires a failure classification.")
+            prior_execution_id = prior_execution.id
+            changed_paths = prior_execution.evidence_summary.get("file_boundary", [])
+            if not isinstance(changed_paths, list):
+                changed_paths = []
+            instruction = compose_revision_instruction(
+                milestone_instruction=instruction,
+                prior_execution_id=str(prior_execution_id),
+                failure_classification=failure_classification,
+                implementation_summary=str(
+                    prior_execution.evidence_summary.get("implementation_summary", "")
+                )
+                or None,
+                changed_paths=tuple(str(path) for path in changed_paths),
+                validation_runs=tuple(
+                    item for item in validation_runs if isinstance(item, dict)
+                ),
+            )
+            await db.rollback()
+            return await self._start_command(
+                db,
+                context=context,
+                milestone_id=milestone_id,
+                expected_version=expected_version,
+                current_status=current_status,
+                roadmap_id=roadmap_id,
+                requested_code_changes=requested_code_changes,
+                milestone_validation=milestone_validation,
+                owning_workstream=owning_workstream,
+                milestone_code=milestone_code,
+                starting_commit_evidence=starting_commit_evidence,
+                instruction=instruction,
+                action=action,
+                reason=reason or f"revision_of:{prior_execution_id}",
+                revision_of_execution_id=prior_execution_id,
+                now=now,
+            )
         if action == "start":
             if current_status != "ready" or not definition_approved:
                 raise ValueError("Only an approved ready milestone can start.")
@@ -430,70 +499,28 @@ class RoadmapService:
                         "The assigned provider repository is not prepared for the current execution base."
                     )
             await db.rollback()
-            command = await self.commands.create_command(
+            return await self._start_command(
                 db,
                 context=context,
-                command=CreateEngineeringCommand(
-                    command_type="mission_control_milestone",
-                    owner_instruction=instruction,
-                    repository_key=repository_key,
-                    expected_branch=expected_branch,
-                    expected_head=expected_head,
-                    requested_code_changes=requested_code_changes,
-                    expires_at=now + timedelta(days=7),
-                    idempotency_key=f"milestone:{milestone_id}:v{expected_version}",
-                    execution_boundary=self._execution_boundary(
-                        repository_key=repository_key,
-                        expected_branch=expected_branch,
-                        expected_head=expected_head,
-                        milestone_code=milestone_code,
-                        owning_workstream=owning_workstream,
-                        starting_commit_evidence=starting_commit_evidence,
-                        validation=milestone_validation,
-                        requested_code_changes=requested_code_changes,
-                    ),
-                ),
-            )
-            command = await self.commands.approve_command(
-                db,
-                context=context,
-                command=ApproveEngineeringCommand(
-                    command_id=command.id,
-                    expected_version=command.version,
-                    instruction_digest=command.instruction_digest,
-                    request_digest=command.request_digest,
-                    repository_key=command.repository_key,
-                    expected_branch=command.expected_branch,
-                    expected_head=command.expected_head,
-                    requested_code_changes=command.requested_code_changes,
-                    execution_boundary_digest=command.execution_boundary_digest,
-                ),
-            )
-            await self.mobile.control_workstream(
-                db,
-                context=context,
-                command_id=command.id,
-                action="start",
-                reason="mission_control_dispatch",
+                milestone_id=milestone_id,
+                expected_version=expected_version,
+                current_status=current_status,
+                roadmap_id=roadmap_id,
+                requested_code_changes=requested_code_changes,
+                milestone_validation=milestone_validation,
+                owning_workstream=owning_workstream,
+                milestone_code=milestone_code,
+                starting_commit_evidence=starting_commit_evidence,
+                instruction=instruction,
+                action=action,
+                reason=reason,
+                revision_of_execution_id=None,
                 now=now,
             )
-            async with db.begin():
-                locked = await self._get(
-                    db, context.company.id, milestone_id, lock=True
-                )
-                if locked.version != expected_version or locked.status != "ready":
-                    raise ValueError("Milestone changed before dispatch completed.")
-                locked.command_id = command.id
-                self._transition(
-                    db, locked, "running", context.user.id, action, reason, now
-                )
-                await db.flush()
-                return locked
 
         transitions = {
             "approve": ({"waiting_review", "waiting_approval"}, "completed"),
             "reject": ({"waiting_review", "waiting_approval"}, "blocked"),
-            "request_revision": ({"waiting_review", "blocked"}, "waiting_approval"),
             "skip": ({"planned", "ready", "waiting_approval", "blocked"}, "skipped"),
             "archive": ({"completed", "cancelled", "skipped", "blocked"}, "archived"),
             "pause": ({"running"}, "paused"),
@@ -520,8 +547,6 @@ class RoadmapService:
             locked = await self._get(db, context.company.id, milestone_id, lock=True)
             if locked.version != expected_version or locked.status != current_status:
                 raise ValueError("Milestone changed before the action completed.")
-            if action == "request_revision":
-                locked.definition_approved = False
             if action == "approve" and locked.status == "waiting_approval":
                 locked.definition_approved = True
             self._transition(db, locked, target, context.user.id, action, reason, now)
@@ -531,6 +556,116 @@ class RoadmapService:
             )
             await db.flush()
         return locked
+
+    async def _start_command(
+        self,
+        db: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        milestone_id: UUID,
+        expected_version: int,
+        current_status: str,
+        roadmap_id: UUID,
+        requested_code_changes: bool,
+        milestone_validation: tuple[str, ...],
+        owning_workstream: str,
+        milestone_code: str | None,
+        starting_commit_evidence: dict[str, object],
+        instruction: str,
+        action: str,
+        reason: str | None,
+        revision_of_execution_id: UUID | None,
+        now: datetime,
+    ) -> EngineeringMilestone:
+        roadmap = await self._roadmap(db, context.company.id, roadmap_id)
+        repository_key = roadmap.repository_key
+        expected_branch = roadmap.expected_branch
+        expected_head = roadmap.expected_head
+        candidate_head = str(starting_commit_evidence.get("authoritative_head", ""))
+        validate_candidate_execution_head(
+            requested_code_changes=requested_code_changes,
+            candidate_head=candidate_head,
+            authoritative_head=expected_head,
+        )
+        if requested_code_changes:
+            from app.engineering_control.repository_readiness import (
+                repository_readiness_service,
+            )
+
+            if not await repository_readiness_service.is_current_for_milestone(
+                db,
+                company_id=context.company.id,
+                milestone_id=milestone_id,
+                repository_key=repository_key,
+                branch=expected_branch,
+                candidate_head=expected_head,
+                evidence=starting_commit_evidence,
+                now=now,
+            ):
+                raise ValueError(
+                    "The assigned provider repository is not prepared for the current execution base."
+                )
+        await db.rollback()
+        command = await self.commands.create_command(
+            db,
+            context=context,
+            command=CreateEngineeringCommand(
+                command_type="mission_control_milestone",
+                owner_instruction=instruction,
+                repository_key=repository_key,
+                expected_branch=expected_branch,
+                expected_head=expected_head,
+                requested_code_changes=requested_code_changes,
+                expires_at=now + timedelta(days=7),
+                idempotency_key=(
+                    f"milestone:{milestone_id}:v{expected_version}:{action}:"
+                    f"{revision_of_execution_id or 'initial'}"
+                ),
+                execution_boundary=self._execution_boundary(
+                    repository_key=repository_key,
+                    expected_branch=expected_branch,
+                    expected_head=expected_head,
+                    milestone_code=milestone_code,
+                    owning_workstream=owning_workstream,
+                    starting_commit_evidence=starting_commit_evidence,
+                    validation=milestone_validation,
+                    requested_code_changes=requested_code_changes,
+                ),
+            ),
+        )
+        command = await self.commands.approve_command(
+            db,
+            context=context,
+            command=ApproveEngineeringCommand(
+                command_id=command.id,
+                expected_version=command.version,
+                instruction_digest=command.instruction_digest,
+                request_digest=command.request_digest,
+                repository_key=command.repository_key,
+                expected_branch=command.expected_branch,
+                expected_head=command.expected_head,
+                requested_code_changes=command.requested_code_changes,
+                execution_boundary_digest=command.execution_boundary_digest,
+            ),
+        )
+        await self.mobile.control_workstream(
+            db,
+            context=context,
+            command_id=command.id,
+            action="start",
+            reason="mission_control_dispatch",
+            now=now,
+        )
+        async with db.begin():
+            locked = await self._get(db, context.company.id, milestone_id, lock=True)
+            if locked.version != expected_version or locked.status != current_status:
+                raise ValueError("Milestone changed before dispatch completed.")
+            locked.command_id = command.id
+            self._transition(
+                db, locked, "running", context.user.id, action, reason, now
+            )
+            await db.flush()
+            return locked
 
     @staticmethod
     async def _emit_realtime_event(

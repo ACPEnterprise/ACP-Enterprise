@@ -1,10 +1,12 @@
 import hashlib
 import json
 import os
+import platform
 import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from uuid import UUID
@@ -16,6 +18,59 @@ from .workspaces import WorkspaceManager, WorkspaceReconciliationRequired
 
 class ProviderFailure(RuntimeError):
     pass
+
+
+VALIDATION_OUTPUT_LIMIT = 8_192
+_SENSITIVE_OUTPUT_MARKERS = (
+    "authorization:",
+    "bearer ",
+    "private key",
+    "password=",
+    "token=",
+    "secret=",
+    "npm_auth_token",
+)
+
+
+def _bounded_validation_output(value: bytes) -> dict[str, object]:
+    """Return diagnostic output without persisting unbounded or sensitive data."""
+    decoded = value.decode("utf-8", errors="replace")
+    lines = []
+    redacted = False
+    for line in decoded.splitlines():
+        if any(marker in line.casefold() for marker in _SENSITIVE_OUTPUT_MARKERS):
+            lines.append("[REDACTED SENSITIVE VALIDATION OUTPUT]")
+            redacted = True
+        else:
+            lines.append(line)
+    sanitized = "\n".join(lines)
+    encoded = sanitized.encode("utf-8")
+    truncated = len(encoded) > VALIDATION_OUTPUT_LIMIT
+    if truncated:
+        half = VALIDATION_OUTPUT_LIMIT // 2
+        sanitized = (
+            encoded[:half].decode("utf-8", errors="ignore")
+            + "\n[... VALIDATION OUTPUT TRUNCATED ...]\n"
+            + encoded[-half:].decode("utf-8", errors="ignore")
+        )
+    return {"text": sanitized, "truncated": truncated, "redacted": redacted}
+
+
+def _validation_failure_summary(stdout: bytes, stderr: bytes) -> str | None:
+    relevant = []
+    for line in (
+        (stdout + b"\n" + stderr).decode("utf-8", errors="replace").splitlines()
+    ):
+        folded = line.casefold()
+        if any(marker in folded for marker in ("failed", "error", "assert", "×")):
+            if any(secret in folded for secret in _SENSITIVE_OUTPUT_MARKERS):
+                relevant.append("[REDACTED SENSITIVE VALIDATION OUTPUT]")
+            else:
+                relevant.append(line)
+        if len(relevant) == 12:
+            break
+    summary = "\n".join(relevant)
+    return summary[:2_000] or None
 
 
 class FrontendValidationEnvironment:
@@ -435,20 +490,54 @@ class ControlledExecutionProvider:
                 evidence = self.implementation.execute(
                     workspace, request, timeout_seconds
                 )
+            if resume_after_implementation:
+                validation_environment = self._prepare_validation_environment(
+                    workspace, request.boundary.validation_requirements
+                )
             files = self.workspaces.changed_files(workspace)
             enforce_changed_paths(request.boundary, files)
             self.journal.append(request, ProviderPhase.VALIDATING, files=list(files))
-            validations = self._validate(
-                workspace, request.boundary.validation_requirements, files
+            validations, validation_runs = self._validate(
+                workspace,
+                request.boundary.validation_requirements,
+                files,
+                validation_environment=validation_environment,
             )
             self.journal.append(
                 request,
                 ProviderPhase.VALIDATING,
                 files=list(files),
                 validation=validations,
+                validation_runs=validation_runs,
             )
             if not validations or not all(validations.values()):
-                raise ProviderFailure("Required validation failed.")
+                self.journal.append(
+                    request,
+                    ProviderPhase.FAILED,
+                    reason="required_validation_failed",
+                    files=list(files),
+                    validation=validations,
+                    validation_runs=validation_runs,
+                    repository_mutated=False,
+                )
+                return ProviderExecutionResult(
+                    request.execution_id,
+                    request.lease_id,
+                    ProviderPhase.FAILED,
+                    request.boundary.expected_head,
+                    None,
+                    None,
+                    files,
+                    validations,
+                    {
+                        **evidence,
+                        "failure_classification": "required_validation_failed",
+                        "validation_runs": validation_runs,
+                        "validation_environment": validation_environment,
+                        "repository_mutated": False,
+                    },
+                    "required_validation_failed",
+                )
             self.journal.append(request, ProviderPhase.COMMIT_READY)
             commit = self.workspaces.commit(workspace, request, files)
             self.journal.append(request, ProviderPhase.PUBLISHING_RESULT, commit=commit)
@@ -459,8 +548,11 @@ class ControlledExecutionProvider:
                 if reconciled:
                     files = self.workspaces.committed_files(workspace)
                     enforce_changed_paths(request.boundary, files)
-                    validations = self._validate(
-                        workspace, request.boundary.validation_requirements, files
+                    validations, validation_runs = self._validate(
+                        workspace,
+                        request.boundary.validation_requirements,
+                        files,
+                        validation_environment=validation_environment,
                     )
                     if not validations or not all(validations.values()):
                         raise ProviderFailure(
@@ -487,6 +579,8 @@ class ControlledExecutionProvider:
                     "published_commit_sha": published,
                     "remote_head_before": remote_head,
                     "mechanically_reconciled": reconciled,
+                    "validation_runs": validation_runs,
+                    "validation_environment": validation_environment,
                 }
             )
             evidence["phases"] = [
@@ -511,8 +605,13 @@ class ControlledExecutionProvider:
             )
 
     def _validate(
-        self, workspace: Path, requirements: tuple[str, ...], files: tuple[str, ...]
-    ) -> dict[str, bool]:
+        self,
+        workspace: Path,
+        requirements: tuple[str, ...],
+        files: tuple[str, ...],
+        *,
+        validation_environment: dict[str, object] | None = None,
+    ) -> tuple[dict[str, bool], list[dict[str, object]]]:
         python_files = tuple(
             path.removeprefix("backend/")
             for path in files
@@ -564,22 +663,27 @@ class ControlledExecutionProvider:
         python_changed = any(path.endswith(".py") for path in files)
         frontend_changed = any(path.startswith("frontend/") for path in files)
         results: dict[str, bool] = {}
+        runs: list[dict[str, object]] = []
         for requirement in requirements:
             normalized = requirement.casefold()
             if normalized in {"ruff", "mypy", "pytest"} and not python_changed:
                 results[requirement] = True
+                runs.append({"identity": normalized, "skipped": True, "passed": True})
                 continue
             if normalized == "mypy" and not application_files:
                 results[requirement] = True
+                runs.append({"identity": normalized, "skipped": True, "passed": True})
                 continue
             if normalized == "pytest" and not (test_files or component_tests):
                 results[requirement] = True
+                runs.append({"identity": normalized, "skipped": True, "passed": True})
                 continue
             if (
                 normalized in {"eslint", "typescript", "frontend tests"}
                 and not frontend_changed
             ):
                 results[requirement] = True
+                runs.append({"identity": normalized, "skipped": True, "passed": True})
                 continue
             validation = allowed.get(normalized)
             if validation is None:
@@ -597,12 +701,14 @@ class ControlledExecutionProvider:
                     raise ProviderFailure(
                         "Frontend validation environment is not configured."
                     )
-                validation_environment, temporary = (
+                frontend_environment, temporary = (
                     self.frontend_validation.disposable_environment(workspace)
                 )
-                environment.update(validation_environment)
+                environment.update(frontend_environment)
                 environment["PYTHONPATH"] = str(workspace / "backend")
             try:
+                started_at = datetime.now(timezone.utc)
+                started = time.monotonic()
                 completed = subprocess.run(
                     argv,
                     cwd=workspace / relative_cwd,
@@ -612,12 +718,38 @@ class ControlledExecutionProvider:
                     timeout=1800,
                     check=False,
                 )
+                ended_at = datetime.now(timezone.utc)
             finally:
                 if self.frontend_validation is not None and temporary is not None:
                     self.frontend_validation.clean_generated_artifacts(workspace)
                     shutil.rmtree(temporary)
             results[requirement] = completed.returncode == 0
-        return results
+            runs.append(
+                {
+                    "identity": normalized,
+                    "argv": list(argv),
+                    "working_directory": relative_cwd.as_posix(),
+                    "started_at": started_at.isoformat(),
+                    "completed_at": ended_at.isoformat(),
+                    "duration_ms": round((time.monotonic() - started) * 1000),
+                    "exit_code": completed.returncode,
+                    "passed": completed.returncode == 0,
+                    "failure_summary": (
+                        None
+                        if completed.returncode == 0
+                        else _validation_failure_summary(
+                            completed.stdout, completed.stderr
+                        )
+                    ),
+                    "toolchain": {
+                        "python_version": platform.python_version(),
+                        **dict(validation_environment or {}),
+                    },
+                    "stdout": _bounded_validation_output(completed.stdout),
+                    "stderr": _bounded_validation_output(completed.stderr),
+                }
+            )
+        return results, runs
 
     def _prepare_validation_environment(
         self, workspace: Path, requirements: tuple[str, ...]

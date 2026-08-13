@@ -4,7 +4,7 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
-
+from app.engineering_control.revision_evidence import compose_revision_instruction
 from app.execution_nodes.boundaries import BoundaryViolation, boundary_digest
 from app.execution_nodes.contracts import (
     ProviderBoundary,
@@ -29,6 +29,19 @@ class Implementation:
             "VALUE = 1\n"
         )
         return {"implementation": "test"}
+
+
+class FrontendImplementation:
+    def __init__(self, content: str) -> None:
+        self.content = content
+
+    def execute(
+        self, workspace: Path, request: ProviderExecutionRequest, timeout: int
+    ) -> dict[str, object]:
+        target = workspace / "frontend" / "src" / "features" / "technician"
+        target.mkdir(parents=True, exist_ok=True)
+        (target / "TechnicianShell.tsx").write_text(self.content)
+        return {"summary": "Implemented the bounded Technician shell fixture."}
 
 
 def git(path: Path, *argv: str) -> str:
@@ -285,19 +298,191 @@ def test_frontend_validation_uses_prepared_pinned_toolchain(tmp_path: Path) -> N
         environment,
     )
 
-    results = provider._validate(
+    results, runs = provider._validate(
         workspace,
         ("frontend tests", "eslint", "typescript"),
         ("frontend/src/features/technician/TechnicianShell.tsx",),
     )
 
     assert results == {"frontend tests": True, "eslint": True, "typescript": True}
+    assert [run["identity"] for run in runs] == [
+        "frontend tests",
+        "eslint",
+        "typescript",
+    ]
+    assert all(run["exit_code"] == 0 for run in runs)
     calls = (tmp_path / "npm-cache" / "calls").read_text()
     assert "run test:run|true|true" in calls
     assert "run lint -- --max-warnings=0|true|true" in calls
     assert "run build|true|true" in calls
     assert not (frontend / "node_modules" / ".tmp").exists()
     assert not (frontend / "dist").exists()
+
+
+def test_validation_failure_preserves_bounded_redacted_diagnostics(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path / "workspace"
+    frontend = workspace / "frontend"
+    frontend.mkdir(parents=True)
+    (frontend / "package.json").write_text("{}\n")
+    (frontend / "package-lock.json").write_text('{"lockfileVersion":3}\n')
+    environment = _frontend_validation_environment(tmp_path)
+    environment.prepare(workspace)
+    npm = environment.npm_executable
+    npm.write_text(
+        "#!/bin/sh\n"
+        'if [ "$1" = "--version" ]; then echo 10.9.8; exit 0; fi\n'
+        'echo "AssertionError: expected Ready"\n'
+        'echo "TOKEN=must-not-survive" >&2\n'
+        "yes x | head -c 20000\n"
+        "exit 7\n"
+    )
+    provider = ControlledExecutionProvider(
+        WorkspaceManager(tmp_path / "provider", {}),
+        ProviderJournal(tmp_path / "journal"),
+        Implementation(),
+        environment,
+    )
+
+    results, runs = provider._validate(
+        workspace,
+        ("frontend tests",),
+        ("frontend/src/features/technician/TechnicianShell.tsx",),
+    )
+
+    assert results == {"frontend tests": False}
+    run = runs[0]
+    assert run["exit_code"] == 7
+    assert run["passed"] is False
+    assert run["duration_ms"] >= 0
+    assert run["stdout"]["truncated"] is True
+    assert "AssertionError: expected Ready" in run["stdout"]["text"]
+    assert run["stderr"]["redacted"] is True
+    assert "must-not-survive" not in run["stderr"]["text"]
+
+
+def test_isolated_failed_validation_revision_publishes_from_new_workspace(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "repository"
+    root.mkdir()
+    git(root, "init", "-b", "main")
+    git(root, "config", "user.name", "Test")
+    git(root, "config", "user.email", "test@example.invalid")
+    frontend = root / "frontend"
+    (frontend / "src").mkdir(parents=True)
+    (frontend / "package.json").write_text("{}\n")
+    (frontend / "package-lock.json").write_text('{"lockfileVersion":3}\n')
+    (root / ".gitignore").write_text("frontend/node_modules/\nfrontend/dist/\n")
+    git(root, "add", ".")
+    git(root, "commit", "-m", "initial")
+    remote = tmp_path / "remote.git"
+    subprocess.run(("git", "init", "--bare", str(remote)), check=True)
+    git(root, "remote", "add", "origin", str(remote))
+    git(root, "push", "-u", "origin", "main")
+    head = git(root, "rev-parse", "HEAD")
+    git(root, "update-ref", "refs/acp/provider-ready/main", head)
+    boundary = ProviderBoundary(
+        allowed_repository="acp-enterprise",
+        allowed_branch="main",
+        expected_head=head,
+        allowed_paths=("frontend/src/features/technician/**",),
+        forbidden_paths=(".git/**", ".env*", "**/.env*", "backend/**"),
+        permitted_operations=(
+            "inspect",
+            "modify",
+            "validate",
+            "commit",
+            "mechanical_reconcile",
+            "push",
+        ),
+        validation_requirements=(
+            "frontend tests",
+            "eslint",
+            "typescript",
+            "git diff --check",
+        ),
+    )
+    environment = _frontend_validation_environment(tmp_path)
+    npm = environment.npm_executable
+    npm.write_text(
+        "#!/bin/sh\n"
+        'if [ "$1" = "--version" ]; then echo 10.9.8; exit 0; fi\n'
+        'if [ "$1" = "ci" ]; then mkdir -p node_modules; : > node_modules/.package-lock.json; exit 0; fi\n'
+        'echo "FAIL TechnicianShell renders an unsafe state" >&2\n'
+        "exit 1\n"
+    )
+    manager = WorkspaceManager(tmp_path / "provider", {"acp-enterprise": root})
+    first = make_request(
+        head,
+        workspace_id="tech-first-attempt",
+        boundary=boundary,
+        boundary_digest=boundary_digest(boundary),
+        instruction="Establish the bounded Technician shell.",
+        instruction_digest=hashlib.sha256(
+            b"Establish the bounded Technician shell."
+        ).hexdigest(),
+        commit_subject="feat(technician): establish application shell",
+    )
+    failed = ControlledExecutionProvider(
+        manager,
+        ProviderJournal(tmp_path / "journal"),
+        FrontendImplementation("export const broken = true;\n"),
+        environment,
+    ).execute(first)
+    assert failed.phase is ProviderPhase.FAILED
+    assert failed.commit_sha is None
+    assert failed.evidence["validation_runs"]
+    assert git(root, "ls-remote", "origin", "refs/heads/main").split()[0] == head
+    historical = (
+        manager.root / "executions" / str(first.company_id) / first.workspace_id
+    )
+    assert git(historical, "status", "--porcelain")
+
+    revision_instruction = compose_revision_instruction(
+        milestone_instruction="Establish the bounded Technician shell.",
+        prior_execution_id=str(first.execution_id),
+        failure_classification="required_validation_failed",
+        implementation_summary=str(failed.evidence.get("summary", "")),
+        changed_paths=failed.files_changed,
+        validation_runs=failed.evidence["validation_runs"],
+    )
+    npm.write_text(
+        "#!/bin/sh\n"
+        'if [ "$1" = "--version" ]; then echo 10.9.8; exit 0; fi\n'
+        'if [ "$1" = "ci" ]; then mkdir -p node_modules; : > node_modules/.package-lock.json; fi\n'
+        "exit 0\n"
+    )
+    second = make_request(
+        head,
+        command_id=uuid4(),
+        execution_id=uuid4(),
+        lease_id=uuid4(),
+        workspace_id="tech-revision-attempt",
+        boundary=boundary,
+        boundary_digest=boundary_digest(boundary),
+        instruction=revision_instruction,
+        instruction_digest=hashlib.sha256(revision_instruction.encode()).hexdigest(),
+        commit_subject="feat(technician): establish application shell",
+    )
+    succeeded = ControlledExecutionProvider(
+        manager,
+        ProviderJournal(tmp_path / "journal"),
+        FrontendImplementation("export const technicianShell = true;\n"),
+        environment,
+    ).execute(second)
+    assert second.execution_id != first.execution_id
+    assert succeeded.phase is ProviderPhase.COMPLETED
+    assert succeeded.commit_sha is not None
+    assert all(succeeded.validation.values())
+    assert (
+        git(root, "ls-remote", "origin", "refs/heads/main").split()[0]
+        == succeeded.commit_sha
+    )
+    assert git(historical, "status", "--porcelain")
+    assert str(first.execution_id) in revision_instruction
+    assert "immutable historical evidence" in revision_instruction
 
 
 def test_frontend_validation_discards_only_generated_build_artifacts(

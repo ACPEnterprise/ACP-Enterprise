@@ -208,6 +208,24 @@ def _attention(
             ("approve", "reject", "skip"),
         )
     if item.status == "running":
+        if runtime is not None and runtime.runtime_state == "failed":
+            if runtime.reason_code == "required_validation_failed":
+                diagnostic = (
+                    runtime.current_activity
+                    if runtime.current_activity
+                    and runtime.current_activity.startswith("Validation failed:")
+                    else "Required validation failed"
+                )
+                return (
+                    "owner_action_required",
+                    f"{diagnostic}. Revision available; no work was published.",
+                    ("request_revision", "cancel"),
+                )
+            return (
+                "owner_action_required",
+                "Execution failed without publication and requires owner review.",
+                ("request_revision", "cancel"),
+            )
         if capacity_state == "available" and (
             runtime is None or runtime.runtime_state in {"queued", "acknowledged"}
         ):

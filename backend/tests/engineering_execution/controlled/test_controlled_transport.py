@@ -4,8 +4,6 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from app.core.config import settings
 from app.engineering_control.review.service import EngineeringReviewService
 from app.engineering_execution.controlled.contracts import ControlledCommandType
@@ -25,6 +23,8 @@ from app.worker_control.transport.contracts import (
     HeartbeatMessage,
     TransportMessageKind,
 )
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
 from tests.engineering_control.test_engineering_command_service import (
     ServiceFixture,
     seed_service_fixture,
@@ -149,6 +149,31 @@ async def test_authenticated_controlled_result_becomes_owner_review(
                 "file_boundary": ["backend/app/result.py"],
                 "repository_mutated": True,
                 "validation": {"git diff --check": True},
+                "validation_runs": [
+                    {
+                        "identity": "git diff --check",
+                        "argv": ["git", "diff", "--check", "HEAD"],
+                        "working_directory": ".",
+                        "started_at": (now + timedelta(seconds=2)).isoformat(),
+                        "completed_at": completed_at.isoformat(),
+                        "duration_ms": 1000,
+                        "exit_code": 0,
+                        "passed": True,
+                        "failure_summary": None,
+                        "toolchain": {"python_version": "3.12.13"},
+                        "stdout": {
+                            "text": "",
+                            "truncated": False,
+                            "redacted": False,
+                        },
+                        "stderr": {
+                            "text": "",
+                            "truncated": False,
+                            "redacted": False,
+                        },
+                    }
+                ],
+                "validation_environment": {"frontend": "not-required"},
                 "evidence": {
                     "phases": [
                         "composed",

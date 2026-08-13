@@ -204,6 +204,34 @@ class NodeExecutionProviderClient:
             )
         result = response.json()
         evidence = result["evidence"]
+        if result["phase"] == "failed":
+            summary = str(evidence.get("summary", ""))
+            if any(
+                marker in summary.casefold()
+                for marker in (
+                    "authorization:",
+                    "bearer ",
+                    "private key",
+                    "password=",
+                    "token=",
+                    "secret=",
+                    "npm_auth_token",
+                )
+            ):
+                summary = "[REDACTED SENSITIVE IMPLEMENTATION SUMMARY]"
+            return {
+                "workspace_id": offer.workspace_id,
+                "repository_key": offer.payload["repository_key"],
+                "branch": offer.payload["expected_branch"],
+                "starting_head": result["starting_head"],
+                "file_count": len(result["files_changed"]),
+                "file_boundary": result["files_changed"],
+                "validation": result["validation"],
+                "validation_runs": evidence.get("validation_runs", []),
+                "validation_environment": evidence.get("validation_environment", {}),
+                "implementation_summary": summary[:8_000],
+                "repository_mutated": False,
+            }
         return {
             "workspace_id": offer.workspace_id,
             "repository_key": offer.payload["repository_key"],
@@ -218,6 +246,8 @@ class NodeExecutionProviderClient:
             "file_count": len(result["files_changed"]),
             "file_boundary": result["files_changed"],
             "validation": result["validation"],
+            "validation_runs": evidence["validation_runs"],
+            "validation_environment": evidence["validation_environment"],
             "evidence": evidence,
             "repository_mutated": True,
         }

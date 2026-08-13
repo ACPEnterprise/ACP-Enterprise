@@ -134,6 +134,7 @@ def create_app() -> FastAPI:
             "files_changed": result.files_changed,
             "validation": result.validation,
             "evidence": result.evidence,
+            "reconciliation_reason": result.reconciliation_reason,
         }
 
     @app.post("/repositories/prepare")
