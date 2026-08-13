@@ -1,0 +1,118 @@
+{
+  "packet": "ACC.CORE.1",
+  "depends_on": ["ACC.CORE.CONTRACT.1"],
+  "allowed_paths": [
+    "backend/app/accounting/**",
+    "backend/tests/accounting/**",
+    "backend/alembic/versions/*_create_internal_accounting_core.py",
+    "backend/app/platform/permissions/codes.py",
+    "backend/app/platform/permissions/catalog.py",
+    "backend/app/events/types.py",
+    "backend/app/main.py",
+    "docs/architecture/accounting/core-ledger-contract.md",
+    "docs/architecture/accounting/acc-core-1-execution-boundary.json"
+  ],
+  "shared_seams": {
+    "backend/app/platform/permissions/codes.py": "add only the nine COMPANY_ACCOUNTING_* codes frozen by the core contract",
+    "backend/app/platform/permissions/catalog.py": "register only those Accounting permissions in existing roles/catalog structure",
+    "backend/app/events/types.py": "add only journal-posted, journal-reversed, period-closed, period-reopened, and posting-failed event types",
+    "backend/app/main.py": "register only the authenticated Accounting router"
+  },
+  "prohibited_paths": [
+    ".env*",
+    "**/*credential*",
+    "**/*private_key*",
+    "backend/app/invoicing/**",
+    "backend/app/payments/**",
+    "backend/app/accounts_payable/**",
+    "backend/app/financial_reporting/**",
+    "backend/app/accounting_migration/**",
+    "backend/app/inventory/**",
+    "backend/app/purchasing/**",
+    "backend/app/mission_control/**",
+    "backend/app/workers/**",
+    "frontend/**",
+    "deployment/**",
+    "infra/**"
+  ],
+  "persistence_ownership": [
+    "accounting_chart_versions",
+    "accounting_accounts",
+    "accounting_account_source_identities",
+    "accounting_control_account_assignments",
+    "accounting_periods",
+    "accounting_period_transitions",
+    "accounting_journals",
+    "accounting_journal_lines",
+    "accounting_journal_approvals",
+    "accounting_posting_sources",
+    "accounting_posting_failures"
+  ],
+  "migration": {
+    "maximum_revisions": 1,
+    "slot": 1,
+    "parent": "actual single authoritative Enterprise head fetched immediately before integration",
+    "required": true,
+    "sibling_heads_allowed": false,
+    "merge_revision_allowed": false,
+    "silent_reparenting_allowed": false
+  },
+  "api_scope": [
+    "authenticated Company-scoped COA administration/read",
+    "manual journal draft, prepare, approve/post",
+    "reversal and corrective posting",
+    "period read, close, and governed reopen",
+    "internal trial-balance and control-readiness queries"
+  ],
+  "frontend_scope": "none",
+  "excluded_runtime": [
+    "invoice and Accounts Receivable",
+    "payment, refund, processor, and settlement",
+    "Accounts Payable",
+    "financial statement implementation",
+    "cross-domain event posting adapters",
+    "QuickBooks extraction, import, or real data access",
+    "Preview, Production, activation, or cutover"
+  ],
+  "focused_tests": [
+    "backend/tests/accounting/**",
+    "permission and record-level separation-of-duties tests",
+    "Company and Branch isolation tests",
+    "balanced-entry and trial-balance property tests",
+    "posted immutability and reversal/correction tests",
+    "period close/reopen and close-versus-post concurrency tests",
+    "idempotency replay, digest-conflict, and concurrent duplicate tests",
+    "atomic rollback/no-orphan/no-partial-post tests",
+    "control-account manual-post protection and reconciliation tests",
+    "audit, provenance, and Business Event outbox tests",
+    "opening-journal contract tests with synthetic data only"
+  ],
+  "validation": [
+    "Ruff on changed backend Python",
+    "MyPy on changed backend Python",
+    "focused Accounting test suite",
+    "affected authorization, audit, events, Company, and Branch regression",
+    "appropriate backend regression",
+    "fresh Alembic upgrade",
+    "Accounting revision downgrade and re-upgrade",
+    "Alembic drift detection",
+    "exactly one Alembic head",
+    "git diff --check",
+    "focused credential, secret, and private-key scan"
+  ],
+  "integration_order": [
+    "ACC.CORE.1",
+    "INVOICE.1-3.ACCEL",
+    "PAY.1-3.ACCEL",
+    "ACC.AP.1",
+    "ACC.POST.1",
+    "ACC.RPT.1",
+    "ACC.MIG.1"
+  ],
+  "gates": {
+    "preview": "separate owner authorization required",
+    "production": "separate Production authorization required",
+    "finance": "distinct Finance Preparer and Independent Finance Approver evidence required",
+    "cutover": "all control reconciliations, zero unexplained variance, rollback readiness, and separate final owner authorization required"
+  }
+}
