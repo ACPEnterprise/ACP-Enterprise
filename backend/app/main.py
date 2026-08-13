@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
+from app.accounting.router import router as accounting_router
 from app.analytics.router import router as analytics_router
 from app.api.health import router as health_router
 from app.beacon.router import router as beacon_router
@@ -122,6 +123,7 @@ app.add_middleware(SecurityHeadersMiddleware, configuration=settings)
 app.include_router(health_router)
 app.include_router(events_router)
 app.include_router(analytics_router)
+app.include_router(accounting_router)
 app.include_router(beacon_router)
 app.include_router(customers_router)
 app.include_router(auth_router)

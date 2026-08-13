@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from app.platform.permissions.codes import (
+    AccountingPermission,
     AdministrationPermission,
     AnalyticsPermission,
     BeaconPermission,
@@ -191,6 +192,18 @@ INVENTORY_DEFINITIONS = tuple(
     for code in sorted(InventoryPermission.ALL)
 )
 
+ACCOUNTING_DEFINITIONS = tuple(
+    PermissionDefinition(
+        code=code,
+        name=code.replace("_", " ").title(),
+        resource="accounting",
+        action=code.removeprefix("COMPANY_ACCOUNTING_").lower(),
+        scope=PermissionScope.COMPANY,
+        reserved=True,
+    )
+    for code in sorted(AccountingPermission.ALL)
+)
+
 PRICE_BOOK_DEFINITIONS = tuple(
     PermissionDefinition(
         code=code,
@@ -300,6 +313,7 @@ permission_catalog = PermissionCatalog(
     + JOB_DEFINITIONS
     + DISPATCH_DEFINITIONS
     + INVENTORY_DEFINITIONS
+    + ACCOUNTING_DEFINITIONS
     + PRICE_BOOK_DEFINITIONS
     + COMMUNICATIONS_DEFINITIONS
     + ESTIMATE_DEFINITIONS

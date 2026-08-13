@@ -2,6 +2,13 @@ from enum import Enum
 
 
 class EventType(str, Enum):
+    # Accounting
+    ACCOUNTING_JOURNAL_POSTED = "accounting.journal_posted"
+    ACCOUNTING_JOURNAL_REVERSED = "accounting.journal_reversed"
+    ACCOUNTING_PERIOD_CLOSED = "accounting.period_closed"
+    ACCOUNTING_PERIOD_REOPENED = "accounting.period_reopened"
+    ACCOUNTING_POSTING_FAILED = "accounting.posting_failed"
+
     # Inventory
     INVENTORY_LOCATION_CREATED = "inventory.location_created"
     INVENTORY_TRANSFER_POSTED = "inventory.transfer_posted"
