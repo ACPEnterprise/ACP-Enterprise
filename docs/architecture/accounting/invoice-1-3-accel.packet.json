@@ -1,0 +1,147 @@
+{
+  "schema_version": "1.0",
+  "packet_id": "INVOICE.1-3.ACCEL",
+  "status": "ready_for_owner_start",
+  "objective": "Implement authoritative invoices and the Accounts Receivable subledger defined by ACC.AR.CONTRACT.1 without taking ownership from source domains or Accounting.",
+  "dependencies": [
+    "ACC.AR.CONTRACT.1",
+    "ACC.CORE.1",
+    "CRM.2",
+    "EST.4",
+    "OPS.1",
+    "PLAT.1",
+    "COMMS.1"
+  ],
+  "repository": {
+    "name": "ACP-Enterprise",
+    "authoritative_branch": "customer-management-v1",
+    "work_branch": "work/invoice-1-3-accel",
+    "start_rule": "fetch origin and create an isolated worktree from the current origin/customer-management-v1"
+  },
+  "allowed_paths": [
+    "backend/app/invoicing/**",
+    "backend/tests/invoicing/**",
+    "frontend/src/api/invoices.ts",
+    "frontend/src/api/invoices.test.ts",
+    "frontend/src/hooks/useInvoices.ts",
+    "frontend/src/types/invoices.ts",
+    "frontend/src/components/invoices/**",
+    "frontend/src/routes/InvoicesRoute.tsx",
+    "frontend/src/routes/InvoicesRoute.test.tsx",
+    "frontend/src/routes/InvoiceDetailRoute.tsx",
+    "frontend/src/routes/InvoiceDetailRoute.test.tsx",
+    "backend/app/events/types.py",
+    "backend/app/platform/permissions/codes.py",
+    "backend/app/platform/permissions/catalog.py",
+    "backend/app/main.py",
+    "frontend/src/routing/router.tsx",
+    "frontend/src/routing/routeMetadata.ts",
+    "frontend/src/layout/navigation.ts",
+    "backend/alembic/versions/<one_new_invoice_revision>.py"
+  ],
+  "prohibited_paths": [
+    "backend/app/accounting/** except consumption of an accepted public contract",
+    "backend/app/payments/**",
+    "backend/app/estimates/**",
+    "backend/app/jobs/**",
+    "backend/app/customers/**",
+    "backend/app/price_book/**",
+    "backend/app/tax_policy/**",
+    "backend/app/inventory/**",
+    "backend/app/operational_migration/**",
+    "deployment/**",
+    ".env*"
+  ],
+  "persistence_owner": "Invoicing owns invoice aggregates, issued revisions and lines, AR subledger entries, credits, write-offs, payment applications, and Accounting posting receipts; Accounting owns journals, periods, mappings, control accounts, and statements.",
+  "migration": {
+    "authority": "Accounting migration slot 2",
+    "required": true,
+    "parent_rule": "descend from the single authoritative head after ACC.CORE.1",
+    "single_head_required": true,
+    "reparent_rule": "mechanical re-parenting is allowed only before application and only when schema semantics do not conflict"
+  },
+  "lifecycle_states": [
+    "draft",
+    "cancelled",
+    "issued",
+    "partially_paid",
+    "adjusted",
+    "paid",
+    "voided"
+  ],
+  "accounting_states": [
+    "pending",
+    "posted",
+    "reversed",
+    "reconciliation_required"
+  ],
+  "required_events": [
+    "invoice.created",
+    "invoice.issued",
+    "invoice.voided",
+    "invoice.credit_memo_issued",
+    "invoice.write_off_recorded",
+    "invoice.payment_applied",
+    "invoice.payment_application_reversed",
+    "invoice.correction_replacement_linked"
+  ],
+  "required_permissions": [
+    "COMPANY_INVOICE_READ",
+    "COMPANY_INVOICE_MANAGE",
+    "COMPANY_INVOICE_ISSUE",
+    "COMPANY_INVOICE_ADJUST",
+    "COMPANY_INVOICE_APPLY_PAYMENT"
+  ],
+  "required_invariants": [
+    "one AR obligation per issued invoice revision",
+    "issued evidence is immutable and corrections are compensating",
+    "open amount is derived from authoritative subledger evidence",
+    "AR aging reconciles to the AR subledger and Accounting control",
+    "invoice tax equals line tax and tax-liability posting input",
+    "idempotency replay returns the original result and contradictory replay fails",
+    "Company and Branch scope is enforced in storage, service, API, events, and UI",
+    "accounting posted state requires an Accounting posting receipt",
+    "missing financial evidence is never treated as zero"
+  ],
+  "validation": [
+    "invoice lifecycle and transition tests",
+    "deterministic totals, discount allocation, tax, rounding, and digest tests",
+    "credit memo, void, correction, write-off, and reversal tests",
+    "AR subledger replay, aging-input, and control-reconciliation tests",
+    "payment application, unapplication, overpayment, and duplicate tests with a fake accepted receipt contract",
+    "idempotency and contradictory replay tests",
+    "optimistic concurrency and transaction rollback tests",
+    "Company, Branch, customer/location, Estimate, and Job isolation tests",
+    "authorization negative tests",
+    "Business Event and Accounting posting-receipt contract tests",
+    "API and responsive frontend workflow tests",
+    "affected Customer, Estimate, Job, Price Book, tax-policy, Communications, and Platform regressions",
+    "Ruff, MyPy, ESLint, TypeScript typecheck, production frontend build, git diff --check, and focused secret scan",
+    "fresh Alembic upgrade, downgrade/re-upgrade, drift detection, and exactly one head"
+  ],
+  "serialization": {
+    "type": "TYPE B",
+    "migration_after": "ACC.CORE.1",
+    "shared_contract_checkpoint": "ACC.IC.1",
+    "stop_on": [
+      "accounting policy ambiguity",
+      "schema or migration collision",
+      "shared-contract semantic conflict",
+      "security or data-integrity concern",
+      "non-mechanical Git conflict"
+    ]
+  },
+  "environment_gates": {
+    "preview": "separate owner authorization after integration and Finance review",
+    "production": "separate owner authorization after ACC.IC.1, rehearsal, reconciliation, and go/no-go gates",
+    "real_data_import": "prohibited"
+  },
+  "completion": [
+    "implementation and all validation pass",
+    "Finance inputs are configured and evidenced or fail-closed gates remain explicit",
+    "one exact-boundary commit is normally pushed",
+    "local and remote are synchronized with a clean tree and empty index",
+    "exactly one Alembic head remains"
+  ]
+}
+
