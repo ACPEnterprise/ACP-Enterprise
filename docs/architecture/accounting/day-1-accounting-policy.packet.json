@@ -1,0 +1,175 @@
+{
+  "schema_version": "1.0",
+  "packet_id": "CUTOVER.FINANCE.1",
+  "status": "owner_finance_evidence_required",
+  "target_cutover": "2026-08-21T00:00:00-04:00",
+  "ledger_authority": "ACP Internal Accounting Core after accepted cutover",
+  "pre_cutover_authority": "QuickBooks",
+  "policy_authority": {
+    "normative_contracts": [
+      "docs/architecture/adr/0005-internal-accounting-system-of-record.md",
+      "docs/architecture/accounting/day-1-control-contract.md",
+      "docs/architecture/accounting/core-ledger-contract.md",
+      "docs/architecture/accounting/accounts-receivable-invoice-contract.md",
+      "docs/architecture/accounting/accounts-payable-vendor-contract.md",
+      "docs/architecture/accounting/payment-cash-settlement-contract.md",
+      "docs/architecture/accounting/domain-event-posting-contract.md",
+      "docs/architecture/accounting/day-1-financial-reporting-contract.md",
+      "docs/architecture/accounting/quickbooks-exit-data-contract.md"
+    ],
+    "business_economics_is_accounting_authority": false
+  },
+  "classification_vocabulary": [
+    "RESOLVED_BY_AUTHORITY",
+    "OWNER_DECISION_REQUIRED",
+    "FINANCE_DECISION_REQUIRED",
+    "SOURCE_EVIDENCE_REQUIRED",
+    "BLOCKED"
+  ],
+  "policies": [
+    {
+      "id": "functional_currency",
+      "classification": "SOURCE_EVIDENCE_REQUIRED",
+      "approved_fact": null,
+      "fixed_rule": "Use exactly the active QuickBooks company functional/home currency at cutover; Day 1 is single-functional-currency.",
+      "evidence_required": ["QuickBooks company settings export or controlled screenshot", "active Chart of Accounts export", "cutover trial balance showing currency/basis settings"],
+      "blocks": ["PAY.1-3.ACCEL activation", "ACC.AP.1 activation", "ACC.POST.1 activation", "ACC.RPT.1 acceptance", "ACC.MIG.1", "cutover"]
+    },
+    {
+      "id": "accounting_basis",
+      "classification": "SOURCE_EVIDENCE_REQUIRED",
+      "approved_fact": null,
+      "fixed_rule": "Match the current QuickBooks book basis exactly; do not change basis during migration.",
+      "evidence_required": ["QuickBooks company accounting-basis setting", "trial balance, balance sheet, and P&L exported with the same basis and cutoff"],
+      "blocks": ["ACC.POST.1 activation", "ACC.RPT.1 acceptance", "ACC.MIG.1", "cutover"]
+    },
+    {
+      "id": "company_timezone",
+      "classification": "RESOLVED_BY_AUTHORITY",
+      "approved_fact": "America/New_York",
+      "fixed_rule": "Company business and cutover date boundaries use America/New_York; transport timestamps remain offset-aware.",
+      "evidence_required": ["QuickBooks export metadata must record its source timezone for migration reconciliation"],
+      "blocks": []
+    },
+    {
+      "id": "fiscal_calendar",
+      "classification": "SOURCE_EVIDENCE_REQUIRED",
+      "approved_fact": null,
+      "fixed_rule": "ACP periods must reproduce the active QuickBooks fiscal year/calendar at cutover; periods cannot overlap.",
+      "evidence_required": ["QuickBooks fiscal-year/company settings", "accounting-period or close-date settings", "Finance-confirmed 2026 period schedule"],
+      "blocks": ["ACC.POST.1 activation", "ACC.RPT.1 acceptance", "ACC.MIG.1", "cutover"]
+    },
+    {
+      "id": "coa_classifications",
+      "classification": "SOURCE_EVIDENCE_REQUIRED",
+      "approved_fact": null,
+      "fixed_rule": "Adopt the active QuickBooks Chart of Accounts without redesign and preserve source types/classifications and stable identities.",
+      "evidence_required": ["machine-readable active Chart of Accounts", "human-readable COA control report", "stable source account IDs, types, subtypes, active state, and parent relationships"],
+      "blocks": ["ACC.POST.1 mappings", "ACC.RPT.1 statements", "ACC.MIG.1", "cutover"]
+    },
+    {
+      "id": "financial_statement_mappings",
+      "classification": "FINANCE_DECISION_REQUIRED",
+      "approved_fact": null,
+      "fixed_rule": "Every active/nonzero account maps exactly once to a versioned balance-sheet or income-statement section consistent with its accepted COA classification.",
+      "evidence_required": ["accepted COA export", "current QuickBooks balance sheet and P&L account ordering", "Finance-signed mapping workpaper"],
+      "blocks": ["ACC.RPT.1 balance sheet and P&L acceptance", "cutover"]
+    },
+    {
+      "id": "retained_current_earnings",
+      "classification": "FINANCE_DECISION_REQUIRED",
+      "approved_fact": null,
+      "fixed_rule": "Opening retained earnings equals evidenced QuickBooks retained earnings; reports present unclosed current earnings separately and never invent a closing entry.",
+      "evidence_required": ["QuickBooks retained-earnings/equity report", "fiscal-year context", "Finance-signed retained/current-earnings mapping"],
+      "blocks": ["ACC.RPT.1 balance sheet acceptance", "ACC.MIG.1 equity opening state", "cutover"]
+    },
+    {
+      "id": "ar_aging_buckets",
+      "classification": "FINANCE_DECISION_REQUIRED",
+      "approved_fact": null,
+      "fixed_rule": "Buckets are versioned, ordered, nonoverlapping, exhaustive, and based on contractual due date in America/New_York.",
+      "evidence_required": ["QuickBooks AR aging settings and report", "Finance-signed bucket boundaries"],
+      "blocks": ["ACC.RPT.1 AR aging acceptance", "ACC.MIG.1 AR reconciliation", "cutover"]
+    },
+    {
+      "id": "ap_aging_buckets",
+      "classification": "FINANCE_DECISION_REQUIRED",
+      "approved_fact": null,
+      "fixed_rule": "Buckets are versioned, ordered, nonoverlapping, exhaustive, and based on due date in America/New_York.",
+      "evidence_required": ["QuickBooks AP aging settings and report", "Finance-signed bucket boundaries"],
+      "blocks": ["ACC.RPT.1 AP aging acceptance", "ACC.MIG.1 AP reconciliation", "cutover"]
+    },
+    {
+      "id": "display_sign_policy",
+      "classification": "FINANCE_DECISION_REQUIRED",
+      "approved_fact": null,
+      "fixed_rule": "Canonical ledger math remains debit-positive; presentation signs may not alter balances or reconciliation.",
+      "evidence_required": ["Finance-signed statement display convention", "current QuickBooks statement examples"],
+      "blocks": ["ACC.RPT.1 statement acceptance"]
+    },
+    {
+      "id": "comparative_period_policy",
+      "classification": "OWNER_DECISION_REQUIRED",
+      "approved_fact": null,
+      "fixed_rule": "Every comparison is a separately complete computation with its own effective range and cutoff.",
+      "evidence_required": ["Owner-selected Day-1 comparison set", "Finance confirmation that fiscal/calendar comparisons are valid"],
+      "blocks": ["ACC.RPT.1 presentation acceptance"]
+    },
+    {
+      "id": "reporting_freshness",
+      "classification": "RESOLVED_BY_AUTHORITY",
+      "approved_fact": "cutoff_consistent_on_demand",
+      "fixed_rule": "A report is current only for its immutable ledger/subledger cutoffs; any later authoritative posting or open-item evidence makes the prior result stale. No elapsed-time SLA can override cutoff inconsistency.",
+      "evidence_required": [],
+      "blocks": []
+    },
+    {
+      "id": "export_retention",
+      "classification": "FINANCE_DECISION_REQUIRED",
+      "approved_fact": null,
+      "fixed_rule": "Accepted report packages and manifests are immutable, access-controlled, and retained under an approved accounting/legal records schedule.",
+      "evidence_required": ["Finance/legal retention schedule", "approved restricted storage/custodian record", "archive restore/fixity procedure"],
+      "blocks": ["ACC.RPT.1 export acceptance", "ACC.MIG.1 package acceptance", "cutover"]
+    },
+    {
+      "id": "exception_ownership",
+      "classification": "RESOLVED_BY_AUTHORITY",
+      "approved_fact": "Owner as FINANCE_PREPARER; external accountant/CPA as INDEPENDENT_FINANCE_APPROVER; Owner as final cutover authority",
+      "fixed_rule": "Preparer/reconciler and independent approver are different human identities; unresolved or nonzero variances block acceptance.",
+      "evidence_required": ["named human assignments are recorded separately under independent_reviewer_identity"],
+      "blocks": []
+    },
+    {
+      "id": "control_account_workpapers",
+      "classification": "SOURCE_EVIDENCE_REQUIRED",
+      "approved_fact": null,
+      "fixed_rule": "Every required control ties exactly to its authoritative subledger or signed workpaper at the same company, currency, basis, and cutoff; absence is not zero.",
+      "evidence_required": ["AR and AP control ties", "bank/cash and undeposited-funds reconciliations", "payment clearing/settlement controls", "tax, inventory, payroll, opening-state, equity, and every applicable conditional schedule"],
+      "blocks": ["PAY.1-3.ACCEL acceptance", "ACC.AP.1 acceptance", "ACC.RPT.1 acceptance", "ACC.MIG.1", "cutover"]
+    },
+    {
+      "id": "independent_reviewer_identity",
+      "classification": "SOURCE_EVIDENCE_REQUIRED",
+      "approved_fact": null,
+      "fixed_rule": "The external accountant/CPA is the independent approver and may approve a checksum-bound package without ACP application access; their identity must differ from the preparer.",
+      "evidence_required": ["reviewer legal/display identity and professional relationship", "accepted signature or attestation method", "approved secure exchange channel", "checksum-bound approval artifact", "availability for rehearsal and cutover gates"],
+      "blocks": ["Finance acceptance", "ACC.MIG.1 activation", "cutover"]
+    }
+  ],
+  "reconciliation_invariants": [
+    "trial balance debits equal credits and net equals zero",
+    "assets equal liabilities plus equity including current earnings",
+    "AR open items equal AR subledger equal AR control",
+    "AP open items equal AP subledger equal AP control",
+    "bank and cash book balances equal mapped GL balances and reconciling items explain statement variance",
+    "every nonzero control variance is unresolved regardless of reporting materiality"
+  ],
+  "consumers": {
+    "ACC.POST.1": "accepted currency, basis, periods, COA/control mappings and exact posting policy",
+    "ACC.RPT.1": "all report definitions, mappings, aging, display, comparison, freshness, retention, review and reconciliation policy",
+    "ACC.MIG.1": "source settings, accepted mappings, opening controls, artifact checksums, dispositions and independent approval evidence",
+    "cutover_reconciliation": "same-company, same-currency, same-basis, same-cutoff exact control package",
+    "finance_review": "immutable checksum-bound package with preparer, independent decision, exceptions and final owner authorization"
+  },
+  "activation_rule": "No unresolved parameter is replaced by a recommendation or default. Every blocking policy must carry accepted evidence before its consumer activates."
+}
