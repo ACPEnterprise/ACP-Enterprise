@@ -1,0 +1,140 @@
+{
+  "schema_version": "1.0",
+  "packet_id": "ACC.AP.1",
+  "status": "blocked_on_preceding_serialized_slot",
+  "objective": "Implement the authoritative Day-1 vendor accounting, bills, credits, AP subledger, aging inputs, disbursement evidence, and Accounting handoff defined by ACC.AP.CONTRACT.1.",
+  "dependencies": [
+    "ACC.AP.CONTRACT.1",
+    "ACC.CORE.1",
+    "PAY.1-3.ACCEL integration or explicit migration-free disposition for slot 3"
+  ],
+  "non_dependency_context": [
+    "PUR.1 is not required for generic/non-PO AP; its future adapter consumes only accepted Purchasing public facts"
+  ],
+  "repository": {
+    "name": "ACP-Enterprise",
+    "authoritative_branch": "customer-management-v1",
+    "work_branch": "work/acc-ap-1",
+    "start_rule": "fetch origin, confirm dependencies and one Alembic head, then create an isolated worktree"
+  },
+  "allowed_paths": [
+    "backend/app/accounts_payable/**",
+    "backend/tests/accounts_payable/**",
+    "frontend/src/api/accountsPayable.ts",
+    "frontend/src/api/accountsPayable.test.ts",
+    "frontend/src/hooks/useAccountsPayable.ts",
+    "frontend/src/types/accountsPayable.ts",
+    "frontend/src/components/accounts-payable/**",
+    "frontend/src/routes/AccountsPayableRoute.tsx",
+    "frontend/src/routes/AccountsPayableRoute.test.tsx",
+    "frontend/src/routes/VendorBillDetailRoute.tsx",
+    "frontend/src/routes/VendorBillDetailRoute.test.tsx",
+    "backend/app/events/types.py",
+    "backend/app/platform/permissions/codes.py",
+    "backend/app/platform/permissions/catalog.py",
+    "backend/app/main.py",
+    "frontend/src/routing/router.tsx",
+    "frontend/src/routing/routeMetadata.ts",
+    "frontend/src/layout/navigation.ts",
+    "backend/alembic/versions/<one_new_accounts_payable_revision>.py"
+  ],
+  "prohibited_paths": [
+    "backend/app/accounting/** except consumption of accepted public contracts",
+    "backend/app/purchasing/**",
+    "backend/app/inventory/**",
+    "backend/app/invoicing/**",
+    "backend/app/payments/**",
+    "backend/app/accounting_migration/**",
+    "backend/app/operational_migration/**",
+    "deployment/**",
+    ".env*"
+  ],
+  "persistence_owner": "Accounts Payable owns accounting vendors and source/Purchasing mappings, vendor bills/revisions/lines, duplicate review evidence, credits and applications, AP subledger entries, disbursement evidence/applications, reconciliation exceptions, and Accounting posting receipts.",
+  "migration": {
+    "authority": "Accounting migration slot 4",
+    "maximum_revisions": 1,
+    "required": true,
+    "parent_rule": "descend from the actual single authoritative head after slots 1 through 3 are integrated or explicitly migration-free",
+    "single_head_required": true,
+    "merge_revision_allowed": false,
+    "silent_reparenting_allowed": false,
+    "collision_rule": "stop for overlapping DDL, published revision, incompatible Accounting/Purchasing semantics, data rewrite, or migration identity collision"
+  },
+  "api_scope": [
+    "Company-scoped accounting vendor create/read/archive and Purchasing mapping",
+    "vendor bill draft/submit/approve/read and duplicate review",
+    "vendor credit issue/apply/unapply",
+    "bill/credit correction and reversal",
+    "verified disbursement record/apply/reverse without money initiation",
+    "AP open items, aging inputs, control reconciliation, and posting receipt status"
+  ],
+  "required_permissions": [
+    "COMPANY_ACCOUNTS_PAYABLE_READ",
+    "COMPANY_ACCOUNTS_PAYABLE_VENDOR_MANAGE",
+    "COMPANY_ACCOUNTS_PAYABLE_BILL_PREPARE",
+    "COMPANY_ACCOUNTS_PAYABLE_BILL_APPROVE",
+    "COMPANY_ACCOUNTS_PAYABLE_CREDIT_MANAGE",
+    "COMPANY_ACCOUNTS_PAYABLE_DISBURSEMENT_RECORD",
+    "COMPANY_ACCOUNTS_PAYABLE_RECONCILE",
+    "COMPANY_ACCOUNTS_PAYABLE_REPORT_READ"
+  ],
+  "required_events": [
+    "accounts_payable.vendor_created",
+    "accounts_payable.vendor_mapped",
+    "accounts_payable.bill_approved",
+    "accounts_payable.bill_reversed",
+    "accounts_payable.vendor_credit_issued",
+    "accounts_payable.vendor_credit_applied",
+    "accounts_payable.disbursement_recorded",
+    "accounts_payable.disbursement_reversed",
+    "accounts_payable.reconciliation_required"
+  ],
+  "required_invariants": [
+    "one AP obligation per approved bill revision and no GL-posted state without a Core posting receipt",
+    "posted evidence is append-only and corrections are compensating",
+    "open items derive from AP subledger evidence and reconcile to AP control",
+    "duplicate vendor bill identity fails closed unless independently reviewed under policy",
+    "credits and disbursements cannot over-apply or cross vendor, Company, or currency",
+    "receipt, PO, Inventory movement, bill, liability, and disbursement remain distinct facts",
+    "closed periods reject approval/posting handoff and correction",
+    "idempotent replay returns the original result and contradictory replay conflicts",
+    "preparer/approver, duplicate override, disbursement, and reconciliation SOD is record-level",
+    "missing financial evidence is never treated as zero"
+  ],
+  "validation": [
+    "vendor identity/source mapping, archive, Company isolation, and restricted-data tests",
+    "bill lifecycle, immutable revision, totals, currency, period, and account-mapping tests",
+    "hard/possible duplicate, normalization, concurrent duplicate, override, and SOD tests",
+    "vendor credit application/unapplication, correction, reversal, and over-application tests",
+    "AP subledger replay, open-item, aging-input, and AP-control reconciliation tests",
+    "non-PO and fake Purchasing PO/receipt fact contract tests without Purchasing table access",
+    "verified disbursement record/application/reversal and unknown-outcome tests without money initiation",
+    "Accounting posting receipt, failure, replay, audit, and atomic Business Event tests",
+    "optimistic concurrency, row-lock, rollback, Company/Branch, permission-negative, and API security tests",
+    "responsive frontend AP workflow, accessibility, API contract, and authorization tests",
+    "affected Accounting Core, Invoicing, Payments contract, Inventory, authorization, audit, and event regressions",
+    "Ruff, MyPy, ESLint, TypeScript typecheck, frontend production build, git diff --check, and focused secret/private-key scan",
+    "fresh Alembic upgrade, revision downgrade/re-upgrade, drift detection, and exactly one head"
+  ],
+  "serialization": {
+    "type": "TYPE B",
+    "migration_after": "PAY.1-3.ACCEL",
+    "migration_before": "ACC.POST.1",
+    "current_observed_head_at_contract_start": "w8m0i2k4n619",
+    "actual_parent_must_be_refetched": true
+  },
+  "environment_gates": {
+    "preview": "separate owner authorization required",
+    "production": "separate Production authorization required",
+    "real_data_import": "prohibited",
+    "finance": "Finance mappings, policies, SOD identities, and control review required before activation",
+    "cutover": "separate final owner and independent Finance approval required"
+  },
+  "completion": [
+    "exact-boundary implementation and comprehensive validation pass",
+    "Finance inputs are evidenced or their fail-closed activation gates remain explicit",
+    "one migration descends from the then-current single authoritative head",
+    "one exact-boundary commit is normally pushed with local/remote synchronized and clean",
+    "ACC.POST.1 receives stable accepted AP event contracts"
+  ]
+}
