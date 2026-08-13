@@ -8,6 +8,17 @@ the [Version 1 roadmap](version-1-implementation-roadmap.md) without granting
 implementation, Git, Preview, migration-execution, cutover, or Production
 authority. The Master Milestone Queue remains the status authority.
 
+The accepted [Accounting authority decision](../architecture/adr/0005-internal-accounting-system-of-record.md)
+supersedes the former QuickBooks-handoff meaning of `ACC.1` and `ACC.2`. They are
+historical, not schedulable work. Accounting scheduling now uses the separately
+gated [cutover path](accounting-cutover-critical-path.md) and
+[implementation packets](../architecture/accounting/implementation-packets.md).
+
+The immediate proposed handoff is `OM2-A → ACC.AR.CONTRACT.1`,
+`OM2-B → ACC.CORE.CONTRACT.1`, and, after its existing MMQ work,
+`LAP-B → ACC.DATA.1`. All three are `PLANNED` but dependency-ready; the owner has
+not granted their milestone-specific Start.
+
 The scheduler may select only a milestone recorded as `READY`. A visible
 `PLANNED`, `BLOCKED`, or conditionally sequenced item is not permission to start.
 Every owner approval is milestone-specific. Routine implementation,
@@ -118,8 +129,8 @@ is the minimum boundary and does not replace the repository standards.
 | `PAY.1` | Establish payment provider boundary | Financial | `INVOICE.1`; `PLAT.1` | `OM2` suggested | `ACP` | `UNKNOWN` before `READY` | `ACP` rule | `TYPE B` | `UNKNOWN` | Security/provider/financial | `UNKNOWN` | `NO` | Serialized integration | `IC.2` | Threat, token, webhook, idempotency failures | READY/Start; security/finance review | `PAY.2` |
 | `PAY.2` | Collect and record payments | Financial | `PAY.1`; `INVOICE.2` | `OM1` suggested | `ACP` | `UNKNOWN` before `READY` | `ACP` rule | `TYPE B` | `UNKNOWN` | Invoice/Portal/Technician | `UNKNOWN` | `NO` | Serialized integration | `IC.2` | Duplicate-charge, retries, receipts, totals | READY/Start; finance review; Git gates | `PAY.3` |
 | `PAY.3` | Reconcile refunds and failures | Financial | `PAY.2`; `INVOICE.3` | `OM2` suggested | `ACP` | `UNKNOWN` before `READY` | `ACP` rule | `TYPE B` | `UNKNOWN` | Accounting/Reporting/Beacon | `UNKNOWN` | `NO` | Serialized integration | `IC.2` | Refund, late webhook, settlement recovery | READY/Start; finance review; Git gates | `ACC.1` |
-| `ACC.1` | Define QuickBooks handoff | Accounting boundary | `INVOICE.3`; `PAY.3`; `BE.8` | `OM1` + `ECO` review | `ACP` | `UNKNOWN` before `READY` | `ACP` rule | `TYPE B` | `UNKNOWN` | Financial ownership/QuickBooks | `UNKNOWN` | `NO` | Serialized integration | `IC.2` | Mapping, idempotency, control matrix | READY/Start; finance owner review | `ACC.2` |
-| `ACC.2` | Implement accounting reconciliation | Accounting boundary | `ACC.1` | `OM1` + `ECO` review | `ACP` | `UNKNOWN` before `READY` | `ACP` rule | `TYPE B` | `UNKNOWN` | QuickBooks/Reporting/Migration | `UNKNOWN` | `NO` | Serialized integration | `IC.2` | Export, acknowledgement, variance, retry | READY/Start; finance owner review | `RPT.3` |
+| `ACC.1` | Superseded QuickBooks handoff | Historical only | `ACC.CUTOVER.0` supersession | none | `ACP` | prohibited | historical | not schedulable | `NO` | superseded | `NO` | `NO` | not startable | none | preserved history | none | none |
+| `ACC.2` | Superseded QuickBooks reconciliation | Historical only | `ACC.CUTOVER.0` supersession | none | `ACP` | prohibited | historical | not schedulable | `NO` | superseded | `NO` | `NO` | not startable | none | preserved history | none | none |
 | `PORTAL.1` | Establish customer portal trust boundary | Customer Portal | `CRM.2`; `PLAT.1`; `IC.1` | `OM2` suggested | `ACP` | `UNKNOWN` before `READY` | `ACP` rule | `TYPE B` | `UNKNOWN` | Identity/tenant/CRM | `UNKNOWN` | `NO` | Serialized integration | `IC.2` | Account linking, enumeration, tenant security | READY/Start; security review; Git gates | `PORTAL.2` |
 | `PORTAL.2` | Expose commercial self-service | Customer Portal | `PORTAL.1`; `EST.4`; `INVOICE.2`; `PAY.2` | `OM2` suggested | `ACP` | `UNKNOWN` before `READY` | `ACP` rule | `TYPE B` | `UNKNOWN` | Sales/Financial/Communications | `UNKNOWN` | `NO` | `COND` | `IC.2` | Customer journey, authorization, accessibility | READY/Start; review; Git gates | `IC.2` |
 | `PORTAL.3` | Expose appointment self-service | Customer Portal | `PORTAL.1`; `OPS.1`; `COMMS.1` | `OM1` suggested | `ACP` | `UNKNOWN` before `READY` | `ACP` rule | `TYPE B` | `UNKNOWN` | Scheduling/Operations | `UNKNOWN` | `NO` | `COND` | `IC.2` | Safe request handoff, authorization, accessibility | READY/Start; review; Git gates | `IC.2` |

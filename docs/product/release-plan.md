@@ -8,7 +8,9 @@ This is an aggressive launch plan. Scope must be limited to the workflows requir
 
 ## Release guardrails
 
-- QuickBooks remains the accounting system of record.
+- QuickBooks remains authoritative only until the separately gated internal-
+  accounting cutover defined by
+  [ADR 0005](../architecture/adr/0005-internal-accounting-system-of-record.md).
 - Multi-company SaaS administration is out of scope, but tenant and branch boundaries must be enforced in the design.
 - Prefer complete primary workflows over broad configuration and edge-feature parity.
 - No launch occurs without migrated-data reconciliation, role validation, backup/restore evidence, operational monitoring, and an approved rollback procedure.

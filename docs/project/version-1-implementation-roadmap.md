@@ -18,11 +18,11 @@ not an assignment. The owner must approve a milestone definition, repository,
 exact starting commit, branch or workspace, migration ownership, acceptance
 evidence, and Start before implementation.
 
-Version 1.0 replaces the launch-critical Housecall Pro operating path. QuickBooks
-remains the accounting system of record. General ledger, accounts payable,
-payroll, bank reconciliation, financial close, broad autonomous AI, and
-multi-company SaaS administration are not Version 1.0 claims. Production remains
-untouched until the independent release gates are approved.
+Version 1.0 replaces the launch-critical Housecall Pro operating path. The
+separately approved [internal-accounting cutover program](accounting-cutover-critical-path.md)
+now supersedes this roadmap's former QuickBooks system-of-record boundary.
+Accounting implementation and cutover remain independently gated; Production
+remains untouched until the applicable release and cutover approvals pass.
 
 ## Planning assumptions
 
@@ -78,8 +78,8 @@ untouched until the independent release gates are approved.
 | `PAY.1` | Establish payment provider boundary | Tokenization, idempotency, request/attempt model, webhook verification | `INVOICE.1`; `PLAT.1` | Provider adapter contract, threat model, failure-safe persistence | Invoicing, Platform, Communications | `L` | `XL` | `ACP-Enterprise`, isolated worktree | Office Machine 2 |
 | `PAY.2` | Collect and record payments | Payment request, charge/record flow, receipts, retries | `PAY.1`; `INVOICE.2` | Payment journey with duplicate-charge protection | Invoicing, Portal, Technician, Communications | `XL` | `XL` | `ACP-Enterprise`, isolated worktree | Office Machine 1 |
 | `PAY.3` | Reconcile refunds and failures | Refunds, failed/late webhooks, settlement exceptions, correction rules | `PAY.2`; `INVOICE.3` | Reconciliation queue, refund evidence, recovery tests | Accounting, Reporting, Beacon | `L` | `XL` | `ACP-Enterprise`, isolated worktree | Office Machine 2 |
-| `ACC.1` | Define QuickBooks handoff | Operational-to-accounting mapping, export ownership, idempotent references | `INVOICE.3`; `PAY.3`; `BE.8` | Approved QuickBooks contract and financial control matrix | Invoicing, Payments, Business Economics | `L` | `XL` | `ACP-Enterprise`, isolated worktree | Office Machine 1 with finance review |
-| `ACC.2` | Implement accounting reconciliation | Export/integration, acknowledgements, retry, variance workflow | `ACC.1` | QuickBooks handoff, reconciliation report, exception ownership | Reporting, Migration, Beacon | `XL` | `XL` | `ACP-Enterprise`, isolated worktree | Office Machine 1 with finance review |
+| `ACC.1` | Superseded QuickBooks handoff | Historical planning entry only; do not Start | Superseded by `ACC.CUTOVER.0` | Preserved roadmap history | None | — | — | `ACP-Enterprise` | None |
+| `ACC.2` | Superseded QuickBooks reconciliation | Historical planning entry only; do not Start | Superseded by `ACC.CUTOVER.0` | Preserved roadmap history | None | — | — | `ACP-Enterprise` | None |
 | `PORTAL.1` | Establish customer portal trust boundary | Customer authentication, account linking, consent, tenant isolation | `CRM.2`; `PLAT.1`; `IC.1` | Portal identity architecture, APIs, shell, security tests | CRM, Platform, Communications | `L` | `XL` | `ACP-Enterprise`, isolated worktree | Office Machine 2 |
 | `PORTAL.2` | Expose commercial self-service | Estimate review/approval, invoice view, payment request and receipt | `PORTAL.1`; `EST.4`; `INVOICE.2`; `PAY.2` | Customer commercial journey and accessibility evidence | Estimates, Invoicing, Payments, Communications | `L` | `XL` | `ACP-Enterprise`, isolated worktree | Office Machine 2 |
 | `PORTAL.3` | Expose appointment self-service | Appointment view, bounded reschedule/cancel request, message history | `PORTAL.1`; `OPS.1`; `COMMS.1` | Customer appointment journey and safe request handoff | Scheduling, Operations, Communications | `L` | `XL` | `ACP-Enterprise`, isolated worktree | Office Machine 1 |
@@ -165,7 +165,7 @@ parallel.
 | 1C | `DISP.2`, `PUR.1`, and `TECH.1` after their prerequisites | Dispatch/Technician shared interfaces; `IC.1` aggregate validation |
 | 2A | `TECH.2`, `PUR.2`, `INVOICE.1`, `PAY.1`, and `PORTAL.1` on isolated boundaries | Invoice/Payment schema order and shared financial contracts |
 | 2B | `INV.3`, `INVOICE.2`, `PORTAL.3`; then `PUR.3`, `INVOICE.3`, `PAY.2`, `PORTAL.2` as edges clear | Financial totals, provider webhooks, portal authorization, and Alembic chain |
-| 2C | `INV.4`, `PAY.3`, `COMMS.2`; then `ACC.1` and `ACC.2` | QuickBooks mapping and financial reconciliation; `IC.2` serial integration |
+| 2C | `INV.4`, `PAY.3`, `COMMS.2`; Accounting follows its separately approved accelerated path | Financial contracts and Alembic lineage remain serialized; historical `ACC.1`/`ACC.2` do not Start |
 | 3A | `RPT.1`, `MIG.2`, and `TECH.3`; then `RPT.2`, `RPT.3`, `BE.9`, `BEA.6` | Projection schemas, migration datasets, and source-of-truth definitions |
 | 3B | `BEA.7`, `AUTO.1`, `MIG.3`, and `TECH.4` after dependencies | Automation approval surfaces; `IC.3` serial candidate assembly |
 | 4 | Training/support preparation may accompany `IC.4` and `MIG.4` evidence work | `IC.4`, `MIG.4`, `REL.1`, `REL.2`, `IC.5`, and `REL.3` are a strict release chain |
@@ -254,9 +254,9 @@ an approved scope change.
 
 | Code | Milestone | Earliest release | Reason |
 | --- | --- | --- | --- |
-| `ACC.GL.1` | Double-entry general ledger and period controls | Version 2.0 | QuickBooks remains Version 1.0 accounting system of record |
-| `ACC.AP.1` | Accounts payable, vendor bills and disbursements | Version 2.0 | Requires accounting controls and segregation of duties |
-| `ACC.CLOSE.1` | Bank reconciliation, close and formal statements | Version 2.0 | Requires sustained parallel financial validation |
+| `ACC.GL.1` | Historical ledger candidate | Superseded | Replaced by `ACC.CORE.1` in the approved Accounting cutover path |
+| `ACC.AP.1` | Accounts payable, vendor bills and disbursements | Accounting cutover | Promoted to the approved Day-1 critical path |
+| `ACC.CLOSE.1` | Historical close candidate | Superseded | Day-1 close/report controls are owned by `ACC.CORE.1` and `ACC.RPT.1` |
 | `INV.5` | Predictive replenishment and multi-location optimization | Version 1.5 | Not required for launch material tracking |
 | `TECH.5` | Offline-first field synchronization | Version 1.5 | Version 1.0 provides bounded degraded-network behavior only |
 | `PORTAL.4` | Broad customer account self-service | Version 1.5 | Version 1.0 is limited to launch journeys |

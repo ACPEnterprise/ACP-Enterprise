@@ -16,9 +16,13 @@ Required capabilities:
 - Customer notifications and essential communication history
 - Operational dashboard and launch-critical reports
 - Controlled data migration, reconciliation, backup, monitoring, support, and rollback procedures
-- Necessary integrations for payment processing, messaging, mapping, and continued QuickBooks operation
+- Necessary integrations for payment processing, messaging, and mapping
+- The separately gated internal-accounting critical path defined by
+  [ADR 0005](adr/0005-internal-accounting-system-of-record.md)
 
-QuickBooks remains the accounting system of record. Nonessential SaaS administration, broad AI capabilities, and speculative workflow variants are out of scope.
+QuickBooks remains authoritative only until the independently accepted internal-
+accounting cutover. Nonessential SaaS administration, broad AI capabilities, and
+speculative workflow variants remain out of scope.
 
 ## Version 1.5 — Operational depth and revenue optimization
 
@@ -35,9 +39,10 @@ Candidate capabilities:
 - Broader mobile resilience and offline-tolerant field workflows
 - Hardened integration and data-quality operations
 
-## Version 2.0 — Financial system expansion
+## Internal Accounting cutover program
 
-**Outcome:** ACP Enterprise can progressively replace QuickBooks without weakening financial control.
+**Outcome:** ACP Enterprise replaces QuickBooks as the operational accounting
+system without weakening financial control.
 
 Expected areas:
 
@@ -48,7 +53,10 @@ Expected areas:
 - Financial statements, period controls, immutable audit trails, and accountant access
 - Parallel-run reconciliation and independently approved cutover criteria
 
-QuickBooks replacement is a separate business and architecture decision from Housecall Pro replacement. It requires accounting expertise, internal controls, and a sustained parallel validation period.
+The controlling decision and Day-1 boundary are recorded in
+[ADR 0005](adr/0005-internal-accounting-system-of-record.md). QuickBooks becomes
+read-only only after independent financial verification and owner-authorized
+cutover.
 
 ## Version 3.0 — Multi-company SaaS platform
 

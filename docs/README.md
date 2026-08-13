@@ -2,7 +2,12 @@
 
 This directory is the authoritative documentation set for ACP Enterprise. It records why the platform exists, how it is structured, how engineers are expected to build it, and what must be true before it is released.
 
-ACP Enterprise version 1.0 has one mission: replace Housecall Pro for All County Plumbing & Leak. QuickBooks replacement and multi-company SaaS capabilities are later phases and must not expand version 1.0 scope unless the roadmap and applicable architecture decisions are deliberately revised.
+ACP Enterprise replaces Housecall Pro for All County Plumbing & Leak and now has
+an explicitly approved, independently gated internal-accounting cutover program.
+[ADR 0005](architecture/adr/0005-internal-accounting-system-of-record.md)
+supersedes the former QuickBooks system-of-record boundary without weakening
+Finance, Preview, Production, reconciliation, or cutover controls. Multi-company
+SaaS remains a later phase.
 
 ## Documentation map
 

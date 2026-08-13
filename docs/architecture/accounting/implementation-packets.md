@@ -1,0 +1,69 @@
+<!-- markdownlint-disable MD013 -->
+
+# Internal Accounting Implementation Packets
+
+## Common execution boundary
+
+All packets target `ACP-Enterprise` from a freshly fetched
+`origin/customer-management-v1` in a unique isolated worktree. Each is `TYPE B`.
+Implementation may run in parallel only with disjoint files; migration and shared
+financial-contract integration is serialized. Every packet stops for schema
+scope outside its authority, policy ambiguity, security/data-integrity concern,
+or semantic integration conflict.
+
+Common allowed roots are the packet-specific roots below plus matching focused
+tests and explicitly named shared event/permission seams. Common prohibited roots
+are `.env*`, credentials/private keys, deployment/Production configuration,
+Migration workstream code, Economics, Mission Control/worker control, and
+unrelated domains. No packet authorizes Preview, Production, import, cutover,
+force-push, or irreversible operations.
+
+Starting commit rule for every packet: fetch immediately before workspace
+creation, record the full origin SHA, require zero behind, and stop for any
+non-mechanical overlap. Proposed branches are
+`work/acc-core-contract-1`, `work/acc-core-1`, `work/acc-ar-contract-1`,
+`work/invoice-1-3-accel`, `work/pay-1-3-accel`, `work/acc-ap-1`,
+`work/acc-post-1`, `work/acc-rpt-1`, `work/acc-data-1`, and
+`work/acc-mig-1`, respectively. Branch names do not authorize Start.
+
+Every runtime packet validates Ruff, MyPy, focused and affected regressions,
+authorization and Company/Branch isolation, transaction rollback, idempotency,
+audit, fresh Alembic upgrade, downgrade/re-upgrade, drift, exactly one head,
+`git diff --check`, and a focused secret scan. Frontend changes also require tests,
+ESLint, typecheck, and production build.
+
+## Packet ledger
+
+| Packet | Dependencies and exact scope | Enforceable paths | Persistence and integration | Gates and completion |
+| --- | --- | --- | --- | --- |
+| `ACC.CORE.CONTRACT.1` | [Day-1 contract](day-1-control-contract.md); freeze COA/GL/journal/period/reversal/audit/SOD interfaces without runtime | `docs/architecture/accounting/**`, new Accounting product specification only | No migration; precedes all Accounting runtime | Architecture tests and links; owner accepts; then `ACC.CORE.1` may start |
+| `ACC.CORE.1` | `ACC.CORE.CONTRACT.1`; implement accounts, stable source mapping, balanced journals, periods, reversals, audit, Finance permissions | new `backend/app/accounting/**`, `backend/tests/accounting/**`, one new Accounting migration, narrowly required permission/event catalogs | Owns Accounting migration slot 1; first integration after current head | Finance control review; no Preview/Production; stop at owner review |
+| `ACC.AR.CONTRACT.1` | [Day-1 contract](day-1-control-contract.md); freeze invoice/AR/tax/credit/correction/aging-input rules without runtime | Accounting/Financial architecture and product specifications only | No migration; may run with core contract | Owner/Finance policy acceptance; then accelerated invoice packet may start |
+| `INVOICE.1-3.ACCEL` | `ACC.AR.CONTRACT.1`, accepted estimate/job contracts; invoices, AR, tax, credits, voids, adjustments, corrections, aging facts | new `backend/app/invoicing/**`, `backend/tests/invoicing/**`, matching frontend API/hooks/routes/tests, narrowly required events/permissions | Owns Accounting migration slot 2; serialize after `ACC.CORE.1` | Deterministic totals, balancing handoff, tax, corrections, concurrency, UI/security; Finance review |
+| `PAY.1-3.ACCEL` | Accepted invoice contract and current processor decision; payment application, refunds, failures, deposits, clearing, undeposited funds, settlement reconciliation | new `backend/app/payments/**`, `backend/tests/payments/**`, matching frontend seams, narrowly required events/permissions | Owns slot 3; no processor replacement or secrets | Provider fakes/contracts, replay/webhook/idempotency, duplicate-charge and settlement tests; Finance review |
+| `ACC.AP.1` | Core contract; vendors, bills, credits, AP balances/aging facts, controlled disbursement recording | new `backend/app/accounts_payable/**`, `backend/tests/accounts_payable/**`, matching frontend seams, named vendor/event/permission seams | Owns slot 4; Purchasing integration is contract-only unless separately approved | AP control/balance, duplicate bill, reversal, aging, SOD/security; Finance review |
+| `ACC.POST.1` | Accepted core, invoice, payment, and AP contracts; idempotent Business Event/domain fact to journal posting, tax, inventory-control, payroll-summary interfaces | `backend/app/accounting/**`, focused producer adapters/tests, named `backend/app/events/**` seams only | Owns slot 5 if required; no direct cross-domain table writes | Exactly-once/replay, source mapping, failure queue, balanced posting and producer rollback; serialized integration |
+| `ACC.RPT.1` | Accepted postings; trial balance, balance sheet, income statement, GL detail, AR/AP aging | new `backend/app/financial_reporting/**`, tests, matching frontend reporting seams; read-only Accounting interfaces | Owns slot 6 if projection persistence is required | Rebuild/freshness, control-account ties, date/period basis, tenant security, statement balance; Finance acceptance |
+| `ACC.DATA.1` | [QuickBooks exit contract](quickbooks-exit-contract.md); define source inventory, formats, ownership, checksums, disposition and workpapers | `docs/architecture/accounting/**`, new sanitized schemas/fixtures under `docs/project/accounting-cutover/**`; never real exports | No migration/import; may run parallel after this contract | Schema/fixture/checksum/reconciliation validation; owner prepares; Finance reviews later |
+| `ACC.MIG.1` | Accepted `ACC.DATA.1` and all target schemas; deterministic opening-state loader, rejects, dispositions, replay, control report | new `backend/app/accounting_migration/**`, tests, sanitized fixtures; no customer Migration workstream modification without separate authority | Owns slot 7 if persistence required; import execution is TYPE C and separate | Fresh/synthetic loads, replay, counts, exact controls, teardown; Preview/Production import forbidden until separately approved |
+
+## Accounting migration serialization
+
+The inspected authoritative head at this contract's start is `u6k8f0h2j497`.
+Immediately before every integration, fetch origin and determine the then-current
+single head. The intended order is:
+
+`ACC.CORE.1 → INVOICE.1-3.ACCEL → PAY.1-3.ACCEL → ACC.AP.1 → ACC.POST.1 → ACC.RPT.1 → ACC.MIG.1`.
+
+The order is migration ownership, not an instruction to create unnecessary
+migrations. A packet with no schema change consumes no revision. Whichever
+migration integrates next must descend from the current authoritative head and
+be fully revalidated. Sibling heads, silent re-parenting, force-push, and unjustified
+merge migrations are prohibited.
+
+## Readiness at contract completion
+
+`ACC.CORE.CONTRACT.1`, `ACC.AR.CONTRACT.1`, and `ACC.DATA.1` are dependency-ready
+for separate owner Start because their approved inputs are complete, they are
+documentation/contracts only, own no migration, and have enforceable boundaries.
+No runtime packet is READY until its corresponding contract is accepted.

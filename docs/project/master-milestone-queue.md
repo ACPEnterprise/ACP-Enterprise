@@ -15,6 +15,28 @@ Preview, migration/import execution, cutover, deployment, or Production. Owner
 approval remains milestone-specific and privileged actions remain separately
 approved. Production is untouched.
 
+### Accounting authority override
+
+`ACC.CUTOVER.0`, accepted on 2026-08-13 through
+[ADR 0005](../architecture/adr/0005-internal-accounting-system-of-record.md),
+supersedes the former QuickBooks-oriented `ACC.1`/`ACC.2` planning meaning. Those
+entries are historical and must not Start. The controlling sequence and packet
+readiness are defined by the
+[Accounting cutover critical path](accounting-cutover-critical-path.md) and
+[implementation packets](../architecture/accounting/implementation-packets.md).
+This override grants no runtime, migration, Preview, Production, import, or
+cutover authority.
+
+| Milestone | State | Capacity | Next authority |
+| --- | --- | --- | --- |
+| `ACC.CUTOVER.0` | `COMPLETE` when this bounded documentation commit is authoritative | `LAP-A` | Architecture/control contract only |
+| `ACC.CORE.CONTRACT.1` | `PLANNED` — dependency-ready | `OM2-B` | Separate owner Start required |
+| `ACC.AR.CONTRACT.1` | `PLANNED` — dependency-ready | `OM2-A` | Separate owner Start required |
+| `ACC.DATA.1` | `PLANNED` — dependency-ready, capacity-waiting | `LAP-B` after existing MMQ work | Separate owner Start required |
+
+Dependency-ready does not mean `READY`: each successor still requires its own
+owner-approved execution contract and Start.
+
 ## Scheduler lifecycle
 
 The only milestone states are:

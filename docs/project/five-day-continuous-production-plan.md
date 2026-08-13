@@ -17,6 +17,11 @@ the [Version 1 roadmap](version-1-implementation-roadmap.md), or the
 [Continuous Production Scheduler](continuous-production-scheduler.md). Those files
 remain authoritative and are not changed by MMQ.7.
 
+The later accepted [internal Accounting decision](../architecture/adr/0005-internal-accounting-system-of-record.md)
+supersedes this overlay's QuickBooks-oriented `ACC.1`/`ACC.2` sequence. Use the
+[Accounting cutover critical path](accounting-cutover-critical-path.md); do not
+Start the historical Accounting entries below.
+
 The owner-supplied active assignments are preserved: `OM1: PHONE.FINAL`, `MIG:
 MIG.PREP.3`, `ECO: BE.VECTORS.1`, and `LAP-B: MMQ.7`. MMQ.7 does not duplicate,
 inspect, modify,
@@ -188,8 +193,8 @@ requires a new separate approval. Production is always `NO`, except `REL.3` is
 | `PAY.1` | Payment provider boundary; Financial | INVOICE.1, PLAT.1 | OM2-A / OM1-A | ACP | B; Y; A/F; B | IC.2; NO; NO | threat/token/webhook/idempotency | S+F; `PAY.2`; provider decision + packet |
 | `PAY.2` | Collect/record payments; Financial | PAY.1, INVOICE.2 | OM1-A / OM2-A | ACP | B; Y; F; B | IC.2; NO; NO | duplicate charge/retry/receipt/totals | F; `PAY.3,PORTAL.2,COMMS.2`; packet |
 | `PAY.3` | Refund/failure reconciliation; Financial | PAY.2, INVOICE.3 | OM2-A / OM1-A | ACP | B; Y; F; B | IC.2; NO; NO | refunds/late webhook/settlement | F; `ACC.1,COMMS.2`; packet |
-| `ACC.1` | Define QuickBooks handoff; Accounting | INVOICE.3, PAY.3, BE.8 | OM1-A + OM1-C review / none | ACP | B; U; F; B | IC.2; NO; NO | mapping/idempotency/control matrix | F; `ACC.2`; finance ownership decision + packet |
-| `ACC.2` | Accounting reconciliation; Accounting | ACC.1 | OM1-A + OM1-C review / none | ACP | B; Y; F; B | IC.2; NO; NO | export/ack/variance/retry | F; `RPT.3,BE.9,IC.2`; packet |
+| `ACC.1` | Superseded QuickBooks handoff; historical only | `ACC.CUTOVER.0` supersession | none | ACP | not schedulable | none | preserved history only |
+| `ACC.2` | Superseded QuickBooks reconciliation; historical only | `ACC.CUTOVER.0` supersession | none | ACP | not schedulable | none | preserved history only |
 | `PORTAL.1` | Portal trust boundary; Portal | CRM.2, PLAT.1, IC.1 | OM2-A / OM1-A | ACP | B; Y; A/C; B | IC.2; NO; NO | linking/enumeration/tenant security | S; `PORTAL.2,PORTAL.3`; identity decision + packet |
 | `PORTAL.2` | Commercial self-service; Portal | PORTAL.1, EST.4, INVOICE.2, PAY.2 | OM2-A / OM1-A | ACP | B; U; C/F; B | IC.2; NO; NO | journey/auth/accessibility | R; `IC.2`; packet |
 | `PORTAL.3` | Appointment self-service; Portal | PORTAL.1, OPS.1, COMMS.1 | OM1-A / OM2-A | ACP | B; U; C; B | IC.2; NO; NO | safe request/auth/accessibility | R; `IC.2`; packet |

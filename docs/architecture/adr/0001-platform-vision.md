@@ -1,6 +1,6 @@
 # ADR 0001: Replace Housecall Pro Before QuickBooks
 
-- **Status:** Accepted
+- **Status:** Superseded in part by [ADR 0005](0005-internal-accounting-system-of-record.md)
 - **Date:** 2026-07-17
 - **Decision owners:** Product and Engineering leadership
 

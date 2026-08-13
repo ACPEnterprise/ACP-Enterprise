@@ -46,12 +46,18 @@ Owns the pricebook, estimates, estimate options, discounts, approvals, sales att
 **Depends on:** Foundation, CRM.
 **Primary consumers:** Operations, Field Service, Financial, Inventory, Analytics.
 
-### Financial
+### Financial and Accounting
 
-For version 1.0, owns operational invoices, payment requests, payment records, refunds, tax calculations, and reconciliation with the external accounting system. General ledger, accounts payable, payroll, and full accounting controls remain outside version 1.0.
+Financial owns operational invoices, payment requests and applications, refunds,
+tax calculations, deposits, clearing, and settlement facts. Accounting owns the
+chart of accounts, journals, periods, GL, AR/AP control, bank/cash reconciliation,
+posting rules, close controls, and financial statements. External processors
+execute specialized services but do not own ACP accounting records. The complete
+boundary is controlled by [ADR 0005](adr/0005-internal-accounting-system-of-record.md).
 
 **Depends on:** Foundation, CRM, Operations, Sales.
-**Primary consumers:** Communications, Analytics, Automation; later external accounting integrations.
+**Primary consumers:** Communications, Analytics, Automation, Finance, and
+independent financial review.
 
 ### Inventory
 
