@@ -1,0 +1,187 @@
+{
+  "schema_version": "1.0",
+  "packet_id": "ACC.POST.1",
+  "status": "not_startable",
+  "objective": "Consume accepted immutable domain financial facts and post deterministic balanced journals into Accounting Core without taking source-domain ownership.",
+  "dependencies": {
+    "complete": [
+      "ACC.CORE.CONTRACT.1",
+      "ACC.CORE.1",
+      "ACC.AR.CONTRACT.1",
+      "INVOICE.1-3.ACCEL",
+      "ACC.AP.CONTRACT.1",
+      "PAY.CONTRACT.1"
+    ],
+    "blocked": [
+      "PAY.1-3.ACCEL accepted payment runtime implementing its accepted fact contract",
+      "ACC.AP.1 accepted AP/vendor runtime implementing its accepted fact contract",
+      "accepted tax jurisdiction and control-mapping facts",
+      "accepted inventory financial-adjustment producer facts",
+      "accepted payroll-summary producer facts",
+      "Finance-approved versioned posting-rule and account-mapping package",
+      "separate Owner Start"
+    ]
+  },
+  "repository": {
+    "name": "ACP-Enterprise",
+    "authoritative_branch": "customer-management-v1",
+    "work_branch": "work/acc-post-1",
+    "start_rule": "Only after all blocked dependencies are authoritative: fetch origin and create a unique isolated worktree from current origin/customer-management-v1; record the full SHA and single Alembic head."
+  },
+  "allowed_paths": [
+    "backend/app/accounting/posting/**",
+    "backend/tests/accounting/posting/**",
+    "backend/app/accounting/contracts.py",
+    "backend/app/accounting/repository.py",
+    "backend/app/accounting/service.py",
+    "backend/app/accounting/errors.py",
+    "backend/app/events/types.py",
+    "backend/app/platform/permissions/codes.py",
+    "backend/app/platform/permissions/catalog.py",
+    "backend/app/invoicing/contracts.py",
+    "backend/app/invoicing/service.py",
+    "backend/app/payments/contracts.py",
+    "backend/app/accounts_payable/contracts.py",
+    "backend/alembic/versions/<at_most_one_acc_post_revision>.py"
+  ],
+  "shared_path_limits": {
+    "backend/app/accounting/contracts.py": "add only accepted automated-posting, rule, outcome, and reconciliation contracts",
+    "backend/app/accounting/repository.py": "add only Company-scoped posting-rule, claim, outcome, and failure-queue operations",
+    "backend/app/accounting/service.py": "consume existing Core journal APIs without weakening balance, period, control, idempotency, audit, or immutability invariants",
+    "backend/app/events/types.py": "add only posting events named by accepted producer contracts and Accounting outcome events",
+    "backend/app/platform/permissions/**": "add only contract-approved Accounting posting/reconciliation permissions; no default grants",
+    "source-domain contracts/services": "add only accepted fact/receipt seams; no source lifecycle or financial-semantic changes"
+  },
+  "prohibited_paths": [
+    ".env*",
+    "**/*credential*",
+    "**/*private_key*",
+    "backend/app/accounting/models.py except separately approved slot-5 persistence",
+    "backend/app/invoicing/models.py",
+    "backend/app/payments/models.py",
+    "backend/app/accounts_payable/models.py",
+    "backend/app/inventory/** except consumption of an accepted public fact contract",
+    "backend/app/payroll/** except consumption of an accepted public fact contract",
+    "backend/app/accounting_migration/**",
+    "backend/app/operational_migration/**",
+    "frontend/**",
+    "deployment/**",
+    "infra/**"
+  ],
+  "accepted_source_facts": {
+    "invoice_ar": [
+      "invoice.created",
+      "invoice.issued",
+      "invoice.voided",
+      "invoice.credit_memo_issued",
+      "invoice.write_off_recorded",
+      "invoice.payment_applied",
+      "invoice.payment_application_reversed",
+      "invoice.correction_replacement_linked"
+    ],
+    "payment": [
+      "payment.intent_created",
+      "payment.authorization_recorded",
+      "payment.receipt_captured",
+      "payment.failed",
+      "payment.refund_requested",
+      "payment.refund_succeeded",
+      "payment.refund_failed",
+      "payment.dispute_recorded",
+      "payment.deposit_submitted",
+      "payment.deposit_reversed",
+      "payment.settlement_received",
+      "payment.settlement_reconciled",
+      "payment.reconciliation_exception_opened",
+      "payment.reconciliation_exception_resolved"
+    ],
+    "accounts_payable": [
+      "accounts_payable.vendor_created",
+      "accounts_payable.vendor_mapped",
+      "accounts_payable.bill_approved",
+      "accounts_payable.bill_reversed",
+      "accounts_payable.vendor_credit_issued",
+      "accounts_payable.vendor_credit_applied",
+      "accounts_payable.disbursement_recorded",
+      "accounts_payable.disbursement_reversed",
+      "accounts_payable.reconciliation_required"
+    ],
+    "tax": "invoice tax total accepted; jurisdiction and control mapping required",
+    "inventory_financial": "SOURCE CONTRACT REQUIRED",
+    "payroll_summary": "SOURCE CONTRACT REQUIRED"
+  },
+  "required_invariants": [
+    "exactly one effective approved rule and mapping per eligible event",
+    "every posted journal has at least two non-zero lines and debits equal credits",
+    "source identity and canonical digest replay is idempotent; contradictory replay posts nothing",
+    "posted journals and lines are immutable; corrections use linked reversal/corrective journals",
+    "closed and closing periods fail closed without implicit date shifting",
+    "Company and Branch isolation applies to event, rule, mapping, journal, queue, receipt, and audit evidence",
+    "journal, lines, posting source, audit, outbox, and durable outcome commit atomically",
+    "receipt delivery retries never repost",
+    "every eligible source event has exactly one explainable posting/nonposting/failure state",
+    "missing or unknown source facts, mappings, amounts, and identities are never treated as zero"
+  ],
+  "migration": {
+    "slot": 5,
+    "maximum_revisions": 1,
+    "required": "only if accepted posting-rule/outcome/queue persistence is not already owned by Core",
+    "parent_rule": "descend from the then-current single authoritative head after ACC.AP.1 and preceding slots integrate",
+    "implementation_parent_is_not_integration_authority": true,
+    "sibling_heads_allowed": false,
+    "merge_revision_allowed": false,
+    "mechanical_reparenting": "allowed before publication only when DDL, data, runtime, and downgrade semantics are unchanged and full validation passes"
+  },
+  "validation": [
+    "event schema/version and canonical digest contract tests for every accepted producer",
+    "posting-rule effective-date, overlap, unknown-version, and mapping tests",
+    "balanced-entry, exact decimal, rounding, control-account, and trial-balance tests",
+    "open/reopened/closing/closed-period and close-versus-post concurrency tests",
+    "idempotent replay, contradictory replay, and concurrent duplicate tests",
+    "reversal, correction, stale/circular/double-reversal tests",
+    "atomic rollback, no orphan, no partial journal, and crash-before/after-commit tests",
+    "failure queue lease, retry, expiry, disposition, and reconciliation tests",
+    "posting-receipt delivery retry and source-domain status consistency tests",
+    "Company/Branch isolation and authorization/SOD negative tests",
+    "sensitive-data exclusion from payloads, logs, failures, audit, and receipts",
+    "AR/AP/tax/inventory/payroll source-to-control reconciliation for accepted producers",
+    "Ruff, MyPy, focused and affected backend regressions",
+    "if a revision exists: fresh upgrade, downgrade/re-upgrade, drift, and exactly one Alembic head",
+    "Markdown/JSON/link checks, git diff --check, and focused secret/private-key scan"
+  ],
+  "serialization": {
+    "type": "TYPE B",
+    "order": [
+      "ACC.CORE.1",
+      "INVOICE.1-3.ACCEL",
+      "PAY.1-3.ACCEL",
+      "ACC.AP.1",
+      "ACC.POST.1",
+      "ACC.RPT.1",
+      "ACC.MIG.1"
+    ],
+    "integration_checkpoint": "ACC.IC.1"
+  },
+  "environment_gates": {
+    "preview": "separate owner authorization required",
+    "production": "separate Production authorization required",
+    "real_data_import": "prohibited",
+    "cutover": "separate owner and independent Finance approval required"
+  },
+  "stop_conditions": [
+    "missing or ambiguous producer fact",
+    "genuine accounting or Finance mapping decision",
+    "schema or migration conflict",
+    "non-mechanical integration conflict",
+    "security or data-integrity concern",
+    "Preview, Production, import, cutover, or irreversible operation"
+  ],
+  "completion": [
+    "all producer contracts and posting-rule mappings are authoritative",
+    "all focused and affected validation passes",
+    "migration integrates in slot 5 or is evidenced unnecessary",
+    "exactly one Alembic head remains",
+    "one exact-boundary commit is normally pushed and local/remote are synchronized",
+    "Preview and Production remain untouched"
+  ]
+}
