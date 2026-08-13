@@ -6,6 +6,9 @@ The target is Friday, 2026-08-21. The date never overrides the controlling
 [ADR](../architecture/adr/0005-internal-accounting-system-of-record.md),
 [Day-1 controls](../architecture/accounting/day-1-control-contract.md), Finance
 approval, reconciliation, security, Preview, Production, or cutover gates.
+Parallel implementation and serialized handoffs are governed by the
+[Accounting integration control](../architecture/accounting/integration-control.md)
+and its [durable ledger](../architecture/accounting/accounting-integration-ledger.json).
 
 ## Ordered path
 
@@ -28,12 +31,15 @@ approval, reconciliation, security, Preview, Production, or cutover gates.
 
 ## Capacity handoff
 
-- `OM2-A`: `ACC.AR.CONTRACT.1` now; after acceptance,
-  `INVOICE.1-3.ACCEL`, then `PAY.1-3.ACCEL`.
-- `OM2-B`: `ACC.CORE.CONTRACT.1` now; after acceptance, `ACC.CORE.1`, then
+- `OM2-A`: `ACC.AR.CONTRACT.1` is complete at `0d6e796`;
+  `INVOICE.1-3.ACCEL` is dependency-ready for separate owner Start, then
+  `PAY.1-3.ACCEL`. Invoice migration integration remains after `ACC.CORE.1`.
+- `OM2-B`: `ACC.CORE.CONTRACT.1` is complete at `c3717fa`; `ACC.CORE.1` is
+  dependency-ready for separate owner Start, then
   `ACC.AP.1`.
 - `LAP-A`: this milestone, then serialized `ACC.IC.1` and release gates.
-- `LAP-B`: after existing MMQ work, `ACC.DATA.1`, then rehearsal evidence.
+- `LAP-B`: `ACC.DATA.1` has a clean isolated worktree but no implementation
+  evidence; it requires confirmed Start/active evidence, then rehearsal evidence.
 - MIG/ECO receive no filler work. Any reassignment requires a clean independent
   repository/worktree and a separate Start.
 

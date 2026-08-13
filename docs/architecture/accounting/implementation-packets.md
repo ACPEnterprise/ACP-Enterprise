@@ -32,6 +32,11 @@ audit, fresh Alembic upgrade, downgrade/re-upgrade, drift, exactly one head,
 `git diff --check`, and a focused secret scan. Frontend changes also require tests,
 ESLint, typecheck, and production build.
 
+Parallel lane ownership, successor gates, and actual integration evidence are
+controlled by the [Accounting integration control](integration-control.md) and
+its [durable ledger](accounting-integration-ledger.json). Packet order alone is
+not readiness or Start authorization.
+
 ## Packet ledger
 
 | Packet | Dependencies and exact scope | Enforceable paths | Persistence and integration | Gates and completion |
@@ -63,7 +68,10 @@ merge migrations are prohibited.
 
 ## Readiness at contract completion
 
-`ACC.CORE.CONTRACT.1`, `ACC.AR.CONTRACT.1`, and `ACC.DATA.1` are dependency-ready
-for separate owner Start because their approved inputs are complete, they are
-documentation/contracts only, own no migration, and have enforceable boundaries.
-No runtime packet is READY until its corresponding contract is accepted.
+`ACC.CORE.CONTRACT.1` is complete at `c3717fa`; consequently `ACC.CORE.1` is
+dependency-ready but still requires its own owner Start. `ACC.AR.CONTRACT.1` is
+complete at `0d6e796`; consequently isolated `INVOICE.1-3.ACCEL` implementation
+is dependency-ready for separate owner Start, while its migration integration
+must follow `ACC.CORE.1`. `ACC.DATA.1` has a clean worktree but no implementation
+evidence. No other runtime packet is READY until the dependency and metadata
+conditions in the integration control are satisfied.
