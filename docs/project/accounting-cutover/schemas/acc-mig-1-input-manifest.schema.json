@@ -1,0 +1,135 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:acp:accounting:acc-mig-1-input-manifest:1.0.0",
+  "title": "ACC.MIG.1 immutable input manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "contract_version",
+    "transformation_version",
+    "package_id",
+    "synthetic",
+    "source_company",
+    "target_binding",
+    "cutoff",
+    "generated_at",
+    "artifacts",
+    "control_totals",
+    "manifest_sha256"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "contract_version": { "const": "ACC.DATA.1" },
+    "transformation_version": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$" },
+    "package_id": { "type": "string", "format": "uuid" },
+    "synthetic": { "type": "boolean" },
+    "source_company": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stable_id", "product", "edition", "version", "currency", "timezone", "locale", "accounting_basis"],
+      "properties": {
+        "stable_id": { "$ref": "#/$defs/nonempty" },
+        "product": { "const": "QuickBooks" },
+        "edition": { "$ref": "#/$defs/nonempty" },
+        "version": { "$ref": "#/$defs/nonempty" },
+        "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+        "timezone": { "$ref": "#/$defs/nonempty" },
+        "locale": { "$ref": "#/$defs/nonempty" },
+        "accounting_basis": { "enum": ["accrual", "cash"] }
+      }
+    },
+    "target_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["company_id", "branch_policy", "branch_ids"],
+      "properties": {
+        "company_id": { "$ref": "#/$defs/nonempty" },
+        "branch_policy": { "$ref": "#/$defs/nonempty" },
+        "branch_ids": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/nonempty" } }
+      }
+    },
+    "cutoff": { "type": "string", "format": "date-time" },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "artifacts": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/artifact" }
+    },
+    "control_totals": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/control" }
+    },
+    "manifest_sha256": { "$ref": "#/$defs/sha256" }
+  },
+  "$defs": {
+    "nonempty": { "type": "string", "minLength": 1 },
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "money": { "type": "string", "pattern": "^-?(0|[1-9][0-9]*)\\.[0-9]{2,}$" },
+    "artifact_kind": {
+      "enum": [
+        "chart_of_accounts", "trial_balance", "gl_detail",
+        "open_customer_invoices", "customer_credits", "ar_aging",
+        "unapplied_customer_receipts", "undeposited_funds",
+        "open_vendor_bills", "vendor_credits", "ap_aging",
+        "bank_accounts", "cash_accounts", "credit_card_balances",
+        "loan_balances_and_terms", "outstanding_checks", "deposits",
+        "transfers", "reconciling_items", "sales_tax_liabilities",
+        "inventory_control_balance", "payroll_liabilities_accruals",
+        "payroll_summary", "fixed_assets", "accumulated_depreciation",
+        "equity", "retained_earnings", "prepaids", "accruals",
+        "customer_identities", "vendor_identities", "accounting_periods",
+        "export_metadata", "native_archive"
+      ]
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact_id", "kind", "role", "requirement", "state", "source_authority",
+        "path", "original_filename", "media_type", "byte_size", "sha256",
+        "exported_at", "report_definition", "source_layout_evidence",
+        "source_row_count", "accepted_row_count", "rejected_row_count",
+        "pending_disposition_row_count"
+      ],
+      "properties": {
+        "artifact_id": { "$ref": "#/$defs/nonempty" },
+        "kind": { "$ref": "#/$defs/artifact_kind" },
+        "role": { "enum": ["primary_source", "control_report", "archive_evidence"] },
+        "requirement": { "enum": ["required", "conditional"] },
+        "state": { "enum": ["accepted", "rejected", "not_applicable", "finance_disposition_required"] },
+        "source_authority": { "$ref": "#/$defs/nonempty" },
+        "path": { "type": "string", "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+$" },
+        "original_filename": { "$ref": "#/$defs/nonempty" },
+        "media_type": { "$ref": "#/$defs/nonempty" },
+        "byte_size": { "type": "integer", "minimum": 0 },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "exported_at": { "type": "string", "format": "date-time" },
+        "report_definition": { "$ref": "#/$defs/nonempty" },
+        "source_layout_evidence": { "$ref": "#/$defs/nonempty" },
+        "source_row_count": { "type": "integer", "minimum": 0 },
+        "accepted_row_count": { "type": "integer", "minimum": 0 },
+        "rejected_row_count": { "type": "integer", "minimum": 0 },
+        "pending_disposition_row_count": { "type": "integer", "minimum": 0 },
+        "finance_disposition_id": { "$ref": "#/$defs/nonempty" }
+      }
+    },
+    "control": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["control_id", "equation", "currency", "source_amount", "target_amount", "variance", "state", "evidence_sha256"],
+      "properties": {
+        "control_id": { "$ref": "#/$defs/nonempty" },
+        "equation": { "$ref": "#/$defs/nonempty" },
+        "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+        "source_amount": { "$ref": "#/$defs/money" },
+        "target_amount": { "$ref": "#/$defs/money" },
+        "variance": { "$ref": "#/$defs/money" },
+        "state": { "enum": ["passed", "failed", "finance_disposition_required"] },
+        "evidence_sha256": { "$ref": "#/$defs/sha256" },
+        "finance_disposition_id": { "$ref": "#/$defs/nonempty" }
+      }
+    }
+  }
+}

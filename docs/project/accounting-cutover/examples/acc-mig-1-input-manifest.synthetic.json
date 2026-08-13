@@ -1,0 +1,59 @@
+{
+  "schema_version": "1.0.0",
+  "contract_version": "ACC.DATA.1",
+  "transformation_version": "synthetic-v1",
+  "package_id": "00000000-0000-4000-8000-000000000001",
+  "synthetic": true,
+  "source_company": {
+    "stable_id": "SYNTHETIC-SOURCE-COMPANY",
+    "product": "QuickBooks",
+    "edition": "SOURCE EVIDENCE REQUIRED",
+    "version": "SOURCE EVIDENCE REQUIRED",
+    "currency": "USD",
+    "timezone": "America/New_York",
+    "locale": "en-US",
+    "accounting_basis": "accrual"
+  },
+  "target_binding": {
+    "company_id": "SYNTHETIC-ACP-COMPANY",
+    "branch_policy": "SYNTHETIC-EXPLICIT-MAPPING",
+    "branch_ids": ["SYNTHETIC-BRANCH-1"]
+  },
+  "cutoff": "2030-01-01T00:00:00-05:00",
+  "generated_at": "2026-08-13T00:00:00-04:00",
+  "artifacts": [
+    {
+      "artifact_id": "synthetic-trial-balance",
+      "kind": "trial_balance",
+      "role": "primary_source",
+      "requirement": "required",
+      "state": "accepted",
+      "source_authority": "SYNTHETIC QUICKBOOKS-LIKE FIXTURE; NOT SOURCE EVIDENCE",
+      "path": "source/trial-balance.synthetic.csv",
+      "original_filename": "trial-balance.synthetic.csv",
+      "media_type": "text/csv",
+      "byte_size": 128,
+      "sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+      "exported_at": "2030-01-01T00:05:00-05:00",
+      "report_definition": "SYNTHETIC ONLY; SOURCE EVIDENCE REQUIRED",
+      "source_layout_evidence": "SYNTHETIC ONLY; SOURCE EVIDENCE REQUIRED",
+      "source_row_count": 2,
+      "accepted_row_count": 2,
+      "rejected_row_count": 0,
+      "pending_disposition_row_count": 0
+    }
+  ],
+  "control_totals": [
+    {
+      "control_id": "synthetic-opening-balance",
+      "equation": "QuickBooks closing balance = ACP opening balance",
+      "currency": "USD",
+      "source_amount": "100.00",
+      "target_amount": "100.00",
+      "variance": "0.00",
+      "state": "passed",
+      "evidence_sha256": "2222222222222222222222222222222222222222222222222222222222222222"
+    }
+  ],
+  "manifest_sha256": "f20fe062ff8ed59b2694fd481a1b9d8a16c1d42dd68f0200bd840287c446918d"
+}

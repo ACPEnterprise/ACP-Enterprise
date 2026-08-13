@@ -2,6 +2,13 @@
 
 # QuickBooks Exit and Opening-State Contract
 
+This document records the approved exit strategy and control invariant. The
+normative `ACC.DATA.1` artifact catalog, opening-state mapping, archive rules,
+and `ACC.MIG.1` machine handoff are frozen in the
+[QuickBooks exit data contract](quickbooks-exit-data-contract.md). If the two
+documents differ, the detailed data contract controls for data-package content;
+the Day-1 control contract continues to control Accounting policy.
+
 ## Required source package
 
 `ACC.DATA.1` inventories and fingerprints, but does not extract, the following:
