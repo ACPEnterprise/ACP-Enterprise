@@ -2,7 +2,23 @@ import { createBrowserRouter, type RouteObject } from "react-router";
 
 import { ApplicationShell } from "../layout";
 import { ProtectedRoute } from "../auth";
-import { administrationHandle, appointmentsHandle, commandCenterHandle, customerDetailHandle, customersHandle, dispatchHandle, engineeringHandle, estimatesHandle, inventoryHandle, jobsHandle, missionControlHandle, notFoundHandle, priceBookHandle, schedulingHandle } from "./routeMetadata";
+import {
+  administrationHandle,
+  appointmentsHandle,
+  commandCenterHandle,
+  customerDetailHandle,
+  customersHandle,
+  dispatchHandle,
+  engineeringHandle,
+  estimatesHandle,
+  inventoryHandle,
+  invoicesHandle,
+  jobsHandle,
+  missionControlHandle,
+  notFoundHandle,
+  priceBookHandle,
+  schedulingHandle,
+} from "./routeMetadata";
 import { RouteErrorBoundary } from "./RouteErrorBoundary";
 
 export const appRoutes: RouteObject[] = [
@@ -24,7 +40,8 @@ export const appRoutes: RouteObject[] = [
             index: true,
             handle: commandCenterHandle,
             lazy: async () => ({
-              Component: (await import("../routes/CommandCenterRoute")).CommandCenterRoute,
+              Component: (await import("../routes/CommandCenterRoute"))
+                .CommandCenterRoute,
             }),
           },
           {
@@ -61,52 +78,100 @@ export const appRoutes: RouteObject[] = [
           {
             path: "dispatch",
             handle: dispatchHandle,
-            lazy: async () => ({ Component: (await import("../routes/DispatchRoute")).DispatchRoute }),
+            lazy: async () => ({
+              Component: (await import("../routes/DispatchRoute"))
+                .DispatchRoute,
+            }),
           },
           {
             path: "estimates",
             handle: estimatesHandle,
-            lazy: async () => ({ Component: (await import("../routes/EstimatesRoute")).EstimatesRoute }),
+            lazy: async () => ({
+              Component: (await import("../routes/EstimatesRoute"))
+                .EstimatesRoute,
+            }),
+          },
+          {
+            path: "invoices",
+            handle: invoicesHandle,
+            lazy: async () => ({
+              Component: (await import("../routes/InvoicesRoute"))
+                .InvoicesRoute,
+            }),
+          },
+          {
+            path: "invoices/:invoiceId",
+            handle: invoicesHandle,
+            lazy: async () => ({
+              Component: (await import("../routes/InvoiceDetailRoute"))
+                .InvoiceDetailRoute,
+            }),
           },
           {
             path: "price-book",
             handle: priceBookHandle,
-            lazy: async () => ({ Component: (await import("../routes/PriceBookRoute")).PriceBookRoute }),
+            lazy: async () => ({
+              Component: (await import("../routes/PriceBookRoute"))
+                .PriceBookRoute,
+            }),
           },
           {
             path: "inventory",
             handle: inventoryHandle,
-            lazy: async () => ({ Component: (await import("../routes/InventoryRoute")).InventoryRoute }),
+            lazy: async () => ({
+              Component: (await import("../routes/InventoryRoute"))
+                .InventoryRoute,
+            }),
           },
           {
             path: "jobs",
             handle: jobsHandle,
-            lazy: async () => ({ Component: (await import("../routes/JobsRoute")).JobsRoute }),
+            lazy: async () => ({
+              Component: (await import("../routes/JobsRoute")).JobsRoute,
+            }),
           },
           {
             path: "jobs/:jobId",
             handle: jobsHandle,
-            lazy: async () => ({ Component: (await import("../routes/JobDetailRoute")).JobDetailRoute }),
+            lazy: async () => ({
+              Component: (await import("../routes/JobDetailRoute"))
+                .JobDetailRoute,
+            }),
           },
           {
             path: "appointments/:appointmentId",
             handle: appointmentsHandle,
-            lazy: async () => ({ Component: (await import("../routes/AppointmentDetailRoute")).AppointmentDetailRoute }),
+            lazy: async () => ({
+              Component: (await import("../routes/AppointmentDetailRoute"))
+                .AppointmentDetailRoute,
+            }),
           },
           {
             path: "engineering",
             handle: engineeringHandle,
-            lazy: async () => ({ Component: (await import("../features/engineering-mobile/MobileEngineeringListPage")).MobileEngineeringListPage }),
+            lazy: async () => ({
+              Component: (
+                await import("../features/engineering-mobile/MobileEngineeringListPage")
+              ).MobileEngineeringListPage,
+            }),
           },
           {
             path: "engineering/:commandId",
             handle: engineeringHandle,
-            lazy: async () => ({ Component: (await import("../features/engineering-mobile/MobileEngineeringDetailPage")).MobileEngineeringDetailPage }),
+            lazy: async () => ({
+              Component: (
+                await import("../features/engineering-mobile/MobileEngineeringDetailPage")
+              ).MobileEngineeringDetailPage,
+            }),
           },
           {
             path: "administration",
             handle: administrationHandle,
-            lazy: async () => ({ Component: (await import("../features/administration/AdministrationRoute")).AdministrationRoute }),
+            lazy: async () => ({
+              Component: (
+                await import("../features/administration/AdministrationRoute")
+              ).AdministrationRoute,
+            }),
           },
           {
             path: "*",

@@ -40,31 +40,78 @@ export const customerDetailHandle = {
 } as const satisfies ShellRouteHandle;
 
 export const jobsHandle = {
-  workspace: { pageTitle: "Jobs", breadcrumbs: [{ label: "Jobs" }], helpTopic: "jobs", aiContext: "jobs" },
+  workspace: {
+    pageTitle: "Jobs",
+    breadcrumbs: [{ label: "Jobs" }],
+    helpTopic: "jobs",
+    aiContext: "jobs",
+  },
 } as const satisfies ShellRouteHandle;
 
 export const appointmentsHandle = {
-  workspace: { pageTitle: "Appointment", breadcrumbs: [{ label: "Scheduling", path: "/scheduling" }, { label: "Appointment" }], helpTopic: "scheduling", aiContext: "scheduling" },
+  workspace: {
+    pageTitle: "Appointment",
+    breadcrumbs: [
+      { label: "Scheduling", path: "/scheduling" },
+      { label: "Appointment" },
+    ],
+    helpTopic: "scheduling",
+    aiContext: "scheduling",
+  },
 } as const satisfies ShellRouteHandle;
 
 export const schedulingHandle = {
-  workspace: { pageTitle: "Scheduling", breadcrumbs: [{ label: "Scheduling" }], helpTopic: "scheduling", aiContext: "scheduling" },
+  workspace: {
+    pageTitle: "Scheduling",
+    breadcrumbs: [{ label: "Scheduling" }],
+    helpTopic: "scheduling",
+    aiContext: "scheduling",
+  },
 } as const satisfies ShellRouteHandle;
 
 export const dispatchHandle = {
-  workspace: { pageTitle: "Dispatch", breadcrumbs: [{ label: "Dispatch" }], helpTopic: "dispatch", aiContext: "dispatch" },
+  workspace: {
+    pageTitle: "Dispatch",
+    breadcrumbs: [{ label: "Dispatch" }],
+    helpTopic: "dispatch",
+    aiContext: "dispatch",
+  },
 } as const satisfies ShellRouteHandle;
 
 export const inventoryHandle = {
-  workspace: { pageTitle: "Inventory", breadcrumbs: [{ label: "Inventory" }], helpTopic: "inventory", aiContext: "inventory" },
+  workspace: {
+    pageTitle: "Inventory",
+    breadcrumbs: [{ label: "Inventory" }],
+    helpTopic: "inventory",
+    aiContext: "inventory",
+  },
 } as const satisfies ShellRouteHandle;
 
 export const priceBookHandle = {
-  workspace: { pageTitle: "Price Book", breadcrumbs: [{ label: "Price Book" }], helpTopic: "price-book", aiContext: "price-book" },
+  workspace: {
+    pageTitle: "Price Book",
+    breadcrumbs: [{ label: "Price Book" }],
+    helpTopic: "price-book",
+    aiContext: "price-book",
+  },
 } as const satisfies ShellRouteHandle;
 
 export const estimatesHandle = {
-  workspace: { pageTitle: "Estimates", breadcrumbs: [{ label: "Estimates" }], helpTopic: "estimates", aiContext: "estimates" },
+  workspace: {
+    pageTitle: "Estimates",
+    breadcrumbs: [{ label: "Estimates" }],
+    helpTopic: "estimates",
+    aiContext: "estimates",
+  },
+} as const satisfies ShellRouteHandle;
+
+export const invoicesHandle = {
+  workspace: {
+    pageTitle: "Invoices",
+    breadcrumbs: [{ label: "Invoices" }],
+    helpTopic: "invoices",
+    aiContext: "invoices",
+  },
 } as const satisfies ShellRouteHandle;
 
 export const engineeringHandle = {

@@ -245,6 +245,13 @@ class EventType(str, Enum):
 
     # Financial
     INVOICE_CREATED = "invoice.created"
+    INVOICE_ISSUED = "invoice.issued"
+    INVOICE_VOIDED = "invoice.voided"
+    INVOICE_CREDIT_MEMO_ISSUED = "invoice.credit_memo_issued"
+    INVOICE_WRITE_OFF_RECORDED = "invoice.write_off_recorded"
+    INVOICE_PAYMENT_APPLIED = "invoice.payment_applied"
+    INVOICE_PAYMENT_APPLICATION_REVERSED = "invoice.payment_application_reversed"
+    INVOICE_CORRECTION_REPLACEMENT_LINKED = "invoice.correction_replacement_linked"
     INVOICE_MIGRATED = "invoice.migrated"
     PAYMENT_RECEIVED = "payment.received"
     PAYMENT_REFUNDED = "payment.refunded"
