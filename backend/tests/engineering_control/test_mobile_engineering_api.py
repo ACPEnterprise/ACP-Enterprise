@@ -831,9 +831,17 @@ async def test_validation_failure_request_revision_creates_new_lineage_with_evid
                 version=1,
             )
             session.add(runtime)
-        runtime.runtime_state = "failed"
-        runtime.reason_code = "required_validation_failed"
-        runtime.current_activity = "Validation failed: frontend tests"
+        runtime.runtime_state = "recovering" if historical_incomplete else "failed"
+        runtime.reason_code = (
+            "heartbeat_expired"
+            if historical_incomplete
+            else "required_validation_failed"
+        )
+        runtime.current_activity = (
+            "Execution outcome requires reconciliation"
+            if historical_incomplete
+            else "Validation failed: frontend tests"
+        )
         runtime.version += 1
         version = milestone.version
 
@@ -1400,7 +1408,7 @@ def test_healthy_capacity_projects_authorized_automatic_dispatch() -> None:
         SimpleNamespace(runtime_state="acknowledged", reason_code=None),
         "available",
         "Healthy assigned capacity is available.",
-        True,
+        False,
     )
     assert attention == "running"
     assert reason == "Authorized — awaiting automatic worker dispatch."
@@ -1438,7 +1446,7 @@ def test_reconciliation_runtime_overrides_capacity_projection() -> None:
         ),
         "available",
         "Healthy assigned capacity is available.",
-        True,
+        False,
     )
     assert attention == "owner_action_required"
     assert "recovery" in reason.lower()
@@ -1467,6 +1475,35 @@ def test_required_validation_failure_projects_phone_revision_action() -> None:
         reason
         == "Validation failed: frontend tests. Revision available; no work was published."
     )
+    assert actions == ("request_revision", "cancel")
+
+
+def test_revision_evidence_overrides_stale_heartbeat_runtime_and_ready() -> None:
+    item = SimpleNamespace(
+        reconciliation_state="current",
+        status="ready",
+        readiness_state="ready",
+        requested_code_changes=True,
+        starting_commit_evidence={},
+        owning_branch="customer-management-v1",
+    )
+    attention, reason, actions = _attention(
+        item,
+        None,
+        SimpleNamespace(
+            runtime_state="recovering",
+            reason_code="heartbeat_expired",
+            current_activity="Execution outcome requires reconciliation",
+        ),
+        "available",
+        "Healthy assigned capacity is available.",
+        True,
+        True,
+    )
+
+    assert attention == "owner_action_required"
+    assert "Revision available" in reason
+    assert "Detailed diagnostics were not captured" in reason
     assert actions == ("request_revision", "cancel")
 
 

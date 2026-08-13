@@ -142,24 +142,43 @@ def _attention(
             f"Scheduler reconciliation required: {item.reconciliation_state}.",
             (),
         )
+    if (
+        runtime is not None
+        and runtime.runtime_state == "recovering"
+        and runtime.reason_code
+        in {
+            "reconciliation_required",
+            "ambiguous_interrupted_execution",
+        }
+    ):
+        return (
+            "owner_action_required",
+            "A manual recovery decision is required.",
+            ("request_revision", "cancel"),
+        )
+    # Terminal, revision-eligible execution evidence is authoritative even when an
+    # older workstream heartbeat projection remains recovering or stale. The
+    # milestone command scopes revision_eligible to its controlling execution, so
+    # scheduler Ready must not expose a second ordinary Start.
+    if revision_eligible:
+        diagnostic = (
+            runtime.current_activity
+            if runtime is not None
+            and runtime.current_activity
+            and runtime.current_activity.startswith("Validation failed:")
+            else "Required validation failed"
+        )
+        detail = (
+            " Detailed diagnostics were not captured for this historical attempt."
+            if historical_diagnostics_incomplete
+            else ""
+        )
+        return (
+            "owner_action_required",
+            f"{diagnostic}. Revision available; no work was published.{detail}",
+            ("request_revision", "cancel"),
+        )
     if runtime is not None and runtime.runtime_state == "failed":
-        if runtime.reason_code == "required_validation_failed" and revision_eligible:
-            diagnostic = (
-                runtime.current_activity
-                if runtime.current_activity
-                and runtime.current_activity.startswith("Validation failed:")
-                else "Required validation failed"
-            )
-            detail = (
-                " Detailed diagnostics were not captured for this historical attempt."
-                if historical_diagnostics_incomplete
-                else ""
-            )
-            return (
-                "owner_action_required",
-                f"{diagnostic}. Revision available; no work was published.{detail}",
-                ("request_revision", "cancel"),
-            )
         return (
             "owner_action_required",
             "Execution failed without publication and requires owner review.",
@@ -202,20 +221,6 @@ def _attention(
                 else "External work is progressing outside Mission Control."
             )
             return "waiting_on_external", reason, ()
-    if (
-        runtime is not None
-        and runtime.runtime_state == "recovering"
-        and runtime.reason_code
-        in {
-            "reconciliation_required",
-            "ambiguous_interrupted_execution",
-        }
-    ):
-        return (
-            "owner_action_required",
-            "A manual recovery decision is required.",
-            ("request_revision", "cancel"),
-        )
     if item.status == "ready" and item.readiness_state == "ready":
         return (
             "owner_action_required",
