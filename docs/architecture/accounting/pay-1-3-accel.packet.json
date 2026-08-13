@@ -1,0 +1,156 @@
+{
+  "schema_version": "1.0",
+  "packet_id": "PAY.1-3.ACCEL",
+  "status": "ready_for_owner_start",
+  "objective": "Implement the provider-neutral Day-1 payment, cash, refund, deposit, and settlement runtime defined by PAY.CONTRACT.1 while retaining the existing external payment processor and preserving Invoice and Accounting ownership.",
+  "dependencies": [
+    "PAY.CONTRACT.1",
+    "INVOICE.1-3.ACCEL",
+    "ACC.CORE.1",
+    "PLAT.1"
+  ],
+  "repository": {
+    "name": "ACP-Enterprise",
+    "authoritative_branch": "customer-management-v1",
+    "work_branch": "work/pay-1-3-accel",
+    "start_rule": "fetch origin and create an isolated worktree from current origin/customer-management-v1"
+  },
+  "allowed_paths": [
+    "backend/app/payments/**",
+    "backend/tests/payments/**",
+    "frontend/src/api/payments.ts",
+    "frontend/src/api/payments.test.ts",
+    "frontend/src/hooks/usePayments.ts",
+    "frontend/src/types/payments.ts",
+    "frontend/src/components/payments/**",
+    "frontend/src/routes/PaymentsRoute.tsx",
+    "frontend/src/routes/PaymentsRoute.test.tsx",
+    "frontend/src/routes/PaymentDetailRoute.tsx",
+    "frontend/src/routes/PaymentDetailRoute.test.tsx",
+    "backend/app/events/types.py",
+    "backend/app/platform/permissions/codes.py",
+    "backend/app/platform/permissions/catalog.py",
+    "backend/app/main.py",
+    "frontend/src/routing/router.tsx",
+    "frontend/src/routing/routeMetadata.ts",
+    "frontend/src/layout/navigation.ts",
+    "backend/alembic/versions/<one_new_payment_revision>.py"
+  ],
+  "prohibited_paths": [
+    "backend/app/invoicing/** except consumption of accepted public commands/contracts",
+    "backend/app/accounting/** except consumption of accepted public contracts",
+    "backend/app/customers/**",
+    "backend/app/jobs/**",
+    "backend/app/estimates/**",
+    "backend/app/accounts_payable/**",
+    "backend/app/accounting_migration/**",
+    "deployment/**",
+    ".env*"
+  ],
+  "persistence_owner": "Payments owns intents, attempts, verified receipts, sanitized provider evidence, refund aggregates, receipt-availability evidence, deposits, settlements, reconciliation exceptions, idempotency, webhook receipts, and Accounting posting receipts. Invoicing owns AR applications/unapplications; Accounting owns journals, mappings, periods, controls, and statements.",
+  "processor_boundary": {
+    "replacement": "prohibited",
+    "adapter": "provider-neutral port with exactly one configured existing-processor adapter at activation",
+    "tokenization": "processor-hosted or direct-to-processor; ACP stores opaque references only",
+    "secrets": "approved runtime secret facility only; never database, API, log, event, or repository",
+    "webhooks": "verify raw body signature, timestamp tolerance, provider, merchant account, and secret version before parsing or mutation"
+  },
+  "migration": {
+    "authority": "Accounting migration slot 3",
+    "required": true,
+    "implementation_parent": "w8m0i2k4n619",
+    "parent_rule": "immediately before integration, descend from the then-current single authoritative head after INVOICE.1-3.ACCEL",
+    "single_head_required": true,
+    "reparent_rule": "mechanical re-parenting is allowed only before application and only when DDL, data, runtime, and downgrade semantics remain unchanged"
+  },
+  "states": {
+    "payment_intent": ["created", "requires_action", "authorized", "captured", "declined", "failed", "cancelled", "expired", "reconciliation_required"],
+    "receipt": ["unapplied", "partially_applied", "fully_applied", "partially_refunded", "refunded", "disputed", "reconciliation_required"],
+    "refund": ["requested", "submitted", "pending", "succeeded", "failed", "cancelled", "reconciliation_required"],
+    "deposit": ["open", "submitted", "settled", "reconciled", "reversed", "reconciliation_required"]
+  },
+  "required_events": [
+    "payment.intent_created",
+    "payment.authorization_recorded",
+    "payment.receipt_captured",
+    "payment.failed",
+    "payment.refund_requested",
+    "payment.refund_succeeded",
+    "payment.refund_failed",
+    "payment.dispute_recorded",
+    "payment.deposit_submitted",
+    "payment.deposit_reversed",
+    "payment.settlement_received",
+    "payment.settlement_reconciled",
+    "payment.reconciliation_exception_opened",
+    "payment.reconciliation_exception_resolved"
+  ],
+  "required_permissions": [
+    "COMPANY_PAYMENT_READ",
+    "COMPANY_PAYMENT_COLLECT",
+    "COMPANY_PAYMENT_APPLY",
+    "COMPANY_PAYMENT_REFUND",
+    "COMPANY_PAYMENT_DEPOSIT_MANAGE",
+    "COMPANY_PAYMENT_RECONCILE",
+    "COMPANY_PAYMENT_FINANCE_APPROVE"
+  ],
+  "required_invariants": [
+    "verified capture is the only source of a receipt",
+    "exact command replay returns the original result and contradictory replay fails",
+    "ambiguous processor outcomes reconcile before retry and never create a new provider idempotency identity",
+    "captured amount equals available plus applied plus refunded plus disputed-or-reversed amount",
+    "Payments never mutates Invoice AR evidence and uses accepted application/unapplication commands",
+    "overpayments remain unapplied and are never implicit revenue or customer credit",
+    "refunds never exceed verified refundable balance and applied refunds require compensating unapplication",
+    "settlement components reconcile exactly to provider net payout and accepted bank/clearing controls",
+    "provider fees never reduce receipt or AR principal",
+    "Company, Branch, Customer, merchant, provider, and currency scope is enforced",
+    "financial evidence is append-only and missing evidence is never zero",
+    "Accounting posted state requires an Accounting posting receipt"
+  ],
+  "validation": [
+    "provider adapter contract tests with a deterministic fake; no live processor calls",
+    "raw-body webhook signature, timestamp, merchant, rotation, tamper, and replay tests",
+    "intent, authorization, capture, decline, failure, ambiguity, cancellation, and expiry lifecycle tests",
+    "concurrent retry, canonical digest, provider idempotency, and duplicate-charge tests",
+    "verified receipt, partial application, unapplication, overpayment, and Invoice isolation tests",
+    "refund partial/full/failure/late-event and applied-refund compensation tests",
+    "deposit, undeposited-funds, clearing, fee, dispute, settlement, and variance tests",
+    "append-only evidence and deterministic projection rebuild tests",
+    "Company, Branch, Customer, provider merchant, and currency isolation tests",
+    "authorization and separation-of-duties negative tests",
+    "Business Event and Accounting posting-receipt seam tests",
+    "API and responsive frontend workflow tests if frontend is implemented",
+    "affected Invoice, Accounting, Customer, Job, Platform, and Communications regressions",
+    "fresh Alembic upgrade, downgrade/re-upgrade, drift detection, and exactly one head",
+    "Ruff, MyPy, ESLint, TypeScript typecheck/build where applicable, git diff --check, and focused secret scan"
+  ],
+  "serialization": {
+    "type": "TYPE B",
+    "migration_slot": 3,
+    "migration_after": "INVOICE.1-3.ACCEL",
+    "migration_before": "ACC.AP.1",
+    "shared_contract_checkpoint": "ACC.IC.1",
+    "stop_on": [
+      "processor or merchant authority ambiguity",
+      "schema or migration collision",
+      "shared-contract semantic conflict",
+      "security or data-integrity concern",
+      "non-mechanical Git conflict"
+    ]
+  },
+  "environment_gates": {
+    "preview": "separate owner authorization with non-production processor credentials and synthetic transactions only",
+    "production": "separate Production authorization after Finance control review, ACC.IC.1, reconciliation rehearsal, and go/no-go gates",
+    "processor_activation": "separate owner authorization after credential, webhook, merchant, and mapping evidence",
+    "real_transactions": "prohibited during implementation and automated validation",
+    "real_data_import": "prohibited"
+  },
+  "completion": [
+    "runtime implementation and validation pass against deterministic provider fakes",
+    "fail-closed activation gates remain explicit for missing processor and Finance inputs",
+    "one exact-boundary commit is normally pushed",
+    "local and remote are synchronized with clean tree and empty index",
+    "exactly one Alembic head remains"
+  ]
+}

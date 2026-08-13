@@ -20,8 +20,8 @@ implementation evidence; owner and Finance gates remain separate evidence.
 
 | Lane | Controlled sequence | Current repository evidence | Collision boundary |
 | --- | --- | --- | --- |
-| `OM2-A` | `ACC.AR.CONTRACT.1 → INVOICE.1-3.ACCEL → PAY.1-3.ACCEL` | AR contract is complete at `0d6e796`; `INVOICE.1-3.ACCEL` is dependency-ready for a separate owner Start | Owns invoice/payment paths and their named event/permission seams only |
-| `OM2-B` | `ACC.CORE.CONTRACT.1 → ACC.CORE.1 → ACC.AP.1` | Core contract is complete at `c3717fa`; `ACC.CORE.1` is dependency-ready for a separate owner Start | Owns Accounting core first, then AP; may not overlap invoice/payment paths |
+| `OM2-A` | `ACC.AR.CONTRACT.1 → INVOICE.1-3.ACCEL → PAY.CONTRACT.1 → PAY.1-3.ACCEL` | Invoice runtime is complete at `43018e2`; PAY contract and packet are frozen by `PAY.CONTRACT.1` | Owns invoice/payment paths and their named event/permission seams only |
+| `OM2-B` | `ACC.CORE.CONTRACT.1 → ACC.CORE.1 → ACC.AP.1` | Accounting Core is complete at `ee87e57`; AP remains a later separately started packet | Owns Accounting core first, then AP; may not overlap invoice/payment paths |
 | `LAP-B` | `ACC.DATA.1 → ACC.REHEARSAL.1` | DATA worktree exists at `da37cd1`, clean, with no implementation commit | Documentation/sanitized schema only; no real export or runtime until separately authorized |
 | `LAP-A` | `ACC.INTEGRATION.1 → ACC.IC.1 → ACC.PREVIEW.1` | This control lane owns serialization and evidence only | Never edits an unfinished lane; integrates only accepted commits |
 | `OM1` | PHONE control until operational | Independent critical-infrastructure lane | No Accounting file or worktree access |
@@ -36,8 +36,8 @@ idempotency is not mechanical and stops for owner review.
 
 ## Alembic serialization protocol
 
-The authoritative single head inspected at `0d6e796534d185607f76a072c40453de397d3b7f`
-is `u6k8f0h2j497`. The migration order is:
+The authoritative single head inspected for `PAY.CONTRACT.1` at
+`06ba3007940ff8d716bb5682d7760473a86ef0e6` is `w8m0i2k4n619`. The migration order is:
 
 `ACC.CORE.1 → INVOICE.1-3.ACCEL → PAY.1-3.ACCEL → ACC.AP.1 → ACC.POST.1 → ACC.RPT.1 → ACC.MIG.1`.
 
@@ -72,7 +72,7 @@ commit still integrates in order when it owns a shared financial contract.
 | --- | --- |
 | `ACC.CORE.1` | `ACC.CORE.CONTRACT.1` is accepted on authoritative Enterprise; its machine boundary is fingerprinted; a fresh Start SHA and single Alembic head are recorded; owner separately Starts the packet |
 | `INVOICE.1-3.ACCEL` | `ACC.AR.CONTRACT.1` is accepted and pushed; accepted Estimate/Job authority is verified; its exact execution boundary, migration slot 2, validation, Finance, and owner gates are frozen; owner separately Starts it |
-| `PAY.1-3.ACCEL` | Invoice contract is accepted and the invoice application/accounting seams required by the payment packet are authoritative; processor boundary and exact packet metadata are frozen; owner separately Starts it |
+| `PAY.1-3.ACCEL` | `PAY.CONTRACT.1`, [the payment contract](payment-cash-settlement-contract.md), and [machine packet](pay-1-3-accel.packet.json) are authoritative; Invoice application and Accounting seams exist; owner separately Starts it |
 | `ACC.AP.1` | Core contract is accepted; AP execution boundary, vendor/bill authority, migration slot 4, and validation/SOD gates are frozen; preceding integrated migration head is known; owner separately Starts it |
 | `ACC.POST.1` | Core, invoice, payment, and AP contracts and producer facts are accepted; posting mappings and failure/idempotency boundaries are frozen; slots 1–4 are integrated or proven migration-free; owner separately Starts it |
 | `ACC.RPT.1` | Authoritative postings and AR/AP aging/control seams exist; required statements, accounting basis, period, reconciliation, and projection-freshness contracts are accepted; owner separately Starts it |
@@ -81,10 +81,10 @@ commit still integrates in order when it owns a shared financial contract.
 | `ACC.PREVIEW.1` | `ACC.IC.1` is owner accepted; backup/restore, release, rollback, sanitized validation, and separate Preview authority are recorded |
 | `ACC.REHEARSAL.1` | Accepted `ACC.DATA.1`, `ACC.MIG.1`, `ACC.RPT.1`, and healthy `ACC.PREVIEW.1`; immutable real-export package and separate owner/Finance rehearsal authority exist |
 
-`ACC.CORE.1` and isolated implementation of `INVOICE.1-3.ACCEL` are
-dependency-ready now but are not Started by this control milestone. Invoice
-migration integration remains blocked until Core integrates first. The DATA
-successor remains blocked by its uncompleted contract.
+Core and Invoice are integrated in the required order. When `PAY.CONTRACT.1` is
+authoritative, `PAY.1-3.ACCEL` is dependency-ready for a separate owner Start.
+Processor activation, Preview, Production, real transactions, import, rehearsal,
+and cutover remain separately gated.
 
 ## Cutover critical-path watch
 
