@@ -24,7 +24,7 @@ export const navigationCatalog = [
   { id: "mission-control", label: "Mission Control", path: "/mission-control", icon: LayoutDashboard, availability: "available" },
   { id: "customers", label: "Customers", path: "/customers", icon: Users, availability: "available" },
   { id: "dispatch", label: "Dispatch", path: "/dispatch", icon: ClipboardList, availability: "available" },
-  { id: "scheduling", label: "Scheduling", path: "/scheduling", icon: CalendarDays, availability: "coming-soon" },
+  { id: "scheduling", label: "Scheduling", path: "/scheduling", icon: CalendarDays, availability: "available", requiredPermission: "COMPANY_SCHEDULING_READ" },
   { id: "estimates", label: "Estimates", path: "/estimates", icon: FileChartColumn, availability: "available", requiredPermission: "COMPANY_ESTIMATE_READ" },
   { id: "price-book", label: "Price Book", path: "/price-book", icon: FileChartColumn, availability: "available", requiredPermission: "COMPANY_PRICE_BOOK_READ" },
   { id: "jobs", label: "Jobs", path: "/jobs", icon: BriefcaseBusiness, availability: "available" },

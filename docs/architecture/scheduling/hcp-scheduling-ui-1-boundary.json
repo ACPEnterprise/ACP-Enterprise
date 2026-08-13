@@ -1,0 +1,40 @@
+{
+  "schema_version": "1.0",
+  "packet_id": "HCP.SCHEDULING.UI.1",
+  "classification": "TYPE_A_PARALLEL_IMPLEMENTATION",
+  "repository": "ACP-Enterprise",
+  "branch": "work/hcp-cutover-1",
+  "starting_sha": "ee87e572d0f0e53fbc826978ab4d3a8ff489120a",
+  "dependencies": ["OPS.1", "Scheduling backend/API", "PLAT.1"],
+  "allowed_paths": [
+    "frontend/src/routes/SchedulingRoute.tsx",
+    "frontend/src/routes/SchedulingRoute.test.tsx",
+    "frontend/src/routes/AppointmentDetailRoute.tsx",
+    "frontend/src/routing/paths.ts",
+    "frontend/src/routing/router.tsx",
+    "frontend/src/routing/routeMetadata.ts",
+    "frontend/src/layout/navigation.ts",
+    "frontend/src/layout/PrimaryNavigation.test.tsx",
+    "docs/project/hcp-day-1-cutover.md",
+    "docs/architecture/scheduling/hcp-scheduling-ui-1-boundary.json"
+  ],
+  "prohibited_scope": [
+    "backend runtime",
+    "Alembic migrations",
+    "TECH.1 or OM1 files/worktrees",
+    "Accounting, Invoicing, or Payments",
+    "Preview, Production, import, or cutover"
+  ],
+  "migration": "NONE",
+  "validation": [
+    "Scheduling route tests",
+    "appointment detail regression",
+    "navigation and router tests",
+    "Scheduling API/hook regressions",
+    "ESLint",
+    "TypeScript/Vite production build",
+    "Markdown/JSON/links",
+    "git diff --check",
+    "secret/private-key scan"
+  ]
+}
