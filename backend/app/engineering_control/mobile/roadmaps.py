@@ -31,6 +31,7 @@ from app.engineering_control.repository_operation.models import (
 from app.engineering_control.revision_evidence import (
     compose_revision_instruction,
     revision_evidence,
+    revision_milestone_eligible,
 )
 from app.engineering_control.scheduler.manifest import ExecutionBoundaryDefinition
 from app.engineering_control.service import EngineeringControlService
@@ -380,11 +381,10 @@ class RoadmapService:
         instruction = self._instruction(milestone)
         await db.rollback()
         if action == "request_revision" and command_id is not None:
-            if (
-                current_status not in {"ready", "running", "blocked", "waiting_review"}
-                or not definition_approved
-                or reconciliation_state != "current"
-                or readiness_state != "ready"
+            if not revision_milestone_eligible(
+                status=current_status,
+                definition_approved=definition_approved,
+                reconciliation_state=reconciliation_state,
             ):
                 raise ValueError(
                     "Request Revision requires a current, approved failed milestone."

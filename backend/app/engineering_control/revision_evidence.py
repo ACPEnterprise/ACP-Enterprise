@@ -6,6 +6,9 @@ from typing import cast
 REVISION_EVIDENCE_LIMIT = 24_000
 REVISION_STREAM_LIMIT = 1_000
 REVISION_ELIGIBLE_FAILURES = frozenset({"required_validation_failed"})
+REVISION_ELIGIBLE_MILESTONE_STATES = frozenset(
+    {"ready", "running", "blocked", "waiting_review"}
+)
 
 
 @dataclass(frozen=True)
@@ -14,6 +17,17 @@ class RevisionEvidence:
     validation_runs: tuple[Mapping[str, object], ...]
     historical_validation: Mapping[str, object] | None = None
     evidence_references: Mapping[str, object] | None = None
+
+
+def revision_milestone_eligible(
+    *, status: str, definition_approved: bool, reconciliation_state: str
+) -> bool:
+    """Return the shared read/write eligibility for a failed milestone revision."""
+    return (
+        status in REVISION_ELIGIBLE_MILESTONE_STATES
+        and definition_approved
+        and reconciliation_state == "current"
+    )
 
 
 def revision_evidence(

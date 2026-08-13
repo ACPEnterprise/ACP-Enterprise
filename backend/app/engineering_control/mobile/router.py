@@ -17,7 +17,10 @@ from app.engineering_control.commands import (
 )
 from app.engineering_control.errors import EngineeringControlError
 from app.engineering_control.http_errors import engineering_http_error
-from app.engineering_control.revision_evidence import revision_evidence
+from app.engineering_control.revision_evidence import (
+    revision_evidence,
+    revision_milestone_eligible,
+)
 from app.engineering_control.scheduler.reconciliation import (
     scheduler_reconciliation_service,
 )
@@ -437,7 +440,12 @@ async def list_roadmaps(context: ReadContext, session: DatabaseSession) -> Roadm
                 runtimes.get(item.command_id) if item.command_id else None,
                 capacity_states.get(item.command_id) if item.command_id else None,
                 capacity_reasons.get(item.command_id) if item.command_id else None,
-                item.command_id in revision_evidence_by_command
+                revision_milestone_eligible(
+                    status=item.status,
+                    definition_approved=item.definition_approved,
+                    reconciliation_state=item.reconciliation_state,
+                )
+                and item.command_id in revision_evidence_by_command
                 if item.command_id
                 else False,
                 (

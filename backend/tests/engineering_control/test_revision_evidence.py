@@ -5,7 +5,31 @@ import pytest
 from app.engineering_control.revision_evidence import (
     compose_revision_instruction,
     revision_evidence,
+    revision_milestone_eligible,
 )
+
+
+def test_revision_milestone_eligibility_is_shared_and_operationally_stable() -> None:
+    assert revision_milestone_eligible(
+        status="ready",
+        definition_approved=True,
+        reconciliation_state="current",
+    )
+    assert not revision_milestone_eligible(
+        status="ready",
+        definition_approved=False,
+        reconciliation_state="current",
+    )
+    assert not revision_milestone_eligible(
+        status="ready",
+        definition_approved=True,
+        reconciliation_state="reconciliation_required",
+    )
+    assert not revision_milestone_eligible(
+        status="completed",
+        definition_approved=True,
+        reconciliation_state="current",
+    )
 
 
 def test_revision_evidence_is_bounded_structured_and_non_authoritative() -> None:

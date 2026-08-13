@@ -771,6 +771,7 @@ async def test_validation_failure_request_revision_creates_new_lineage_with_evid
                 }
             )
             milestone.status = "ready"
+            milestone.readiness_state = "preparing_environment"
         else:
             evidence_summary["validation_runs"] = [run]
             validation_summary["runs"] = [run]
