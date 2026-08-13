@@ -14,7 +14,7 @@
 | Scheduling/cancel/reschedule | C → B in this packet | Backend lifecycle/API and appointment detail existed; `HCP.SCHEDULING.UI.1` adds the missing office calendar/list entry point; acceptance remains required |
 | Dispatch/technician assignment | B | `DISP.2` runtime, workspace, permissions, events, and tests exist; requires integrated acceptance with TECH runtime |
 | Technician mobile shell | B | `TECH.1` is owner-controlled on OM1; authoritative scheduler boundary exists, but no accepted technician runtime is present at this audit SHA |
-| Field execution/notes/evidence/completion | D | Requires bounded `TECH.FIELD.1`; current Jobs lifecycle exists but no technician journey performs and evidences work |
+| Field execution/notes/evidence/completion | D, contract frozen | `TECH.FIELD.CONTRACT.1` defines the bounded `TECH.FIELD.1` journey and machine-enforceable boundary; implementation remains blocked until TECH.1, EST.4, and INVOICE.1-3.ACCEL are accepted and integrated |
 | Jobs and appointment relationship | A | Jobs APIs/UI, create-from-appointment, lifecycle, cancellation/reopen, authorization, and tests exist |
 | Price Book | A | Price Book runtime/API/UI, activation, permissions, and tests exist |
 | Estimates/customer approval | A | Estimate creation, immutable revisions, options/discounts/tax, presentation/approval, conversion, UI, and tests exist |

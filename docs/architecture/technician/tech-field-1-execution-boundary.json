@@ -1,0 +1,128 @@
+{
+  "schema_version": 1,
+  "milestone": {
+    "code": "TECH.FIELD.1",
+    "title": "Implement Day-1 technician field execution",
+    "classification": "TYPE_B_SERIALIZED_INTEGRATION",
+    "repository": "/Users/michaelfouse/Development/ACP-Enterprise",
+    "branch": "work/tech-field-1-day-1-execution",
+    "state": "PLANNED_DEPENDENCY_BLOCKED",
+    "owner_start_required": true
+  },
+  "starting_commit_rule": {
+    "ref": "origin/customer-management-v1",
+    "requirements": [
+      "fetch immediately before worktree creation",
+      "require local authoritative branch to be zero commits behind",
+      "record the full resolved SHA",
+      "require accepted and integrated TECH.1 evidence",
+      "stop for semantic overlap with active PHONE or Accounting work"
+    ]
+  },
+  "dependencies": {
+    "hard": [
+      "TECH.1 accepted and integrated at its recorded boundary fingerprint",
+      "OPS.1 COMPLETE",
+      "DISP.2 COMPLETE",
+      "EST.4 accepted and integrated",
+      "INVOICE.1-3.ACCEL accepted and integrated"
+    ],
+    "acceptance_only": [
+      "PAY.1-3.ACCEL accepted and integrated for the physical payment-handoff acceptance case"
+    ]
+  },
+  "allowed_paths": [
+    "backend/app/field_service/**",
+    "backend/tests/field_service/**",
+    "backend/app/jobs/guards.py",
+    "backend/app/jobs/service.py",
+    "backend/tests/jobs/test_job_service.py",
+    "backend/app/events/types.py",
+    "backend/app/platform/permissions/codes.py",
+    "backend/app/platform/permissions/catalog.py",
+    "backend/app/main.py",
+    "backend/alembic/versions/<one-tech-field-revision>.py",
+    "frontend/src/features/technician/**",
+    "frontend/src/routes/TechnicianJobRoute.tsx",
+    "frontend/src/routes/TechnicianJobRoute.test.tsx",
+    "frontend/src/api/technicianField.ts",
+    "frontend/src/api/technicianField.test.ts",
+    "frontend/src/hooks/useTechnicianField.ts",
+    "frontend/src/types/technicianField.ts",
+    "docs/architecture/technician/**"
+  ],
+  "shared_path_constraints": {
+    "backend/app/jobs/guards.py": "add only the field-completion guard contract or composition seam",
+    "backend/app/jobs/service.py": "register/invoke the field guard without changing established lifecycle semantics",
+    "backend/app/events/types.py": "add only versioned technician field evidence and handoff event codes",
+    "backend/app/platform/permissions/codes.py": "add only closed technician read/execute codes when no accepted equivalent exists",
+    "backend/app/platform/permissions/catalog.py": "register only the approved technician permissions",
+    "backend/app/main.py": "register only the field-service router",
+    "frontend/src/features/technician/**": "extend only after TECH.1 is accepted and integrated; do not modify its active worktree"
+  },
+  "prohibited_paths": [
+    "backend/app/accounting/**",
+    "backend/app/customers/**",
+    "backend/app/dispatch/**",
+    "backend/app/estimates/**",
+    "backend/app/invoicing/**",
+    "backend/app/payments/**",
+    "backend/app/pricebook/**",
+    "backend/app/scheduling/**",
+    "backend/app/worker_control/**",
+    "backend/app/engineering_control/**",
+    "frontend/src/features/phone/**",
+    "infrastructure/**",
+    ".github/**"
+  ],
+  "persistence": {
+    "migration_required": true,
+    "migration_count": 1,
+    "implementation_parent_rule": "resolve the sole authoritative Enterprise Alembic head when implementation begins",
+    "integration_parent_rule": "fetch and re-resolve the sole authoritative head immediately before serialized integration",
+    "mechanical_reparent_allowed_when": "the new intervening lineage has no semantic or table overlap and fresh upgrade, downgrade/re-upgrade, drift, and regressions all pass",
+    "stop_when": "multiple heads, semantic overlap, destructive transform, ambiguous ancestry, or data-integrity conflict is found"
+  },
+  "required_runtime_contracts": [
+    "assignment-scoped technician itinerary and minimum field context",
+    "acknowledge, en-route, arrival, start, pause, resume, and complete orchestration",
+    "append-only notes, requirement snapshots, evidence, and customer approval disposition",
+    "global field completion guard for field-assigned Jobs",
+    "durable idempotent invoice and payment handoff status",
+    "server-side Company, Branch, Employee, capability, assignment, and permission enforcement",
+    "auditable Business Events and reconnect-safe idempotency"
+  ],
+  "validation": [
+    "focused backend field-service tests",
+    "focused mobile technician frontend tests",
+    "Jobs, Dispatch, Scheduling, Estimate, Price Book, Invoice, and Payment seam regressions",
+    "duplicate, stale-version, reconnect, retry, and reordered-command tests",
+    "Company and Branch isolation plus inactive/unassigned identity negative tests",
+    "generic Job endpoint completion-guard bypass test",
+    "Ruff and MyPy",
+    "ESLint and TypeScript production build",
+    "fresh Alembic upgrade",
+    "downgrade to integration parent and re-upgrade",
+    "Alembic drift and exactly-one-head checks",
+    "git diff --check",
+    "focused secret/private-key scan",
+    "physical iPhone Safari closed-loop acceptance in separately authorized Preview"
+  ],
+  "gates": {
+    "implementation": "separate owner Start after all hard dependencies are evidenced",
+    "integration": "serialized TYPE B review and current-head migration reconciliation",
+    "preview": "separate owner deployment authorization",
+    "production": "not authorized by this packet",
+    "cutover": "not authorized by this packet"
+  },
+  "stop_conditions": [
+    "TECH.1 is not accepted and integrated",
+    "a hard dependency is absent",
+    "active PHONE work overlaps the resolved implementation boundary",
+    "schema or event ownership expands beyond field evidence/handoff",
+    "payment or accounting truth would be fabricated",
+    "security or isolation must be weakened",
+    "migration ancestry or integration conflict is non-mechanical",
+    "Preview, Production, import, cutover, or irreversible action is required"
+  ]
+}

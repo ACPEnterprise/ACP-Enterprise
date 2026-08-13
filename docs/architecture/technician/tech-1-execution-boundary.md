@@ -34,3 +34,8 @@ instruction and provider completion evidence.
 Changing this scope requires a new boundary version and fingerprint in the
 authoritative scheduler manifest. A Ready code-changing scheduler milestone
 without a valid boundary remains fail-closed.
+
+The Day-1 field-execution successor is governed by the separate
+[Technician Day-1 Field Execution Contract](tech-field-day-1-contract.md). It
+may not begin until this TECH.1 shell is owner-accepted and integrated; the
+successor contract does not authorize changes to an active TECH.1 worktree.
