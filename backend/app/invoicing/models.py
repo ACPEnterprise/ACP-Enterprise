@@ -83,7 +83,14 @@ class Invoice(Base):
             ondelete="RESTRICT",
         ),
         CheckConstraint(
-            "invoice_number ~ '^INV-[0-9]{6,}$'", name="ck_invoices_number"
+            "(identity_origin = 'native' AND invoice_number ~ '^INV-[0-9]{6,}$') "
+            "OR (identity_origin = 'grandfathered_legacy' "
+            "AND legacy_evidence_missing = true)",
+            name="ck_invoices_number",
+        ),
+        CheckConstraint(
+            "identity_origin IN ('native','grandfathered_legacy')",
+            name="ck_invoices_identity_origin",
         ),
         CheckConstraint(
             "status IN ('draft','cancelled','issued','partially_paid','adjusted','paid','voided')",
@@ -140,6 +147,9 @@ class Invoice(Base):
     estimate_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
     estimate_revision_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
     invoice_number: Mapped[str] = mapped_column(String(40), nullable=False)
+    identity_origin: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="native", server_default="native"
+    )
     status: Mapped[str] = mapped_column(String(24), nullable=False, default="draft")
     accounting_status: Mapped[str] = mapped_column(
         String(32), nullable=False, default="pending"

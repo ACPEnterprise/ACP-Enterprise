@@ -294,11 +294,39 @@ def upgrade() -> None:
     op.add_column(
         "invoices", sa.Column("legacy_evidence_missing", sa.Boolean(), nullable=True)
     )
+    op.add_column(
+        "invoices",
+        sa.Column(
+            "identity_origin",
+            sa.String(length=32),
+            nullable=True,
+            server_default="native",
+        ),
+    )
     op.add_column("invoices", sa.Column("version", sa.Integer(), nullable=True))
     op.add_column("invoices", sa.Column("updated_by_user_id", sa.UUID(), nullable=True))
     op.add_column(
         "invoices", sa.Column("updated_at", sa.DateTime(timezone=True), nullable=True)
     )
+    op.execute("""
+        DO $$ BEGIN
+          IF EXISTS (
+            SELECT 1
+            FROM invoices i
+            WHERE NOT EXISTS (
+              SELECT 1
+              FROM operational_migration_invoice_source_identities source
+              WHERE source.company_id = i.company_id
+                AND source.branch_id = i.branch_id
+                AND source.invoice_id = i.id
+                AND source.customer_id = i.customer_id
+                AND source.service_location_id = i.service_location_id
+            )
+          ) THEN
+            RAISE EXCEPTION 'Pre-contract Invoice lacks authoritative migration source provenance';
+          END IF;
+        END $$
+    """)
     op.execute("""
         UPDATE invoices
         SET accounting_status = 'reconciliation_required',
@@ -309,6 +337,7 @@ def upgrade() -> None:
             open_amount = total_amount,
             calculation_digest = lpad(md5(id::text || invoice_number), 64, '0'),
             legacy_evidence_missing = true,
+            identity_origin = 'grandfathered_legacy',
             version = 1,
             updated_by_user_id = created_by_user_id,
             updated_at = created_at
@@ -322,6 +351,7 @@ def upgrade() -> None:
         "open_amount",
         "calculation_digest",
         "legacy_evidence_missing",
+        "identity_origin",
         "version",
         "updated_by_user_id",
         "updated_at",
@@ -432,7 +462,15 @@ def upgrade() -> None:
         "ck_invoices_dates", "invoices", "due_date >= issue_date"
     )
     op.create_check_constraint(
-        "ck_invoices_number", "invoices", "invoice_number ~ '^INV-[0-9]{6,}$'"
+        "ck_invoices_number",
+        "invoices",
+        "(identity_origin = 'native' AND invoice_number ~ '^INV-[0-9]{6,}$') "
+        "OR (identity_origin = 'grandfathered_legacy' AND legacy_evidence_missing = true)",
+    )
+    op.create_check_constraint(
+        "ck_invoices_identity_origin",
+        "invoices",
+        "identity_origin IN ('native','grandfathered_legacy')",
     )
     op.create_check_constraint("ck_invoices_version", "invoices", "version >= 1")
     op.create_check_constraint(
@@ -463,6 +501,37 @@ def upgrade() -> None:
             BEFORE UPDATE OR DELETE ON {table_name}
             FOR EACH ROW EXECUTE FUNCTION prevent_invoice_financial_evidence_mutation()
         """)
+    op.execute("""
+        CREATE FUNCTION enforce_invoice_identity_provenance()
+        RETURNS trigger LANGUAGE plpgsql AS $$
+        BEGIN
+          IF TG_OP = 'UPDATE' AND (
+            NEW.identity_origin IS DISTINCT FROM OLD.identity_origin
+            OR NEW.invoice_number IS DISTINCT FROM OLD.invoice_number
+          ) THEN
+            RAISE EXCEPTION 'invoice identity provenance is immutable';
+          END IF;
+          IF NEW.identity_origin = 'grandfathered_legacy' AND NOT EXISTS (
+            SELECT 1
+            FROM operational_migration_invoice_source_identities source
+            WHERE source.company_id = NEW.company_id
+              AND source.branch_id = NEW.branch_id
+              AND source.invoice_id = NEW.id
+              AND source.customer_id = NEW.customer_id
+              AND source.service_location_id = NEW.service_location_id
+          ) THEN
+            RAISE EXCEPTION 'grandfathered Invoice requires authoritative migration source provenance';
+          END IF;
+          RETURN NEW;
+        END;
+        $$
+    """)
+    op.execute("""
+        CREATE CONSTRAINT TRIGGER tr_invoices_identity_provenance
+        AFTER INSERT OR UPDATE ON invoices
+        DEFERRABLE INITIALLY DEFERRED
+        FOR EACH ROW EXECUTE FUNCTION enforce_invoice_identity_provenance()
+    """)
     # ### end Alembic commands ###
 
 
@@ -476,6 +545,8 @@ def downgrade() -> None:
           END IF;
         END $$
     """)
+    op.execute("DROP TRIGGER tr_invoices_identity_provenance ON invoices")
+    op.execute("DROP FUNCTION enforce_invoice_identity_provenance")
     for table_name in (
         "ar_ledger_entries",
         "invoice_idempotency",
@@ -487,6 +558,7 @@ def downgrade() -> None:
     op.drop_constraint("ck_invoices_amounts", "invoices", type_="check")
     op.drop_constraint("ck_invoices_status", "invoices", type_="check")
     op.drop_constraint("ck_invoices_version", "invoices", type_="check")
+    op.drop_constraint("ck_invoices_identity_origin", "invoices", type_="check")
     op.drop_constraint("ck_invoices_number", "invoices", type_="check")
     op.drop_constraint("ck_invoices_dates", "invoices", type_="check")
     op.drop_constraint("ck_invoices_currency", "invoices", type_="check")
@@ -539,6 +611,7 @@ def downgrade() -> None:
     op.drop_column("invoices", "updated_at")
     op.drop_column("invoices", "updated_by_user_id")
     op.drop_column("invoices", "version")
+    op.drop_column("invoices", "identity_origin")
     op.drop_column("invoices", "legacy_evidence_missing")
     op.drop_column("invoices", "calculation_digest")
     op.drop_column("invoices", "open_amount")

@@ -90,6 +90,10 @@ async def test_accepted_work_creates_and_issues_one_exact_receivable(invoice_fix
     async with factory() as session:
         invoice = await service.create_from_estimate(session, spec)
     assert invoice.status == "draft"
+    assert invoice.identity_origin == "native"
+    assert invoice.invoice_number.startswith("INV-")
+    assert invoice.invoice_number[4:].isdigit()
+    assert len(invoice.invoice_number[4:]) >= 6
     assert invoice.total_amount == estimate.current_revision.total_amount
     assert invoice.tax_amount == estimate.current_revision.tax_amount
     assert invoice.open_amount == Decimal("0.00")

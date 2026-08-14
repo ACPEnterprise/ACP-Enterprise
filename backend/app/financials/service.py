@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
+from hashlib import sha256
 from uuid import UUID, uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -241,6 +242,10 @@ class FinancialService:
         if job is None:
             raise FinancialValidationError("Job parent was not found.")
         identifier = uuid4()
+        created_at = utc_now()
+        issue_date = (command.issued_at or created_at).date()
+        due_date = command.due_on or issue_date
+        invoice_number = self._number("INV", identifier)
         invoice = Invoice(
             id=identifier,
             company_id=context.company.id,
@@ -248,16 +253,30 @@ class FinancialService:
             job_id=job.id,
             customer_id=job.customer_id,
             service_location_id=job.service_location_id,
-            invoice_number=self._number("INV", identifier),
-            status=command.status,
+            invoice_number=invoice_number,
+            identity_origin="grandfathered_legacy",
+            status="voided" if command.status == "void" else command.status,
+            accounting_status="reconciliation_required",
             currency=self._currency(command.currency),
+            issue_date=issue_date,
+            due_date=due_date,
+            terms="Imported invoice terms require source reconciliation",
             subtotal_amount=command.subtotal_amount,
+            discount_amount=Decimal("0.00"),
             tax_amount=command.tax_amount,
             total_amount=command.total_amount,
+            open_amount=command.total_amount,
+            calculation_digest=sha256(
+                f"{identifier}:{invoice_number}".encode()
+            ).hexdigest(),
+            legacy_evidence_missing=True,
+            version=1,
             issued_at=command.issued_at,
             due_on=command.due_on,
             created_by_user_id=context.user.id,
-            created_at=utc_now(),
+            updated_by_user_id=context.user.id,
+            created_at=created_at,
+            updated_at=created_at,
         )
         items = [
             InvoiceLineItem(
@@ -265,10 +284,16 @@ class FinancialService:
                 company_id=context.company.id,
                 invoice_id=invoice.id,
                 position=position,
+                title=item.description.strip(),
                 description=item.description.strip(),
                 quantity=item.quantity,
                 unit_price=item.unit_price,
                 total_amount=item.total_amount,
+                evidence={
+                    "legacy_evidence_missing": True,
+                    "source_line_id": item.source_id,
+                },
+                created_at=created_at,
             )
             for position, item in enumerate(command.line_items, start=1)
         ]

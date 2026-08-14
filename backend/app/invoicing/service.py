@@ -153,6 +153,7 @@ class InvoiceService:
                 estimate_id=estimate.id,
                 estimate_revision_id=revision.id,
                 invoice_number=await self._next_number(session, spec.company_id),
+                identity_origin="native",
                 status="draft",
                 accounting_status="pending",
                 currency=revision.currency,

@@ -3,6 +3,7 @@ from decimal import Decimal
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
+    JSON,
     CheckConstraint,
     Date,
     DateTime,
@@ -182,11 +183,25 @@ class Invoice(Base):
         nullable=False,
     )
     invoice_number: Mapped[str] = mapped_column(String(40), nullable=False)
+    identity_origin: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="native", server_default="native"
+    )
     status: Mapped[str] = mapped_column(String(20), nullable=False)
     currency: Mapped[str] = mapped_column(String(3), nullable=False)
     subtotal_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
     tax_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
     total_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
+    accounting_status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="reconciliation_required"
+    )
+    issue_date: Mapped[date] = mapped_column(Date, nullable=False)
+    due_date: Mapped[date] = mapped_column(Date, nullable=False)
+    terms: Mapped[str] = mapped_column(Text, nullable=False)
+    discount_amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
+    open_amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
+    calculation_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    legacy_evidence_missing: Mapped[bool] = mapped_column(nullable=False, default=True)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     issued_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     due_on: Mapped[date | None] = mapped_column(Date)
     created_by_user_id: Mapped[UUID] = mapped_column(
@@ -195,6 +210,10 @@ class Invoice(Base):
         nullable=False,
     )
     created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+    updated_by_user_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
     )
 
@@ -233,10 +252,15 @@ class InvoiceLineItem(Base):
     company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     invoice_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     position: Mapped[int] = mapped_column(Integer, nullable=False)
+    title: Mapped[str] = mapped_column(String(240), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
     quantity: Mapped[Decimal] = mapped_column(Numeric(12, 3), nullable=False)
     unit_price: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
     total_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
+    evidence: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
 
 
 class Payment(Base):
