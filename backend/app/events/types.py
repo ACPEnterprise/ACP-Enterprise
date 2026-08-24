@@ -2,6 +2,22 @@ from enum import Enum
 
 
 class EventType(str, Enum):
+    # Payments
+    PAYMENT_INTENT_CREATED = "payment.intent_created"
+    PAYMENT_AUTHORIZATION_RECORDED = "payment.authorization_recorded"
+    PAYMENT_RECEIPT_CAPTURED = "payment.receipt_captured"
+    PAYMENT_FAILED = "payment.failed"
+    PAYMENT_REFUND_REQUESTED = "payment.refund_requested"
+    PAYMENT_REFUND_SUCCEEDED = "payment.refund_succeeded"
+    PAYMENT_REFUND_FAILED = "payment.refund_failed"
+    PAYMENT_DISPUTE_RECORDED = "payment.dispute_recorded"
+    PAYMENT_DEPOSIT_SUBMITTED = "payment.deposit_submitted"
+    PAYMENT_DEPOSIT_REVERSED = "payment.deposit_reversed"
+    PAYMENT_SETTLEMENT_RECEIVED = "payment.settlement_received"
+    PAYMENT_SETTLEMENT_RECONCILED = "payment.settlement_reconciled"
+    PAYMENT_RECONCILIATION_EXCEPTION_OPENED = "payment.reconciliation_exception_opened"
+    PAYMENT_RECONCILIATION_EXCEPTION_RESOLVED = "payment.reconciliation_exception_resolved"
+
     # Accounting
     ACCOUNTING_JOURNAL_POSTED = "accounting.journal_posted"
     ACCOUNTING_JOURNAL_REVERSED = "accounting.journal_reversed"

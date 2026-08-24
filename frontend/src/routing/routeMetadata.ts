@@ -114,6 +114,10 @@ export const invoicesHandle = {
   },
 } as const satisfies ShellRouteHandle;
 
+export const paymentsHandle = {
+  workspace: { pageTitle: "Payments", breadcrumbs: [{ label: "Payments" }], helpTopic: "payments", aiContext: "payments" },
+} as const satisfies ShellRouteHandle;
+
 export const engineeringHandle = {
   workspace: {
     pageTitle: "Engineering",

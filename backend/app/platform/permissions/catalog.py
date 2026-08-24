@@ -19,6 +19,7 @@ from app.platform.permissions.codes import (
     InvoicePermission,
     JobPermission,
     LaunchPlatformPermission,
+    PaymentPermission,
     PriceBookPermission,
     SchedulingPermission,
     WorkerControlPermission,
@@ -249,6 +250,17 @@ INVOICE_DEFINITIONS = tuple(
     for code in sorted(InvoicePermission.ALL)
 )
 
+PAYMENT_DEFINITIONS = tuple(
+    PermissionDefinition(
+        code=code,
+        name=code.replace("_", " ").title(),
+        resource="payment",
+        action=code.removeprefix("COMPANY_PAYMENT_").lower(),
+        scope=PermissionScope.COMPANY,
+    )
+    for code in sorted(PaymentPermission.ALL)
+)
+
 ENGINEERING_COMMAND_DEFINITIONS = tuple(
     PermissionDefinition(
         code=code,
@@ -330,6 +342,7 @@ permission_catalog = PermissionCatalog(
     + COMMUNICATIONS_DEFINITIONS
     + ESTIMATE_DEFINITIONS
     + INVOICE_DEFINITIONS
+    + PAYMENT_DEFINITIONS
     + ENGINEERING_COMMAND_DEFINITIONS
     + ENGINEERING_EXECUTION_DEFINITIONS
     + ENGINEERING_CAPACITY_DEFINITIONS
