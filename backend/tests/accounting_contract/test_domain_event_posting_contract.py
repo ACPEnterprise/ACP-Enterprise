@@ -25,7 +25,8 @@ def test_packet_is_machine_closed_and_not_startable() -> None:
         "ACC.AP.CONTRACT.1",
         "PAY.CONTRACT.1",
     }
-    assert len(dependencies["blocked"]) == 7
+    assert len(dependencies["blocked"]) == 3
+    assert len(dependencies["activation_only"]) == 4
     assert packet["migration"]["slot"] == 5
     assert packet["migration"]["sibling_heads_allowed"] is False
     assert packet["serialization"]["type"] == "TYPE B"

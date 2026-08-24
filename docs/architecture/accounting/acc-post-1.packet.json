@@ -2,6 +2,7 @@
   "schema_version": "1.0",
   "packet_id": "ACC.POST.1",
   "status": "not_startable",
+  "readiness_artifact": "docs/architecture/accounting/acc-post-1-readiness.md",
   "objective": "Consume accepted immutable domain financial facts and post deterministic balanced journals into Accounting Core without taking source-domain ownership.",
   "dependencies": {
     "complete": [
@@ -15,11 +16,13 @@
     "blocked": [
       "PAY.1-3.ACCEL accepted payment runtime implementing its accepted fact contract",
       "ACC.AP.1 accepted AP/vendor runtime implementing its accepted fact contract",
-      "accepted tax jurisdiction and control-mapping facts",
-      "accepted inventory financial-adjustment producer facts",
-      "accepted payroll-summary producer facts",
-      "Finance-approved versioned posting-rule and account-mapping package",
       "separate Owner Start"
+    ],
+    "activation_only": [
+      "accepted tax jurisdiction and control-mapping facts",
+      "accepted inventory financial-adjustment producer facts when Inventory financial posting is enabled",
+      "accepted payroll-summary producer facts when payroll-summary posting is enabled",
+      "Finance-approved versioned posting-rule and account-mapping values"
     ]
   },
   "repository": {
@@ -161,6 +164,14 @@
       "ACC.MIG.1"
     ],
     "integration_checkpoint": "ACC.IC.1"
+  },
+  "startability": {
+    "trigger": "PAY.1-3.ACCEL and ACC.AP.1 authoritative runtimes and source/receipt schemas integrated in slots 3 and 4; exactly one current Alembic head; no shared-seam conflict; fail-closed configuration supported; separate Owner Start",
+    "actual_account_ids_required_for_start": false,
+    "missing_mapping_behavior": "affected rule is disabled or reconciliation_required; no default, suspense, inferred zero, or date shift",
+    "inventory_adapter_required_for_initial_runtime": false,
+    "payroll_adapter_required_for_initial_runtime": false,
+    "tax_mapping_required_for_invoice_tax_activation": true
   },
   "environment_gates": {
     "preview": "separate owner authorization required",
