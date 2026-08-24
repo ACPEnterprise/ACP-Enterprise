@@ -14,6 +14,7 @@ import {
   estimatesHandle,
   inventoryHandle,
   invoicesHandle,
+  paymentsHandle,
   jobsHandle,
   missionControlHandle,
   notFoundHandle,
@@ -120,6 +121,16 @@ export const appRoutes: RouteObject[] = [
               Component: (await import("../routes/InvoiceDetailRoute"))
                 .InvoiceDetailRoute,
             }),
+          },
+          {
+            path: "payments",
+            handle: paymentsHandle,
+            lazy: async () => ({ Component: (await import("../routes/PaymentsRoute")).PaymentsRoute }),
+          },
+          {
+            path: "payments/:receiptId",
+            handle: paymentsHandle,
+            lazy: async () => ({ Component: (await import("../routes/PaymentDetailRoute")).PaymentDetailRoute }),
           },
           {
             path: "price-book",

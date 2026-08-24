@@ -38,6 +38,7 @@ from app.inventory.router import router as inventory_router
 from app.invoicing.router import router as invoicing_router
 from app.jobs.router import router as jobs_router
 from app.operations.router import router as operations_router
+from app.payments.router import router as payments_router
 from app.platform.audit.router import router as platform_audit_router
 from app.platform.auth.router import router as auth_router
 from app.platform.company.admin_router import router as company_admin_router
@@ -143,6 +144,7 @@ app.include_router(dispatch_router)
 app.include_router(price_book_router)
 app.include_router(estimates_router)
 app.include_router(invoicing_router)
+app.include_router(payments_router)
 app.include_router(communications_router)
 app.include_router(engineering_commands_router)
 app.include_router(engineering_reviews_router)
