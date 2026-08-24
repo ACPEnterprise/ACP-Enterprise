@@ -10,6 +10,8 @@
 
 The authoritative implementation boundary is [tech-field-1-execution-boundary.json](tech-field-1-execution-boundary.json). The existing [TECH.1 boundary](tech-1-execution-boundary.md) continues to govern the shell.
 
+Current dependency and migration-slot evidence is maintained in [TECH.FIELD.1 Runtime Readiness](tech-field-runtime-readiness.md); that evidence may close prerequisites but cannot alter this contract's product boundary.
+
 ## Day-1 authority model
 
 Existing domain owners remain authoritative:

@@ -14,12 +14,12 @@
 | Scheduling/cancel/reschedule | C → B in this packet | Backend lifecycle/API and appointment detail existed; `HCP.SCHEDULING.UI.1` adds the missing office calendar/list entry point; acceptance remains required |
 | Dispatch/technician assignment | B | `DISP.2` runtime, workspace, permissions, events, and tests exist; requires integrated acceptance with TECH runtime |
 | Technician mobile shell | B | `TECH.1` is owner-controlled on OM1; authoritative scheduler boundary exists, but no accepted technician runtime is present at this audit SHA |
-| Field execution/notes/evidence/completion | D, contract frozen | `TECH.FIELD.CONTRACT.1` defines the bounded `TECH.FIELD.1` journey and machine-enforceable boundary; implementation remains blocked until TECH.1, EST.4, and INVOICE.1-3.ACCEL are accepted and integrated |
+| Field execution/notes/evidence/completion | D, runtime-ready except TECH.1 | `TECH.FIELD.CONTRACT.1` and `TECH.FIELD.READY.1` freeze the journey and packet; OPS.1, DISP.2, EST.4, and INVOICE.1-3.ACCEL are authoritative, leaving accepted/integrated TECH.1 as the sole initial-runtime dependency |
 | Jobs and appointment relationship | A | Jobs APIs/UI, create-from-appointment, lifecycle, cancellation/reopen, authorization, and tests exist |
 | Price Book | A | Price Book runtime/API/UI, activation, permissions, and tests exist |
 | Estimates/customer approval | A | Estimate creation, immutable revisions, options/discounts/tax, presentation/approval, conversion, UI, and tests exist |
-| Invoices/AR | B | `INVOICE.1-3.ACCEL` is active on OM2-A and not accepted at audit time |
-| Payments | D | No Payments runtime exists; `PAY.1-3.ACCEL` follows accepted Invoice seams and remains on the Accounting path |
+| Invoices/AR | A — Day-1 runtime authoritative | `INVOICE.1-3.ACCEL` is integrated at `43018e2`; `5f66495` preserves grandfathered invoice identities |
+| Payments | D, contract ready | `PAY.CONTRACT.1` and its execution packet are authoritative, but no Payments runtime exists; it does not block initial TECH.FIELD.1 runtime and does block final payment-handoff acceptance |
 | Communications/invoice delivery | B/C | Communications outbox/provider boundary exists; invoice/payment templates and end-to-end delivery depend on accepted Invoice/Payment facts |
 | Accounting handoff | B | Accounting Core is authoritative at `ee87e57`; Invoice, Payment, posting, reporting, and cutover gates remain |
 | Operational migration/cutover | B/C | Customer, location, job, appointment, estimate, invoice/payment source identities, history/artifact, dry-run, idempotency, and readiness foundations exist; real HCP source evidence, rehearsal, open-work reconciliation, and owner cutover authority do not |
