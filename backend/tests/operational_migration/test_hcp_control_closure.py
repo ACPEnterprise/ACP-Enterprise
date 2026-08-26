@@ -7,12 +7,15 @@ import pytest
 from app.operational_migration.hcp_control_closure import (
     BranchMappingCandidate,
     ControlExportType,
+    HcpHistoryLayer,
     PaymentDateRange,
     ReadinessImpact,
     ReconciliationClassification,
     TechnicianCrosswalkSource,
+    classify_hcp_history,
     financial_conflict,
     intake_csv_control,
+    missing_evidence_impact,
     reconcile_native_evidence,
     seal_control_manifest,
     unsupported_relationship,
@@ -73,3 +76,17 @@ def test_review_packets_do_not_claim_owner_mapping() -> None:
     assert branch.candidate_enterprise_branch_id is None
     assert tech.enterprise_employee_id is None
     assert ReadinessImpact.BLOCKS_OPEN_WORK_CUTOVER.value == "blocks_open_work_cutover"
+
+
+def test_owner_cutoff_changes_reconciliation_not_source_truth() -> None:
+    legacy = classify_hcp_history(date(2022, 12, 31))
+    analytical = classify_hcp_history(date(2023, 1, 1))
+    current = classify_hcp_history(
+        date(2018, 1, 1), current_operational_or_balance_dependency=True
+    )
+    assert legacy is HcpHistoryLayer.LEGACY_HISTORICAL_ARCHIVE
+    assert analytical is HcpHistoryLayer.ENTERPRISE_ANALYTICAL_HISTORY
+    assert current is HcpHistoryLayer.DAY_ONE_CUTOVER_STATE
+    assert missing_evidence_impact(legacy) is ReadinessImpact.NON_BLOCKING_MISSING_EVIDENCE
+    assert missing_evidence_impact(analytical) is ReadinessImpact.BLOCKS_RECONCILIATION
+    assert missing_evidence_impact(current) is ReadinessImpact.BLOCKS_OPEN_WORK_CUTOVER

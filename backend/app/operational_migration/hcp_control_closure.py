@@ -50,6 +50,12 @@ class ReadinessImpact(StrEnum):
     NON_BLOCKING_MISSING_EVIDENCE = "non_blocking_missing_evidence"
 
 
+class HcpHistoryLayer(StrEnum):
+    LEGACY_HISTORICAL_ARCHIVE = "legacy_historical_archive"
+    ENTERPRISE_ANALYTICAL_HISTORY = "enterprise_analytical_history"
+    DAY_ONE_CUTOVER_STATE = "day_one_cutover_state"
+
+
 @dataclass(frozen=True)
 class PaymentDateRange:
     start: date
@@ -262,3 +268,23 @@ def financial_conflict(
         "conflict" if len(values) > 1 else "consistent",
         "hcp-qbo-financial-assertions/v1",
     )
+
+
+def classify_hcp_history(
+    source_date: date, *, current_operational_or_balance_dependency: bool = False
+) -> HcpHistoryLayer:
+    """Classify relevance without changing or excluding the source assertion."""
+    if current_operational_or_balance_dependency:
+        return HcpHistoryLayer.DAY_ONE_CUTOVER_STATE
+    if source_date < date(2023, 1, 1):
+        return HcpHistoryLayer.LEGACY_HISTORICAL_ARCHIVE
+    return HcpHistoryLayer.ENTERPRISE_ANALYTICAL_HISTORY
+
+
+def missing_evidence_impact(layer: HcpHistoryLayer) -> ReadinessImpact:
+    """Apply owner relevance policy; missing evidence never blocks acquisition."""
+    if layer is HcpHistoryLayer.DAY_ONE_CUTOVER_STATE:
+        return ReadinessImpact.BLOCKS_OPEN_WORK_CUTOVER
+    if layer is HcpHistoryLayer.ENTERPRISE_ANALYTICAL_HISTORY:
+        return ReadinessImpact.BLOCKS_RECONCILIATION
+    return ReadinessImpact.NON_BLOCKING_MISSING_EVIDENCE
