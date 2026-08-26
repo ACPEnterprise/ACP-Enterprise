@@ -214,6 +214,14 @@ class FakeWorkstreamRuntimeService:
         return 0
 
 
+class FakeControlledExecutionService:
+    async def reconcile_expired_worker_leases_in_transaction(
+        self, database, **kwargs
+    ) -> int:
+        del database, kwargs
+        return 0
+
+
 def worker_identity() -> WorkerIdentity:
     worker_id = uuid4()
     return WorkerIdentity(
@@ -252,6 +260,7 @@ def make_service() -> tuple[
         authenticator=authenticator,
         worker_control=cast(object, control),  # type: ignore[arg-type]
         sessions=InMemoryWorkerTransportSessionRepository(),
+        controlled=cast(object, FakeControlledExecutionService()),  # type: ignore[arg-type]
         workstreams=cast(object, FakeWorkstreamRuntimeService()),  # type: ignore[arg-type]
     )
     return service, authenticator, control

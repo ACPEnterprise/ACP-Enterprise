@@ -2,6 +2,7 @@ import hashlib
 import hmac
 import json
 import os
+from datetime import datetime
 from pathlib import Path
 from typing import Annotated
 from uuid import UUID
@@ -9,6 +10,7 @@ from uuid import UUID
 from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
+from .authority import ExecutionAuthorityRegistry
 from .contracts import ProviderBoundary, ProviderExecutionRequest
 from .provider import (
     CodexImplementation,
@@ -44,6 +46,14 @@ class ExecutionPayload(BaseModel):
     boundary_digest: str
     boundary: BoundaryPayload
     commit_subject: str
+    authority_expires_at: datetime
+
+
+class AuthorityPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    execution_id: UUID
+    lease_id: UUID
+    expires_at: datetime
 
 
 class RepositoryPreparationPayload(BaseModel):
@@ -64,6 +74,7 @@ def create_app() -> FastAPI:
         Path(os.environ["ACP_PROVIDER_REPOSITORIES_FILE"]).read_text()
     )
     journal = ProviderJournal(Path(os.environ["ACP_PROVIDER_STATE_ROOT"]))
+    authority = ExecutionAuthorityRegistry()
     workspaces = WorkspaceManager(
         Path(os.environ["ACP_PROVIDER_WORKSPACE_ROOT"]),
         {key: Path(value) for key, value in repositories.items()},
@@ -86,6 +97,7 @@ def create_app() -> FastAPI:
             expected_node_version=os.environ["ACP_PROVIDER_NODE_VERSION"],
             expected_npm_version=os.environ["ACP_PROVIDER_NPM_VERSION"],
         ),
+        authority_check=authority.require_valid,
     )
     app = FastAPI(
         title="ACP Controlled Execution Provider",
@@ -123,6 +135,14 @@ def create_app() -> FastAPI:
         request = ProviderExecutionRequest(
             **payload.model_dump(exclude={"boundary"}), boundary=boundary
         )
+        try:
+            authority.record(
+                request.execution_id,
+                request.lease_id,
+                payload.authority_expires_at,
+            )
+        except ValueError as error:
+            raise HTTPException(status_code=409, detail=str(error)) from error
         result = provider.execute(request)
         return {
             "execution_id": str(result.execution_id),
@@ -136,6 +156,27 @@ def create_app() -> FastAPI:
             "evidence": result.evidence,
             "reconciliation_reason": result.reconciliation_reason,
         }
+
+    @app.post("/executions/{execution_id}/authority", status_code=204)
+    def refresh_execution_authority(
+        execution_id: UUID,
+        payload: AuthorityPayload,
+        signature: Annotated[str, Header(alias="X-ACP-Provider-Signature")],
+    ) -> None:
+        canonical = json.dumps(
+            payload.model_dump(mode="json"), sort_keys=True, separators=(",", ":")
+        ).encode()
+        expected = hmac.new(token, canonical, hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(expected, signature):
+            raise HTTPException(
+                status_code=401, detail="Provider request authentication failed."
+            )
+        if payload.execution_id != execution_id:
+            raise HTTPException(status_code=409, detail="Execution identity mismatch.")
+        try:
+            authority.record(payload.execution_id, payload.lease_id, payload.expires_at)
+        except ValueError as error:
+            raise HTTPException(status_code=409, detail=str(error)) from error
 
     @app.post("/repositories/prepare")
     def prepare_repository(

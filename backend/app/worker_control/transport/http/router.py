@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_database_session
 from app.worker_control.contracts import WorkerExecutionResult
+from app.worker_control.models import WorkerLease
 from app.worker_control.transport.contracts import (
     AuthenticatedMessageEnvelope,
     CancellationAcknowledgementMessage,
@@ -212,11 +213,17 @@ async def acquire_controlled_offer(
         raise transport_http_error(
             TransportMessageError("Acquired offer was not found.")
         )
+    lease = await database.get(WorkerLease, offer.lease_id)
+    if lease is None:
+        raise transport_http_error(
+            TransportMessageError("Acquired lease was not found.")
+        )
     return ControlledOfferAcquisitionResponse(
         receipt=receipt,
         offer_id=offer.id,
         lease_id=offer.lease_id,
         lease_version=1,
+        lease_expires_at=lease.expires_at,
         workspace_id=offer.workspace_id,
         command_type=offer.command_type.value,
         payload=dict(offer.payload),

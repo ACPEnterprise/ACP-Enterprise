@@ -93,6 +93,24 @@ class ProductionBoundedGitAdapter:
     def inspect_current_head(self) -> str:
         return self._sha(("rev-parse", "HEAD"))
 
+    def inspect_remote_head(self, branch: str) -> str:
+        if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._/-]{0,254}", branch) is None:
+            raise RepositoryOperationGitError(
+                "invalid_branch", "Remote branch identifier is invalid."
+            )
+        reference = f"refs/heads/{branch}"
+        value = self._text(("ls-remote", "--exit-code", "origin", reference)).strip()
+        rows = [row.split() for row in value.splitlines() if row.strip()]
+        if len(rows) != 1 or len(rows[0]) != 2 or rows[0][1] != reference:
+            raise RepositoryOperationGitError(
+                "ambiguous_publication", "Remote publication proof is ambiguous."
+            )
+        if FULL_SHA.fullmatch(rows[0][0]) is None:
+            raise RepositoryOperationGitError(
+                "invalid_repository_state", "Remote returned an invalid commit."
+            )
+        return rows[0][0]
+
     def _changed_files(self) -> tuple[str, ...]:
         tracked = self._names(("diff", "--name-only", "-z", "HEAD"))
         untracked = self._names(("ls-files", "--others", "--exclude-standard", "-z"))

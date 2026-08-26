@@ -6,11 +6,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_database_session
 from app.platform.permissions.authorization import AuthorizationContext
-from app.platform.permissions.codes import EngineeringExecutionPermission
+from app.platform.permissions.codes import (
+    EngineeringCommandPermission,
+    EngineeringExecutionPermission,
+)
 from app.platform.permissions.dependencies import require_permission
 
 from .errors import ControlledExecutionError
-from .schemas import ControlledOfferResponse, PrepareControlledOfferRequest
+from .schemas import (
+    AdoptControlledResultRequest,
+    AdoptControlledResultResponse,
+    ControlledOfferResponse,
+    PrepareControlledOfferRequest,
+)
 from .service import ControlledExecutionService
 
 router = APIRouter(
@@ -22,7 +30,49 @@ ExecutionContext = Annotated[
     AuthorizationContext,
     Depends(require_permission(EngineeringExecutionPermission.REQUEST)),
 ]
+AdoptionContext = Annotated[
+    AuthorizationContext,
+    Depends(require_permission(EngineeringCommandPermission.APPROVE)),
+]
 service = ControlledExecutionService()
+
+
+@router.post(
+    "/{execution_id}/expired-result-adoptions",
+    response_model=AdoptControlledResultResponse,
+    summary="Adopt immutable published evidence after controlled lease expiry",
+)
+async def adopt_expired_result(
+    execution_id: UUID,
+    data: AdoptControlledResultRequest,
+    context: AdoptionContext,
+    database: Database,
+) -> AdoptControlledResultResponse:
+    try:
+        result, review_id, adopted_at = await service.adopt_expired_result(
+            database,
+            context=context,
+            execution_id=execution_id,
+            **data.model_dump(),
+        )
+    except ControlledExecutionError as error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "controlled_result_adoption_rejected",
+                "message": str(error),
+            },
+        ) from error
+    return AdoptControlledResultResponse(
+        result_id=result.id,
+        execution_id=result.execution_id,
+        outcome=result.outcome.value,
+        repository_mutated=result.repository_mutated,
+        result_commit=str(result.output["commit_sha"]),
+        provider_completed_at=result.completed_at,
+        adopted_at=adopted_at,
+        review_id=review_id,
+    )
 
 
 @router.post(

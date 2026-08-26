@@ -8,10 +8,6 @@ from uuid import uuid4
 import httpx
 import pytest
 import pytest_asyncio
-from fastapi import FastAPI
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-
 from app.core.config import settings
 from app.database.session import get_database_session
 from app.engineering_control.repository_authorization.contracts import (
@@ -56,6 +52,10 @@ from app.platform.permissions.codes import (
     EngineeringRepositoryOperationPermission,
 )
 from app.platform.permissions.dependencies import get_authorization_context
+from fastapi import FastAPI
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
 from tests.engineering_control.repository_authorization.test_repository_authorization import (
     BOUNDARY,
     accepted_review,
@@ -93,6 +93,26 @@ def repository(root: Path) -> str:
     for path in BOUNDARY:
         (root / path).write_text("reviewed change\n", encoding="utf-8")
     return base
+
+
+def test_bounded_adapter_verifies_exact_remote_publication(tmp_path: Path) -> None:
+    working = tmp_path / "working"
+    remote = tmp_path / "remote.git"
+    working.mkdir()
+    remote.mkdir()
+    base = repository(working)
+    git(remote, "init", "--bare")
+    git(working, "remote", "add", "origin", str(remote))
+    git(working, "add", "--", *BOUNDARY)
+    git(working, "commit", "-m", "published result")
+    commit = git(working, "rev-parse", "HEAD")
+    git(working, "push", "origin", "customer-management-v1")
+
+    adapter = ProductionBoundedGitAdapter(working)
+    proof = adapter.inspect_commit(commit)
+    assert proof.parent == base
+    assert proof.files == BOUNDARY
+    assert adapter.inspect_remote_head("customer-management-v1") == commit
 
 
 @pytest_asyncio.fixture

@@ -6,7 +6,10 @@ import pytest
 import pytest_asyncio
 from app.core.config import settings
 from app.engineering_control.review.service import EngineeringReviewService
-from app.engineering_execution.controlled.contracts import ControlledCommandType
+from app.engineering_execution.controlled.contracts import (
+    ControlledCommandType,
+    ControlledOutcome,
+)
 from app.engineering_execution.controlled.repository import (
     ControlledExecutionRepository,
 )
@@ -196,6 +199,21 @@ async def test_authenticated_controlled_result_becomes_owner_review(
     async with fixture.factory() as database:
         receipt = await transport.handle_message(database, envelope=result)
     assert receipt.outcome_reference.startswith("controlled_result:")
+    result_id = receipt.outcome_reference.split(":")[1]
+    async with fixture.factory() as database, database.begin():
+        duplicate = await ControlledExecutionService().complete_in_transaction(
+            database,
+            worker_context=worker_session.context,
+            session_id=uuid4(),
+            offer_id=offer.id,
+            lease_id=acquired.lease_id,
+            outcome=ControlledOutcome.SUCCEEDED,
+            output=result.payload.output,
+            error_classification=None,
+            started_at=result.payload.started_at,
+            completed_at=result.payload.completed_at,
+        )
+    assert str(duplicate.id) == result_id
 
     async with fixture.factory() as database:
         package = await EngineeringReviewService().prepare(

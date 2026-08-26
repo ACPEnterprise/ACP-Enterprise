@@ -5,6 +5,7 @@ import json
 import re
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from uuid import UUID
 
@@ -33,6 +34,7 @@ class AcquiredControlledOffer:
     workspace_id: str
     command_type: str
     payload: Mapping[str, object]
+    lease_expires_at: datetime | None = None
 
 
 class IsolatedWorkspaceExecutor:
@@ -159,6 +161,11 @@ class NodeExecutionProviderClient:
             "boundary_digest": offer.payload["boundary_digest"],
             "boundary": offer.payload["boundary"],
             "commit_subject": offer.payload["commit_subject"],
+            "authority_expires_at": (
+                offer.lease_expires_at.isoformat()
+                if offer.lease_expires_at is not None
+                else None
+            ),
         }
         canonical = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
         signature = hmac.new(self.token, canonical, hashlib.sha256).hexdigest()
@@ -251,6 +258,32 @@ class NodeExecutionProviderClient:
             "evidence": evidence,
             "repository_mutated": True,
         }
+
+    async def refresh_authority(
+        self, *, execution_id: UUID, lease_id: UUID, expires_at: datetime
+    ) -> None:
+        payload = {
+            "execution_id": str(execution_id),
+            "lease_id": str(lease_id),
+            "expires_at": expires_at.isoformat(),
+        }
+        canonical = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+        signature = hmac.new(self.token, canonical, hashlib.sha256).hexdigest()
+        async with httpx.AsyncClient(
+            base_url=self.base_url, timeout=min(self.timeout_seconds, 30)
+        ) as client:
+            response = await client.post(
+                f"/executions/{execution_id}/authority",
+                content=canonical,
+                headers={
+                    "Content-Type": "application/json",
+                    "X-ACP-Provider-Signature": signature,
+                },
+            )
+        if response.status_code != 204:
+            raise IsolatedWorkspaceExecutionError(
+                "Provider rejected renewed execution authority."
+            )
 
     async def prepare_repository(
         self, *, repository_key: str, branch: str, candidate_head: str

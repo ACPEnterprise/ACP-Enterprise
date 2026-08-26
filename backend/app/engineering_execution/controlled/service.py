@@ -1,14 +1,26 @@
+import fnmatch
+import hashlib
 import json
 import re
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from typing import cast
 from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.engineering_control.models import EngineeringCommand
 from app.engineering_control.records import EngineeringApprovalState
+from app.engineering_control.repository_operation.errors import (
+    RepositoryOperationGitError,
+)
+from app.engineering_control.repository_operation.git_adapter import (
+    ProductionBoundedGitAdapter,
+)
+from app.engineering_control.review.service import EngineeringReviewService
 from app.engineering_control.workstream_runtime import EngineeringWorkstreamRuntime
 from app.engineering_execution.contracts import (
     EngineeringExecutionState,
@@ -19,13 +31,17 @@ from app.events.schemas import BusinessEventCreate
 from app.events.service import BusinessEventService
 from app.events.types import EventType
 from app.execution_nodes.models import ProviderExecutionTransition
+from app.platform.audit.service import AuditEntry, AuditService, audit_service
 from app.platform.permissions.authorization import (
     AuthorizationContext,
     AuthorizationService,
     PermissionDeniedError,
     authorization_service,
 )
-from app.platform.permissions.codes import EngineeringExecutionPermission
+from app.platform.permissions.codes import (
+    EngineeringCommandPermission,
+    EngineeringExecutionPermission,
+)
 from app.worker_control.contracts import (
     AuthenticatedWorkerContext,
     ExecutionOffer,
@@ -50,7 +66,7 @@ from .errors import (
     ControlledExecutionNotFoundError,
     ControlledExecutionPayloadError,
 )
-from .models import ControlledExecutionOfferModel
+from .models import ControlledExecutionOfferModel, ControlledExecutionResultModel
 from .repository import ControlledExecutionRepository
 
 SAFE_WORKSPACE = re.compile(r"^[a-z0-9][a-z0-9._-]{2,99}$")
@@ -67,6 +83,45 @@ SENSITIVE_EVIDENCE_MARKERS = (
     "secret=",
     "npm_auth_token",
 )
+
+
+def calculate_adoption_evidence_digest(
+    *,
+    command_id: UUID,
+    execution_id: UUID,
+    ecid: str,
+    offer_id: UUID,
+    lease_id: UUID,
+    starting_head: str,
+    commit_sha: str,
+    commit_parent: str,
+    remote_head: str,
+    boundary_version: int,
+    boundary_fingerprint: str,
+    boundary_digest: str,
+    provider_completed_at: datetime,
+    workspace_clean: bool,
+    output: dict[str, object],
+) -> str:
+    payload = {
+        "command_id": str(command_id),
+        "execution_id": str(execution_id),
+        "ecid": ecid,
+        "offer_id": str(offer_id),
+        "lease_id": str(lease_id),
+        "starting_head": starting_head,
+        "commit_sha": commit_sha,
+        "commit_parent": commit_parent,
+        "remote_head": remote_head,
+        "boundary_version": boundary_version,
+        "boundary_fingerprint": boundary_fingerprint,
+        "boundary_digest": boundary_digest,
+        "provider_completed_at": provider_completed_at.isoformat(),
+        "workspace_clean": workspace_clean,
+        "output": output,
+    }
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode()).hexdigest()
 
 
 def utc_now() -> datetime:
@@ -216,11 +271,365 @@ class ControlledExecutionService:
         workers: WorkerControlService | None = None,
         authorization: AuthorizationService = authorization_service,
         events: type[BusinessEventService] = BusinessEventService,
+        audit: AuditService = audit_service,
+        publication_adapter: ProductionBoundedGitAdapter | None = None,
     ) -> None:
         self.repository = repository
         self.workers = workers or WorkerControlService()
         self.authorization = authorization
         self.events = events
+        self.audit = audit
+        self.publication_adapter = publication_adapter
+
+    async def adopt_expired_result(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        execution_id: UUID,
+        command_id: UUID,
+        ecid: str,
+        offer_id: UUID,
+        lease_id: UUID,
+        starting_head: str,
+        commit_sha: str,
+        commit_parent: str,
+        remote_head: str,
+        boundary_version: int,
+        boundary_fingerprint: str,
+        boundary_digest: str,
+        provider_completed_at: datetime,
+        provider_evidence_digest: str,
+        workspace_clean: bool,
+        output: dict[str, object],
+        idempotency_key: str,
+        now: datetime | None = None,
+    ) -> tuple[ControlledExecutionResult, UUID, datetime]:
+        """Adopt immutable published evidence without reviving expired authority."""
+        self.authorization.require_permission(
+            context, EngineeringCommandPermission.APPROVE
+        )
+        adopted_at = now or utc_now()
+        calculated_digest = calculate_adoption_evidence_digest(
+            command_id=command_id,
+            execution_id=execution_id,
+            ecid=ecid,
+            offer_id=offer_id,
+            lease_id=lease_id,
+            starting_head=starting_head,
+            commit_sha=commit_sha,
+            commit_parent=commit_parent,
+            remote_head=remote_head,
+            boundary_version=boundary_version,
+            boundary_fingerprint=boundary_fingerprint,
+            boundary_digest=boundary_digest,
+            provider_completed_at=provider_completed_at,
+            workspace_clean=workspace_clean,
+            output=output,
+        )
+        if calculated_digest != provider_evidence_digest:
+            raise ControlledExecutionPayloadError(
+                "Provider evidence digest does not match immutable evidence."
+            )
+        files = output.get("file_boundary")
+        if not isinstance(files, list) or not all(
+            isinstance(path, str) for path in files
+        ):
+            raise ControlledExecutionPayloadError(
+                "Publication path evidence is invalid."
+            )
+        try:
+            publication = self._publication_adapter()
+            commit = publication.inspect_commit(commit_sha)
+            observed_remote = publication.inspect_remote_head(
+                str(output.get("branch", ""))
+            )
+        except RepositoryOperationGitError as error:
+            raise ControlledExecutionPayloadError(
+                "Authoritative publication proof could not be verified."
+            ) from error
+        if (
+            commit.parent != commit_parent
+            or commit.files != tuple(files)
+            or observed_remote != remote_head
+            or remote_head != commit_sha
+        ):
+            raise ControlledExecutionPayloadError(
+                "Authoritative publication proof does not match provider evidence."
+            )
+        try:
+            async with session.begin():
+                offer = await self.repository.get_offer_for_update(
+                    session, company_id=context.company.id, offer_id=offer_id
+                )
+                command = await session.get(EngineeringCommand, command_id)
+                execution = await session.get(EngineeringExecution, execution_id)
+                if (
+                    offer is None
+                    or command is None
+                    or execution is None
+                    or command.company_id != context.company.id
+                    or execution.company_id != context.company.id
+                    or offer.execution_id != execution_id
+                    or offer.command_id != command_id
+                    or offer.lease_id != lease_id
+                    or execution.command_id != command_id
+                    or command.ecid != ecid
+                ):
+                    raise ControlledExecutionNotFoundError(
+                        "Controlled execution lineage was not found."
+                    )
+                existing = await session.scalar(
+                    select(ControlledExecutionResultModel).where(
+                        ControlledExecutionResultModel.company_id == context.company.id,
+                        ControlledExecutionResultModel.offer_id == offer_id,
+                    )
+                )
+                if existing is not None:
+                    adoption = existing.output.get("adoption")
+                    if (
+                        isinstance(adoption, dict)
+                        and adoption.get("idempotency_key") == idempotency_key
+                        and adoption.get("evidence_digest") == provider_evidence_digest
+                    ):
+                        result = self.repository.result_record(existing)
+                        stored_adopted_at = adoption.get("adopted_at")
+                        if isinstance(stored_adopted_at, str):
+                            adopted_at = datetime.fromisoformat(stored_adopted_at)
+                    else:
+                        raise ControlledExecutionConflictError(
+                            "A conflicting terminal result already exists."
+                        )
+                else:
+                    self._validate_adoption_source(
+                        command=command,
+                        execution=execution,
+                        offer=offer,
+                        starting_head=starting_head,
+                        commit_sha=commit_sha,
+                        commit_parent=commit_parent,
+                        remote_head=remote_head,
+                        boundary_version=boundary_version,
+                        boundary_fingerprint=boundary_fingerprint,
+                        boundary_digest=boundary_digest,
+                        provider_completed_at=provider_completed_at,
+                        workspace_clean=workspace_clean,
+                        output=output,
+                    )
+                    from app.engineering_control.mobile.roadmaps import (
+                        EngineeringMilestone,
+                    )
+
+                    milestone = await session.scalar(
+                        select(EngineeringMilestone).where(
+                            EngineeringMilestone.company_id == context.company.id,
+                            EngineeringMilestone.command_id == command_id,
+                        )
+                    )
+                    if milestone is None:
+                        raise ControlledExecutionIneligibleError(
+                            "Scheduler lineage is unavailable for adoption."
+                        )
+                    adopted_output = {
+                        **output,
+                        "adoption": {
+                            "evidence_digest": provider_evidence_digest,
+                            "idempotency_key": idempotency_key,
+                            "provider_completed_at": provider_completed_at.isoformat(),
+                            "adopted_at": adopted_at.isoformat(),
+                            "adopted_by_user_id": str(context.user.id),
+                            "transport_failure_preserved": True,
+                            "expired_lease_preserved": str(lease_id),
+                            "prior_reconciliation_evidence": dict(
+                                execution.evidence_summary
+                            ),
+                        },
+                    }
+                    result = await self.repository.create_adopted_result(
+                        session,
+                        offer=offer,
+                        output=adopted_output,
+                        started_at=execution.started_at
+                        or offer.acquired_at
+                        or provider_completed_at,
+                        completed_at=provider_completed_at,
+                        adopted_at=adopted_at,
+                    )
+                    execution.state = EngineeringExecutionState.COMPLETED.value
+                    execution.status = EngineeringExecutionStatus.SUCCEEDED.value
+                    execution.evidence_summary = adopted_output
+                    execution.validation_summary = {
+                        "controlled_execution": True,
+                        "repository_mutated": True,
+                        "required": dict(cast(dict[str, bool], output["validation"])),
+                        "runs": list(
+                            cast(list[dict[str, object]], output["validation_runs"])
+                        ),
+                        "owner_authorized_adoption": True,
+                    }
+                    execution.failure_classification = None
+                    execution.finished_at = provider_completed_at
+                    execution.updated_at = adopted_at
+                    execution.version += 1
+                    runtime = await session.scalar(
+                        select(EngineeringWorkstreamRuntime).where(
+                            EngineeringWorkstreamRuntime.company_id
+                            == context.company.id,
+                            EngineeringWorkstreamRuntime.command_id == command_id,
+                        )
+                    )
+                    if runtime is not None:
+                        runtime.runtime_state = "completed"
+                        runtime.worker_health = "healthy"
+                        runtime.progress_percent = 100
+                        runtime.current_activity = (
+                            "Published result ready for owner review"
+                        )
+                        runtime.reason_code = None
+                        runtime.updated_at = adopted_at
+                        runtime.version += 1
+                    self._stage(
+                        session,
+                        offer=_offer_record(offer),
+                        event_type=EventType.ENGINEERING_CONTROLLED_RESULT_ADOPTED,
+                        now=adopted_at,
+                        result_id=result.id,
+                        repository_mutated=True,
+                    )
+                    self.audit.stage(
+                        session,
+                        AuditEntry(
+                            action="engineering.controlled_result_adopted",
+                            resource_type="engineering_execution",
+                            actor_user_id=context.user.id,
+                            company_id=context.company.id,
+                            branch_id=(
+                                context.active_branch.id
+                                if context.active_branch
+                                else None
+                            ),
+                            resource_id=execution_id,
+                            correlation_id=execution.correlation_id,
+                            details={
+                                "ecid": ecid,
+                                "command_id": str(command_id),
+                                "offer_id": str(offer_id),
+                                "lease_id": str(lease_id),
+                                "result_id": str(result.id),
+                                "commit_sha": commit_sha,
+                                "evidence_digest": provider_evidence_digest,
+                                "transport_failure_preserved": True,
+                            },
+                            occurred_at=adopted_at,
+                        ),
+                    )
+            review = await EngineeringReviewService().prepare(
+                session, context=context, command_id=command_id, now=adopted_at
+            )
+            return result, review.review.id, adopted_at
+        except IntegrityError as error:
+            await session.rollback()
+            raise ControlledExecutionConflictError(
+                "Evidence adoption conflicts with an existing terminal result."
+            ) from error
+
+    def _publication_adapter(self) -> ProductionBoundedGitAdapter:
+        if self.publication_adapter is not None:
+            return self.publication_adapter
+        root = settings.repository_operation_root
+        if root is None or not root.strip():
+            raise ControlledExecutionPayloadError(
+                "Controlled repository publication verification is unavailable."
+            )
+        self.publication_adapter = ProductionBoundedGitAdapter(Path(root))
+        return self.publication_adapter
+
+    @staticmethod
+    def _validate_adoption_source(
+        *,
+        command: EngineeringCommand,
+        execution: EngineeringExecution,
+        offer: ControlledExecutionOfferModel,
+        starting_head: str,
+        commit_sha: str,
+        commit_parent: str,
+        remote_head: str,
+        boundary_version: int,
+        boundary_fingerprint: str,
+        boundary_digest: str,
+        provider_completed_at: datetime,
+        workspace_clean: bool,
+        output: dict[str, object],
+    ) -> None:
+        boundary = dict(command.execution_boundary)
+        files = output.get("file_boundary")
+        validation = output.get("validation")
+        runs = output.get("validation_runs")
+        evidence = output.get("evidence")
+        requirements = boundary.get("validation_requirements")
+        allowed_paths = boundary.get("allowed_paths")
+        forbidden_paths = boundary.get("forbidden_paths")
+        if (
+            offer.state != ControlledOfferState.EXPIRED.value
+            or execution.state not in {"running", "starting", "queued"}
+            or execution.evidence_summary.get("reconciliation_required") is not True
+            or execution.evidence_summary.get("reconciliation_reason")
+            != "expired_lease_unresolved_provider_outcome"
+            or execution.evidence_summary.get("security_incident") is True
+            or command.expected_head != starting_head
+            or commit_parent != starting_head
+            or commit_sha != remote_head
+            or command.execution_boundary_digest != boundary_digest
+            or boundary.get("boundary_version") != boundary_version
+            or boundary.get("fingerprint") != boundary_fingerprint
+            or workspace_clean is not True
+            or output.get("repository_mutated") is not True
+            or output.get("starting_head") != starting_head
+            or output.get("head") != commit_sha
+            or output.get("commit_sha") != commit_sha
+            or output.get("published_commit_sha") != commit_sha
+            or output.get("remote_head_before") != starting_head
+            or not isinstance(files, list)
+            or files != sorted(set(files))
+            or output.get("file_count") != len(files)
+            or not isinstance(validation, dict)
+            or not isinstance(requirements, list)
+            or set(validation) != set(requirements)
+            or not validation
+            or not all(value is True for value in validation.values())
+            or not isinstance(runs, list)
+            or len(runs) != len(validation)
+            or not all(_valid_validation_run(run) for run in runs)
+            or not isinstance(evidence, dict)
+            or not isinstance(allowed_paths, list)
+            or not isinstance(forbidden_paths, list)
+            or evidence.get("phases")
+            != [
+                "composed",
+                "workspace_ready",
+                "executing",
+                "validating",
+                "commit_ready",
+                "publishing_result",
+                "completed",
+            ]
+            or provider_completed_at < (execution.started_at or provider_completed_at)
+        ):
+            raise ControlledExecutionPayloadError(
+                "Immutable terminal evidence is incomplete or inconsistent."
+            )
+        allowed = tuple(str(item) for item in allowed_paths)
+        forbidden = tuple(str(item) for item in forbidden_paths)
+        for path in files:
+            if (
+                not isinstance(path, str)
+                or not _safe_relative_path(path)
+                or any(fnmatch.fnmatchcase(path, pattern) for pattern in forbidden)
+                or not any(fnmatch.fnmatchcase(path, pattern) for pattern in allowed)
+            ):
+                raise ControlledExecutionPayloadError(
+                    "Adopted result violates the frozen execution boundary."
+                )
 
     async def prepare_offer(
         self,
@@ -343,6 +752,7 @@ class ControlledExecutionService:
                 recovery = {
                     "recovery_lease_id": str(lease.id),
                     "recovery_lease_version": lease.version,
+                    "recovery_lease_expires_at": lease.expires_at.isoformat(),
                 }
             responses.append(
                 ExecutionOffer(
@@ -659,6 +1069,26 @@ class ControlledExecutionService:
         )
         if offer is None:
             raise ControlledExecutionNotFoundError("Execution offer was not found.")
+        existing_result = await database.scalar(
+            select(ControlledExecutionResultModel).where(
+                ControlledExecutionResultModel.company_id == worker_context.company_id,
+                ControlledExecutionResultModel.offer_id == offer_id,
+            )
+        )
+        if existing_result is not None:
+            if (
+                existing_result.lease_id == lease_id
+                and existing_result.worker_id == worker_context.worker_id
+                and existing_result.outcome == outcome.value
+                and existing_result.output == output
+                and existing_result.error_classification == error_classification
+                and existing_result.started_at == started_at
+                and existing_result.completed_at == completed_at
+            ):
+                return self.repository.result_record(existing_result)
+            raise ControlledExecutionConflictError(
+                "A conflicting terminal result already exists."
+            )
         if (
             offer.state != ControlledOfferState.ACQUIRED.value
             or offer.worker_id != worker_context.worker_id

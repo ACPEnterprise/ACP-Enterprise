@@ -31,6 +31,12 @@ from .models import ControlledExecutionOfferModel, ControlledExecutionResultMode
 
 class ControlledExecutionRepository:
     @staticmethod
+    def result_record(
+        entity: ControlledExecutionResultModel,
+    ) -> ControlledExecutionResult:
+        return _result(entity)
+
+    @staticmethod
     async def active_node_id(
         session: AsyncSession, *, company_id: UUID, worker_id: UUID, now: datetime
     ) -> UUID | None:
@@ -373,6 +379,39 @@ class ControlledExecutionRepository:
         offer.completed_at = completed_at
         offer.updated_at = completed_at
         offer.version += 1
+        session.add(entity)
+        await session.flush()
+        return _result(entity)
+
+    @staticmethod
+    async def create_adopted_result(
+        session: AsyncSession,
+        *,
+        offer: ControlledExecutionOfferModel,
+        output: dict[str, object],
+        started_at: datetime,
+        completed_at: datetime,
+        adopted_at: datetime,
+    ) -> ControlledExecutionResult:
+        """Persist an adopted result without rewriting expired authority history."""
+        assert offer.lease_id and offer.worker_id and offer.session_id
+        entity = ControlledExecutionResultModel(
+            company_id=offer.company_id,
+            offer_id=offer.id,
+            command_id=offer.command_id,
+            execution_id=offer.execution_id,
+            lease_id=offer.lease_id,
+            worker_id=offer.worker_id,
+            session_id=offer.session_id,
+            outcome=ControlledOutcome.SUCCEEDED.value,
+            output=output,
+            error_classification=None,
+            repository_mutated=True,
+            correlation_id=offer.correlation_id,
+            started_at=started_at,
+            completed_at=completed_at,
+            created_at=adopted_at,
+        )
         session.add(entity)
         await session.flush()
         return _result(entity)

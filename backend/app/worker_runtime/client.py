@@ -167,6 +167,7 @@ class WorkerTransportClient:
             offer_id=UUID(data["offer_id"]),
             lease_id=UUID(data["lease_id"]),
             lease_version=data["lease_version"],
+            lease_expires_at=datetime.fromisoformat(data["lease_expires_at"]),
             workspace_id=data["workspace_id"],
             command_type=data["command_type"],
             payload=data["payload"],

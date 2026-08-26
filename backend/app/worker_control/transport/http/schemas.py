@@ -223,6 +223,7 @@ class ControlledOfferAcquisitionResponse(StrictModel):
     offer_id: UUID
     lease_id: UUID
     lease_version: int
+    lease_expires_at: datetime
     workspace_id: str
     command_type: Literal["inspect_workspace", "execute_code"]
     payload: dict[str, object]

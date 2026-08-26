@@ -1,6 +1,6 @@
 import asyncio
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from enum import StrEnum
 from typing import cast
 from uuid import UUID, uuid4
@@ -79,6 +79,11 @@ class AuthenticatedWorkerRuntime:
         self._workstream_versions: dict[UUID, int] = {}
         self._workstream_actions: dict[UUID, str] = {}
         self._lock = asyncio.Lock()
+        # Provider execution is intentionally long-running.  Authenticated
+        # transport sequence numbers must still be serialized while that work is
+        # in flight; the execution lock cannot provide that serialization because
+        # execute_available_offer holds it until the provider returns.
+        self._transport_lock = asyncio.Lock()
 
     @classmethod
     def production(cls, config: WorkerRuntimeConfig) -> "AuthenticatedWorkerRuntime":
@@ -126,33 +131,8 @@ class AuthenticatedWorkerRuntime:
         self, health: WorkerHealth = WorkerHealth.HEALTHY
     ) -> WorkerRuntimeSnapshot:
         async with self._lock:
-            session = self._require_session()
-            sent_at = datetime.now(timezone.utc)
-            envelope = self._envelope(
-                session=session,
-                sent_at=sent_at,
-                kind=TransportMessageKind.HEARTBEAT,
-                payload=HeartbeatMessage(health=health),
-            )
-            await self.client.heartbeat(
-                session_id=session.session_id,
-                payload={
-                    "message_id": str(envelope.message_id),
-                    "session_id": str(envelope.session_id),
-                    "sequence_number": envelope.sequence_number,
-                    "sent_at": envelope.sent_at.isoformat(),
-                    "authentication_proof": envelope.authentication_proof,
-                    "key_version": envelope.key_version,
-                    "health": health.value,
-                },
-            )
-            self._advance(sent_at)
-            if self.journal is not None:
-                self.journal.record_health(
-                    worker_id=self.config.worker_id,
-                    observed_at=sent_at,
-                    service_version=self.config.service_version,
-                )
+            async with self._transport_lock:
+                await self._heartbeat_in_transaction(health)
             return self.snapshot
 
     async def renew_lease(
@@ -163,34 +143,35 @@ class AuthenticatedWorkerRuntime:
         lease_seconds: int,
     ) -> WorkerRuntimeSnapshot:
         async with self._lock:
-            session = self._require_session()
-            sent_at = datetime.now(timezone.utc)
-            payload = LeaseRenewalMessage(
-                lease_id=lease_id,
-                expected_lease_version=expected_version,
-                lease_seconds=lease_seconds,
-            )
-            envelope = self._envelope(
-                session=session,
-                sent_at=sent_at,
-                kind=TransportMessageKind.LEASE_RENEWAL,
-                payload=payload,
-            )
-            await self.client.renew_lease(
-                session_id=session.session_id,
-                payload={
-                    "message_id": str(envelope.message_id),
-                    "session_id": str(envelope.session_id),
-                    "sequence_number": envelope.sequence_number,
-                    "sent_at": envelope.sent_at.isoformat(),
-                    "authentication_proof": envelope.authentication_proof,
-                    "key_version": envelope.key_version,
-                    "lease_id": str(lease_id),
-                    "expected_lease_version": expected_version,
-                    "lease_seconds": lease_seconds,
-                },
-            )
-            self._advance(sent_at)
+            async with self._transport_lock:
+                session = self._require_session()
+                sent_at = datetime.now(timezone.utc)
+                payload = LeaseRenewalMessage(
+                    lease_id=lease_id,
+                    expected_lease_version=expected_version,
+                    lease_seconds=lease_seconds,
+                )
+                envelope = self._envelope(
+                    session=session,
+                    sent_at=sent_at,
+                    kind=TransportMessageKind.LEASE_RENEWAL,
+                    payload=payload,
+                )
+                await self.client.renew_lease(
+                    session_id=session.session_id,
+                    payload={
+                        "message_id": str(envelope.message_id),
+                        "session_id": str(envelope.session_id),
+                        "sequence_number": envelope.sequence_number,
+                        "sent_at": envelope.sent_at.isoformat(),
+                        "authentication_proof": envelope.authentication_proof,
+                        "key_version": envelope.key_version,
+                        "lease_id": str(lease_id),
+                        "expected_lease_version": expected_version,
+                        "lease_seconds": lease_seconds,
+                    },
+                )
+                self._advance(sent_at)
             return self.snapshot
 
     async def run(self, stop: asyncio.Event) -> None:
@@ -339,6 +320,9 @@ class AuthenticatedWorkerRuntime:
                     offer_id=UUID(str(offered["offer_id"])),
                     lease_id=UUID(str(offered_payload["recovery_lease_id"])),
                     lease_version=int(str(offered_payload["recovery_lease_version"])),
+                    lease_expires_at=datetime.fromisoformat(
+                        str(offered_payload["recovery_lease_expires_at"])
+                    ),
                     workspace_id=str(offered["workspace_id"]),
                     command_type=str(offered["command_type"]),
                     payload=offered_payload,
@@ -400,10 +384,14 @@ class AuthenticatedWorkerRuntime:
                         )
                     renewal = asyncio.create_task(
                         self._maintain_execution_lease(
-                            session=session,
                             lease_id=acquired.lease_id,
                             initial_version=acquired.lease_version,
                             renew_immediately=recovered_lease,
+                            provider=NodeExecutionProviderClient(
+                                self.config.provider_url,
+                                self.config.provider_token_file,
+                            ),
+                            execution_id=UUID(str(acquired.payload["execution_id"])),
                         )
                     )
                     phase_progress = {
@@ -417,6 +405,12 @@ class AuthenticatedWorkerRuntime:
                     }
 
                     async def publish_provider_progress(phase: str) -> None:
+                        if renewal is not None and renewal.done():
+                            # Never allow validation/commit/publication to proceed
+                            # after authenticated execution authority maintenance
+                            # has failed.  Awaiting preserves its exact transport
+                            # exception as the durable reconciliation cause.
+                            await renewal
                         progress, activity = phase_progress.get(
                             phase, (1, "Controlled execution active")
                         )
@@ -533,43 +527,91 @@ class AuthenticatedWorkerRuntime:
     async def _maintain_execution_lease(
         self,
         *,
-        session: Session,
         lease_id: UUID,
         initial_version: int,
         renew_immediately: bool = False,
+        provider: NodeExecutionProviderClient | None = None,
+        execution_id: UUID | None = None,
     ) -> None:
         version = initial_version
+        seconds_since_renewal = 240 if renew_immediately else 0
         while True:
             if not renew_immediately:
-                await asyncio.sleep(240)
+                await asyncio.sleep(self.config.heartbeat_seconds)
+                seconds_since_renewal += self.config.heartbeat_seconds
             renew_immediately = False
-            sent_at = datetime.now(timezone.utc)
-            payload = LeaseRenewalMessage(
-                lease_id=lease_id,
-                expected_lease_version=version,
-                lease_seconds=900,
+            async with self._transport_lock:
+                # Operational health is independent of lease authority.  Both
+                # are authenticated, but only the explicit renewal below extends
+                # the bounded execution lease.
+                await self._heartbeat_in_transaction(WorkerHealth.HEALTHY)
+                if seconds_since_renewal < 240:
+                    continue
+                session = self._require_session()
+                sent_at = datetime.now(timezone.utc)
+                payload = LeaseRenewalMessage(
+                    lease_id=lease_id,
+                    expected_lease_version=version,
+                    lease_seconds=900,
+                )
+                envelope = self._envelope(
+                    session=session,
+                    sent_at=sent_at,
+                    kind=TransportMessageKind.LEASE_RENEWAL,
+                    payload=payload,
+                )
+                version = await self.client.renew_lease(
+                    session_id=session.session_id,
+                    payload={
+                        "message_id": str(envelope.message_id),
+                        "session_id": str(envelope.session_id),
+                        "sequence_number": envelope.sequence_number,
+                        "sent_at": envelope.sent_at.isoformat(),
+                        "authentication_proof": envelope.authentication_proof,
+                        "key_version": envelope.key_version,
+                        "lease_id": str(lease_id),
+                        "expected_lease_version": version,
+                        "lease_seconds": 900,
+                    },
+                )
+                self._advance(sent_at)
+                if provider is not None and execution_id is not None:
+                    await provider.refresh_authority(
+                        execution_id=execution_id,
+                        lease_id=lease_id,
+                        expires_at=sent_at + timedelta(seconds=900),
+                    )
+                seconds_since_renewal = 0
+
+    async def _heartbeat_in_transaction(self, health: WorkerHealth) -> None:
+        """Publish one heartbeat while the caller owns transport serialization."""
+        session = self._require_session()
+        sent_at = datetime.now(timezone.utc)
+        envelope = self._envelope(
+            session=session,
+            sent_at=sent_at,
+            kind=TransportMessageKind.HEARTBEAT,
+            payload=HeartbeatMessage(health=health),
+        )
+        await self.client.heartbeat(
+            session_id=session.session_id,
+            payload={
+                "message_id": str(envelope.message_id),
+                "session_id": str(envelope.session_id),
+                "sequence_number": envelope.sequence_number,
+                "sent_at": envelope.sent_at.isoformat(),
+                "authentication_proof": envelope.authentication_proof,
+                "key_version": envelope.key_version,
+                "health": health.value,
+            },
+        )
+        self._advance(sent_at)
+        if self.journal is not None:
+            self.journal.record_health(
+                worker_id=self.config.worker_id,
+                observed_at=sent_at,
+                service_version=self.config.service_version,
             )
-            envelope = self._envelope(
-                session=session,
-                sent_at=sent_at,
-                kind=TransportMessageKind.LEASE_RENEWAL,
-                payload=payload,
-            )
-            version = await self.client.renew_lease(
-                session_id=session.session_id,
-                payload={
-                    "message_id": str(envelope.message_id),
-                    "session_id": str(envelope.session_id),
-                    "sequence_number": envelope.sequence_number,
-                    "sent_at": envelope.sent_at.isoformat(),
-                    "authentication_proof": envelope.authentication_proof,
-                    "key_version": envelope.key_version,
-                    "lease_id": str(lease_id),
-                    "expected_lease_version": version,
-                    "lease_seconds": 900,
-                },
-            )
-            self._advance(sent_at)
 
     async def consume_workstream_control(self) -> bool:
         async with self._lock:
@@ -619,6 +661,13 @@ class AuthenticatedWorkerRuntime:
             return True
 
     async def _publish_workstream_state(
+        self,
+        **values: object,
+    ) -> None:
+        async with self._transport_lock:
+            await self._publish_workstream_state_unlocked(**values)  # type: ignore[arg-type]
+
+    async def _publish_workstream_state_unlocked(
         self,
         *,
         command_id: UUID,
@@ -670,6 +719,20 @@ class AuthenticatedWorkerRuntime:
         self._workstream_versions[command_id] = version
 
     async def _deliver_pending_result(self, pending: RecoveryRecord) -> None:
+        for attempt in range(3):
+            try:
+                async with self._transport_lock:
+                    await self._deliver_pending_result_unlocked(pending)
+                return
+            except (WorkerRuntimeTransportError, httpx.HTTPError, OSError):
+                if attempt == 2:
+                    # The pending_result journal remains durable.  The outer
+                    # authenticated reconnect loop may redeliver it only while
+                    # server-side lease authority still accepts the exact result.
+                    raise
+                await asyncio.sleep(2**attempt)
+
+    async def _deliver_pending_result_unlocked(self, pending: RecoveryRecord) -> None:
         if pending.result is None or self.journal is None:
             raise RuntimeError("Pending worker result is incomplete.")
         current = self._require_session()

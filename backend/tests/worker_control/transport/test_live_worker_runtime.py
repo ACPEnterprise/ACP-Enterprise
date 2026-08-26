@@ -1,12 +1,10 @@
+import asyncio
 import base64
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from uuid import uuid4
 
 import pytest
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-
 from app.worker_control.contracts import (
     AuthenticatedWorkerContext,
     WorkerCapability,
@@ -24,10 +22,12 @@ from app.worker_control.transport.http.dependencies import (
     Ed25519CredentialProofVerifier,
     Ed25519MessageProofVerifier,
 )
-from app.worker_runtime.client import Challenge, Session
+from app.worker_runtime.client import Challenge, Session, WorkerRuntimeTransportError
 from app.worker_runtime.config import WorkerRuntimeConfig
 from app.worker_runtime.recovery import RecoveryRecord, WorkerRecoveryJournal
 from app.worker_runtime.service import AuthenticatedWorkerRuntime, WorkerRuntimeState
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 NOW = datetime(2026, 7, 27, 20, 0, tzinfo=timezone.utc)
 
@@ -121,6 +121,8 @@ class FakeClient:
         self.renewals: list[dict[str, object]] = []
         self.closed = False
         self.results: list[dict[str, object]] = []
+        self.result_failures = 0
+        self.result_attempts = 0
 
     async def challenge(self, worker_id):
         del worker_id
@@ -148,6 +150,10 @@ class FakeClient:
 
     async def submit_controlled_result(self, *, session_id, payload):
         assert str(session_id) == payload["session_id"]
+        self.result_attempts += 1
+        if self.result_failures:
+            self.result_failures -= 1
+            raise WorkerRuntimeTransportError("temporary result transport failure")
         self.results.append(payload)
 
 
@@ -228,6 +234,100 @@ async def test_pending_result_is_redelivered_once_after_new_session(
 
     assert len(client.results) == 1
     assert journal.load() is None
+
+
+@pytest.mark.asyncio
+async def test_terminal_result_delivery_retries_bounded_transport_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    private = Ed25519PrivateKey.generate()
+    client = FakeClient()
+    client.private = private
+    client.result_failures = 2
+    journal = WorkerRecoveryJournal(tmp_path / "state")
+    pending = RecoveryRecord(
+        phase="pending_result",
+        offer_id=uuid4(),
+        lease_id=uuid4(),
+        started_at=NOW,
+        result={
+            "outcome": "succeeded",
+            "output": {"repository_mutated": False},
+            "error_classification": None,
+            "completed_at": NOW.isoformat(),
+        },
+    )
+    journal.store(pending)
+    runtime = AuthenticatedWorkerRuntime(
+        config=WorkerRuntimeConfig(
+            base_url="https://worker.invalid",
+            worker_id=uuid4(),
+            private_key_file=tmp_path / "unused.key",
+            capabilities=(WorkerCapability.ENGINEERING_EXECUTE,),
+            workspace_root=tmp_path,
+            state_directory=tmp_path / "state",
+        ),
+        client=client,  # type: ignore[arg-type]
+        private_key=private,
+        journal=journal,
+    )
+
+    async def no_delay(_: float) -> None:
+        return None
+
+    monkeypatch.setattr(asyncio, "sleep", no_delay)
+    await runtime.establish()
+    await runtime._deliver_pending_result(pending)
+
+    assert client.result_failures == 0
+    assert client.result_attempts == 3
+    assert len(client.results) == 1
+    assert journal.load() is None
+    assert runtime.snapshot.next_sequence == 2
+
+
+@pytest.mark.asyncio
+async def test_long_running_execution_heartbeat_and_lease_are_distinct_and_serialized(
+    tmp_path: Path,
+) -> None:
+    private = Ed25519PrivateKey.generate()
+    client = FakeClient()
+    client.private = private
+    runtime = AuthenticatedWorkerRuntime(
+        config=WorkerRuntimeConfig(
+            base_url="https://worker.invalid",
+            worker_id=uuid4(),
+            private_key_file=tmp_path / "unused.key",
+            capabilities=(WorkerCapability.ENGINEERING_EXECUTE,),
+            heartbeat_seconds=10,
+            workspace_root=tmp_path,
+            state_directory=tmp_path / "state",
+        ),
+        client=client,  # type: ignore[arg-type]
+        private_key=private,
+        journal=WorkerRecoveryJournal(tmp_path / "state"),
+    )
+    await runtime.establish()
+    task = asyncio.create_task(
+        runtime._maintain_execution_lease(
+            lease_id=uuid4(),
+            initial_version=7,
+            renew_immediately=True,
+        )
+    )
+    for _ in range(20):
+        if client.renewals:
+            break
+        await asyncio.sleep(0)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert len(client.heartbeats) == 1
+    assert len(client.renewals) == 1
+    assert client.heartbeats[0]["sequence_number"] == 1
+    assert client.renewals[0]["sequence_number"] == 2
+    assert client.renewals[0]["expected_lease_version"] == 7
 
 
 def test_acquired_execution_survives_restart_as_reconciliation_truth(

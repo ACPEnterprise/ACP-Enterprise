@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from uuid import UUID
@@ -402,11 +403,27 @@ class ControlledExecutionProvider:
         journal: ProviderJournal,
         implementation: CodexImplementation,
         frontend_validation: FrontendValidationEnvironment | None = None,
+        authority_check: Callable[[UUID, UUID], None] | None = None,
     ) -> None:
         self.workspaces = workspaces
         self.journal = journal
         self.implementation = implementation
         self.frontend_validation = frontend_validation
+        self.authority_check = authority_check
+
+    def _require_authority(self, request: ProviderExecutionRequest) -> None:
+        if self.authority_check is not None:
+            try:
+                self.authority_check(request.execution_id, request.lease_id)
+            except RuntimeError as error:
+                self.journal.append(
+                    request,
+                    ProviderPhase.RECONCILIATION_REQUIRED,
+                    reason="execution_authority_expired",
+                )
+                raise ProviderFailure(
+                    "Authenticated execution authority expired."
+                ) from error
 
     def execute(
         self, request: ProviderExecutionRequest, *, timeout_seconds: int = 7200
@@ -495,6 +512,7 @@ class ControlledExecutionProvider:
                     workspace, request.boundary.validation_requirements
                 )
             files = self.workspaces.changed_files(workspace)
+            self._require_authority(request)
             enforce_changed_paths(request.boundary, files)
             self.journal.append(request, ProviderPhase.VALIDATING, files=list(files))
             validations, validation_runs = self._validate(
@@ -539,9 +557,11 @@ class ControlledExecutionProvider:
                     "required_validation_failed",
                 )
             self.journal.append(request, ProviderPhase.COMMIT_READY)
+            self._require_authority(request)
             commit = self.workspaces.commit(workspace, request, files)
             self.journal.append(request, ProviderPhase.PUBLISHING_RESULT, commit=commit)
             try:
+                self._require_authority(request)
                 remote_head, reconciled = self.workspaces.reconcile_for_publish(
                     workspace, request
                 )
@@ -559,6 +579,7 @@ class ControlledExecutionProvider:
                             "Validation failed after mechanical reconciliation."
                         )
                     commit = self.workspaces._git(workspace, "rev-parse", "HEAD")
+                self._require_authority(request)
                 published = self.workspaces.push(workspace, request, remote_head)
             except WorkspaceReconciliationRequired as error:
                 self.journal.append(

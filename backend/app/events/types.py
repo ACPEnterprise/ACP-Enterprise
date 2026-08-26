@@ -70,6 +70,9 @@ class EventType(str, Enum):
     ENGINEERING_CONTROLLED_EXECUTION_FAILED = (
         "engineering_execution.controlled_execution_failed"
     )
+    ENGINEERING_CONTROLLED_RESULT_ADOPTED = (
+        "engineering_execution.controlled_result_adopted"
+    )
     WORKER_IDENTITY_REGISTERED = "engineering.worker_identity_registered"
     WORKER_IDENTITY_STATE_CHANGED = "engineering.worker_identity_state_changed"
     WORKER_CREDENTIAL_ISSUED = "engineering.worker_credential_issued"

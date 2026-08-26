@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import datetime
 from enum import StrEnum
 from uuid import UUID
 
@@ -42,6 +43,7 @@ class ProviderExecutionRequest:
     boundary_digest: str
     boundary: ProviderBoundary
     commit_subject: str
+    authority_expires_at: datetime | None = None
 
 
 @dataclass(frozen=True)
