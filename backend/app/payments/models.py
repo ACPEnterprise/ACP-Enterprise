@@ -3,7 +3,6 @@ from decimal import Decimal
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
-    JSON,
     CheckConstraint,
     Date,
     DateTime,
@@ -16,6 +15,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -30,8 +30,14 @@ class PaymentIntent(Base):
     __tablename__ = "payment_intents"
     __table_args__ = (
         ForeignKeyConstraint(["company_id", "branch_id"], ["branches.company_id", "branches.id"], ondelete="RESTRICT"),
-        CheckConstraint("amount > 0 AND currency ~ '^[A-Z]{3}$'"),
-        CheckConstraint("status IN ('created','requires_action','authorized','captured','declined','failed','cancelled','expired','reconciliation_required')"),
+        CheckConstraint(
+            "amount > 0 AND currency ~ '^[A-Z]{3}$'",
+            name="payment_intents_check",
+        ),
+        CheckConstraint(
+            "status IN ('created','requires_action','authorized','captured','declined','failed','cancelled','expired','reconciliation_required')",
+            name="payment_intents_status_check",
+        ),
         UniqueConstraint("company_id", "idempotency_key"),
         UniqueConstraint("company_id", "provider_idempotency_key"),
         UniqueConstraint("company_id", "id"),
@@ -77,8 +83,14 @@ class PaymentReceipt(Base):
     __tablename__ = "payment_receipts"
     __table_args__ = (
         ForeignKeyConstraint(["company_id", "intent_id"], ["payment_intents.company_id", "payment_intents.id"], ondelete="RESTRICT"),
-        CheckConstraint("captured_amount >= 0 AND available_amount >= 0 AND applied_amount >= 0 AND refunded_amount >= 0 AND disputed_amount >= 0"),
-        CheckConstraint("captured_amount = available_amount + applied_amount + refunded_amount + disputed_amount"),
+        CheckConstraint(
+            "captured_amount >= 0 AND available_amount >= 0 AND applied_amount >= 0 AND refunded_amount >= 0 AND disputed_amount >= 0",
+            name="payment_receipts_check",
+        ),
+        CheckConstraint(
+            "captured_amount = available_amount + applied_amount + refunded_amount + disputed_amount",
+            name="payment_receipts_check1",
+        ),
         UniqueConstraint("company_id", "intent_id"), UniqueConstraint("company_id", "id"),
     )
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
@@ -115,7 +127,7 @@ class ReceiptEvent(Base):
 
 class Refund(Base):
     __tablename__ = "payment_refunds"
-    __table_args__ = (ForeignKeyConstraint(["company_id", "receipt_id"], ["payment_receipts.company_id", "payment_receipts.id"], ondelete="RESTRICT"), CheckConstraint("amount > 0"), UniqueConstraint("company_id", "idempotency_key"), UniqueConstraint("company_id", "id"),)
+    __table_args__ = (ForeignKeyConstraint(["company_id", "receipt_id"], ["payment_receipts.company_id", "payment_receipts.id"], ondelete="RESTRICT"), CheckConstraint("amount > 0", name="payment_refunds_amount_check"), UniqueConstraint("company_id", "idempotency_key"), UniqueConstraint("company_id", "id"),)
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
     company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
@@ -136,7 +148,7 @@ class Refund(Base):
 
 class Deposit(Base):
     __tablename__ = "payment_deposits"
-    __table_args__ = (CheckConstraint("gross_amount >= 0"), UniqueConstraint("company_id", "idempotency_key"), UniqueConstraint("company_id", "id"),)
+    __table_args__ = (CheckConstraint("gross_amount >= 0", name="payment_deposits_gross_amount_check"), UniqueConstraint("company_id", "idempotency_key"), UniqueConstraint("company_id", "id"),)
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
     company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("companies.id", ondelete="RESTRICT"), nullable=False)
     branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
@@ -163,7 +175,7 @@ class DepositReceipt(Base):
 
 class Settlement(Base):
     __tablename__ = "payment_settlements"
-    __table_args__ = (CheckConstraint("gross_amount - refund_amount - dispute_amount - fee_amount + adjustment_amount = net_amount"), UniqueConstraint("company_id", "provider", "merchant_account", "provider_payout_id"), UniqueConstraint("company_id", "id"),)
+    __table_args__ = (CheckConstraint("gross_amount - refund_amount - dispute_amount - fee_amount + adjustment_amount = net_amount", name="payment_settlements_check"), UniqueConstraint("company_id", "provider", "merchant_account", "provider_payout_id"), UniqueConstraint("company_id", "id"),)
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
     company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("companies.id", ondelete="RESTRICT"), nullable=False)
     provider: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -211,7 +223,7 @@ class WebhookReceipt(Base):
     event_type: Mapped[str] = mapped_column(String(80), nullable=False)
     evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
     secret_version: Mapped[str] = mapped_column(String(32), nullable=False)
-    allowed_evidence: Mapped[dict[str, str]] = mapped_column(JSON, nullable=False)
+    allowed_evidence: Mapped[dict[str, str]] = mapped_column(JSONB, nullable=False)
     received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
 
 
