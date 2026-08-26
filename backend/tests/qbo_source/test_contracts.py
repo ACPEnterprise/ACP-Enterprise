@@ -62,6 +62,8 @@ def test_envelope_preserves_native_open_state_and_digest() -> None:
     assert item.source_accounting_meaning["open_balance"] == "125.00"
     with pytest.raises(TypeError):
         item.raw_payload["Balance"] = "0.00"  # type: ignore[index]
+    with pytest.raises(TypeError):
+        item.raw_payload["CurrencyRef"]["value"] = "EUR"  # type: ignore[index]
 
 
 def test_envelope_rejects_payload_digest_mismatch() -> None:

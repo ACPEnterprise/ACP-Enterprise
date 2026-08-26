@@ -80,7 +80,10 @@ class AcquisitionRequest:
 
 def canonical_source_digest(payload: Mapping[str, object]) -> str:
     encoded = json.dumps(
-        dict(payload), ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        _json_domain(payload),
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
     ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
 
@@ -120,9 +123,7 @@ class QboSourceEnvelope:
             raise ValueError("currency must be an ISO 4217 code")
         if len(set(self.relationship_ids)) != len(self.relationship_ids):
             raise ValueError("relationship identities must be unique")
-        object.__setattr__(
-            self, "raw_payload", MappingProxyType(dict(self.raw_payload))
-        )
+        object.__setattr__(self, "raw_payload", _deep_freeze(self.raw_payload))
         object.__setattr__(
             self,
             "source_accounting_meaning",
@@ -168,6 +169,24 @@ class QboSourceEnvelope:
 class SourceAcquisitionProvider(Protocol):
     """Read-only seam. Implementations expose no create/update/delete operation."""
 
-    async def acquire(
+    def acquire(
         self, request: AcquisitionRequest
     ) -> AsyncIterator[QboSourceEnvelope]: ...
+
+
+def _deep_freeze(value: object) -> object:
+    if isinstance(value, Mapping):
+        return MappingProxyType(
+            {str(key): _deep_freeze(child) for key, child in value.items()}
+        )
+    if isinstance(value, (list, tuple)):
+        return tuple(_deep_freeze(child) for child in value)
+    return value
+
+
+def _json_domain(value: object) -> object:
+    if isinstance(value, Mapping):
+        return {str(key): _json_domain(child) for key, child in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_domain(child) for child in value]
+    return value
