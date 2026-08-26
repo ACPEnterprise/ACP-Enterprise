@@ -1,0 +1,56 @@
+{
+  "schema_version": "qbo-real-connection-packet/v1",
+  "status": "OWNER_CONFIGURATION_REQUIRED",
+  "real_extraction_authorized": false,
+  "intuit_app": {
+    "purpose": "ACP read-only QBO source acquisition",
+    "environment": "production",
+    "quickbooks_online_accounting_enabled": true,
+    "production_requirements_complete": "OWNER_VALUE_REQUIRED",
+    "requested_scope": "com.intuit.quickbooks.accounting"
+  },
+  "callback": {
+    "method": "GET",
+    "path": "/api/v1/integrations/qbo/oauth/callback",
+    "exact_uri": "https://<OWNER_APPROVED_ACQUISITION_HOST>/api/v1/integrations/qbo/oauth/callback",
+    "wildcards_allowed": false,
+    "registered_in_intuit": "OWNER_VALUE_REQUIRED"
+  },
+  "protected_configuration": {
+    "client_credential_reference": "secret-manager://acp/qbo/production/client",
+    "realm_token_reference_template": "secret-manager://acp/qbo/production/realms/<VERIFIED_REALM_ID>/oauth",
+    "oauth_state_root": "OWNER_ENCRYPTED_RESTRICTED_PATH_REQUIRED",
+    "evidence_root": "OWNER_ENCRYPTED_RESTRICTED_PATH_REQUIRED",
+    "credentials_or_tokens_in_git_logs_docs_prompts": false
+  },
+  "consent": {
+    "initiator": "OWNER_AUTHORIZED_OPERATOR_REQUIRED",
+    "company_selection": "EXACT_ALL_COUNTY_QBO_COMPANY_REQUIRED",
+    "returned_realm_id": "OWNER_VERIFICATION_REQUIRED",
+    "company_info_name": "OWNER_VERIFICATION_REQUIRED",
+    "company_info_must_precede_queries": true
+  },
+  "revocation": {
+    "intuit_navigation": "Intuit account > Sign-in & security > Apps with access to your account",
+    "adapter_revoke_supported": true,
+    "delete_local_token_only_after_intuit_accepts_revocation": true
+  },
+  "abort_conditions": [
+    "oauth state replay, expiry, or mismatch",
+    "callback URI mismatch",
+    "unexpected scope",
+    "wrong realm or CompanyInfo",
+    "secret-manager rotation or compare-and-swap failure",
+    "evidence root permission or integrity failure",
+    "unexpected non-read QBO operation",
+    "partial acquisition or unexplained drift"
+  ],
+  "abort_behavior": {
+    "stop_further_requests": true,
+    "seal_partial_evidence": true,
+    "preserve_source_observations": true,
+    "mutate_qbo": false,
+    "import_acp": false,
+    "owner_real_extraction_reauthorization_required": true
+  }
+}
