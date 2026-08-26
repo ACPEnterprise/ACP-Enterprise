@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app.accounting.router import router as accounting_router
+from app.accounts_payable.router import router as accounts_payable_router
 from app.analytics.router import router as analytics_router
 from app.api.health import router as health_router
 from app.beacon.router import router as beacon_router
@@ -145,6 +146,7 @@ app.include_router(price_book_router)
 app.include_router(estimates_router)
 app.include_router(invoicing_router)
 app.include_router(payments_router)
+app.include_router(accounts_payable_router)
 app.include_router(communications_router)
 app.include_router(engineering_commands_router)
 app.include_router(engineering_reviews_router)

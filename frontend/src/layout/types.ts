@@ -27,6 +27,7 @@ export type NavigationItemId =
   | "jobs"
   | "engineering"
   | "invoices"
+  | "accounts-payable"
   | "inventory"
   | "technician"
   | "administration"

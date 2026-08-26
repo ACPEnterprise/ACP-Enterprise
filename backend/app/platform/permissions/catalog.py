@@ -4,6 +4,7 @@ from enum import StrEnum
 
 from app.platform.permissions.codes import (
     AccountingPermission,
+    AccountsPayablePermission,
     AdministrationPermission,
     AnalyticsPermission,
     BeaconPermission,
@@ -261,6 +262,18 @@ PAYMENT_DEFINITIONS = tuple(
     for code in sorted(PaymentPermission.ALL)
 )
 
+ACCOUNTS_PAYABLE_DEFINITIONS = tuple(
+    PermissionDefinition(
+        code=code,
+        name=code.replace("_", " ").title(),
+        resource="accounts_payable",
+        action=code.removeprefix("COMPANY_ACCOUNTS_PAYABLE_").lower(),
+        scope=PermissionScope.COMPANY,
+        reserved=True,
+    )
+    for code in sorted(AccountsPayablePermission.ALL)
+)
+
 ENGINEERING_COMMAND_DEFINITIONS = tuple(
     PermissionDefinition(
         code=code,
@@ -343,6 +356,7 @@ permission_catalog = PermissionCatalog(
     + ESTIMATE_DEFINITIONS
     + INVOICE_DEFINITIONS
     + PAYMENT_DEFINITIONS
+    + ACCOUNTS_PAYABLE_DEFINITIONS
     + ENGINEERING_COMMAND_DEFINITIONS
     + ENGINEERING_EXECUTION_DEFINITIONS
     + ENGINEERING_CAPACITY_DEFINITIONS

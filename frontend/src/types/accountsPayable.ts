@@ -1,0 +1,3 @@
+export interface AccountingVendor { id: string; company_id: string; code: string; legal_name: string; display_name: string; status: "active" | "archived"; default_terms?: string; provenance: string; version: number; created_at: string; }
+export interface APAgingItem { vendor_id: string; bill_id: string; bill_number: string; bill_date: string; due_date: string; original_amount: string; open_amount: string; currency: string; days_past_due: number; status: string; }
+export interface CreateVendorInput { code: string; legal_name: string; display_name: string; provenance: string; default_terms?: string; }

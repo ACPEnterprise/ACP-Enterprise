@@ -1,6 +1,7 @@
 from logging.config import fileConfig
 
 from alembic import context
+from app.accounts_payable import models as accounts_payable_models  # noqa: F401
 from app.beacon import models as beacon_models  # noqa: F401
 from app.core.config import settings
 from app.core.database import Base

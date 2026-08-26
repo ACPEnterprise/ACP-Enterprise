@@ -127,6 +127,10 @@ export const paymentsHandle = {
   workspace: { pageTitle: "Payments", breadcrumbs: [{ label: "Payments" }], helpTopic: "payments", aiContext: "payments" },
 } as const satisfies ShellRouteHandle;
 
+export const accountsPayableHandle = {
+  workspace: { pageTitle: "Accounts Payable", breadcrumbs: [{ label: "Accounts Payable" }], helpTopic: "accounts-payable", aiContext: "accounts-payable" },
+} as const satisfies ShellRouteHandle;
+
 export const engineeringHandle = {
   workspace: {
     pageTitle: "Engineering",

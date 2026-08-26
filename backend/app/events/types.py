@@ -2,6 +2,17 @@ from enum import Enum
 
 
 class EventType(str, Enum):
+    # Accounts Payable
+    ACCOUNTS_PAYABLE_VENDOR_CREATED = "accounts_payable.vendor_created"
+    ACCOUNTS_PAYABLE_VENDOR_MAPPED = "accounts_payable.vendor_mapped"
+    ACCOUNTS_PAYABLE_BILL_APPROVED = "accounts_payable.bill_approved"
+    ACCOUNTS_PAYABLE_BILL_REVERSED = "accounts_payable.bill_reversed"
+    ACCOUNTS_PAYABLE_VENDOR_CREDIT_ISSUED = "accounts_payable.vendor_credit_issued"
+    ACCOUNTS_PAYABLE_VENDOR_CREDIT_APPLIED = "accounts_payable.vendor_credit_applied"
+    ACCOUNTS_PAYABLE_DISBURSEMENT_RECORDED = "accounts_payable.disbursement_recorded"
+    ACCOUNTS_PAYABLE_DISBURSEMENT_REVERSED = "accounts_payable.disbursement_reversed"
+    ACCOUNTS_PAYABLE_RECONCILIATION_REQUIRED = "accounts_payable.reconciliation_required"
+
     # Payments
     PAYMENT_INTENT_CREATED = "payment.intent_created"
     PAYMENT_AUTHORIZATION_RECORDED = "payment.authorization_recorded"
