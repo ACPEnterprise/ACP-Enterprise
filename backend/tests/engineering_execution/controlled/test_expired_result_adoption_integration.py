@@ -7,9 +7,6 @@ from pathlib import Path
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from app.core.config import settings
 from app.engineering_control.mobile.roadmaps import (
     EngineeringMilestone,
@@ -21,6 +18,11 @@ from app.engineering_control.repository_operation.git_adapter import (
     ProductionBoundedGitAdapter,
 )
 from app.engineering_control.review.models import EngineeringExecutionReview
+from app.engineering_control.scheduler.manifest import release_bound_manifest
+from app.engineering_control.scheduler.models import (
+    EngineeringSchedulerEvent,
+    EngineeringSchedulerSnapshot,
+)
 from app.engineering_execution.controlled.contracts import ControlledCommandType
 from app.engineering_execution.controlled.models import ControlledExecutionOfferModel
 from app.engineering_execution.controlled.repository import (
@@ -36,6 +38,9 @@ from app.execution_nodes.models import EngineeringExecutionNode
 from app.execution_nodes.workspaces import WorkspaceManager
 from app.platform.audit.models import AuditRecord
 from app.worker_control.models import WorkerLease
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
 from tests.engineering_control.test_engineering_command_service import (
     ServiceFixture,
     seed_service_fixture,
@@ -99,9 +104,10 @@ async def adoption_database() -> AsyncIterator[ServiceFixture]:
         await engine.dispose()
 
 
+@pytest.mark.parametrize("legacy_boundary", [False, True])
 @pytest.mark.asyncio
 async def test_expired_published_result_adoption_preserves_history_and_opens_review(
-    adoption_database: ServiceFixture, tmp_path: Path
+    adoption_database: ServiceFixture, tmp_path: Path, legacy_boundary: bool
 ) -> None:
     fixture = adoption_database
     starting_head, commit, current_head = published_repository(tmp_path)
@@ -116,6 +122,23 @@ async def test_expired_published_result_adoption_preserves_history_and_opens_rev
         "permitted_operations": ["inspect", "modify", "validate", "commit", "push"],
         "validation_requirements": ["git diff --check"],
     }
+    manifest = release_bound_manifest(starting_head)
+    tech = next(item for item in manifest.milestones if item.milestone_code == "TECH.1")
+    assert tech.execution_boundary is not None
+    boundary_version = 2
+    boundary_fingerprint = FINGERPRINT
+    if legacy_boundary:
+        boundary_version = tech.execution_boundary.boundary_version
+        boundary_fingerprint = tech.execution_boundary.fingerprint
+        boundary = {
+            "allowed_repository": command.repository_key,
+            "allowed_branch": command.expected_branch,
+            "expected_head": starting_head,
+            "allowed_paths": list(tech.execution_boundary.allowed_paths),
+            "forbidden_paths": list(tech.execution_boundary.forbidden_paths),
+            "permitted_operations": list(tech.execution_boundary.permitted_operations),
+            "validation_requirements": list(tech.execution_boundary.validation_requirements),
+        }
     boundary_digest = hashlib.sha256(
         json.dumps(boundary, sort_keys=True, separators=(",", ":")).encode()
     ).hexdigest()
@@ -138,16 +161,15 @@ async def test_expired_published_result_adoption_preserves_history_and_opens_rev
         )
         database.add(roadmap)
         await database.flush()
-        database.add(
-            EngineeringMilestone(
+        milestone = EngineeringMilestone(
                 company_id=fixture.context.company.id,
                 roadmap_id=roadmap.id,
                 position=1,
                 title="Adopt result",
-                milestone_code="TEST.1",
+                milestone_code="TECH.1" if legacy_boundary else "TEST.1",
                 reconciliation_state="current",
                 objective="Regression",
-                owning_workstream="Engineering",
+                owning_workstream="Field Service" if legacy_boundary else "Engineering",
                 owning_branch=command.expected_branch,
                 status="running",
                 definition_approved=True,
@@ -156,7 +178,35 @@ async def test_expired_published_result_adoption_preserves_history_and_opens_rev
                 created_at=now,
                 updated_at=now,
             )
-        )
+        database.add(milestone)
+        await database.flush()
+        if legacy_boundary:
+            historical_at = durable_command.created_at - timedelta(seconds=1)
+            database.add(
+                EngineeringSchedulerSnapshot(
+                    company_id=fixture.context.company.id,
+                    scheduler_version=manifest.scheduler_version,
+                    fingerprint=manifest.fingerprint,
+                    manifest=manifest.model_dump(mode="json"),
+                    source_documents=list(manifest.source_documents),
+                    active=False,
+                    created_at=historical_at,
+                    activated_at=historical_at,
+                )
+            )
+            database.add(
+                EngineeringSchedulerEvent(
+                    company_id=fixture.context.company.id,
+                    event_type="scheduler.milestone_reconciled",
+                    scheduler_version=manifest.scheduler_version,
+                    milestone_code="TECH.1",
+                    permanent_capacity_identity="OM1",
+                    record_id=milestone.id,
+                    details={"non_destructive": True},
+                    idempotency_key=f"legacy-boundary:{command.id}",
+                    occurred_at=historical_at,
+                )
+            )
     async with fixture.factory() as database:
         execution = await EngineeringExecutionService().request_execution(
             database,
@@ -229,6 +279,11 @@ async def test_expired_published_result_adoption_preserves_history_and_opens_rev
         "stdout": {"text": "", "truncated": False, "redacted": False},
         "stderr": {"text": "", "truncated": False, "redacted": False},
     }
+    requirements = list(boundary["validation_requirements"])
+    runs = [
+        {**run, "identity": identity, "argv": ["tool", identity]}
+        for identity in requirements
+    ]
     output: dict[str, object] = {
         "workspace_id": "adoption-test",
         "repository_key": command.repository_key,
@@ -243,8 +298,8 @@ async def test_expired_published_result_adoption_preserves_history_and_opens_rev
         "file_count": 1,
         "file_boundary": [PATH],
         "repository_mutated": True,
-        "validation": {"git diff --check": True},
-        "validation_runs": [run],
+        "validation": {identity: True for identity in requirements},
+        "validation_runs": runs,
         "validation_environment": {"mode": "isolated"},
         "evidence": {
             "phases": [
@@ -268,8 +323,8 @@ async def test_expired_published_result_adoption_preserves_history_and_opens_rev
         commit_sha=commit,
         commit_parent=starting_head,
         remote_head=commit,
-        boundary_version=2,
-        boundary_fingerprint=FINGERPRINT,
+        boundary_version=boundary_version,
+        boundary_fingerprint=boundary_fingerprint,
         boundary_digest=boundary_digest,
         provider_completed_at=completed_at,
         workspace_clean=True,
@@ -291,8 +346,8 @@ async def test_expired_published_result_adoption_preserves_history_and_opens_rev
             commit_sha=commit,
             commit_parent=starting_head,
             remote_head=commit,
-            boundary_version=2,
-            boundary_fingerprint=FINGERPRINT,
+            boundary_version=boundary_version,
+            boundary_fingerprint=boundary_fingerprint,
             boundary_digest=boundary_digest,
             provider_completed_at=completed_at,
             provider_evidence_digest=evidence_digest,
@@ -318,8 +373,8 @@ async def test_expired_published_result_adoption_preserves_history_and_opens_rev
             commit_sha=commit,
             commit_parent=starting_head,
             remote_head=commit,
-            boundary_version=2,
-            boundary_fingerprint=FINGERPRINT,
+            boundary_version=boundary_version,
+            boundary_fingerprint=boundary_fingerprint,
             boundary_digest=boundary_digest,
             provider_completed_at=completed_at,
             provider_evidence_digest=evidence_digest,
@@ -338,6 +393,8 @@ async def test_expired_published_result_adoption_preserves_history_and_opens_rev
         result.output["adoption"]["current_authoritative_head_at_adoption"]
         == current_head
     )
+    expected_source = "legacy_scheduler_snapshot" if legacy_boundary else "frozen_command"
+    assert result.output["adoption"]["boundary_evidence"]["source"] == expected_source
     assert adopted_at > completed_at
     assert git(tmp_path / "working", "rev-parse", "HEAD") == current_head
     assert (
@@ -361,6 +418,7 @@ async def test_expired_published_result_adoption_preserves_history_and_opens_rev
         stored_offer = await database.get(ControlledExecutionOfferModel, offer.id)
         stored_lease = await database.get(WorkerLease, acquired.lease_id)
         review = await database.get(EngineeringExecutionReview, review_id)
+        stored_command = await database.get(EngineeringCommand, command.id)
         audits = (
             await database.scalars(
                 select(AuditRecord).where(
@@ -380,6 +438,9 @@ async def test_expired_published_result_adoption_preserves_history_and_opens_rev
     assert stored_lease is not None and stored_lease.status == "expired"
     assert review is not None and review.state == "pending"
     assert len(audits) == 1
+    assert stored_command is not None
+    assert stored_command.execution_boundary == boundary
+    assert audits[0].details["boundary_evidence"]["source"] == expected_source
     assert projection.pipeline_status == "waiting_for_owner"
     assert projection.authoritative_state == "waiting_for_owner_review"
     assert projection.owner_action_required is True

@@ -85,6 +85,12 @@ SENSITIVE_EVIDENCE_MARKERS = (
 )
 
 
+def _evidence_set(value: object) -> frozenset[str] | None:
+    if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
+        return None
+    return frozenset(value)
+
+
 def calculate_adoption_evidence_digest(
     *,
     command_id: UUID,
@@ -400,10 +406,21 @@ class ControlledExecutionService:
                             "A conflicting terminal result already exists."
                         )
                 else:
+                    boundary, boundary_provenance = (
+                        await self._resolve_adoption_boundary(
+                            session,
+                            command=command,
+                            execution=execution,
+                            starting_head=starting_head,
+                            boundary_version=boundary_version,
+                            boundary_fingerprint=boundary_fingerprint,
+                        )
+                    )
                     self._validate_adoption_source(
                         command=command,
                         execution=execution,
                         offer=offer,
+                        boundary=boundary,
                         starting_head=starting_head,
                         commit_sha=commit_sha,
                         commit_parent=commit_parent,
@@ -446,6 +463,7 @@ class ControlledExecutionService:
                             "prior_reconciliation_evidence": dict(
                                 execution.evidence_summary
                             ),
+                            "boundary_evidence": boundary_provenance,
                         },
                     }
                     result = await self.repository.create_adopted_result(
@@ -522,6 +540,7 @@ class ControlledExecutionService:
                                 "commit_sha": commit_sha,
                                 "evidence_digest": provider_evidence_digest,
                                 "transport_failure_preserved": True,
+                                "boundary_evidence": boundary_provenance,
                             },
                             occurred_at=adopted_at,
                         ),
@@ -548,11 +567,215 @@ class ControlledExecutionService:
         return self.publication_adapter
 
     @staticmethod
+    async def _resolve_adoption_boundary(
+        session: AsyncSession,
+        *,
+        command: EngineeringCommand,
+        execution: EngineeringExecution,
+        starting_head: str,
+        boundary_version: int,
+        boundary_fingerprint: str,
+    ) -> tuple[dict[str, object], dict[str, object]]:
+        """Resolve modern frozen metadata or one historically bound legacy source."""
+        boundary = dict(command.execution_boundary)
+        canonical_digest = hashlib.sha256(
+            json.dumps(boundary, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+        if canonical_digest != command.execution_boundary_digest:
+            raise ControlledExecutionPayloadError(
+                "Frozen command boundary digest is inconsistent."
+            )
+        stored_version = boundary.get("boundary_version")
+        stored_fingerprint = boundary.get("fingerprint")
+        if stored_version is not None or stored_fingerprint is not None:
+            if (
+                stored_version != boundary_version
+                or stored_fingerprint != boundary_fingerprint
+            ):
+                raise ControlledExecutionPayloadError(
+                    "Frozen command boundary metadata is incomplete or contradictory."
+                )
+            return boundary, {
+                "source": "frozen_command",
+                "command_id": str(command.id),
+                "boundary_version": boundary_version,
+                "boundary_fingerprint": boundary_fingerprint,
+            }
+
+        # Legacy composition is deliberately restricted to immutable scheduler
+        # snapshots and their pre-command reconciliation event. The live milestone
+        # definition is mutable current-readiness state and is never a source.
+        from app.engineering_control.mobile.roadmaps import (
+            EngineeringMilestone,
+            EngineeringRoadmap,
+        )
+        from app.engineering_control.scheduler.manifest import SchedulerManifest
+        from app.engineering_control.scheduler.models import (
+            EngineeringSchedulerEvent,
+            EngineeringSchedulerSnapshot,
+        )
+
+        milestones = tuple(
+            (
+                await session.scalars(
+                    select(EngineeringMilestone).where(
+                        EngineeringMilestone.company_id == command.company_id,
+                        EngineeringMilestone.command_id == command.id,
+                    )
+                )
+            ).all()
+        )
+        if len(milestones) != 1 or milestones[0].milestone_code is None:
+            raise ControlledExecutionPayloadError(
+                "Legacy scheduler boundary lineage is unavailable or ambiguous."
+            )
+        milestone = milestones[0]
+        roadmap = await session.get(EngineeringRoadmap, milestone.roadmap_id)
+        if (
+            roadmap is None
+            or roadmap.company_id != command.company_id
+            or roadmap.repository_key != command.repository_key
+            or roadmap.expected_branch != command.expected_branch
+            or milestone.owning_branch != command.expected_branch
+            or execution.command_id != command.id
+            or command.expected_head != starting_head
+        ):
+            raise ControlledExecutionPayloadError(
+                "Legacy scheduler boundary identity does not match execution lineage."
+            )
+
+        cutoff = command.approved_at or command.created_at
+        events = tuple(
+            (
+                await session.scalars(
+                    select(EngineeringSchedulerEvent).where(
+                        EngineeringSchedulerEvent.company_id == command.company_id,
+                        EngineeringSchedulerEvent.record_id == milestone.id,
+                        EngineeringSchedulerEvent.milestone_code
+                        == milestone.milestone_code,
+                        EngineeringSchedulerEvent.event_type
+                        == "scheduler.milestone_reconciled",
+                        EngineeringSchedulerEvent.occurred_at <= cutoff,
+                    )
+                )
+            ).all()
+        )
+        candidates: list[
+            tuple[
+                EngineeringSchedulerSnapshot,
+                EngineeringSchedulerEvent,
+                dict[str, object],
+            ]
+        ] = []
+        for event in events:
+            if event.occurred_at > cutoff:
+                continue
+            snapshot = await session.scalar(
+                select(EngineeringSchedulerSnapshot).where(
+                    EngineeringSchedulerSnapshot.company_id == command.company_id,
+                    EngineeringSchedulerSnapshot.scheduler_version
+                    == event.scheduler_version,
+                    EngineeringSchedulerSnapshot.created_at <= cutoff,
+                )
+            )
+            if snapshot is None or (
+                snapshot.activated_at is not None and snapshot.activated_at > cutoff
+            ):
+                continue
+            try:
+                manifest = SchedulerManifest.model_validate(snapshot.manifest)
+            except ValueError:
+                continue
+            if (
+                manifest.scheduler_version != snapshot.scheduler_version
+                or manifest.fingerprint != snapshot.fingerprint
+            ):
+                continue
+            definitions = tuple(
+                item
+                for item in manifest.milestones
+                if item.milestone_code == milestone.milestone_code
+            )
+            if len(definitions) != 1:
+                continue
+            definition = definitions[0]
+            evidence_head = definition.starting_commit_evidence.get(
+                "authoritative_head"
+            )
+            definition_boundary = definition.execution_boundary
+            if (
+                definition.workstream != milestone.owning_workstream
+                or definition.repository_key != command.repository_key
+                or evidence_head != starting_head
+                or definition_boundary is None
+                or definition_boundary.boundary_version != boundary_version
+                or definition_boundary.fingerprint != boundary_fingerprint
+            ):
+                continue
+            composed = {
+                **boundary,
+                "boundary_version": definition_boundary.boundary_version,
+                "fingerprint": definition_boundary.fingerprint,
+            }
+            if (
+                boundary.get("allowed_repository") != command.repository_key
+                or boundary.get("allowed_branch") != command.expected_branch
+                or boundary.get("expected_head") != starting_head
+                or _evidence_set(boundary.get("allowed_paths"))
+                != frozenset(definition_boundary.allowed_paths)
+                or _evidence_set(boundary.get("forbidden_paths"))
+                != frozenset(definition_boundary.forbidden_paths)
+                or _evidence_set(boundary.get("permitted_operations"))
+                != frozenset(definition_boundary.permitted_operations)
+                or _evidence_set(boundary.get("validation_requirements"))
+                != frozenset(definition_boundary.validation_requirements)
+            ):
+                continue
+            candidates.append((snapshot, event, composed))
+
+        if not candidates:
+            raise ControlledExecutionPayloadError(
+                "No immutable historical scheduler boundary matches this execution."
+            )
+        identities = {
+            json.dumps(item[2], sort_keys=True, separators=(",", ":"))
+            for item in candidates
+        }
+        if len(identities) != 1:
+            raise ControlledExecutionPayloadError(
+                "Historical scheduler boundary evidence is contradictory."
+            )
+        snapshot, event, composed = max(
+            candidates, key=lambda item: (item[1].occurred_at, str(item[1].id))
+        )
+        return cast(dict[str, object], composed), {
+            "source": "legacy_scheduler_snapshot",
+            "command_id": str(command.id),
+            "execution_id": str(execution.id),
+            "milestone_id": str(milestone.id),
+            "milestone_code": milestone.milestone_code,
+            "workstream": milestone.owning_workstream,
+            "repository_key": command.repository_key,
+            "expected_branch": command.expected_branch,
+            "starting_head": starting_head,
+            "scheduler_snapshot_id": str(snapshot.id),
+            "scheduler_event_id": str(event.id),
+            "scheduler_version": snapshot.scheduler_version,
+            "scheduler_fingerprint": snapshot.fingerprint,
+            "snapshot_created_at": snapshot.created_at.isoformat(),
+            "event_occurred_at": event.occurred_at.isoformat(),
+            "boundary_version": boundary_version,
+            "boundary_fingerprint": boundary_fingerprint,
+            "command_boundary_unchanged": True,
+        }
+
+    @staticmethod
     def _validate_adoption_source(
         *,
         command: EngineeringCommand,
         execution: EngineeringExecution,
         offer: ControlledExecutionOfferModel,
+        boundary: dict[str, object] | None = None,
         starting_head: str,
         commit_sha: str,
         commit_parent: str,
@@ -564,7 +787,7 @@ class ControlledExecutionService:
         workspace_clean: bool,
         output: dict[str, object],
     ) -> None:
-        boundary = dict(command.execution_boundary)
+        boundary = dict(boundary or command.execution_boundary)
         files = output.get("file_boundary")
         validation = output.get("validation")
         runs = output.get("validation_runs")
