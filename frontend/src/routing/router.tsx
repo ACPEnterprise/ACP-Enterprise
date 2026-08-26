@@ -2,6 +2,7 @@ import { createBrowserRouter, type RouteObject } from "react-router";
 
 import { ApplicationShell } from "../layout";
 import { ProtectedRoute } from "../auth";
+import { TechnicianRouteGuard } from "../features/technician/TechnicianRouteGuard";
 import {
   administrationHandle,
   appointmentsHandle,
@@ -18,6 +19,7 @@ import {
   notFoundHandle,
   priceBookHandle,
   schedulingHandle,
+  technicianHandle,
 } from "./routeMetadata";
 import { RouteErrorBoundary } from "./RouteErrorBoundary";
 
@@ -74,6 +76,18 @@ export const appRoutes: RouteObject[] = [
             path: "scheduling",
             handle: schedulingHandle,
             lazy: async () => ({ Component: (await import("../routes/SchedulingRoute")).SchedulingRoute }),
+          },
+          {
+            Component: TechnicianRouteGuard,
+            children: [
+              {
+                path: "technician",
+                handle: technicianHandle,
+                lazy: async () => ({
+                  Component: (await import("../routes/TechnicianRoute")).TechnicianRoute,
+                }),
+              },
+            ],
           },
           {
             path: "dispatch",

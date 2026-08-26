@@ -78,6 +78,15 @@ export const dispatchHandle = {
   },
 } as const satisfies ShellRouteHandle;
 
+export const technicianHandle = {
+  workspace: {
+    pageTitle: "My day",
+    breadcrumbs: [{ label: "My day" }],
+    helpTopic: "technician-itinerary",
+    aiContext: "technician-itinerary",
+  },
+} as const satisfies ShellRouteHandle;
+
 export const inventoryHandle = {
   workspace: {
     pageTitle: "Inventory",

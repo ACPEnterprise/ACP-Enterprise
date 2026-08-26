@@ -6,6 +6,7 @@ import { BrandRegion } from "./BrandRegion";
 import { navigationGroups } from "./navigation";
 import { PrimaryNavigation } from "./PrimaryNavigation";
 import { useAdministrationAccess } from "../features/administration/hooks";
+import { useEffectivePermissions } from "../auth/usePermissions";
 
 interface SidebarProps {
   readonly brand: BrandConfiguration;
@@ -25,9 +26,16 @@ export function Sidebar({
   onClose,
 }: SidebarProps) {
   const administrationAccess = useAdministrationAccess();
+  const permissions = useEffectivePermissions();
   const visibleGroups = navigationGroups.map((group) => ({
     ...group,
-    items: group.items.filter((item) => item.id !== "administration" || administrationAccess.isSuccess),
+    items: group.items.filter((item) => {
+      if (item.id === "administration" && !administrationAccess.isSuccess) return false;
+      const requiredPermission = "requiredPermission" in item
+        ? item.requiredPermission
+        : undefined;
+      return !requiredPermission || permissions.has(requiredPermission);
+    }),
   }));
   return (
     <aside

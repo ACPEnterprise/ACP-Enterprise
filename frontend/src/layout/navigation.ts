@@ -12,6 +12,7 @@ import {
   MonitorCog,
   ShieldCheck,
   Wrench,
+  MapPinned,
   LayoutDashboard,
   Settings,
   Users,
@@ -40,6 +41,14 @@ export const navigationCatalog = [
     path: "/customers",
     icon: Users,
     availability: "available",
+  },
+  {
+    id: "technician",
+    label: "My day",
+    path: "/technician",
+    icon: MapPinned,
+    availability: "available",
+    requiredPermission: "COMPANY_JOB_EXECUTE",
   },
   {
     id: "dispatch",
@@ -168,6 +177,7 @@ export const navigationGroups = [
     label: "Operations",
     items: [
       item("customers"),
+      item("technician"),
       item("scheduling"),
       item("jobs"),
       item("dispatch"),

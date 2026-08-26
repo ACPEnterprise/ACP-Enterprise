@@ -23,6 +23,7 @@ vi.mock("../routes/JobsRoute", () => ({ JobsRoute: () => <div>Jobs route content
 vi.mock("../routes/JobDetailRoute", () => ({ JobDetailRoute: () => <div>Job detail route content</div> }));
 vi.mock("../routes/AppointmentDetailRoute", () => ({ AppointmentDetailRoute: () => <div>Appointment detail route content</div> }));
 vi.mock("../routes/DispatchRoute", () => ({ DispatchRoute: () => <div>Dispatch route content</div> }));
+vi.mock("../routes/TechnicianRoute", () => ({ TechnicianRoute: () => <div>Technician route content</div> }));
 vi.mock("../features/engineering-mobile/MobileEngineeringListPage", () => ({ MobileEngineeringListPage: () => <div>Engineering route content</div> }));
 vi.mock("../features/engineering-mobile/MobileEngineeringDetailPage", () => ({ MobileEngineeringDetailPage: () => <div>Engineering detail route content</div> }));
 
@@ -118,6 +119,22 @@ describe("application routing", () => {
     renderRoute("/dispatch");
     expect(await screen.findByText("Dispatch route content")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Dispatch" })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("allows a field-capable user to load the technician shell", async () => {
+    renderRoute("/technician", {
+      ...authenticatedContext,
+      permissionCodes: ["COMPANY_JOB_EXECUTE"],
+    });
+    expect(await screen.findByText("Technician route content")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "My day" })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("redirects a user without field permission away from the technician route", async () => {
+    const router = renderRoute("/technician", { ...authenticatedContext, permissionCodes: [] });
+    expect(await screen.findByText("Command Center route content")).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe("/");
+    expect(screen.queryByRole("link", { name: "My day" })).not.toBeInTheDocument();
   });
 
   it("routes Engineering list and detail through the protected shell", async () => {
