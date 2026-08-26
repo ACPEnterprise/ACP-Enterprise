@@ -1,7 +1,5 @@
 from logging.config import fileConfig
 
-from sqlalchemy import engine_from_config, pool
-
 from alembic import context
 from app.beacon import models as beacon_models  # noqa: F401
 from app.core.config import settings
@@ -56,6 +54,7 @@ from app.operational_migration import cutover_models  # noqa: F401
 from app.operational_migration import (
     models as operational_migration_models,  # noqa: F401
 )
+from app.payments import models as payment_models  # noqa: F401
 from app.platform.audit import models as audit_models  # noqa: F401
 from app.platform.auth import models as auth_models  # noqa: F401
 from app.platform.branch import models as branch_models  # noqa: F401
@@ -75,6 +74,7 @@ from app.worker_control.transport.persistence import (
 )
 from app.worker_identity import models as worker_identity_models  # noqa: F401
 from app.workforce import models as workforce_models  # noqa: F401
+from sqlalchemy import engine_from_config, pool
 
 config = context.config
 
