@@ -341,8 +341,8 @@ class ControlledExecutionService:
         try:
             publication = self._publication_adapter()
             commit = publication.inspect_commit(commit_sha)
-            observed_remote = publication.inspect_remote_head(
-                str(output.get("branch", ""))
+            current_authoritative_head = publication.verify_historical_publication(
+                str(output.get("branch", "")), commit_sha
             )
         except RepositoryOperationGitError as error:
             raise ControlledExecutionPayloadError(
@@ -351,7 +351,6 @@ class ControlledExecutionService:
         if (
             commit.parent != commit_parent
             or commit.files != tuple(files)
-            or observed_remote != remote_head
             or remote_head != commit_sha
         ):
             raise ControlledExecutionPayloadError(
@@ -440,6 +439,10 @@ class ControlledExecutionService:
                             "adopted_by_user_id": str(context.user.id),
                             "transport_failure_preserved": True,
                             "expired_lease_preserved": str(lease_id),
+                            "historical_publication_head": commit_sha,
+                            "current_authoritative_head_at_adoption": (
+                                current_authoritative_head
+                            ),
                             "prior_reconciliation_evidence": dict(
                                 execution.evidence_summary
                             ),

@@ -111,6 +111,34 @@ class ProductionBoundedGitAdapter:
             )
         return rows[0][0]
 
+    def verify_historical_publication(self, branch: str, commit_sha: str) -> str:
+        """Prove a commit remains on the current authoritative branch lineage.
+
+        The returned SHA is the current remote tip. Fetching the exact branch
+        makes the ancestry proof independent of unrelated local refs without
+        moving the checked-out branch or any provider-readiness ref.
+        """
+        if FULL_SHA.fullmatch(commit_sha) is None:
+            raise RepositoryOperationGitError(
+                "invalid_commit", "Commit identifier is invalid."
+            )
+        observed_remote = self.inspect_remote_head(branch)
+        self._git(("fetch", "--no-tags", "origin", branch))
+        fetched = self._sha(("rev-parse", "FETCH_HEAD"))
+        if fetched != observed_remote:
+            raise RepositoryOperationGitError(
+                "ambiguous_publication",
+                "Authoritative branch changed during publication verification.",
+            )
+        try:
+            self._git(("merge-base", "--is-ancestor", commit_sha, fetched))
+        except RepositoryOperationGitError as error:
+            raise RepositoryOperationGitError(
+                "publication_not_in_authoritative_lineage",
+                "Result commit is not in the authoritative branch lineage.",
+            ) from error
+        return fetched
+
     def _changed_files(self) -> tuple[str, ...]:
         tracked = self._names(("diff", "--name-only", "-z", "HEAD"))
         untracked = self._names(("ls-files", "--others", "--exclude-standard", "-z"))

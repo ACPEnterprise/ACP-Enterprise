@@ -7,6 +7,9 @@ from pathlib import Path
 
 import pytest
 import pytest_asyncio
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
 from app.core.config import settings
 from app.engineering_control.mobile.roadmaps import (
     EngineeringMilestone,
@@ -30,11 +33,9 @@ from app.engineering_execution.controlled.service import (
 from app.engineering_execution.models import EngineeringExecution
 from app.engineering_execution.service import EngineeringExecutionService
 from app.execution_nodes.models import EngineeringExecutionNode
+from app.execution_nodes.workspaces import WorkspaceManager
 from app.platform.audit.models import AuditRecord
 from app.worker_control.models import WorkerLease
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from tests.engineering_control.test_engineering_command_service import (
     ServiceFixture,
     seed_service_fixture,
@@ -58,7 +59,7 @@ def git(root: Path, *args: str) -> str:
     ).stdout.strip()
 
 
-def published_repository(root: Path) -> tuple[str, str]:
+def published_repository(root: Path) -> tuple[str, str, str]:
     working, remote = root / "working", root / "remote.git"
     working.mkdir()
     remote.mkdir()
@@ -78,7 +79,12 @@ def published_repository(root: Path) -> tuple[str, str]:
     git(remote, "init", "--bare")
     git(working, "remote", "add", "origin", str(remote))
     git(working, "push", "origin", "customer-management-v1")
-    return starting_head, commit
+    target.write_text("published\ncurrent repair\n", encoding="utf-8")
+    git(working, "add", PATH)
+    git(working, "commit", "-m", "later authorized repair")
+    current_head = git(working, "rev-parse", "HEAD")
+    git(working, "push", "origin", "customer-management-v1")
+    return starting_head, commit, current_head
 
 
 @pytest_asyncio.fixture
@@ -98,7 +104,7 @@ async def test_expired_published_result_adoption_preserves_history_and_opens_rev
     adoption_database: ServiceFixture, tmp_path: Path
 ) -> None:
     fixture = adoption_database
-    starting_head, commit = published_repository(tmp_path)
+    starting_head, commit, current_head = published_repository(tmp_path)
     _, worker_session = await established_transport(fixture)
     command = await approved_command(fixture, requested_code_changes=True)
     boundary = {
@@ -327,7 +333,30 @@ async def test_expired_published_result_adoption_preserves_history_and_opens_rev
     assert duplicate_adopted_at == adopted_at
     assert result.repository_mutated is True
     assert result.output["commit_sha"] == commit
+    assert result.output["adoption"]["historical_publication_head"] == commit
+    assert (
+        result.output["adoption"]["current_authoritative_head_at_adoption"]
+        == current_head
+    )
     assert adopted_at > completed_at
+    assert git(tmp_path / "working", "rev-parse", "HEAD") == current_head
+    assert (
+        git(
+            tmp_path / "working",
+            "ls-remote",
+            "origin",
+            "refs/heads/customer-management-v1",
+        ).split()[0]
+        == current_head
+    )
+    readiness = WorkspaceManager(
+        tmp_path / "provider-workspaces",
+        {"acp-enterprise": tmp_path / "working"},
+    ).prepare_repository(
+        "acp-enterprise", "customer-management-v1", current_head
+    )
+    assert readiness.ready is True
+    assert readiness.observed_head == current_head
     async with fixture.factory() as database:
         stored_offer = await database.get(ControlledExecutionOfferModel, offer.id)
         stored_lease = await database.get(WorkerLease, acquired.lease_id)

@@ -8,6 +8,10 @@ from uuid import uuid4
 import httpx
 import pytest
 import pytest_asyncio
+from fastapi import FastAPI
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
 from app.core.config import settings
 from app.database.session import get_database_session
 from app.engineering_control.repository_authorization.contracts import (
@@ -52,10 +56,6 @@ from app.platform.permissions.codes import (
     EngineeringRepositoryOperationPermission,
 )
 from app.platform.permissions.dependencies import get_authorization_context
-from fastapi import FastAPI
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-
 from tests.engineering_control.repository_authorization.test_repository_authorization import (
     BOUNDARY,
     accepted_review,
@@ -113,6 +113,64 @@ def test_bounded_adapter_verifies_exact_remote_publication(tmp_path: Path) -> No
     assert proof.parent == base
     assert proof.files == BOUNDARY
     assert adapter.inspect_remote_head("customer-management-v1") == commit
+    assert (
+        adapter.verify_historical_publication("customer-management-v1", commit)
+        == commit
+    )
+
+
+def test_historical_publication_accepts_descendant_tip_without_moving_branch(
+    tmp_path: Path,
+) -> None:
+    working = tmp_path / "working"
+    remote = tmp_path / "remote.git"
+    working.mkdir()
+    remote.mkdir()
+    repository(working)
+    git(remote, "init", "--bare")
+    git(working, "remote", "add", "origin", str(remote))
+    git(working, "add", "--", *BOUNDARY)
+    git(working, "commit", "-m", "published result")
+    result_commit = git(working, "rev-parse", "HEAD")
+    git(working, "push", "origin", "customer-management-v1")
+    (working / BOUNDARY[0]).write_text("later repair\n", encoding="utf-8")
+    git(working, "add", BOUNDARY[0])
+    git(working, "commit", "-m", "later authorized repair")
+    current_head = git(working, "rev-parse", "HEAD")
+    git(working, "push", "origin", "customer-management-v1")
+
+    adapter = ProductionBoundedGitAdapter(working)
+    assert (
+        adapter.verify_historical_publication(
+            "customer-management-v1", result_commit
+        )
+        == current_head
+    )
+    assert git(working, "rev-parse", "HEAD") == current_head
+
+
+def test_historical_publication_rejects_diverged_or_unrelated_object(
+    tmp_path: Path,
+) -> None:
+    working = tmp_path / "working"
+    remote = tmp_path / "remote.git"
+    working.mkdir()
+    remote.mkdir()
+    base = repository(working)
+    git(remote, "init", "--bare")
+    git(working, "remote", "add", "origin", str(remote))
+    git(working, "add", "--", *BOUNDARY)
+    git(working, "commit", "-m", "result on replaced lineage")
+    result_commit = git(working, "rev-parse", "HEAD")
+    git(working, "push", "origin", "customer-management-v1")
+    git(remote, "update-ref", "refs/heads/customer-management-v1", base)
+
+    adapter = ProductionBoundedGitAdapter(working)
+    with pytest.raises(RepositoryOperationGitError) as error:
+        adapter.verify_historical_publication(
+            "customer-management-v1", result_commit
+        )
+    assert error.value.classification == "publication_not_in_authoritative_lineage"
 
 
 @pytest_asyncio.fixture
