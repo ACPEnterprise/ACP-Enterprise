@@ -497,8 +497,12 @@ class MobileEngineeringControlService:
             runtime=runtime,
             now=observed_at,
         )
+        terminal_owner_review = (
+            status.monitoring_state == "completed" and status.review_state == "pending"
+        )
         stale_runtime = bool(
             runtime
+            and not terminal_owner_review
             and runtime.runtime_state not in {"completed", "failed", "cancelled"}
             and observed_at - runtime.heartbeat_at > timedelta(minutes=2)
         )
@@ -616,6 +620,8 @@ class MobileEngineeringControlService:
             and status.monitoring_state not in {"completed", "failed", "cancelled"}
         ):
             return "reconciliation_required"
+        if status.monitoring_state == "completed" and status.review_state == "pending":
+            return "waiting_for_owner"
         if runtime is not None:
             if (
                 runtime.acknowledgement_expires_at <= now

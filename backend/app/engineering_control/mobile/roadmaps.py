@@ -13,6 +13,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    func,
     select,
 )
 from sqlalchemy.dialects.postgresql import JSONB
@@ -21,13 +22,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
+from app.engineering_capacity.models import EngineeringWorkerCapacity
 from app.engineering_control.commands import (
     ApproveEngineeringCommand,
     CreateEngineeringCommand,
 )
+from app.engineering_control.post_adoption_convergence import (
+    AdoptedOwnerReviewFacts,
+    evaluate_adopted_owner_review,
+)
 from app.engineering_control.repository_operation.models import (
     EngineeringRepositoryOperation,
 )
+from app.engineering_control.review.models import EngineeringExecutionReview
 from app.engineering_control.revision_evidence import (
     compose_revision_instruction,
     revision_evidence,
@@ -36,9 +43,13 @@ from app.engineering_control.revision_evidence import (
 from app.engineering_control.scheduler.manifest import ExecutionBoundaryDefinition
 from app.engineering_control.service import EngineeringControlService
 from app.engineering_control.workstream_runtime import EngineeringWorkstreamEvent
-from app.engineering_execution.controlled.models import ControlledExecutionResultModel
+from app.engineering_execution.controlled.models import (
+    ControlledExecutionOfferModel,
+    ControlledExecutionResultModel,
+)
 from app.engineering_execution.models import EngineeringExecution
 from app.platform.permissions.authorization import AuthorizationContext
+from app.worker_control.models import WorkerLease
 
 from .control import EngineeringWorkstreamControl
 from .service import MobileEngineeringControlService
@@ -727,7 +738,131 @@ class RoadmapService:
     ) -> None:
         from app.engineering_control.workstream_runtime import (
             EngineeringWorkstreamRuntime,
+            WorkstreamRuntimeService,
         )
+
+        observed_at = utc_now()
+        adopted_candidates = tuple(
+            (
+                await db.scalars(
+                    select(EngineeringMilestone).where(
+                        EngineeringMilestone.company_id == context.company.id,
+                        EngineeringMilestone.status.in_({"ready", "waiting_review"}),
+                        EngineeringMilestone.command_id.is_not(None),
+                    )
+                )
+            ).all()
+        )
+        adopted_changes: list[tuple[UUID, UUID, UUID, UUID]] = []
+        for milestone in adopted_candidates:
+            result = await db.scalar(
+                select(ControlledExecutionResultModel)
+                .where(
+                    ControlledExecutionResultModel.company_id == context.company.id,
+                    ControlledExecutionResultModel.command_id == milestone.command_id,
+                    ControlledExecutionResultModel.outcome == "succeeded",
+                )
+                .order_by(ControlledExecutionResultModel.completed_at.desc())
+                .limit(1)
+            )
+            if result is None:
+                continue
+            execution = await db.get(EngineeringExecution, result.execution_id)
+            reviews = tuple(
+                (
+                    await db.scalars(
+                        select(EngineeringExecutionReview).where(
+                            EngineeringExecutionReview.company_id
+                            == context.company.id,
+                            EngineeringExecutionReview.command_id
+                            == milestone.command_id,
+                            EngineeringExecutionReview.state == "pending",
+                        )
+                    )
+                ).all()
+            )
+            active_offers = int(
+                await db.scalar(
+                    select(func.count(ControlledExecutionOfferModel.id)).where(
+                        ControlledExecutionOfferModel.company_id
+                        == context.company.id,
+                        ControlledExecutionOfferModel.execution_id
+                        == result.execution_id,
+                        ControlledExecutionOfferModel.state.in_(
+                            {"available", "acquired"}
+                        ),
+                    )
+                )
+                or 0
+            )
+            active_leases = int(
+                await db.scalar(
+                    select(func.count(WorkerLease.id)).where(
+                        WorkerLease.company_id == context.company.id,
+                        WorkerLease.execution_id == result.execution_id,
+                        WorkerLease.status == "active",
+                    )
+                )
+                or 0
+            )
+            runtime = await db.scalar(
+                select(EngineeringWorkstreamRuntime).where(
+                    EngineeringWorkstreamRuntime.company_id == context.company.id,
+                    EngineeringWorkstreamRuntime.command_id == milestone.command_id,
+                )
+            )
+            capacity = await db.scalar(
+                select(EngineeringWorkerCapacity).where(
+                    EngineeringWorkerCapacity.company_id == context.company.id,
+                    EngineeringWorkerCapacity.worker_id == result.worker_id,
+                )
+            )
+            adoption = result.output.get("adoption")
+            commit = result.output.get("published_commit_sha")
+            adoption_verified = (
+                isinstance(adoption, dict)
+                and isinstance(adoption.get("evidence_digest"), str)
+                and len(str(adoption["evidence_digest"])) == 64
+                and adoption.get("historical_publication_head") == commit
+            )
+            review = reviews[0] if len(reviews) == 1 else None
+            runtime_clear = False
+            if runtime is not None and runtime.worker_health == "healthy":
+                runtime_clear = runtime.runtime_state in {
+                    "acknowledged",
+                    "waiting_for_owner",
+                    "completed",
+                }
+            capacity_clear = capacity is None or (
+                capacity.health_state == "healthy"
+                and capacity.operational_state == "available"
+                and capacity.allocated_capacity == 0
+                and capacity.reserved_capacity == 0
+            )
+            decision = evaluate_adopted_owner_review(
+                AdoptedOwnerReviewFacts(
+                    execution_succeeded=execution is not None
+                    and execution.state == "completed"
+                    and execution.status == "succeeded",
+                    adopted_result_verified=adoption_verified,
+                    published_repository_mutation=result.repository_mutated is True
+                    and isinstance(commit, str)
+                    and len(commit) == 40,
+                    pending_review_count=len(reviews),
+                    review_matches_lineage=review is not None
+                    and review.execution_id == result.execution_id
+                    and review.controlled_result_id == result.id,
+                    scheduler_matches_lineage=milestone.command_id == result.command_id
+                    and milestone.reconciliation_state == "current",
+                    superseded=milestone.reconciliation_state == "superseded",
+                    active_authority=bool(active_offers or active_leases),
+                    unresolved_recovery=not (runtime_clear and capacity_clear),
+                )
+            )
+            if decision.eligible and review is not None and runtime is not None:
+                adopted_changes.append(
+                    (milestone.id, result.id, review.id, result.command_id)
+                )
 
         candidates = tuple(
             (
@@ -786,11 +921,35 @@ class RoadmapService:
                         None,
                     )
                 )
-        if not changes:
+        if not changes and not adopted_changes:
             return
-        now = utc_now()
+        now = observed_at
         await db.rollback()
         async with db.begin():
+            for milestone_id, result_id, review_id, command_id in adopted_changes:
+                locked = await self._get(
+                    db, context.company.id, milestone_id, lock=True
+                )
+                if locked.command_id != command_id:
+                    continue
+                if locked.status == "ready":
+                    self._transition(
+                        db,
+                        locked,
+                        "waiting_review",
+                        context.user.id,
+                        "adopted_result_reconciled",
+                        "Immutable adopted result has a pending owner review.",
+                        now,
+                    )
+                await WorkstreamRuntimeService().converge_adopted_owner_review(
+                    db,
+                    company_id=context.company.id,
+                    command_id=command_id,
+                    result_id=result_id,
+                    review_id=review_id,
+                    now=now,
+                )
             for milestone_id, target, resulting_head in changes:
                 locked = await self._get(
                     db, context.company.id, milestone_id, lock=True

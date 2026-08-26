@@ -8,9 +8,12 @@ from pathlib import Path
 import pytest
 import pytest_asyncio
 from app.core.config import settings
+from app.engineering_control.mobile.control import EngineeringWorkstreamControl
 from app.engineering_control.mobile.roadmaps import (
     EngineeringMilestone,
+    EngineeringMilestoneEvent,
     EngineeringRoadmap,
+    RoadmapService,
 )
 from app.engineering_control.mobile.service import MobileEngineeringControlService
 from app.engineering_control.models import EngineeringCommand
@@ -22,6 +25,10 @@ from app.engineering_control.scheduler.manifest import release_bound_manifest
 from app.engineering_control.scheduler.models import (
     EngineeringSchedulerEvent,
     EngineeringSchedulerSnapshot,
+)
+from app.engineering_control.workstream_runtime import (
+    EngineeringWorkstreamEvent,
+    EngineeringWorkstreamRuntime,
 )
 from app.engineering_execution.controlled.contracts import ControlledCommandType
 from app.engineering_execution.controlled.models import ControlledExecutionOfferModel
@@ -38,7 +45,7 @@ from app.execution_nodes.models import EngineeringExecutionNode
 from app.execution_nodes.workspaces import WorkspaceManager
 from app.platform.audit.models import AuditRecord
 from app.worker_control.models import WorkerLease
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from tests.engineering_control.test_engineering_command_service import (
@@ -414,6 +421,96 @@ async def test_expired_published_result_adoption_preserves_history_and_opens_rev
     )
     assert readiness.ready is True
     assert readiness.observed_head == current_head
+    async with fixture.factory() as database, database.begin():
+        durable_milestone = await database.get(EngineeringMilestone, milestone.id)
+        assert durable_milestone is not None
+        durable_milestone.status = "ready"
+        durable_milestone.updated_at = adopted_at
+        control = EngineeringWorkstreamControl(
+            company_id=fixture.context.company.id,
+            command_id=command.id,
+            desired_state="active",
+            requested_action="start",
+            actor_user_id=fixture.context.user.id,
+            version=1,
+            created_at=now,
+            updated_at=now,
+        )
+        database.add(control)
+        await database.flush()
+        database.add(
+            EngineeringWorkstreamRuntime(
+                company_id=fixture.context.company.id,
+                command_id=command.id,
+                control_id=control.id,
+                worker_id=result.worker_id,
+                worker_session_id=result.session_id,
+                acknowledged_control_version=control.version,
+                acknowledged_action="start",
+                runtime_state="acknowledged",
+                worker_health="healthy",
+                progress_percent=100,
+                current_activity="Published result ready for owner review",
+                reason_code="reconciliation_required",
+                acknowledged_at=now,
+                acknowledgement_expires_at=adopted_at - timedelta(seconds=1),
+                heartbeat_at=adopted_at,
+                updated_at=adopted_at,
+                version=2,
+            )
+        )
+    async with fixture.factory() as database:
+        await RoadmapService().reconcile(database, context=fixture.context)
+    async with fixture.factory() as database:
+        await RoadmapService().reconcile(database, context=fixture.context)
+    async with fixture.factory() as database:
+        converged_milestone = await database.get(EngineeringMilestone, milestone.id)
+        converged_runtime = await database.scalar(
+            select(EngineeringWorkstreamRuntime).where(
+                EngineeringWorkstreamRuntime.command_id == command.id
+            )
+        )
+        convergence_events = tuple(
+            (
+                await database.scalars(
+                    select(EngineeringWorkstreamEvent).where(
+                        EngineeringWorkstreamEvent.command_id == command.id,
+                        EngineeringWorkstreamEvent.reason_code
+                        == "adopted_result_owner_review",
+                    )
+                )
+            ).all()
+        )
+        milestone_events = tuple(
+            (
+                await database.scalars(
+                    select(EngineeringMilestoneEvent).where(
+                        EngineeringMilestoneEvent.milestone_id == milestone.id,
+                        EngineeringMilestoneEvent.event_type
+                        == "adopted_result_reconciled",
+                    )
+                )
+            ).all()
+        )
+        review_count = await database.scalar(
+            select(func.count(EngineeringExecutionReview.id)).where(
+                EngineeringExecutionReview.command_id == command.id
+            )
+        )
+        execution_count = await database.scalar(
+            select(func.count(EngineeringExecution.id)).where(
+                EngineeringExecution.command_id == command.id
+            )
+        )
+    assert converged_milestone is not None
+    assert converged_milestone.status == "waiting_review"
+    assert converged_runtime is not None
+    assert converged_runtime.runtime_state == "waiting_for_owner"
+    assert converged_runtime.reason_code == "adopted_result_owner_review"
+    assert len(convergence_events) == 1
+    assert len(milestone_events) == 1
+    assert review_count == 1
+    assert execution_count == 1
     async with fixture.factory() as database:
         stored_offer = await database.get(ControlledExecutionOfferModel, offer.id)
         stored_lease = await database.get(WorkerLease, acquired.lease_id)

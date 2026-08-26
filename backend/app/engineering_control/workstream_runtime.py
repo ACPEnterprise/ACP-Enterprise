@@ -153,6 +153,62 @@ class WorkstreamRuntimeError(Exception):
 
 
 class WorkstreamRuntimeService:
+    async def converge_adopted_owner_review(
+        self,
+        db: AsyncSession,
+        *,
+        company_id: UUID,
+        command_id: UUID,
+        result_id: UUID,
+        review_id: UUID,
+        now: datetime,
+    ) -> EngineeringWorkstreamRuntime:
+        """Append an audited terminal projection without rewriting an expired ack."""
+        idempotency_key = f"adopted-owner-review:{result_id}:{review_id}"
+        runtime = await db.scalar(
+            select(EngineeringWorkstreamRuntime)
+            .where(
+                EngineeringWorkstreamRuntime.company_id == company_id,
+                EngineeringWorkstreamRuntime.command_id == command_id,
+            )
+            .with_for_update()
+        )
+        if runtime is None:
+            raise WorkstreamRuntimeError("Workstream runtime projection was not found.")
+        duplicate = await db.scalar(
+            select(EngineeringWorkstreamEvent.id).where(
+                EngineeringWorkstreamEvent.company_id == company_id,
+                EngineeringWorkstreamEvent.idempotency_key == idempotency_key,
+            )
+        )
+        if duplicate is not None:
+            return runtime
+        runtime.runtime_state = "waiting_for_owner"
+        runtime.worker_health = "healthy"
+        runtime.progress_percent = 100
+        runtime.current_activity = "Published result ready for owner review"
+        runtime.reason_code = "adopted_result_owner_review"
+        runtime.updated_at = now
+        runtime.version += 1
+        db.add(
+            EngineeringWorkstreamEvent(
+                company_id=company_id,
+                command_id=command_id,
+                control_id=runtime.control_id,
+                control_version=runtime.acknowledged_control_version,
+                worker_id=runtime.worker_id,
+                worker_session_id=runtime.worker_session_id,
+                event_type="result_reconciliation",
+                action=runtime.acknowledged_action,
+                runtime_state="waiting_for_owner",
+                reason_code="adopted_result_owner_review",
+                idempotency_key=idempotency_key,
+                occurred_at=now,
+            )
+        )
+        await db.flush()
+        return runtime
+
     async def project_provider_progress(
         self,
         db: AsyncSession,
