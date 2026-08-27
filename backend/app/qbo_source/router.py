@@ -26,8 +26,7 @@ _Administer = Annotated[
 
 AUTHORIZE_PATH = "/api/v1/integrations/qbo/oauth/authorize"
 _CALLBACK_URI = (
-    "https://preview.allcountyhomeservices.com"
-    "/api/v1/integrations/qbo/oauth/callback"
+    "https://preview.allcountyhomeservices.com/api/v1/integrations/qbo/oauth/callback"
 )
 
 _SAFE_HEADERS = {
@@ -43,6 +42,26 @@ def _safe_response(status_code: int, code: str) -> JSONResponse:
         content={"status": "sandbox_oauth_callback", "result": code},
         headers=_SAFE_HEADERS,
     )
+
+
+def _safe_callback_error(error: IntuitAuthenticationError | IntuitProtocolError) -> str:
+    if error.code == "oauth_state_expired":
+        return "state_expired"
+    if error.code == "oauth_state_replayed":
+        return "state_replayed"
+    if error.code == "oauth_provider_rejected":
+        return "provider_rejected"
+    if error.code.startswith(("oauth_state", "oauth_environment")):
+        return "state_invalid"
+    if error.code.startswith("token_") or error.code == "invalid_token_response":
+        return "token_exchange_failed"
+    if error.code == "company_realm_mismatch":
+        return "realm_mismatch"
+    if error.code == "company_identity_mismatch":
+        return "company_name_mismatch"
+    if error.code.startswith("company_info"):
+        return "companyinfo_failed"
+    return "provider_verification_failed"
 
 
 @router.post(AUTHORIZE_PATH, name="qbo-sandbox-oauth-authorize")
@@ -100,12 +119,10 @@ async def qbo_sandbox_oauth_callback(
     effective_state = internal_state or state
     effective_realm = internal_realm or realm_id
     effective_error = internal_error or provider_error
-    if effective_error or not all(
-        (effective_code, effective_state, effective_realm)
+    if not effective_state or (
+        not effective_error and not all((effective_code, effective_realm))
     ):
-        return _safe_response(
-            status.HTTP_400_BAD_REQUEST, "connection_not_completed"
-        )
+        return _safe_response(status.HTTP_400_BAD_REQUEST, "connection_not_completed")
     try:
         runtime = get_sandbox_oauth_runtime()
         await runtime.complete(
@@ -118,12 +135,14 @@ async def qbo_sandbox_oauth_callback(
         return _safe_response(
             status.HTTP_503_SERVICE_UNAVAILABLE, "sandbox_not_configured"
         )
-    except (IntuitAuthenticationError, IntuitProtocolError, ValueError):
+    except (IntuitAuthenticationError, IntuitProtocolError) as error:
+        return _safe_response(status.HTTP_400_BAD_REQUEST, _safe_callback_error(error))
+    except ValueError:
         return _safe_response(
-            status.HTTP_400_BAD_REQUEST, "connection_not_completed"
+            status.HTTP_400_BAD_REQUEST, "provider_verification_failed"
         )
     except Exception:  # noqa: BLE001 - external boundary returns no sensitive detail
         return _safe_response(
             status.HTTP_502_BAD_GATEWAY, "provider_verification_failed"
         )
-    return _safe_response(status.HTTP_200_OK, "company_verified")
+    return _safe_response(status.HTTP_200_OK, "connection_completed")

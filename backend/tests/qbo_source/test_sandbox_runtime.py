@@ -7,15 +7,18 @@ import stat
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
+from typing import cast
 from uuid import uuid4
 
 import pytest
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
-
 from app.database.session import get_security_database_session
 from app.main import app
+from app.platform.permissions.authorization import AuthorizationContext
 from app.qbo_source import router as qbo_router_module
+from app.qbo_source.diagnostics import (
+    OAuthDiagnosticStage,
+    ProtectedOAuthDiagnosticJournal,
+)
 from app.qbo_source.intuit import (
     ACCOUNTING_SCOPE,
     AuthorizedRealm,
@@ -27,12 +30,15 @@ from app.qbo_source.runtime import (
     ProtectedSandboxCompanyBinding,
     SandboxCompanyInfoVerifier,
     SandboxConnectionRegistry,
+    SandboxOAuthRuntime,
     SandboxRuntimeError,
 )
 from app.qbo_source.secrets import (
     ProtectedSandboxSecretProvider,
     SandboxSecretStoreError,
 )
+from fastapi import FastAPI, Request
+from fastapi.testclient import TestClient
 
 
 class _Runtime:
@@ -84,7 +90,7 @@ def test_callback_boundary_is_sanitized_and_maps_internal_headers(
     assert response.status_code == 200
     assert response.json() == {
         "status": "sandbox_oauth_callback",
-        "result": "company_verified",
+        "result": "connection_completed",
     }
     assert response.headers["cache-control"] == "no-store"
     assert runtime.received == (*markers, None)
@@ -98,7 +104,6 @@ def test_callback_boundary_is_sanitized_and_maps_internal_headers(
         ({}, 400),
         ({"state": "synthetic-state-marker", "realmId": "synthetic-realm-marker"}, 400),
         ({"code": "synthetic-code-marker", "realmId": "synthetic-realm-marker"}, 400),
-        ({"error": "access_denied", "error_description": "private"}, 400),
     ],
 )
 def test_callback_rejects_incomplete_or_provider_error_without_echo(
@@ -110,6 +115,65 @@ def test_callback_rejects_incomplete_or_provider_error_without_echo(
     assert response.status_code == status_code
     assert response.json()["result"] == "connection_not_completed"
     assert all(value not in response.text for value in params.values())
+
+
+@pytest.mark.parametrize(
+    ("error_code", "safe_result"),
+    [
+        ("oauth_state_invalid", "state_invalid"),
+        ("oauth_state_expired", "state_expired"),
+        ("oauth_state_replayed", "state_replayed"),
+        ("oauth_provider_rejected", "provider_rejected"),
+        ("token_request_rejected", "token_exchange_failed"),
+        ("company_info_provider_rejected", "companyinfo_failed"),
+        ("company_realm_mismatch", "realm_mismatch"),
+        ("company_identity_mismatch", "company_name_mismatch"),
+    ],
+)
+def test_callback_returns_actionable_sanitized_failure(
+    monkeypatch: pytest.MonkeyPatch, error_code: str, safe_result: str
+) -> None:
+    runtime = _Runtime(IntuitAuthenticationError(error_code))
+    monkeypatch.setattr(qbo_router_module, "get_sandbox_oauth_runtime", lambda: runtime)
+
+    response = TestClient(app).get(
+        "/api/v1/integrations/qbo/oauth/callback",
+        headers={
+            "X-ACP-QBO-Code": "synthetic-code",
+            "X-ACP-QBO-State": "synthetic-state",
+            "X-ACP-QBO-Realm": "synthetic-realm",
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["result"] == safe_result
+    assert "synthetic" not in response.text
+
+
+def test_provider_rejection_delegates_state_consumption_without_description(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runtime = _Runtime(IntuitAuthenticationError("oauth_provider_rejected"))
+    monkeypatch.setattr(qbo_router_module, "get_sandbox_oauth_runtime", lambda: runtime)
+
+    response = TestClient(app).get(
+        "/api/v1/integrations/qbo/oauth/callback",
+        params={
+            "state": "synthetic-state-marker",
+            "error": "access_denied",
+            "error_description": "provider-private-description",
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["result"] == "provider_rejected"
+    assert runtime.received == (
+        None,
+        "synthetic-state-marker",
+        None,
+        "access_denied",
+    )
+    assert "provider-private-description" not in response.text
 
 
 @pytest.mark.asyncio
@@ -124,7 +188,8 @@ async def test_authorization_initiation_is_bounded_and_does_not_log_state(
 
     with caplog.at_level(logging.DEBUG):
         response = await qbo_router_module.qbo_sandbox_oauth_authorize(
-            request=SimpleNamespace(), authorization=authorization  # type: ignore[arg-type]
+            request=cast(Request, SimpleNamespace()),
+            authorization=cast(AuthorizationContext, authorization),
         )
 
     assert response.status_code == 200
@@ -210,7 +275,7 @@ class _Transport:
 
 
 @pytest.mark.asyncio
-async def test_company_info_mismatch_fails_closed_and_deletes_token(
+async def test_company_info_verifier_classifies_exact_realm_mismatch(
     tmp_path: Path,
 ) -> None:
     repository = tmp_path / "repository"
@@ -218,7 +283,9 @@ async def test_company_info_mismatch_fails_closed_and_deletes_token(
     provider = ProtectedSandboxSecretProvider(
         root=tmp_path / "secrets", repository_root=repository
     )
-    await provider.put_token(provider.TOKEN_REFERENCE, _token(), expected_generation=None)
+    await provider.put_token(
+        provider.TOKEN_REFERENCE, _token(), expected_generation=None
+    )
     verifier = SandboxCompanyInfoVerifier(
         transport=_Transport(
             HttpResponse(
@@ -237,8 +304,123 @@ async def test_company_info_mismatch_fails_closed_and_deletes_token(
     )
 
     with pytest.raises(IntuitAuthenticationError, match="company_realm_mismatch"):
-        await verifier.verify(AuthorizedRealm(realm_id="expected-realm", token=_token()))
+        await verifier.verify(
+            AuthorizedRealm(realm_id="expected-realm", token=_token())
+        )
+    assert provider.token_path.exists()
+
+
+def test_sanitized_diagnostic_journal_is_restricted_and_append_only(
+    tmp_path: Path,
+) -> None:
+    repository = tmp_path / "repository"
+    repository.mkdir()
+    journal = ProtectedOAuthDiagnosticJournal(
+        tmp_path / "oauth-diagnostics", repository_root=repository
+    )
+    attempt_id = "a" * 64
+    journal.record(attempt_id, OAuthDiagnosticStage.CALLBACK_REACHED)
+    journal.record(
+        attempt_id,
+        OAuthDiagnosticStage.CONNECTION_FAILED,
+        failure_classification="token_exchange_failed",
+    )
+
+    records = sorted((journal.root / attempt_id).iterdir())
+    content = b"".join(path.read_bytes() for path in records)
+    assert len(records) == 2
+    assert stat.S_IMODE(journal.root.stat().st_mode) == 0o700
+    assert all(stat.S_IMODE(path.stat().st_mode) == 0o600 for path in records)
+    assert b"token_exchange_failed" in content
+    for forbidden in (
+        b"synthetic-code",
+        b"synthetic-state",
+        b"synthetic-access-material",
+        b"synthetic-refresh-material",
+        b"client-secret",
+    ):
+        assert forbidden not in content
+
+
+class _PersistedTokenCallback:
+    def __init__(self, provider: ProtectedSandboxSecretProvider) -> None:
+        self.provider = provider
+        self.state_consumed = False
+
+    async def handle(self, **_: str | None) -> AuthorizedRealm:
+        self.state_consumed = True
+        token = _token()
+        await self.provider.put_token(
+            self.provider.TOKEN_REFERENCE, token, expected_generation=None
+        )
+        return AuthorizedRealm(realm_id="expected-realm", token=token)
+
+
+@pytest.mark.asyncio
+async def test_first_attempt_shape_retains_stage_and_cleans_temporary_token(
+    tmp_path: Path,
+) -> None:
+    repository = tmp_path / "repository"
+    repository.mkdir()
+    provider = ProtectedSandboxSecretProvider(
+        root=tmp_path / "secrets", repository_root=repository
+    )
+    callback = _PersistedTokenCallback(provider)
+    registry = SandboxConnectionRegistry(tmp_path / "connections")
+    diagnostics = ProtectedOAuthDiagnosticJournal(
+        tmp_path / "oauth-diagnostics", repository_root=repository
+    )
+    verifier = SandboxCompanyInfoVerifier(
+        transport=_Transport(
+            HttpResponse(
+                status=200,
+                headers={},
+                body=json.dumps(
+                    {"CompanyInfo": {"Id": "wrong-realm", "CompanyName": "Sandbox"}}
+                ).encode(),
+            )
+        ),
+        secrets_provider=provider,
+        expected_company_name="Sandbox",
+        token_reference=provider.TOKEN_REFERENCE,
+        minor_version=75,
+        registry=registry,
+    )
+    runtime = SandboxOAuthRuntime(
+        callback=callback,  # type: ignore[arg-type]
+        verifier=verifier,
+        coordinator=None,  # type: ignore[arg-type]
+        diagnostics=diagnostics,
+    )
+
+    with pytest.raises(IntuitAuthenticationError, match="company_realm_mismatch"):
+        await runtime.complete(
+            code="synthetic-code",
+            state="synthetic-state-" + "x" * 32,
+            realm_id="expected-realm",
+            provider_error=None,
+        )
+
+    assert callback.state_consumed
     assert not provider.token_path.exists()
+    assert not (registry.root / "verified.json").exists()
+    evidence = b"".join(path.read_bytes() for path in diagnostics.root.glob("*/*.json"))
+    for expected in (
+        b'"stage":"STATE_VALIDATED"',
+        b'"stage":"TOKEN_PERSISTED_TEMPORARILY"',
+        b'"stage":"COMPANYINFO_REQUEST_STARTED"',
+        b'"stage":"REALM_MISMATCH"',
+        b'"stage":"TOKEN_CLEANUP_SUCCEEDED"',
+        b'"failure_classification":"realm_mismatch"',
+    ):
+        assert expected in evidence
+    for forbidden in (
+        b"synthetic-code",
+        b"synthetic-state",
+        b"synthetic-access-material",
+        b"synthetic-refresh-material",
+    ):
+        assert forbidden not in evidence
 
 
 def test_preview_proxy_suppresses_callback_query_logging() -> None:
@@ -252,8 +434,6 @@ def test_preview_proxy_suppresses_callback_query_logging() -> None:
     assert "X-ACP-QBO-Code $qbo_code" in callback
     assert "rewrite ^ /api/v1/integrations/qbo/oauth/callback? break;" in callback
     assert "proxy_pass http://backend:8000;" in callback
-    caddy = (
-        repository / "docs/deployment/mission-control-preview.caddy"
-    ).read_text()
+    caddy = (repository / "docs/deployment/mission-control-preview.caddy").read_text()
     assert "log_skip @qbo_oauth_callback" in caddy
     assert os.environ.get("QBO_CLIENT_SECRET") is None

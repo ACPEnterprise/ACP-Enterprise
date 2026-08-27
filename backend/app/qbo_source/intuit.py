@@ -219,9 +219,10 @@ class SystemClock:
 
 
 class IntuitError(RuntimeError):
-    def __init__(self, code: str) -> None:
+    def __init__(self, code: str, *, provider_status: int | None = None) -> None:
         super().__init__(code)
         self.code = code
+        self.provider_status = provider_status
 
 
 class IntuitAuthenticationError(IntuitError):
@@ -289,15 +290,27 @@ class IntuitOAuthClient:
     ) -> OAuthToken:
         if not code or not redirect_uri.startswith("https://"):
             raise ValueError("authorization code and secure redirect URI are required")
-        token = await self._token_request(
-            {
-                "grant_type": "authorization_code",
-                "code": code,
-                "redirect_uri": redirect_uri,
-            },
-            generation=0,
-        )
-        await self.secrets.put_token(token_reference, token, expected_generation=None)
+        try:
+            token = await self._token_request(
+                {
+                    "grant_type": "authorization_code",
+                    "code": code,
+                    "redirect_uri": redirect_uri,
+                },
+                generation=0,
+            )
+        except IntuitError:
+            raise
+        except Exception as error:
+            raise IntuitAuthenticationError(
+                "token_exchange_transport_failed"
+            ) from error
+        try:
+            await self.secrets.put_token(
+                token_reference, token, expected_generation=None
+            )
+        except Exception as error:
+            raise IntuitAuthenticationError("token_persistence_failed") from error
         return token
 
     async def refresh(self, current: OAuthToken) -> OAuthToken:
@@ -338,7 +351,9 @@ class IntuitOAuthClient:
             body=urlencode(fields).encode(),
         )
         if response.status != 200:
-            raise IntuitAuthenticationError("token_request_rejected")
+            raise IntuitAuthenticationError(
+                "token_request_rejected", provider_status=response.status
+            )
         payload = response.json()
         try:
             access_token = str(payload["access_token"])
@@ -406,13 +421,7 @@ class OAuthAuthorizationCoordinator:
     async def complete(
         self, *, code: str, state: str, realm_id: str
     ) -> AuthorizedRealm:
-        pending = await self.states.consume(state)
-        if pending is None or pending.state != state:
-            raise IntuitAuthenticationError("oauth_state_invalid")
-        if pending.environment != self.oauth.environment:
-            raise IntuitAuthenticationError("oauth_environment_mismatch")
-        if pending.expires_at <= self.clock.now():
-            raise IntuitAuthenticationError("oauth_state_expired")
+        pending = await self._consume_valid_state(state)
         if not realm_id:
             raise IntuitAuthenticationError("oauth_realm_missing")
         token = await self.oauth.exchange_code(
@@ -421,6 +430,20 @@ class OAuthAuthorizationCoordinator:
             token_reference=pending.token_reference,
         )
         return AuthorizedRealm(realm_id=realm_id, token=token)
+
+    async def reject(self, *, state: str) -> None:
+        await self._consume_valid_state(state)
+        raise IntuitAuthenticationError("oauth_provider_rejected")
+
+    async def _consume_valid_state(self, state: str) -> PendingAuthorization:
+        pending = await self.states.consume(state)
+        if pending is None or pending.state != state:
+            raise IntuitAuthenticationError("oauth_state_invalid")
+        if pending.environment != self.oauth.environment:
+            raise IntuitAuthenticationError("oauth_environment_mismatch")
+        if pending.expires_at <= self.clock.now():
+            raise IntuitAuthenticationError("oauth_state_expired")
+        return pending
 
 
 class SerializedTokenManager:

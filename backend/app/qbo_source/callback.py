@@ -107,7 +107,10 @@ class OAuthCallbackHandler:
         provider_error: str | None = None,
     ) -> AuthorizedRealm:
         if provider_error:
-            raise IntuitAuthenticationError("oauth_provider_rejected")
+            if not state:
+                raise IntuitAuthenticationError("oauth_state_invalid")
+            await self.coordinator.reject(state=state)
+            raise AssertionError("OAuth rejection must not return")
         if not code or not state or not realm_id:
             raise IntuitAuthenticationError("oauth_callback_incomplete")
         return await self.coordinator.complete(
