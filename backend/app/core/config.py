@@ -1,5 +1,6 @@
 from functools import lru_cache
 from ipaddress import ip_network
+from pathlib import Path
 from typing import Literal
 
 from pydantic import Field, model_validator
@@ -30,6 +31,13 @@ class Settings(BaseSettings):
     )
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
     platform_contract_expected_fingerprint: str | None = None
+
+    qbo_sandbox_enabled: bool = False
+    qbo_sandbox_callback_uri: str | None = None
+    qbo_sandbox_runtime_root: str | None = None
+    qbo_sandbox_expected_company_name: str | None = None
+    qbo_sandbox_api_minor_version: int = 75
+    qbo_repository_root: str = "/app"
 
     password_min_length: int = 12
     password_max_length: int = 256
@@ -130,6 +138,21 @@ class Settings(BaseSettings):
             ) from error
         if self.hsts_max_age_seconds < 0:
             raise ValueError("HSTS_MAX_AGE_SECONDS cannot be negative")
+        if self.qbo_sandbox_enabled:
+            expected_callback = (
+                "https://preview.allcountyhomeservices.com"
+                "/api/v1/integrations/qbo/oauth/callback"
+            )
+            if self.environment == "production":
+                raise ValueError("QBO sandbox OAuth cannot run in Production")
+            if self.qbo_sandbox_callback_uri != expected_callback:
+                raise ValueError("QBO sandbox callback URI must match Preview exactly")
+            if not self.qbo_sandbox_runtime_root or not Path(
+                self.qbo_sandbox_runtime_root
+            ).is_absolute():
+                raise ValueError("QBO sandbox runtime root must be an absolute path")
+            if not 1 <= self.qbo_sandbox_api_minor_version <= 999:
+                raise ValueError("QBO sandbox API minor version is invalid")
         if self.environment in {"preview", "production"}:
             if not self.platform_contract_expected_fingerprint:
                 raise ValueError(

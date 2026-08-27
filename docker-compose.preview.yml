@@ -19,6 +19,10 @@ x-backend-environment: &backend-environment
   HSTS_ENABLED: "true"
   TRUST_FORWARDED_HEADERS: "true"
   TRUSTED_PROXY_CIDRS: ${TRUSTED_PROXY_CIDRS:-["172.30.0.0/24"]}
+  QBO_SANDBOX_ENABLED: "true"
+  QBO_SANDBOX_CALLBACK_URI: https://preview.allcountyhomeservices.com/api/v1/integrations/qbo/oauth/callback
+  QBO_SANDBOX_RUNTIME_ROOT: /var/lib/acp-qbo-sandbox
+  QBO_REPOSITORY_ROOT: /app
 
 services:
   postgres:
@@ -77,6 +81,10 @@ services:
         condition: service_completed_successfully
       redis:
         condition: service_healthy
+      qbo-sandbox-init:
+        condition: service_completed_successfully
+    volumes:
+      - preview_qbo_sandbox_state:/var/lib/acp-qbo-sandbox
     healthcheck:
       test: ["CMD", "python", "-c", "import json,urllib.request; data=json.load(urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)); assert data['status']=='healthy'"]
       interval: 10s
@@ -84,6 +92,23 @@ services:
       start_period: 10s
       retries: 12
     restart: unless-stopped
+    networks:
+      preview:
+
+  qbo-sandbox-init:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.preview
+    user: root
+    command:
+      [
+        "sh",
+        "-c",
+        "install -d -o acp -g acp -m 700 /var/lib/acp-qbo-sandbox"
+      ]
+    volumes:
+      - preview_qbo_sandbox_state:/var/lib/acp-qbo-sandbox
+    restart: "no"
     networks:
       preview:
 
@@ -180,6 +205,7 @@ volumes:
   preview_postgres_data:
   preview_redis_data:
   preview_worker_state:
+  preview_qbo_sandbox_state:
 
 networks:
   preview:

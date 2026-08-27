@@ -11,6 +11,7 @@ from urllib.parse import urlparse
 
 from .intuit import (
     AuthorizationStateStore,
+    AuthorizedRealm,
     IntuitAuthenticationError,
     IntuitEnvironment,
     OAuthAuthorizationCoordinator,
@@ -104,12 +105,11 @@ class OAuthCallbackHandler:
         state: str | None,
         realm_id: str | None,
         provider_error: str | None = None,
-    ) -> str:
+    ) -> AuthorizedRealm:
         if provider_error:
             raise IntuitAuthenticationError("oauth_provider_rejected")
         if not code or not state or not realm_id:
             raise IntuitAuthenticationError("oauth_callback_incomplete")
-        authorized = await self.coordinator.complete(
+        return await self.coordinator.complete(
             code=code, state=state, realm_id=realm_id
         )
-        return authorized.realm_id

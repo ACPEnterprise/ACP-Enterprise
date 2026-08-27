@@ -63,6 +63,8 @@ from app.platform.users.identity_router import (
     self_service_router as identity_self_service_router,
 )
 from app.price_book.router import router as price_book_router
+from app.qbo_source.router import router as qbo_source_router
+from app.qbo_source.runtime import initialize_sandbox_runtime_storage
 from app.scheduling.router import router as scheduling_router
 from app.worker_control.transport.http.router import router as worker_transport_router
 
@@ -74,6 +76,7 @@ logging.basicConfig(
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    initialize_sandbox_runtime_storage(settings)
     permission_catalog.validate()
     validate_launch_role_matrix(permission_catalog)
     platform_contract_manifest.assert_expected(
@@ -157,6 +160,7 @@ app.include_router(engineering_capacity_router)
 app.include_router(execution_status_router)
 app.include_router(controlled_execution_router)
 app.include_router(worker_transport_router)
+app.include_router(qbo_source_router)
 
 
 @app.get("/", tags=["System"])
