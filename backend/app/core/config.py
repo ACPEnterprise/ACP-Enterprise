@@ -36,6 +36,11 @@ class Settings(BaseSettings):
     qbo_sandbox_callback_uri: str | None = None
     qbo_sandbox_runtime_root: str | None = None
     qbo_sandbox_api_minor_version: int = 75
+    qbo_production_enabled: bool = False
+    qbo_production_callback_uri: str | None = None
+    qbo_production_runtime_root: str | None = None
+    qbo_production_evidence_root: str | None = None
+    qbo_production_api_minor_version: int = 75
     qbo_repository_root: str = "/app"
 
     password_min_length: int = 12
@@ -146,12 +151,36 @@ class Settings(BaseSettings):
                 raise ValueError("QBO sandbox OAuth cannot run in Production")
             if self.qbo_sandbox_callback_uri != expected_callback:
                 raise ValueError("QBO sandbox callback URI must match Preview exactly")
-            if not self.qbo_sandbox_runtime_root or not Path(
-                self.qbo_sandbox_runtime_root
-            ).is_absolute():
+            if (
+                not self.qbo_sandbox_runtime_root
+                or not Path(self.qbo_sandbox_runtime_root).is_absolute()
+            ):
                 raise ValueError("QBO sandbox runtime root must be an absolute path")
             if not 1 <= self.qbo_sandbox_api_minor_version <= 999:
                 raise ValueError("QBO sandbox API minor version is invalid")
+        if self.qbo_production_enabled:
+            expected_callback = (
+                "https://preview.allcountyhomeservices.com"
+                "/api/v1/integrations/qbo/production/oauth/callback"
+            )
+            if self.environment == "production":
+                raise ValueError(
+                    "QBO source acquisition control cannot run in ACP Production"
+                )
+            if self.qbo_production_callback_uri != expected_callback:
+                raise ValueError(
+                    "QBO Production callback URI must match Preview exactly"
+                )
+            roots = (
+                self.qbo_production_runtime_root,
+                self.qbo_production_evidence_root,
+            )
+            if any(not value or not Path(value).is_absolute() for value in roots):
+                raise ValueError("QBO Production protected roots must be absolute")
+            if self.qbo_production_runtime_root == self.qbo_sandbox_runtime_root:
+                raise ValueError("QBO sandbox and Production roots must be isolated")
+            if not 1 <= self.qbo_production_api_minor_version <= 999:
+                raise ValueError("QBO Production API minor version is invalid")
         if self.environment in {"preview", "production"}:
             if not self.platform_contract_expected_fingerprint:
                 raise ValueError(

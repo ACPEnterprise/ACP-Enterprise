@@ -23,6 +23,10 @@ x-backend-environment: &backend-environment
   QBO_SANDBOX_CALLBACK_URI: https://preview.allcountyhomeservices.com/api/v1/integrations/qbo/oauth/callback
   QBO_SANDBOX_RUNTIME_ROOT: /var/lib/acp-qbo-sandbox
   QBO_REPOSITORY_ROOT: /app
+  QBO_PRODUCTION_ENABLED: ${QBO_PRODUCTION_ENABLED:-false}
+  QBO_PRODUCTION_CALLBACK_URI: https://preview.allcountyhomeservices.com/api/v1/integrations/qbo/production/oauth/callback
+  QBO_PRODUCTION_RUNTIME_ROOT: /var/lib/acp-qbo-production
+  QBO_PRODUCTION_EVIDENCE_ROOT: /var/lib/acp-qbo-production-evidence
 
 services:
   postgres:
@@ -83,8 +87,12 @@ services:
         condition: service_healthy
       qbo-sandbox-init:
         condition: service_completed_successfully
+      qbo-production-init:
+        condition: service_completed_successfully
     volumes:
       - preview_qbo_sandbox_state:/var/lib/acp-qbo-sandbox
+      - preview_qbo_production_state:/var/lib/acp-qbo-production
+      - preview_qbo_production_evidence:/var/lib/acp-qbo-production-evidence
     healthcheck:
       test: ["CMD", "python", "-c", "import json,urllib.request; data=json.load(urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)); assert data['status']=='healthy'"]
       interval: 10s
@@ -108,6 +116,24 @@ services:
       ]
     volumes:
       - preview_qbo_sandbox_state:/var/lib/acp-qbo-sandbox
+    restart: "no"
+    networks:
+      preview:
+
+  qbo-production-init:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.preview
+    user: root
+    command:
+      [
+        "sh",
+        "-c",
+        "install -d -o acp -g acp -m 700 /var/lib/acp-qbo-production /var/lib/acp-qbo-production-evidence"
+      ]
+    volumes:
+      - preview_qbo_production_state:/var/lib/acp-qbo-production
+      - preview_qbo_production_evidence:/var/lib/acp-qbo-production-evidence
     restart: "no"
     networks:
       preview:
@@ -206,6 +232,8 @@ volumes:
   preview_redis_data:
   preview_worker_state:
   preview_qbo_sandbox_state:
+  preview_qbo_production_state:
+  preview_qbo_production_evidence:
 
 networks:
   preview:

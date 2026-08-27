@@ -20,6 +20,7 @@ from .callback import (
 )
 from .diagnostics import OAuthDiagnosticStage, ProtectedOAuthDiagnosticJournal
 from .intuit import (
+    ENDPOINTS,
     AuthorizedRealm,
     HttpTransport,
     IntuitAuthenticationError,
@@ -30,7 +31,11 @@ from .intuit import (
     IntuitProtocolError,
     OAuthAuthorizationCoordinator,
 )
-from .secrets import ProtectedSandboxSecretProvider, SandboxSecretStoreError
+from .secrets import (
+    ProtectedProductionSecretProvider,
+    ProtectedSandboxSecretProvider,
+    SandboxSecretStoreError,
+)
 
 
 class SandboxRuntimeError(RuntimeError):
@@ -95,6 +100,7 @@ class SandboxCompanyInfoVerifier:
         token_reference: str,
         minor_version: int,
         registry: SandboxConnectionRegistry,
+        environment: IntuitEnvironment = IntuitEnvironment.SANDBOX,
     ) -> None:
         self.transport = transport
         self.secrets_provider = secrets_provider
@@ -102,6 +108,7 @@ class SandboxCompanyInfoVerifier:
         self.token_reference = token_reference
         self.minor_version = minor_version
         self.registry = registry
+        self.environment = environment
 
     async def verify(self, authorized: AuthorizedRealm) -> None:
         if authorized.token.realm_id != authorized.realm_id:
@@ -109,7 +116,7 @@ class SandboxCompanyInfoVerifier:
         if not authorized.realm_id.isascii() or not authorized.realm_id.isdigit():
             raise IntuitAuthenticationError("company_realm_invalid")
         url = (
-            "https://sandbox-quickbooks.api.intuit.com/v3/company/"
+            f"{ENDPOINTS[self.environment].api_base}/"
             f"{authorized.realm_id}/companyinfo/{authorized.realm_id}"
             f"?minorversion={self.minor_version}"
         )
@@ -151,8 +158,9 @@ class SandboxCompanyInfoVerifier:
 
 
 class SandboxConnectionRegistry:
-    def __init__(self, root: Path) -> None:
+    def __init__(self, root: Path, environment: str = "sandbox") -> None:
         self.root = root
+        self.environment = environment
         self.root.mkdir(parents=True, mode=0o700, exist_ok=True)
         os.chmod(self.root, 0o700)
 
@@ -165,8 +173,8 @@ class SandboxConnectionRegistry:
         minor_version: int,
     ) -> None:
         document = {
-            "schema_version": "qbo-sandbox-connection/v2",
-            "environment": "sandbox",
+            "schema_version": f"qbo-{self.environment}-connection/v2",
+            "environment": self.environment,
             "realm_id": realm_id,
             "company_info_id": company_info_id,
             "company_name": company_name,
@@ -268,11 +276,12 @@ class SandboxOAuthRuntime:
     verifier: SandboxCompanyInfoVerifier
     coordinator: OAuthAuthorizationCoordinator
     diagnostics: ProtectedOAuthDiagnosticJournal
+    token_reference: str = ProtectedSandboxSecretProvider.TOKEN_REFERENCE
 
     async def begin(self, *, redirect_uri: str) -> str:
         return await self.coordinator.begin(
             redirect_uri=redirect_uri,
-            token_reference=ProtectedSandboxSecretProvider.TOKEN_REFERENCE,
+            token_reference=self.token_reference,
         )
 
     def connection_state(self) -> str:
@@ -296,9 +305,7 @@ class SandboxOAuthRuntime:
         try:
             if self.connection_state() != "disconnecting":
                 raise SandboxRuntimeError("sandbox_connection_state_inconsistent")
-            await self.coordinator.oauth.revoke(
-                token_reference=ProtectedSandboxSecretProvider.TOKEN_REFERENCE
-            )
+            await self.coordinator.oauth.revoke(token_reference=self.token_reference)
             self.verifier.registry.archive_and_delete_verified()
         finally:
             self.verifier.registry.end_disconnect()
@@ -437,6 +444,20 @@ def initialize_sandbox_runtime_storage(configuration: Settings = settings) -> No
     SandboxConnectionRegistry(root / "connections")
 
 
+def initialize_production_runtime_storage(configuration: Settings = settings) -> None:
+    if not configuration.qbo_production_enabled:
+        return
+    root = _production_runtime_root(configuration)
+    repository = Path(configuration.qbo_repository_root).resolve()
+    ProtectedProductionSecretProvider(root=root / "secrets", repository_root=repository)
+    ProtectedAuthorizationStateStore(root / "oauth-state", repository_root=repository)
+    ProtectedOAuthDiagnosticJournal(
+        root / "oauth-diagnostics", repository_root=repository
+    )
+    ProtectedSandboxCompanyBinding(root / "configuration")
+    SandboxConnectionRegistry(root / "connections", environment="production")
+
+
 @lru_cache
 def get_sandbox_oauth_runtime() -> SandboxOAuthRuntime:
     configuration = settings
@@ -487,6 +508,60 @@ def get_sandbox_oauth_runtime() -> SandboxOAuthRuntime:
     )
 
 
+@lru_cache
+def get_production_oauth_runtime() -> SandboxOAuthRuntime:
+    configuration = settings
+    if not configuration.qbo_production_enabled:
+        raise SandboxRuntimeError("production_oauth_runtime_disabled")
+    expected_uri = (
+        "https://preview.allcountyhomeservices.com"
+        "/api/v1/integrations/qbo/production/oauth/callback"
+    )
+    if configuration.qbo_production_callback_uri != expected_uri:
+        raise SandboxRuntimeError("production_callback_uri_mismatch")
+    root = _production_runtime_root(configuration)
+    repository = Path(configuration.qbo_repository_root).resolve()
+    provider = ProtectedProductionSecretProvider(
+        root=root / "secrets", repository_root=repository
+    )
+    states = ProtectedAuthorizationStateStore(
+        root / "oauth-state", repository_root=repository
+    )
+    diagnostics = ProtectedOAuthDiagnosticJournal(
+        root / "oauth-diagnostics", repository_root=repository
+    )
+    transport = IntuitHttpTransport()
+    oauth = IntuitOAuthClient(
+        environment=IntuitEnvironment.PRODUCTION,
+        transport=transport,
+        secrets=provider,
+        credential_reference=provider.CLIENT_REFERENCE,
+    )
+    coordinator = OAuthAuthorizationCoordinator(
+        oauth=oauth, states=states, state_factory=lambda: secrets.token_urlsafe(32)
+    )
+    verifier = SandboxCompanyInfoVerifier(
+        transport=transport,
+        secrets_provider=provider,
+        expected_company_name=ProtectedSandboxCompanyBinding(
+            root / "configuration"
+        ).read(),
+        token_reference=provider.TOKEN_REFERENCE,
+        minor_version=configuration.qbo_production_api_minor_version,
+        registry=SandboxConnectionRegistry(
+            root / "connections", environment="production"
+        ),
+        environment=IntuitEnvironment.PRODUCTION,
+    )
+    return SandboxOAuthRuntime(
+        callback=OAuthCallbackHandler(coordinator),
+        verifier=verifier,
+        coordinator=coordinator,
+        diagnostics=diagnostics,
+        token_reference=provider.TOKEN_REFERENCE,
+    )
+
+
 def _runtime_root(configuration: Settings) -> Path:
     if not configuration.qbo_sandbox_runtime_root:
         raise SandboxRuntimeError("sandbox_runtime_root_not_configured")
@@ -495,6 +570,17 @@ def _runtime_root(configuration: Settings) -> Path:
         raise SandboxRuntimeError("sandbox_runtime_root_invalid")
     if root.exists() and stat.S_IMODE(root.stat().st_mode) & 0o077:
         raise SandboxSecretStoreError("sandbox_runtime_root_permissions_too_open")
+    root.mkdir(parents=True, mode=0o700, exist_ok=True)
+    os.chmod(root, 0o700)
+    return root
+
+
+def _production_runtime_root(configuration: Settings) -> Path:
+    if not configuration.qbo_production_runtime_root:
+        raise SandboxRuntimeError("production_runtime_root_not_configured")
+    root = Path(configuration.qbo_production_runtime_root).expanduser().resolve()
+    if root.exists() and stat.S_IMODE(root.stat().st_mode) & 0o077:
+        raise SandboxSecretStoreError("production_runtime_root_permissions_too_open")
     root.mkdir(parents=True, mode=0o700, exist_ok=True)
     os.chmod(root, 0o700)
     return root

@@ -14,7 +14,11 @@ from app.platform.permissions.dependencies import require_permission
 
 from .callback import CALLBACK_PATH
 from .intuit import IntuitAuthenticationError, IntuitProtocolError
-from .runtime import SandboxRuntimeError, get_sandbox_oauth_runtime
+from .runtime import (
+    SandboxRuntimeError,
+    get_production_oauth_runtime,
+    get_sandbox_oauth_runtime,
+)
 from .secrets import SandboxSecretStoreError
 
 router = APIRouter(tags=["QBO Sandbox OAuth"])
@@ -29,6 +33,12 @@ CONNECTION_PATH = "/api/v1/integrations/qbo/connection"
 DISCONNECT_PATH = "/api/v1/integrations/qbo/oauth/disconnect"
 _CALLBACK_URI = (
     "https://preview.allcountyhomeservices.com/api/v1/integrations/qbo/oauth/callback"
+)
+PRODUCTION_AUTHORIZE_PATH = "/api/v1/integrations/qbo/production/oauth/authorize"
+PRODUCTION_CALLBACK_PATH = "/api/v1/integrations/qbo/production/oauth/callback"
+_PRODUCTION_CALLBACK_URI = (
+    "https://preview.allcountyhomeservices.com"
+    "/api/v1/integrations/qbo/production/oauth/callback"
 )
 
 _SAFE_HEADERS = {
@@ -55,6 +65,90 @@ def _connection_response(status_code: int, connection_state: str) -> JSONRespons
         },
         headers=_SAFE_HEADERS,
     )
+
+
+def _production_response(status_code: int, result: str) -> JSONResponse:
+    return JSONResponse(
+        status_code=status_code,
+        content={"status": "qbo_production_oauth_callback", "result": result},
+        headers=_SAFE_HEADERS,
+    )
+
+
+@router.post(PRODUCTION_AUTHORIZE_PATH, name="qbo-production-oauth-authorize")
+async def qbo_production_oauth_authorize(
+    authorization: _Administer,
+) -> JSONResponse:
+    identifier = hashlib.sha256(str(authorization.user.id).encode()).hexdigest()
+    try:
+        await _rate_limiter.enforce(
+            bucket="qbo-production-oauth-initiation",
+            identifier_hash=identifier,
+            limit=1,
+            window_seconds=900,
+        )
+        authorization_url = await get_production_oauth_runtime().begin(
+            redirect_uri=_PRODUCTION_CALLBACK_URI
+        )
+    except RateLimitExceededError:
+        return _production_response(
+            status.HTTP_429_TOO_MANY_REQUESTS, "initiation_limited"
+        )
+    except (
+        RateLimitUnavailableError,
+        SandboxRuntimeError,
+        SandboxSecretStoreError,
+        ValueError,
+    ):
+        return _production_response(
+            status.HTTP_503_SERVICE_UNAVAILABLE, "production_not_configured"
+        )
+    return JSONResponse(
+        status_code=status.HTTP_200_OK,
+        content={
+            "status": "qbo_production_oauth_initiation",
+            "authorization_url": authorization_url,
+        },
+        headers=_SAFE_HEADERS,
+    )
+
+
+@router.get(PRODUCTION_CALLBACK_PATH, name="qbo-production-oauth-callback")
+async def qbo_production_oauth_callback(
+    code: Annotated[str | None, Query()] = None,
+    state: Annotated[str | None, Query()] = None,
+    realm_id: Annotated[str | None, Query(alias="realmId")] = None,
+    provider_error: Annotated[str | None, Query(alias="error")] = None,
+    internal_code: Annotated[str | None, Header(alias="X-ACP-QBO-Code")] = None,
+    internal_state: Annotated[str | None, Header(alias="X-ACP-QBO-State")] = None,
+    internal_realm: Annotated[str | None, Header(alias="X-ACP-QBO-Realm")] = None,
+    internal_error: Annotated[str | None, Header(alias="X-ACP-QBO-Error")] = None,
+) -> JSONResponse:
+    code = internal_code or code
+    state = internal_state or state
+    realm_id = internal_realm or realm_id
+    provider_error = internal_error or provider_error
+    if not state or (not provider_error and not all((code, realm_id))):
+        return _production_response(
+            status.HTTP_400_BAD_REQUEST, "connection_not_completed"
+        )
+    try:
+        await get_production_oauth_runtime().complete(
+            code=code, state=state, realm_id=realm_id, provider_error=provider_error
+        )
+    except (SandboxRuntimeError, SandboxSecretStoreError):
+        return _production_response(
+            status.HTTP_503_SERVICE_UNAVAILABLE, "production_not_configured"
+        )
+    except (IntuitAuthenticationError, IntuitProtocolError) as error:
+        return _production_response(
+            status.HTTP_400_BAD_REQUEST, _safe_callback_error(error)
+        )
+    except Exception:  # noqa: BLE001
+        return _production_response(
+            status.HTTP_502_BAD_GATEWAY, "provider_verification_failed"
+        )
+    return _production_response(status.HTTP_200_OK, "connection_completed")
 
 
 @router.get(CONNECTION_PATH, name="qbo-sandbox-connection-status")

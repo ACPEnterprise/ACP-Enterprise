@@ -1,5 +1,5 @@
 preview.allcountyhomeservices.com {
-	@qbo_oauth_callback path /api/v1/integrations/qbo/oauth/callback
+	@qbo_oauth_callback path /api/v1/integrations/qbo/oauth/callback /api/v1/integrations/qbo/production/oauth/callback
 	log_skip @qbo_oauth_callback
 
 	handle /mission-control* {

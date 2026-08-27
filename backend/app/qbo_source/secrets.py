@@ -28,6 +28,9 @@ class ProtectedSandboxSecretProvider(SecretProvider):
 
     CLIENT_REFERENCE = "qbo-sandbox/client"
     TOKEN_REFERENCE = "qbo-sandbox/token"
+    ENVIRONMENT = "sandbox"
+    CLIENT_FILENAME = "development-client.json"
+    TOKEN_FILENAME = "sandbox-token.json"
 
     def __init__(self, *, root: Path, repository_root: Path) -> None:
         self.root = root.expanduser().resolve()
@@ -61,17 +64,17 @@ class ProtectedSandboxSecretProvider(SecretProvider):
 
     @property
     def client_path(self) -> Path:
-        return self.root / "development-client.json"
+        return self.root / self.CLIENT_FILENAME
 
     @property
     def token_path(self) -> Path:
-        return self.root / "sandbox-token.json"
+        return self.root / self.TOKEN_FILENAME
 
     def _read_client(self) -> ClientCredential:
         document = self._read_document(
             self.client_path, "sandbox_client_not_configured"
         )
-        if document.get("environment") != "sandbox":
+        if document.get("environment") != self.ENVIRONMENT:
             raise SandboxSecretStoreError("sandbox_client_environment_invalid")
         client_id = document.get("client_id")
         client_secret = document.get("client_secret")
@@ -102,8 +105,8 @@ class ProtectedSandboxSecretProvider(SecretProvider):
                 if current.get("generation") != expected_generation:
                     raise SandboxSecretStoreError("sandbox_token_generation_conflict")
             document = {
-                "schema_version": "qbo-sandbox-token/v1",
-                "environment": "sandbox",
+                "schema_version": f"qbo-{self.ENVIRONMENT}-token/v1",
+                "environment": self.ENVIRONMENT,
                 "access_token": token.access_token,
                 "refresh_token": token.refresh_token,
                 "access_expires_at": token.access_expires_at.isoformat(),
@@ -127,7 +130,7 @@ class ProtectedSandboxSecretProvider(SecretProvider):
 
     def _token_from_document(self, document: dict[str, object]) -> OAuthToken:
         try:
-            if document["environment"] != "sandbox":
+            if document["environment"] != self.ENVIRONMENT:
                 raise ValueError
             access_expires_at = datetime.fromisoformat(
                 str(document["access_expires_at"])
@@ -202,6 +205,16 @@ class ProtectedSandboxSecretProvider(SecretProvider):
     def _require_reference(actual: str, expected: str) -> None:
         if actual != expected:
             raise SandboxSecretStoreError("sandbox_secret_reference_rejected")
+
+
+class ProtectedProductionSecretProvider(ProtectedSandboxSecretProvider):
+    """Real-company Intuit credentials isolated from Development sandbox state."""
+
+    CLIENT_REFERENCE = "qbo-production/client"
+    TOKEN_REFERENCE = "qbo-production/token"
+    ENVIRONMENT = "production"
+    CLIENT_FILENAME = "production-client.json"
+    TOKEN_FILENAME = "production-token.json"
 
 
 class _FileLock:
