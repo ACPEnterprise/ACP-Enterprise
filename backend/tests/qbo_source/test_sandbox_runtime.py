@@ -169,9 +169,10 @@ def test_preview_proxy_suppresses_callback_query_logging() -> None:
         "location = /api/v1/integrations/qbo/oauth/callback {", maxsplit=1
     )[1].split("}", maxsplit=1)[0]
     assert "access_log off;" in callback
+    assert "set $qbo_code $arg_code;" in callback
+    assert "X-ACP-QBO-Code $qbo_code" in callback
     assert "rewrite ^ /api/v1/integrations/qbo/oauth/callback? break;" in callback
     assert "proxy_pass http://backend:8000;" in callback
-    assert "X-ACP-QBO-Code $arg_code" in callback
     caddy = (
         repository / "docs/deployment/mission-control-preview.caddy"
     ).read_text()
