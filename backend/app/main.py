@@ -35,6 +35,7 @@ from app.events.router import router as events_router
 from app.events.schemas import BusinessEventCreate
 from app.events.service import BusinessEventService
 from app.events.types import EventType
+from app.field_service.router import router as field_service_router
 from app.inventory.router import router as inventory_router
 from app.invoicing.router import router as invoicing_router
 from app.jobs.router import router as jobs_router
@@ -149,6 +150,7 @@ app.include_router(jobs_router)
 app.include_router(inventory_router)
 app.include_router(operations_router)
 app.include_router(dispatch_router)
+app.include_router(field_service_router)
 app.include_router(price_book_router)
 app.include_router(estimates_router)
 app.include_router(invoicing_router)

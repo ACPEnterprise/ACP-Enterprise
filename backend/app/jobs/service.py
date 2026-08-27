@@ -40,6 +40,7 @@ from app.jobs.errors import (
 from app.jobs.guards import (
     JobCancellationGuard,
     JobCompletionGuard,
+    JobExecutionGuard,
     JobGuardContext,
     JobReopeningGuard,
 )
@@ -68,6 +69,7 @@ class JobService:
         scheduling_references: SchedulingReferenceService = scheduling_reference_service,
         customer_references: CustomerReferenceService = customer_reference_service,
         completion_guards: Sequence[JobCompletionGuard] = (),
+        execution_guards: Sequence[JobExecutionGuard] = (),
         cancellation_guards: Sequence[JobCancellationGuard] = (),
         reopening_guards: Sequence[JobReopeningGuard] = (),
         clock: Callable[[], datetime] = utc_now,
@@ -76,6 +78,7 @@ class JobService:
         self._scheduling_references = scheduling_references
         self._customer_references = customer_references
         self._completion_guards = tuple(completion_guards)
+        self._execution_guards = tuple(execution_guards)
         self._cancellation_guards = tuple(cancellation_guards)
         self._reopening_guards = tuple(reopening_guards)
         self._clock = clock
@@ -535,6 +538,7 @@ class JobService:
             from_status=JobStatus.READY,
             event_type=EventType.JOB_STARTED,
             mutate=self._repository.start_job,
+            action="start",
         )
 
     async def pause_job(
@@ -551,6 +555,11 @@ class JobService:
                 raise JobInvalidTransitionError("Job is paused for another reason.")
             self._check_version(job, command.expected_version)
             self._require_status(job, JobStatus.IN_PROGRESS)
+            guard_context = self._guard_context(job)
+            for guard in self._execution_guards:
+                await guard.validate_execution(
+                    session, context=context, job=guard_context, action="pause"
+                )
             self._repository.pause_job(
                 job,
                 reason_code=command.reason_code.value,
@@ -584,6 +593,7 @@ class JobService:
             from_status=JobStatus.PAUSED,
             event_type=EventType.JOB_RESUMED,
             mutate=self._repository.resume_job,
+            action="resume",
         )
 
     async def complete_job(
@@ -718,12 +728,19 @@ class JobService:
         from_status: JobStatus,
         event_type: EventType,
         mutate: Callable[..., None],
+        action: str | None = None,
     ) -> Job:
         occurred_at, correlation_id = self._operation_identity()
         async with session.begin():
             job = await self._locked_job(session, context=context, job_id=job_id)
             self._check_version(job, expected_version)
             self._require_status(job, from_status)
+            if action:
+                guard_context = self._guard_context(job)
+                for guard in self._execution_guards:
+                    await guard.validate_execution(
+                        session, context=context, job=guard_context, action=action
+                    )
             mutate(job, actor_user_id=context.user.id, occurred_at=occurred_at)
             self._stage_transition_event(
                 session,
@@ -1068,4 +1085,8 @@ class JobService:
         )
 
 
-job_service = JobService()
+from app.field_service.guards import field_job_guard
+
+job_service = JobService(
+    completion_guards=(field_job_guard,), execution_guards=(field_job_guard,)
+)

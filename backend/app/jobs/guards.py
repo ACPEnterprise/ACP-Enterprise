@@ -28,6 +28,17 @@ class JobCompletionGuard(Protocol):
     ) -> None: ...
 
 
+class JobExecutionGuard(Protocol):
+    async def validate_execution(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        job: JobGuardContext,
+        action: str,
+    ) -> None: ...
+
+
 class JobCancellationGuard(Protocol):
     async def validate_cancellation(
         self,

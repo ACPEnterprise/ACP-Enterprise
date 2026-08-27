@@ -3,6 +3,7 @@ import { Link } from "react-router";
 
 import type { TechnicianItineraryItem } from "../../types/technician";
 import { Badge, Card, CardContent, CardHeader, CardTitle } from "../../ui";
+import { TechnicianFieldPanel } from "./TechnicianFieldPanel";
 
 const time = new Intl.DateTimeFormat(undefined, {
   hour: "numeric",
@@ -52,6 +53,7 @@ export function TechnicianItineraryCard({ item }: { readonly item: TechnicianIti
         ) : (
           <p className="text-body-s text-content-muted">Job details are not available yet.</p>
         )}
+        {item.job_id && item.field_execution_enabled && <TechnicianFieldPanel item={item} />}
       </CardContent>
     </Card>
   );
