@@ -876,7 +876,26 @@ class RoadmapService:
                     unresolved_recovery=not (runtime_clear and capacity_clear),
                 )
             )
-            if decision.eligible and review is not None and runtime is not None:
+            target_reason = (
+                "heartbeat_expired"
+                if runtime is not None
+                and runtime.worker_health == "unhealthy"
+                and runtime.reason_code == "heartbeat_expired"
+                else "adopted_result_owner_review"
+            )
+            projection_drifted = runtime is not None and (
+                milestone.status == "ready"
+                or runtime.runtime_state != "waiting_for_owner"
+                or runtime.progress_percent != 100
+                or runtime.current_activity != "Published result ready for owner review"
+                or runtime.reason_code != target_reason
+            )
+            if (
+                decision.eligible
+                and review is not None
+                and runtime is not None
+                and projection_drifted
+            ):
                 adopted_changes.append(
                     (milestone.id, result.id, review.id, result.command_id)
                 )

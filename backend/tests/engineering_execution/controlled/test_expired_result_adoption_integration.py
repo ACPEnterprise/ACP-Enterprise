@@ -546,6 +546,12 @@ async def test_expired_published_result_adoption_preserves_history_and_opens_rev
         await RoadmapService().reconcile(database, context=fixture.context)
     async with fixture.factory() as database:
         await RoadmapService().reconcile(database, context=fixture.context)
+        roadmaps = await RoadmapService().list(database, context=fixture.context)
+        milestones = await RoadmapService().milestones(
+            database, context=fixture.context
+        )
+        assert roadmaps[0].id == milestone.roadmap_id
+        assert any(item.id == milestone.id for item in milestones)
     async with fixture.factory() as database:
         restored_runtime = await database.scalar(
             select(EngineeringWorkstreamRuntime).where(
