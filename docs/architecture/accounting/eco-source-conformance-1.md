@@ -22,3 +22,15 @@ Beacon does not reinterpret facts; Luminary may later explain and recommend, and
 may guide an authorized owner. Accounting alone records corrections.
 
 No schema, API, deployment, real source data, or Production behavior is introduced.
+
+## ECO.SOURCE.ADAPTERS.1
+
+Typed adapters now consume the existing QBO economics assessment and a minimal
+public operational-evidence contract. QBO revenue, settlement, and procurement
+assertions remain source-reported and unaccepted; a partial QBO package becomes
+`UNKNOWN`. The operational handoff contains identities, authority, confidence,
+limitations, and immutable digests, but no raw Migration payload or economic amount.
+
+Cross-source comparison requires an explicit semantic reconciliation key supplied by
+the owning reconciliation boundary. The adapter does not infer Job linkage. Matching
+keys with different value digests become `CONFLICTING`, retaining both assertions.
