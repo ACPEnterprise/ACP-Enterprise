@@ -85,6 +85,7 @@ export function AdministrationRoute() {
     setQboDisconnectConfirmation(false);
     setQboError(false);
     setQboPending(true);
+    setQboState("disconnecting");
     try {
       const state = await disconnectQuickBooksSandbox();
       setQboState(state);
