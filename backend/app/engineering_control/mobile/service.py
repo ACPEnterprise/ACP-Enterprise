@@ -170,6 +170,102 @@ class MobileEngineeringControlService:
             milestone=milestone,
             now=current,
         )
+        result_commit_sha = summary.resulting_commit_sha
+        result_publication_status = "not_available"
+        result_adoption_status = "not_adopted"
+        result_completed_at = status.finished_at
+        result_adopted_at = None
+        acknowledgement_status = (
+            "recorded" if summary.acknowledged_at is not None else "pending"
+        )
+        execution_status = (
+            "completed" if status.monitoring_state == "completed" else "pending"
+        )
+        validation_status = (
+            "completed"
+            if status.monitoring_state == "completed"
+            and summary.failure_classification is None
+            else "pending"
+        )
+        preview_deployment_status = (
+            "completed" if summary.deployment_latency_ms is not None else "not_recorded"
+        )
+        owner_review_digest = None
+        owner_review_version = None
+        owner_review_action_available = False
+        historical_recovery_context: tuple[dict[str, object], ...] = ()
+        if status.review_id is not None and status.review_state == "pending":
+            await session.rollback()
+            package = await self.reviews.get(
+                session,
+                context=context,
+                review_id=status.review_id,
+            )
+            evidence = package.evidence_summary
+            adoption = evidence.get("adoption")
+            commit = evidence.get("published_commit_sha") or evidence.get("commit_sha")
+            validation = package.validation_summary.get("validation")
+            phases_source = evidence.get("evidence")
+            phases = (
+                phases_source.get("phases", ())
+                if isinstance(phases_source, Mapping)
+                else ()
+            )
+            validation_complete = (
+                isinstance(validation, Mapping)
+                and bool(validation)
+                and all(value is True for value in validation.values())
+            )
+            if (
+                isinstance(adoption, Mapping)
+                and package.result_status == "succeeded"
+                and package.result_disposition == "accepted"
+                and package.repository_mutated
+                and isinstance(commit, str)
+                and len(commit) == 40
+            ):
+                result_commit_sha = commit
+                result_publication_status = "published"
+                result_adoption_status = "adopted"
+                provider_completed_at = adoption.get("provider_completed_at")
+                adopted_at = adoption.get("adopted_at")
+                if isinstance(provider_completed_at, str):
+                    result_completed_at = datetime.fromisoformat(provider_completed_at)
+                if isinstance(adopted_at, str):
+                    result_adopted_at = datetime.fromisoformat(adopted_at)
+                acknowledgement_status = (
+                    "recorded"
+                    if summary.acknowledged_at is not None
+                    else "completed_from_immutable_evidence"
+                )
+                execution_status = (
+                    "completed" if "completed" in phases else package.result_status
+                )
+                validation_status = "completed" if validation_complete else "incomplete"
+                preview_deployment_status = "not_performed"
+                owner_review_action_available = True
+                prior = adoption.get("prior_reconciliation_evidence")
+                if isinstance(prior, Mapping):
+                    historical_recovery_context = (
+                        {
+                            "classification": "historical_transport_recovery",
+                            "summary": (
+                                "The provider completed and published the result; "
+                                "terminal transport later required owner-authorized "
+                                "evidence adoption."
+                            ),
+                            "reason_code": prior.get("reconciliation_reason"),
+                        },
+                    )
+                summary = summary.model_copy(
+                    update={
+                        "resulting_commit_sha": commit,
+                        "repository_operation_status": "published",
+                        "failure_classification": None,
+                    }
+                )
+            owner_review_digest = package.review.review_digest
+            owner_review_version = package.review.version
         return MobileWorkstreamDetail(
             **summary.model_dump(),
             owner_instruction=command.owner_instruction,
@@ -181,6 +277,19 @@ class MobileEngineeringControlService:
                 {"event": item.event, "occurred_at": item.occurred_at}
                 for item in status.timeline
             ),
+            result_commit_sha=result_commit_sha,
+            result_publication_status=result_publication_status,
+            result_adoption_status=result_adoption_status,
+            result_completed_at=result_completed_at,
+            result_adopted_at=result_adopted_at,
+            acknowledgement_status=acknowledgement_status,
+            execution_status=execution_status,
+            validation_status=validation_status,
+            preview_deployment_status=preview_deployment_status,
+            owner_review_digest=owner_review_digest,
+            owner_review_version=owner_review_version,
+            owner_review_action_available=owner_review_action_available,
+            historical_recovery_context=historical_recovery_context,
         )
 
     async def control_workstream(

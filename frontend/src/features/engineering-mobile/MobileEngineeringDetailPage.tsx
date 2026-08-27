@@ -14,6 +14,7 @@ import {
   useApproveMobileReview,
   useCancelMobileReview,
   useControlMobileWorkstream,
+  useDecideEngineeringReview,
   useMobileReview,
   useMobileWorkstream,
 } from "./hooks";
@@ -44,6 +45,51 @@ function duration(milliseconds: number | null): string {
   return `${(milliseconds / 1000).toFixed(1)} s`;
 }
 
+function stageStatus(status: string, milliseconds: number | null): string {
+  if (!status) return "Pending";
+  if (status === "completed" || status === "recorded") {
+    return milliseconds == null
+      ? "Completed"
+      : `Completed · ${duration(milliseconds)}`;
+  }
+  if (status === "completed_from_immutable_evidence") {
+    return "Completed · immutable provider evidence";
+  }
+  if (status === "not_performed") return "Not performed by this execution";
+  if (status === "not_recorded") return "No deployment recorded";
+  if (status === "incomplete") return "Incomplete";
+  return mobileEngineeringLabel(status);
+}
+
+function ReadableInstruction({ value }: { value: string }) {
+  const lines = value.split("\n");
+  return (
+    <div className="mt-ui-3 space-y-ui-2 text-sm leading-6">
+      {lines.map((line, index) => {
+        const heading = line.match(/^#{1,4}\s+(.+)$/);
+        const bullet = line.match(/^[-*]\s+(.+)$/);
+        if (!line.trim()) return <div key={index} className="h-ui-1" />;
+        if (heading)
+          return (
+            <h3 key={index} className="pt-ui-2 font-bold">
+              {heading[1]}
+            </h3>
+          );
+        if (bullet)
+          return (
+            <p
+              key={index}
+              className="pl-ui-4 before:mr-ui-2 before:content-['•']"
+            >
+              {bullet[1]}
+            </p>
+          );
+        return <p key={index}>{line}</p>;
+      })}
+    </div>
+  );
+}
+
 export function MobileEngineeringDetailPage() {
   const { commandId } = useParams();
   const query = useMobileWorkstream(commandId);
@@ -51,6 +97,10 @@ export function MobileEngineeringDetailPage() {
   const review = useMobileReview(commandId);
   const approve = useApproveMobileReview(commandId ?? "");
   const cancelReview = useCancelMobileReview(commandId ?? "");
+  const decideResult = useDecideEngineeringReview(
+    commandId ?? "",
+    query.data?.review_id ?? null,
+  );
   const realtime = useEngineeringRealtime();
   const [observedAt] = useState(() => Date.now());
   const [confirmation, setConfirmation] =
@@ -58,6 +108,7 @@ export function MobileEngineeringDetailPage() {
   const [reviewDecision, setReviewDecision] = useState<
     "reject" | "revision" | null
   >(null);
+  const [acceptResult, setAcceptResult] = useState(false);
 
   if (query.isLoading)
     return (
@@ -221,6 +272,23 @@ export function MobileEngineeringDetailPage() {
           </div>
         </Alert>
       )}
+      {workstream.owner_review_action_available && (
+        <Alert variant="warning" title="Owner review prepared">
+          <p>
+            The published result and its immutable validation evidence are ready
+            for your decision.
+          </p>
+          <div className="mt-ui-3">
+            <Button
+              className="min-h-11"
+              disabled={decideResult.isPending}
+              onClick={() => setAcceptResult(true)}
+            >
+              Review and accept published result
+            </Button>
+          </div>
+        </Alert>
+      )}
       {approve.isError && (
         <Alert
           variant="danger"
@@ -230,13 +298,20 @@ export function MobileEngineeringDetailPage() {
           {getOperatorApiError(approve.error, "Owner approval").message}
         </Alert>
       )}
+      {decideResult.isError && (
+        <Alert
+          variant="danger"
+          announcement="assertive"
+          title="Review decision not accepted"
+        >
+          {getOperatorApiError(decideResult.error, "Owner review").message}
+        </Alert>
+      )}
 
       <div className="grid gap-ui-4 lg:grid-cols-2">
         <Card className="min-w-0 p-ui-4">
           <h2 className="font-bold">Current work</h2>
-          <p className="mt-ui-3 whitespace-pre-wrap break-words text-sm leading-6">
-            {workstream.owner_instruction}
-          </p>
+          <ReadableInstruction value={workstream.owner_instruction} />
           <dl className="mt-ui-4 grid gap-ui-3 text-sm">
             <div>
               <dt className="text-content-muted">Progress</dt>
@@ -256,12 +331,20 @@ export function MobileEngineeringDetailPage() {
             </div>
             <div>
               <dt className="text-content-muted">Last signal</dt>
-              <dd>{mobileEngineeringRelativeTime(workstream.heartbeat_at, observedAt)}</dd>
+              <dd>
+                {mobileEngineeringRelativeTime(
+                  workstream.heartbeat_at,
+                  observedAt,
+                )}
+              </dd>
             </div>
             <div>
               <dt className="text-content-muted">Request acknowledged</dt>
               <dd>
-                {mobileEngineeringRelativeTime(workstream.acknowledged_at, observedAt)}
+                {mobileEngineeringRelativeTime(
+                  workstream.acknowledged_at,
+                  observedAt,
+                )}
               </dd>
             </div>
           </dl>
@@ -270,7 +353,7 @@ export function MobileEngineeringDetailPage() {
           <h2 className="font-bold">Delivery</h2>
           <dl className="mt-ui-3 grid gap-ui-3 text-sm">
             <div>
-              <dt className="text-content-muted">Expected HEAD</dt>
+              <dt className="text-content-muted">Starting HEAD</dt>
               <dd className="break-all font-mono">
                 {shortExpectedHead(workstream.expected_head)}
               </dd>
@@ -284,17 +367,30 @@ export function MobileEngineeringDetailPage() {
               </dd>
             </div>
             <div>
-              <dt className="text-content-muted">Preview operation</dt>
+              <dt className="text-content-muted">Result publication</dt>
+              <dd>{stageStatus(workstream.result_publication_status, null)}</dd>
+            </div>
+            <div>
+              <dt className="text-content-muted">Adoption</dt>
               <dd>
                 {mobileEngineeringLabel(
-                  workstream.repository_operation_status ?? "not_started",
+                  workstream.result_adoption_status ?? "not_adopted",
                 )}
               </dd>
             </div>
             <div>
-              <dt className="text-content-muted">Result commit</dt>
+              <dt className="text-content-muted">Preview deployment</dt>
+              <dd>
+                {stageStatus(
+                  workstream.preview_deployment_status,
+                  workstream.deployment_latency_ms,
+                )}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-content-muted">Published result commit</dt>
               <dd className="break-all font-mono">
-                {workstream.resulting_commit_sha ?? "Not available"}
+                {workstream.result_commit_sha ?? "Not available"}
               </dd>
             </div>
           </dl>
@@ -306,25 +402,45 @@ export function MobileEngineeringDetailPage() {
         <dl className="mt-ui-3 grid grid-cols-2 gap-ui-3 text-sm sm:grid-cols-3">
           <div>
             <dt className="text-content-muted">Acknowledgement</dt>
-            <dd>{duration(workstream.acknowledgement_latency_ms)}</dd>
+            <dd>
+              {stageStatus(
+                workstream.acknowledgement_status,
+                workstream.acknowledgement_latency_ms,
+              )}
+            </dd>
           </div>
           <div>
             <dt className="text-content-muted">Execution</dt>
-            <dd>{duration(workstream.execution_latency_ms)}</dd>
+            <dd>
+              {stageStatus(
+                workstream.execution_status,
+                workstream.execution_latency_ms,
+              )}
+            </dd>
           </div>
           <div>
             <dt className="text-content-muted">Validation</dt>
-            <dd>{duration(workstream.validation_latency_ms)}</dd>
+            <dd>
+              {stageStatus(
+                workstream.validation_status,
+                workstream.validation_latency_ms,
+              )}
+            </dd>
           </div>
           <div>
             <dt className="text-content-muted">Deployment</dt>
-            <dd>{duration(workstream.deployment_latency_ms)}</dd>
+            <dd>
+              {stageStatus(
+                workstream.preview_deployment_status,
+                workstream.deployment_latency_ms,
+              )}
+            </dd>
           </div>
           <div>
             <dt className="text-content-muted">Worker uptime</dt>
             <dd>
               {workstream.worker_uptime_seconds == null
-                ? "Pending"
+                ? "Not recorded"
                 : `${workstream.worker_uptime_seconds} s`}
             </dd>
           </div>
@@ -334,6 +450,25 @@ export function MobileEngineeringDetailPage() {
           </div>
         </dl>
       </Card>
+
+      {(workstream.historical_recovery_context?.length ?? 0) > 0 && (
+        <Card className="p-ui-4">
+          <h2 className="font-bold">Historical recovery context</h2>
+          <p className="mt-ui-2 text-sm text-content-muted">
+            These preserved events are not the current result under review.
+          </p>
+          {workstream.historical_recovery_context?.map((item) => (
+            <Alert
+              key={`${item.classification}-${item.reason_code ?? "none"}`}
+              className="mt-ui-3"
+              variant="warning"
+              title="Historical transport recovery"
+            >
+              {item.summary}
+            </Alert>
+          ))}
+        </Card>
+      )}
 
       <Card className="p-ui-4">
         <h2 className="text-lg font-bold">Journey</h2>
@@ -448,6 +583,31 @@ export function MobileEngineeringDetailPage() {
           </p>
         </ConfirmationDialog>
       )}
+      {acceptResult &&
+        workstream.owner_review_digest &&
+        workstream.owner_review_version && (
+          <ConfirmationDialog
+            title="Accept this published result?"
+            confirmLabel="Accept published result"
+            pending={decideResult.isPending}
+            onCancel={() => setAcceptResult(false)}
+            onConfirm={() =>
+              decideResult.mutate(
+                {
+                  expected_version: workstream.owner_review_version!,
+                  review_digest: workstream.owner_review_digest!,
+                  decision: "accept",
+                },
+                { onSuccess: () => setAcceptResult(false) },
+              )
+            }
+          >
+            <p>
+              This records your decision for the immutable result commit shown
+              on this page. It does not start another execution.
+            </p>
+          </ConfirmationDialog>
+        )}
     </div>
   );
 }

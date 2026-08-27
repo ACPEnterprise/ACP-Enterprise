@@ -150,6 +150,19 @@ class MobileWorkstreamDetail(MobileWorkstreamSummary):
     started_at: datetime | None
     finished_at: datetime | None
     timeline: tuple[dict[str, object], ...]
+    result_commit_sha: str | None = None
+    result_publication_status: str = "not_available"
+    result_adoption_status: str = "not_adopted"
+    result_completed_at: datetime | None = None
+    result_adopted_at: datetime | None = None
+    acknowledgement_status: str = "pending"
+    execution_status: str = "pending"
+    validation_status: str = "pending"
+    preview_deployment_status: str = "not_recorded"
+    owner_review_digest: str | None = None
+    owner_review_version: int | None = None
+    owner_review_action_available: bool = False
+    historical_recovery_context: tuple[dict[str, object], ...] = ()
 
 
 class MobileWorkstreamActionRequest(MobileEngineeringSchema):

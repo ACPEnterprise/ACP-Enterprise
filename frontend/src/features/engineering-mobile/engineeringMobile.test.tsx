@@ -125,6 +125,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   vi.mocked(hooks.useApproveMobileReview).mockReturnValue(mutation());
   vi.mocked(hooks.useCancelMobileReview).mockReturnValue(mutation());
+  vi.mocked(hooks.useDecideEngineeringReview).mockReturnValue(mutation());
   vi.mocked(hooks.useEngineeringCapacity).mockReturnValue({
     isLoading: false,
     isError: false,
@@ -568,5 +569,66 @@ describe("mobile Engineering Control", () => {
       { action: "pause" },
       expect.any(Object),
     );
+  });
+
+  it("shows authoritative adopted-result review detail without stale pending stages", async () => {
+    const decide = vi.fn();
+    vi.mocked(hooks.useDecideEngineeringReview).mockReturnValue(mutation(decide));
+    vi.mocked(hooks.useMobileReview).mockReturnValue({ data: null } as never);
+    vi.mocked(hooks.useMobileWorkstream).mockReturnValue({
+      isLoading: false,
+      data: {
+        ...workstream,
+        owner_instruction: "# TECH.1\n- Establish technician shell",
+        requested_code_changes: true,
+        created_at: review.created_at,
+        started_at: "2026-08-26T18:02:00Z",
+        finished_at: "2026-08-26T18:24:08Z",
+        timeline: [{ event: "execution_failed", occurred_at: "2026-08-26T18:25:00Z" }],
+        available_actions: [],
+        runtime_state: "waiting_for_owner",
+        pipeline_status: "waiting_for_owner",
+        worker_health: "healthy",
+        progress_percent: 100,
+        current_activity: "Published result ready for owner review",
+        result_commit_sha: "72a741287a8df991e8bff3a60bbcc6300a5ad76b",
+        result_publication_status: "published",
+        result_adoption_status: "adopted",
+        result_completed_at: "2026-08-26T18:24:08Z",
+        result_adopted_at: "2026-08-26T22:35:15Z",
+        acknowledgement_status: "completed_from_immutable_evidence",
+        execution_status: "completed",
+        validation_status: "completed",
+        preview_deployment_status: "not_performed",
+        owner_review_digest: "d".repeat(64),
+        owner_review_version: 1,
+        owner_review_action_available: true,
+        historical_recovery_context: [{
+          classification: "historical_transport_recovery",
+          summary: "Terminal transport required evidence adoption.",
+          reason_code: "expired_lease_unresolved_provider_outcome",
+        }],
+      },
+    } as never);
+
+    renderDetail();
+
+    expect(screen.getByText("TECH.1")).toBeInTheDocument();
+    expect(screen.getByText("Establish technician shell")).toBeInTheDocument();
+    expect(screen.getByText("72a741287a8df991e8bff3a60bbcc6300a5ad76b")).toBeInTheDocument();
+    expect(screen.getAllByText("Completed").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText("Not performed by this execution")).toHaveLength(2);
+    expect(screen.getByText("Historical recovery context")).toBeInTheDocument();
+    expect(screen.queryByText("Request revision")).not.toBeInTheDocument();
+    expect(screen.queryByText("Pending")).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Review and accept published result" }));
+    const dialog = screen.getByRole("dialog", { name: "Accept this published result?" });
+    await userEvent.click(within(dialog).getByRole("button", { name: "Accept published result" }));
+    expect(decide).toHaveBeenCalledWith({
+      expected_version: 1,
+      review_digest: "d".repeat(64),
+      decision: "accept",
+    }, expect.any(Object));
   });
 });

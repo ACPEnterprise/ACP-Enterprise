@@ -608,3 +608,16 @@ async def test_expired_published_result_adoption_preserves_history_and_opens_rev
     assert projection.owner_action_required is True
     assert projection.next_owner_action == "review_execution_result"
     assert "start" not in projection.available_actions
+    assert projection.result_commit_sha == commit
+    assert projection.result_publication_status == "published"
+    assert projection.result_adoption_status == "adopted"
+    assert projection.execution_status == "completed"
+    assert projection.validation_status == "completed"
+    assert projection.preview_deployment_status == "not_performed"
+    assert projection.owner_review_digest == review.review_digest
+    assert projection.owner_review_version == review.version
+    assert projection.owner_review_action_available is True
+    assert projection.failure_classification is None
+    assert projection.historical_recovery_context[0]["classification"] == (
+        "historical_transport_recovery"
+    )

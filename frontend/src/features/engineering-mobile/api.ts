@@ -10,6 +10,7 @@ import type {
   MobileWorkstreamDetail,
   MobileWorkstreamAction,
   MobileWorkstreamActionResult,
+  EngineeringReviewDecisionInput,
   MobileReviewPage,
   MissionNotificationItem,
   MissionNotificationPage,
@@ -29,6 +30,7 @@ export const MOBILE_ENGINEERING_PATH = "/api/v1/engineering/mobile/reviews";
 export const MOBILE_OWNER_REVIEWS_PATH =
   "/api/v1/engineering/mobile/owner-reviews";
 export const MOBILE_WORKSTREAMS_PATH = "/api/v1/engineering/mobile/workstreams";
+export const ENGINEERING_REVIEWS_PATH = "/api/v1/engineering/reviews";
 export const MISSION_NOTIFICATIONS_PATH =
   "/api/v1/engineering/mobile/notifications";
 export const MISSION_ROADMAPS_PATH = "/api/v1/engineering/mobile/roadmaps";
@@ -38,6 +40,13 @@ export async function listMissionNotifications(): Promise<MissionNotificationPag
   return (
     await apiClient.get<MissionNotificationPage>(MISSION_NOTIFICATIONS_PATH)
   ).data;
+}
+
+export async function decideEngineeringReview(
+  reviewId: string,
+  input: EngineeringReviewDecisionInput,
+): Promise<unknown> {
+  return (await apiClient.post(`${ENGINEERING_REVIEWS_PATH}/${reviewId}/decision`, input)).data;
 }
 
 export async function acknowledgeMissionNotification(

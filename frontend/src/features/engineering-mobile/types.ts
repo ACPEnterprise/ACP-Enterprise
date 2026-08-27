@@ -186,6 +186,30 @@ export interface MobileWorkstreamDetail extends MobileWorkstreamSummary {
   started_at: string | null;
   finished_at: string | null;
   timeline: readonly { event: string; occurred_at: string }[];
+  result_commit_sha: string | null;
+  result_publication_status: string;
+  result_adoption_status: string;
+  result_completed_at: string | null;
+  result_adopted_at: string | null;
+  acknowledgement_status: string;
+  execution_status: string;
+  validation_status: string;
+  preview_deployment_status: string;
+  owner_review_digest: string | null;
+  owner_review_version: number | null;
+  owner_review_action_available: boolean;
+  historical_recovery_context: readonly {
+    classification: string;
+    summary: string;
+    reason_code?: string | null;
+  }[];
+}
+
+export interface EngineeringReviewDecisionInput {
+  expected_version: number;
+  review_digest: string;
+  decision: "accept" | "reject";
+  reason_code?: string;
 }
 
 export interface MobileWorkstreamActionResult {

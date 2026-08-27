@@ -13,6 +13,7 @@ import type {
   MobileReviewCancellation,
   MobileReviewQuery,
   MobileWorkstreamAction,
+  EngineeringReviewDecisionInput,
   MilestoneAction,
 } from "./types";
 
@@ -219,6 +220,24 @@ export function useControlMobileWorkstream(commandId: string) {
         queryClient.invalidateQueries({
           queryKey: mobileEngineeringKeys.workstream(commandId),
         }),
+        queryClient.invalidateQueries({ queryKey: mobileEngineeringKeys.all }),
+      ]);
+    },
+  });
+}
+
+export function useDecideEngineeringReview(commandId: string, reviewId: string | null) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: EngineeringReviewDecisionInput) => {
+      if (!reviewId) throw new Error("Owner review is unavailable.");
+      return mobileApi.decideEngineeringReview(reviewId, input);
+    },
+    retry: false,
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: mobileEngineeringKeys.workstream(commandId) }),
+        queryClient.invalidateQueries({ queryKey: mobileEngineeringKeys.roadmaps() }),
         queryClient.invalidateQueries({ queryKey: mobileEngineeringKeys.all }),
       ]);
     },
