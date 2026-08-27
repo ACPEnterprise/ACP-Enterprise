@@ -60,12 +60,15 @@ class MeasurementEvidenceInput:
     evidence_digest: str
     value_digest: str
     package_digest: str
+    definition_version: str = MEASUREMENT_DEFINITION_VERSION
 
     def __post_init__(self) -> None:
         if not self.input_id or not self.subject_id or not self.reconciliation_key:
             raise ValueError("measurement input identities are required")
         if not self.source_authority:
             raise ValueError("source authority is required")
+        if self.definition_version != MEASUREMENT_DEFINITION_VERSION:
+            raise ValueError("unsupported measurement input definition version")
         for digest in (self.evidence_digest, self.value_digest, self.package_digest):
             if not _SHA256.fullmatch(digest):
                 raise ValueError("immutable measurement provenance is required")
@@ -236,6 +239,7 @@ def evaluate_contribution_measurement_gate(
                 "evidence_digest": item.evidence_digest,
                 "value_digest": item.value_digest,
                 "package_digest": item.package_digest,
+                "definition_version": item.definition_version,
             }
             for item in relevant_evidence
         ],
