@@ -8,6 +8,16 @@ from .findings import (
     SubjectKind,
     evaluate_economic_findings,
 )
+from .measurement_contract import (
+    ComponentMeasurementGate,
+    ContributionMeasurementGate,
+    MeasurementComponent,
+    MeasurementEvidenceInput,
+    MeasurementGateState,
+    PolicyPrerequisite,
+    PrerequisiteState,
+    evaluate_contribution_measurement_gate,
+)
 from .source_adapters import (
     PublicOperationalEvidence,
     adapt_public_operational_evidence,
@@ -23,6 +33,8 @@ from .source_conformance import (
 )
 
 __all__ = [
+    "ComponentMeasurementGate",
+    "ContributionMeasurementGate",
     "EconomicComponent",
     "EconomicFinding",
     "EconomicInconsistencyFinding",
@@ -31,11 +43,17 @@ __all__ = [
     "FindingState",
     "FindingSubject",
     "FindingType",
+    "MeasurementComponent",
+    "MeasurementEvidenceInput",
+    "MeasurementGateState",
+    "PolicyPrerequisite",
+    "PrerequisiteState",
     "PublicOperationalEvidence",
     "SourceConformanceAssessment",
     "SubjectKind",
     "adapt_public_operational_evidence",
     "adapt_qbo_economics_evidence",
     "assess_source_conformance",
+    "evaluate_contribution_measurement_gate",
     "evaluate_economic_findings",
 ]
