@@ -32,7 +32,7 @@ def manifest():
 
 
 def test_manifest_is_deterministic_complete_and_unique(manifest) -> None:
-    assert manifest.scheduler_version == "MMQ.5-2026-08-11.8"
+    assert manifest.scheduler_version == "MMQ.5-2026-08-27.9"
     assert (
         manifest.fingerprint
         == "f08c2fbabaf852a156baab19d22fe9faa212ceebc519b80d5b1fe1ca9ceeec24"
