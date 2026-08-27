@@ -6,11 +6,16 @@ import os
 import stat
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
+from uuid import uuid4
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from app.database.session import get_security_database_session
 from app.main import app
+from app.qbo_source import router as qbo_router_module
 from app.qbo_source.intuit import (
     ACCOUNTING_SCOPE,
     AuthorizedRealm,
@@ -19,8 +24,10 @@ from app.qbo_source.intuit import (
     OAuthToken,
 )
 from app.qbo_source.runtime import (
+    ProtectedSandboxCompanyBinding,
     SandboxCompanyInfoVerifier,
     SandboxConnectionRegistry,
+    SandboxRuntimeError,
 )
 from app.qbo_source.secrets import (
     ProtectedSandboxSecretProvider,
@@ -37,6 +44,22 @@ class _Runtime:
         self.received = tuple(values.values())
         if self.error:
             raise self.error
+
+    async def begin(self, *, redirect_uri: str) -> str:
+        self.received = (redirect_uri,)
+        return (
+            "https://appcenter.intuit.com/connect/oauth2"
+            "?client_id=synthetic-client&response_type=code"
+            "&scope=com.intuit.quickbooks.accounting&state=synthetic-state-marker"
+        )
+
+
+class _RateLimiter:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def enforce(self, **_: object) -> None:
+        self.calls += 1
 
 
 def test_callback_boundary_is_sanitized_and_maps_internal_headers(
@@ -89,6 +112,59 @@ def test_callback_rejects_incomplete_or_provider_error_without_echo(
     assert all(value not in response.text for value in params.values())
 
 
+@pytest.mark.asyncio
+async def test_authorization_initiation_is_bounded_and_does_not_log_state(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    runtime = _Runtime()
+    limiter = _RateLimiter()
+    monkeypatch.setattr(qbo_router_module, "get_sandbox_oauth_runtime", lambda: runtime)
+    monkeypatch.setattr(qbo_router_module, "_rate_limiter", limiter)
+    authorization = SimpleNamespace(user=SimpleNamespace(id=uuid4()))
+
+    with caplog.at_level(logging.DEBUG):
+        response = await qbo_router_module.qbo_sandbox_oauth_authorize(
+            request=SimpleNamespace(), authorization=authorization  # type: ignore[arg-type]
+        )
+
+    assert response.status_code == 200
+    assert limiter.calls == 1
+    assert runtime.received == (
+        (
+            "https://preview.allcountyhomeservices.com"
+            "/api/v1/integrations/qbo/oauth/callback"
+        ),
+    )
+    assert b"com.intuit.quickbooks.accounting" in response.body
+    assert "synthetic-state-marker" not in caplog.text
+
+
+def test_authorization_initiation_requires_bearer_authentication() -> None:
+    isolated = FastAPI()
+    isolated.include_router(qbo_router_module.router)
+
+    async def database_override():  # type: ignore[no-untyped-def]
+        yield object()
+
+    isolated.dependency_overrides[get_security_database_session] = database_override
+    response = TestClient(isolated).post(qbo_router_module.AUTHORIZE_PATH)
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Authentication required."}
+
+
+def test_protected_company_binding_is_exact_and_restricted(tmp_path: Path) -> None:
+    binding = ProtectedSandboxCompanyBinding(tmp_path / "configuration")
+    binding.path.write_text("Synthetic Sandbox Company", encoding="utf-8")
+    os.chmod(binding.path, 0o600)
+    assert binding.read() == "Synthetic Sandbox Company"
+    assert stat.S_IMODE(binding.root.stat().st_mode) == 0o700
+
+    binding.path.write_text("Synthetic Sandbox Company\n", encoding="utf-8")
+    os.chmod(binding.path, 0o600)
+    with pytest.raises(SandboxRuntimeError, match="binding_invalid"):
+        binding.read()
+
+
 def _token(generation: int = 1) -> OAuthToken:
     return OAuthToken(
         access_token="synthetic-access-material",
@@ -121,6 +197,8 @@ async def test_protected_token_store_is_restricted_and_generation_safe(
             provider.TOKEN_REFERENCE, _token(2), expected_generation=99
         )
     assert (await provider.get_token(provider.TOKEN_REFERENCE)).generation == 1
+    with pytest.raises(SandboxSecretStoreError, match="reference_rejected"):
+        await provider.get_client_credential("qbo-production/client")
 
 
 class _Transport:

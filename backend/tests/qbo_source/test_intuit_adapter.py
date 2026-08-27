@@ -241,17 +241,94 @@ async def test_callback_state_is_single_use_and_returns_realm_binding_input() ->
         redirect_uri="https://localhost.example/qbo/callback",
         token_reference="secret://synthetic/token",
     )
+    query = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)
 
     authorized = await coordinator.complete(
         code="synthetic-code", state="state" * 8, realm_id="synthetic-realm"
     )
 
-    assert "state=" in url
+    assert urllib.parse.urlparse(url).scheme == "https"
+    assert query["response_type"] == ["code"]
+    assert query["scope"] == [ACCOUNTING_SCOPE]
+    assert query["redirect_uri"] == ["https://localhost.example/qbo/callback"]
+    assert query["state"] == ["state" * 8]
     assert authorized.realm_id == "synthetic-realm"
     with pytest.raises(IntuitAuthenticationError, match="oauth_state_invalid"):
         await coordinator.complete(
             code="replay", state="state" * 8, realm_id="synthetic-realm"
         )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("environment", "expires_delta", "expected"),
+    [
+        (IntuitEnvironment.PRODUCTION, timedelta(minutes=5), "environment_mismatch"),
+        (IntuitEnvironment.SANDBOX, timedelta(seconds=-1), "state_expired"),
+    ],
+)
+async def test_callback_rejects_wrong_environment_or_expired_state(
+    environment: IntuitEnvironment,
+    expires_delta: timedelta,
+    expected: str,
+) -> None:
+    clock = FakeClock()
+    states = FakeStates()
+    state = "bounded-state-" + "x" * 32
+    states.values[state] = PendingAuthorization(
+        state=state,
+        environment=environment,
+        redirect_uri="https://preview.example/qbo/callback",
+        token_reference="secret://synthetic/token",
+        expires_at=clock.now() + expires_delta,
+    )
+    coordinator = OAuthAuthorizationCoordinator(
+        oauth=IntuitOAuthClient(
+            environment=IntuitEnvironment.SANDBOX,
+            transport=SequenceTransport([]),
+            secrets=FakeSecrets(),
+            credential_reference="secret://synthetic/client",
+            clock=clock,
+        ),
+        states=states,
+        state_factory=lambda: state,
+        clock=clock,
+    )
+
+    with pytest.raises(IntuitAuthenticationError, match=expected):
+        await coordinator.complete(code="synthetic", state=state, realm_id="realm")
+    assert await states.consume(state) is None
+
+
+@pytest.mark.asyncio
+async def test_duplicate_initiations_create_distinct_bounded_states() -> None:
+    clock = FakeClock()
+    states = FakeStates()
+    generated = iter(("a" * 32, "b" * 32))
+    coordinator = OAuthAuthorizationCoordinator(
+        oauth=IntuitOAuthClient(
+            environment=IntuitEnvironment.SANDBOX,
+            transport=SequenceTransport([]),
+            secrets=FakeSecrets(),
+            credential_reference="secret://synthetic/client",
+            clock=clock,
+        ),
+        states=states,
+        state_factory=lambda: next(generated),
+        clock=clock,
+    )
+
+    first = await coordinator.begin(
+        redirect_uri="https://preview.example/qbo/callback",
+        token_reference="secret://synthetic/token",
+    )
+    second = await coordinator.begin(
+        redirect_uri="https://preview.example/qbo/callback",
+        token_reference="secret://synthetic/token",
+    )
+
+    assert first != second
+    assert set(states.values) == {"a" * 32, "b" * 32}
 
 
 @pytest.mark.asyncio

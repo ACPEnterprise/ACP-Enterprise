@@ -1,9 +1,16 @@
 from __future__ import annotations
 
+import hashlib
 from typing import Annotated
 
-from fastapi import APIRouter, Header, Query, status
+from fastapi import APIRouter, Depends, Header, Query, Request, status
 from fastapi.responses import JSONResponse
+
+from app.platform.auth.errors import RateLimitExceededError, RateLimitUnavailableError
+from app.platform.auth.rate_limit import AuthenticationRateLimiter
+from app.platform.permissions.authorization import AuthorizationContext
+from app.platform.permissions.codes import AdministrationPermission
+from app.platform.permissions.dependencies import require_permission
 
 from .callback import CALLBACK_PATH
 from .intuit import IntuitAuthenticationError, IntuitProtocolError
@@ -11,6 +18,17 @@ from .runtime import SandboxRuntimeError, get_sandbox_oauth_runtime
 from .secrets import SandboxSecretStoreError
 
 router = APIRouter(tags=["QBO Sandbox OAuth"])
+_rate_limiter = AuthenticationRateLimiter()
+_Administer = Annotated[
+    AuthorizationContext,
+    Depends(require_permission(AdministrationPermission.COMPANY_ADMINISTER)),
+]
+
+AUTHORIZE_PATH = "/api/v1/integrations/qbo/oauth/authorize"
+_CALLBACK_URI = (
+    "https://preview.allcountyhomeservices.com"
+    "/api/v1/integrations/qbo/oauth/callback"
+)
 
 _SAFE_HEADERS = {
     "Cache-Control": "no-store",
@@ -23,6 +41,44 @@ def _safe_response(status_code: int, code: str) -> JSONResponse:
     return JSONResponse(
         status_code=status_code,
         content={"status": "sandbox_oauth_callback", "result": code},
+        headers=_SAFE_HEADERS,
+    )
+
+
+@router.post(AUTHORIZE_PATH, name="qbo-sandbox-oauth-authorize")
+async def qbo_sandbox_oauth_authorize(
+    request: Request,
+    authorization: _Administer,
+) -> JSONResponse:
+    """Create protected state and return one sandbox authorization URL."""
+    del request
+    identifier = hashlib.sha256(str(authorization.user.id).encode()).hexdigest()
+    try:
+        await _rate_limiter.enforce(
+            bucket="qbo-sandbox-oauth-initiation",
+            identifier_hash=identifier,
+            limit=3,
+            window_seconds=600,
+        )
+        authorization_url = await get_sandbox_oauth_runtime().begin(
+            redirect_uri=_CALLBACK_URI
+        )
+    except RateLimitExceededError:
+        return _safe_response(status.HTTP_429_TOO_MANY_REQUESTS, "initiation_limited")
+    except RateLimitUnavailableError:
+        return _safe_response(
+            status.HTTP_503_SERVICE_UNAVAILABLE, "initiation_safeguard_unavailable"
+        )
+    except (SandboxRuntimeError, SandboxSecretStoreError, ValueError):
+        return _safe_response(
+            status.HTTP_503_SERVICE_UNAVAILABLE, "sandbox_not_configured"
+        )
+    return JSONResponse(
+        status_code=status.HTTP_200_OK,
+        content={
+            "status": "sandbox_oauth_initiation",
+            "authorization_url": authorization_url,
+        },
         headers=_SAFE_HEADERS,
     )
 

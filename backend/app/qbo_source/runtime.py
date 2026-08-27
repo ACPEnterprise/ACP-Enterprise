@@ -34,6 +34,32 @@ class SandboxRuntimeError(RuntimeError):
         self.code = code
 
 
+class ProtectedSandboxCompanyBinding:
+    """Exact expected CompanyInfo name from protected sandbox configuration."""
+
+    def __init__(self, root: Path) -> None:
+        self.root = root
+        self.root.mkdir(parents=True, mode=0o700, exist_ok=True)
+        os.chmod(self.root, 0o700)
+
+    @property
+    def path(self) -> Path:
+        return self.root / "expected-company-name"
+
+    def read(self) -> str:
+        try:
+            if stat.S_IMODE(self.path.stat().st_mode) != 0o600:
+                raise SandboxRuntimeError("sandbox_company_binding_permissions_invalid")
+            value = self.path.read_text(encoding="utf-8")
+        except FileNotFoundError as error:
+            raise SandboxRuntimeError("sandbox_company_not_configured") from error
+        except UnicodeDecodeError as error:
+            raise SandboxRuntimeError("sandbox_company_binding_invalid") from error
+        if not value or "\x00" in value or "\r" in value or "\n" in value:
+            raise SandboxRuntimeError("sandbox_company_binding_invalid")
+        return value
+
+
 class SandboxCompanyInfoVerifier:
     def __init__(
         self,
@@ -132,6 +158,13 @@ class SandboxConnectionRegistry:
 class SandboxOAuthRuntime:
     callback: OAuthCallbackHandler
     verifier: SandboxCompanyInfoVerifier
+    coordinator: OAuthAuthorizationCoordinator
+
+    async def begin(self, *, redirect_uri: str) -> str:
+        return await self.coordinator.begin(
+            redirect_uri=redirect_uri,
+            token_reference=ProtectedSandboxSecretProvider.TOKEN_REFERENCE,
+        )
 
     async def complete(
         self,
@@ -161,6 +194,7 @@ def initialize_sandbox_runtime_storage(configuration: Settings = settings) -> No
     ProtectedAuthorizationStateStore(
         root / "oauth-state", repository_root=repository
     )
+    ProtectedSandboxCompanyBinding(root / "configuration")
     SandboxConnectionRegistry(root / "connections")
 
 
@@ -169,8 +203,6 @@ def get_sandbox_oauth_runtime() -> SandboxOAuthRuntime:
     configuration = settings
     if not configuration.qbo_sandbox_enabled:
         raise SandboxRuntimeError("sandbox_oauth_runtime_disabled")
-    if not configuration.qbo_sandbox_expected_company_name:
-        raise SandboxRuntimeError("sandbox_company_not_configured")
     expected_uri = exact_callback_uri("https://preview.allcountyhomeservices.com")
     if configuration.qbo_sandbox_callback_uri != expected_uri:
         raise SandboxRuntimeError("sandbox_callback_uri_mismatch")
@@ -182,6 +214,9 @@ def get_sandbox_oauth_runtime() -> SandboxOAuthRuntime:
     state_store = ProtectedAuthorizationStateStore(
         root / "oauth-state", repository_root=repository
     )
+    expected_company_name = ProtectedSandboxCompanyBinding(
+        root / "configuration"
+    ).read()
     transport = IntuitHttpTransport()
     oauth = IntuitOAuthClient(
         environment=IntuitEnvironment.SANDBOX,
@@ -197,13 +232,15 @@ def get_sandbox_oauth_runtime() -> SandboxOAuthRuntime:
     verifier = SandboxCompanyInfoVerifier(
         transport=transport,
         secrets_provider=provider,
-        expected_company_name=configuration.qbo_sandbox_expected_company_name,
+        expected_company_name=expected_company_name,
         token_reference=ProtectedSandboxSecretProvider.TOKEN_REFERENCE,
         minor_version=configuration.qbo_sandbox_api_minor_version,
         registry=SandboxConnectionRegistry(root / "connections"),
     )
     return SandboxOAuthRuntime(
-        callback=OAuthCallbackHandler(coordinator), verifier=verifier
+        callback=OAuthCallbackHandler(coordinator),
+        verifier=verifier,
+        coordinator=coordinator,
     )
 
 

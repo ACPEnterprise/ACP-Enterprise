@@ -35,7 +35,6 @@ class Settings(BaseSettings):
     qbo_sandbox_enabled: bool = False
     qbo_sandbox_callback_uri: str | None = None
     qbo_sandbox_runtime_root: str | None = None
-    qbo_sandbox_expected_company_name: str | None = None
     qbo_sandbox_api_minor_version: int = 75
     qbo_repository_root: str = "/app"
 
