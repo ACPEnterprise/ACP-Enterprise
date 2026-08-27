@@ -258,8 +258,17 @@ class PreviewWorkerProvisioningService:
             context=context,
             credential_id=credential.id,
         )
-        if credential.state is not WorkerCredentialState.ACTIVE:
+        credential_state = credential.state
+        credential_verifier = credential.verifier
+        credential_issued_at = credential.issued_at
+        credential_expires_at = credential.expires_at
+        credential_id = credential.id
+        if credential_state is not WorkerCredentialState.ACTIVE:
             raise RuntimeError("Worker credential activation failed.")
+        # Reading the expired ORM entity after the service-owned commit opens a
+        # new implicit transaction.  End that read transaction before the next
+        # application service takes ownership of the session transaction.
+        await session.rollback()
         await worker_control.set_worker_lifecycle(
             session,
             context=context,
@@ -286,19 +295,19 @@ class PreviewWorkerProvisioningService:
                         name=config.worker_name,
                         provider_identifier=config.provider_identifier,
                         credential_fingerprint=hashlib.sha256(
-                            credential.verifier.encode()
+                            credential_verifier.encode()
                         ).hexdigest(),
                         capabilities=[item.value for item in config.capabilities],
                         status="active",
-                        enrolled_at=credential.issued_at,
-                        expires_at=credential.expires_at,
+                        enrolled_at=credential_issued_at,
+                        expires_at=credential_expires_at,
                         version=1,
                     )
                 )
         return ProvisioningResult(
             worker_id=worker_id,
             identity_id=identity_id,
-            credential_id=credential.id,
+            credential_id=credential_id,
         )
 
     @staticmethod
