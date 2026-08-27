@@ -4,6 +4,7 @@ import asyncio
 import base64
 import hashlib
 import json
+import logging
 from collections.abc import AsyncIterator, Callable, Mapping
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
@@ -167,6 +168,7 @@ class IntuitHttpTransport:
     )
 
     def __init__(self, client: httpx.AsyncClient | None = None) -> None:
+        _install_intuit_url_log_filter()
         self.client = client or httpx.AsyncClient(
             timeout=httpx.Timeout(30, connect=10), follow_redirects=False
         )
@@ -203,6 +205,24 @@ class IntuitHttpTransport:
             headers=dict(response.headers),
             body=response.content,
         )
+
+
+class _IntuitProviderUrlLogFilter(logging.Filter):
+    """Suppress httpx records containing realm-scoped or OAuth provider URLs."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if record.name != "httpx":
+            return True
+        message = record.getMessage()
+        return not any(host in message for host in IntuitHttpTransport._allowed_hosts)
+
+
+def _install_intuit_url_log_filter() -> None:
+    logger = logging.getLogger("httpx")
+    if not any(
+        isinstance(item, _IntuitProviderUrlLogFilter) for item in logger.filters
+    ):
+        logger.addFilter(_IntuitProviderUrlLogFilter())
 
 
 class Clock(Protocol):

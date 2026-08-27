@@ -24,6 +24,15 @@ export interface PermissionDefinition {
 
 const ADMIN_PATH = "/api/v1/company-admin";
 const QBO_SANDBOX_AUTHORIZE_PATH = "/api/v1/integrations/qbo/oauth/authorize";
+const QBO_SANDBOX_CONNECTION_PATH = "/api/v1/integrations/qbo/connection";
+const QBO_SANDBOX_DISCONNECT_PATH = "/api/v1/integrations/qbo/oauth/disconnect";
+
+export type QboSandboxConnectionState = "connected" | "not_connected" | "disconnecting" | "disconnect_failed" | "unavailable";
+
+interface QboSandboxConnectionResponse {
+  status: "qbo_sandbox_connection";
+  connection_state: QboSandboxConnectionState;
+}
 
 interface QboSandboxAuthorizationResponse {
   status: "sandbox_oauth_initiation";
@@ -55,6 +64,14 @@ export async function launchQuickBooksSandbox(
 ): Promise<void> {
   const response = await apiClient.post<QboSandboxAuthorizationResponse>(QBO_SANDBOX_AUTHORIZE_PATH);
   navigate(validatedIntuitAuthorizationUrl(response.data.authorization_url));
+}
+
+export async function getQuickBooksSandboxConnection(): Promise<QboSandboxConnectionState> {
+  return (await apiClient.get<QboSandboxConnectionResponse>(QBO_SANDBOX_CONNECTION_PATH)).data.connection_state;
+}
+
+export async function disconnectQuickBooksSandbox(): Promise<QboSandboxConnectionState> {
+  return (await apiClient.post<QboSandboxConnectionResponse>(QBO_SANDBOX_DISCONNECT_PATH)).data.connection_state;
 }
 
 export async function listRoles(): Promise<CompanyRole[]> {

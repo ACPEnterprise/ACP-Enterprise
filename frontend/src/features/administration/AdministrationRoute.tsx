@@ -1,12 +1,12 @@
 import axios from "axios";
 import { Search, ShieldCheck, Unplug } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 
 import { useAuth } from "../../auth";
 import { Alert, Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, ConfirmationDialog, Input, Spinner } from "../../ui";
-import type { PermissionDefinition } from "./api";
-import { launchQuickBooksSandbox } from "./api";
+import type { PermissionDefinition, QboSandboxConnectionState } from "./api";
+import { disconnectQuickBooksSandbox, getQuickBooksSandboxConnection, launchQuickBooksSandbox } from "./api";
 import { usePermissionMutation, useRolePermissions, useRoles } from "./hooks";
 
 type PendingChange = { action: "grant" | "remove"; permission: PermissionDefinition };
@@ -27,7 +27,18 @@ export function AdministrationRoute() {
   const [mutationError, setMutationError] = useState<string | null>(null);
   const [qboPending, setQboPending] = useState(false);
   const [qboError, setQboError] = useState(false);
+  const [qboDisconnectConfirmation, setQboDisconnectConfirmation] = useState(false);
+  const [qboState, setQboState] = useState<QboSandboxConnectionState | "loading">("loading");
   const mutation = usePermissionMutation(pending?.action ?? "grant");
+
+  useEffect(() => {
+    if (!permissionCodes.includes("COMPANY_ADMINISTER")) return;
+    let active = true;
+    void getQuickBooksSandboxConnection()
+      .then((connectionState) => { if (active) setQboState(connectionState); })
+      .catch(() => { if (active) setQboState("unavailable"); });
+    return () => { active = false; };
+  }, [permissionCodes]);
 
   const visiblePermissions = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -70,6 +81,21 @@ export function AdministrationRoute() {
     }
   };
 
+  const disconnectSandbox = async () => {
+    setQboDisconnectConfirmation(false);
+    setQboError(false);
+    setQboPending(true);
+    try {
+      const state = await disconnectQuickBooksSandbox();
+      setQboState(state);
+      setQboPending(false);
+    } catch {
+      setQboState("disconnect_failed");
+      setQboError(true);
+      setQboPending(false);
+    }
+  };
+
   return (
     <div className="mx-auto w-full max-w-5xl space-y-ui-5 pb-ui-8">
       <header>
@@ -83,15 +109,31 @@ export function AdministrationRoute() {
           <CardDescription>Connect only the configured Intuit Development company. Production is unavailable.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-ui-3">
-          {qboError && <Alert variant="danger" announcement="assertive">QuickBooks sandbox authorization could not be started. No company was connected.</Alert>}
-          <Button
+          {qboState === "loading" && <Spinner label="Loading QuickBooks sandbox connection" />}
+          {qboState === "connected" && <Badge variant="success">Connected</Badge>}
+          {qboState === "not_connected" && <Badge variant="neutral">Not connected</Badge>}
+          {qboState === "disconnecting" && <Badge variant="warning">Disconnecting</Badge>}
+          {qboState === "disconnect_failed" && <Alert variant="danger" announcement="assertive">Disconnect failed. The existing connection was retained.</Alert>}
+          {qboState === "unavailable" && <Alert variant="danger" announcement="assertive">QuickBooks sandbox connection status is unavailable.</Alert>}
+          {qboError && qboState !== "disconnect_failed" && <Alert variant="danger" announcement="assertive">QuickBooks sandbox authorization could not be started. No company was connected.</Alert>}
+          {(qboState === "connected" || qboState === "disconnect_failed") && <Button
+            leadingIcon={<Unplug />}
+            loading={qboPending}
+            loadingLabel="Disconnecting QuickBooks sandbox"
+            disabled={qboPending}
+            onClick={() => setQboDisconnectConfirmation(true)}
+          >
+            Disconnect QuickBooks Sandbox
+          </Button>}
+          {qboState === "not_connected" && <Button
             leadingIcon={<Unplug />}
             loading={qboPending}
             loadingLabel="Opening QuickBooks sandbox"
+            disabled={qboPending}
             onClick={() => void connectQuickBooksSandbox()}
           >
             Connect QuickBooks Sandbox
-          </Button>
+          </Button>}
         </CardContent>
       </Card>}
       <Card>
@@ -132,6 +174,15 @@ export function AdministrationRoute() {
         pending={mutation.isPending}
         onCancel={() => setPending(null)}
         onConfirm={() => void applyChange()}
+      />}
+      {qboDisconnectConfirmation && <ConfirmationDialog
+        title="Disconnect QuickBooks Sandbox?"
+        description="Intuit access will be revoked before ACP removes the protected local sandbox connection. Connection history and sandbox configuration will be preserved."
+        confirmLabel="Disconnect QuickBooks Sandbox"
+        destructive
+        pending={qboPending}
+        onCancel={() => setQboDisconnectConfirmation(false)}
+        onConfirm={() => void disconnectSandbox()}
       />}
     </div>
   );

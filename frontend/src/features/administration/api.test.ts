@@ -2,9 +2,19 @@ import { AxiosHeaders } from "axios";
 import { describe, expect, it, vi } from "vitest";
 
 import { apiClient } from "../../api/client";
-import { launchQuickBooksSandbox } from "./api";
+import { disconnectQuickBooksSandbox, getQuickBooksSandboxConnection, launchQuickBooksSandbox } from "./api";
 
 describe("QuickBooks sandbox administration API", () => {
+  it("reads and disconnects through authenticated API paths", async () => {
+    const get = vi.spyOn(apiClient, "get").mockResolvedValue({ data: { status: "qbo_sandbox_connection", connection_state: "connected" } });
+    const post = vi.spyOn(apiClient, "post").mockResolvedValue({ data: { status: "qbo_sandbox_connection", connection_state: "not_connected" } });
+
+    expect(await getQuickBooksSandboxConnection()).toBe("connected");
+    expect(await disconnectQuickBooksSandbox()).toBe("not_connected");
+    expect(get).toHaveBeenCalledWith("/api/v1/integrations/qbo/connection");
+    expect(post).toHaveBeenCalledWith("/api/v1/integrations/qbo/oauth/disconnect");
+  });
+
   it("navigates directly to the official Intuit authorization endpoint", async () => {
     const callback = encodeURIComponent(
       `${window.location.origin}/api/v1/integrations/qbo/oauth/callback`,

@@ -11,6 +11,9 @@ from typing import cast
 from uuid import uuid4
 
 import pytest
+from fastapi import FastAPI, Request
+from fastapi.testclient import TestClient
+
 from app.database.session import get_security_database_session
 from app.main import app
 from app.platform.permissions.authorization import AuthorizationContext
@@ -38,8 +41,6 @@ from app.qbo_source.secrets import (
     ProtectedSandboxSecretProvider,
     SandboxSecretStoreError,
 )
-from fastapi import FastAPI, Request
-from fastapi.testclient import TestClient
 
 
 class _Runtime:
@@ -59,6 +60,14 @@ class _Runtime:
             "?client_id=synthetic-client&response_type=code"
             "&scope=com.intuit.quickbooks.accounting&state=synthetic-state-marker"
         )
+
+    def connection_state(self) -> str:
+        return "connected"
+
+    async def disconnect(self) -> str:
+        if self.error:
+            raise self.error
+        return "not_connected"
 
 
 class _RateLimiter:
@@ -218,6 +227,40 @@ def test_authorization_initiation_requires_bearer_authentication() -> None:
     assert response.json() == {"detail": "Authentication required."}
 
 
+@pytest.mark.asyncio
+async def test_disconnect_boundary_is_bounded_and_sanitized(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runtime = _Runtime()
+    limiter = _RateLimiter()
+    monkeypatch.setattr(qbo_router_module, "get_sandbox_oauth_runtime", lambda: runtime)
+    monkeypatch.setattr(qbo_router_module, "_rate_limiter", limiter)
+    authorization = cast(
+        AuthorizationContext, SimpleNamespace(user=SimpleNamespace(id=uuid4()))
+    )
+
+    response = await qbo_router_module.qbo_sandbox_oauth_disconnect(authorization)
+
+    assert response.status_code == 200
+    assert response.body == (
+        b'{"status":"qbo_sandbox_connection","connection_state":"not_connected"}'
+    )
+    assert limiter.calls == 1
+
+
+def test_connection_and_disconnect_require_bearer_authentication() -> None:
+    isolated = FastAPI()
+    isolated.include_router(qbo_router_module.router)
+
+    async def database_override():  # type: ignore[no-untyped-def]
+        yield object()
+
+    isolated.dependency_overrides[get_security_database_session] = database_override
+    client = TestClient(isolated)
+    assert client.get(qbo_router_module.CONNECTION_PATH).status_code == 401
+    assert client.post(qbo_router_module.DISCONNECT_PATH).status_code == 401
+
+
 def test_protected_company_binding_is_exact_and_restricted(tmp_path: Path) -> None:
     binding = ProtectedSandboxCompanyBinding(tmp_path / "configuration")
     binding.path.write_text("Synthetic Sandbox Company", encoding="utf-8")
@@ -229,6 +272,138 @@ def test_protected_company_binding_is_exact_and_restricted(tmp_path: Path) -> No
     os.chmod(binding.path, 0o600)
     with pytest.raises(SandboxRuntimeError, match="binding_invalid"):
         binding.read()
+
+
+class _DisconnectOAuth:
+    def __init__(
+        self, provider: ProtectedSandboxSecretProvider, *, fail: bool = False
+    ) -> None:
+        self.provider = provider
+        self.fail = fail
+        self.calls = 0
+
+    async def revoke(self, *, token_reference: str) -> None:
+        self.calls += 1
+        if self.fail:
+            raise IntuitAuthenticationError("token_revocation_failed")
+        await self.provider.delete_token(token_reference)
+
+
+def _disconnect_runtime(
+    tmp_path: Path, *, fail: bool = False
+) -> tuple[
+    SandboxOAuthRuntime,
+    ProtectedSandboxSecretProvider,
+    SandboxConnectionRegistry,
+    _DisconnectOAuth,
+]:
+    repository = tmp_path / "repository"
+    repository.mkdir()
+    provider = ProtectedSandboxSecretProvider(
+        root=tmp_path / "secrets", repository_root=repository
+    )
+    registry = SandboxConnectionRegistry(tmp_path / "connections")
+    oauth = _DisconnectOAuth(provider, fail=fail)
+    runtime = SandboxOAuthRuntime(
+        callback=None,  # type: ignore[arg-type]
+        verifier=SandboxCompanyInfoVerifier(
+            transport=_Transport(HttpResponse(200, {}, b"{}")),
+            secrets_provider=provider,
+            expected_company_name="Sandbox",
+            token_reference=provider.TOKEN_REFERENCE,
+            minor_version=75,
+            registry=registry,
+        ),
+        coordinator=SimpleNamespace(oauth=oauth),  # type: ignore[arg-type]
+        diagnostics=ProtectedOAuthDiagnosticJournal(
+            tmp_path / "oauth-diagnostics", repository_root=repository
+        ),
+    )
+    return runtime, provider, registry, oauth
+
+
+@pytest.mark.asyncio
+async def test_disconnect_revokes_before_cleanup_and_preserves_history(
+    tmp_path: Path,
+) -> None:
+    runtime, provider, registry, oauth = _disconnect_runtime(tmp_path)
+    await provider.put_token(
+        provider.TOKEN_REFERENCE, _token(), expected_generation=None
+    )
+    registry.record_verified(
+        realm_id="123456789",
+        company_info_id="native-id",
+        company_name="Sandbox",
+        minor_version=75,
+    )
+    runtime.diagnostics.record("a" * 64, OAuthDiagnosticStage.CONNECTION_COMMITTED)
+    diagnostic_before = next(runtime.diagnostics.root.glob("*/*.json")).read_bytes()
+
+    assert runtime.connection_state() == "connected"
+    assert await runtime.disconnect() == "not_connected"
+
+    assert oauth.calls == 1
+    assert not provider.token_path.exists()
+    assert not registry.verified_path.exists()
+    histories = list((registry.root / "history").glob("*.json"))
+    assert len(histories) == 1
+    assert stat.S_IMODE(histories[0].stat().st_mode) == 0o600
+    assert (
+        next(runtime.diagnostics.root.glob("*/*.json")).read_bytes()
+        == diagnostic_before
+    )
+    assert await runtime.disconnect() == "not_connected"
+    assert oauth.calls == 1
+
+
+@pytest.mark.asyncio
+async def test_disconnect_failure_retains_token_and_connection_marker(
+    tmp_path: Path,
+) -> None:
+    runtime, provider, registry, oauth = _disconnect_runtime(tmp_path, fail=True)
+    await provider.put_token(
+        provider.TOKEN_REFERENCE, _token(), expected_generation=None
+    )
+    registry.record_verified(
+        realm_id="123456789",
+        company_info_id="native-id",
+        company_name="Sandbox",
+        minor_version=75,
+    )
+
+    with pytest.raises(IntuitAuthenticationError, match="token_revocation_failed"):
+        await runtime.disconnect()
+
+    assert oauth.calls == 1
+    assert provider.token_path.exists()
+    assert registry.verified_path.exists()
+    assert runtime.connection_state() == "connected"
+
+
+@pytest.mark.asyncio
+async def test_duplicate_disconnect_is_rejected_before_provider_call(
+    tmp_path: Path,
+) -> None:
+    runtime, provider, registry, oauth = _disconnect_runtime(tmp_path)
+    await provider.put_token(
+        provider.TOKEN_REFERENCE, _token(), expected_generation=None
+    )
+    registry.record_verified(
+        realm_id="123456789",
+        company_info_id="native-id",
+        company_name="Sandbox",
+        minor_version=75,
+    )
+    registry.begin_disconnect()
+    try:
+        assert runtime.connection_state() == "disconnecting"
+        with pytest.raises(SandboxRuntimeError, match="state_inconsistent"):
+            await runtime.disconnect()
+        assert oauth.calls == 0
+        assert provider.token_path.exists()
+        assert registry.verified_path.exists()
+    finally:
+        registry.end_disconnect()
 
 
 def _token(generation: int = 1, *, realm_id: str = "123456789") -> OAuthToken:

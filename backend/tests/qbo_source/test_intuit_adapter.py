@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import urllib.parse
 from collections.abc import Mapping
 from datetime import date, datetime, timedelta, timezone
 
 import pytest
+
 from app.qbo_source.contracts import AcquisitionRequest, EntityKind, SnapshotIdentity
 from app.qbo_source.intuit import (
     ACCOUNTING_SCOPE,
@@ -215,6 +217,66 @@ async def test_authorization_exchange_refresh_and_revoke() -> None:
     assert all(
         "synthetic-secret" not in str(request["body"]) for request in transport.requests
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("provider_status", [200, 204])
+async def test_revoke_accepts_only_provider_success_and_deletes_after_response(
+    provider_status: int,
+) -> None:
+    clock = FakeClock()
+    secrets = FakeSecrets(token(clock))
+    transport = SequenceTransport([response(provider_status, {})])
+    oauth = IntuitOAuthClient(
+        environment=IntuitEnvironment.SANDBOX,
+        transport=transport,
+        secrets=secrets,
+        credential_reference="secret://synthetic/client",
+        clock=clock,
+    )
+
+    await oauth.revoke(token_reference="secret://synthetic/token")
+
+    assert secrets.deleted
+    assert transport.requests[0]["url"] == (
+        "https://developer.api.intuit.com/v2/oauth2/tokens/revoke"
+    )
+
+
+@pytest.mark.asyncio
+async def test_failed_provider_revocation_retains_local_token() -> None:
+    clock = FakeClock()
+    secrets = FakeSecrets(token(clock))
+    oauth = IntuitOAuthClient(
+        environment=IntuitEnvironment.SANDBOX,
+        transport=SequenceTransport([response(500, {})]),
+        secrets=secrets,
+        credential_reference="secret://synthetic/client",
+        clock=clock,
+    )
+
+    with pytest.raises(IntuitAuthenticationError, match="token_revocation_failed"):
+        await oauth.revoke(token_reference="secret://synthetic/token")
+
+    assert not secrets.deleted
+    assert secrets.token is not None
+
+
+@pytest.mark.asyncio
+async def test_intuit_provider_urls_are_suppressed_without_disabling_other_http_logs(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    transport = IntuitHttpTransport()
+    logger = logging.getLogger("httpx")
+    with caplog.at_level(logging.INFO, logger="httpx"):
+        logger.info(
+            "HTTP Request: GET https://sandbox-quickbooks.api.intuit.com/v3/company/synthetic-realm/companyinfo"
+        )
+        logger.info("HTTP pool remained healthy")
+
+    assert "synthetic-realm" not in caplog.text
+    assert "HTTP pool remained healthy" in caplog.text
+    await transport.client.aclose()
 
 
 @pytest.mark.asyncio

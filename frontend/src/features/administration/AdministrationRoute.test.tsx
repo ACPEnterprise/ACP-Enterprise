@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AxiosError, AxiosHeaders } from "axios";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -46,6 +46,8 @@ describe("AdministrationRoute", () => {
     vi.mocked(api.grantPermission).mockResolvedValue(undefined);
     vi.mocked(api.removePermission).mockResolvedValue(undefined);
     vi.mocked(api.launchQuickBooksSandbox).mockResolvedValue(undefined);
+    vi.mocked(api.getQuickBooksSandboxConnection).mockResolvedValue("not_connected");
+    vi.mocked(api.disconnectQuickBooksSandbox).mockResolvedValue("not_connected");
   });
 
   it("renders assigned and unassigned permissions in a phone-safe single column", async () => {
@@ -63,6 +65,27 @@ describe("AdministrationRoute", () => {
     renderPage();
     await userEvent.click(await screen.findByRole("button", { name: "Connect QuickBooks Sandbox" }));
     expect(api.launchQuickBooksSandbox).toHaveBeenCalledOnce();
+  });
+
+  it("requires explicit confirmation before disconnect and restores connect action", async () => {
+    vi.mocked(api.getQuickBooksSandboxConnection).mockResolvedValue("connected");
+    renderPage();
+    await userEvent.click(await screen.findByRole("button", { name: "Disconnect QuickBooks Sandbox" }));
+    expect(screen.getByRole("dialog", { name: "Disconnect QuickBooks Sandbox?" })).toBeInTheDocument();
+    expect(api.disconnectQuickBooksSandbox).not.toHaveBeenCalled();
+    await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Disconnect QuickBooks Sandbox" }));
+    expect(api.disconnectQuickBooksSandbox).toHaveBeenCalledOnce();
+    expect(await screen.findByRole("button", { name: "Connect QuickBooks Sandbox" })).toBeInTheDocument();
+  });
+
+  it("reports a failed disconnect while retaining the disconnect action", async () => {
+    vi.mocked(api.getQuickBooksSandboxConnection).mockResolvedValue("connected");
+    vi.mocked(api.disconnectQuickBooksSandbox).mockRejectedValue(new Error("provider rejected"));
+    renderPage();
+    await userEvent.click(await screen.findByRole("button", { name: "Disconnect QuickBooks Sandbox" }));
+    await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Disconnect QuickBooks Sandbox" }));
+    expect(await screen.findByText("Disconnect failed. The existing connection was retained.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Disconnect QuickBooks Sandbox" })).toBeInTheDocument();
   });
 
   it("finds canonical Dispatch permissions by owner search", async () => {

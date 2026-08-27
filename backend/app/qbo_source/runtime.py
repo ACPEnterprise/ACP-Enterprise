@@ -194,6 +194,73 @@ class SandboxConnectionRegistry:
         finally:
             temporary.unlink(missing_ok=True)
 
+    @property
+    def verified_path(self) -> Path:
+        return self.root / "verified.json"
+
+    def is_verified(self) -> bool:
+        return self.verified_path.is_file()
+
+    @property
+    def disconnect_claim_path(self) -> Path:
+        return self.root / ".disconnecting"
+
+    def begin_disconnect(self) -> None:
+        try:
+            descriptor = os.open(
+                self.disconnect_claim_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600
+            )
+        except FileExistsError as error:
+            raise SandboxRuntimeError("sandbox_disconnect_in_progress") from error
+        os.close(descriptor)
+
+    def end_disconnect(self) -> None:
+        self.disconnect_claim_path.unlink(missing_ok=True)
+
+    def archive_and_delete_verified(self) -> None:
+        """Preserve connection history before removing the active marker."""
+        try:
+            document = json.loads(self.verified_path.read_text(encoding="utf-8"))
+        except FileNotFoundError as error:
+            raise SandboxRuntimeError("sandbox_connection_marker_missing") from error
+        except (json.JSONDecodeError, UnicodeDecodeError) as error:
+            raise SandboxRuntimeError("sandbox_connection_marker_invalid") from error
+        if not isinstance(document, dict) or document.get("environment") != "sandbox":
+            raise SandboxRuntimeError("sandbox_connection_marker_invalid")
+
+        history = self.root / "history"
+        history.mkdir(mode=0o700, exist_ok=True)
+        os.chmod(history, 0o700)
+        archived = {
+            "schema_version": "qbo-sandbox-disconnection/v1",
+            "environment": "sandbox",
+            "connection": document,
+            "disconnected_at": datetime.now(timezone.utc).isoformat(),
+            "provider_revocation_succeeded": True,
+        }
+        path = (
+            history
+            / f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')}-{uuid4().hex}.json"
+        )
+        descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        try:
+            with os.fdopen(descriptor, "wb") as target:
+                target.write(
+                    json.dumps(
+                        archived,
+                        ensure_ascii=False,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    ).encode()
+                )
+                target.flush()
+                os.fsync(target.fileno())
+            os.chmod(path, 0o600)
+        except Exception:
+            path.unlink(missing_ok=True)
+            raise
+        self.verified_path.unlink()
+
 
 @dataclass(frozen=True)
 class SandboxOAuthRuntime:
@@ -207,6 +274,35 @@ class SandboxOAuthRuntime:
             redirect_uri=redirect_uri,
             token_reference=ProtectedSandboxSecretProvider.TOKEN_REFERENCE,
         )
+
+    def connection_state(self) -> str:
+        token_exists = self.verifier.secrets_provider.token_path.is_file()
+        marker_exists = self.verifier.registry.is_verified()
+        if token_exists and marker_exists:
+            if self.verifier.registry.disconnect_claim_path.exists():
+                return "disconnecting"
+            return "connected"
+        if not token_exists and not marker_exists:
+            return "not_connected"
+        return "disconnect_failed"
+
+    async def disconnect(self) -> str:
+        state = self.connection_state()
+        if state == "not_connected":
+            return state
+        if state != "connected":
+            raise SandboxRuntimeError("sandbox_connection_state_inconsistent")
+        self.verifier.registry.begin_disconnect()
+        try:
+            if self.connection_state() != "disconnecting":
+                raise SandboxRuntimeError("sandbox_connection_state_inconsistent")
+            await self.coordinator.oauth.revoke(
+                token_reference=ProtectedSandboxSecretProvider.TOKEN_REFERENCE
+            )
+            self.verifier.registry.archive_and_delete_verified()
+        finally:
+            self.verifier.registry.end_disconnect()
+        return "not_connected"
 
     async def complete(
         self,

@@ -25,6 +25,8 @@ _Administer = Annotated[
 ]
 
 AUTHORIZE_PATH = "/api/v1/integrations/qbo/oauth/authorize"
+CONNECTION_PATH = "/api/v1/integrations/qbo/connection"
+DISCONNECT_PATH = "/api/v1/integrations/qbo/oauth/disconnect"
 _CALLBACK_URI = (
     "https://preview.allcountyhomeservices.com/api/v1/integrations/qbo/oauth/callback"
 )
@@ -42,6 +44,59 @@ def _safe_response(status_code: int, code: str) -> JSONResponse:
         content={"status": "sandbox_oauth_callback", "result": code},
         headers=_SAFE_HEADERS,
     )
+
+
+def _connection_response(status_code: int, connection_state: str) -> JSONResponse:
+    return JSONResponse(
+        status_code=status_code,
+        content={
+            "status": "qbo_sandbox_connection",
+            "connection_state": connection_state,
+        },
+        headers=_SAFE_HEADERS,
+    )
+
+
+@router.get(CONNECTION_PATH, name="qbo-sandbox-connection-status")
+async def qbo_sandbox_connection_status(
+    authorization: _Administer,
+) -> JSONResponse:
+    del authorization
+    try:
+        state = get_sandbox_oauth_runtime().connection_state()
+    except (SandboxRuntimeError, SandboxSecretStoreError):
+        return _connection_response(status.HTTP_503_SERVICE_UNAVAILABLE, "unavailable")
+    return _connection_response(status.HTTP_200_OK, state)
+
+
+@router.post(DISCONNECT_PATH, name="qbo-sandbox-oauth-disconnect")
+async def qbo_sandbox_oauth_disconnect(
+    authorization: _Administer,
+) -> JSONResponse:
+    identifier = hashlib.sha256(str(authorization.user.id).encode()).hexdigest()
+    try:
+        await _rate_limiter.enforce(
+            bucket="qbo-sandbox-oauth-disconnect",
+            identifier_hash=identifier,
+            limit=2,
+            window_seconds=600,
+        )
+        state = await get_sandbox_oauth_runtime().disconnect()
+    except RateLimitExceededError:
+        return _connection_response(
+            status.HTTP_429_TOO_MANY_REQUESTS, "disconnect_failed"
+        )
+    except RateLimitUnavailableError:
+        return _connection_response(
+            status.HTTP_503_SERVICE_UNAVAILABLE, "disconnect_failed"
+        )
+    except (IntuitAuthenticationError, IntuitProtocolError):
+        return _connection_response(status.HTTP_502_BAD_GATEWAY, "disconnect_failed")
+    except (SandboxRuntimeError, SandboxSecretStoreError, OSError, ValueError):
+        return _connection_response(
+            status.HTTP_503_SERVICE_UNAVAILABLE, "disconnect_failed"
+        )
+    return _connection_response(status.HTTP_200_OK, state)
 
 
 def _safe_callback_error(error: IntuitAuthenticationError | IntuitProtocolError) -> str:
