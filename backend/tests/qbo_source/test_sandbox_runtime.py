@@ -8,6 +8,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
+from fastapi.testclient import TestClient
+
 from app.main import app
 from app.qbo_source.intuit import (
     ACCOUNTING_SCOPE,
@@ -24,7 +26,6 @@ from app.qbo_source.secrets import (
     ProtectedSandboxSecretProvider,
     SandboxSecretStoreError,
 )
-from fastapi.testclient import TestClient
 
 
 class _Runtime:
