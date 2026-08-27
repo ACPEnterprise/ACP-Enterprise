@@ -7,11 +7,6 @@ from uuid import uuid4
 import httpx
 import pytest
 import pytest_asyncio
-from fastapi import FastAPI
-from fastapi.dependencies.models import Dependant
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-
 from app.core.config import settings
 from app.database.session import get_database_session, get_security_database_session
 from app.engineering_capacity.service import EngineeringCapacityService
@@ -40,6 +35,11 @@ from app.platform.permissions.codes import (
 )
 from app.platform.permissions.dependencies import get_authorization_context
 from app.worker_control.models import EngineeringWorker
+from fastapi import FastAPI
+from fastapi.dependencies.models import Dependant
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
 from tests.engineering_control.review.test_engineering_review import completed_command
 from tests.engineering_control.test_engineering_command_service import (
     ServiceFixture,
@@ -1506,6 +1506,48 @@ def test_revision_evidence_overrides_stale_heartbeat_runtime_and_ready() -> None
     assert "Revision available" in reason
     assert "Detailed diagnostics were not captured" in reason
     assert actions == ("request_revision", "cancel")
+
+
+def test_adopted_result_review_exposes_only_review_entrypoint() -> None:
+    item = SimpleNamespace(
+        reconciliation_state="current",
+        status="waiting_review",
+        readiness_state="ready",
+        requested_code_changes=True,
+        starting_commit_evidence={},
+        owning_branch="customer-management-v1",
+    )
+
+    attention, reason, actions = _attention(
+        item,
+        None,
+        SimpleNamespace(
+            runtime_state="waiting_for_owner",
+            reason_code="heartbeat_expired",
+            current_activity="Published result ready for owner review",
+        ),
+        "available",
+        "Healthy assigned capacity is available.",
+        False,
+        False,
+        True,
+    )
+
+    assert attention == "owner_action_required"
+    assert reason == "Completed work is ready for your review."
+    assert actions == ()
+
+
+def test_modern_result_review_retains_standard_review_actions() -> None:
+    item = SimpleNamespace(
+        reconciliation_state="current",
+        status="waiting_review",
+        readiness_state="ready",
+    )
+
+    _, _, actions = _attention(item, None, None)
+
+    assert actions == ("approve", "request_revision", "reject")
 
 
 def test_code_start_fails_closed_until_candidate_head_is_current() -> None:

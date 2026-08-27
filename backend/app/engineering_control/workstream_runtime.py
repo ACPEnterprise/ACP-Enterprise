@@ -181,15 +181,28 @@ class WorkstreamRuntimeService:
                 EngineeringWorkstreamEvent.idempotency_key == idempotency_key,
             )
         )
+        target_reason = (
+            "heartbeat_expired"
+            if runtime.worker_health == "unhealthy"
+            and runtime.reason_code == "heartbeat_expired"
+            else "adopted_result_owner_review"
+        )
+        projection_drifted = (
+            runtime.runtime_state != "waiting_for_owner"
+            or runtime.progress_percent != 100
+            or runtime.current_activity != "Published result ready for owner review"
+            or runtime.reason_code != target_reason
+        )
+        if projection_drifted:
+            runtime.runtime_state = "waiting_for_owner"
+            runtime.progress_percent = 100
+            runtime.current_activity = "Published result ready for owner review"
+            runtime.reason_code = target_reason
+            runtime.updated_at = now
+            runtime.version += 1
         if duplicate is not None:
+            await db.flush()
             return runtime
-        runtime.runtime_state = "waiting_for_owner"
-        runtime.worker_health = "healthy"
-        runtime.progress_percent = 100
-        runtime.current_activity = "Published result ready for owner review"
-        runtime.reason_code = "adopted_result_owner_review"
-        runtime.updated_at = now
-        runtime.version += 1
         db.add(
             EngineeringWorkstreamEvent(
                 company_id=company_id,

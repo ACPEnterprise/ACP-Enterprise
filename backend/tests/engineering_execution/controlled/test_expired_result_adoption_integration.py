@@ -144,7 +144,9 @@ async def test_expired_published_result_adoption_preserves_history_and_opens_rev
             "allowed_paths": list(tech.execution_boundary.allowed_paths),
             "forbidden_paths": list(tech.execution_boundary.forbidden_paths),
             "permitted_operations": list(tech.execution_boundary.permitted_operations),
-            "validation_requirements": list(tech.execution_boundary.validation_requirements),
+            "validation_requirements": list(
+                tech.execution_boundary.validation_requirements
+            ),
         }
     boundary_digest = hashlib.sha256(
         json.dumps(boundary, sort_keys=True, separators=(",", ":")).encode()
@@ -169,22 +171,22 @@ async def test_expired_published_result_adoption_preserves_history_and_opens_rev
         database.add(roadmap)
         await database.flush()
         milestone = EngineeringMilestone(
-                company_id=fixture.context.company.id,
-                roadmap_id=roadmap.id,
-                position=1,
-                title="Adopt result",
-                milestone_code="TECH.1" if legacy_boundary else "TEST.1",
-                reconciliation_state="current",
-                objective="Regression",
-                owning_workstream="Field Service" if legacy_boundary else "Engineering",
-                owning_branch=command.expected_branch,
-                status="running",
-                definition_approved=True,
-                requested_code_changes=True,
-                command_id=command.id,
-                created_at=now,
-                updated_at=now,
-            )
+            company_id=fixture.context.company.id,
+            roadmap_id=roadmap.id,
+            position=1,
+            title="Adopt result",
+            milestone_code="TECH.1" if legacy_boundary else "TEST.1",
+            reconciliation_state="current",
+            objective="Regression",
+            owning_workstream="Field Service" if legacy_boundary else "Engineering",
+            owning_branch=command.expected_branch,
+            status="running",
+            definition_approved=True,
+            requested_code_changes=True,
+            command_id=command.id,
+            created_at=now,
+            updated_at=now,
+        )
         database.add(milestone)
         await database.flush()
         if legacy_boundary:
@@ -400,7 +402,9 @@ async def test_expired_published_result_adoption_preserves_history_and_opens_rev
         result.output["adoption"]["current_authoritative_head_at_adoption"]
         == current_head
     )
-    expected_source = "legacy_scheduler_snapshot" if legacy_boundary else "frozen_command"
+    expected_source = (
+        "legacy_scheduler_snapshot" if legacy_boundary else "frozen_command"
+    )
     assert result.output["adoption"]["boundary_evidence"]["source"] == expected_source
     assert adopted_at > completed_at
     assert git(tmp_path / "working", "rev-parse", "HEAD") == current_head
@@ -416,9 +420,7 @@ async def test_expired_published_result_adoption_preserves_history_and_opens_rev
     readiness = WorkspaceManager(
         tmp_path / "provider-workspaces",
         {"acp-enterprise": tmp_path / "working"},
-    ).prepare_repository(
-        "acp-enterprise", "customer-management-v1", current_head
-    )
+    ).prepare_repository("acp-enterprise", "customer-management-v1", current_head)
     assert readiness.ready is True
     assert readiness.observed_head == current_head
     async with fixture.factory() as database, database.begin():
@@ -511,6 +513,63 @@ async def test_expired_published_result_adoption_preserves_history_and_opens_rev
     assert len(milestone_events) == 1
     assert review_count == 1
     assert execution_count == 1
+    heartbeat_at = adopted_at + timedelta(minutes=6)
+    async with fixture.factory() as database, database.begin():
+        drifted_runtime = await database.scalar(
+            select(EngineeringWorkstreamRuntime).where(
+                EngineeringWorkstreamRuntime.command_id == command.id
+            )
+        )
+        assert drifted_runtime is not None
+        drifted_runtime.runtime_state = "recovering"
+        drifted_runtime.worker_health = "unhealthy"
+        drifted_runtime.reason_code = "heartbeat_expired"
+        drifted_runtime.version += 1
+        drifted_runtime.updated_at = heartbeat_at
+        database.add(
+            EngineeringWorkstreamEvent(
+                company_id=fixture.context.company.id,
+                command_id=command.id,
+                control_id=drifted_runtime.control_id,
+                control_version=drifted_runtime.acknowledged_control_version,
+                worker_id=drifted_runtime.worker_id,
+                worker_session_id=drifted_runtime.worker_session_id,
+                event_type="runtime_transition",
+                action=drifted_runtime.acknowledged_action,
+                runtime_state="recovering",
+                reason_code="heartbeat_expired",
+                idempotency_key=f"heartbeat-expired:{drifted_runtime.id}:fixture",
+                occurred_at=heartbeat_at,
+            )
+        )
+    async with fixture.factory() as database:
+        await RoadmapService().reconcile(database, context=fixture.context)
+    async with fixture.factory() as database:
+        await RoadmapService().reconcile(database, context=fixture.context)
+    async with fixture.factory() as database:
+        restored_runtime = await database.scalar(
+            select(EngineeringWorkstreamRuntime).where(
+                EngineeringWorkstreamRuntime.command_id == command.id
+            )
+        )
+        convergence_count = await database.scalar(
+            select(func.count(EngineeringWorkstreamEvent.id)).where(
+                EngineeringWorkstreamEvent.command_id == command.id,
+                EngineeringWorkstreamEvent.reason_code == "adopted_result_owner_review",
+            )
+        )
+        heartbeat_count = await database.scalar(
+            select(func.count(EngineeringWorkstreamEvent.id)).where(
+                EngineeringWorkstreamEvent.command_id == command.id,
+                EngineeringWorkstreamEvent.reason_code == "heartbeat_expired",
+            )
+        )
+        assert restored_runtime is not None
+        assert restored_runtime.runtime_state == "waiting_for_owner"
+        assert restored_runtime.worker_health == "unhealthy"
+        assert restored_runtime.reason_code == "heartbeat_expired"
+        assert convergence_count == 1
+        assert heartbeat_count == 1
     async with fixture.factory() as database:
         stored_offer = await database.get(ControlledExecutionOfferModel, offer.id)
         stored_lease = await database.get(WorkerLease, acquired.lease_id)

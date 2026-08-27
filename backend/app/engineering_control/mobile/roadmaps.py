@@ -772,8 +772,7 @@ class RoadmapService:
                 (
                     await db.scalars(
                         select(EngineeringExecutionReview).where(
-                            EngineeringExecutionReview.company_id
-                            == context.company.id,
+                            EngineeringExecutionReview.company_id == context.company.id,
                             EngineeringExecutionReview.command_id
                             == milestone.command_id,
                             EngineeringExecutionReview.state == "pending",
@@ -784,8 +783,7 @@ class RoadmapService:
             active_offers = int(
                 await db.scalar(
                     select(func.count(ControlledExecutionOfferModel.id)).where(
-                        ControlledExecutionOfferModel.company_id
-                        == context.company.id,
+                        ControlledExecutionOfferModel.company_id == context.company.id,
                         ControlledExecutionOfferModel.execution_id
                         == result.execution_id,
                         ControlledExecutionOfferModel.state.in_(
@@ -826,13 +824,32 @@ class RoadmapService:
                 and adoption.get("historical_publication_head") == commit
             )
             review = reviews[0] if len(reviews) == 1 else None
+            convergence_recorded = False
+            if review is not None:
+                convergence_recorded = bool(
+                    await db.scalar(
+                        select(EngineeringWorkstreamEvent.id).where(
+                            EngineeringWorkstreamEvent.company_id == context.company.id,
+                            EngineeringWorkstreamEvent.command_id
+                            == milestone.command_id,
+                            EngineeringWorkstreamEvent.idempotency_key
+                            == f"adopted-owner-review:{result.id}:{review.id}",
+                        )
+                    )
+                )
             runtime_clear = False
-            if runtime is not None and runtime.worker_health == "healthy":
-                runtime_clear = runtime.runtime_state in {
-                    "acknowledged",
-                    "waiting_for_owner",
-                    "completed",
-                }
+            if runtime is not None:
+                runtime_clear = (
+                    runtime.worker_health == "healthy"
+                    and runtime.runtime_state
+                    in {"acknowledged", "waiting_for_owner", "completed"}
+                ) or (
+                    milestone.status == "waiting_review"
+                    and convergence_recorded
+                    and runtime.worker_health == "unhealthy"
+                    and runtime.reason_code == "heartbeat_expired"
+                    and runtime.runtime_state in {"recovering", "waiting_for_owner"}
+                )
             capacity_clear = capacity is None or (
                 capacity.health_state == "healthy"
                 and capacity.operational_state == "available"

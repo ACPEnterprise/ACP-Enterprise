@@ -17,6 +17,7 @@ from app.engineering_control.commands import (
 )
 from app.engineering_control.errors import EngineeringControlError
 from app.engineering_control.http_errors import engineering_http_error
+from app.engineering_control.review.models import EngineeringExecutionReview
 from app.engineering_control.revision_evidence import (
     revision_evidence,
     revision_milestone_eligible,
@@ -26,6 +27,7 @@ from app.engineering_control.scheduler.reconciliation import (
 )
 from app.engineering_control.scheduler.schemas import SchedulerReconciliationReport
 from app.engineering_control.workstream_runtime import EngineeringWorkstreamRuntime
+from app.engineering_execution.controlled.models import ControlledExecutionResultModel
 from app.engineering_execution.models import EngineeringExecution
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import EngineeringCommandPermission
@@ -131,6 +133,7 @@ def _attention(
     capacity_reason: str | None = None,
     revision_eligible: bool = False,
     historical_diagnostics_incomplete: bool = False,
+    adopted_result_review: bool = False,
 ) -> tuple[str, str, tuple[str, ...]]:
     if capacity_state == "reconciliation":
         return (
@@ -229,6 +232,12 @@ def _attention(
             "owner_action_required",
             "This milestone is ready to start.",
             ("start", "skip"),
+        )
+    if item.status == "waiting_review" and adopted_result_review:
+        return (
+            "owner_action_required",
+            "Completed work is ready for your review.",
+            (),
         )
     if item.status == "waiting_review":
         return (
@@ -362,6 +371,41 @@ async def list_roadmaps(context: ReadContext, session: DatabaseSession) -> Roadm
         milestones, MilestoneItem, "milestone"
     )
     command_ids = tuple(item.command_id for item in milestone_items if item.command_id)
+    adopted_result_reviews: set[UUID] = set()
+    if command_ids:
+        adopted_rows = tuple(
+            (
+                await session.execute(
+                    select(ControlledExecutionResultModel, EngineeringExecutionReview)
+                    .join(
+                        EngineeringExecutionReview,
+                        EngineeringExecutionReview.controlled_result_id
+                        == ControlledExecutionResultModel.id,
+                    )
+                    .where(
+                        ControlledExecutionResultModel.company_id == context.company.id,
+                        ControlledExecutionResultModel.command_id.in_(command_ids),
+                        ControlledExecutionResultModel.outcome == "succeeded",
+                        EngineeringExecutionReview.state == "pending",
+                    )
+                )
+            ).all()
+        )
+        for result, review in adopted_rows:
+            adoption_evidence = result.output.get("adoption")
+            published_commit = result.output.get("published_commit_sha")
+            if (
+                review.command_id == result.command_id
+                and review.execution_id == result.execution_id
+                and result.repository_mutated is True
+                and isinstance(published_commit, str)
+                and len(published_commit) == 40
+                and isinstance(adoption_evidence, dict)
+                and len(str(adoption_evidence.get("evidence_digest", ""))) == 64
+                and adoption_evidence.get("historical_publication_head")
+                == published_commit
+            ):
+                adopted_result_reviews.add(result.command_id)
     runtimes = {
         item.command_id: item
         for item in (
@@ -456,6 +500,7 @@ async def list_roadmaps(context: ReadContext, session: DatabaseSession) -> Roadm
                     if item.command_id in revision_evidence_by_command
                     else False
                 ),
+                item.command_id in adopted_result_reviews,
             ),
         )
     )

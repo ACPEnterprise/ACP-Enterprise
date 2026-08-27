@@ -10,11 +10,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.database.session import AsyncSessionFactory
-from app.engineering_control.mobile.roadmaps import EngineeringMilestoneEvent
+from app.engineering_control.mobile.roadmaps import (
+    EngineeringMilestone,
+    EngineeringMilestoneEvent,
+)
+from app.engineering_control.review.models import EngineeringExecutionReview
 from app.engineering_control.workstream_runtime import (
     EngineeringWorkstreamEvent,
     EngineeringWorkstreamRuntime,
 )
+from app.engineering_execution.controlled.models import ControlledExecutionResultModel
+from app.engineering_execution.models import EngineeringExecution
 
 
 class InvalidResumeToken(ValueError):
@@ -367,7 +373,76 @@ async def persist_expired_heartbeats(company_id: UUID) -> None:
             ).all()
         )
         for runtime in runtimes:
-            runtime.runtime_state = "recovering"
+            preserve_terminal_review = False
+            milestone = await db.scalar(
+                select(EngineeringMilestone).where(
+                    EngineeringMilestone.company_id == company_id,
+                    EngineeringMilestone.command_id == runtime.command_id,
+                    EngineeringMilestone.status == "waiting_review",
+                    EngineeringMilestone.reconciliation_state == "current",
+                )
+            )
+            result = await db.scalar(
+                select(ControlledExecutionResultModel)
+                .where(
+                    ControlledExecutionResultModel.company_id == company_id,
+                    ControlledExecutionResultModel.command_id == runtime.command_id,
+                    ControlledExecutionResultModel.outcome == "succeeded",
+                )
+                .order_by(ControlledExecutionResultModel.completed_at.desc())
+                .limit(1)
+            )
+            if milestone is not None and result is not None:
+                execution = await db.get(EngineeringExecution, result.execution_id)
+                reviews = tuple(
+                    (
+                        await db.scalars(
+                            select(EngineeringExecutionReview).where(
+                                EngineeringExecutionReview.company_id == company_id,
+                                EngineeringExecutionReview.command_id
+                                == runtime.command_id,
+                                EngineeringExecutionReview.execution_id
+                                == result.execution_id,
+                                EngineeringExecutionReview.controlled_result_id
+                                == result.id,
+                                EngineeringExecutionReview.state == "pending",
+                            )
+                        )
+                    ).all()
+                )
+                adoption = result.output.get("adoption")
+                published_commit = result.output.get("published_commit_sha")
+                convergence_recorded = False
+                if len(reviews) == 1:
+                    convergence_recorded = bool(
+                        await db.scalar(
+                            select(EngineeringWorkstreamEvent.id).where(
+                                EngineeringWorkstreamEvent.company_id == company_id,
+                                EngineeringWorkstreamEvent.command_id
+                                == runtime.command_id,
+                                EngineeringWorkstreamEvent.idempotency_key
+                                == (
+                                    f"adopted-owner-review:{result.id}:{reviews[0].id}"
+                                ),
+                            )
+                        )
+                    )
+                preserve_terminal_review = (
+                    execution is not None
+                    and execution.state == "completed"
+                    and execution.status == "succeeded"
+                    and result.repository_mutated is True
+                    and isinstance(published_commit, str)
+                    and len(published_commit) == 40
+                    and isinstance(adoption, dict)
+                    and len(str(adoption.get("evidence_digest", ""))) == 64
+                    and adoption.get("historical_publication_head") == published_commit
+                    and len(reviews) == 1
+                    and convergence_recorded
+                )
+            runtime.runtime_state = (
+                "waiting_for_owner" if preserve_terminal_review else "recovering"
+            )
             runtime.worker_health = "unhealthy"
             runtime.reason_code = "heartbeat_expired"
             runtime.updated_at = now
@@ -382,7 +457,7 @@ async def persist_expired_heartbeats(company_id: UUID) -> None:
                     worker_session_id=runtime.worker_session_id,
                     event_type="runtime_transition",
                     action=runtime.acknowledged_action,
-                    runtime_state="recovering",
+                    runtime_state=runtime.runtime_state,
                     reason_code="heartbeat_expired",
                     idempotency_key=f"heartbeat-expired:{runtime.id}:{runtime.version}",
                     occurred_at=now,
