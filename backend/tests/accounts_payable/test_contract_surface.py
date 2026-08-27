@@ -3,7 +3,12 @@ from pathlib import Path
 import pytest
 
 from app.accounts_payable.errors import APValidation
-from app.accounts_payable.models import AccountingVendor, Disbursement, DuplicateOverride, VendorBill
+from app.accounts_payable.models import (
+    AccountingVendor,
+    Disbursement,
+    DuplicateOverride,
+    VendorBill,
+)
 from app.accounts_payable.service import normalize_document
 from app.events.types import EventType
 from app.platform.permissions.codes import AccountsPayablePermission

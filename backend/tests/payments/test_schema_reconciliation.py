@@ -1,9 +1,10 @@
 from pathlib import Path
 
-from app.core.database import Base
-from app.payments import models as payment_models  # noqa: F401
 from sqlalchemy import CheckConstraint
 from sqlalchemy.dialects.postgresql import JSONB
+
+from app.core.database import Base
+from app.payments import models as payment_models  # noqa: F401
 
 EXPECTED_CHECKS = {
     "payment_intents": {
