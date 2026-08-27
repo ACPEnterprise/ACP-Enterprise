@@ -23,7 +23,7 @@ const permissions = [
 
 const requireReauthentication = vi.fn();
 const context: AuthenticationContextValue = {
-  status: "authenticated", activeCompany: null,
+  status: "authenticated", activeCompany: null, permissionCodes: ["COMPANY_ADMINISTER"],
   user: { id: "owner", normalized_email: "owner@example.com", first_name: "Owner", last_name: "User", display_name: "Owner", email_verified_at: null },
   signIn: vi.fn(), signOut: vi.fn(), signOutAll: vi.fn(), requireReauthentication,
 };
@@ -45,6 +45,7 @@ describe("AdministrationRoute", () => {
     vi.mocked(api.listPermissions).mockResolvedValue(permissions);
     vi.mocked(api.grantPermission).mockResolvedValue(undefined);
     vi.mocked(api.removePermission).mockResolvedValue(undefined);
+    vi.mocked(api.launchQuickBooksSandbox).mockResolvedValue(undefined);
   });
 
   it("renders assigned and unassigned permissions in a phone-safe single column", async () => {
@@ -55,6 +56,13 @@ describe("AdministrationRoute", () => {
     expect(screen.getByText("Reconciliation required")).toBeInTheDocument();
     expect(screen.getByText("Assigned")).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "Grant" })[0]).toHaveClass("min-h-11");
+    expect(screen.getByRole("button", { name: "Connect QuickBooks Sandbox" })).toBeInTheDocument();
+  });
+
+  it("launches the sandbox through the authenticated API client only after owner click", async () => {
+    renderPage();
+    await userEvent.click(await screen.findByRole("button", { name: "Connect QuickBooks Sandbox" }));
+    expect(api.launchQuickBooksSandbox).toHaveBeenCalledOnce();
   });
 
   it("finds canonical Dispatch permissions by owner search", async () => {

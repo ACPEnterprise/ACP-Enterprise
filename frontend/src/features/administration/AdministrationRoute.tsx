@@ -1,11 +1,12 @@
 import axios from "axios";
-import { Search, ShieldCheck } from "lucide-react";
+import { Search, ShieldCheck, Unplug } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 
 import { useAuth } from "../../auth";
 import { Alert, Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, ConfirmationDialog, Input, Spinner } from "../../ui";
 import type { PermissionDefinition } from "./api";
+import { launchQuickBooksSandbox } from "./api";
 import { usePermissionMutation, useRolePermissions, useRoles } from "./hooks";
 
 type PendingChange = { action: "grant" | "remove"; permission: PermissionDefinition };
@@ -16,7 +17,7 @@ function errorStatus(error: unknown): number | undefined {
 
 export function AdministrationRoute() {
   const navigate = useNavigate();
-  const { requireReauthentication } = useAuth();
+  const { permissionCodes = [], requireReauthentication } = useAuth();
   const roles = useRoles();
   const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null);
   const selectedRole = roles.data?.find((role) => role.id === selectedRoleId) ?? roles.data?.[0] ?? null;
@@ -24,6 +25,8 @@ export function AdministrationRoute() {
   const [search, setSearch] = useState("");
   const [pending, setPending] = useState<PendingChange | null>(null);
   const [mutationError, setMutationError] = useState<string | null>(null);
+  const [qboPending, setQboPending] = useState(false);
+  const [qboError, setQboError] = useState(false);
   const mutation = usePermissionMutation(pending?.action ?? "grant");
 
   const visiblePermissions = useMemo(() => {
@@ -56,6 +59,17 @@ export function AdministrationRoute() {
     }
   };
 
+  const connectQuickBooksSandbox = async () => {
+    setQboError(false);
+    setQboPending(true);
+    try {
+      await launchQuickBooksSandbox();
+    } catch {
+      setQboError(true);
+      setQboPending(false);
+    }
+  };
+
   return (
     <div className="mx-auto w-full max-w-5xl space-y-ui-5 pb-ui-8">
       <header>
@@ -63,6 +77,23 @@ export function AdministrationRoute() {
         <p className="mt-ui-2 text-body-s text-content-muted">Review one role and change one canonical permission at a time.</p>
       </header>
       {mutationError && <Alert variant="danger" announcement="assertive">{mutationError}</Alert>}
+      {permissionCodes.includes("COMPANY_ADMINISTER") && <Card>
+        <CardHeader>
+          <CardTitle>QuickBooks Development sandbox</CardTitle>
+          <CardDescription>Connect only the configured Intuit Development company. Production is unavailable.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-ui-3">
+          {qboError && <Alert variant="danger" announcement="assertive">QuickBooks sandbox authorization could not be started. No company was connected.</Alert>}
+          <Button
+            leadingIcon={<Unplug />}
+            loading={qboPending}
+            loadingLabel="Opening QuickBooks sandbox"
+            onClick={() => void connectQuickBooksSandbox()}
+          >
+            Connect QuickBooks Sandbox
+          </Button>
+        </CardContent>
+      </Card>}
       <Card>
         <CardHeader><CardTitle>Company roles</CardTitle><CardDescription>Select the role whose access you want to review.</CardDescription></CardHeader>
         <CardContent>

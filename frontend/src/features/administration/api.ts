@@ -23,6 +23,39 @@ export interface PermissionDefinition {
 }
 
 const ADMIN_PATH = "/api/v1/company-admin";
+const QBO_SANDBOX_AUTHORIZE_PATH = "/api/v1/integrations/qbo/oauth/authorize";
+
+interface QboSandboxAuthorizationResponse {
+  status: "sandbox_oauth_initiation";
+  authorization_url: string;
+}
+
+function validatedIntuitAuthorizationUrl(value: string): string {
+  const url = new URL(value);
+  const expectedCallback = `${window.location.origin}/api/v1/integrations/qbo/oauth/callback`;
+  if (
+    url.protocol !== "https:" ||
+    url.hostname !== "appcenter.intuit.com" ||
+    url.pathname !== "/connect/oauth2" ||
+    url.username ||
+    url.password ||
+    url.searchParams.get("response_type") !== "code" ||
+    url.searchParams.get("scope") !== "com.intuit.quickbooks.accounting" ||
+    url.searchParams.get("redirect_uri") !== expectedCallback ||
+    !url.searchParams.get("client_id") ||
+    !url.searchParams.get("state")
+  ) {
+    throw new Error("Unexpected QuickBooks authorization destination.");
+  }
+  return url.toString();
+}
+
+export async function launchQuickBooksSandbox(
+  navigate: (url: string) => void = (url) => window.location.assign(url),
+): Promise<void> {
+  const response = await apiClient.post<QboSandboxAuthorizationResponse>(QBO_SANDBOX_AUTHORIZE_PATH);
+  navigate(validatedIntuitAuthorizationUrl(response.data.authorization_url));
+}
 
 export async function listRoles(): Promise<CompanyRole[]> {
   return (await apiClient.get<CompanyRole[]>(`${ADMIN_PATH}/roles`)).data;
