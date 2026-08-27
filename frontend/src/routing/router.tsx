@@ -5,6 +5,7 @@ import { ProtectedRoute } from "../auth";
 import { TechnicianRouteGuard } from "../features/technician/TechnicianRouteGuard";
 import {
   accountsPayableHandle,
+  financialReportsHandle,
   administrationHandle,
   appointmentsHandle,
   commandCenterHandle,
@@ -137,6 +138,11 @@ export const appRoutes: RouteObject[] = [
             path: "accounts-payable",
             handle: accountsPayableHandle,
             lazy: async () => ({ Component: (await import("../routes/AccountsPayableRoute")).AccountsPayableRoute }),
+          },
+          {
+            path: "financial-reports",
+            handle: financialReportsHandle,
+            lazy: async () => ({ Component: (await import("../routes/FinancialReportsRoute")).FinancialReportsRoute }),
           },
           {
             path: "price-book",

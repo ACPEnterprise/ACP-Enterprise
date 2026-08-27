@@ -28,6 +28,7 @@ export type NavigationItemId =
   | "engineering"
   | "invoices"
   | "accounts-payable"
+  | "financial-reports"
   | "inventory"
   | "technician"
   | "administration"
