@@ -1,0 +1,84 @@
+{
+  "schema_version": "1.0",
+  "packet_id": "PUR.1",
+  "title": "Establish purchasing foundation",
+  "status": "ready_for_owner_start",
+  "objective": "Implement Company/Branch-scoped Vendor and purchase-order identity, lifecycle, authorization, repository, API, and audit evidence without writing Inventory or Accounting-owned persistence.",
+  "dependencies": [
+    "INV.2A accepted on origin/customer-management-v1",
+    "Inventory/Purchasing architecture at dd4a620aa93e209fee813f556bebefe9946cb12a"
+  ],
+  "repository": {
+    "name": "ACP-Enterprise",
+    "authoritative_branch": "customer-management-v1",
+    "start_rule": "Fetch origin, record current authoritative SHA and sole Alembic head, and create a new isolated worktree only after separate Owner Start."
+  },
+  "allowed_paths": [
+    "backend/app/purchasing/**",
+    "backend/tests/purchasing/**",
+    "frontend/src/api/purchasing.ts",
+    "frontend/src/api/purchasing.test.ts",
+    "frontend/src/hooks/usePurchasing.ts",
+    "frontend/src/types/purchasing.ts",
+    "frontend/src/components/purchasing/**",
+    "frontend/src/routes/PurchasingRoute.tsx",
+    "frontend/src/routes/PurchasingRoute.test.tsx",
+    "backend/app/events/types.py",
+    "backend/app/platform/permissions/codes.py",
+    "backend/app/platform/permissions/catalog.py",
+    "backend/app/main.py",
+    "frontend/src/routing/router.tsx",
+    "frontend/src/routing/routeMetadata.ts",
+    "frontend/src/layout/navigation.ts",
+    "backend/alembic/versions/<one_new_purchasing_revision>.py"
+  ],
+  "prohibited_paths": [
+    "backend/app/inventory/**",
+    "backend/app/accounting/**",
+    "backend/app/accounts_payable/**",
+    "backend/app/payments/**",
+    "backend/app/invoicing/**",
+    "backend/app/qbo_source/**",
+    "backend/app/customer_migration/**",
+    "backend/app/operational_migration/**",
+    "docs/project/continuous-production-scheduler.md",
+    "docs/project/master-milestone-queue.md",
+    "deployment/**",
+    ".env*"
+  ],
+  "ownership": {
+    "purchasing": "Vendor operational identity, purchase orders, lines, lifecycle, approval boundary, and purchasing audit evidence.",
+    "inventory": "Items, locations, quantities, reservations, movements, receipts into stock, and all Inventory tables. PUR.1 may reference accepted public identities but may not write them.",
+    "accounting": "Vendor financial identity/mapping, AP bills, journals, control accounts, periods, and financial statements.",
+    "receiving": "Deferred to PUR.2; PUR.1 does not receive stock or post Inventory movements."
+  },
+  "migration": {
+    "required": true,
+    "owner": "PUR.1 purchasing persistence only",
+    "parent_rule": "Immediately before integration, fetch origin/customer-management-v1 and descend from its sole current Alembic head. No sibling head or merge revision.",
+    "reparent_rule": "Mechanical only before publication and only when DDL, data, runtime, and downgrade semantics are unchanged; otherwise STOP."
+  },
+  "validation": [
+    "Vendor and purchase-order lifecycle invariants",
+    "Company/Branch isolation and permission denial",
+    "idempotency, optimistic concurrency, and immutable audit events",
+    "prove no direct Inventory or Accounting persistence writes",
+    "focused backend/frontend tests, Ruff, MyPy, ESLint, TypeScript/Vite build",
+    "fresh Alembic upgrade, drift check, and exactly one head",
+    "git diff --check and focused secret/private-key scan"
+  ],
+  "stop_conditions": [
+    "new Vendor/AP ownership decision",
+    "Inventory receipt or quantity mutation",
+    "accounting or valuation policy",
+    "schema or migration collision",
+    "security or data-integrity risk",
+    "non-mechanical integration conflict",
+    "real-data access or import",
+    "Preview, Production, deployment, cutover, or irreversible operation"
+  ],
+  "preview": "prohibited without separate authorization",
+  "production": "prohibited",
+  "successor": "PUR.2",
+  "start_authority": "Separate Owner Start required; this packet does not Start PUR.1."
+}

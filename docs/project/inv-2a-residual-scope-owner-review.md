@@ -2,20 +2,25 @@
 
 # INV.2A residual-scope owner review
 
-**Review milestone:** `INV.2A.REVIEW`  
+**Review milestone:** `INV.2A.REVIEW` — `OWNER APPROVED`
 **Authoritative Enterprise evidence:** `a76be4f1de0dae6fdcce00f77509381127de43e8`  
 **Integrated Inventory foundations:** `2389af0415161fd685c3c73b8751df2ad440f701`, `303548a7ecba9bc8b5a788237cc3a81a233c0d48`, `d892cf96249083908317bc814f6b460940a91def`, `9c2b114cb658be0454bbb36bdf0e5929ecc7e0e5`  
 **Alembic head at review:** `u6k8f0h2j497` (one head)
 
-## Decision requested
+## Owner decision — August 27, 2026
 
-Approve the **recommended residual scope** below and explicitly defer opening-balance
-completeness policy. Approval authorizes only the missing Inventory interface and
-acceptance-evidence closure; it does not authorize Purchasing, roadmap INV.3 Job
-consumption, valuation policy, or a schema change.
+The owner approved the **recommended residual scope** below and explicitly
+deferred historical/opening-balance completeness to `INV.OPENING.1`. Operational
+Inventory Phase 1 may complete without historical/opening-balance completeness.
+Where completeness has not been reconciled, its status is
+`unknown / not-yet-reconciled`; absence of recorded movement is never evidence of
+a confirmed zero balance.
 
-If approved and accepted after implementation, INV.2A is complete and `PUR.1`
-becomes dependency-ready. Approval does not start `PUR.1`.
+This approval authorizes only the missing Inventory interface and acceptance-
+evidence closure. It does not authorize Purchasing, roadmap INV.3 Job consumption,
+valuation or accounting policy, fabricated balances, real-data import, a schema
+change, Preview, or Production. Accepted completion makes `PUR.1` dependency-ready
+but does not Start it.
 
 ## Original intent and governing contracts
 
@@ -123,15 +128,15 @@ integration.
 - changes to EST.4, DISP.2, PHONE, scheduler/control-plane, Migration, or Economics
   ownership.
 
-## Genuine owner choice: opening-balance completeness
+## Resolved owner choice: opening-balance completeness
 
-**Recommended:** explicitly defer opening-balance completeness state from INV.2A.
+**Approved:** explicitly defer opening-balance completeness state from INV.2A.
 The architecture makes complete opening balances optional for Version 1 and requires
 separate launch evidence before making them critical. PUR.1 establishes Vendor/PO
 authority and does not require complete stock balances. Existing zero rows remain
 absence of recorded movement evidence, not a certified complete count.
 
-**Alternative:** require explicit completeness before accepting INV.2A. This would
+**Not selected:** require explicit completeness before accepting INV.2A. This would
 add a product policy for completeness granularity and authority, a persistence model
 and migration, APIs/UI, events, permissions, and reconciliation tests. It would keep
 PUR.1 blocked and must not be inferred from the current documents. If selected, the
@@ -169,12 +174,27 @@ or count-session scoped and who may certify/revoke it.
   dependency. PUR.1 then becomes dependency-ready but still requires its own packet,
   Start, fresh SHA, collision check, and serialized integration.
 
-## Owner response requested
+## Owner response recorded
 
-Choose one:
+The owner selected the recommended bounded residual and deferred opening-balance
+completeness. No other product choice is required for INV.2A. `INV.OPENING.1`
+remains separately gated and not startable under this approval.
 
-1. **Approve recommended residual and defer opening-balance completeness.**
-2. **Require opening-balance completeness in INV.2A** and provide the completeness
-   granularity and certifying authority decisions listed above.
+## Completion evidence — August 27, 2026
 
-No other product choice is required by the current repository evidence.
+The bounded residual is complete in the commit containing this record:
+
+- authorized Branch-scoped location creation uses the existing Inventory command;
+- authorized reservation creation and allocation use the existing versioned,
+  idempotent commands;
+- read-only users do not receive mutation controls;
+- allocation changes reserved/available quantity without changing physical on-hand;
+- focused application tests preserve Branch concealment and Business Event evidence;
+- no Inventory model, repository semantic, Business Event, permission, schema, or
+  migration changed; and
+- `INV.OPENING.1` preserves the deferred unknown/not-yet-reconciled boundary.
+
+Fresh-database Inventory tests, full frontend tests, Ruff, MyPy, ESLint,
+TypeScript/Vite build, Alembic upgrade/head/drift validation, diff checks, and a
+focused secret scan passed. `PUR.1` is dependency-ready with a separately bounded
+execution packet; it still requires its own Owner Start.

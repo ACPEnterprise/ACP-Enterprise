@@ -8,7 +8,12 @@ from sqlalchemy import select
 from app.events.models import BusinessEvent
 from app.inventory.contracts import CreateStockLocation
 from app.inventory.errors import InventoryNotFound
-from app.inventory.schemas import TransferCreate
+from app.inventory.schemas import (
+    LocationCreate,
+    ReservationAllocate,
+    ReservationCreate,
+    TransferCreate,
+)
 from app.inventory.service import InventoryService
 from app.platform.company.membership_models import Membership
 from app.platform.permissions.authorization import AuthorizationContext
@@ -134,3 +139,93 @@ async def test_repository_lists_do_not_leak_other_branches(
         )
         assert warehouse.id in {record.id for record in records}
         assert all(record.branch_id == branch.id for record in records)
+
+
+@pytest.mark.asyncio
+async def test_operational_location_and_reservation_commands_preserve_scope_and_evidence(
+    inventory_fixture,  # noqa: F811
+) -> None:
+    factory, company, branch, other_branch, actor = inventory_fixture
+    repository, item, warehouse, _ = await seed_foundation(
+        factory, company, branch, actor
+    )
+    async with factory() as session, session.begin():
+        await repository.post_movement(
+            session, spec=opening_spec(company, branch, actor, item, warehouse)
+        )
+    authorization = await context(factory, company, branch, actor)
+    service = InventoryService(repository)
+
+    async with factory() as session:
+        location = await service.create_location(
+            session,
+            context=authorization,
+            data=LocationCreate(
+                branch_id=branch.id,
+                code="service-van-7",
+                name="Service Van 7",
+                location_type="vehicle",
+            ),
+        )
+        with pytest.raises(InventoryNotFound):
+            await service.create_location(
+                session,
+                context=authorization,
+                data=LocationCreate(
+                    branch_id=other_branch.id,
+                    code="other-branch",
+                    name="Other Branch",
+                    location_type="warehouse",
+                ),
+            )
+
+    async with factory() as session:
+        reservation = await service.create_reservation(
+            session,
+            context=authorization,
+            data=ReservationCreate(
+                branch_id=branch.id,
+                item_id=item.id,
+                location_id=warehouse.id,
+                quantity=Decimal("2.5"),
+                demand_type="job",
+                demand_id=uuid4(),
+                idempotency_key=f"reservation-{uuid4()}",
+            ),
+        )
+        allocation = await service.allocate(
+            session,
+            context=authorization,
+            reservation_id=reservation.id,
+            data=ReservationAllocate(
+                quantity=None,
+                allow_partial=True,
+                expected_version=reservation.version,
+                idempotency_key=f"allocation-{uuid4()}",
+            ),
+        )
+
+    async with factory() as session:
+        event_types = set(
+            (
+                await session.scalars(
+                    select(BusinessEvent.event_type).where(
+                        BusinessEvent.entity_id.in_([location.id, reservation.id])
+                    )
+                )
+            ).all()
+        )
+        quantity = await repository.get_quantity(
+            session,
+            company_id=company.id,
+            branch_id=branch.id,
+            item_id=item.id,
+            location_id=warehouse.id,
+        )
+        assert event_types == {
+            "inventory.location_created",
+            "inventory.reservation_created",
+        }
+        assert allocation.quantity == Decimal("2.5")
+        assert quantity.on_hand == Decimal("20.5")
+        assert quantity.reserved == Decimal("2.5")
