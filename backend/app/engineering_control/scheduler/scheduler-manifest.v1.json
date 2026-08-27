@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "scheduler_version": "MMQ.5-2026-08-11.8",
-  "fingerprint": "f08c2fbabaf852a156baab19d22fe9faa212ceebc519b80d5b1fe1ca9ceeec24",
+  "scheduler_version": "MMQ.5-2026-08-27.9",
+  "fingerprint": "9efea5198540c476bf1064b26151d86f273102bb1d5e594a56466a2bb570ae7a",
   "authoritative_repository_head": "7a9314b4647563eefaa48a755101e0f9cdf93602",
   "source_documents": [
     "docs/project/master-milestone-queue.md",
@@ -17,10 +17,10 @@
   ],
   "capacities": [
     {"identity": "OM1", "display_name": "Office Machine 1 Enterprise", "worker_id": "d4eeead4-455e-4c2d-a87a-7c2abba3db5a"},
-    {"identity": "OM2", "display_name": "Office Machine 2 Enterprise"},
+    {"identity": "OM2", "display_name": "Office Machine 2 Enterprise", "worker_id": "c8fad3e5-da98-4c3e-8863-c34c0f0bac1e"},
     {"identity": "MIG", "display_name": "Customer Migration"},
     {"identity": "ECO", "display_name": "Business Economics"},
-    {"identity": "LAP", "display_name": "Laptop 1 Integration / Release / PMO"}
+    {"identity": "LAP", "display_name": "Laptop 1 Integration / Release / PMO", "worker_id": "0ed35bd2-fc15-4e02-8fc7-bef835dac09d"}
   ],
   "milestones": [
     {
