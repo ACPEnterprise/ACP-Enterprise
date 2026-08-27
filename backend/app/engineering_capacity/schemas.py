@@ -122,6 +122,12 @@ class PermanentCapacityBindingResponse(CapacitySchema):
     version: int
 
 
+class PermanentCapacityBindingRequest(CapacitySchema):
+    identity_code: Literal["OM1", "OM2", "MIG", "ECO", "LAP"]
+    worker_id: UUID
+    idempotency_key: str = Field(min_length=8, max_length=128)
+
+
 class WorkerStateUpdate(CapacitySchema):
     expected_version: int = Field(ge=1)
     reason: str = Field(min_length=1, max_length=200)

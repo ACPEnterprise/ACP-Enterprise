@@ -50,6 +50,7 @@ from .schemas import (
     CapacitySummaryResponse,
     EligibleWorkerResponse,
     ExistingWorkerCapacitySetup,
+    PermanentCapacityBindingRequest,
     PermanentCapacityBindingResponse,
     PermanentCapacityResponse,
     WorkerCapacityRegister,
@@ -68,6 +69,105 @@ def utc_now() -> datetime:
 
 
 class EngineeringCapacityService:
+    async def bind_permanent_capacity(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        data: PermanentCapacityBindingRequest,
+    ) -> PermanentCapacityBindingResponse:
+        """Bind an enrolled healthy physical worker without reconciling the queue."""
+        now = utc_now()
+        async with session.begin():
+            permanent = await session.scalar(
+                select(EngineeringPermanentCapacity)
+                .where(
+                    EngineeringPermanentCapacity.company_id == context.company.id,
+                    EngineeringPermanentCapacity.identity_code == data.identity_code,
+                )
+                .with_for_update()
+            )
+            worker_capacity = await session.scalar(
+                select(EngineeringWorkerCapacity)
+                .where(
+                    EngineeringWorkerCapacity.company_id == context.company.id,
+                    EngineeringWorkerCapacity.worker_id == data.worker_id,
+                )
+                .with_for_update()
+            )
+            if permanent is None or worker_capacity is None:
+                raise CapacityNotFoundError("Permanent or worker capacity was not found.")
+            if (
+                worker_capacity.configured_limit != 1
+                or worker_capacity.health_state != "healthy"
+                or worker_capacity.operational_state != "available"
+            ):
+                raise CapacityUnavailableError(
+                    "Only one healthy available physical capacity may be bound."
+                )
+            active = await session.scalar(
+                select(EngineeringCapacityBinding).where(
+                    EngineeringCapacityBinding.company_id == context.company.id,
+                    EngineeringCapacityBinding.permanent_capacity_id == permanent.id,
+                    EngineeringCapacityBinding.state == "active",
+                )
+            )
+            conflicting = await session.scalar(
+                select(EngineeringCapacityBinding).where(
+                    EngineeringCapacityBinding.company_id == context.company.id,
+                    EngineeringCapacityBinding.worker_capacity_id == worker_capacity.id,
+                    EngineeringCapacityBinding.state == "active",
+                )
+            )
+            if active is not None:
+                if active.worker_capacity_id != worker_capacity.id:
+                    raise CapacityConflictError(
+                        "Permanent capacity is already bound to another worker."
+                    )
+                return PermanentCapacityBindingResponse.model_validate(active)
+            if conflicting is not None:
+                raise CapacityConflictError(
+                    "Physical worker is already bound to another permanent capacity."
+                )
+            binding = EngineeringCapacityBinding(
+                company_id=context.company.id,
+                permanent_capacity_id=permanent.id,
+                worker_capacity_id=worker_capacity.id,
+                state="active",
+                evidence={
+                    "authority": "owner_multi_worker_tonight_1",
+                    "worker_id": str(data.worker_id),
+                    "identity": data.identity_code,
+                    "physical_capacity_units": 1,
+                },
+                bound_by_user_id=context.user.id,
+                created_at=now,
+                updated_at=now,
+            )
+            session.add(binding)
+            permanent.state = "available"
+            permanent.reconciliation_reason = None
+            permanent.version += 1
+            permanent.updated_at = now
+            await session.flush()
+            self._event(
+                session,
+                context,
+                "capacity.permanent_worker_bound",
+                "owner",
+                data.idempotency_key,
+                worker_capacity_id=worker_capacity.id,
+                details={"identity": data.identity_code, "physical_capacity_units": 1},
+            )
+            self._audit(
+                session,
+                context,
+                "engineering.capacity.permanent_worker_bound",
+                binding.id,
+                {"identity": data.identity_code, "worker_id": str(data.worker_id)},
+            )
+        return PermanentCapacityBindingResponse.model_validate(binding)
+
     async def observe_worker_health_in_transaction(
         self,
         session: AsyncSession,

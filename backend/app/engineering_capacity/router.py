@@ -25,6 +25,8 @@ from .schemas import (
     CapacitySummaryResponse,
     EligibleWorkerResponse,
     ExistingWorkerCapacitySetup,
+    PermanentCapacityBindingRequest,
+    PermanentCapacityBindingResponse,
     WorkerCapacityRegister,
     WorkerCapacityResponse,
     WorkerCapacityUpdate,
@@ -130,6 +132,22 @@ async def configure_worker_capacity(
 ) -> WorkerCapacityResponse:
     try:
         return await engineering_capacity_service.register_worker_capacity(
+            session, context=context, data=data
+        )
+    except EngineeringCapacityError as error:
+        raise capacity_http_error(error) from error
+
+
+@router.post(
+    "/permanent-bindings", response_model=PermanentCapacityBindingResponse
+)
+async def bind_permanent_capacity(
+    data: PermanentCapacityBindingRequest,
+    context: ManageContext,
+    session: DatabaseSession,
+) -> PermanentCapacityBindingResponse:
+    try:
+        return await engineering_capacity_service.bind_permanent_capacity(
             session, context=context, data=data
         )
     except EngineeringCapacityError as error:
