@@ -177,6 +177,13 @@ class PreviewWorkerProvisioningService:
                 EngineeringWorker.name == config.worker_name,
             )
         )
+        existing_worker_id = existing_worker.id if existing_worker else None
+        existing_worker_capabilities = (
+            set(existing_worker.capabilities) if existing_worker else None
+        )
+        # The matching-state query owns no mutation but starts an implicit read
+        # transaction.  Service commands below own their write transactions.
+        await session.rollback()
         if existing_worker is None:
             created_worker = await worker_control.register_worker(
                 session,
@@ -189,14 +196,16 @@ class PreviewWorkerProvisioningService:
                 ),
             )
             worker_id = created_worker.id
-        elif set(existing_worker.capabilities) != {
+            await session.rollback()
+        elif existing_worker_capabilities != {
             item.value for item in config.capabilities
         }:
             raise PermissionError(
                 "Existing worker capabilities do not match enrollment."
             )
         else:
-            worker_id = existing_worker.id
+            assert existing_worker_id is not None
+            worker_id = existing_worker_id
 
         existing_identity = await session.scalar(
             select(WorkerIdentity).where(
@@ -204,34 +213,48 @@ class PreviewWorkerProvisioningService:
                 WorkerIdentity.name == config.worker_name,
             )
         )
+        existing_identity_id = existing_identity.id if existing_identity else None
+        existing_identity_state = existing_identity.state if existing_identity else None
+        existing_identity_worker_id = (
+            existing_identity.orchestration_worker_id if existing_identity else None
+        )
+        await session.rollback()
         if existing_identity is None:
             created_identity = await identity_service.register(
                 session,
                 context=context,
                 name=config.worker_name,
             )
+            created_identity_id = created_identity.id
+            created_identity_version = created_identity.version
+            await session.rollback()
             activated_identity = await identity_service.transition_identity(
                 session,
                 context=context,
-                identity_id=created_identity.id,
-                expected_version=created_identity.version,
+                identity_id=created_identity_id,
+                expected_version=created_identity_version,
                 state=WorkerIdentityState.ACTIVE,
             )
+            activated_identity_id = activated_identity.id
+            activated_identity_version = activated_identity.version
+            await session.rollback()
             bound_identity = await identity_service.bind_orchestration_worker(
                 session,
                 context=context,
-                identity_id=activated_identity.id,
+                identity_id=activated_identity_id,
                 worker_id=worker_id,
-                expected_version=activated_identity.version,
+                expected_version=activated_identity_version,
             )
             identity_id = bound_identity.id
+            await session.rollback()
         elif (
-            existing_identity.state != WorkerIdentityState.ACTIVE.value
-            or existing_identity.orchestration_worker_id != worker_id
+            existing_identity_state != WorkerIdentityState.ACTIVE.value
+            or existing_identity_worker_id != worker_id
         ):
             raise PermissionError("Existing worker identity binding is inconsistent.")
         else:
-            identity_id = existing_identity.id
+            assert existing_identity_id is not None
+            identity_id = existing_identity_id
 
         existing_credential = await session.scalar(
             select(WorkerCredential).where(
@@ -253,10 +276,12 @@ class PreviewWorkerProvisioningService:
             identity_id=identity_id,
             lifetime=timedelta(days=config.credential_days),
         )
+        issued_credential_id = credential.id
+        await session.rollback()
         credential = await identity_service.activate_credential(
             session,
             context=context,
-            credential_id=credential.id,
+            credential_id=issued_credential_id,
         )
         credential_state = credential.state
         credential_verifier = credential.verifier
