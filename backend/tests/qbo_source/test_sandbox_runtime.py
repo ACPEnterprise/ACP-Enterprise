@@ -24,6 +24,7 @@ from app.qbo_source.intuit import (
     AuthorizedRealm,
     HttpResponse,
     IntuitAuthenticationError,
+    IntuitError,
     OAuthToken,
 )
 from app.qbo_source.runtime import (
@@ -230,7 +231,7 @@ def test_protected_company_binding_is_exact_and_restricted(tmp_path: Path) -> No
         binding.read()
 
 
-def _token(generation: int = 1) -> OAuthToken:
+def _token(generation: int = 1, *, realm_id: str = "123456789") -> OAuthToken:
     return OAuthToken(
         access_token="synthetic-access-material",
         refresh_token="synthetic-refresh-material",
@@ -238,6 +239,7 @@ def _token(generation: int = 1) -> OAuthToken:
         refresh_expires_at=datetime.now(timezone.utc) + timedelta(days=30),
         scope=ACCOUNTING_SCOPE,
         generation=generation,
+        realm_id=realm_id,
     )
 
 
@@ -267,15 +269,19 @@ async def test_protected_token_store_is_restricted_and_generation_safe(
 
 
 class _Transport:
-    def __init__(self, response: HttpResponse) -> None:
+    def __init__(self, response: HttpResponse | Exception) -> None:
         self.response = response
+        self.requests: list[dict[str, object]] = []
 
-    async def request(self, **_: object) -> HttpResponse:
+    async def request(self, **values: object) -> HttpResponse:
+        self.requests.append(values)
+        if isinstance(self.response, Exception):
+            raise self.response
         return self.response
 
 
 @pytest.mark.asyncio
-async def test_company_info_verifier_classifies_exact_realm_mismatch(
+async def test_company_info_native_id_is_separate_from_authorized_realm(
     tmp_path: Path,
 ) -> None:
     repository = tmp_path / "repository"
@@ -286,16 +292,61 @@ async def test_company_info_verifier_classifies_exact_realm_mismatch(
     await provider.put_token(
         provider.TOKEN_REFERENCE, _token(), expected_generation=None
     )
+    transport = _Transport(
+        HttpResponse(
+            status=200,
+            headers={},
+            body=json.dumps(
+                {
+                    "CompanyInfo": {
+                        "Id": "native-company-info-id",
+                        "CompanyName": "Sandbox",
+                    }
+                }
+            ).encode(),
+        )
+    )
+    registry = SandboxConnectionRegistry(tmp_path / "connections")
     verifier = SandboxCompanyInfoVerifier(
-        transport=_Transport(
-            HttpResponse(
-                status=200,
-                headers={},
-                body=json.dumps(
-                    {"CompanyInfo": {"Id": "wrong-realm", "CompanyName": "Sandbox"}}
-                ).encode(),
-            )
-        ),
+        transport=transport,
+        secrets_provider=provider,
+        expected_company_name="Sandbox",
+        token_reference=provider.TOKEN_REFERENCE,
+        minor_version=75,
+        registry=registry,
+    )
+
+    await verifier.verify(AuthorizedRealm(realm_id="123456789", token=_token()))
+
+    assert transport.requests[0]["url"] == (
+        "https://sandbox-quickbooks.api.intuit.com/v3/company/"
+        "123456789/companyinfo/123456789?minorversion=75"
+    )
+    connection = json.loads((registry.root / "verified.json").read_text())
+    assert connection["realm_id"] == "123456789"
+    assert connection["company_info_id"] == "native-company-info-id"
+    assert connection["company_name"] == "Sandbox"
+    assert connection["schema_version"] == "qbo-sandbox-connection/v2"
+
+
+@pytest.mark.asyncio
+async def test_token_bound_to_another_realm_fails_before_company_info_request(
+    tmp_path: Path,
+) -> None:
+    repository = tmp_path / "repository"
+    repository.mkdir()
+    provider = ProtectedSandboxSecretProvider(
+        root=tmp_path / "secrets", repository_root=repository
+    )
+    transport = _Transport(
+        HttpResponse(
+            status=200,
+            headers={},
+            body=b"{}",
+        )
+    )
+    verifier = SandboxCompanyInfoVerifier(
+        transport=transport,
         secrets_provider=provider,
         expected_company_name="Sandbox",
         token_reference=provider.TOKEN_REFERENCE,
@@ -305,9 +356,9 @@ async def test_company_info_verifier_classifies_exact_realm_mismatch(
 
     with pytest.raises(IntuitAuthenticationError, match="company_realm_mismatch"):
         await verifier.verify(
-            AuthorizedRealm(realm_id="expected-realm", token=_token())
+            AuthorizedRealm(realm_id="123456789", token=_token(realm_id="987654321"))
         )
-    assert provider.token_path.exists()
+    assert transport.requests == []
 
 
 def test_sanitized_diagnostic_journal_is_restricted_and_append_only(
@@ -343,21 +394,29 @@ def test_sanitized_diagnostic_journal_is_restricted_and_append_only(
 
 
 class _PersistedTokenCallback:
-    def __init__(self, provider: ProtectedSandboxSecretProvider) -> None:
+    def __init__(
+        self,
+        provider: ProtectedSandboxSecretProvider,
+        *,
+        callback_realm: str = "123456789",
+        token_realm: str = "123456789",
+    ) -> None:
         self.provider = provider
+        self.callback_realm = callback_realm
+        self.token_realm = token_realm
         self.state_consumed = False
 
     async def handle(self, **_: str | None) -> AuthorizedRealm:
         self.state_consumed = True
-        token = _token()
+        token = _token(realm_id=self.token_realm)
         await self.provider.put_token(
             self.provider.TOKEN_REFERENCE, token, expected_generation=None
         )
-        return AuthorizedRealm(realm_id="expected-realm", token=token)
+        return AuthorizedRealm(realm_id=self.callback_realm, token=token)
 
 
 @pytest.mark.asyncio
-async def test_first_attempt_shape_retains_stage_and_cleans_temporary_token(
+async def test_real_attempt_shape_commits_distinct_company_info_native_id(
     tmp_path: Path,
 ) -> None:
     repository = tmp_path / "repository"
@@ -376,7 +435,12 @@ async def test_first_attempt_shape_retains_stage_and_cleans_temporary_token(
                 status=200,
                 headers={},
                 body=json.dumps(
-                    {"CompanyInfo": {"Id": "wrong-realm", "CompanyName": "Sandbox"}}
+                    {
+                        "CompanyInfo": {
+                            "Id": "native-company-info-id",
+                            "CompanyName": "Sandbox",
+                        }
+                    }
                 ).encode(),
             )
         ),
@@ -393,25 +457,25 @@ async def test_first_attempt_shape_retains_stage_and_cleans_temporary_token(
         diagnostics=diagnostics,
     )
 
-    with pytest.raises(IntuitAuthenticationError, match="company_realm_mismatch"):
-        await runtime.complete(
-            code="synthetic-code",
-            state="synthetic-state-" + "x" * 32,
-            realm_id="expected-realm",
-            provider_error=None,
-        )
+    await runtime.complete(
+        code="synthetic-code",
+        state="synthetic-state-" + "x" * 32,
+        realm_id="123456789",
+        provider_error=None,
+    )
 
     assert callback.state_consumed
-    assert not provider.token_path.exists()
-    assert not (registry.root / "verified.json").exists()
+    assert provider.token_path.exists()
+    connection = json.loads((registry.root / "verified.json").read_text())
+    assert connection["realm_id"] == "123456789"
+    assert connection["company_info_id"] == "native-company-info-id"
     evidence = b"".join(path.read_bytes() for path in diagnostics.root.glob("*/*.json"))
     for expected in (
         b'"stage":"STATE_VALIDATED"',
         b'"stage":"TOKEN_PERSISTED_TEMPORARILY"',
         b'"stage":"COMPANYINFO_REQUEST_STARTED"',
-        b'"stage":"REALM_MISMATCH"',
-        b'"stage":"TOKEN_CLEANUP_SUCCEEDED"',
-        b'"failure_classification":"realm_mismatch"',
+        b'"stage":"VERIFICATION_SUCCEEDED"',
+        b'"stage":"CONNECTION_COMMITTED"',
     ):
         assert expected in evidence
     for forbidden in (
@@ -421,6 +485,108 @@ async def test_first_attempt_shape_retains_stage_and_cleans_temporary_token(
         b"synthetic-refresh-material",
     ):
         assert forbidden not in evidence
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("callback_realm", "token_realm", "response", "error_code", "stage"),
+    [
+        (
+            "123456789",
+            "987654321",
+            HttpResponse(200, {}, b"{}"),
+            "company_realm_mismatch",
+            "REALM_MISMATCH",
+        ),
+        (
+            "123456789",
+            "123456789",
+            HttpResponse(200, {}, b"not-json"),
+            "company_info_response_malformed",
+            "COMPANYINFO_RESPONSE_MALFORMED",
+        ),
+        (
+            "123456789",
+            "123456789",
+            HttpResponse(
+                200,
+                {},
+                json.dumps(
+                    {
+                        "CompanyInfo": {
+                            "Id": "native-company-info-id",
+                            "CompanyName": "Different Sandbox",
+                        }
+                    }
+                ).encode(),
+            ),
+            "company_identity_mismatch",
+            "COMPANY_NAME_MISMATCH",
+        ),
+        (
+            "123456789",
+            "123456789",
+            HttpResponse(401, {}, b"{}"),
+            "company_info_provider_rejected",
+            "COMPANYINFO_PROVIDER_REJECTED",
+        ),
+        (
+            "123456789",
+            "123456789",
+            RuntimeError("synthetic transport failure"),
+            "company_info_transport_failed",
+            "COMPANYINFO_TRANSPORT_FAILED",
+        ),
+    ],
+)
+async def test_post_exchange_failures_clean_token_and_never_commit(
+    tmp_path: Path,
+    callback_realm: str,
+    token_realm: str,
+    response: HttpResponse | Exception,
+    error_code: str,
+    stage: str,
+) -> None:
+    repository = tmp_path / "repository"
+    repository.mkdir()
+    provider = ProtectedSandboxSecretProvider(
+        root=tmp_path / "secrets", repository_root=repository
+    )
+    callback = _PersistedTokenCallback(
+        provider, callback_realm=callback_realm, token_realm=token_realm
+    )
+    registry = SandboxConnectionRegistry(tmp_path / "connections")
+    diagnostics = ProtectedOAuthDiagnosticJournal(
+        tmp_path / "oauth-diagnostics", repository_root=repository
+    )
+    runtime = SandboxOAuthRuntime(
+        callback=callback,  # type: ignore[arg-type]
+        verifier=SandboxCompanyInfoVerifier(
+            transport=_Transport(response),
+            secrets_provider=provider,
+            expected_company_name="Sandbox",
+            token_reference=provider.TOKEN_REFERENCE,
+            minor_version=75,
+            registry=registry,
+        ),
+        coordinator=None,  # type: ignore[arg-type]
+        diagnostics=diagnostics,
+    )
+
+    with pytest.raises(IntuitError, match=error_code):
+        await runtime.complete(
+            code="synthetic-code",
+            state="synthetic-state-" + "x" * 32,
+            realm_id=callback_realm,
+            provider_error=None,
+        )
+
+    assert not provider.token_path.exists()
+    assert not (registry.root / "verified.json").exists()
+    evidence = b"".join(path.read_bytes() for path in diagnostics.root.glob("*/*.json"))
+    assert f'"stage":"{stage}"'.encode() in evidence
+    assert b'"stage":"TOKEN_CLEANUP_SUCCEEDED"' in evidence
+    assert b'"stage":"CONNECTION_FAILED"' in evidence
 
 
 def test_preview_proxy_suppresses_callback_query_logging() -> None:

@@ -7,7 +7,6 @@ from collections.abc import Mapping
 from datetime import date, datetime, timedelta, timezone
 
 import pytest
-
 from app.qbo_source.contracts import AcquisitionRequest, EntityKind, SnapshotIdentity
 from app.qbo_source.intuit import (
     ACCOUNTING_SCOPE,
@@ -92,6 +91,14 @@ class SequenceTransport:
         return self.responses.pop(0)
 
 
+class FailingTokenPersistence(FakeSecrets):
+    async def put_token(
+        self, reference: str, token: OAuthToken, *, expected_generation: int | None
+    ) -> None:
+        del reference, token, expected_generation
+        raise OSError("synthetic persistence failure")
+
+
 class FakeStates:
     def __init__(self) -> None:
         self.values: dict[str, PendingAuthorization] = {}
@@ -118,6 +125,7 @@ def token(clock: FakeClock, *, expired: bool = False) -> OAuthToken:
         refresh_expires_at=clock.now() + timedelta(days=100),
         scope=ACCOUNTING_SCOPE,
         generation=0,
+        realm_id="synthetic-realm",
     )
 
 
@@ -193,6 +201,7 @@ async def test_authorization_exchange_refresh_and_revoke() -> None:
         code="synthetic-code",
         redirect_uri="https://localhost.example/qbo/callback",
         token_reference="secret://synthetic/token",
+        realm_id="123456789",
     )
     second = await oauth.refresh(first)
     await secrets.put_token(
@@ -201,10 +210,43 @@ async def test_authorization_exchange_refresh_and_revoke() -> None:
     await oauth.revoke(token_reference="secret://synthetic/token")
 
     assert second.generation == 1
+    assert first.realm_id == second.realm_id == "123456789"
     assert secrets.deleted
     assert all(
         "synthetic-secret" not in str(request["body"]) for request in transport.requests
     )
+
+
+@pytest.mark.asyncio
+async def test_token_persistence_failure_is_safely_classified() -> None:
+    clock = FakeClock()
+    oauth = IntuitOAuthClient(
+        environment=IntuitEnvironment.SANDBOX,
+        transport=SequenceTransport(
+            [
+                response(
+                    200,
+                    {
+                        "access_token": "synthetic-access",
+                        "refresh_token": "synthetic-refresh",
+                        "expires_in": 3600,
+                        "scope": ACCOUNTING_SCOPE,
+                    },
+                )
+            ]
+        ),
+        secrets=FailingTokenPersistence(),
+        credential_reference="secret://synthetic/client",
+        clock=clock,
+    )
+
+    with pytest.raises(IntuitAuthenticationError, match="token_persistence_failed"):
+        await oauth.exchange_code(
+            code="synthetic-code",
+            redirect_uri="https://localhost.example/qbo/callback",
+            token_reference="secret://synthetic/token",
+            realm_id="123456789",
+        )
 
 
 @pytest.mark.asyncio
@@ -364,6 +406,37 @@ async def test_refresh_is_serialized_and_rotated_once() -> None:
     assert values == ["synthetic-fresh"] * 8
     assert secrets.put_count == 1
     assert len(transport.requests) == 1
+
+
+@pytest.mark.asyncio
+async def test_token_manager_rejects_token_bound_to_another_realm() -> None:
+    clock = FakeClock()
+    mismatched = token(clock)
+    mismatched = OAuthToken(
+        access_token=mismatched.access_token,
+        refresh_token=mismatched.refresh_token,
+        access_expires_at=mismatched.access_expires_at,
+        refresh_expires_at=mismatched.refresh_expires_at,
+        scope=mismatched.scope,
+        generation=mismatched.generation,
+        realm_id="another-realm",
+    )
+    secrets = FakeSecrets(mismatched)
+    manager = SerializedTokenManager(
+        oauth=IntuitOAuthClient(
+            environment=IntuitEnvironment.SANDBOX,
+            transport=SequenceTransport([]),
+            secrets=secrets,
+            credential_reference="secret://synthetic/client",
+            clock=clock,
+        ),
+        secrets=secrets,
+        binding=binding(),
+        clock=clock,
+    )
+
+    with pytest.raises(IntuitAuthenticationError, match="token_realm_mismatch"):
+        await manager.access_token()
 
 
 @pytest.mark.asyncio

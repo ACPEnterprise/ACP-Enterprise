@@ -104,6 +104,10 @@ class SandboxCompanyInfoVerifier:
         self.registry = registry
 
     async def verify(self, authorized: AuthorizedRealm) -> None:
+        if authorized.token.realm_id != authorized.realm_id:
+            raise IntuitAuthenticationError("company_realm_mismatch")
+        if not authorized.realm_id.isascii() or not authorized.realm_id.isdigit():
+            raise IntuitAuthenticationError("company_realm_invalid")
         url = (
             "https://sandbox-quickbooks.api.intuit.com/v3/company/"
             f"{authorized.realm_id}/companyinfo/{authorized.realm_id}"
@@ -133,12 +137,14 @@ class SandboxCompanyInfoVerifier:
                 raise TypeError
         except (ValueError, TypeError, json.JSONDecodeError) as error:
             raise IntuitProtocolError("company_info_response_malformed") from error
-        if company.get("Id") != authorized.realm_id:
-            raise IntuitAuthenticationError("company_realm_mismatch")
+        company_info_id = company.get("Id")
+        if not isinstance(company_info_id, str) or not company_info_id:
+            raise IntuitProtocolError("company_info_response_malformed")
         if company.get("CompanyName") != self.expected_company_name:
             raise IntuitAuthenticationError("company_identity_mismatch")
         self.registry.record_verified(
             realm_id=authorized.realm_id,
+            company_info_id=company_info_id,
             company_name=self.expected_company_name,
             minor_version=self.minor_version,
         )
@@ -151,12 +157,18 @@ class SandboxConnectionRegistry:
         os.chmod(self.root, 0o700)
 
     def record_verified(
-        self, *, realm_id: str, company_name: str, minor_version: int
+        self,
+        *,
+        realm_id: str,
+        company_info_id: str,
+        company_name: str,
+        minor_version: int,
     ) -> None:
         document = {
-            "schema_version": "qbo-sandbox-connection/v1",
+            "schema_version": "qbo-sandbox-connection/v2",
             "environment": "sandbox",
             "realm_id": realm_id,
+            "company_info_id": company_info_id,
             "company_name": company_name,
             "api_minor_version": minor_version,
             "company_info_verified_at": datetime.now(timezone.utc).isoformat(),

@@ -5,7 +5,7 @@ import base64
 import hashlib
 import json
 from collections.abc import AsyncIterator, Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import ClassVar, Protocol
@@ -86,6 +86,7 @@ class OAuthToken:
     refresh_expires_at: datetime | None
     scope: str
     generation: int
+    realm_id: str | None = None
 
     def __post_init__(self) -> None:
         if not self.access_token or not self.refresh_token:
@@ -287,8 +288,9 @@ class IntuitOAuthClient:
         code: str,
         redirect_uri: str,
         token_reference: str,
+        realm_id: str,
     ) -> OAuthToken:
-        if not code or not redirect_uri.startswith("https://"):
+        if not code or not redirect_uri.startswith("https://") or not realm_id:
             raise ValueError("authorization code and secure redirect URI are required")
         try:
             token = await self._token_request(
@@ -306,6 +308,7 @@ class IntuitOAuthClient:
                 "token_exchange_transport_failed"
             ) from error
         try:
+            token = replace(token, realm_id=realm_id)
             await self.secrets.put_token(
                 token_reference, token, expected_generation=None
             )
@@ -314,9 +317,12 @@ class IntuitOAuthClient:
         return token
 
     async def refresh(self, current: OAuthToken) -> OAuthToken:
-        return await self._token_request(
-            {"grant_type": "refresh_token", "refresh_token": current.refresh_token},
-            generation=current.generation + 1,
+        return replace(
+            await self._token_request(
+                {"grant_type": "refresh_token", "refresh_token": current.refresh_token},
+                generation=current.generation + 1,
+            ),
+            realm_id=current.realm_id,
         )
 
     async def revoke(self, *, token_reference: str) -> None:
@@ -428,6 +434,7 @@ class OAuthAuthorizationCoordinator:
             code=code,
             redirect_uri=pending.redirect_uri,
             token_reference=pending.token_reference,
+            realm_id=realm_id,
         )
         return AuthorizedRealm(realm_id=realm_id, token=token)
 
@@ -468,12 +475,14 @@ class SerializedTokenManager:
 
     async def access_token(self) -> str:
         token = await self.secrets.get_token(self.binding.token_reference)
+        self._require_bound_realm(token)
         if token.access_expires_at > self.clock.now() + self.refresh_skew:
             return token.access_token
         key = (self.binding.environment.value, self.binding.realm_id)
         lock = self._locks.setdefault(key, asyncio.Lock())
         async with lock:
             token = await self.secrets.get_token(self.binding.token_reference)
+            self._require_bound_realm(token)
             if token.access_expires_at > self.clock.now() + self.refresh_skew:
                 return token.access_token
             refreshed = await self.oauth.refresh(token)
@@ -483,6 +492,10 @@ class SerializedTokenManager:
                 expected_generation=token.generation,
             )
             return refreshed.access_token
+
+    def _require_bound_realm(self, token: OAuthToken) -> None:
+        if token.realm_id != self.binding.realm_id:
+            raise IntuitAuthenticationError("token_realm_mismatch")
 
 
 ENTITY_QUERY_NAMES: Mapping[EntityKind, str] = {

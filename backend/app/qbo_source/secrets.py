@@ -68,7 +68,9 @@ class ProtectedSandboxSecretProvider(SecretProvider):
         return self.root / "sandbox-token.json"
 
     def _read_client(self) -> ClientCredential:
-        document = self._read_document(self.client_path, "sandbox_client_not_configured")
+        document = self._read_document(
+            self.client_path, "sandbox_client_not_configured"
+        )
         if document.get("environment") != "sandbox":
             raise SandboxSecretStoreError("sandbox_client_environment_invalid")
         client_id = document.get("client_id")
@@ -112,6 +114,7 @@ class ProtectedSandboxSecretProvider(SecretProvider):
                 ),
                 "scope": token.scope,
                 "generation": token.generation,
+                "realm_id": token.realm_id,
             }
             self._atomic_write(self.token_path, document)
 
@@ -126,7 +129,9 @@ class ProtectedSandboxSecretProvider(SecretProvider):
         try:
             if document["environment"] != "sandbox":
                 raise ValueError
-            access_expires_at = datetime.fromisoformat(str(document["access_expires_at"]))
+            access_expires_at = datetime.fromisoformat(
+                str(document["access_expires_at"])
+            )
             refresh_value = document.get("refresh_expires_at")
             token = OAuthToken(
                 access_token=str(document["access_token"]),
@@ -139,6 +144,11 @@ class ProtectedSandboxSecretProvider(SecretProvider):
                 ),
                 scope=str(document["scope"]),
                 generation=int(str(document["generation"])),
+                realm_id=(
+                    str(document["realm_id"])
+                    if document.get("realm_id") is not None
+                    else None
+                ),
             )
         except (KeyError, TypeError, ValueError) as error:
             raise SandboxSecretStoreError("sandbox_token_material_invalid") from error
@@ -148,7 +158,9 @@ class ProtectedSandboxSecretProvider(SecretProvider):
         try:
             mode = stat.S_IMODE(path.stat().st_mode)
             if mode & 0o077:
-                raise SandboxSecretStoreError("sandbox_secret_file_permissions_too_open")
+                raise SandboxSecretStoreError(
+                    "sandbox_secret_file_permissions_too_open"
+                )
             value = json.loads(path.read_bytes())
         except FileNotFoundError as error:
             raise SandboxSecretStoreError(missing_code) from error
@@ -160,9 +172,7 @@ class ProtectedSandboxSecretProvider(SecretProvider):
 
     def _atomic_write(self, path: Path, document: Mapping[str, object]) -> None:
         temporary = path.with_suffix(".tmp")
-        descriptor = os.open(
-            temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600
-        )
+        descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         try:
             with os.fdopen(descriptor, "wb") as target:
                 target.write(
