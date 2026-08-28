@@ -10,7 +10,7 @@ from uuid import UUID
 
 from .policy_authority import PolicyIntegrityError, PolicyParameterGap, canonical_digest
 
-ACCEPTANCE_DEFINITION_VERSION = "eco.evidence-acceptance.v1"
+ACCEPTANCE_DEFINITION_VERSION = "eco.evidence-acceptance.v2"
 GAP_CLOSURE_VERSION = "eco.gap-closure.v1"
 
 
@@ -26,6 +26,110 @@ class GapAssessmentClass(StrEnum):
     UPSTREAM_CONTRACT_REQUIRED = "upstream_contract_required"
     FINANCE_PARAMETER_REQUIRED = "finance_parameter_required"
     EXTERNAL_RECONCILIATION_REQUIRED = "external_reconciliation_required"
+
+
+class TimeEntryProvenance(StrEnum):
+    EMPLOYEE_PUNCH = "employee_punch"
+    AUTHORIZED_MANUAL_ENTRY = "authorized_manual_entry"
+
+
+class PaidActivityType(StrEnum):
+    JOB = "job"
+    TRAVEL = "travel"
+    SHOP = "shop"
+    TRAINING = "training"
+    MEETING = "meeting"
+    BREAK = "break"
+    PTO = "pto"
+    OTHER = "other"
+
+
+@dataclass(frozen=True)
+class WorkdayTimeEvidence:
+    """Payroll-authority candidate; it does not establish Job attribution."""
+
+    workday_time_id: str
+    company_id: UUID
+    employee_id: UUID
+    effective_date: date
+    provenance: TimeEntryProvenance
+    start_at: datetime | None
+    end_at: datetime | None
+    approved_duration_minutes: int | None
+    approval_id: str
+    correction_revision_id: str
+    supersedes_revision_id: str | None
+    entered_by_user_id: UUID | None
+    punch_event_ids: tuple[str, ...]
+    evidence_digest: str
+
+    def validate(self) -> None:
+        if self.provenance is TimeEntryProvenance.EMPLOYEE_PUNCH:
+            if not self.punch_event_ids or self.entered_by_user_id is not None:
+                raise PolicyIntegrityError(
+                    "employee-punched time provenance is invalid"
+                )
+        elif self.entered_by_user_id is None or self.punch_event_ids:
+            raise PolicyIntegrityError("manual time provenance is invalid")
+        if self.approved_duration_minutes is None and (
+            self.start_at is None or self.end_at is None
+        ):
+            raise PolicyIntegrityError(
+                "workday time requires timestamps or approved duration"
+            )
+
+
+@dataclass(frozen=True)
+class JobParticipationEvidence:
+    """Economic attribution candidate; it does not establish paid Workday Time."""
+
+    participation_id: str
+    company_id: UUID
+    employee_id: UUID
+    job_id: UUID | None
+    activity_type: PaidActivityType
+    effective_date: date
+    start_at: datetime | None
+    end_at: datetime | None
+    approved_duration_minutes: int | None
+    approval_id: str
+    correction_revision_id: str
+    supersedes_revision_id: str | None
+    workday_time_ids: tuple[str, ...]
+    evidence_digest: str
+
+    def validate(self) -> None:
+        if (self.activity_type is PaidActivityType.JOB) != (self.job_id is not None):
+            raise PolicyIntegrityError(
+                "Job participation requires exactly one Job identity"
+            )
+        if self.approved_duration_minutes is None and (
+            self.start_at is None or self.end_at is None
+        ):
+            raise PolicyIntegrityError(
+                "participation requires timestamps or approved duration"
+            )
+
+
+@dataclass(frozen=True)
+class TimeReconciliationEvidence:
+    """Links two distinct facts without allowing either fact to substitute for the other."""
+
+    reconciliation_id: str
+    company_id: UUID
+    employee_id: UUID
+    effective_period: str
+    workday_time_ids: tuple[str, ...]
+    participation_ids: tuple[str, ...]
+    unallocated_paid_minutes: int
+    overallocated_minutes: int
+    evidence_digest: str
+
+    def validate(self) -> None:
+        if self.unallocated_paid_minutes < 0 or self.overallocated_minutes < 0:
+            raise PolicyIntegrityError(
+                "time reconciliation variance cannot be negative"
+            )
 
 
 @dataclass(frozen=True)

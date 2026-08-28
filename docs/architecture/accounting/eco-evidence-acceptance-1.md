@@ -10,7 +10,7 @@ No economic value is calculated here. Missing evidence remains `OPEN`; different
 
 - **Job lifecycle:** ACP Jobs can authoritatively identify the Job and its current completed state. Immutable lifecycle events must establish completion time, reopen/recompletion, cancellation, and supersession.
 - **Earned value:** billing, estimates, payments, HCP amounts, and QBO amounts do not establish earned value. ACP still needs a Finance-accepted earned-value revision/correction contract.
-- **Actual labor:** scheduled or elapsed appointments are not actual Job time. ACP still needs approved participation/time revisions, approval, correction, and multi-worker identity.
+- **Actual labor:** Workday Time and Job Participation are separate evidence contracts. Workday Time is a Payroll-authority candidate for paid employee time; Job Participation attributes time to a Job or non-Job activity for operations/economics. They must reconcile, but neither substitutes for the other. Scheduled or elapsed appointments are not actual Job time. ACP still needs approved participation/time revisions, approval, correction, and multi-worker identity.
 - **Worker-class burden:** Finance must approve effective-dated classes, assignments, rates/bases, and true-up rules. Selection of the standard-burden strategy supplies none of those values.
 - **Materials:** ACP inventory issues and reversals preserve issue history, but the current reservation `demand_type`/`demand_id` seam does not itself prove an authoritative Job relationship. A typed, validated Job-demand contract and accepted cost-layer valuation are separate prerequisites. Purchases and AP do not establish Job consumption.
 - **Other direct cost:** ACP needs approved categories plus authoritative Job linkage, accepted value, effective date, and correction/reversal evidence. No category list is selected here.
@@ -30,6 +30,16 @@ No economic value is calculated here. Missing evidence remains `OPEN`; different
 | Accounting quality | No aggregate quality attestation | Must attest completeness/currentness/reconciliation/integrity/review | Control evidence only | `quickbooks_online_source_reported` | Missing contract/reconciliation |
 
 Neither HCP nor QBO is promoted by these contracts. Accounting provenance is distinct from Job-level economic meaning.
+
+## Workday and participation time
+
+`WorkdayTimeEvidence` preserves employee identity, timestamps or approved duration, approval, immutable correction lineage, and provenance. Provenance is exactly `employee_punch` or `authorized_manual_entry`: a punch requires punch-event identities, while a manual entry requires the responsible user and cannot masquerade as a punch.
+
+`JobParticipationEvidence` separately preserves the Job or non-Job activity, worker, approved duration/timestamps, approval, correction lineage, and the Workday Time identities it reconciles to. Supported activity identities include Job, travel, shop, training, meeting, break, PTO, and other explicitly classified activity. Job activity requires a Job identity; non-Job activity forbids one.
+
+`TimeReconciliationEvidence` records both identity sets and visible unallocated/overallocated minutes. It does not convert either assertion into the other. The future authoritative chain remains employee authentication → Workday punch/manual correction → Job/activity participation → manager approval → paid-time authority → Payroll → Accounting.
+
+Technician Economics later consumes actual compensation/payroll burden and attributed participation plus vehicles, tools/assets, technician costs, and approved overhead. Job Economics standard worker-class burden cannot substitute for that actual employee-cost model.
 
 ## All County v1 gap assessment
 
@@ -74,11 +84,12 @@ The readiness bridge resolves a policy prerequisite only when every registered g
 1. `ECO.JOB.LIFECYCLE.ACCEPTANCE.1`: qualify native Job completion/lifecycle-event adapters.
 2. `ECO.INVENTORY.JOB.CONSUMPTION.AUTHORITY.1`: add typed, validated Job-demand linkage and qualify issue/reversal adapters; leave valuation blocked.
 3. `ECO.EARNED.VALUE.AUTHORITY.1`: add accepted earned-value revisions, credits/adjustments, cancellations, and correction lineage.
-4. `ECO.ACTUAL.JOB.TIME.AUTHORITY.1`: add approved actual participation/time and correction history.
-5. `ECO.INVENTORY.COST.ACCEPTANCE.1`: establish accepted issue cost layers and costing provenance.
-6. `ECO.DIRECT.COST.AUTHORITY.1`: after category approval, add Job linkage and accepted cost revisions.
-7. `ECO.ACCOUNTING.QUALITY.ATTESTATION.1`: establish complete/current/reconciled/integrity/review attestations.
-8. Finance parameter activation: separately approve worker classes, assignments, rates, true-up, and direct-cost categories.
-9. External reconciliation: close the QBO/HCP/Accounting reconciliation gate after authoritative evidence is available.
+4. `TIME.WORKDAY.AUTHORITY.1`: establish employee punches, authorized manual entries, missed-punch correction, approval, immutable revisions, and non-Job paid activity evidence.
+5. `ECO.JOB.PARTICIPATION.AUTHORITY.1`: establish approved Job/activity participation, multi-technician identity, and reconciliation to Workday Time without substitution.
+6. `ECO.INVENTORY.COST.ACCEPTANCE.1`: establish accepted issue cost layers and costing provenance.
+7. `ECO.DIRECT.COST.AUTHORITY.1`: after category approval, add Job linkage and accepted cost revisions.
+8. `ECO.ACCOUNTING.QUALITY.ATTESTATION.1`: establish complete/current/reconciled/integrity/review attestations.
+9. Finance parameter activation: separately approve worker classes, assignments, rates, true-up, and direct-cost categories.
+10. External reconciliation: close the QBO/HCP/Accounting reconciliation gate after authoritative evidence is available.
 
 Technician Economics remains separate: actual compensation, payroll costs, vehicles, tools/assets, worker-period attribution, and multi-technician revenue attribution cannot be replaced by Job Economics standard worker-class burden.

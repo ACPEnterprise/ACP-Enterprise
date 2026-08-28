@@ -15,6 +15,11 @@ from app.business_economics.evidence_acceptance import (
     EconomicEvidenceAssertion,
     GapAssessmentClass,
     GapLifecycleState,
+    JobParticipationEvidence,
+    PaidActivityType,
+    TimeEntryProvenance,
+    TimeReconciliationEvidence,
+    WorkdayTimeEvidence,
     build_gap_closure_snapshot,
     evaluate_gap_closure,
     seal_acceptance_grant,
@@ -53,6 +58,8 @@ OWNER = UUID("50000000-0000-0000-0000-000000000002")
 NOW = datetime(2026, 8, 28, 15, 0, tzinfo=timezone.utc)
 SUBJECT = "job:synthetic-accepted"
 RECONCILIATION = "job:synthetic-accepted"
+EMPLOYEE = UUID("50000000-0000-0000-0000-000000000003")
+JOB = UUID("50000000-0000-0000-0000-000000000004")
 
 
 def _bundle():
@@ -194,6 +201,84 @@ def test_wrong_company_period_and_convenient_source_roles_fail_closed() -> None:
             "accepted_earned_job_value",
             (too_late,),
             (_grant(accepted, "accepted_earned_job_value"),),
+        ).state
+        is GapLifecycleState.OPEN
+    )
+
+
+def test_workday_and_job_participation_are_distinct_reconcilable_contracts() -> None:
+    punch = WorkdayTimeEvidence(
+        workday_time_id="workday:punch",
+        company_id=COMPANY,
+        employee_id=EMPLOYEE,
+        effective_date=date(2026, 8, 27),
+        provenance=TimeEntryProvenance.EMPLOYEE_PUNCH,
+        start_at=NOW.replace(hour=8),
+        end_at=NOW.replace(hour=16),
+        approved_duration_minutes=None,
+        approval_id="approval:workday",
+        correction_revision_id="workday-revision:1",
+        supersedes_revision_id=None,
+        entered_by_user_id=None,
+        punch_event_ids=("punch:in", "punch:out"),
+        evidence_digest="d" * 64,
+    )
+    manual = replace(
+        punch,
+        workday_time_id="workday:manual",
+        provenance=TimeEntryProvenance.AUTHORIZED_MANUAL_ENTRY,
+        entered_by_user_id=OWNER,
+        punch_event_ids=(),
+        correction_revision_id="workday-revision:2",
+        supersedes_revision_id=punch.correction_revision_id,
+    )
+    participation = JobParticipationEvidence(
+        participation_id="participation:job",
+        company_id=COMPANY,
+        employee_id=EMPLOYEE,
+        job_id=JOB,
+        activity_type=PaidActivityType.JOB,
+        effective_date=date(2026, 8, 27),
+        start_at=None,
+        end_at=None,
+        approved_duration_minutes=180,
+        approval_id="approval:participation",
+        correction_revision_id="participation-revision:1",
+        supersedes_revision_id=None,
+        workday_time_ids=(manual.workday_time_id,),
+        evidence_digest="e" * 64,
+    )
+    reconciliation = TimeReconciliationEvidence(
+        reconciliation_id="time-reconciliation:1",
+        company_id=COMPANY,
+        employee_id=EMPLOYEE,
+        effective_period="2026-08-27",
+        workday_time_ids=(manual.workday_time_id,),
+        participation_ids=(participation.participation_id,),
+        unallocated_paid_minutes=300,
+        overallocated_minutes=0,
+        evidence_digest="f" * 64,
+    )
+    punch.validate()
+    manual.validate()
+    participation.validate()
+    reconciliation.validate()
+    assert punch.provenance is not manual.provenance
+    assert participation.workday_time_ids == (manual.workday_time_id,)
+    assert reconciliation.unallocated_paid_minutes == 300
+
+
+def test_workday_time_cannot_substitute_for_job_participation() -> None:
+    workday_only = _assertion(
+        "approved_actual_job_time",
+        authority="acp_approved_job_participation",
+        evidence_type="workday_time_only",
+    )
+    assert (
+        _closure(
+            "approved_actual_job_time",
+            (workday_only,),
+            (_grant(workday_only, "approved_actual_job_time"),),
         ).state
         is GapLifecycleState.OPEN
     )
