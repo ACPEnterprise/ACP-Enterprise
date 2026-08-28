@@ -2,6 +2,7 @@
 
 from collections.abc import Mapping
 
+from .evidence_acceptance import GapClosureSnapshot, GapLifecycleState
 from .measurement_contract import (
     MeasurementComponent,
     PolicyPrerequisite,
@@ -26,7 +27,25 @@ _COMPONENT_BY_FAMILY: Mapping[str, MeasurementComponent] = {
 def policy_snapshot_to_prerequisites(
     snapshot: PolicySnapshot,
 ) -> tuple[PolicyPrerequisite, ...]:
+    return policy_and_evidence_snapshot_to_prerequisites(snapshot, None)
+
+
+def policy_and_evidence_snapshot_to_prerequisites(
+    snapshot: PolicySnapshot,
+    closure_snapshot: GapClosureSnapshot | None,
+) -> tuple[PolicyPrerequisite, ...]:
     snapshot.verify()
+    if closure_snapshot is not None:
+        closure_snapshot.verify()
+        if (
+            closure_snapshot.company_id != snapshot.company_id
+            or closure_snapshot.branch_id != snapshot.branch_id
+        ):
+            raise ValueError("policy and evidence snapshot scope mismatch")
+    closure_by_gap = {
+        item.gap_id: item
+        for item in (() if closure_snapshot is None else closure_snapshot.closures)
+    }
     prerequisites = []
     for policy in snapshot.policies:
         component = _COMPONENT_BY_FAMILY.get(policy.family_key)
@@ -35,10 +54,19 @@ def policy_snapshot_to_prerequisites(
         resolved = (
             policy.family_key not in snapshot.deferred_family_keys
             and not missing_required_parameters(policy)
-            and not any(
-                gap.family_key == policy.family_key for gap in snapshot.parameter_gaps
+            and all(
+                closure_by_gap.get(gap.gap_id) is not None
+                and closure_by_gap[gap.gap_id].state is GapLifecycleState.SATISFIED
+                for gap in snapshot.parameter_gaps
+                if gap.family_key == policy.family_key
             )
         )
+        family_closures = tuple(
+            closure_by_gap[gap.gap_id]
+            for gap in snapshot.parameter_gaps
+            if gap.family_key == policy.family_key and gap.gap_id in closure_by_gap
+        )
+        provisional = any(item.provisional for item in family_closures)
         prerequisites.append(
             PolicyPrerequisite(
                 dependency_id=policy.family_key,
@@ -46,7 +74,11 @@ def policy_snapshot_to_prerequisites(
                 state=PrerequisiteState.RESOLVED
                 if resolved
                 else PrerequisiteState.UNRESOLVED,
-                authority="company_finance_policy_authority",
+                authority=(
+                    "company_finance_policy_authority:UNREVIEWED_PROVISIONAL"
+                    if provisional
+                    else "company_finance_policy_authority"
+                ),
                 policy_version=f"{policy.definition_version}:{policy.policy_version}"
                 if resolved
                 else None,

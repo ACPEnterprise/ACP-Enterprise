@@ -202,7 +202,8 @@ class CompanyFinancePolicyGap(Base):
     __table_args__ = (
         CheckConstraint("branch_id IS NULL", name="ck_eco_policy_gap_company_scope_v1"),
         CheckConstraint(
-            "state IN ('unresolved','resolved')", name="ck_eco_policy_gap_state"
+            "state IN ('open','satisfied','conflicting','superseded')",
+            name="ck_eco_policy_gap_state",
         ),
         UniqueConstraint(
             "company_id",
@@ -235,4 +236,127 @@ class CompanyFinancePolicyGap(Base):
     )
     registered_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
+    )
+
+
+class EvidenceAcceptanceContractRecord(Base):
+    __tablename__ = "economics_evidence_acceptance_contracts"
+    __table_args__ = (
+        UniqueConstraint(
+            "contract_id",
+            "contract_version",
+            name="uq_eco_acceptance_contract_version",
+        ),
+    )
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    contract_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    contract_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    family_key: Mapped[str] = mapped_column(String(100), nullable=False)
+    gap_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    definition: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    contract_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
+class EvidenceAcceptanceGrantRecord(Base):
+    __tablename__ = "economics_evidence_acceptance_grants"
+    __table_args__ = (
+        UniqueConstraint(
+            "company_id", "grant_id", name="uq_eco_acceptance_grant_identity"
+        ),
+        UniqueConstraint(
+            "company_id", "grant_digest", name="uq_eco_acceptance_grant_digest"
+        ),
+        Index(
+            "ix_eco_acceptance_grant_replay",
+            "company_id",
+            "contract_id",
+            "subject_id",
+            "effective_start",
+        ),
+    )
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    grant_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    company_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    branch_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    subject_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    contract_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    contract_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    evidence_id: Mapped[str] = mapped_column(String(240), nullable=False)
+    evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    authority: Mapped[str] = mapped_column(String(160), nullable=False)
+    effective_start: Mapped[date] = mapped_column(Date, nullable=False)
+    effective_end: Mapped[date | None] = mapped_column(Date)
+    approved_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    approved_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    grant_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
+class PolicyGapClosureRecord(Base):
+    __tablename__ = "economics_policy_gap_closures"
+    __table_args__ = (
+        CheckConstraint(
+            "state IN ('open','satisfied','conflicting','superseded')",
+            name="ck_eco_gap_closure_state",
+        ),
+        UniqueConstraint(
+            "company_id", "closure_digest", name="uq_eco_gap_closure_digest"
+        ),
+        Index(
+            "ix_eco_gap_closure_replay",
+            "company_id",
+            "gap_id",
+            "effective_date",
+            "as_of",
+        ),
+    )
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    branch_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    gap_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("economics_company_policy_gaps.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    subject_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    reconciliation_key: Mapped[str] = mapped_column(String(240), nullable=False)
+    contract_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    contract_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    state: Mapped[str] = mapped_column(String(20), nullable=False)
+    evidence_ids: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    evidence_digests: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    authorities: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    effective_date: Mapped[date] = mapped_column(Date, nullable=False)
+    as_of: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    provisional: Mapped[bool] = mapped_column(nullable=False)
+    limitations: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    supersedes_closure_id: Mapped[str | None] = mapped_column(String(128))
+    closure_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
     )

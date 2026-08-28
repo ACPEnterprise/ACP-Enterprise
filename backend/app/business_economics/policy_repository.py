@@ -61,7 +61,7 @@ async def persist_all_county_policy_v1(
                 requirement=gap.requirement,
                 authority_dependency=gap.authority_dependency,
                 effective_start=gap.effective_start,
-                state="unresolved",
+                state="open",
                 decision_evidence_digest=gap.decision_evidence_digest,
                 gap_digest=gap.gap_digest,
                 registered_by_user_id=gap.registered_by_user_id,
