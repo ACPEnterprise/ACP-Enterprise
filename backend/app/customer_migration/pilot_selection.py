@@ -101,7 +101,7 @@ class CustomerPilotSelectionService:
             for item in reviewed.aggregates
             if len(item.service_locations) > 1
         }
-        blocked = rejected | duplicates | children | multi
+        blocked = rejected | duplicates
         eligible = sorted(
             (
                 item

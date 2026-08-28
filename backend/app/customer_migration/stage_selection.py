@@ -121,7 +121,7 @@ class CustomerMigrationStageSelectionService:
             for item in reviewed.aggregates
             if len(item.service_locations) > 1
         }
-        blocked = rejected | duplicates | children | multi
+        blocked = rejected | duplicates
         eligible = tuple(
             sorted(
                 (
@@ -155,7 +155,7 @@ class CustomerMigrationStageSelectionService:
             raise ValueError("insufficient eligible Customer aggregates")
         hashes = tuple(item.source_identity_sha256 for item in selected)
         if prior_stage is not None:
-            prior_stage.validate_integrity()
+            prior_stage.validate_integrity()  # type: ignore[operator]
             if (
                 prior_stage.source_sha256 != reviewed.source_sha256
                 or prior_stage.transformation_version != reviewed.transformation_sha256

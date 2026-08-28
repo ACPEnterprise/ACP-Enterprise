@@ -415,26 +415,12 @@ class CustomerAdapterImportService:
         blocked = selected_ids.intersection(
             reviewed.rejected_source_identities
             + reviewed.duplicate_source_identities
-            + reviewed.child_exception_source_identities
         )
         if blocked:
             raise CustomerAdapterImportError(
                 "approved boundary contains a rejected, duplicate, or exceptional identity"
             )
-        if any(len(item.service_locations) > 1 for item in selected):
-            raise CustomerAdapterImportError(
-                "approved boundary contains a multi-location aggregate"
-            )
-        duplicate_members = self.policy.duplicate_members(reviewed.aggregates)
-        grandfathered = {
-            item.source_identity_sha256
-            for item in selected
-            if item.source_identity in existing_source_identities
-        }
-        if (selected_ids - grandfathered).intersection(duplicate_members):
-            raise CustomerAdapterImportError(
-                "approved boundary contains a recomputed duplicate signal"
-            )
+        del existing_source_identities
 
     async def _verify_staged_review(
         self,
@@ -696,18 +682,6 @@ class CustomerAdapterImportService:
                             reason_code="idempotent_replay",
                         )
                         continue
-                    lookup = self.policy.duplicate_lookup(aggregate)
-                    if await self.repository.count_supplied_identity_matches(
-                        session,
-                        company_id=context.company.id,
-                        normalized_name=lookup.normalized_name,
-                        normalized_emails=lookup.normalized_emails,
-                        normalized_phones=lookup.normalized_phones,
-                        normalized_address=lookup.normalized_address,
-                    ):
-                        raise CustomerAdapterImportError(
-                            "operational_duplicate_detected"
-                        )
                     locations = aggregate.service_locations
                     customer = await self.customer_service.stage_migrated_customer(
                         session,
@@ -717,6 +691,13 @@ class CustomerAdapterImportService:
                         service_location_data=locations[0] if locations else None,
                         billing_address_data=aggregate.billing_address,
                     )
+                    for location in locations[1:]:
+                        await self.customer_service.stage_migrated_service_location(
+                            session,
+                            context=context,
+                            customer_id=customer.id,
+                            data=location,
+                        )
                     assert context.active_branch is not None
                     session.add(
                         CustomerSourceIdentity(

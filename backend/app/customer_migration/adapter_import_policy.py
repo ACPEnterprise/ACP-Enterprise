@@ -75,6 +75,19 @@ class CustomerAdapterImportPolicy:
     def duplicate_members(
         aggregates: Sequence[ReviewedAggregate],
     ) -> frozenset[str]:
+        """Return no hard exclusions from non-authoritative profile similarity.
+
+        Provider-native identity is the admission key. Names, contact values, and
+        addresses are useful reconciliation signals but cannot prove that two
+        source Customers are the same person or business.
+        """
+        return frozenset()
+
+    @staticmethod
+    def similarity_evidence(
+        aggregates: Sequence[ReviewedAggregate],
+    ) -> dict[str, tuple[tuple[str, ...], ...]]:
+        """Return deterministic review clusters without changing admission."""
         signals: dict[str, dict[str, set[str]]] = defaultdict(lambda: defaultdict(set))
         for aggregate in aggregates:
             identity = aggregate.source_identity_sha256
@@ -102,12 +115,15 @@ class CustomerAdapterImportPolicy:
                         location.postal_code,
                     )
                 ].add(identity)
-        members: set[str] = set()
+        clusters: dict[str, list[tuple[str, ...]]] = defaultdict(list)
         for groups in signals.values():
-            for identities in groups.values():
+            for signal, identities in groups.items():
                 if len(identities) > 1:
-                    members.update(identities)
-        return frozenset(members)
+                    clusters[signal].append(tuple(sorted(identities)))
+        return {
+            signal: tuple(sorted(values))
+            for signal, values in sorted(clusters.items())
+        }
 
     @staticmethod
     def duplicate_lookup(aggregate: ReviewedAggregate) -> DuplicateLookup:

@@ -6,14 +6,6 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import (
-    AsyncEngine,
-    AsyncSession,
-    async_sessionmaker,
-    create_async_engine,
-)
-
 from app.core.config import settings
 from app.customer_migration.adapter_import import (
     BOUNDARY_VERSION,
@@ -23,6 +15,7 @@ from app.customer_migration.adapter_import import (
     ExpectedCustomerImportCounts,
     review_adapter_output,
 )
+from app.customer_migration.adapter_import_policy import customer_adapter_import_policy
 from app.customer_migration.models import (
     CustomerMigrationCandidate,
     CustomerMigrationException,
@@ -53,6 +46,13 @@ from app.platform.company.membership_models import Membership
 from app.platform.company.models import Company
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.users.models import User
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 
 def digest(value: str) -> str:
@@ -222,6 +222,10 @@ def boundary(reviewed, *, identities=None, source_sha=None, schema=None):
         identities
         or [aggregate.source_identity_sha256 for aggregate in reviewed.aggregates]
     )
+    selected = tuple(
+        item for item in reviewed.aggregates if item.source_identity_sha256 in approved
+    )
+    counts = customer_adapter_import_policy.expected_counts(selected)
     return ApprovedCustomerImportBoundary(
         boundary_version=BOUNDARY_VERSION,
         source_sha256=source_sha or reviewed.source_sha256,
@@ -229,11 +233,11 @@ def boundary(reviewed, *, identities=None, source_sha=None, schema=None):
         pilot_boundary_sha256=digest(json.dumps(approved, separators=(",", ":"))),
         approved_source_identities=approved,
         expected=ExpectedCustomerImportCounts(
-            customers=len(approved),
-            contacts=1 if len(approved) == 2 else 0,
-            service_locations=len(approved),
-            billing_addresses=1 if len(approved) == 2 else 0,
-            business_events=len(approved) * 2 + (2 if len(approved) == 2 else 0),
+            customers=counts.customers,
+            contacts=counts.contacts,
+            service_locations=counts.service_locations,
+            billing_addresses=counts.billing_addresses,
+            business_events=counts.business_events,
         ),
     )
 
@@ -432,7 +436,7 @@ async def test_fails_closed_on_approved_boundary_mismatch(
 
 
 @pytest.mark.asyncio
-async def test_recomputes_duplicate_and_child_exception_exclusions(database) -> None:
+async def test_similarity_and_child_exceptions_do_not_block_parent_admission(database) -> None:
     _, factory = database
     context = await seed_context(factory)
     raw = mock_output()
@@ -453,13 +457,13 @@ async def test_recomputes_duplicate_and_child_exception_exclusions(database) -> 
         duplicate_output, source_system="synthetic"
     )
     await stage_reviewed(factory, context, reviewed_duplicate)
-    with pytest.raises(CustomerAdapterImportError, match="duplicate signal"):
-        await CustomerAdapterImportService().run(
-            factory,
-            context=context,
-            reviewed=reviewed_duplicate,
-            boundary=boundary(reviewed_duplicate),
-        )
+    duplicate_report = await CustomerAdapterImportService().run(
+        factory,
+        context=context,
+        reviewed=reviewed_duplicate,
+        boundary=boundary(reviewed_duplicate),
+    )
+    assert duplicate_report.accepted == 2
 
     child_output = MockOutput(
         **{
@@ -469,13 +473,13 @@ async def test_recomputes_duplicate_and_child_exception_exclusions(database) -> 
     )
     reviewed_child = review_adapter_output(child_output, source_system="child")
     await stage_reviewed(factory, context, reviewed_child)
-    with pytest.raises(CustomerAdapterImportError, match="exceptional identity"):
-        await CustomerAdapterImportService().run(
-            factory,
-            context=context,
-            reviewed=reviewed_child,
-            boundary=boundary(reviewed_child),
-        )
+    child_report = await CustomerAdapterImportService().run(
+        factory,
+        context=context,
+        reviewed=reviewed_child,
+        boundary=boundary(reviewed_child),
+    )
+    assert child_report.accepted == 2
 
 
 @pytest.mark.asyncio
@@ -513,7 +517,7 @@ async def test_rejects_tampered_review_and_staging_candidate(database) -> None:
 
 
 @pytest.mark.asyncio
-async def test_revalidates_against_existing_operational_customers(database) -> None:
+async def test_name_only_operational_match_does_not_merge_native_identity(database) -> None:
     _, factory = database
     context = await seed_context(factory)
     reviewed = review_adapter_output(mock_output(), source_system="synthetic")
@@ -525,15 +529,13 @@ async def test_revalidates_against_existing_operational_customers(database) -> N
             data=reviewed.aggregates[0].customer,
         )
 
-    with pytest.raises(
-        CustomerAdapterImportError, match="operational_duplicate_detected"
-    ):
-        await CustomerAdapterImportService().run(
-            factory,
-            context=context,
-            reviewed=reviewed,
-            boundary=boundary(reviewed),
-        )
+    report = await CustomerAdapterImportService().run(
+        factory,
+        context=context,
+        reviewed=reviewed,
+        boundary=boundary(reviewed),
+    )
+    assert report.accepted == 2
 
     async with factory() as session:
         assert (
@@ -542,15 +544,15 @@ async def test_revalidates_against_existing_operational_customers(database) -> N
                 .select_from(Customer)
                 .where(Customer.company_id == context.company.id)
             )
-            == 1
+            == 3
         )
         run = await session.scalar(
             select(CustomerMigrationRun)
             .where(CustomerMigrationRun.company_id == context.company.id)
             .order_by(CustomerMigrationRun.started_at.desc())
         )
-        assert run is not None and run.status == "failed"
-        assert (run.source_count, run.rejected_count) == (1, 1)
+        assert run is not None and run.status == "completed"
+        assert (run.source_count, run.accepted_count, run.rejected_count) == (2, 2, 0)
 
 
 class FailingSecondCustomerService(CustomerService):

@@ -8,8 +8,6 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
-from pydantic import ValidationError
-
 from app.customer_migration.adapter_import import (
     CustomerAdapterImportReport,
     review_adapter_output,
@@ -28,6 +26,7 @@ from app.customer_migration.pilot_execution import (
 )
 from app.customer_migration.pilot_selection import CustomerPilotSelectionService
 from app.customers.schemas import CustomerCreate, CustomerStatus, CustomerType
+from pydantic import ValidationError
 
 
 def digest(value: str) -> str:
@@ -139,7 +138,7 @@ def reviewed_output(*, include_second: bool = False):
     return review_adapter_output(output, source_system="synthetic")
 
 
-def test_duplicate_policy_matches_operational_name_gate() -> None:
+def test_name_similarity_is_not_a_duplicate_admission_gate() -> None:
     reviewed = reviewed_output()
     first = reviewed.aggregates[0]
     second = replace(
@@ -148,10 +147,8 @@ def test_duplicate_policy_matches_operational_name_gate() -> None:
         source_identity_sha256=digest("second-source"),
     )
     members = CustomerPilotSelectionService().policy.duplicate_members((first, second))
-    assert members == {
-        first.source_identity_sha256,
-        second.source_identity_sha256,
-    }
+    assert members == frozenset()
+    assert CustomerPilotSelectionService().policy.similarity_evidence((first, second))
 
 
 def counts(**changes: int) -> OperationalCounts:

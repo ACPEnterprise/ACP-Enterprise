@@ -2,14 +2,17 @@ from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
     ForeignKeyConstraint,
+    Index,
     Integer,
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
@@ -20,6 +23,217 @@ from app.core.database import Base
 
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+class HcpMigrationMasterRun(Base):
+    """Authoritative envelope for one full HCP rehearsal execution."""
+
+    __tablename__ = "hcp_migration_master_runs"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('prepared','running','interrupted','completed','failed')",
+            name="ck_hcp_master_run_status",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "branch_id"],
+            ["branches.company_id", "branches.id"],
+            name="fk_hcp_master_run_branch_scope",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "company_id", "branch_id", "input_digest", name="uq_hcp_master_input"
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True)
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    actor_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    package_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    collection_digests: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    transformation_contracts: Mapped[dict[str, object]] = mapped_column(
+        JSONB, nullable=False
+    )
+    owner_receipts: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    schema_head: Mapped[str] = mapped_column(String(32), nullable=False)
+    implementation_version: Mapped[str] = mapped_column(String(100), nullable=False)
+    supported_entities: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    baseline_counts: Mapped[dict[str, int]] = mapped_column(JSONB, nullable=False)
+    source_counts: Mapped[dict[str, int]] = mapped_column(JSONB, nullable=False)
+    transformed_counts: Mapped[dict[str, int]] = mapped_column(JSONB, nullable=False)
+    persisted_counts: Mapped[dict[str, int]] = mapped_column(JSONB, nullable=False)
+    hold_counts: Mapped[dict[str, int]] = mapped_column(JSONB, nullable=False)
+    exception_counts: Mapped[dict[str, int]] = mapped_column(JSONB, nullable=False)
+    rejection_counts: Mapped[dict[str, int]] = mapped_column(JSONB, nullable=False)
+    unresolved_counts: Mapped[dict[str, int]] = mapped_column(JSONB, nullable=False)
+    reconciliation_digest: Mapped[str | None] = mapped_column(String(64))
+    replay_state: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    resume_state: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    input_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    attestation_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
+class HcpCustomerSourceLineage(Base):
+    __tablename__ = "hcp_customer_source_lineage"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "branch_id"],
+            ["branches.company_id", "branches.id"],
+            name="fk_hcp_customer_lineage_branch_scope",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "company_id", "native_customer_id", name="uq_hcp_customer_lineage_native"
+        ),
+        UniqueConstraint(
+            "company_id", "evidence_digest", name="uq_hcp_customer_lineage_replay"
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    master_run_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("hcp_migration_master_runs.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    customer_source_identity_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("customer_source_identities.id", ondelete="RESTRICT"),
+    )
+    native_customer_id: Mapped[str] = mapped_column(String(191), nullable=False)
+    package_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    transformation_contract: Mapped[str] = mapped_column(String(100), nullable=False)
+    transformation_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    owner_disposition: Mapped[str | None] = mapped_column(String(100))
+    source_timestamps: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    source_context: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    recorded_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
+class HcpEmployeeSourceCrosswalk(Base):
+    __tablename__ = "hcp_employee_source_crosswalks"
+    __table_args__ = (
+        CheckConstraint(
+            "disposition IN ('CREATE_ENTERPRISE_EMPLOYEE_CANDIDATE',"
+            "'EXCLUDE_EMPLOYEE_HOLD_ASSIGNMENTS')",
+            name="ck_hcp_employee_crosswalk_disposition",
+        ),
+        CheckConstraint(
+            "disposition <> 'EXCLUDE_EMPLOYEE_HOLD_ASSIGNMENTS' "
+            "OR employee_id IS NULL",
+            name="ck_hcp_employee_crosswalk_excluded_no_target",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "branch_id"],
+            ["branches.company_id", "branches.id"],
+            name="fk_hcp_employee_crosswalk_branch_scope",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "company_id", "native_employee_id", "evidence_version",
+            name="uq_hcp_employee_crosswalk_version",
+        ),
+        UniqueConstraint(
+            "company_id", "evidence_digest", name="uq_hcp_employee_crosswalk_replay"
+        ),
+        Index(
+            "uq_hcp_employee_crosswalk_target",
+            "company_id",
+            "employee_id",
+            unique=True,
+            postgresql_where=text("employee_id IS NOT NULL"),
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    master_run_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("hcp_migration_master_runs.id"), nullable=False
+    )
+    prior_evidence_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("hcp_employee_source_crosswalks.id")
+    )
+    employee_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("employees.id", ondelete="RESTRICT")
+    )
+    native_employee_id: Mapped[str] = mapped_column(String(191), nullable=False)
+    disposition: Mapped[str] = mapped_column(String(100), nullable=False)
+    package_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    owner_receipt_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    evidence_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    recorded_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
+class HcpMigrationHold(Base):
+    __tablename__ = "hcp_migration_holds"
+    __table_args__ = (
+        CheckConstraint("state IN ('HELD','RELEASED')", name="ck_hcp_hold_state"),
+        CheckConstraint(
+            "operational_effects_enabled = false AND financial_truth_accepted = false",
+            name="ck_hcp_hold_no_effects",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "branch_id"],
+            ["branches.company_id", "branches.id"],
+            name="fk_hcp_hold_branch_scope",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "company_id", "master_run_id", "entity_kind", "native_id",
+            name="uq_hcp_hold_native_run",
+        ),
+        UniqueConstraint("company_id", "hold_digest", name="uq_hcp_hold_replay"),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    master_run_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("hcp_migration_master_runs.id"), nullable=False
+    )
+    prior_hold_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("hcp_migration_holds.id")
+    )
+    entity_kind: Mapped[str] = mapped_column(String(40), nullable=False)
+    native_id: Mapped[str] = mapped_column(String(191), nullable=False)
+    hold_code: Mapped[str] = mapped_column(String(100), nullable=False)
+    owner_disposition: Mapped[str | None] = mapped_column(String(100))
+    package_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    reconciliation_key: Mapped[str] = mapped_column(String(191), nullable=False)
+    state: Mapped[str] = mapped_column(String(20), nullable=False)
+    hold_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    evidence_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    operational_effects_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    financial_truth_accepted: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    recorded_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
 
 
 class OperationalMigrationRun(Base):

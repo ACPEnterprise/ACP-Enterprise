@@ -375,7 +375,9 @@ class HousecallProCustomerExportAdapter:
         )
 
     @staticmethod
-    def _contact(row: dict[str, str], title_field: str) -> ContactCreate | None:
+    def _contact(
+        row: dict[str, str], title_field: str
+    ) -> tuple[ContactCreate | None, tuple[str, ...]]:
         first = _optional(row, "First Name")
         last = _optional(row, "Last Name")
         mobile = _optional(row, "Mobile Number") or _optional(row, "Home Number")
@@ -388,19 +390,24 @@ class HousecallProCustomerExportAdapter:
             _optional(row, title_field),
         )
         if not any(values):
-            return None
+            return None, ()
         if first is None or last is None:
-            raise CustomerAdapterValidationError(
-                "contact_name_unresolved", fields=("First Name", "Last Name")
+            return None, tuple(
+                field
+                for field, value in (("First Name", first), ("Last Name", last))
+                if value is None
             )
-        return ContactCreate(
-            first_name=first,
-            last_name=last,
-            title=_optional(row, title_field),
-            email=_optional(row, "Email"),
-            mobile_phone=mobile,
-            office_phone=_optional(row, "Work Number"),
-            is_preferred=True,
+        return (
+            ContactCreate(
+                first_name=first,
+                last_name=last,
+                title=_optional(row, title_field),
+                email=_optional(row, "Email"),
+                mobile_phone=mobile,
+                office_phone=_optional(row, "Work Number"),
+                is_preferred=True,
+            ),
+            (),
         )
 
     def _adapt(
@@ -449,13 +456,33 @@ class HousecallProCustomerExportAdapter:
             notes=_optional(row, "Notes"),
             status=self.default_status,
         )
+        contact, missing_contact_fields = self._contact(row, title_field)
+        if missing_contact_fields:
+            evidence_payload = {
+                "source_id_sha256": source_id_sha256,
+                "child_entity_type": "contact",
+                "missing_fields": missing_contact_fields,
+            }
+            child_exceptions = (
+                *child_exceptions,
+                CustomerChildTransformationException(
+                    source_id_sha256=source_id_sha256,
+                    contract_version=contract.version,
+                    address_group_number=0,
+                    missing_fields=missing_contact_fields,
+                    reason_code="contact_name_unresolved",
+                    evidence_sha256=hashlib.sha256(
+                        json.dumps(evidence_payload, sort_keys=True).encode()
+                    ).hexdigest(),
+                ),
+            )
         row_payload = json.dumps(row, sort_keys=True).encode()
         return AdaptedCustomerRecord(
             row_number=row_number,
             source_id=source_id,
             schema_version=contract.version,
             customer=customer,
-            contact=self._contact(row, title_field),
+            contact=contact,
             service_locations=services,
             billing_address=billing,
             unmapped_fields=unmapped,
