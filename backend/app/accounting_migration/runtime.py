@@ -173,7 +173,7 @@ class OpeningMigrationRuntime:
             raise RuntimeValidationError("invalid_money")
 
     @classmethod
-    def _validate_plan(cls, package: OpeningPackage, plan: OpeningStatePlan) -> None:
+    def validate_plan(cls, package: OpeningPackage, plan: OpeningStatePlan) -> None:
         if (
             plan.package_id != package.package_id
             or plan.manifest_sha256 != package.manifest_sha256
@@ -284,7 +284,7 @@ class OpeningMigrationRuntime:
         *,
         target: RehearsalTarget,
     ) -> RehearsalResult:
-        self._validate_plan(package, plan)
+        self.validate_plan(package, plan)
         plan_sha256 = _canonical_digest(self._plan_payload(plan))
         idempotency_key = _canonical_digest(
             {

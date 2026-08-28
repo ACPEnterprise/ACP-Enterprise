@@ -2,15 +2,18 @@ from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
     ForeignKeyConstraint,
     Index,
+    Integer,
     String,
     Text,
     UniqueConstraint,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -166,5 +169,146 @@ class FieldInvoiceHandoff(Base):
         DateTime(timezone=True), nullable=False, default=utc_now
     )
     updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
+class FieldCompletionRequirementSnapshot(Base):
+    __tablename__ = "field_completion_requirement_snapshots"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "branch_id", "job_id"],
+            ["jobs.company_id", "jobs.branch_id", "jobs.id"],
+            name="fk_field_requirement_snapshots_job",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint("version >= 1", name="ck_field_requirement_snapshot_version"),
+        CheckConstraint(
+            "requirements_fingerprint ~ '^[0-9a-f]{64}$'",
+            name="ck_field_requirement_snapshot_fingerprint",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "job_id",
+            "version",
+            name="uq_field_requirement_snapshot_version",
+        ),
+        UniqueConstraint(
+            "company_id", "job_id", name="uq_field_requirement_snapshot_job"
+        ),
+    )
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    job_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    assignment_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("dispatch_assignments.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    requirements: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    requirements_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
+class FieldCompletionEvidence(Base):
+    __tablename__ = "field_completion_evidence"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "branch_id", "job_id"],
+            ["jobs.company_id", "jobs.branch_id", "jobs.id"],
+            name="fk_field_completion_evidence_job",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "snapshot_id",
+            "requirement_code",
+            name="uq_field_evidence_requirement",
+        ),
+    )
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    job_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    snapshot_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("field_completion_requirement_snapshots.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    requirement_code: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    recorded_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
+class FieldNonBillableDisposition(Base):
+    __tablename__ = "field_non_billable_dispositions"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "branch_id", "job_id"],
+            ["jobs.company_id", "jobs.branch_id", "jobs.id"],
+            name="fk_field_non_billable_job",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "length(btrim(reason)) > 0", name="ck_field_non_billable_reason"
+        ),
+        UniqueConstraint("company_id", "job_id", name="uq_field_non_billable_job"),
+        UniqueConstraint(
+            "company_id", "idempotency_key", name="uq_field_non_billable_idempotency"
+        ),
+    )
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    job_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    assignment_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("dispatch_assignments.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    authorized_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
     )

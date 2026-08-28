@@ -619,7 +619,10 @@ class JobService:
             guard_context = self._guard_context(job)
             for guard in self._completion_guards:
                 await guard.validate_completion(
-                    session, context=context, job=guard_context
+                    session,
+                    context=context,
+                    job=guard_context,
+                    correlation_id=correlation_id,
                 )
             self._repository.complete_job(
                 job, actor_user_id=context.user.id, occurred_at=occurred_at

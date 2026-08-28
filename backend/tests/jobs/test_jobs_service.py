@@ -656,6 +656,7 @@ class BlockingCompletionGuard:
         *,
         context: AuthorizationContext,
         job: JobGuardContext,
+        correlation_id: UUID,
     ) -> None:
         raise JobCompletionBlockedError("Completion is blocked.")
 

@@ -7,11 +7,13 @@ export async function getFieldJob(jobId: string): Promise<FieldJobState> {
   return (await apiClient.get<FieldJobState>(`${ROOT}/jobs/${jobId}`)).data;
 }
 
-export async function addWorkNote(jobId: string, content: string): Promise<FieldJobState> {
+export async function addWorkNote(jobId: string, content: string, jobVersion: number, assignmentVersion: number): Promise<FieldJobState> {
   return (await apiClient.post<FieldJobState>(`${ROOT}/jobs/${jobId}/notes`, {
     note_type: "work_performed",
     content,
     idempotency_key: crypto.randomUUID(),
+    expected_job_version: jobVersion,
+    expected_assignment_version: assignmentVersion,
   })).data;
 }
 
@@ -20,18 +22,24 @@ export async function recordCustomerDisposition(
   disposition: CustomerDisposition,
   customerName: string,
   reason: string,
+  jobVersion: number,
+  assignmentVersion: number,
 ): Promise<FieldJobState> {
   return (await apiClient.post<FieldJobState>(`${ROOT}/jobs/${jobId}/customer-approval`, {
     disposition,
     customer_name: disposition === "approved" ? customerName : null,
     reason: disposition === "approved" ? null : reason,
     idempotency_key: crypto.randomUUID(),
+    expected_job_version: jobVersion,
+    expected_assignment_version: assignmentVersion,
   })).data;
 }
 
-export async function refreshInvoiceHandoff(jobId: string): Promise<FieldJobState> {
+export async function refreshInvoiceHandoff(jobId: string, jobVersion: number, assignmentVersion: number): Promise<FieldJobState> {
   return (await apiClient.post<FieldJobState>(`${ROOT}/jobs/${jobId}/invoice-handoff`, {
     idempotency_key: crypto.randomUUID(),
+    expected_job_version: jobVersion,
+    expected_assignment_version: assignmentVersion,
   })).data;
 }
 

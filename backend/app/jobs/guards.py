@@ -25,6 +25,7 @@ class JobCompletionGuard(Protocol):
         *,
         context: AuthorizationContext,
         job: JobGuardContext,
+        correlation_id: UUID,
     ) -> None: ...
 
 

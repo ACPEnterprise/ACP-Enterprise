@@ -29,8 +29,8 @@ from app.accounting_migration.manifest import (
 )
 
 TRANSFORMATION_VERSION = "acc-mig-synthetic-v1"
-COMPANY_ID = "synthetic-company"
-BRANCH_ID = "synthetic-branch"
+COMPANY_ID = "00000000-0000-4000-8000-000000000101"
+BRANCH_ID = "00000000-0000-4000-8000-000000000102"
 
 
 def _artifact(kind: str, content: bytes, *, rejected: int = 0) -> dict[str, object]:
@@ -138,7 +138,7 @@ def _plan(package: OpeningPackage, *, rejected_kind: str | None = None) -> Openi
         for item in package.artifacts
         if item.role == "primary_source" and item.state == "accepted"
     )
-    rejections = ()
+    rejections: tuple[RejectionEvidence, ...] = ()
     if rejected_kind is not None:
         rejected = next(item for item in package.artifacts if item.kind == rejected_kind)
         rejections = (

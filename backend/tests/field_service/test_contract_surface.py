@@ -11,6 +11,7 @@ def test_field_service_openapi_is_bounded() -> None:
     assert "/api/v1/technician/jobs/{job_id}/notes" in paths
     assert "/api/v1/technician/jobs/{job_id}/customer-approval" in paths
     assert "/api/v1/technician/jobs/{job_id}/invoice-handoff" in paths
+    assert "/api/v1/technician/jobs/{job_id}/non-billable" in paths
 
 
 @pytest.mark.asyncio
