@@ -184,6 +184,9 @@ class AuthenticatedWorkerRuntime:
                     delay = self.config.reconnect_min_seconds
                     while not stop.is_set():
                         recovery = self.journal.load() if self.journal else None
+                        if recovery and recovery.phase == "reconciliation_required":
+                            await self.apply_recovery_acknowledgement(recovery)
+                            recovery = self.journal.load() if self.journal else None
                         if (
                             recovery is None
                             and WorkerCapability.ENGINEERING_EXECUTE
@@ -301,6 +304,43 @@ class AuthenticatedWorkerRuntime:
                 },
             )
             self._advance(sent_at)
+
+    async def apply_recovery_acknowledgement(self, recovery: RecoveryRecord) -> None:
+        """Apply only server-authorized archival of an unresolved local block."""
+        session = self._require_session()
+        if self.journal is None:
+            raise RuntimeError("Recovery acknowledgement requires a journal.")
+        items = await self.client.recovery_acknowledgements(
+            session_id=session.session_id
+        )
+        if not items:
+            return
+        if len(items) != 1:
+            raise RuntimeError("Multiple recovery acknowledgements are ambiguous.")
+        item = items[0]
+        if UUID(str(item["worker_id"])) != self.config.worker_id:
+            raise RuntimeError("Recovery acknowledgement worker identity mismatch.")
+        if (
+            UUID(str(item["offer_id"])) != recovery.offer_id
+            or UUID(str(item["lease_id"])) != recovery.lease_id
+        ):
+            raise RuntimeError("Recovery acknowledgement lineage mismatch.")
+        archive_digest = self.journal.acknowledge(
+            acknowledgement_id=UUID(str(item["id"])),
+            expected_journal_digest=str(item["journal_digest"]),
+            audit_digest=str(item["audit_digest"]),
+            acknowledged_at=datetime.fromisoformat(str(item["acknowledged_at"])),
+            worker_id=self.config.worker_id,
+            command_id=UUID(str(item["command_id"])),
+            execution_id=UUID(str(item["execution_id"])),
+            offer_id=recovery.offer_id,
+            lease_id=recovery.lease_id,
+        )
+        await self.client.recovery_acknowledgement_applied(
+            session_id=session.session_id,
+            acknowledgement_id=UUID(str(item["id"])),
+            local_archive_digest=archive_digest,
+        )
 
     async def execute_available_offer(self) -> bool:
         async with self._lock:

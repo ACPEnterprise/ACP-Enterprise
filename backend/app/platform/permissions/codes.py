@@ -207,8 +207,9 @@ class EngineeringRepositoryOperationPermission:
 
 class WorkerControlPermission:
     MANAGE = "COMPANY_ENGINEERING_WORKER_MANAGE"
+    RECOVERY_ACKNOWLEDGE = "COMPANY_ENGINEERING_WORKER_RECOVERY_ACKNOWLEDGE"
 
-    ALL = frozenset({MANAGE})
+    ALL = frozenset({MANAGE, RECOVERY_ACKNOWLEDGE})
 
 
 class WorkerIdentityPermission:

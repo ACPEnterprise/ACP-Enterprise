@@ -73,6 +73,10 @@ from app.qbo_source.runtime import (
 )
 from app.scheduling.router import router as scheduling_router
 from app.worker_control.transport.http.router import router as worker_transport_router
+from app.worker_control.recovery_acknowledgement import (
+    router as worker_recovery_router,
+    worker_router as worker_recovery_transport_router,
+)
 
 logging.basicConfig(
     level=getattr(logging, settings.log_level),
@@ -170,6 +174,8 @@ app.include_router(engineering_capacity_router)
 app.include_router(execution_status_router)
 app.include_router(controlled_execution_router)
 app.include_router(worker_transport_router)
+app.include_router(worker_recovery_router)
+app.include_router(worker_recovery_transport_router)
 app.include_router(qbo_source_router)
 
 

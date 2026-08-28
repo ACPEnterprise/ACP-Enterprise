@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -12,7 +13,8 @@ from sqlalchemy import (
     UniqueConstraint,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID as PGUUID
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -267,6 +269,101 @@ class WorkerResult(Base):
     output_references: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
     failure_classification: Mapped[str] = mapped_column(String(50), nullable=False)
     correlation_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
+class WorkerRecoveryAcknowledgement(Base):
+    """Durable operator authority to release only a local recovery block."""
+
+    __tablename__ = "engineering_worker_recovery_acknowledgements"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "worker_id"],
+            ["engineering_workers.company_id", "engineering_workers.id"],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "lease_id"],
+            ["engineering_worker_leases.company_id", "engineering_worker_leases.id"],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "execution_id"],
+            ["engineering_executions.company_id", "engineering_executions.id"],
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "acknowledgement_version >= 1", name="ck_worker_recovery_ack_version"
+        ),
+        CheckConstraint(
+            "length(journal_digest) = 64", name="ck_worker_recovery_ack_journal_digest"
+        ),
+        CheckConstraint(
+            "length(audit_digest) = 64", name="ck_worker_recovery_ack_audit_digest"
+        ),
+        UniqueConstraint(
+            "company_id",
+            "worker_id",
+            "journal_digest",
+            name="uq_worker_recovery_ack_journal",
+        ),
+        UniqueConstraint(
+            "company_id", "audit_digest", name="uq_worker_recovery_ack_audit"
+        ),
+        Index(
+            "ix_worker_recovery_ack_pending", "company_id", "worker_id", "applied_at"
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    worker_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    command_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("engineering_commands.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    execution_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    offer_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("engineering_controlled_execution_offers.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    lease_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    journal_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    reconciliation_reason: Mapped[str] = mapped_column(String(200), nullable=False)
+    acknowledgement_reason: Mapped[str] = mapped_column(String(500), nullable=False)
+    operator_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    authorization_context: Mapped[dict[str, object]] = mapped_column(
+        JSONB, nullable=False
+    )
+    acknowledgement_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1
+    )
+    audit_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    historical_execution_unresolved: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True
+    )
+    acknowledged_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    applied_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    local_archive_digest: Mapped[str | None] = mapped_column(String(64))
+    active_block_released: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
     )

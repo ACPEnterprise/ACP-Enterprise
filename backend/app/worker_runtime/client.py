@@ -93,6 +93,30 @@ class WorkerTransportClient:
         self._accepted(response, 200)
         return tuple(response.json()["items"])
 
+    async def recovery_acknowledgements(
+        self, *, session_id: UUID
+    ) -> tuple[dict[str, object], ...]:
+        response = await self._client.get(
+            f"/api/v1/worker-transport/sessions/{session_id}/recovery-acknowledgements",
+            headers={"X-Worker-Session-ID": str(session_id)},
+        )
+        self._accepted(response, 200)
+        return tuple(response.json())
+
+    async def recovery_acknowledgement_applied(
+        self,
+        *,
+        session_id: UUID,
+        acknowledgement_id: UUID,
+        local_archive_digest: str,
+    ) -> None:
+        response = await self._client.post(
+            f"/api/v1/worker-transport/recovery-acknowledgements/{acknowledgement_id}/applied",
+            headers={"X-Worker-Session-ID": str(session_id)},
+            json={"local_archive_digest": local_archive_digest},
+        )
+        self._accepted(response, 200)
+
     async def publish_repository_readiness(
         self, *, session_id: UUID, payload: dict[str, object]
     ) -> None:
