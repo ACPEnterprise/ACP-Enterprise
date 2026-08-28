@@ -46,6 +46,8 @@ class ExecutionPayload(BaseModel):
     boundary_digest: str
     boundary: BoundaryPayload
     commit_subject: str
+    execution_capability_profile: str = "code_change"
+    repository_mutation_allowed: bool = True
     authority_expires_at: datetime
 
 

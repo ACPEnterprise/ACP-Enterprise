@@ -4,6 +4,7 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
+
 from app.engineering_control.revision_evidence import compose_revision_instruction
 from app.execution_nodes.boundaries import BoundaryViolation, boundary_digest
 from app.execution_nodes.contracts import (
@@ -598,6 +599,52 @@ def test_duplicate_completed_execution_is_rejected(
     provider.execute(request)
     with pytest.raises(ProviderFailure, match="Duplicate"):
         provider.execute(request)
+
+
+def test_read_only_provider_validates_without_implementation_or_publication(
+    repository: tuple[Path, str], tmp_path: Path
+) -> None:
+    root, head = repository
+    boundary = ProviderBoundary(
+        allowed_repository="acp-enterprise",
+        allowed_branch="main",
+        expected_head=head,
+        allowed_paths=("**",),
+        forbidden_paths=(".git/**", ".env*", "**/.env*"),
+        permitted_operations=("inspect", "validate"),
+        validation_requirements=("git diff --check",),
+    )
+    request = make_request(
+        head,
+        boundary=boundary,
+        boundary_digest=boundary_digest(boundary),
+        execution_capability_profile="inspect_validate_only",
+        repository_mutation_allowed=False,
+    )
+    before = git(root, "ls-remote", "origin", "refs/heads/main").split()[0]
+    result = service(tmp_path, root).execute(request)
+    assert result.phase is ProviderPhase.COMPLETED
+    assert result.result_head == head
+    assert result.commit_sha is None
+    assert result.files_changed == ()
+    assert result.evidence["repository_mutated"] is False
+    assert result.evidence["phases"] == [
+        "composed", "workspace_ready", "validating", "completed"
+    ]
+    assert git(root, "ls-remote", "origin", "refs/heads/main").split()[0] == before
+
+
+def test_read_only_profile_rejects_mutation_operations(
+    repository: tuple[Path, str], tmp_path: Path
+) -> None:
+    root, head = repository
+    request = make_request(
+        head,
+        execution_capability_profile="inspect_validate_only",
+        repository_mutation_allowed=False,
+    )
+    with pytest.raises(BoundaryViolation, match="Read-only"):
+        service(tmp_path, root).execute(request)
 
 
 def test_provider_mechanically_reconciles_disjoint_remote_advance(

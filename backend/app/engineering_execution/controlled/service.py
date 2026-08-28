@@ -1114,6 +1114,19 @@ class ControlledExecutionService:
         )
         for command, execution in sources:
             boundary = dict(command.execution_boundary)
+            mutation_allowed = command.requested_code_changes
+            operations = set(_evidence_set(boundary.get("permitted_operations")))
+            if mutation_allowed:
+                required_operations = {
+                    "inspect", "modify", "validate", "commit",
+                    "mechanical_reconcile", "push",
+                }
+                capability_profile = "code_change"
+            else:
+                required_operations = {"inspect", "validate"}
+                capability_profile = "inspect_validate_only"
+            if operations != required_operations:
+                continue
             offer = await self.repository.create_offer(
                 database,
                 company_id=command.company_id,
@@ -1135,10 +1148,9 @@ class ControlledExecutionService:
                     "request_digest": command.request_digest,
                     "boundary": boundary,
                     "boundary_digest": command.execution_boundary_digest,
-                    "commit_subject": _commit_subject(
-                        command.command_type, command.ecid
-                    ),
-                    "repository_mutation_allowed": True,
+                    "commit_subject": _commit_subject(command.command_type, command.ecid),
+                    "execution_capability_profile": capability_profile,
+                    "repository_mutation_allowed": mutation_allowed,
                 },
                 expires_at=command.expires_at,
                 lease_seconds=900,
@@ -1260,6 +1272,13 @@ class ControlledExecutionService:
                     "validation_environment",
                     "evidence",
                 }
+            elif "validation" in output:
+                expected |= {
+                    "validation",
+                    "validation_runs",
+                    "validation_environment",
+                    "evidence",
+                }
             boundary = output.get("file_boundary")
             if (
                 set(output) != expected
@@ -1348,6 +1367,23 @@ class ControlledExecutionService:
             or (
                 mutation is False
                 and output.get("head") != offer.payload.get("expected_head")
+            )
+            or (
+                mutation is False
+                and offer.command_type == "execute_code"
+                and (
+                    offer.payload.get("execution_capability_profile")
+                    != "inspect_validate_only"
+                    or offer.payload.get("repository_mutation_allowed") is not False
+                    or not isinstance(validation_output, dict)
+                    or not validation_output
+                    or not all(value is True for value in validation_output.values())
+                    or not isinstance(validation_runs_output, list)
+                    or not validation_runs_output
+                    or len(validation_runs_output) > MAX_VALIDATION_RUNS
+                    or not all(_valid_validation_run(run) for run in validation_runs_output)
+                    or not isinstance(output.get("validation_environment"), dict)
+                )
             )
             or (
                 mutation is True

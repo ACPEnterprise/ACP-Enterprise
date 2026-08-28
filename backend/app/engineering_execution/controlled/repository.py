@@ -167,7 +167,6 @@ class ControlledExecutionRepository:
                 .where(
                     EngineeringCommand.company_id == company_id,
                     EngineeringCommand.approval_state == "approved",
-                    EngineeringCommand.requested_code_changes.is_(True),
                     EngineeringCommand.canceled_at.is_(None),
                     EngineeringCommand.expires_at > now,
                     EngineeringCommand.execution_boundary_digest != "0" * 64,

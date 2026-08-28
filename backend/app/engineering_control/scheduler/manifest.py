@@ -53,22 +53,26 @@ class ExecutionBoundaryDefinition(SchedulerModel):
         min_length=1, max_length=6
     )
     validation_requirements: tuple[str, ...] = Field(min_length=1, max_length=50)
+    capability_profile: Literal["code_change", "inspect_validate_only"] = "code_change"
 
     @model_validator(mode="after")
     def validate_fingerprint(self) -> "ExecutionBoundaryDefinition":
         payload = self.model_dump(exclude={"fingerprint"}, mode="json")
-        if self.fingerprint != manifest_fingerprint(payload):
+        accepted = {manifest_fingerprint(payload)}
+        if self.capability_profile == "code_change":
+            accepted.add(manifest_fingerprint({
+                key: value for key, value in payload.items()
+                if key != "capability_profile"
+            }))
+        if self.fingerprint not in accepted:
             raise ValueError("Execution boundary fingerprint is invalid.")
-        required_operations = {
-            "inspect",
-            "modify",
-            "validate",
-            "commit",
-            "mechanical_reconcile",
-            "push",
-        }
+        required_operations = (
+            {"inspect", "validate"}
+            if self.capability_profile == "inspect_validate_only"
+            else {"inspect", "modify", "validate", "commit", "mechanical_reconcile", "push"}
+        )
         if set(self.permitted_operations) != required_operations:
-            raise ValueError("Code-changing execution authority is incomplete.")
+            raise ValueError("Execution authority does not match its capability profile.")
         if not {".git/**", ".env*", "**/.env*"} <= set(self.forbidden_paths):
             raise ValueError("Mandatory forbidden paths are absent.")
         return self
@@ -114,6 +118,16 @@ class MilestoneDefinition(SchedulerModel):
                 raise ValueError(
                     "A migration-free milestone must explicitly forbid migrations."
                 )
+            if (
+                self.implementation_classification == "TYPE_C"
+                and self.execution_boundary.capability_profile != "inspect_validate_only"
+            ):
+                raise ValueError("A read-only milestone requires inspect/validate-only authority.")
+            if (
+                self.implementation_classification != "TYPE_C"
+                and self.execution_boundary.capability_profile != "code_change"
+            ):
+                raise ValueError("A code-changing milestone requires code-change authority.")
         if (
             self.readiness_state == "ready"
             and self.implementation_classification != "TYPE_C"

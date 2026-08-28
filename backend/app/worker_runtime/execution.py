@@ -161,6 +161,12 @@ class NodeExecutionProviderClient:
             "boundary_digest": offer.payload["boundary_digest"],
             "boundary": offer.payload["boundary"],
             "commit_subject": offer.payload["commit_subject"],
+            "execution_capability_profile": offer.payload.get(
+                "execution_capability_profile", "code_change"
+            ),
+            "repository_mutation_allowed": offer.payload.get(
+                "repository_mutation_allowed", True
+            ),
             "authority_expires_at": (
                 offer.lease_expires_at.isoformat()
                 if offer.lease_expires_at is not None
@@ -237,6 +243,21 @@ class NodeExecutionProviderClient:
                 "validation_runs": evidence.get("validation_runs", []),
                 "validation_environment": evidence.get("validation_environment", {}),
                 "implementation_summary": summary[:8_000],
+                "repository_mutated": False,
+            }
+        if offer.payload.get("repository_mutation_allowed") is False:
+            return {
+                "workspace_id": offer.workspace_id,
+                "repository_key": offer.payload["repository_key"],
+                "branch": offer.payload["expected_branch"],
+                "head": result["result_head"],
+                "clean": True,
+                "file_count": len(result["files_changed"]),
+                "file_boundary": result["files_changed"],
+                "validation": result["validation"],
+                "validation_runs": evidence["validation_runs"],
+                "validation_environment": evidence["validation_environment"],
+                "evidence": evidence,
                 "repository_mutated": False,
             }
         return {

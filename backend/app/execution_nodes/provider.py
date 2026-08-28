@@ -429,6 +429,8 @@ class ControlledExecutionProvider:
         self, request: ProviderExecutionRequest, *, timeout_seconds: int = 7200
     ) -> ProviderExecutionResult:
         validate_request(request)
+        if not request.repository_mutation_allowed:
+            return self._execute_read_only(request)
         prior = self.journal.latest_phase(request)
         prior_record = self.journal.latest_record(request)
         if prior is ProviderPhase.COMPLETED:
@@ -623,6 +625,81 @@ class ControlledExecutionProvider:
                 files,
                 validations,
                 evidence,
+            )
+
+    def _execute_read_only(
+        self, request: ProviderExecutionRequest
+    ) -> ProviderExecutionResult:
+        """Validate an immutable checkout without implementation or publication."""
+        prior = self.journal.latest_phase(request)
+        if prior is ProviderPhase.COMPLETED:
+            raise ProviderFailure("Duplicate completed execution is rejected.")
+        if prior not in {None, ProviderPhase.QUEUED}:
+            self.journal.append(
+                request, ProviderPhase.RECONCILIATION_REQUIRED,
+                reason="ambiguous_read_only_interruption",
+            )
+            raise ProviderFailure("Interrupted read-only execution requires reconciliation.")
+        with self.workspaces.locked(request):
+            self.journal.append(request, ProviderPhase.COMPOSED)
+            workspace = self.workspaces.prepare(request)
+            environment = self._prepare_validation_environment(
+                workspace, request.boundary.validation_requirements
+            )
+            self.journal.append(
+                request, ProviderPhase.WORKSPACE_READY,
+                head=request.boundary.expected_head,
+                validation_environment=environment,
+            )
+            self._require_authority(request)
+            before = self.workspaces.changed_files(workspace)
+            if before:
+                raise ProviderFailure("Read-only workspace is not pristine.")
+            self.journal.append(request, ProviderPhase.VALIDATING, files=[])
+            validations, runs = self._validate(
+                workspace,
+                request.boundary.validation_requirements,
+                (),
+                validation_environment=environment,
+            )
+            self._require_authority(request)
+            after = self.workspaces.changed_files(workspace)
+            if after:
+                self.journal.append(
+                    request, ProviderPhase.FAILED,
+                    reason="read_only_repository_mutation_detected",
+                    files=list(after), repository_mutated=False,
+                )
+                raise ProviderFailure("Read-only validation changed repository files.")
+            if not validations or not all(validations.values()):
+                self.journal.append(
+                    request, ProviderPhase.FAILED,
+                    reason="required_validation_failed", files=[],
+                    validation=validations, validation_runs=runs,
+                    repository_mutated=False,
+                )
+                return ProviderExecutionResult(
+                    request.execution_id, request.lease_id, ProviderPhase.FAILED,
+                    request.boundary.expected_head, None, None, (), validations,
+                    {"validation_runs": runs, "validation_environment": environment,
+                     "repository_mutated": False},
+                    "required_validation_failed",
+                )
+            evidence = {
+                "execution_capability_profile": "inspect_validate_only",
+                "validation_runs": runs,
+                "validation_environment": environment,
+                "repository_mutated": False,
+                "phases": ["composed", "workspace_ready", "validating", "completed"],
+            }
+            self.journal.append(
+                request, ProviderPhase.COMPLETED, head=request.boundary.expected_head,
+                repository_mutated=False,
+            )
+            return ProviderExecutionResult(
+                request.execution_id, request.lease_id, ProviderPhase.COMPLETED,
+                request.boundary.expected_head, request.boundary.expected_head,
+                None, (), validations, evidence,
             )
 
     def _validate(

@@ -1101,6 +1101,12 @@ class RoadmapService:
                 raise ValueError(
                     "This milestone boundary does not match the durable milestone identity."
                 )
+            if requested_code_changes == (
+                definition.capability_profile == "inspect_validate_only"
+            ):
+                raise ValueError(
+                    "This milestone boundary capability contradicts the command."
+                )
             return {
                 "allowed_repository": repository_key,
                 "allowed_branch": expected_branch,

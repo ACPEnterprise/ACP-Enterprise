@@ -39,10 +39,17 @@ def validate_request(request: ProviderExecutionRequest) -> None:
         raise BoundaryViolation("Execution boundary digest mismatch.")
     if not MANDATORY_FORBIDDEN <= set(boundary.forbidden_paths):
         raise BoundaryViolation("Mandatory forbidden paths are absent.")
-    if not {"inspect", "modify", "validate", "commit", "mechanical_reconcile", "push"} <= set(
-        boundary.permitted_operations
+    operations = set(boundary.permitted_operations)
+    if request.repository_mutation_allowed:
+        if request.execution_capability_profile != "code_change" or operations != {
+            "inspect", "modify", "validate", "commit", "mechanical_reconcile", "push"
+        }:
+            raise BoundaryViolation("Code-changing authority is incomplete.")
+    elif (
+        request.execution_capability_profile != "inspect_validate_only"
+        or operations != {"inspect", "validate"}
     ):
-        raise BoundaryViolation("Code-changing authority is incomplete.")
+        raise BoundaryViolation("Read-only execution authority is invalid.")
     if not boundary.allowed_paths or not boundary.validation_requirements:
         raise BoundaryViolation("Paths and validation must be explicitly bounded.")
     for pattern in (*boundary.allowed_paths, *boundary.forbidden_paths):
