@@ -170,6 +170,7 @@ class ArtifactEvidence:
     role: ArtifactRole
     requirement: str
     state: ArtifactState
+    source_authority: str
     path: str
     byte_size: int
     sha256: str
@@ -458,6 +459,9 @@ class OpeningPackageValidator:
                 role=role,  # type: ignore[arg-type]
                 requirement=requirement,
                 state=state,  # type: ignore[arg-type]
+                source_authority=self._string(
+                    value, "source_authority", "missing_source_authority"
+                ),
                 path=path_value,
                 byte_size=size,
                 sha256=digest,

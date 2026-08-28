@@ -1,6 +1,6 @@
 <!-- markdownlint-disable MD013 -->
 
-# ACC.MIG.1 Synthetic Runtime Foundation
+# ACC.MIG.1 Native Opening-State Binding
 
 ## Status and authority
 
@@ -51,20 +51,50 @@ commit operation and proves zero committed records after every run. The
 in-memory append-only checkpoint implementation proves retry/resume semantics
 without claiming durable Production evidence.
 
+`NativeOpeningStateService` is the accepted provider-neutral handoff into native
+Accounting. It maps source account and Branch identities to approved native
+targets, verifies the active chart, accounting basis, currency, period,
+balance-sheet classification and applicable control-account assignments, and
+produces a deterministic reconciliation package. Each line preserves source
+authority, source and imported-value digests, target identity, expected and
+prepared debit/credit, difference, limitations, reconciliation identity and
+state. Missing or contradictory evidence is represented as unknown rather than
+zero and is never eligible for posting.
+
+Posting uses `AccountingService.create_journal`, `prepare_journal`,
+`approve_journal`, and `post_journal`; it never writes balances directly. The
+opening journal carries the canonical reconciliation digest as its posting
+source, a deterministic package/version idempotency key, Finance approval
+evidence, and the native control-override evidence. Existing Accounting
+separation of duties, immutable audit entries, Business Events, posting-source
+deduplication and contradictory-replay checks therefore govern the opening
+state. A lifecycle failure is also sent to the existing durable Accounting
+posting-failure evidence seam.
+
+The posted opening journal is an ordinary immutable native ledger fact. ACC.RPT.1
+continues to read only posted General Ledger activity, so trial balance,
+balance-sheet and report checksum/cutoff behavior require no external-record
+exception.
+
 ## Explicit blockers
 
-### Target schemas
+### Persistence decision
 
-No Accounting persistence, ORM mapping, API, target adapter, or Alembic revision
-is created. Those remain blocked until the authoritative sequence lands:
+No new table or Alembic revision is required. Successful authority is already
+durable in the native journal, journal lines, posting-source identity, approval,
+audit and Business Event records. Failed posting evidence uses the existing
+Accounting posting-failure store. Pre-post reconciliation remains a canonical,
+digest-bound value contract and cannot be confused with posted ledger truth.
 
-`ACC.CORE.1 → INVOICE.1-3.ACCEL → PAY.1-3.ACCEL → ACC.AP.1 → ACC.POST.1 → ACC.RPT.1 → ACC.MIG.1`.
+## Finance prerequisites deliberately unresolved
 
-After those contracts exist, ACC.MIG.1 must bind its plan classes to their
-public interfaces without directly writing another domain's tables. If durable
-run/audit/rejection persistence is still required, its migration owns slot 7,
-must descend from the then-current single authoritative head, and must pass the
-full serialization protocol. No sibling head is permitted.
+The service requires explicit versioned references for opening-balance
+acceptance, reconciliation precedence, retained-earnings treatment,
+opening-equity treatment, unresolved AR/AP treatment, unresolved bank/cash
+treatment, materiality, cutover date, period and currency. It validates these
+inputs but supplies no default policy. Account mapping also requires a Finance
+mapping reference. Provider acquisition and the 298 HCP/QBO balance assertions
+remain outside this boundary.
 
 ### Source evidence
 
