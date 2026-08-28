@@ -1115,7 +1115,9 @@ class ControlledExecutionService:
         for command, execution in sources:
             boundary = dict(command.execution_boundary)
             mutation_allowed = command.requested_code_changes
-            operations = set(_evidence_set(boundary.get("permitted_operations")))
+            operations = set(
+                _evidence_set(boundary.get("permitted_operations")) or ()
+            )
             if mutation_allowed:
                 required_operations = {
                     "inspect", "modify", "validate", "commit",
