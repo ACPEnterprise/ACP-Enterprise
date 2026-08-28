@@ -55,8 +55,17 @@ def test_current_projection_reconciles_completion_and_releases_successor() -> No
     assert milestones["BANK.PUR.001"].completion_commit_sha == (
         "88285c7c0879d8df7b42659a9d25c64e5b58a27b"
     )
-    assert milestones["BANK.PLAT.001"].current_state == "EXECUTABLE"
+    assert milestones["BANK.PLAT.001"].current_state == "COMPLETE"
+    assert milestones["BANK.PLAT.001"].canonical_milestone_id == "BANK.PLAT.001"
+    assert milestones["BANK.PLAT.001"].completion_commit_sha == (
+        "0f6559ecddb7ca3854c79ea7b5cb31432318976a"
+    )
+    assert milestones["BANK.PUR.002"].current_state == "EXECUTABLE"
+    assert milestones["BANK.PLAT.002"].current_state == "EXECUTABLE"
     assert "BANK.PUR.001" not in projection.executable_milestone_ids
+    assert "BANK.PLAT.001" not in projection.executable_milestone_ids
+    assert "BANK.PUR.002" in projection.executable_milestone_ids
+    assert "BANK.PLAT.002" in projection.executable_milestone_ids
     assert "BANK.BEA.001" in projection.executable_milestone_ids
 
 
@@ -66,7 +75,7 @@ def test_unresolved_predecessor_blocks_successor() -> None:
     raw["completion_evidence"] = [
         item
         for item in raw["completion_evidence"]  # type: ignore[union-attr]
-        if item["bank_milestone_id"] != "BANK.PUR.001"
+        if item["bank_milestone_id"] not in {"BANK.PUR.001", "BANK.PLAT.001"}
     ]
     authority = ingest_authority_snapshot(_resign(raw), bank)
 
@@ -128,7 +137,7 @@ def test_active_collision_domain_blocks_other_work() -> None:
     ]
     authority = ingest_authority_snapshot(_resign(raw), bank)
     milestone = _by_id(evaluate_readiness(bank, authority))["BANK.PLAT.001"]
-    assert milestone.current_state == "EXECUTABLE"
+    assert milestone.current_state == "COMPLETE"
     purchasing = _by_id(evaluate_readiness(bank, authority))["BANK.PUR.003"]
     assert purchasing.current_state in {"BLOCKED_DEPENDENCY", "BLOCKED_COLLISION"}
 
@@ -136,6 +145,11 @@ def test_active_collision_domain_blocks_other_work() -> None:
 def test_collision_blocks_dependency_ready_candidate() -> None:
     bank = load_milestone_bank()
     raw = _authority_raw()
+    raw["completion_evidence"] = [
+        item
+        for item in raw["completion_evidence"]  # type: ignore[union-attr]
+        if item["bank_milestone_id"] != "BANK.PLAT.001"
+    ]
     raw["active_ownership"] = [
         {
             "bank_milestone_id": "BANK.PLAT.002",
