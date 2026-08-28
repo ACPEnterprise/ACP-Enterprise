@@ -12,6 +12,7 @@ from app.beacon.errors import (
     BeaconSignalStaleError,
     BeaconSnoozeInvalidError,
 )
+from app.beacon.evidence_evaluation import EVIDENCE_EVALUATION_REGISTRY
 from app.beacon.lifecycle import (
     RecordBeaconLifecycleAction,
     beacon_lifecycle_service,
@@ -23,6 +24,8 @@ from app.beacon.schemas import (
     BeaconSignalPage,
     BeaconSignalResponse,
     BeaconSnoozeCommandRequest,
+    EvidenceEvaluationRegistrationResponse,
+    EvidenceEvaluationRegistryResponse,
     OperationalSignalCatalogResponse,
     OperationalSignalDefinitionResponse,
 )
@@ -67,6 +70,37 @@ async def operational_signal_catalog(
                 }
             )
             for definition in catalog.definitions
+        ),
+    )
+
+
+@router.get(
+    "/evaluation-readiness",
+    response_model=EvidenceEvaluationRegistryResponse,
+    summary="List evidence-bound evaluator readiness",
+)
+async def evidence_evaluation_readiness(
+    context: BeaconReader,
+) -> EvidenceEvaluationRegistryResponse:
+    return EvidenceEvaluationRegistryResponse(
+        catalog_id=OPERATIONAL_SIGNAL_CATALOG.catalog_id,
+        catalog_digest=OPERATIONAL_SIGNAL_CATALOG.catalog_digest,
+        company_id=context.company.id,
+        active_branch_id=context.active_branch.id if context.active_branch else None,
+        registrations=tuple(
+            EvidenceEvaluationRegistrationResponse(
+                definition_id=registration.definition_id,
+                family=registration.family,
+                readiness=registration.readiness,
+                authoritative_source_contract=(
+                    registration.authoritative_source_contract
+                ),
+                required_fact_contract=registration.required_fact_contract,
+                evaluator_implemented=registration.evaluator_implemented,
+                blocker=registration.blocker,
+                limitations=registration.limitations,
+            )
+            for registration in EVIDENCE_EVALUATION_REGISTRY.registrations
         ),
     )
 

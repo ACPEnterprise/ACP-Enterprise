@@ -19,6 +19,7 @@ from app.beacon.contracts import (
     BeaconSeverity,
     BeaconSignalSource,
 )
+from app.beacon.evidence_evaluation import EvaluationReadiness
 
 
 class BeaconConfidenceResponse(BaseModel):
@@ -166,3 +167,22 @@ class OperationalSignalCatalogResponse(BaseModel):
     company_id: UUID
     active_branch_id: UUID | None
     definitions: tuple[OperationalSignalDefinitionResponse, ...]
+
+
+class EvidenceEvaluationRegistrationResponse(BaseModel):
+    definition_id: str
+    family: OperationalSignalFamily
+    readiness: EvaluationReadiness
+    authoritative_source_contract: str
+    required_fact_contract: tuple[str, ...]
+    evaluator_implemented: bool
+    blocker: str | None
+    limitations: tuple[str, ...]
+
+
+class EvidenceEvaluationRegistryResponse(BaseModel):
+    catalog_id: str
+    catalog_digest: str
+    company_id: UUID
+    active_branch_id: UUID | None
+    registrations: tuple[EvidenceEvaluationRegistrationResponse, ...]
