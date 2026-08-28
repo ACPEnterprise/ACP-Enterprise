@@ -10,6 +10,7 @@ from app.platform.permissions.codes import (
     JobPermission,
     LaunchPlatformPermission,
     PriceBookPermission,
+    PurchasingPermission,
     SchedulingPermission,
 )
 
@@ -62,6 +63,8 @@ LAUNCH_ROLE_MATRIX = (
                 InventoryPermission.MANAGE,
                 InventoryPermission.MOVE,
                 InventoryPermission.RESERVE,
+                PurchasingPermission.READ,
+                PurchasingPermission.MANAGE,
             }
         ),
     ),

@@ -30,6 +30,7 @@ export type NavigationItemId =
   | "accounts-payable"
   | "financial-reports"
   | "inventory"
+  | "purchasing"
   | "technician"
   | "administration"
   | "employees"
