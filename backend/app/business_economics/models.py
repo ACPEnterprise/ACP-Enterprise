@@ -130,6 +130,7 @@ class FinancePolicySnapshotRecord(Base):
     policy_ids: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
     policy_digests: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
     deferred_family_keys: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    parameter_gap_digests: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
     definition_version: Mapped[str] = mapped_column(String(80), nullable=False)
     snapshot_digest: Mapped[str] = mapped_column(String(64), nullable=False)
     created_by_user_id: Mapped[UUID] = mapped_column(
@@ -193,4 +194,45 @@ class CompanyFinancePolicyParameter(Base):
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
+class CompanyFinancePolicyGap(Base):
+    __tablename__ = "economics_company_policy_gaps"
+    __table_args__ = (
+        CheckConstraint("branch_id IS NULL", name="ck_eco_policy_gap_company_scope_v1"),
+        CheckConstraint(
+            "state IN ('unresolved','resolved')", name="ck_eco_policy_gap_state"
+        ),
+        UniqueConstraint(
+            "company_id",
+            "family_key",
+            "gap_key",
+            "effective_start",
+            name="uq_eco_policy_gap_identity",
+        ),
+        Index("ix_eco_policy_gap_open", "company_id", "family_key", "state"),
+    )
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True)
+    company_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    branch_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    family_key: Mapped[str] = mapped_column(String(100), nullable=False)
+    gap_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    requirement: Mapped[str] = mapped_column(Text, nullable=False)
+    authority_dependency: Mapped[str] = mapped_column(String(200), nullable=False)
+    effective_start: Mapped[date] = mapped_column(Date, nullable=False)
+    state: Mapped[str] = mapped_column(String(20), nullable=False)
+    decision_evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    gap_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    registered_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    registered_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
     )

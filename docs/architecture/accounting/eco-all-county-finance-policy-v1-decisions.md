@@ -1,6 +1,6 @@
 # All County Finance Policy v1 — owner decision record
 
-Status: **OWNER SELECTED — NOT YET IMPLEMENTED**
+Status: **OWNER SELECTED — NON-PRODUCTION ACTIVATION CANDIDATE IMPLEMENTED**
 
 Decision-record version: `all-county.finance-policy-decisions.v1`
 
@@ -221,6 +221,19 @@ Still blocked by evidence:
 
 `BANK.ECO.001` therefore remains blocked. It must not begin automatically from this
 decision record.
+
+## Non-production activation path
+
+`all_county_v1.build_all_county_policy_v1` seals the twelve Company policy
+versions, unresolved parameter/authority gaps, intended metric identity, and policy
+snapshot only after an authoritative `company_id`, approver user identity, and
+approval timestamp are supplied. Importing the configuration performs no activation.
+
+Production activation is deliberately separate: resolve the real Company and owner
+membership through Enterprise authorization, invoke the permission-controlled policy
+service with those identities, persist the exact sealed bundle, verify its decision
+and snapshot digests, and record the activation audit event. No Production identity
+or policy row is embedded in Git or activated by this milestone.
 
 ## Future requirement — Technician Economic Attribution & Fully Loaded Employee Cost
 

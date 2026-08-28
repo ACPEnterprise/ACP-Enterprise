@@ -389,6 +389,55 @@ def seal_policy_parameter(**values: Any) -> PolicyParameterRecord:
     )
 
 
+@dataclass(frozen=True)
+class PolicyParameterGap:
+    gap_id: UUID
+    company_id: UUID
+    branch_id: UUID | None
+    family_key: str
+    gap_key: str
+    requirement: str
+    authority_dependency: str
+    effective_start: date
+    registered_by_user_id: UUID
+    registered_at: datetime
+    decision_evidence_digest: str
+    gap_digest: str
+
+    def canonical_content(self) -> dict[str, object]:
+        return {
+            "gap_id": str(self.gap_id),
+            "company_id": str(self.company_id),
+            "branch_id": str(self.branch_id) if self.branch_id else None,
+            "family_key": self.family_key,
+            "gap_key": self.gap_key,
+            "requirement": self.requirement,
+            "authority_dependency": self.authority_dependency,
+            "effective_start": self.effective_start.isoformat(),
+            "registered_by_user_id": str(self.registered_by_user_id),
+            "registered_at": self.registered_at.isoformat(),
+            "decision_evidence_digest": self.decision_evidence_digest,
+            "state": "unresolved",
+        }
+
+    def validate(self) -> None:
+        if self.family_key not in POLICY_FAMILY_REGISTRY or self.branch_id is not None:
+            raise PolicyIntegrityError("invalid policy gap family or scope")
+        if not self.gap_key or not self.requirement or not self.authority_dependency:
+            raise PolicyIntegrityError(
+                "policy gap identity and requirement are required"
+            )
+        if canonical_digest(self.canonical_content()) != self.gap_digest:
+            raise PolicyIntegrityError("policy gap digest mismatch")
+
+
+def seal_policy_gap(**values: Any) -> PolicyParameterGap:
+    draft = PolicyParameterGap(**values, gap_digest="")
+    return PolicyParameterGap(
+        **values, gap_digest=canonical_digest(draft.canonical_content())
+    )
+
+
 def resolve_policy_authority(
     policies: Sequence[CompanyPolicyVersion],
     *,
@@ -556,6 +605,7 @@ class PolicySnapshot:
     as_of: date
     policies: tuple[CompanyPolicyVersion, ...]
     deferred_family_keys: tuple[str, ...]
+    parameter_gaps: tuple[PolicyParameterGap, ...]
     definition_version: str
     snapshot_digest: str
 
@@ -568,6 +618,9 @@ class PolicySnapshot:
             "as_of": self.as_of.isoformat(),
             "policy_digests": sorted(policy.policy_digest for policy in self.policies),
             "deferred_family_keys": sorted(self.deferred_family_keys),
+            "parameter_gap_digests": sorted(
+                gap.gap_digest for gap in self.parameter_gaps
+            ),
             "definition_version": self.definition_version,
         }
 
@@ -579,6 +632,10 @@ class PolicySnapshot:
                 or policy.branch_id != self.branch_id
             ):
                 raise PolicyIntegrityError("policy snapshot scope mismatch")
+        for gap in self.parameter_gaps:
+            gap.validate()
+            if gap.company_id != self.company_id or gap.branch_id != self.branch_id:
+                raise PolicyIntegrityError("policy gap snapshot scope mismatch")
         if canonical_digest(self.canonical_content()) != self.snapshot_digest:
             raise PolicyIntegrityError("policy snapshot digest mismatch")
 
@@ -592,6 +649,7 @@ def build_policy_snapshot(
     reconciliation_key: str,
     as_of: date,
     required_families: Sequence[str],
+    parameter_gaps: Sequence[PolicyParameterGap] = (),
 ) -> PolicySnapshot:
     resolutions = tuple(
         resolve_policy_authority(
@@ -611,6 +669,12 @@ def build_policy_snapshot(
             "policy snapshot has unresolved or conflicting family"
         )
     selected = tuple(item.policy for item in resolutions if item.policy is not None)
+    relevant_gaps = tuple(
+        sorted(
+            (gap for gap in parameter_gaps if gap.family_key in required_families),
+            key=lambda gap: (gap.family_key, gap.gap_key),
+        )
+    )
     base = PolicySnapshot(
         company_id=company_id,
         branch_id=branch_id,
@@ -623,6 +687,7 @@ def build_policy_snapshot(
             for item in resolutions
             if item.state is PolicyResolutionState.DEFERRED
         ),
+        parameter_gaps=relevant_gaps,
         definition_version=SNAPSHOT_DEFINITION_VERSION,
         snapshot_digest="",
     )
@@ -634,6 +699,7 @@ def build_policy_snapshot(
         as_of=base.as_of,
         policies=base.policies,
         deferred_family_keys=base.deferred_family_keys,
+        parameter_gaps=base.parameter_gaps,
         definition_version=base.definition_version,
         snapshot_digest=canonical_digest(base.canonical_content()),
     )

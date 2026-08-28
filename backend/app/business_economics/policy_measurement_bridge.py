@@ -35,6 +35,9 @@ def policy_snapshot_to_prerequisites(
         resolved = (
             policy.family_key not in snapshot.deferred_family_keys
             and not missing_required_parameters(policy)
+            and not any(
+                gap.family_key == policy.family_key for gap in snapshot.parameter_gaps
+            )
         )
         prerequisites.append(
             PolicyPrerequisite(
