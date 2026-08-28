@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
 from enum import Enum
+from uuid import UUID
 
 from .findings import EconomicInconsistencyFinding, FindingState, SubjectKind
 from .source_conformance import EconomicComponent, EvidenceConfidence
@@ -61,6 +62,8 @@ class MeasurementEvidenceInput:
     value_digest: str
     package_digest: str
     definition_version: str = MEASUREMENT_DEFINITION_VERSION
+    company_id: UUID | None = None
+    branch_id: UUID | None = None
 
     def __post_init__(self) -> None:
         if not self.input_id or not self.subject_id or not self.reconciliation_key:
@@ -240,6 +243,8 @@ def evaluate_contribution_measurement_gate(
                 "value_digest": item.value_digest,
                 "package_digest": item.package_digest,
                 "definition_version": item.definition_version,
+                "company_id": str(item.company_id) if item.company_id else None,
+                "branch_id": str(item.branch_id) if item.branch_id else None,
             }
             for item in relevant_evidence
         ],

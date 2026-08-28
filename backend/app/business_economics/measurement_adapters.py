@@ -118,6 +118,8 @@ def _job_input(
         evidence_digest=evidence_digest,
         value_digest=evidence_digest,
         package_digest=context.package_digest,
+        company_id=context.company_id,
+        branch_id=context.branch_id,
     )
 
 
@@ -150,6 +152,8 @@ def adapt_accounting_posting_fact(
         evidence_digest=fact.evidence_digest,
         value_digest=fact.canonical_digest(),
         package_digest=context.package_digest,
+        company_id=context.company_id,
+        branch_id=context.branch_id,
     )
 
 
@@ -194,6 +198,8 @@ def adapt_public_operational_measurement(
         evidence_digest=evidence.evidence_digest,
         value_digest=evidence.value_digest,
         package_digest=evidence.package_digest,
+        company_id=context.company_id,
+        branch_id=context.branch_id,
     )
 
 
@@ -240,6 +246,8 @@ def adapt_qbo_source_reported_measurement(
         evidence_digest=evidence.raw_sha256,
         value_digest=evidence.source_envelope_sha256,
         package_digest=evidence.source_manifest_sha256,
+        company_id=context.company_id,
+        branch_id=context.branch_id,
     )
 
 
