@@ -4,11 +4,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import TYPE_CHECKING
 
 from app.beacon.catalog import OPERATIONAL_SIGNAL_CATALOG, OperationalSignalFamily
 from app.beacon.contracts import BeaconSnapshot
-from app.beacon.evaluation import SignalEvaluationService, signal_evaluation_service
 from app.beacon.records import BeaconSignal
+
+if TYPE_CHECKING:
+    from app.beacon.evaluation import SignalEvaluationService
 
 
 class EvaluationReadiness(StrEnum):
@@ -87,9 +90,13 @@ class EvidenceEvaluationRegistry:
         self,
         snapshot: BeaconSnapshot,
         *,
-        evaluator: SignalEvaluationService = signal_evaluation_service,
+        evaluator: SignalEvaluationService | None = None,
     ) -> tuple[BeaconSignal, ...]:
         """Run only accepted legacy evaluators and prove their catalog admission."""
+        if evaluator is None:
+            from app.beacon.evaluation import signal_evaluation_service
+
+            evaluator = signal_evaluation_service
         signals = evaluator.evaluate_signals(snapshot)
         accepted_rule_codes = {
             registration.evaluator_code

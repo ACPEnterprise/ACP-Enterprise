@@ -17,6 +17,7 @@ from app.beacon.lifecycle import (
     RecordBeaconLifecycleAction,
     beacon_lifecycle_service,
 )
+from app.beacon.quality import EVIDENCE_QUALITY_SERVICE
 from app.beacon.schemas import (
     BeaconLifecycleCommandRequest,
     BeaconLifecycleEventResponse,
@@ -24,6 +25,8 @@ from app.beacon.schemas import (
     BeaconSignalPage,
     BeaconSignalResponse,
     BeaconSnoozeCommandRequest,
+    DefinitionQualityRegistryResponse,
+    DefinitionQualitySemanticsResponse,
     EvidenceEvaluationRegistrationResponse,
     EvidenceEvaluationRegistryResponse,
     OperationalSignalCatalogResponse,
@@ -101,6 +104,28 @@ async def evidence_evaluation_readiness(
                 limitations=registration.limitations,
             )
             for registration in EVIDENCE_EVALUATION_REGISTRY.registrations
+        ),
+    )
+
+
+@router.get(
+    "/quality-semantics",
+    response_model=DefinitionQualityRegistryResponse,
+    summary="List deterministic confidence and freshness semantics",
+)
+async def signal_quality_semantics(
+    context: BeaconReader,
+) -> DefinitionQualityRegistryResponse:
+    return DefinitionQualityRegistryResponse(
+        catalog_id=OPERATIONAL_SIGNAL_CATALOG.catalog_id,
+        catalog_digest=OPERATIONAL_SIGNAL_CATALOG.catalog_digest,
+        company_id=context.company.id,
+        active_branch_id=context.active_branch.id if context.active_branch else None,
+        definitions=tuple(
+            DefinitionQualitySemanticsResponse.model_validate(
+                semantics, from_attributes=True
+            )
+            for semantics in EVIDENCE_QUALITY_SERVICE.semantics()
         ),
     )
 
