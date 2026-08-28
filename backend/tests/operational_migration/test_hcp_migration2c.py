@@ -10,6 +10,7 @@ from app.operational_migration.hcp_migration2b import (
 from app.operational_migration.hcp_migration2c import (
     ORCHESTRATOR_VERSION,
     CompletionRequirements,
+    EmployeeCandidateCommand,
 )
 from app.operational_migration.hcp_owner_disposition import NonProductionTarget
 from app.operational_migration.hcp_rehearsal_authority import (
@@ -49,9 +50,20 @@ def master_command() -> MasterRunCommand:
         collection_digests={"customers": "a" * 64},
         transformation_contracts={"customers": "hcp-source4-customer/v1"},
         owner_receipts={f"receipt-{index}": str(index) * 64 for index in range(1, 6)},
-        schema_head="c6e0a2b4d957",
+        schema_head="d7f1b3c5e068",
         implementation_version=ORCHESTRATOR_VERSION,
-        supported_entities=("customer", "job"),
+        supported_entities=(
+            "customer",
+            "contact",
+            "service_location",
+            "employee",
+            "job",
+            "appointment",
+            "estimate",
+            "invoice",
+            "payment",
+            "note",
+        ),
         baseline_counts={"customer": 0, "job": 0},
         source_counts={"customer": 1, "job": 2},
     )
@@ -60,7 +72,7 @@ def master_command() -> MasterRunCommand:
 def test_current_master_command_is_deterministic_and_schema_bound() -> None:
     command = master_command()
     command.validate()
-    assert command.schema_head == "c6e0a2b4d957"
+    assert command.schema_head == "d7f1b3c5e068"
     assert command.implementation_version == ORCHESTRATOR_VERSION
 
 
@@ -81,6 +93,14 @@ def test_reconciliation_requires_every_source_subject_to_have_one_outcome() -> N
     requirements = CompletionRequirements(
         customer_lineage=1,
         employee_crosswalks=7,
+        employee_candidates=6,
+        employee_excluded=1,
+        note_outcomes={
+            "persisted": 2640,
+            "duplicate": 0,
+            "exception": 0,
+            "rejected": 0,
+        },
         holds_by_code={"HOLD_OPERATIONAL_RECONCILE_BALANCE": 1},
         hold_counts={"job": 1},
         unlinked_estimates=24,
@@ -126,3 +146,39 @@ def test_preview_production_and_remote_targets_are_rejected() -> None:
 
 def test_sanctioned_context_is_exact() -> None:
     require_sanctioned_context(Context())  # type: ignore[arg-type]
+
+
+def test_employee_candidate_requires_explicit_human_identity() -> None:
+    EmployeeCandidateCommand(
+        native_employee_id="pro_human",
+        disposition="CREATE_ENTERPRISE_EMPLOYEE_CANDIDATE",
+        source_digest="a" * 64,
+        owner_receipt_digest="b" * 64,
+        first_name="Approved",
+        last_name="Human",
+        display_name="Approved Human",
+    ).validate()
+    with pytest.raises(ValueError, match="identity is incomplete"):
+        EmployeeCandidateCommand(
+            native_employee_id="pro_human",
+            disposition="CREATE_ENTERPRISE_EMPLOYEE_CANDIDATE",
+            source_digest="a" * 64,
+            owner_receipt_digest="b" * 64,
+        ).validate()
+
+
+def test_excluded_employee_identity_cannot_carry_candidate_fields() -> None:
+    EmployeeCandidateCommand(
+        native_employee_id="pro_lokal",
+        disposition="EXCLUDE_EMPLOYEE_HOLD_ASSIGNMENTS",
+        source_digest="a" * 64,
+        owner_receipt_digest="b" * 64,
+    ).validate()
+    with pytest.raises(ValueError, match="cannot carry Employee"):
+        EmployeeCandidateCommand(
+            native_employee_id="pro_lokal",
+            disposition="EXCLUDE_EMPLOYEE_HOLD_ASSIGNMENTS",
+            source_digest="a" * 64,
+            owner_receipt_digest="b" * 64,
+            display_name="Not an Employee",
+        ).validate()

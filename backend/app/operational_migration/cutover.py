@@ -25,6 +25,11 @@ from app.operational_migration.cutover_models import (
 from app.operational_migration.cutover_repository import (
     CutoverMigrationRepository,
 )
+from app.operational_migration.hcp_migration2b import SOURCE4_PACKAGE_DIGEST
+from app.operational_migration.hcp_rehearsal_authority import (
+    SOURCE4_SYSTEM,
+    require_sanctioned_context,
+)
 from app.operational_migration.models import OperationalMigrationRun
 from app.operational_migration.service import MigrationReport
 from app.platform.permissions.authorization import AuthorizationContext
@@ -126,6 +131,25 @@ class CutoverMigrationService:
         return normalized
 
     @staticmethod
+    def source_digest(
+        *,
+        source_system: str,
+        history: Sequence[HistoryMigrationRecord],
+        artifacts: Sequence[ArtifactMigrationRecord],
+    ) -> str:
+        return hashlib.sha256(
+            json.dumps(
+                {
+                    "source_system": source_system,
+                    "history": [asdict(record) for record in history],
+                    "artifacts": [asdict(record) for record in artifacts],
+                },
+                sort_keys=True,
+                default=str,
+            ).encode()
+        ).hexdigest()
+
+    @staticmethod
     def _event(
         session: AsyncSession,
         *,
@@ -158,32 +182,31 @@ class CutoverMigrationService:
         history: Sequence[HistoryMigrationRecord],
         artifacts: Sequence[ArtifactMigrationRecord],
         dry_run: bool,
+        master_run_id: UUID | None = None,
         resume_run_id: UUID | None = None,
         interrupt_after: int | None = None,
         progress_callback: Callable[[CutoverProgress], None] | None = None,
     ) -> MigrationReport:
         source_system = self._source_system(source_system)
+        if source_system == SOURCE4_SYSTEM and master_run_id is None:
+            raise CutoverMigrationError("SOURCE.4 history import requires a master run")
+        if source_system == SOURCE4_SYSTEM:
+            require_sanctioned_context(context)
         if context.active_branch is None or not context.can_access_branch(
             context.active_branch.id
         ):
             raise CutoverMigrationError("An authorized active Branch is required.")
-        digest = hashlib.sha256(
-            json.dumps(
-                {
-                    "source_system": source_system,
-                    "history": [asdict(record) for record in history],
-                    "artifacts": [asdict(record) for record in artifacts],
-                },
-                sort_keys=True,
-                default=str,
-            ).encode()
-        ).hexdigest()
+        digest = self.source_digest(
+            source_system=source_system, history=history, artifacts=artifacts
+        )
         if resume_run_id is None:
             async with factory() as session, session.begin():
                 run = OperationalMigrationRun(
                     company_id=context.company.id,
                     branch_id=context.active_branch.id,
                     initiated_by_user_id=context.user.id,
+                    master_run_id=master_run_id,
+                    master_domain="history" if master_run_id is not None else None,
                     source_system=source_system,
                     source_digest=digest,
                     mode="dry_run" if dry_run else "import",
@@ -205,6 +228,11 @@ class CutoverMigrationService:
                     or existing_run.branch_id != context.active_branch.id
                     or existing_run.status != "interrupted"
                     or existing_run.source_digest != digest
+                    or existing_run.master_run_id != master_run_id
+                    or (
+                        master_run_id is not None
+                        and existing_run.master_domain != "history"
+                    )
                 ):
                     raise CutoverMigrationError(
                         "Run is not an interrupted matching migration."
@@ -394,12 +422,20 @@ class CutoverMigrationService:
         parent_id: UUID,
         record: HistoryMigrationRecord,
     ) -> tuple[Disposition, str | None]:
-        if await self._repository.history_exists(
+        existing = await self._repository.history_by_source(
             session,
             company_id=context.company.id,
             source_system=source_system,
             source_hash=source_hash,
-        ):
+        )
+        if existing is not None:
+            if source_system == SOURCE4_SYSTEM and (
+                existing.parent_id != parent_id
+                or existing.external_metadata != self._json(
+                    record.external_metadata, "metadata"
+                )
+            ):
+                raise CutoverMigrationError("history_source_identity_conflict")
             return "duplicate", "source_identity_exists"
         text = " ".join(record.summary_text.split())
         if not text or len(text) > 4000:
@@ -431,6 +467,18 @@ class CutoverMigrationService:
             {tag.strip().lower() for tag in record.tags} - self.supported_tags
         )
         attributes = self._json(record.attributes, "attributes")
+        metadata = self._json(record.external_metadata, "metadata")
+        if source_system == SOURCE4_SYSTEM and (
+            metadata.get("provider") != "housecall_pro"
+            or metadata.get("source_package_digest") != SOURCE4_PACKAGE_DIGEST
+            or not isinstance(metadata.get("source_digest"), str)
+            or len(str(metadata["source_digest"])) != 64
+            or metadata.get("transformation_contract")
+            != "hcp_source4_job_notes_partial_api_v1"
+            or metadata.get("accepted_accounting_truth") is not False
+            or metadata.get("provenance_completeness") != "PARTIAL"
+        ):
+            raise CutoverMigrationError("source4_history_lineage_invalid")
         normalized_attributes = {
             key: value
             for key, value in attributes.items()
@@ -458,7 +506,7 @@ class CutoverMigrationService:
             supported_tags=supported_tags,
             normalized_attributes=normalized_attributes,
             unsupported_attribute_keys=unsupported_keys,
-            external_metadata=self._json(record.external_metadata, "metadata"),
+            external_metadata=metadata,
             first_run_id=run_id,
         )
         self._repository.add_history(session, entry)

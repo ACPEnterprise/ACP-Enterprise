@@ -385,7 +385,14 @@ def build_appointment(row: Mapping[str, object]) -> AppointmentMigrationRecord:
         assigned_technician_source_ids=tuple(
             _id(value, "dispatched_employees_ids", "pro_") for value in dispatched
         ),
-        external_metadata=_metadata(row),
+        external_metadata={
+            **_metadata(row),
+            "transformation_contract": "hcp_source4_job_notes_partial_api_v1",
+            "provenance_completeness": "PARTIAL",
+            "author_provenance": "UNAVAILABLE",
+            "timestamp_provenance": "SOURCE_REPORTED_WHERE_AVAILABLE",
+            "attachment_availability": "NOT_ASSERTED",
+        },
     )
 
 

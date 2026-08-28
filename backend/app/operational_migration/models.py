@@ -282,7 +282,8 @@ class OperationalMigrationRun(Base):
         ),
         CheckConstraint(
             "source_system <> 'housecall_pro_source4' OR "
-            "(master_run_id IS NOT NULL AND master_domain IN ('operational','financial'))",
+            "(master_run_id IS NOT NULL AND "
+            "master_domain IN ('operational','financial','history'))",
             name="ck_operational_source4_master_required",
         ),
         ForeignKeyConstraint(

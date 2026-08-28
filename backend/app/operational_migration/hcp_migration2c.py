@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from urllib.parse import urlparse
-from uuid import UUID
+from uuid import UUID, uuid5
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -17,6 +17,10 @@ from app.customer_migration.adapter_import import (
     ReviewedCustomerAggregate,
 )
 from app.customer_migration.models import CustomerMigrationRun, CustomerSourceIdentity
+from app.operational_migration.cutover import (
+    CutoverMigrationService,
+    HistoryMigrationRecord,
+)
 from app.operational_migration.financial import (
     EstimateMigrationRecord,
     FinancialMigrationService,
@@ -60,21 +64,76 @@ from app.operational_migration.service import (
     MigrationReport,
     OperationalMigrationService,
 )
+from app.platform.employees.models import Employee
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.users.models import UserCredential
 
-REQUIRED_CHILD_DOMAINS = ("customer", "operational", "financial")
+REQUIRED_CHILD_DOMAINS = ("customer", "operational", "financial", "history")
+REQUIRED_SOURCE4_ENTITIES = frozenset(
+    {
+        "customer",
+        "contact",
+        "service_location",
+        "employee",
+        "job",
+        "appointment",
+        "estimate",
+        "invoice",
+        "payment",
+        "note",
+    }
+)
 TERMINAL_CHILD_STATUSES = frozenset(
     {"completed", "completed_with_exceptions", "failed"}
 )
 COMPLETABLE_CHILD_STATUSES = frozenset({"completed", "completed_with_exceptions"})
-ORCHESTRATOR_VERSION = "hcp-migration-2c-orchestrator/v1"
+ORCHESTRATOR_VERSION = "hcp-migration-2d-orchestrator/v1"
+EMPLOYEE_NAMESPACE = UUID("82f43837-ceec-5d02-bb92-cf65b9ac6af8")
+
+
+@dataclass(frozen=True)
+class EmployeeCandidateCommand:
+    native_employee_id: str
+    disposition: str
+    source_digest: str
+    owner_receipt_digest: str
+    first_name: str | None = None
+    last_name: str | None = None
+    display_name: str | None = None
+    job_title: str | None = None
+
+    def validate(self) -> None:
+        EmployeeCrosswalkCommand(
+            native_employee_id=self.native_employee_id,
+            disposition=self.disposition,
+            source_digest=self.source_digest,
+            owner_receipt_digest=self.owner_receipt_digest,
+        ).validate()
+        if self.disposition == "CREATE_ENTERPRISE_EMPLOYEE_CANDIDATE":
+            if not all(
+                value is not None and value.strip()
+                for value in (self.first_name, self.last_name, self.display_name)
+            ):
+                raise ValueError("approved Employee candidate identity is incomplete")
+        elif any(
+            value is not None
+            for value in (
+                self.first_name,
+                self.last_name,
+                self.display_name,
+                self.job_title,
+            )
+        ):
+            raise ValueError("excluded identity cannot carry Employee candidate fields")
 
 
 @dataclass(frozen=True)
 class CompletionRequirements:
     customer_lineage: int
     employee_crosswalks: int
+    employee_candidates: int
+    employee_excluded: int
+    note_outcomes: dict[str, int]
     holds_by_code: dict[str, int]
     hold_counts: dict[str, int]
     unlinked_estimates: int
@@ -122,10 +181,12 @@ class HcpMigration2Orchestrator:
         customer_service: CustomerAdapterImportService | None = None,
         operational_service: OperationalMigrationService | None = None,
         financial_service: FinancialMigrationService | None = None,
+        history_service: CutoverMigrationService | None = None,
     ) -> None:
         self._customers = customer_service or CustomerAdapterImportService()
         self._operations = operational_service or OperationalMigrationService()
         self._financials = financial_service or FinancialMigrationService()
+        self._history = history_service or CutoverMigrationService()
 
     @staticmethod
     async def _authorize(
@@ -174,6 +235,8 @@ class HcpMigration2Orchestrator:
         assert branch is not None
         if command.implementation_version != ORCHESTRATOR_VERSION:
             raise ValueError("unexpected orchestration implementation version")
+        if not REQUIRED_SOURCE4_ENTITIES.issubset(command.supported_entities):
+            raise ValueError("master omits a required SOURCE.4 entity domain")
         expected_input_digest = canonical_sha256(
             command.input_payload(
                 company_id=context.company.id,
@@ -398,6 +461,61 @@ class HcpMigration2Orchestrator:
             master_run_id=master_run_id,
         )
 
+    async def run_history(
+        self,
+        factory: async_sessionmaker[AsyncSession],
+        *,
+        context: AuthorizationContext,
+        master_run_id: UUID,
+        notes: tuple[HistoryMigrationRecord, ...],
+        resume_run_id: UUID | None = None,
+        interrupt_after: int | None = None,
+    ) -> MigrationReport:
+        async with factory() as session:
+            await self._active_master(
+                session, context=context, master_run_id=master_run_id
+            )
+            existing = await session.scalar(
+                select(OperationalMigrationRun).where(
+                    OperationalMigrationRun.master_run_id == master_run_id,
+                    OperationalMigrationRun.master_domain == "history",
+                )
+            )
+            if existing is not None and resume_run_id is None:
+                if existing.status not in COMPLETABLE_CHILD_STATUSES:
+                    raise ValueError("History child requires explicit resume")
+                expected_digest = self._history.source_digest(
+                    source_system=SOURCE4_SYSTEM,
+                    history=notes,
+                    artifacts=(),
+                )
+                if existing.source_digest != expected_digest:
+                    raise ValueError("History replay changed immutable Note evidence")
+                return MigrationReport(
+                    existing.id,
+                    existing.mode,
+                    existing.source_count,
+                    existing.accepted_count,
+                    existing.rejected_count,
+                    existing.duplicate_count,
+                    existing.unresolved_count,
+                )
+            if resume_run_id is not None and (
+                existing is None or existing.id != resume_run_id
+            ):
+                raise ValueError("History resume run is outside the active master")
+        return await self._history.run(
+            factory,
+            context=context,
+            source_system=SOURCE4_SYSTEM,
+            history=notes,
+            artifacts=(),
+            dry_run=False,
+            master_run_id=master_run_id,
+            resume_run_id=resume_run_id,
+            interrupt_after=interrupt_after,
+        )
+
     async def persist_employee(
         self,
         session: AsyncSession,
@@ -414,6 +532,95 @@ class HcpMigration2Orchestrator:
             command=command,
         )
         return created
+
+    async def persist_employee_candidate(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        master_run_id: UUID,
+        command: EmployeeCandidateCommand,
+    ) -> tuple[Employee | None, bool]:
+        await self._active_master(session, context=context, master_run_id=master_run_id)
+        command.validate()
+        existing = await session.scalar(
+            select(HcpEmployeeSourceCrosswalk).where(
+                HcpEmployeeSourceCrosswalk.company_id == context.company.id,
+                HcpEmployeeSourceCrosswalk.native_employee_id
+                == command.native_employee_id,
+                HcpEmployeeSourceCrosswalk.evidence_version == 1,
+            )
+        )
+        employee_id = (
+            uuid5(
+                EMPLOYEE_NAMESPACE,
+                f"{context.company.id}:{command.native_employee_id}",
+            )
+            if command.disposition == "CREATE_ENTERPRISE_EMPLOYEE_CANDIDATE"
+            else None
+        )
+        crosswalk = EmployeeCrosswalkCommand(
+            native_employee_id=command.native_employee_id,
+            disposition=command.disposition,
+            source_digest=command.source_digest,
+            owner_receipt_digest=command.owner_receipt_digest,
+            employee_id=employee_id,
+        )
+        if existing is not None:
+            if (
+                existing.master_run_id != master_run_id
+                or existing.evidence_digest != crosswalk.evidence_digest
+                or existing.employee_id != employee_id
+            ):
+                raise ValueError("contradictory Employee source identity persistence")
+            employee = (
+                await session.get(Employee, existing.employee_id)
+                if existing.employee_id is not None
+                else None
+            )
+            if existing.employee_id is not None and employee is None:
+                raise ValueError("Employee crosswalk target is missing")
+            return employee, False
+        if employee_id is None:
+            await persist_employee_crosswalk(
+                session,
+                context=context,
+                master_run_id=master_run_id,
+                command=crosswalk,
+            )
+            return None, True
+        if await session.get(Employee, employee_id) is not None:
+            raise ValueError("deterministic Employee exists without source crosswalk")
+        assert context.active_branch is not None
+        assert command.first_name is not None
+        assert command.last_name is not None
+        assert command.display_name is not None
+        employee = Employee(
+            id=employee_id,
+            company_id=context.company.id,
+            membership_id=None,
+            home_branch_id=context.active_branch.id,
+            employee_number=f"HCP-{command.source_digest[:16].upper()}",
+            first_name=command.first_name.strip(),
+            last_name=command.last_name.strip(),
+            display_name=command.display_name.strip(),
+            job_title=command.job_title.strip() if command.job_title else None,
+            employee_type="employee",
+            status="inactive",
+            hire_date=None,
+            termination_date=None,
+            created_by_user_id=context.user.id,
+            updated_by_user_id=context.user.id,
+        )
+        session.add(employee)
+        await session.flush()
+        await persist_employee_crosswalk(
+            session,
+            context=context,
+            master_run_id=master_run_id,
+            command=replace(crosswalk, employee_id=employee.id),
+        )
+        return employee, True
 
     async def persist_held_subject(
         self,
@@ -508,12 +715,17 @@ class HcpMigration2Orchestrator:
             ).all()
         )
         by_domain = {item.master_domain: item for item in operational_runs}
-        if customer_run is None or set(by_domain) != {"operational", "financial"}:
+        if customer_run is None or set(by_domain) != {
+            "operational",
+            "financial",
+            "history",
+        }:
             raise ValueError("required child migration run is missing")
         child_runs: dict[str, CustomerMigrationRun | OperationalMigrationRun] = {
             "customer": customer_run,
             "operational": by_domain["operational"],
             "financial": by_domain["financial"],
+            "history": by_domain["history"],
         }
         if any(
             item.status not in TERMINAL_CHILD_STATUSES for item in child_runs.values()
@@ -534,6 +746,26 @@ class HcpMigration2Orchestrator:
             select(func.count())
             .select_from(HcpEmployeeSourceCrosswalk)
             .where(HcpEmployeeSourceCrosswalk.master_run_id == master_run_id)
+        )
+        candidate_count = await session.scalar(
+            select(func.count())
+            .select_from(HcpEmployeeSourceCrosswalk)
+            .where(
+                HcpEmployeeSourceCrosswalk.master_run_id == master_run_id,
+                HcpEmployeeSourceCrosswalk.disposition
+                == "CREATE_ENTERPRISE_EMPLOYEE_CANDIDATE",
+                HcpEmployeeSourceCrosswalk.employee_id.is_not(None),
+            )
+        )
+        excluded_count = await session.scalar(
+            select(func.count())
+            .select_from(HcpEmployeeSourceCrosswalk)
+            .where(
+                HcpEmployeeSourceCrosswalk.master_run_id == master_run_id,
+                HcpEmployeeSourceCrosswalk.disposition
+                == "EXCLUDE_EMPLOYEE_HOLD_ASSIGNMENTS",
+                HcpEmployeeSourceCrosswalk.employee_id.is_(None),
+            )
         )
         unlinked_count = await session.scalar(
             select(func.count())
@@ -565,6 +797,21 @@ class HcpMigration2Orchestrator:
             raise ValueError("Customer success is missing immutable SOURCE.4 lineage")
         if employee_count != requirements.employee_crosswalks:
             raise ValueError("Employee crosswalk reconciliation is incomplete")
+        if (
+            candidate_count != requirements.employee_candidates
+            or excluded_count != requirements.employee_excluded
+            or employee_count != candidate_count + excluded_count
+        ):
+            raise ValueError("Employee candidate/exclusion accounting is incomplete")
+        history = by_domain["history"]
+        actual_note_outcomes = {
+            "persisted": history.accepted_count,
+            "duplicate": history.duplicate_count,
+            "exception": history.unresolved_count,
+            "rejected": history.rejected_count,
+        }
+        if actual_note_outcomes != requirements.note_outcomes:
+            raise ValueError("Note/history reconciliation is incomplete")
         if holds_by_code != requirements.holds_by_code:
             raise ValueError("HOLD reconciliation is incomplete")
         if hold_counts != requirements.hold_counts:
