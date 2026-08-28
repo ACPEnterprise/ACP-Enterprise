@@ -28,6 +28,7 @@ from app.platform.permissions.codes import (
     WorkerControlPermission,
     WorkerIdentityPermission,
 )
+from app.timekeeping.permissions import TimekeepingPermission
 
 CODE_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]*$")
 
@@ -151,6 +152,17 @@ BEACON_DEFINITIONS = tuple(
         scope=PermissionScope.COMPANY,
     )
     for code in sorted(BeaconPermission.ALL)
+)
+
+TIMEKEEPING_DEFINITIONS = tuple(
+    PermissionDefinition(
+        code=code,
+        name=code.replace("_", " ").title(),
+        resource="timekeeping",
+        action=code.removeprefix("COMPANY_TIMEKEEPING_").lower(),
+        scope=PermissionScope.COMPANY,
+    )
+    for code in sorted(TimekeepingPermission.ALL)
 )
 
 SCHEDULING_DEFINITIONS = tuple(
@@ -371,6 +383,7 @@ permission_catalog = PermissionCatalog(
     + CUSTOMER_DEFINITIONS
     + ANALYTICS_DEFINITIONS
     + BEACON_DEFINITIONS
+    + TIMEKEEPING_DEFINITIONS
     + SCHEDULING_DEFINITIONS
     + JOB_DEFINITIONS
     + DISPATCH_DEFINITIONS

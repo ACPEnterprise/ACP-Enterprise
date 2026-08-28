@@ -1,5 +1,7 @@
 from logging.config import fileConfig
 
+from sqlalchemy import engine_from_config, pool
+
 from alembic import context
 from app.accounts_payable import models as accounts_payable_models  # noqa: F401
 from app.beacon import models as beacon_models  # noqa: F401
@@ -72,13 +74,13 @@ from app.price_book import models as price_book_models  # noqa: F401
 from app.purchasing import models as purchasing_models  # noqa: F401
 from app.scheduling import models as scheduling_models  # noqa: F401
 from app.tax_policy import models as tax_policy_models  # noqa: F401
+from app.timekeeping import models as timekeeping_models  # noqa: F401
 from app.worker_control import models as worker_control_models  # noqa: F401
 from app.worker_control.transport.persistence import (
     models as transport_models,  # noqa: F401
 )
 from app.worker_identity import models as worker_identity_models  # noqa: F401
 from app.workforce import models as workforce_models  # noqa: F401
-from sqlalchemy import engine_from_config, pool
 
 config = context.config
 

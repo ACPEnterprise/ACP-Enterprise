@@ -2,6 +2,14 @@ from enum import Enum
 
 
 class EventType(str, Enum):
+    # Workday Time
+    WORKDAY_PUNCH_RECORDED = "timekeeping.punch_recorded"
+    WORKDAY_MANUAL_TIME_RECORDED = "timekeeping.manual_time_recorded"
+    WORKDAY_TIME_SUBMITTED = "timekeeping.time_submitted"
+    WORKDAY_TIME_APPROVED = "timekeeping.time_approved"
+    WORKDAY_TIME_CORRECTED = "timekeeping.time_corrected"
+    WORKDAY_TIME_SUPERSEDED = "timekeeping.time_superseded"
+
     # Accounts Payable
     ACCOUNTS_PAYABLE_VENDOR_CREATED = "accounts_payable.vendor_created"
     ACCOUNTS_PAYABLE_VENDOR_MAPPED = "accounts_payable.vendor_mapped"
@@ -11,7 +19,9 @@ class EventType(str, Enum):
     ACCOUNTS_PAYABLE_VENDOR_CREDIT_APPLIED = "accounts_payable.vendor_credit_applied"
     ACCOUNTS_PAYABLE_DISBURSEMENT_RECORDED = "accounts_payable.disbursement_recorded"
     ACCOUNTS_PAYABLE_DISBURSEMENT_REVERSED = "accounts_payable.disbursement_reversed"
-    ACCOUNTS_PAYABLE_RECONCILIATION_REQUIRED = "accounts_payable.reconciliation_required"
+    ACCOUNTS_PAYABLE_RECONCILIATION_REQUIRED = (
+        "accounts_payable.reconciliation_required"
+    )
 
     # Payments
     PAYMENT_INTENT_CREATED = "payment.intent_created"
@@ -27,7 +37,9 @@ class EventType(str, Enum):
     PAYMENT_SETTLEMENT_RECEIVED = "payment.settlement_received"
     PAYMENT_SETTLEMENT_RECONCILED = "payment.settlement_reconciled"
     PAYMENT_RECONCILIATION_EXCEPTION_OPENED = "payment.reconciliation_exception_opened"
-    PAYMENT_RECONCILIATION_EXCEPTION_RESOLVED = "payment.reconciliation_exception_resolved"
+    PAYMENT_RECONCILIATION_EXCEPTION_RESOLVED = (
+        "payment.reconciliation_exception_resolved"
+    )
 
     # Accounting
     ACCOUNTING_JOURNAL_POSTED = "accounting.journal_posted"
