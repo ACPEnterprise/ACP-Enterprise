@@ -3,7 +3,7 @@
   "authority_id": "BANK.DF.002.AUTHORITY",
   "bank_id": "BANK.2",
   "bank_fingerprint": "f0af5713c967b92588ed1a82d36f5adc864fc4b235064dad0c5f5d11b158d4b3",
-  "authoritative_repository_sha": "bb3194d4c41c9c7b8ba0ea826f858a055f9cc816",
+  "authoritative_repository_sha": "757695adf73c1d3f8b764bc5427d2bb704b7c8a2",
   "repository_ref": "origin/customer-management-v1",
   "completion_inventory_scope": "ALL_BANK_MILESTONES",
   "completion_evidence": [
@@ -20,6 +20,13 @@
       "evidence_kind": "AUTHORITATIVE_INTEGRATION_ACCEPTANCE",
       "authoritative_commit_sha": "0f6559ecddb7ca3854c79ea7b5cb31432318976a",
       "evidence_reference": "owner-accepted Phase-1 operational integration checkpoint evidence"
+    },
+    {
+      "bank_milestone_id": "BANK.PUR.002",
+      "canonical_milestone_id": "PUR.2",
+      "evidence_kind": "AUTHORITATIVE_INTEGRATION_ACCEPTANCE",
+      "authoritative_commit_sha": "04d74278b914b73ca96838128980218fced32546",
+      "evidence_reference": "owner-accepted partial receiving and discrepancy workflow implementation, migration, UI/API, and fail-closed boundary evidence"
     },
     {
       "bank_milestone_id": "BANK.PLAT.002",
@@ -64,5 +71,5 @@
   ],
   "gate_resolutions": [],
   "active_ownership": [],
-  "fingerprint": "f6cf961efd884372f55acc58ca8ffa80b17980f8318ca4059beabb3c7de3b042"
+  "fingerprint": "e19f81909919e9b239408411829c1dccbce98401fab282b3aaced473bc9f7d3d"
 }
