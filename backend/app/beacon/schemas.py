@@ -158,6 +158,38 @@ class BeaconSignalPage(BaseModel):
     lifecycle_commands_available: bool
 
 
+class OperationalRankingResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    position: int
+    ranking_version: str
+    ranking_digest: str
+    severity: BeaconSeverity
+    priority_band: BeaconPriorityBand
+    urgency_policy_id: str | None
+    urgency_policy_version: int | None
+    urgency_value: str | None
+    urgency_unit: str | None
+    confidence_state: str
+    freshness_state: str
+    tie_break_identity: UUID
+    ranking_reason: str
+
+
+class PrioritizedOperationalSignalResponse(BaseModel):
+    signal: BeaconSignalResponse
+    ranking: OperationalRankingResponse
+
+
+class OperationalAttentionQueueResponse(BaseModel):
+    company_id: UUID
+    branch_id: UUID | None
+    evaluated_at: datetime
+    ranking_version: str
+    ranking_digest: str
+    items: tuple[PrioritizedOperationalSignalResponse, ...]
+
+
 class BeaconLifecycleCommandRequest(BaseModel):
     evidence_digest: str = Field(min_length=64, max_length=64)
 

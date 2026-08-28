@@ -37,6 +37,7 @@ COMPANY_ID = UUID("f47ac10b-58cc-4372-a567-0e02b2c3d479")
 def context(*permissions: str) -> AuthorizationContext:
     value = object.__new__(AuthorizationContext)
     object.__setattr__(value, "company", SimpleNamespace(id=COMPANY_ID))
+    object.__setattr__(value, "active_branch", None)
     object.__setattr__(value, "membership", SimpleNamespace(id=uuid4()))
     object.__setattr__(
         value,
@@ -320,6 +321,7 @@ async def test_beacon_http_api_returns_bounded_company_scoped_signals(
         transport=httpx.ASGITransport(app=app), base_url="http://test"
     ) as client:
         response = await client.get("/api/v1/beacon/signals")
+        operational_response = await client.get("/api/v1/beacon/operational-signals")
 
     assert response.status_code == 200
     body = response.json()
@@ -333,3 +335,10 @@ async def test_beacon_http_api_returns_bounded_company_scoped_signals(
     assert body["snoozed_items"] == []
     assert body["lifecycle_commands_available"] is False
     assert "payload" not in str(body).lower()
+    assert operational_response.status_code == 200
+    operational = operational_response.json()
+    # The repository fixture is intentionally one month old, so the operational
+    # projection correctly excludes its expired signals.
+    assert operational["items"] == []
+    assert operational["ranking_version"] == "BANK.BEA.004.v1"
+    assert "financial" not in str(operational).lower()

@@ -29,6 +29,7 @@ from app.beacon.schemas import (
     DefinitionQualitySemanticsResponse,
     EvidenceEvaluationRegistrationResponse,
     EvidenceEvaluationRegistryResponse,
+    OperationalAttentionQueueResponse,
     OperationalSignalCatalogResponse,
     OperationalSignalDefinitionResponse,
 )
@@ -154,6 +155,21 @@ async def list_beacon_signals(
         expires_at=evaluated_at + SIGNAL_TTL,
         lifecycle_commands_available=context.has_permission(BeaconPermission.REVIEW),
     )
+
+
+@router.get(
+    "/operational-signals",
+    response_model=OperationalAttentionQueueResponse,
+    summary="List deterministically prioritized admitted operational signals",
+)
+async def list_prioritized_operational_signals(
+    session: DatabaseSession,
+    context: BeaconReader,
+) -> OperationalAttentionQueueResponse:
+    queue = await beacon_query_service.get_operational_attention_queue(
+        session, context=context
+    )
+    return OperationalAttentionQueueResponse.model_validate(queue, from_attributes=True)
 
 
 def _lifecycle_http_error(error: Exception) -> HTTPException:

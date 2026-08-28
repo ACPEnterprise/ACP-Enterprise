@@ -7,6 +7,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.beacon.contracts import BeaconFactRepository
 from app.beacon.evaluation import SignalEvaluationService, signal_evaluation_service
+from app.beacon.operational_prioritization import (
+    OperationalAttentionQueue,
+    OperationalSignalPrioritizer,
+    operational_signal_prioritizer,
+)
 from app.beacon.records import BeaconAttentionQueue, BeaconSignal
 from app.beacon.repository import (
     BeaconLifecycleRepository,
@@ -30,10 +35,30 @@ class BeaconQueryService:
         repository: BeaconFactRepository = beacon_fact_repository,
         lifecycle_repository: BeaconLifecycleRepository = beacon_lifecycle_repository,
         evaluation_service: SignalEvaluationService = signal_evaluation_service,
+        operational_prioritizer: OperationalSignalPrioritizer = operational_signal_prioritizer,
     ) -> None:
         self.repository = repository
         self.lifecycle_repository = lifecycle_repository
         self.evaluation_service = evaluation_service
+        self.operational_prioritizer = operational_prioritizer
+
+    async def get_operational_attention_queue(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        now: datetime | None = None,
+    ) -> OperationalAttentionQueue:
+        evaluated_at = now or datetime.now(timezone.utc)
+        queue = await self.get_attention_queue(
+            session, context=context, now=evaluated_at
+        )
+        return self.operational_prioritizer.prioritize(
+            queue.active,
+            company_id=context.company.id,
+            branch_id=context.active_branch.id if context.active_branch else None,
+            evaluated_at=evaluated_at,
+        )
 
     async def list_signals(
         self,
