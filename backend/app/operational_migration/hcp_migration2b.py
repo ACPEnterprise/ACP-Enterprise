@@ -154,6 +154,14 @@ class MasterRunCommand:
             raise ValueError("unexpected SOURCE.4 package digest")
         if not self.collection_digests or not self.transformation_contracts:
             raise ValueError("collection and transformation bindings are required")
+        for binding in (
+            "hybrid_customer_admission_digest",
+            "customer_parent_closure_digest",
+        ):
+            value = self.transformation_contracts.get(binding)
+            if not isinstance(value, str):
+                raise TypeError(f"{binding} is required")
+            _digest(value, binding)
         if len(self.owner_receipts) != 5:
             raise ValueError("all five owner receipts are required")
         for value in self.owner_receipts.values():

@@ -2,7 +2,6 @@ from types import SimpleNamespace
 from uuid import UUID
 
 import pytest
-
 from app.operational_migration.hcp_migration2b import (
     SOURCE4_PACKAGE_DIGEST,
     MasterRunCommand,
@@ -48,7 +47,11 @@ def master_command() -> MasterRunCommand:
     return MasterRunCommand(
         package_digest=SOURCE4_PACKAGE_DIGEST,
         collection_digests={"customers": "a" * 64},
-        transformation_contracts={"customers": "hcp-source4-customer/v1"},
+        transformation_contracts={
+            "customers": "hcp-source4-customer/v1",
+            "hybrid_customer_admission_digest": "6" * 64,
+            "customer_parent_closure_digest": "7" * 64,
+        },
         owner_receipts={f"receipt-{index}": str(index) * 64 for index in range(1, 6)},
         schema_head="d7f1b3c5e068",
         implementation_version=ORCHESTRATOR_VERSION,

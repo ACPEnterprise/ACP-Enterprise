@@ -1,7 +1,6 @@
 from uuid import UUID
 
 import pytest
-
 from app.customer_migration.adapter_import_policy import CustomerAdapterImportPolicy
 from app.customers.schemas import CustomerCreate, CustomerType
 from app.operational_migration.hcp_migration2b import (
@@ -49,7 +48,11 @@ def master_command(**overrides: object) -> MasterRunCommand:
     values: dict[str, object] = {
         "package_digest": SOURCE4_PACKAGE_DIGEST,
         "collection_digests": {"customers": "a" * 64},
-        "transformation_contracts": {"customer": "hcp_customer/v1"},
+        "transformation_contracts": {
+            "customer": "hcp_customer/v1",
+            "hybrid_customer_admission_digest": "6" * 64,
+            "customer_parent_closure_digest": "7" * 64,
+        },
         "owner_receipts": {
             f"receipt-{index}": str(index) * 64 for index in range(1, 6)
         },

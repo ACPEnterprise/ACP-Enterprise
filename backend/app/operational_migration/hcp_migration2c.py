@@ -27,6 +27,10 @@ from app.operational_migration.financial import (
     InvoiceMigrationRecord,
     PaymentMigrationRecord,
 )
+from app.operational_migration.hcp_hybrid_customer import (
+    HybridCustomerAdmission,
+    JobParentClosure,
+)
 from app.operational_migration.hcp_migration2a import (
     UnlinkedEstimateEvidenceCommand,
     persist_unlinked_estimate_evidence,
@@ -319,13 +323,37 @@ class HcpMigration2Orchestrator:
         master_run_id: UUID,
         reviewed: ReviewedCustomerAdapterOutput,
         boundary: ApprovedCustomerImportBoundary,
+        hybrid_admission: HybridCustomerAdmission,
+        parent_closure: JobParentClosure,
     ) -> CustomerAdapterImportReport:
         if reviewed.source_system != SOURCE4_SYSTEM:
             raise ValueError("orchestrator requires SOURCE.4 Customer identity")
+        hybrid_admission.validate()
+        parent_closure.validate()
         async with factory() as session:
-            await self._active_master(
+            master = await self._active_master(
                 session, context=context, master_run_id=master_run_id
             )
+            if (
+                master.transformation_contracts.get("hybrid_customer_admission_digest")
+                != hybrid_admission.digest
+            ):
+                raise ValueError("master hybrid Customer admission binding mismatch")
+            if (
+                master.transformation_contracts.get("customer_parent_closure_digest")
+                != parent_closure.digest
+            ):
+                raise ValueError("master Customer parent-closure binding mismatch")
+            admissible = {
+                item.native_customer_id: item
+                for item in hybrid_admission.candidates
+                if item.outcome == "PERSISTABLE"
+            }
+            reviewed_ids = {item.source_identity for item in reviewed.aggregates}
+            if reviewed_ids != set(admissible):
+                raise ValueError(
+                    "reviewed Customer persistence set differs from hybrid admission"
+                )
             existing = await session.scalar(
                 select(CustomerMigrationRun).where(
                     CustomerMigrationRun.master_run_id == master_run_id
@@ -349,6 +377,9 @@ class HcpMigration2Orchestrator:
             identity: CustomerSourceIdentity,
             aggregate: ReviewedCustomerAggregate,
         ) -> None:
+            candidate = admissible.get(aggregate.source_identity)
+            if candidate is None:
+                raise ValueError("persisted Customer lacks hybrid admission evidence")
             await persist_customer_lineage(
                 session,
                 context=context,
@@ -359,7 +390,13 @@ class HcpMigration2Orchestrator:
                     transformation_contract=reviewed.schema_version,
                     transformation_digest=reviewed.transformation_sha256,
                     source_timestamps={},
-                    source_context={"row_number": aggregate.row_number},
+                    source_context={
+                        "row_number": aggregate.row_number,
+                        **candidate.lineage_context(
+                            master.package_digest, hybrid_admission.digest
+                        ),
+                        "customer_parent_closure_digest": parent_closure.digest,
+                    },
                     customer_source_identity_id=identity.id,
                 ),
             )
