@@ -10,16 +10,16 @@ describe("technician field API", () => {
 
   it("records work evidence through the field boundary", async () => {
     vi.mocked(apiClient.post).mockResolvedValue({ data: { completion_ready: false } });
-    await addWorkNote("job-1", "Installed and tested fixture.");
+    await addWorkNote("job-1", "Installed and tested fixture.", 3, 2);
     expect(apiClient.post).toHaveBeenCalledWith(
       "/api/v1/technician/jobs/job-1/notes",
-      expect.objectContaining({ note_type: "work_performed", content: "Installed and tested fixture." }),
+      expect.objectContaining({ note_type: "work_performed", content: "Installed and tested fixture.", expected_job_version: 3, expected_assignment_version: 2 }),
     );
   });
 
   it("separates approval evidence from exception dispositions", async () => {
     vi.mocked(apiClient.post).mockResolvedValue({ data: { completion_ready: true } });
-    await recordCustomerDisposition("job-1", "approved", "Pat Customer", "");
+    await recordCustomerDisposition("job-1", "approved", "Pat Customer", "", 3, 2);
     expect(apiClient.post).toHaveBeenCalledWith(
       "/api/v1/technician/jobs/job-1/customer-approval",
       expect.objectContaining({ disposition: "approved", customer_name: "Pat Customer", reason: null }),

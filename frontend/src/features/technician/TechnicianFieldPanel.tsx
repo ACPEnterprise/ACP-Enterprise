@@ -6,7 +6,7 @@ import type { CustomerDisposition } from "../../types/technicianField";
 import { Alert, Button, Field, Input, Spinner, Textarea } from "../../ui";
 
 export function TechnicianFieldPanel({ item }: { readonly item: TechnicianItineraryItem }) {
-  const field = useTechnicianField(item.job_id ?? "");
+  const field = useTechnicianField(item.job_id ?? "", item.job_version ?? 1, item.assignment_version);
   const [summary, setSummary] = useState("");
   const [disposition, setDisposition] = useState<CustomerDisposition>("approved");
   const [customerName, setCustomerName] = useState("");
@@ -43,9 +43,22 @@ export function TechnicianFieldPanel({ item }: { readonly item: TechnicianItiner
           <Button disabled={busy || (disposition === "approved" ? !customerName.trim() : !reason.trim())} onClick={() => field.approval.mutate({ disposition, customerName, reason })}>Record disposition</Button>
         </div>
       )}
+      {state && !state.completion_ready && (
+        <Alert variant="warning" title="Completion requirements remain">
+          {state.missing_requirements.length > 0
+            ? state.missing_requirements.join(", ")
+            : "Refresh authoritative field state before completion."}
+          {state.commercial_authorization === "missing" && " An accepted estimate or authorized non-billable disposition is required."}
+        </Alert>
+      )}
+      {state?.commercial_authorization === "non_billable" && (
+        <Alert title="Authorized non-billable work">{state.non_billable_reason}</Alert>
+      )}
       {item.job_status === "in_progress" && state?.completion_ready && <Button disabled={busy} onClick={() => field.lifecycle.mutate({ action: "complete", version: item.job_version ?? 1 })}>Complete job</Button>}
       {item.job_status === "completed" && state?.invoice_handoff_status !== "completed" && <Button disabled={busy} onClick={() => field.handoff.mutate()}>Check invoice handoff</Button>}
       {state?.invoice_handoff_status === "completed" && <Alert variant="success" title="Invoice ready">The authoritative invoice handoff is complete.</Alert>}
+      {state?.invoice_handoff_status === "pending" && <Alert variant="warning" title="Invoice handoff pending">No invoice has been reported complete. Retry after authoritative invoicing finishes.</Alert>}
+      {state?.invoice_handoff_status === "reconciliation_required" && <Alert variant="danger" title="Invoice reconciliation required">Office review is required before this handoff can be treated as complete.</Alert>}
       {(field.note.isError || field.approval.isError || field.arrival.isError || field.lifecycle.isError || field.handoff.isError) && <Alert variant="danger" title="Action not recorded">Refresh authoritative state before retrying. No local success was assumed.</Alert>}
     </div>
   );

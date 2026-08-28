@@ -16,6 +16,7 @@ from app.field_service.schemas import (
     FieldJobState,
     HandoffInput,
     Itinerary,
+    NonBillableInput,
     NoteInput,
 )
 from app.field_service.service import field_service
@@ -28,6 +29,9 @@ Session = Annotated[AsyncSession, Depends(get_database_session)]
 Read = Annotated[AuthorizationContext, Depends(require_permission(JobPermission.READ))]
 Execute = Annotated[
     AuthorizationContext, Depends(require_permission(JobPermission.EXECUTE))
+]
+Manage = Annotated[
+    AuthorizationContext, Depends(require_permission(JobPermission.MANAGE))
 ]
 
 
@@ -75,6 +79,18 @@ async def record_approval(
 ) -> FieldJobState:
     try:
         return await field_service.approval(
+            session, context=context, job_id=job_id, payload=payload
+        )
+    except FieldServiceError as error:
+        raise field_error(error) from error
+
+
+@router.post("/jobs/{job_id}/non-billable", response_model=FieldJobState)
+async def authorize_non_billable(
+    job_id: UUID, payload: NonBillableInput, context: Manage, session: Session
+) -> FieldJobState:
+    try:
+        return await field_service.non_billable(
             session, context=context, job_id=job_id, payload=payload
         )
     except FieldServiceError as error:

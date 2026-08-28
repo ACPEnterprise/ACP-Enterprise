@@ -40,6 +40,8 @@ class NoteInput(FieldSchema):
     idempotency_key: str = Field(
         min_length=8, max_length=128, pattern=r"^[A-Za-z0-9._:-]+$"
     )
+    expected_job_version: int = Field(ge=1)
+    expected_assignment_version: int = Field(ge=1)
 
 
 class ApprovalInput(FieldSchema):
@@ -49,12 +51,25 @@ class ApprovalInput(FieldSchema):
     idempotency_key: str = Field(
         min_length=8, max_length=128, pattern=r"^[A-Za-z0-9._:-]+$"
     )
+    expected_job_version: int = Field(ge=1)
+    expected_assignment_version: int = Field(ge=1)
 
 
 class HandoffInput(FieldSchema):
     idempotency_key: str = Field(
         min_length=8, max_length=128, pattern=r"^[A-Za-z0-9._:-]+$"
     )
+    expected_job_version: int = Field(ge=1)
+    expected_assignment_version: int = Field(ge=1)
+
+
+class NonBillableInput(FieldSchema):
+    reason: str = Field(min_length=1, max_length=2000)
+    idempotency_key: str = Field(
+        min_length=8, max_length=128, pattern=r"^[A-Za-z0-9._:-]+$"
+    )
+    expected_job_version: int = Field(ge=1)
+    expected_assignment_version: int = Field(ge=1)
 
 
 class FieldJobState(FieldSchema):
@@ -63,5 +78,9 @@ class FieldJobState(FieldSchema):
     work_summary_recorded: bool
     customer_disposition: str | None
     completion_ready: bool
+    requirement_snapshot_version: int | None
+    missing_requirements: tuple[str, ...]
+    commercial_authorization: Literal["accepted_estimate", "non_billable", "missing"]
+    non_billable_reason: str | None
     invoice_handoff_status: str | None
     invoice_id: UUID | None

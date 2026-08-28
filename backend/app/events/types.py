@@ -45,6 +45,14 @@ class EventType(str, Enum):
     # Operations
     OPERATIONS_SERVICE_REQUEST_ACCEPTED = "operations.service_request.accepted"
 
+    # Technician field execution
+    FIELD_NOTE_RECORDED = "field.note_recorded"
+    FIELD_CUSTOMER_APPROVAL_RECORDED = "field.customer_approval_recorded"
+    FIELD_NON_BILLABLE_AUTHORIZED = "field.non_billable_authorized"
+    FIELD_COMPLETION_REQUIREMENTS_SATISFIED = "field.completion_requirements_satisfied"
+    FIELD_INVOICE_HANDOFF_REQUESTED = "field.invoice_handoff_requested"
+    FIELD_INVOICE_HANDOFF_COMPLETED = "field.invoice_handoff_completed"
+
     # Price Book
     PRICE_BOOK_PRICE_VERSION_ACTIVATED = "price_book.price_version_activated"
 
