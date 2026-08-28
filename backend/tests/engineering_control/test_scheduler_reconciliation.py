@@ -39,7 +39,7 @@ def test_manifest_is_deterministic_complete_and_unique(manifest) -> None:
     )
     assert (
         manifest.authoritative_repository_head
-        == "7a9314b4647563eefaa48a755101e0f9cdf93602"
+        == "d63c6f28e926a84cd6322414a5f1591087df69d9"
     )
     assert {item.identity for item in manifest.capacities} == {
         "OM1",
