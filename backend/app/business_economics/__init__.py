@@ -15,6 +15,12 @@ from .measurement_adapters import (
     adapt_public_operational_measurement,
     adapt_qbo_source_reported_measurement,
 )
+from .measurement_admission import (
+    AdmissionState,
+    CalculationAdmissionRequest,
+    CalculationAdmissionResult,
+    evaluate_calculation_admission,
+)
 from .measurement_contract import (
     ComponentMeasurementGate,
     ContributionMeasurementGate,
@@ -46,6 +52,9 @@ from .source_conformance import (
 )
 
 __all__ = [
+    "AdmissionState",
+    "CalculationAdmissionRequest",
+    "CalculationAdmissionResult",
     "ComponentMeasurementGate",
     "ContributionMeasurementGate",
     "EconomicComponent",
@@ -74,6 +83,7 @@ __all__ = [
     "adapt_qbo_economics_evidence",
     "adapt_qbo_source_reported_measurement",
     "assess_source_conformance",
+    "evaluate_calculation_admission",
     "evaluate_contribution_measurement_gate",
     "evaluate_economic_findings",
     "seal_measurement_readiness_package",
