@@ -53,6 +53,67 @@ class TimekeepingRepository:
             .limit(1)
         )
 
+    async def punch_by_idempotency_key(
+        self,
+        session: AsyncSession,
+        *,
+        company_id: UUID,
+        recorded_by_user_id: UUID,
+        idempotency_key: str,
+    ) -> WorkdayPunchEvent | None:
+        return await session.scalar(
+            select(WorkdayPunchEvent).where(
+                WorkdayPunchEvent.company_id == company_id,
+                WorkdayPunchEvent.recorded_by_user_id == recorded_by_user_id,
+                WorkdayPunchEvent.idempotency_key == idempotency_key,
+            )
+        )
+
+    async def revision_for_punch(
+        self,
+        session: AsyncSession,
+        *,
+        company_id: UUID,
+        punch_id: UUID,
+    ) -> WorkdayTimeEntryRevision | None:
+        return await session.scalar(
+            select(WorkdayTimeEntryRevision)
+            .where(
+                WorkdayTimeEntryRevision.company_id == company_id,
+                WorkdayTimeEntryRevision.punch_event_ids.contains([str(punch_id)]),
+            )
+            .order_by(WorkdayTimeEntryRevision.revision_number.desc())
+            .limit(1)
+        )
+
+    async def manual_revision_by_idempotency_key(
+        self,
+        session: AsyncSession,
+        *,
+        company_id: UUID,
+        responsible_user_id: UUID,
+        idempotency_key: str,
+    ) -> WorkdayTimeEntryRevision | None:
+        origin = await session.scalar(
+            select(WorkdayTimeEntryRevision).where(
+                WorkdayTimeEntryRevision.company_id == company_id,
+                WorkdayTimeEntryRevision.responsible_user_id == responsible_user_id,
+                WorkdayTimeEntryRevision.origin_idempotency_key == idempotency_key,
+                WorkdayTimeEntryRevision.revision_number == 1,
+            )
+        )
+        if origin is None:
+            return None
+        return await session.scalar(
+            select(WorkdayTimeEntryRevision)
+            .where(
+                WorkdayTimeEntryRevision.company_id == company_id,
+                WorkdayTimeEntryRevision.entry_id == origin.entry_id,
+            )
+            .order_by(WorkdayTimeEntryRevision.revision_number.desc())
+            .limit(1)
+        )
+
     async def latest_clock_in(
         self, session: AsyncSession, *, company_id: UUID, employee_id: UUID
     ) -> WorkdayPunchEvent | None:
@@ -125,6 +186,16 @@ class TimekeepingRepository:
                 PayPeriod.company_id == company_id,
                 PayPeriod.period_start <= work_date,
                 PayPeriod.period_end >= work_date,
+            )
+        )
+
+    async def pay_period_by_id(
+        self, session: AsyncSession, *, company_id: UUID, pay_period_id: UUID
+    ) -> PayPeriod | None:
+        return await session.scalar(
+            select(PayPeriod).where(
+                PayPeriod.company_id == company_id,
+                PayPeriod.id == pay_period_id,
             )
         )
 

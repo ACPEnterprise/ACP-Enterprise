@@ -72,11 +72,14 @@ from app.qbo_source.runtime import (
     initialize_sandbox_runtime_storage,
 )
 from app.scheduling.router import router as scheduling_router
-from app.worker_control.transport.http.router import router as worker_transport_router
+from app.timekeeping.router import router as timekeeping_router
 from app.worker_control.recovery_acknowledgement import (
     router as worker_recovery_router,
+)
+from app.worker_control.recovery_acknowledgement import (
     worker_router as worker_recovery_transport_router,
 )
+from app.worker_control.transport.http.router import router as worker_transport_router
 
 logging.basicConfig(
     level=getattr(logging, settings.log_level),
@@ -153,6 +156,7 @@ app.include_router(company_admin_router)
 app.include_router(identity_self_service_router)
 app.include_router(identity_administration_router)
 app.include_router(scheduling_router)
+app.include_router(timekeeping_router)
 app.include_router(jobs_router)
 app.include_router(inventory_router)
 app.include_router(purchasing_router)

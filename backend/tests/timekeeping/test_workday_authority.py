@@ -6,6 +6,7 @@ from uuid import UUID, uuid4
 
 import pytest
 import pytest_asyncio
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -15,11 +16,14 @@ from sqlalchemy.ext.asyncio import (
 
 from app.core.config import settings
 from app.customers.models import Customer, ServiceLocation  # noqa: F401
+from app.database.session import get_database_session
+from app.main import app
 from app.platform.branch.models import Branch
 from app.platform.company.membership_models import Membership
 from app.platform.company.models import Company
 from app.platform.employees.models import Employee
 from app.platform.permissions.catalog import permission_catalog
+from app.platform.permissions.dependencies import get_authorization_context
 from app.platform.users.models import User
 from app.scheduling.models import Appointment  # noqa: F401
 from app.timekeeping.commands import (
@@ -72,17 +76,33 @@ class SeededTimekeeping:
     branch_id: UUID
     user_id: UUID
     membership_id: UUID
+    manager_user_id: UUID
+    manager_membership_id: UUID
     employee_id: UUID
     other_employee_id: UUID
 
 
 class FakeContext:
-    def __init__(self, seed: SeededTimekeeping, permissions: set[str]) -> None:
+    def __init__(
+        self,
+        seed: SeededTimekeeping,
+        permissions: set[str],
+        *,
+        manager: bool = False,
+    ) -> None:
         self.company = SimpleNamespace(id=seed.company_id)
-        self.user = SimpleNamespace(id=seed.user_id)
-        self.membership = SimpleNamespace(id=seed.membership_id)
+        self.company.timezone = "America/New_York"
+        self.user = SimpleNamespace(
+            id=seed.manager_user_id if manager else seed.user_id
+        )
+        self.membership = SimpleNamespace(
+            id=seed.manager_membership_id if manager else seed.membership_id
+        )
         self._branch_ids = {seed.branch_id}
         self._permissions = permissions
+        self.active_branch = SimpleNamespace(
+            id=seed.branch_id, timezone="America/New_York"
+        )
 
     def has_permission(self, code: str) -> bool:
         return code in self._permissions
@@ -98,6 +118,7 @@ async def timekeeping_database() -> AsyncIterator[
     engine: AsyncEngine = create_async_engine(settings.database_url)
     factory = async_sessionmaker(engine, expire_on_commit=False)
     company_id, branch_id, user_id, membership_id = uuid4(), uuid4(), uuid4(), uuid4()
+    manager_user_id, manager_membership_id = uuid4(), uuid4()
     employee_id, other_employee_id = uuid4(), uuid4()
     async with factory() as session, session.begin():
         session.add(
@@ -132,9 +153,31 @@ async def timekeeping_database() -> AsyncIterator[
             )
         )
         session.add(
+            User(
+                id=manager_user_id,
+                normalized_email=f"manager-{uuid4().hex}@example.test",
+                first_name="Time",
+                last_name="Manager",
+                display_name="Time Manager",
+                status="active",
+                authorization_version=1,
+            )
+        )
+        session.add(
             Membership(
                 id=membership_id,
                 user_id=user_id,
+                company_id=company_id,
+                status="active",
+                default_branch_id=branch_id,
+                has_all_branch_access=False,
+                accepted_at=NOW,
+            )
+        )
+        session.add(
+            Membership(
+                id=manager_membership_id,
+                user_id=manager_user_id,
                 company_id=company_id,
                 status="active",
                 default_branch_id=branch_id,
@@ -162,7 +205,14 @@ async def timekeeping_database() -> AsyncIterator[
                 )
             )
     seed = SeededTimekeeping(
-        company_id, branch_id, user_id, membership_id, employee_id, other_employee_id
+        company_id,
+        branch_id,
+        user_id,
+        membership_id,
+        manager_user_id,
+        manager_membership_id,
+        employee_id,
+        other_employee_id,
     )
     try:
         yield factory, seed
@@ -190,8 +240,8 @@ async def test_manual_entry_requires_authority_and_punch_is_employee_owned(
     async with factory() as session:
         with pytest.raises(WorkdayAuthorizationError):
             await service.record_manual_time(
-                session, context=no_permissions, command=manual
-            )  # type: ignore[arg-type]
+                session, context=no_permissions, command=manual  # type: ignore[arg-type]
+            )
     punch_context = FakeContext(seed, {TimekeepingPermission.OWN_PUNCH})
     async with factory() as session:
         with pytest.raises(WorkdayAuthorizationError):
@@ -216,7 +266,9 @@ async def test_manual_entry_requires_authority_and_punch_is_employee_owned(
         approved_duration_minutes=None,
         reason="Invalid timezone regression",
     )
-    manager_context = FakeContext(seed, {TimekeepingPermission.MANUAL_ENTRY})
+    manager_context = FakeContext(
+        seed, {TimekeepingPermission.MANUAL_ENTRY}, manager=True
+    )
     async with factory() as session:
         with pytest.raises(WorkdayTimeError, match="valid IANA zone"):
             await service.record_manual_time(
@@ -247,11 +299,24 @@ async def test_mixed_manual_and_punch_time_approval_correction_and_snapshot(
 ) -> None:
     factory, seed = timekeeping_database
     service = WorkdayTimeService()
-    all_permissions = FakeContext(seed, set(TimekeepingPermission.ALL))
+    employee_context = FakeContext(
+        seed,
+        {TimekeepingPermission.OWN_PUNCH, TimekeepingPermission.OWN_READ},
+    )
+    manager_context = FakeContext(
+        seed,
+        {
+            TimekeepingPermission.MANUAL_ENTRY,
+            TimekeepingPermission.CORRECT,
+            TimekeepingPermission.APPROVE,
+            TimekeepingPermission.ADMIN_READ,
+        },
+        manager=True,
+    )
     async with factory() as session:
         manual = await service.record_manual_time(
             session,
-            context=all_permissions,  # type: ignore[arg-type]
+            context=manager_context,  # type: ignore[arg-type]
             command=RecordManualTime(
                 employee_id=seed.employee_id,
                 branch_id=seed.branch_id,
@@ -265,12 +330,12 @@ async def test_mixed_manual_and_punch_time_approval_correction_and_snapshot(
         )
         submitted_manual = await service.submit(
             session,
-            context=all_permissions,
+            context=manager_context,  # type: ignore[arg-type]
             revision_id=manual.id,  # type: ignore[arg-type]
         )
         approved_manual = await service.approve(
             session,
-            context=all_permissions,  # type: ignore[arg-type]
+            context=manager_context,  # type: ignore[arg-type]
             revision_id=submitted_manual.id,
         )
         assert (
@@ -281,7 +346,7 @@ async def test_mixed_manual_and_punch_time_approval_correction_and_snapshot(
         punch_start = NOW + timedelta(days=1)
         await service.record_punch(
             session,
-            context=all_permissions,  # type: ignore[arg-type]
+            context=employee_context,  # type: ignore[arg-type]
             command=RecordPunch(
                 employee_id=seed.employee_id,
                 branch_id=seed.branch_id,
@@ -293,7 +358,7 @@ async def test_mixed_manual_and_punch_time_approval_correction_and_snapshot(
         with pytest.raises(WorkdayConflictError):
             await service.record_punch(
                 session,
-                context=all_permissions,  # type: ignore[arg-type]
+                context=employee_context,  # type: ignore[arg-type]
                 command=RecordPunch(
                     employee_id=seed.employee_id,
                     branch_id=seed.branch_id,
@@ -304,7 +369,7 @@ async def test_mixed_manual_and_punch_time_approval_correction_and_snapshot(
             )
         _, punch_revision = await service.record_punch(
             session,
-            context=all_permissions,  # type: ignore[arg-type]
+            context=employee_context,  # type: ignore[arg-type]
             command=RecordPunch(
                 employee_id=seed.employee_id,
                 branch_id=seed.branch_id,
@@ -316,19 +381,29 @@ async def test_mixed_manual_and_punch_time_approval_correction_and_snapshot(
         assert punch_revision is not None
         submitted_punch = await service.submit(
             session,
-            context=all_permissions,
+            context=employee_context,  # type: ignore[arg-type]
             revision_id=punch_revision.id,  # type: ignore[arg-type]
         )
+        self_approver = FakeContext(
+            seed,
+            {TimekeepingPermission.OWN_PUNCH, TimekeepingPermission.APPROVE},
+        )
+        with pytest.raises(WorkdayAuthorizationError, match="cannot approve"):
+            await service.approve(
+                session,
+                context=self_approver,  # type: ignore[arg-type]
+                revision_id=submitted_punch.id,
+            )
         approved_punch = await service.approve(
             session,
-            context=all_permissions,  # type: ignore[arg-type]
+            context=manager_context,  # type: ignore[arg-type]
             revision_id=submitted_punch.id,
         )
         assert approved_punch.provenance == TimeEntryProvenance.EMPLOYEE_PUNCH.value
 
         await service.record_manual_time(
             session,
-            context=all_permissions,  # type: ignore[arg-type]
+            context=manager_context,  # type: ignore[arg-type]
             command=RecordManualTime(
                 employee_id=seed.employee_id,
                 branch_id=seed.branch_id,
@@ -343,7 +418,7 @@ async def test_mixed_manual_and_punch_time_approval_correction_and_snapshot(
 
         period = await service.create_pay_period(
             session,
-            context=all_permissions,  # type: ignore[arg-type]
+            context=manager_context,  # type: ignore[arg-type]
             command=CreatePayPeriod(
                 period_start=date(2026, 8, 29),
                 period_end=date(2026, 9, 4),
@@ -356,13 +431,13 @@ async def test_mixed_manual_and_punch_time_approval_correction_and_snapshot(
         )
         first = await service.seal_payroll_input(
             session,
-            context=all_permissions,  # type: ignore[arg-type]
+            context=manager_context,  # type: ignore[arg-type]
             employee_id=seed.employee_id,
             pay_period=period,
         )
         replay = await service.seal_payroll_input(
             session,
-            context=all_permissions,  # type: ignore[arg-type]
+            context=manager_context,  # type: ignore[arg-type]
             employee_id=seed.employee_id,
             pay_period=period,
         )
@@ -378,7 +453,7 @@ async def test_mixed_manual_and_punch_time_approval_correction_and_snapshot(
 
         corrected = await service.correct(
             session,
-            context=all_permissions,  # type: ignore[arg-type]
+            context=manager_context,  # type: ignore[arg-type]
             command=CorrectTimeEntry(
                 revision_id=approved_manual.id,
                 start_at=NOW,
@@ -389,20 +464,204 @@ async def test_mixed_manual_and_punch_time_approval_correction_and_snapshot(
         )
         resubmitted = await service.submit(
             session,
-            context=all_permissions,
+            context=manager_context,  # type: ignore[arg-type]
             revision_id=corrected.id,  # type: ignore[arg-type]
         )
         await service.approve(
             session,
-            context=all_permissions,
+            context=manager_context,  # type: ignore[arg-type]
             revision_id=resubmitted.id,  # type: ignore[arg-type]
         )
         changed = await service.seal_payroll_input(
             session,
-            context=all_permissions,  # type: ignore[arg-type]
+            context=manager_context,  # type: ignore[arg-type]
             employee_id=seed.employee_id,
             pay_period=period,
         )
         assert changed.snapshot_digest != first.snapshot_digest
         assert changed.total_approved_minutes == 780
         assert approved_manual.id in changed.approved_entries[0].correction_lineage
+
+
+@pytest.mark.asyncio
+async def test_phone_safe_api_manual_first_idempotency_and_payroll_snapshot(
+    timekeeping_database: tuple[async_sessionmaker[AsyncSession], SeededTimekeeping],
+) -> None:
+    factory, seed = timekeeping_database
+    employee_context = FakeContext(
+        seed,
+        {
+            TimekeepingPermission.OWN_PUNCH,
+            TimekeepingPermission.OWN_READ,
+            TimekeepingPermission.APPROVE,
+        },
+    )
+    manager_context = FakeContext(
+        seed,
+        {
+            TimekeepingPermission.MANUAL_ENTRY,
+            TimekeepingPermission.CORRECT,
+            TimekeepingPermission.APPROVE,
+            TimekeepingPermission.ADMIN_READ,
+        },
+        manager=True,
+    )
+    today = datetime.now(timezone.utc).astimezone().date()
+    async with factory() as session:
+        period = await WorkdayTimeService().create_pay_period(
+            session,
+            context=manager_context,  # type: ignore[arg-type]
+            command=CreatePayPeriod(
+                period_start=today - timedelta(days=1),
+                period_end=today + timedelta(days=5),
+                processing_date=today + timedelta(days=6),
+                payday=today + timedelta(days=7),
+                timezone="America/New_York",
+                schedule_definition_id="synthetic.phone-first.weekly",
+                schedule_version=1,
+            ),
+        )
+
+    selected_context: dict[str, FakeContext] = {"value": manager_context}
+
+    async def session_override() -> AsyncIterator[AsyncSession]:
+        async with factory() as session:
+            yield session
+
+    async def context_override() -> FakeContext:
+        return selected_context["value"]
+
+    app.dependency_overrides[get_database_session] = session_override
+    app.dependency_overrides[get_authorization_context] = context_override
+    transport = ASGITransport(app=app)
+    try:
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            manual_payload = {
+                "employee_id": str(seed.employee_id),
+                "work_date": (today - timedelta(days=1)).isoformat(),
+                "timezone": "America/New_York",
+                "start_at": (NOW - timedelta(days=1)).isoformat(),
+                "end_at": (NOW - timedelta(days=1) + timedelta(hours=2)).isoformat(),
+                "reason": "Manager-entered time before employee login",
+            }
+            manual = await client.post(
+                "/api/v1/timekeeping/entries/manual",
+                headers={"Idempotency-Key": "manual-first-day"},
+                json=manual_payload,
+            )
+            assert manual.status_code == 200, manual.text
+            manual_retry = await client.post(
+                "/api/v1/timekeeping/entries/manual",
+                headers={"Idempotency-Key": "manual-first-day"},
+                json=manual_payload,
+            )
+            assert manual_retry.json()["revision_id"] == manual.json()["revision_id"]
+
+            submitted_manual = await client.post(
+                f"/api/v1/timekeeping/entries/{manual.json()['revision_id']}/submit"
+            )
+            assert submitted_manual.status_code == 200
+
+            selected_context["value"] = employee_context
+            before = datetime.now(timezone.utc)
+            clock_in = await client.post(
+                "/api/v1/timekeeping/me/punches",
+                headers={"Idempotency-Key": "phone-clock-in"},
+                json={"action": "clock_in", "device_reference": "phone-session"},
+            )
+            after = datetime.now(timezone.utc)
+            assert clock_in.status_code == 200, clock_in.text
+            occurred_at = datetime.fromisoformat(clock_in.json()["occurred_at"])
+            assert before <= occurred_at <= after
+            client_identity_attempt = await client.post(
+                "/api/v1/timekeeping/me/punches",
+                headers={"Idempotency-Key": "client-identity-attempt"},
+                json={
+                    "action": "clock_out",
+                    "employee_id": str(seed.other_employee_id),
+                    "occurred_at": NOW.isoformat(),
+                },
+            )
+            assert client_identity_attempt.status_code == 422
+            duplicate = await client.post(
+                "/api/v1/timekeeping/me/punches",
+                headers={"Idempotency-Key": "phone-clock-in"},
+                json={"action": "clock_in", "device_reference": "phone-session"},
+            )
+            assert duplicate.status_code == 200
+            assert duplicate.json()["punch_id"] == clock_in.json()["punch_id"]
+            impossible = await client.post(
+                "/api/v1/timekeeping/me/punches",
+                headers={"Idempotency-Key": "second-clock-in"},
+                json={"action": "clock_in"},
+            )
+            assert impossible.status_code == 409
+            reused_key = await client.post(
+                "/api/v1/timekeeping/me/punches",
+                headers={"Idempotency-Key": "phone-clock-in"},
+                json={"action": "clock_out", "device_reference": "phone-session"},
+            )
+            assert reused_key.status_code == 409
+
+            clock_out = await client.post(
+                "/api/v1/timekeeping/me/punches",
+                headers={"Idempotency-Key": "phone-clock-out"},
+                json={"action": "clock_out", "device_reference": "phone-session"},
+            )
+            assert clock_out.status_code == 200, clock_out.text
+            punched_revision = clock_out.json()["completed_entry"]["revision_id"]
+            submitted_punch = await client.post(
+                f"/api/v1/timekeeping/entries/{punched_revision}/submit"
+            )
+            assert submitted_punch.status_code == 200
+            self_approval = await client.post(
+                f"/api/v1/timekeeping/entries/{submitted_punch.json()['revision_id']}/approve"
+            )
+            assert self_approval.status_code == 403
+
+            timecard = await client.get("/api/v1/timekeeping/me/timecard")
+            assert timecard.status_code == 200
+            assert timecard.json()["employee_id"] == str(seed.employee_id)
+            assert "compensation" not in timecard.text.lower()
+            assert "rate" not in timecard.text.lower()
+            assert {item["provenance"] for item in timecard.json()["entries"]} == {
+                "authorized_manual_entry",
+                "employee_punch",
+            }
+
+            selected_context["value"] = manager_context
+            approved_revision_ids: list[str] = []
+            for revision_id in (
+                submitted_manual.json()["revision_id"],
+                submitted_punch.json()["revision_id"],
+            ):
+                approved = await client.post(
+                    f"/api/v1/timekeeping/entries/{revision_id}/approve"
+                )
+                assert approved.status_code == 200, approved.text
+                approved_revision_ids.append(approved.json()["revision_id"])
+            snapshot = await client.post(
+                f"/api/v1/timekeeping/pay-periods/{period.id}/employees/"
+                f"{seed.employee_id}/payroll-time-input"
+            )
+            assert snapshot.status_code == 200, snapshot.text
+            assert set(snapshot.json()["approved_revision_ids"]) == set(
+                approved_revision_ids
+            )
+            replay = await client.post(
+                f"/api/v1/timekeeping/pay-periods/{period.id}/employees/"
+                f"{seed.employee_id}/payroll-time-input"
+            )
+            assert replay.json()["snapshot_digest"] == snapshot.json()["snapshot_digest"]
+
+            foreign_context = FakeContext(
+                seed, {TimekeepingPermission.OWN_PUNCH, TimekeepingPermission.OWN_READ}
+            )
+            foreign_context.company = SimpleNamespace(
+                id=uuid4(), timezone="America/New_York"
+            )
+            selected_context["value"] = foreign_context
+            foreign = await client.get("/api/v1/timekeeping/me/timecard")
+            assert foreign.status_code == 403
+    finally:
+        app.dependency_overrides.clear()

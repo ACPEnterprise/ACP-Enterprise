@@ -14,6 +14,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
@@ -82,6 +83,12 @@ class WorkdayPunchEvent(Base):
             name="ck_time_punch_kind",
         ),
         UniqueConstraint("company_id", "id", name="uq_time_punch_company"),
+        UniqueConstraint(
+            "company_id",
+            "recorded_by_user_id",
+            "idempotency_key",
+            name="uq_time_punch_idempotency",
+        ),
         Index(
             "ix_time_punch_employee_occurred",
             "company_id",
@@ -106,6 +113,8 @@ class WorkdayPunchEvent(Base):
         nullable=False,
     )
     source_device_reference: Mapped[str | None] = mapped_column(String(200))
+    idempotency_key: Mapped[str | None] = mapped_column(String(128))
+    request_digest: Mapped[str] = mapped_column(String(64), nullable=False)
     event_digest: Mapped[str] = mapped_column(String(64), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
@@ -158,6 +167,16 @@ class WorkdayTimeEntryRevision(Base):
             "employee_id",
             "work_date",
         ),
+        Index(
+            "uq_time_manual_idempotency",
+            "company_id",
+            "responsible_user_id",
+            "origin_idempotency_key",
+            unique=True,
+            postgresql_where=text(
+                "revision_number = 1 AND origin_idempotency_key IS NOT NULL"
+            ),
+        ),
     )
     id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), primary_key=True, default=uuid4
@@ -184,6 +203,8 @@ class WorkdayTimeEntryRevision(Base):
         JSONB, nullable=False, default=list
     )
     manual_reason: Mapped[str | None] = mapped_column(Text)
+    origin_idempotency_key: Mapped[str | None] = mapped_column(String(128))
+    origin_request_digest: Mapped[str | None] = mapped_column(String(64))
     state: Mapped[str] = mapped_column(String(20), nullable=False)
     source_user_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),

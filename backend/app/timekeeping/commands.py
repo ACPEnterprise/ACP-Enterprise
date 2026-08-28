@@ -14,6 +14,7 @@ class RecordPunch:
     kind: PunchKind
     occurred_at: datetime
     timezone: str
+    idempotency_key: str | None = None
     source_device_reference: str | None = None
 
 
@@ -27,6 +28,7 @@ class RecordManualTime:
     end_at: datetime | None
     approved_duration_minutes: int | None
     reason: str
+    idempotency_key: str | None = None
 
 
 @dataclass(frozen=True)

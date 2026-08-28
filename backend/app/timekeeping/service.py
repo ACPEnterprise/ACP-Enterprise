@@ -6,6 +6,7 @@ from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.events.schemas import BusinessEventCreate
@@ -63,6 +64,25 @@ class WorkdayTimeService:
         )
         if employee is None or employee.id != command.employee_id:
             raise WorkdayAuthorizationError("an employee may punch only their own time")
+        request_digest = self._punch_request_digest(context, command)
+        if command.idempotency_key is not None:
+            self._validate_idempotency_key(command.idempotency_key)
+            existing = await self._repository.punch_by_idempotency_key(
+                session,
+                company_id=context.company.id,
+                recorded_by_user_id=context.user.id,
+                idempotency_key=command.idempotency_key,
+            )
+            if existing is not None:
+                if existing.request_digest != request_digest:
+                    raise WorkdayConflictError(
+                        "idempotency key was used for a different punch request"
+                    )
+                return existing, await self._repository.revision_for_punch(
+                    session,
+                    company_id=context.company.id,
+                    punch_id=existing.id,
+                )
         if command.occurred_at.tzinfo is None:
             raise WorkdayTimeError("punch timestamp must be timezone-aware")
         self._validate_timezone(command.timezone)
@@ -114,8 +134,26 @@ class WorkdayTimeService:
                     "employee_id": str(command.employee_id),
                 },
             )
-        await session.commit()
-        return event, revision
+        try:
+            await session.commit()
+            return event, revision
+        except IntegrityError:
+            await session.rollback()
+            if command.idempotency_key is None:
+                raise
+            existing = await self._repository.punch_by_idempotency_key(
+                session,
+                company_id=context.company.id,
+                recorded_by_user_id=context.user.id,
+                idempotency_key=command.idempotency_key,
+            )
+            if existing is None or existing.request_digest != request_digest:
+                raise WorkdayConflictError(
+                    "concurrent punch request could not be reconciled"
+                )
+            return existing, await self._repository.revision_for_punch(
+                session, company_id=context.company.id, punch_id=existing.id
+            )
 
     async def record_manual_time(
         self,
@@ -128,6 +166,21 @@ class WorkdayTimeService:
         self._require_branch(context, command.branch_id)
         if not command.reason.strip():
             raise WorkdayTimeError("manual-entry reason is required")
+        request_digest = self._manual_request_digest(context, command)
+        if command.idempotency_key is not None:
+            self._validate_idempotency_key(command.idempotency_key)
+            existing = await self._repository.manual_revision_by_idempotency_key(
+                session,
+                company_id=context.company.id,
+                responsible_user_id=context.user.id,
+                idempotency_key=command.idempotency_key,
+            )
+            if existing is not None:
+                if existing.origin_request_digest != request_digest:
+                    raise WorkdayConflictError(
+                        "idempotency key was used for a different manual entry"
+                    )
+                return existing
         self._validate_timezone(command.timezone)
         if not await self._repository.employee_exists(
             session, company_id=context.company.id, employee_id=command.employee_id
@@ -152,6 +205,8 @@ class WorkdayTimeService:
                 manual_reason=command.reason.strip(),
                 state=TimeEntryState.RECORDED,
                 responsible_user_id=context.user.id,
+                origin_idempotency_key=command.idempotency_key,
+                origin_request_digest=request_digest,
             )
             self._stage_action(
                 session,
@@ -162,8 +217,24 @@ class WorkdayTimeService:
                 branch_id=command.branch_id,
                 details={"employee_id": str(command.employee_id)},
             )
-        await session.commit()
-        return revision
+        try:
+            await session.commit()
+            return revision
+        except IntegrityError:
+            await session.rollback()
+            if command.idempotency_key is None:
+                raise
+            existing = await self._repository.manual_revision_by_idempotency_key(
+                session,
+                company_id=context.company.id,
+                responsible_user_id=context.user.id,
+                idempotency_key=command.idempotency_key,
+            )
+            if existing is None or existing.origin_request_digest != request_digest:
+                raise WorkdayConflictError(
+                    "concurrent manual-entry request could not be reconciled"
+                )
+            return existing
 
     async def submit(
         self,
@@ -223,6 +294,15 @@ class WorkdayTimeService:
     ) -> WorkdayTimeEntryRevision:
         self._require_permission(context, TimekeepingPermission.APPROVE)
         prior = await self._require_latest(session, context, revision_id)
+        employee = await self._repository.employee_for_membership(
+            session,
+            company_id=context.company.id,
+            membership_id=context.membership.id,
+        )
+        if employee is not None and employee.id == prior.employee_id:
+            raise WorkdayAuthorizationError(
+                "employees cannot approve their own Workday Time"
+            )
         if prior.state != TimeEntryState.SUBMITTED.value:
             raise WorkdayConflictError("only submitted time may be approved")
         now = datetime.now(timezone.utc)
@@ -419,6 +499,8 @@ class WorkdayTimeService:
         manual_reason: str | None,
         state: TimeEntryState,
         responsible_user_id: UUID,
+        origin_idempotency_key: str | None = None,
+        origin_request_digest: str | None = None,
     ) -> WorkdayTimeEntryRevision:
         await self._reject_overlap(
             session,
@@ -445,6 +527,8 @@ class WorkdayTimeService:
             "manual_reason": manual_reason,
             "state": state.value,
             "responsible_user_id": str(responsible_user_id),
+            "origin_idempotency_key": origin_idempotency_key,
+            "origin_request_digest": origin_request_digest,
         }
         revision = WorkdayTimeEntryRevision(
             entry_id=entry_id,
@@ -462,6 +546,8 @@ class WorkdayTimeService:
             approved_duration_minutes=approved_duration_minutes,
             punch_event_ids=[str(value) for value in punch_event_ids],
             manual_reason=manual_reason,
+            origin_idempotency_key=origin_idempotency_key,
+            origin_request_digest=origin_request_digest,
             state=state.value,
             source_user_id=responsible_user_id,
             responsible_user_id=responsible_user_id,
@@ -528,6 +614,8 @@ class WorkdayTimeService:
             approved_duration_minutes=actual_duration,
             punch_event_ids=list(prior.punch_event_ids),
             manual_reason=prior.manual_reason,
+            origin_idempotency_key=prior.origin_idempotency_key,
+            origin_request_digest=prior.origin_request_digest,
             state=state.value,
             source_user_id=prior.source_user_id,
             responsible_user_id=actor_user_id,
@@ -647,6 +735,7 @@ class WorkdayTimeService:
         context: AuthorizationContext, command: RecordPunch
     ) -> WorkdayPunchEvent:
         event_id = uuid4()
+        request_digest = WorkdayTimeService._punch_request_digest(context, command)
         digest = canonical_digest(
             {
                 "id": str(event_id),
@@ -658,6 +747,8 @@ class WorkdayTimeService:
                 "timezone": command.timezone,
                 "recorded_by_user_id": str(context.user.id),
                 "source_device_reference": command.source_device_reference,
+                "idempotency_key": command.idempotency_key,
+                "request_digest": request_digest,
             }
         )
         return WorkdayPunchEvent(
@@ -670,8 +761,50 @@ class WorkdayTimeService:
             timezone=command.timezone,
             recorded_by_user_id=context.user.id,
             source_device_reference=command.source_device_reference,
+            idempotency_key=command.idempotency_key,
+            request_digest=request_digest,
             event_digest=digest,
         )
+
+    @staticmethod
+    def _punch_request_digest(
+        context: AuthorizationContext, command: RecordPunch
+    ) -> str:
+        return canonical_digest(
+            {
+                "company_id": str(context.company.id),
+                "branch_id": str(command.branch_id) if command.branch_id else None,
+                "employee_id": str(command.employee_id),
+                "actor_user_id": str(context.user.id),
+                "kind": command.kind.value,
+                "timezone": command.timezone,
+                "source_device_reference": command.source_device_reference,
+            }
+        )
+
+    @staticmethod
+    def _manual_request_digest(
+        context: AuthorizationContext, command: RecordManualTime
+    ) -> str:
+        return canonical_digest(
+            {
+                "company_id": str(context.company.id),
+                "branch_id": str(command.branch_id) if command.branch_id else None,
+                "employee_id": str(command.employee_id),
+                "actor_user_id": str(context.user.id),
+                "work_date": command.work_date.isoformat(),
+                "timezone": command.timezone,
+                "start_at": command.start_at.isoformat() if command.start_at else None,
+                "end_at": command.end_at.isoformat() if command.end_at else None,
+                "approved_duration_minutes": command.approved_duration_minutes,
+                "reason": command.reason.strip(),
+            }
+        )
+
+    @staticmethod
+    def _validate_idempotency_key(value: str) -> None:
+        if not value.strip() or len(value) > 128:
+            raise WorkdayTimeError("idempotency key must contain 1-128 characters")
 
     def _stage_action(
         self,
