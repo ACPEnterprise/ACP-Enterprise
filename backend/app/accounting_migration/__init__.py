@@ -1,5 +1,15 @@
 """Provider-neutral, synthetic-only Accounting opening-state migration foundation."""
 
+from app.accounting_migration.integration_candidate import (
+    AccountingIntegrationCandidate,
+    AccountingIntegrationCandidateService,
+    CandidateEvidence,
+    CandidateMappingReferences,
+    CandidatePolicyReferences,
+    CandidateState,
+    InMemoryCandidateRegistry,
+    RehearsalReadiness,
+)
 from app.accounting_migration.manifest import (
     ARTIFACT_KINDS,
     ManifestValidationError,
@@ -34,8 +44,15 @@ from app.accounting_migration.runtime import (
 __all__ = [
     "ARTIFACT_KINDS",
     "AccountTargetBinding",
+    "AccountingIntegrationCandidate",
+    "AccountingIntegrationCandidateService",
     "BranchTargetBinding",
+    "CandidateEvidence",
+    "CandidateMappingReferences",
+    "CandidatePolicyReferences",
+    "CandidateState",
     "ControlTie",
+    "InMemoryCandidateRegistry",
     "InMemoryCheckpointStore",
     "JournalLine",
     "ManifestValidationError",
@@ -51,6 +68,7 @@ __all__ = [
     "OpeningStatePlan",
     "OpeningStateTransformer",
     "ReconciliationState",
+    "RehearsalReadiness",
     "RehearsalResult",
     "RejectionEvidence",
     "RollbackOnlyTarget",
