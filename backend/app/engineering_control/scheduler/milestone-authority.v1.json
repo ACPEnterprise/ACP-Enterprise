@@ -20,6 +20,13 @@
       "evidence_kind": "AUTHORITATIVE_INTEGRATION_ACCEPTANCE",
       "authoritative_commit_sha": "9940a4cfa3bdfa81ef45c1dff320dc1c4a29b8ce",
       "evidence_reference": "authoritative BANK.DF.001 ingestion-contract acceptance"
+    },
+    {
+      "bank_milestone_id": "BANK.DF.002",
+      "canonical_milestone_id": "BANK.DF.002",
+      "evidence_kind": "AUTHORITATIVE_INTEGRATION_ACCEPTANCE",
+      "authoritative_commit_sha": "b691f887e41d25c3ea721b8fa85133ffbffae961",
+      "evidence_reference": "validated BANK.DF.002 readiness-evaluator implementation"
     }
   ],
   "identity_reconciliation_required": [
@@ -40,12 +47,6 @@
     }
   ],
   "gate_resolutions": [],
-  "active_ownership": [
-    {
-      "bank_milestone_id": "BANK.DF.002",
-      "owner_reference": "owner-authorized:BANK.DF.002",
-      "collision_domain": "engineering_control_factory"
-    }
-  ],
-  "fingerprint": "5000118da32417ff0c5e4dc62fe7c46dd6e47250c899082bd4f80049218c1025"
+  "active_ownership": [],
+  "fingerprint": "8c6e733c9a6382cc548ad1f9ab73915c678f05ad13314ea16fd27bcfd348380e"
 }
