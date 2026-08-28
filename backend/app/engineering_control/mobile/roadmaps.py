@@ -493,11 +493,13 @@ class RoadmapService:
             expected_head = roadmap.expected_head
             candidate_head = str(starting_commit_evidence.get("authoritative_head", ""))
             validate_candidate_execution_head(
-                requested_code_changes=requested_code_changes,
+                requested_code_changes=(
+                    requested_code_changes or "proof_role" in starting_commit_evidence
+                ),
                 candidate_head=candidate_head,
                 authoritative_head=expected_head,
             )
-            if requested_code_changes:
+            if requested_code_changes or "proof_role" in starting_commit_evidence:
                 from app.engineering_control.repository_readiness import (
                     repository_readiness_service,
                 )
@@ -600,11 +602,13 @@ class RoadmapService:
         expected_head = roadmap.expected_head
         candidate_head = str(starting_commit_evidence.get("authoritative_head", ""))
         validate_candidate_execution_head(
-            requested_code_changes=requested_code_changes,
+            requested_code_changes=(
+                requested_code_changes or "proof_role" in starting_commit_evidence
+            ),
             candidate_head=candidate_head,
             authoritative_head=expected_head,
         )
-        if requested_code_changes:
+        if requested_code_changes or "proof_role" in starting_commit_evidence:
             from app.engineering_control.repository_readiness import (
                 repository_readiness_service,
             )

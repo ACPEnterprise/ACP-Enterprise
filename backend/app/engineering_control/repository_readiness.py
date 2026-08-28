@@ -74,12 +74,16 @@ def readiness_is_current(
     readiness = evidence.get("provider_repository_readiness")
     if not isinstance(readiness, dict):
         return False
+    observed_at = now or datetime.now(timezone.utc)
     try:
-        datetime.fromisoformat(str(readiness["prepared_at"]))
+        prepared_at = datetime.fromisoformat(str(readiness["prepared_at"]))
     except (KeyError, TypeError, ValueError):
         return False
     return (
-        readiness.get("ready") is True
+        prepared_at.tzinfo is not None
+        and prepared_at <= observed_at
+        and observed_at - prepared_at <= READINESS_TTL
+        and readiness.get("ready") is True
         and readiness.get("repository_key") == repository_key
         and readiness.get("branch") == branch
         and readiness.get("candidate_head") == candidate_head
@@ -171,9 +175,8 @@ class RepositoryReadinessService:
                 )
                 .where(
                     EngineeringMilestone.company_id == company_id,
-                    EngineeringMilestone.status == "ready",
+                    EngineeringMilestone.status.in_(("ready", "running")),
                     EngineeringMilestone.reconciliation_state == "current",
-                    EngineeringMilestone.requested_code_changes.is_(True),
                     EngineeringPermanentCapacity.company_id == company_id,
                     EngineeringCapacityBinding.company_id == company_id,
                     EngineeringCapacityBinding.state == "active",

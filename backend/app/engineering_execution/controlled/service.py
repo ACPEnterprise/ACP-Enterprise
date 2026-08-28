@@ -12,6 +12,10 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.engineering_control.mobile.roadmaps import (
+    EngineeringMilestone,
+    EngineeringRoadmap,
+)
 from app.engineering_control.models import EngineeringCommand
 from app.engineering_control.records import EngineeringApprovalState
 from app.engineering_control.repository_operation.errors import (
@@ -212,6 +216,22 @@ def _valid_validation_run(value: object) -> bool:
 
 
 def _valid_failed_output(output: dict[str, object]) -> bool:
+    if set(output) == {
+        "workspace_id",
+        "repository_key",
+        "branch",
+        "starting_head",
+        "rejection_stage",
+        "provider_status_code",
+        "repository_mutated",
+    }:
+        return bool(
+            output.get("repository_mutated") is False
+            and output.get("rejection_stage")
+            in {"provider_admission", "workspace_preparation"}
+            and isinstance((status_code := output.get("provider_status_code")), int)
+            and 400 <= status_code < 500
+        )
     expected = {
         "workspace_id",
         "repository_key",
@@ -948,6 +968,11 @@ class ControlledExecutionService:
         await self.reconcile_acknowledged_code_commands(
             database, worker_session=session
         )
+        await self.reject_stale_available_offers_in_transaction(
+            database,
+            worker_context=session.context,
+            now=utc_now(),
+        )
         offers = await self.repository.list_available(
             database,
             company_id=session.context.company_id,
@@ -1001,6 +1026,94 @@ class ControlledExecutionService:
             )
         return tuple(responses)
 
+    async def reject_stale_available_offers_in_transaction(
+        self,
+        database: AsyncSession,
+        *,
+        worker_context: AuthenticatedWorkerContext,
+        now: datetime,
+    ) -> int:
+        """Terminally reject stale code offers before any lease can be allocated."""
+        rows = (
+            await database.execute(
+                select(
+                    ControlledExecutionOfferModel,
+                    EngineeringExecution,
+                    EngineeringMilestone,
+                    EngineeringRoadmap,
+                    EngineeringWorkstreamRuntime,
+                )
+                .join(
+                    EngineeringExecution,
+                    EngineeringExecution.id == ControlledExecutionOfferModel.execution_id,
+                )
+                .join(
+                    EngineeringMilestone,
+                    EngineeringMilestone.command_id == ControlledExecutionOfferModel.command_id,
+                )
+                .join(
+                    EngineeringRoadmap,
+                    EngineeringRoadmap.id == EngineeringMilestone.roadmap_id,
+                )
+                .outerjoin(
+                    EngineeringWorkstreamRuntime,
+                    EngineeringWorkstreamRuntime.command_id
+                    == ControlledExecutionOfferModel.command_id,
+                )
+                .where(
+                    ControlledExecutionOfferModel.company_id
+                    == worker_context.company_id,
+                    ControlledExecutionOfferModel.state
+                    == ControlledOfferState.AVAILABLE.value,
+                    ControlledExecutionOfferModel.command_type
+                    == ControlledCommandType.EXECUTE_CODE.value,
+                )
+                .with_for_update(
+                    of=(ControlledExecutionOfferModel, EngineeringExecution),
+                    skip_locked=True,
+                )
+            )
+        ).all()
+        from app.engineering_control.repository_readiness import readiness_is_current
+
+        rejected = 0
+        for offer, execution, milestone, roadmap, runtime in rows:
+            if readiness_is_current(
+                dict(milestone.starting_commit_evidence),
+                repository_key=str(offer.payload.get("repository_key", "")),
+                branch=str(offer.payload.get("expected_branch", "")),
+                candidate_head=str(offer.payload.get("expected_head", "")),
+                worker_id=worker_context.worker_id,
+                now=now,
+            ) and roadmap.expected_head == offer.payload.get("expected_head"):
+                continue
+            offer.state = ControlledOfferState.EXPIRED.value
+            offer.completed_at = now
+            offer.updated_at = now
+            offer.version += 1
+            execution.state = EngineeringExecutionState.FAILED.value
+            execution.status = EngineeringExecutionStatus.FAILED.value
+            execution.failure_classification = "controlled_execution_failed"
+            execution.finished_at = now
+            execution.evidence_summary = {
+                **dict(execution.evidence_summary),
+                "terminal_rejection": True,
+                "rejection_stage": "offer_acquisition_revalidation",
+                "rejection_reason": "stale_authoritative_repository_head",
+                "repository_mutated": False,
+            }
+            execution.updated_at = now
+            execution.version += 1
+            if runtime is not None:
+                runtime.runtime_state = "failed"
+                runtime.reason_code = "stale_authoritative_repository_head"
+                runtime.current_activity = "Execution base changed before acquisition"
+                runtime.updated_at = now
+                runtime.version += 1
+            rejected += 1
+        await database.flush()
+        return rejected
+
     async def reconcile_expired_worker_leases_in_transaction(
         self,
         database: AsyncSession,
@@ -1042,7 +1155,6 @@ class ControlledExecutionService:
                 .where(
                     ControlledExecutionOfferModel.company_id
                     == worker_context.company_id,
-                    ControlledExecutionOfferModel.worker_id == worker_context.worker_id,
                     ControlledExecutionOfferModel.state
                     == ControlledOfferState.ACQUIRED.value,
                     WorkerLease.status == WorkerLeaseStatus.ACTIVE.value,
@@ -1113,6 +1225,57 @@ class ControlledExecutionService:
             limit=1,
         )
         for command, execution in sources:
+            readiness_source = await self.repository.acquisition_readiness(
+                database,
+                company_id=command.company_id,
+                command_id=command.id,
+            )
+            if readiness_source is None:
+                continue
+            milestone, roadmap = readiness_source
+            from app.engineering_control.repository_readiness import (
+                readiness_is_current,
+            )
+
+            if (
+                roadmap.expected_head != command.expected_head
+                or not readiness_is_current(
+                    dict(milestone.starting_commit_evidence),
+                    repository_key=command.repository_key,
+                    branch=command.expected_branch,
+                    candidate_head=command.expected_head,
+                    worker_id=worker_session.context.worker_id,
+                    now=occurred_at,
+                )
+            ):
+                execution.state = EngineeringExecutionState.FAILED.value
+                execution.status = EngineeringExecutionStatus.FAILED.value
+                execution.failure_classification = "controlled_execution_failed"
+                execution.finished_at = occurred_at
+                execution.evidence_summary = {
+                    **dict(execution.evidence_summary),
+                    "terminal_rejection": True,
+                    "rejection_stage": "automatic_offer_admission",
+                    "rejection_reason": "stale_authoritative_repository_head",
+                    "repository_mutated": False,
+                }
+                execution.updated_at = occurred_at
+                execution.version += 1
+                runtime = await database.scalar(
+                    select(EngineeringWorkstreamRuntime).where(
+                        EngineeringWorkstreamRuntime.company_id == command.company_id,
+                        EngineeringWorkstreamRuntime.command_id == command.id,
+                    )
+                )
+                if runtime is not None:
+                    runtime.runtime_state = "failed"
+                    runtime.reason_code = "stale_authoritative_repository_head"
+                    runtime.current_activity = (
+                        "Execution base changed before worker dispatch"
+                    )
+                    runtime.updated_at = occurred_at
+                    runtime.version += 1
+                continue
             boundary = dict(command.execution_boundary)
             mutation_allowed = command.requested_code_changes
             operations = set(
@@ -1188,6 +1351,38 @@ class ControlledExecutionService:
             or offer.expires_at <= now
         ):
             raise ControlledExecutionIneligibleError("Execution offer is unavailable.")
+        if (
+            offer.command_type == ControlledCommandType.EXECUTE_CODE.value
+            and "execution_capability_profile" in offer.payload
+        ):
+            readiness_source = await self.repository.acquisition_readiness(
+                database,
+                company_id=worker_context.company_id,
+                command_id=offer.command_id,
+            )
+            if readiness_source is None:
+                raise ControlledExecutionIneligibleError(
+                    "Execution offer has no current scheduler repository identity."
+                )
+            milestone, roadmap = readiness_source
+            from app.engineering_control.repository_readiness import (
+                readiness_is_current,
+            )
+
+            if (
+                roadmap.expected_head != offer.payload.get("expected_head")
+                or not readiness_is_current(
+                    dict(milestone.starting_commit_evidence),
+                    repository_key=str(offer.payload.get("repository_key", "")),
+                    branch=str(offer.payload.get("expected_branch", "")),
+                    candidate_head=str(offer.payload.get("expected_head", "")),
+                    worker_id=worker_context.worker_id,
+                    now=now,
+                )
+            ):
+                raise ControlledExecutionIneligibleError(
+                    "Execution base is no longer current for this worker."
+                )
         lease = await self.workers.acquire_lease_in_transaction(
             database,
             worker_context=worker_context,

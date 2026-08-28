@@ -431,7 +431,8 @@ async def test_default_limit_reservation_allocation_and_idempotent_release(
         )
         summary = await service.summary(session, context=fixture.context)
     assert released.status == replay_release.status == "released"
-    assert summary.available_capacity == 1
+    assert summary.available_capacity == 0
+    assert summary.numeric_available_capacity == 1
     assert summary.allocated_capacity == 0
 
 

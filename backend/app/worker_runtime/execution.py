@@ -20,8 +20,49 @@ class AmbiguousProviderExecutionError(Exception):
     """Provider outcome is unknown and must never be converted into a retry."""
 
 
+class DeterministicProviderRejectionError(Exception):
+    """Provider proved that it rejected work before an executable outcome existed."""
+
+    def __init__(self, *, code: str, stage: str, status_code: int) -> None:
+        super().__init__(code)
+        self.code = code
+        self.stage = stage
+        self.status_code = status_code
+
+
+def deterministic_provider_rejection(
+    response: httpx.Response,
+) -> DeterministicProviderRejectionError | None:
+    if not (
+        400 <= response.status_code < 500 and response.status_code not in {408, 429}
+    ):
+        return None
+    code = "provider_request_rejected"
+    stage = "provider_admission"
+    try:
+        detail = response.json().get("detail")
+        if isinstance(detail, dict):
+            supplied_code = str(detail.get("code", ""))
+            supplied_stage = str(detail.get("stage", ""))
+            if SAFE_REJECTION.fullmatch(supplied_code):
+                code = supplied_code
+            if supplied_stage in {
+                "provider_admission",
+                "workspace_preparation",
+            }:
+                stage = supplied_stage
+    except (ValueError, AttributeError):
+        pass
+    return DeterministicProviderRejectionError(
+        code=code,
+        stage=stage,
+        status_code=response.status_code,
+    )
+
+
 SHA = re.compile(r"^[0-9a-f]{40}$")
 SAFE_ID = re.compile(r"^[a-z0-9][a-z0-9._-]{2,99}$")
+SAFE_REJECTION = re.compile(r"^[a-z][a-z0-9_]{2,79}$")
 MAX_MANIFEST_BYTES = 32_000
 MAX_BOUNDARY = 500
 
@@ -211,6 +252,9 @@ class NodeExecutionProviderClient:
                     # remains authoritative and its terminal result is still awaited.
                     pass
             response = await request_task
+        rejection = deterministic_provider_rejection(response)
+        if rejection is not None:
+            raise rejection
         if response.status_code != 200:
             raise AmbiguousProviderExecutionError(
                 "Node Execution Provider rejected work."

@@ -18,7 +18,7 @@ from .provider import (
     FrontendValidationEnvironment,
     ProviderJournal,
 )
-from .workspaces import WorkspaceManager
+from .workspaces import WorkspaceFailure, WorkspaceManager
 
 
 class BoundaryPayload(BaseModel):
@@ -145,7 +145,17 @@ def create_app() -> FastAPI:
             )
         except ValueError as error:
             raise HTTPException(status_code=409, detail=str(error)) from error
-        result = provider.execute(request)
+        try:
+            result = provider.execute(request)
+        except WorkspaceFailure as error:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "provider_repository_preparation_rejected",
+                    "stage": "workspace_preparation",
+                    "message": str(error),
+                },
+            ) from error
         return {
             "execution_id": str(result.execution_id),
             "lease_id": str(result.lease_id),

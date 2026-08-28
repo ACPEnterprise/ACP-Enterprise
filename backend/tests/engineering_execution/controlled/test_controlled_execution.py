@@ -2,12 +2,14 @@ import json
 from pathlib import Path
 from uuid import uuid4
 
+import httpx
 import pytest
 from app.engineering_execution.controlled.service import _valid_failed_output
 from app.worker_runtime.execution import (
     AcquiredControlledOffer,
     IsolatedWorkspaceExecutionError,
     IsolatedWorkspaceExecutor,
+    deterministic_provider_rejection,
 )
 
 HEAD = "a" * 40
@@ -117,6 +119,38 @@ def test_runtime_module_exposes_no_shell_or_repository_authority() -> None:
     assert "git add" not in source
     assert "git commit" not in source
     assert "docker" not in source.lower()
+
+
+def test_deterministic_provider_rejection_is_valid_terminal_failure() -> None:
+    assert _valid_failed_output(
+        {
+            "workspace_id": "execution-safe",
+            "repository_key": "acp-enterprise",
+            "branch": "customer-management-v1",
+            "starting_head": HEAD,
+            "rejection_stage": "workspace_preparation",
+            "provider_status_code": 409,
+            "repository_mutated": False,
+        }
+    )
+
+
+def test_provider_preparation_rejection_is_deterministic_not_ambiguous() -> None:
+    rejection = deterministic_provider_rejection(
+        httpx.Response(
+            409,
+            json={
+                "detail": {
+                    "code": "provider_repository_preparation_rejected",
+                    "stage": "workspace_preparation",
+                }
+            },
+        )
+    )
+    assert rejection is not None
+    assert rejection.code == "provider_repository_preparation_rejected"
+    assert rejection.stage == "workspace_preparation"
+    assert deterministic_provider_rejection(httpx.Response(500)) is None
 
 
 def failed_output() -> dict[str, object]:

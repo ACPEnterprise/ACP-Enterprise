@@ -6,7 +6,10 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.engineering_capacity.models import EngineeringWorkerCapacity
-from app.engineering_control.mobile.roadmaps import EngineeringMilestone
+from app.engineering_control.mobile.roadmaps import (
+    EngineeringMilestone,
+    EngineeringRoadmap,
+)
 from app.engineering_control.models import EngineeringCommand
 from app.engineering_control.scheduler.models import (
     EngineeringCapacityBinding,
@@ -30,6 +33,28 @@ from .models import ControlledExecutionOfferModel, ControlledExecutionResultMode
 
 
 class ControlledExecutionRepository:
+    @staticmethod
+    async def acquisition_readiness(
+        session: AsyncSession, *, company_id: UUID, command_id: UUID
+    ) -> tuple[EngineeringMilestone, EngineeringRoadmap] | None:
+        row = (
+            await session.execute(
+                select(EngineeringMilestone, EngineeringRoadmap)
+                .join(
+                    EngineeringRoadmap,
+                    EngineeringRoadmap.id == EngineeringMilestone.roadmap_id,
+                )
+                .where(
+                    EngineeringMilestone.company_id == company_id,
+                    EngineeringMilestone.command_id == command_id,
+                    EngineeringMilestone.status == "running",
+                    EngineeringMilestone.reconciliation_state == "current",
+                    EngineeringRoadmap.company_id == company_id,
+                )
+            )
+        ).one_or_none()
+        return None if row is None else (row[0], row[1])
+
     @staticmethod
     def result_record(
         entity: ControlledExecutionResultModel,

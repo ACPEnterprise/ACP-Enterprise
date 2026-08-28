@@ -34,6 +34,7 @@ from app.worker_runtime.config import WorkerRuntimeConfig
 from app.worker_runtime.execution import (
     AcquiredControlledOffer,
     AmbiguousProviderExecutionError,
+    DeterministicProviderRejectionError,
     IsolatedWorkspaceExecutionError,
     IsolatedWorkspaceExecutor,
     NodeExecutionProviderClient,
@@ -442,6 +443,18 @@ class AuthenticatedWorkerRuntime:
                     output = IsolatedWorkspaceExecutor(
                         self.config.workspace_root
                     ).execute(acquired)
+            except DeterministicProviderRejectionError as error:
+                outcome = "failed"
+                failure = error.code
+                output = {
+                    "workspace_id": acquired.workspace_id,
+                    "repository_key": str(acquired.payload["repository_key"]),
+                    "branch": str(acquired.payload["expected_branch"]),
+                    "starting_head": str(acquired.payload["expected_head"]),
+                    "rejection_stage": error.stage,
+                    "provider_status_code": error.status_code,
+                    "repository_mutated": False,
+                }
             except AmbiguousProviderExecutionError:
                 # The provider may have mutated its isolated workspace. Keep the
                 # acquired journal entry for explicit reconciliation and never

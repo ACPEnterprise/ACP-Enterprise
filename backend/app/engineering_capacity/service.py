@@ -275,11 +275,18 @@ class EngineeringCapacityService:
         reserved = sum(worker.reserved_capacity for worker in workers)
         system_limit = policy.maximum_concurrent_workstreams if policy else 0
         numeric_available = max(0, min(configured, system_limit) - allocated - reserved)
+        heartbeat_healthy_ids = {
+            worker.worker_id
+            for worker in eligible_workers
+            if worker.health_state == "healthy"
+            and worker.lifecycle_state == "available"
+        }
         usable_available = sum(
             worker.available_capacity
             for worker in workers
             if worker.operational_state in USABLE_STATES
             and worker.health_state == "healthy"
+            and worker.worker_id in heartbeat_healthy_ids
         )
         available = min(numeric_available, usable_available)
         return CapacitySummaryResponse(

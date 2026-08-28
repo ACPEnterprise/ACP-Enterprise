@@ -35,9 +35,9 @@ def test_matching_fresh_repository_evidence_is_ready() -> None:
     )
 
 
-def test_observation_age_does_not_change_action_relevant_readiness() -> None:
+def test_stale_observation_is_not_current_for_dispatch_authority() -> None:
     now = datetime.now(timezone.utc)
-    assert readiness_is_current(
+    assert not readiness_is_current(
         evidence(now - timedelta(minutes=3)),
         repository_key="acp-enterprise",
         branch="customer-management-v1",
