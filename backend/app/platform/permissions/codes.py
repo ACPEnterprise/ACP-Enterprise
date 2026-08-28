@@ -33,6 +33,12 @@ class AnalyticsPermission:
     ALL = frozenset({READ})
 
 
+class MigrationPermission:
+    EXECUTE_REHEARSAL = "COMPANY_MIGRATION_REHEARSAL_EXECUTE"
+
+    ALL = frozenset({EXECUTE_REHEARSAL})
+
+
 class SchedulingPermission:
     READ = "COMPANY_SCHEDULING_READ"
     MANAGE = "COMPANY_SCHEDULING_MANAGE"

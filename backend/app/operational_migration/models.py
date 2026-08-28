@@ -143,6 +143,77 @@ class OperationalMigrationException(Base):
     )
 
 
+class UnlinkedEstimateEvidence(Base):
+    """Immutable, non-operational source evidence with no Job relationship."""
+
+    __tablename__ = "operational_migration_unlinked_estimate_evidence"
+    __table_args__ = (
+        CheckConstraint(
+            "disposition = 'UNLINKED_NON_OPERATIONAL_ESTIMATE'",
+            name="ck_unlinked_estimate_evidence_disposition",
+        ),
+        CheckConstraint(
+            "job_relationship_state = 'ABSENT'",
+            name="ck_unlinked_estimate_job_absent",
+        ),
+        CheckConstraint(
+            "operational_effects_enabled = false AND accounting_truth_accepted = false",
+            name="ck_unlinked_estimate_non_operational",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "branch_id"],
+            ["branches.company_id", "branches.id"],
+            name="fk_unlinked_estimate_evidence_branch_scope",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "source_system",
+            "native_estimate_id",
+            name="uq_unlinked_estimate_evidence_native_identity",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "branch_id",
+            "evidence_digest",
+            name="uq_unlinked_estimate_evidence_replay",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    recorded_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    source_system: Mapped[str] = mapped_column(String(80), nullable=False)
+    native_estimate_id: Mapped[str] = mapped_column(String(191), nullable=False)
+    source_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    package_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    owner_binding_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    native_customer_id: Mapped[str | None] = mapped_column(String(191))
+    native_service_location_id: Mapped[str | None] = mapped_column(String(191))
+    source_status: Mapped[str] = mapped_column(String(100), nullable=False)
+    option_evidence: Mapped[list[dict[str, object]]] = mapped_column(
+        JSONB, nullable=False
+    )
+    source_timestamps: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    source_context: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    disposition: Mapped[str] = mapped_column(String(80), nullable=False)
+    job_relationship_state: Mapped[str] = mapped_column(String(20), nullable=False)
+    reconciliation_state: Mapped[str] = mapped_column(String(40), nullable=False)
+    operational_effects_enabled: Mapped[bool] = mapped_column(nullable=False)
+    accounting_truth_accepted: Mapped[bool] = mapped_column(nullable=False)
+    recorded_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
 class JobSourceIdentity(Base):
     __tablename__ = "operational_migration_job_source_identities"
     __table_args__ = (

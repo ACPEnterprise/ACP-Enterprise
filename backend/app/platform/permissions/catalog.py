@@ -10,6 +10,7 @@ from app.platform.permissions.codes import (
     EngineeringExecutionPermission,
     EngineeringRepositoryOperationPermission,
     JobPermission,
+    MigrationPermission,
     SchedulingPermission,
     WorkerControlPermission,
     WorkerIdentityPermission,
@@ -116,6 +117,17 @@ ANALYTICS_DEFINITIONS = tuple(
     for code in sorted(AnalyticsPermission.ALL)
 )
 
+MIGRATION_DEFINITIONS = tuple(
+    PermissionDefinition(
+        code=code,
+        name="Company Migration Rehearsal Execute",
+        resource="migration_rehearsal",
+        action="execute",
+        scope=PermissionScope.COMPANY,
+    )
+    for code in sorted(MigrationPermission.ALL)
+)
+
 SCHEDULING_DEFINITIONS = tuple(
     PermissionDefinition(
         code=code,
@@ -197,6 +209,7 @@ permission_catalog = PermissionCatalog(
     ADMINISTRATION_DEFINITIONS
     + CUSTOMER_DEFINITIONS
     + ANALYTICS_DEFINITIONS
+    + MIGRATION_DEFINITIONS
     + SCHEDULING_DEFINITIONS
     + JOB_DEFINITIONS
     + ENGINEERING_COMMAND_DEFINITIONS
