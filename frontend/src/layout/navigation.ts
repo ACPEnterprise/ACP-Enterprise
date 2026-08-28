@@ -139,6 +139,14 @@ export const navigationCatalog = [
     requiredPermission: "COMPANY_INVENTORY_READ",
   },
   {
+    id: "purchasing",
+    label: "Purchasing",
+    path: "/purchasing",
+    icon: ClipboardList,
+    availability: "available",
+    requiredPermission: "COMPANY_PURCHASING_READ",
+  },
+  {
     id: "employees",
     label: "Employees",
     path: "/employees",

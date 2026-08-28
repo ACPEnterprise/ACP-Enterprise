@@ -1,0 +1,1 @@
+"""Operational Purchasing domain."""

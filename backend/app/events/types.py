@@ -42,6 +42,16 @@ class EventType(str, Enum):
     INVENTORY_RESERVATION_CREATED = "inventory.reservation_created"
     INVENTORY_RESERVATION_RELEASED = "inventory.reservation_released"
 
+    # Purchasing
+    PURCHASING_VENDOR_CREATED = "purchasing.vendor_created"
+    PURCHASING_VENDOR_UPDATED = "purchasing.vendor_updated"
+    PURCHASING_PURCHASE_ORDER_CREATED = "purchasing.purchase_order_created"
+    PURCHASING_PURCHASE_ORDER_SUBMITTED = "purchasing.purchase_order_submitted"
+    PURCHASING_PURCHASE_ORDER_APPROVED = "purchasing.purchase_order_approved"
+    PURCHASING_PURCHASE_ORDER_ISSUED = "purchasing.purchase_order_issued"
+    PURCHASING_PURCHASE_ORDER_CANCELLED = "purchasing.purchase_order_cancelled"
+    PURCHASING_PURCHASE_ORDER_CLOSED = "purchasing.purchase_order_closed"
+
     # Operations
     OPERATIONS_SERVICE_REQUEST_ACCEPTED = "operations.service_request.accepted"
 

@@ -96,6 +96,15 @@ export const inventoryHandle = {
   },
 } as const satisfies ShellRouteHandle;
 
+export const purchasingHandle = {
+  workspace: {
+    pageTitle: "Purchasing",
+    breadcrumbs: [{ label: "Purchasing" }],
+    helpTopic: "purchasing",
+    aiContext: "purchasing",
+  },
+} as const satisfies ShellRouteHandle;
+
 export const priceBookHandle = {
   workspace: {
     pageTitle: "Price Book",
