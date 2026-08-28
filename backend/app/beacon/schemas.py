@@ -3,6 +3,11 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.beacon.catalog import (
+    OperationalConflictPolicy,
+    OperationalSignalAdmission,
+    OperationalSignalFamily,
+)
 from app.beacon.contracts import (
     BeaconCategory,
     BeaconConfidenceLevel,
@@ -132,3 +137,32 @@ class BeaconSnoozeCommandRequest(BeaconLifecycleCommandRequest):
 
 class BeaconLifecycleHistoryResponse(BaseModel):
     items: tuple[BeaconLifecycleEventResponse, ...]
+
+
+class OperationalSignalDefinitionResponse(BaseModel):
+    definition_id: str
+    version: int
+    definition_digest: str
+    family: OperationalSignalFamily
+    subject_type: str
+    source_authority: str
+    condition: str
+    explanation_safe_fields: tuple[str, ...]
+    required_evidence_types: tuple[str, ...]
+    base_severity: BeaconSeverity
+    base_priority: BeaconPriorityBand
+    expiration_policy: BeaconExpirationPolicy
+    ttl_seconds: int
+    conflict_policy: OperationalConflictPolicy
+    admission: OperationalSignalAdmission
+    evaluator_rule_code: str | None
+    scope: str
+
+
+class OperationalSignalCatalogResponse(BaseModel):
+    catalog_id: str
+    version: int
+    catalog_digest: str
+    company_id: UUID
+    active_branch_id: UUID | None
+    definitions: tuple[OperationalSignalDefinitionResponse, ...]

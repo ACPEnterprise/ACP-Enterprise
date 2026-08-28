@@ -5,6 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.beacon.catalog import OPERATIONAL_SIGNAL_CATALOG
 from app.beacon.contracts import BeaconLifecycleAction
 from app.beacon.errors import (
     BeaconSignalNotFoundError,
@@ -22,6 +23,8 @@ from app.beacon.schemas import (
     BeaconSignalPage,
     BeaconSignalResponse,
     BeaconSnoozeCommandRequest,
+    OperationalSignalCatalogResponse,
+    OperationalSignalDefinitionResponse,
 )
 from app.beacon.service import SIGNAL_TTL, beacon_query_service
 from app.database.session import get_database_session
@@ -39,6 +42,33 @@ BeaconReviewer = Annotated[
     AuthorizationContext,
     Depends(require_permission(BeaconPermission.REVIEW)),
 ]
+
+
+@router.get(
+    "/operational-catalog",
+    response_model=OperationalSignalCatalogResponse,
+    summary="List the versioned operational exception catalog",
+)
+async def operational_signal_catalog(
+    context: BeaconReader,
+) -> OperationalSignalCatalogResponse:
+    catalog = OPERATIONAL_SIGNAL_CATALOG
+    return OperationalSignalCatalogResponse(
+        catalog_id=catalog.catalog_id,
+        version=catalog.version,
+        catalog_digest=catalog.catalog_digest,
+        company_id=context.company.id,
+        active_branch_id=context.active_branch.id if context.active_branch else None,
+        definitions=tuple(
+            OperationalSignalDefinitionResponse.model_validate(
+                {
+                    **definition.payload(),
+                    "definition_digest": definition.definition_digest,
+                }
+            )
+            for definition in catalog.definitions
+        ),
+    )
 
 
 @router.get(
