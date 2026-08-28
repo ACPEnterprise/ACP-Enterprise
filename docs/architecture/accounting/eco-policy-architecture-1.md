@@ -6,9 +6,27 @@ Company-only scope is supported in v1. The schema retains a nullable Branch iden
 
 Only explicitly approved, effective policy versions resolve. Missing, overlapping, unsupported, cross-Company, invalid-lifecycle, or scope-ambiguous policy fails closed. Drafting, reading, approval, and retirement use separate Company permissions. Approval and supersession create new durable facts; approved history is not edited or erased.
 
+Resolution has four explicit outcomes: approved selection, approved deferral,
+unresolved, or conflict. Deferral is an approved Company decision to leave a family
+unresolved; it carries no strategy or parameter value and remains a measurement
+blocker. It never supplies an accounting default.
+
+Each product family publishes supported strategy identifiers and typed parameter
+definitions. Company values live in versioned, effective-dated parameter records,
+not source code. Missing strategy-required parameters keep the measurement
+prerequisite unresolved. This supports future worker-class rate tables, true-up
+rules, category sets, freshness windows, thresholds, pools, and allocation drivers
+without fabricating any value.
+
 Policy references to evidence-acceptance rules are identities only. A policy does not accept or promote QBO, HCP, operational, or Accounting evidence. Those rules remain independently versioned authority contracts.
 
 Snapshots bind Company, subject, reconciliation key, as-of date, exact policy identities/digests, and definition version. Canonical SHA-256 digests make later change detectable. Supersession affects future resolution, while a historical snapshot continues to replay its original policy context. Restatement under a new policy must create a new snapshot and future result.
+
+The policy-to-measurement bridge converts a verified snapshot into existing
+`PolicyPrerequisite` records. Deferred or parameter-incomplete policies remain
+`UNRESOLVED`, survive readiness-package sealing, and are rejected by calculation
+admission. The bridge performs no economic calculation and does not alter evidence
+authority.
 
 The registry is extensible without conflating Job Economics labor burden with future Technician Economics. Technician attribution, compensation, worker-period costs, vehicle assignments/costs, tools/assets, multiple-worker attribution, and technician operating costs require distinct future policy families and evidence; this milestone calculates none of them.
 

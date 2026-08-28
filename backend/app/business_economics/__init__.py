@@ -40,12 +40,14 @@ from .measurement_package import (
 from .policy_authority import (
     POLICY_FAMILY_REGISTRY,
     CompanyPolicyVersion,
+    PolicyDisposition,
     PolicyLifecycle,
     PolicySnapshot,
     build_policy_snapshot,
     resolve_policy,
     seal_policy,
 )
+from .policy_measurement_bridge import policy_snapshot_to_prerequisites
 from .source_adapters import (
     PublicOperationalEvidence,
     adapt_public_operational_evidence,
@@ -82,6 +84,7 @@ __all__ = [
     "MeasurementGateState",
     "MeasurementPackageIntegrityError",
     "MeasurementReadinessPackage",
+    "PolicyDisposition",
     "PolicyLifecycle",
     "PolicyPrerequisite",
     "PolicySnapshot",
@@ -100,6 +103,7 @@ __all__ = [
     "evaluate_calculation_admission",
     "evaluate_contribution_measurement_gate",
     "evaluate_economic_findings",
+    "policy_snapshot_to_prerequisites",
     "resolve_policy",
     "seal_measurement_readiness_package",
     "seal_policy",

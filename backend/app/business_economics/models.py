@@ -34,6 +34,10 @@ class CompanyFinancePolicyVersion(Base):
             name="ck_eco_policy_lifecycle",
         ),
         CheckConstraint(
+            "disposition IN ('selected','deferred')",
+            name="ck_eco_policy_disposition",
+        ),
+        CheckConstraint(
             "effective_end IS NULL OR effective_end > effective_start",
             name="ck_eco_policy_interval",
         ),
@@ -65,7 +69,8 @@ class CompanyFinancePolicyVersion(Base):
     branch_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
     family_key: Mapped[str] = mapped_column(String(100), nullable=False)
     policy_version: Mapped[int] = mapped_column(Integer, nullable=False)
-    strategy_key: Mapped[str] = mapped_column(String(100), nullable=False)
+    strategy_key: Mapped[str | None] = mapped_column(String(100))
+    disposition: Mapped[str] = mapped_column(String(20), nullable=False)
     parameters: Mapped[dict[str, object]] = mapped_column(
         JSONB, nullable=False, default=dict
     )
@@ -124,12 +129,67 @@ class FinancePolicySnapshotRecord(Base):
     as_of_date: Mapped[date] = mapped_column(Date, nullable=False)
     policy_ids: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
     policy_digests: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    deferred_family_keys: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
     definition_version: Mapped[str] = mapped_column(String(80), nullable=False)
     snapshot_digest: Mapped[str] = mapped_column(String(64), nullable=False)
     created_by_user_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("users.id", ondelete="RESTRICT"),
         nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
+class CompanyFinancePolicyParameter(Base):
+    __tablename__ = "economics_company_policy_parameters"
+    __table_args__ = (
+        CheckConstraint("parameter_version >= 1", name="ck_eco_parameter_version"),
+        CheckConstraint("branch_id IS NULL", name="ck_eco_parameter_company_scope_v1"),
+        CheckConstraint(
+            "effective_end IS NULL OR effective_end > effective_start",
+            name="ck_eco_parameter_interval",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "family_key",
+            "parameter_key",
+            "parameter_version",
+            name="uq_eco_parameter_version",
+        ),
+        Index(
+            "ix_eco_parameter_resolution",
+            "company_id",
+            "family_key",
+            "parameter_key",
+            "effective_start",
+        ),
+    )
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    branch_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    family_key: Mapped[str] = mapped_column(String(100), nullable=False)
+    parameter_key: Mapped[str] = mapped_column(String(100), nullable=False)
+    parameter_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    value: Mapped[object] = mapped_column(JSONB, nullable=False)
+    effective_start: Mapped[date] = mapped_column(Date, nullable=False)
+    effective_end: Mapped[date | None] = mapped_column(Date)
+    definition_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    parameter_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    approved_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    approved_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now

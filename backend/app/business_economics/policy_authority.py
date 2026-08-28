@@ -27,30 +27,150 @@ class PolicyLifecycle(StrEnum):
     RETIRED = "retired"
 
 
+class PolicyDisposition(StrEnum):
+    SELECTED = "selected"
+    DEFERRED = "deferred"
+
+
+class PolicyResolutionState(StrEnum):
+    APPROVED = "approved"
+    DEFERRED = "deferred"
+    UNRESOLVED = "unresolved"
+    CONFLICT = "conflict"
+
+
 @dataclass(frozen=True)
 class PolicyFamilyDefinition:
     key: str
     title: str
+    finance_decision_id: str
+    supported_strategies: tuple[str, ...]
+    parameter_types: Mapping[str, str]
     definition_version: str = POLICY_DEFINITION_VERSION
 
 
-_FAMILY_TITLES = {
-    "job_lifecycle_cutoff": "Job lifecycle and cutoff",
-    "revenue_recognition": "Revenue recognition",
-    "payment_settlement_acceptance": "Payment and settlement acceptance",
-    "direct_labor_measurement": "Direct labor measurement",
-    "labor_burden": "Labor burden",
-    "direct_material_costing": "Direct material costing",
-    "other_attributable_direct_costs": "Other attributable direct costs",
-    "overhead_pool_definitions": "Overhead pool definitions",
-    "overhead_allocation": "Overhead allocation",
-    "reconciliation_source_precedence": "Reconciliation and source precedence",
-    "monetary_materiality": "Monetary materiality",
-    "accounting_reconciliation_admission": "Accounting reconciliation admission",
+_FAMILIES = {
+    "revenue_recognition": (
+        "ECO-FIN-001",
+        "Revenue recognition",
+        (
+            "invoice_issuance",
+            "accepted_earned_value_at_completion",
+            "approved_progress",
+            "cash_settlement",
+        ),
+        {},
+    ),
+    "payment_settlement_acceptance": (
+        "ECO-FIN-002",
+        "Payment and settlement acceptance",
+        ("accepted_payment_application", "bank_settlement", "cash_receipt"),
+        {"freshness_days": "integer"},
+    ),
+    "direct_labor_measurement": (
+        "ECO-FIN-003",
+        "Direct labor measurement",
+        ("approved_actual_job_time", "approved_standard_time"),
+        {"time_unit": "string"},
+    ),
+    "labor_burden": (
+        "ECO-FIN-004",
+        "Labor burden",
+        ("actual_burden", "standard_by_worker_class", "unburdened"),
+        {"worker_class_rate_table_ref": "reference", "true_up_rule_ref": "reference"},
+    ),
+    "direct_material_costing": (
+        "ECO-FIN-005",
+        "Direct material costing",
+        (
+            "accepted_inventory_issue_layers",
+            "approved_standard_cost",
+            "accepted_specific_purchase_cost",
+        ),
+        {"cost_layer_method": "string"},
+    ),
+    "other_attributable_direct_costs": (
+        "ECO-FIN-006",
+        "Other attributable direct costs",
+        ("category_inclusion_exclusion",),
+        {"included_categories": "string_list", "excluded_categories": "string_list"},
+    ),
+    "overhead_pool_definitions": (
+        "ECO-FIN-007",
+        "Overhead pool definitions",
+        ("approved_pool_set",),
+        {"pool_definition_refs": "reference_list"},
+    ),
+    "overhead_allocation": (
+        "ECO-FIN-008",
+        "Overhead allocation",
+        ("approved_allocation_drivers",),
+        {"driver_definition_refs": "reference_list"},
+    ),
+    "reconciliation_source_precedence": (
+        "ECO-FIN-009",
+        "Reconciliation and source precedence",
+        ("reject_conflicting_component", "fact_specific_approved_precedence"),
+        {"precedence_rule_refs": "reference_list"},
+    ),
+    "monetary_materiality": (
+        "ECO-FIN-010",
+        "Monetary materiality",
+        ("exact_exceptions", "approved_threshold"),
+        {"threshold_minor_units": "integer", "currency": "string"},
+    ),
+    "accounting_reconciliation_admission": (
+        "ECO-FIN-011",
+        "Accounting reconciliation admission",
+        ("integrity_reconciled_reviewed", "integrity_reconciled_provisional"),
+        {"freshness_days": "integer"},
+    ),
+    "job_lifecycle_cutoff": (
+        "ECO-FIN-012",
+        "Job lifecycle and cutoff",
+        ("completed_only", "approved_progress", "closed_period"),
+        {},
+    ),
 }
 POLICY_FAMILY_REGISTRY: Mapping[str, PolicyFamilyDefinition] = MappingProxyType(
-    {key: PolicyFamilyDefinition(key, title) for key, title in _FAMILY_TITLES.items()}
+    {
+        key: PolicyFamilyDefinition(key, title, decision_id, strategies, parameters)
+        for key, (decision_id, title, strategies, parameters) in _FAMILIES.items()
+    }
 )
+STRATEGY_REQUIRED_PARAMETERS: Mapping[tuple[str, str], tuple[str, ...]] = (
+    MappingProxyType(
+        {
+            ("labor_burden", "standard_by_worker_class"): (
+                "worker_class_rate_table_ref",
+                "true_up_rule_ref",
+            ),
+            ("other_attributable_direct_costs", "category_inclusion_exclusion"): (
+                "included_categories",
+                "excluded_categories",
+            ),
+            ("overhead_pool_definitions", "approved_pool_set"): (
+                "pool_definition_refs",
+            ),
+            ("overhead_allocation", "approved_allocation_drivers"): (
+                "driver_definition_refs",
+            ),
+            ("monetary_materiality", "approved_threshold"): (
+                "threshold_minor_units",
+                "currency",
+            ),
+        }
+    )
+)
+
+
+def missing_required_parameters(policy: CompanyPolicyVersion) -> tuple[str, ...]:
+    if policy.strategy_key is None:
+        return ()
+    required = STRATEGY_REQUIRED_PARAMETERS.get(
+        (policy.family_key, policy.strategy_key), ()
+    )
+    return tuple(sorted(set(required) - set(policy.parameters)))
 
 
 class PolicyAuthorityError(ValueError):
@@ -83,7 +203,8 @@ class CompanyPolicyVersion:
     branch_id: UUID | None
     family_key: str
     policy_version: int
-    strategy_key: str
+    disposition: PolicyDisposition
+    strategy_key: str | None
     parameters: Mapping[str, Any]
     evidence_acceptance_rule_refs: tuple[str, ...]
     effective_start: date
@@ -103,6 +224,7 @@ class CompanyPolicyVersion:
             "branch_id": str(self.branch_id) if self.branch_id else None,
             "family_key": self.family_key,
             "policy_version": self.policy_version,
+            "disposition": self.disposition.value,
             "strategy_key": self.strategy_key,
             "parameters": dict(self.parameters),
             "evidence_acceptance_rule_refs": sorted(self.evidence_acceptance_rule_refs),
@@ -131,8 +253,17 @@ class CompanyPolicyVersion:
             raise PolicyIntegrityError(
                 "branch policy overrides are not supported in v1"
             )
-        if self.policy_version < 1 or not self.strategy_key:
-            raise PolicyIntegrityError("invalid policy version or strategy")
+        definition = POLICY_FAMILY_REGISTRY[self.family_key]
+        if self.policy_version < 1:
+            raise PolicyIntegrityError("invalid policy version")
+        if self.disposition is PolicyDisposition.SELECTED:
+            if self.strategy_key not in definition.supported_strategies:
+                raise PolicyIntegrityError("unsupported policy strategy")
+        elif self.strategy_key is not None or self.parameters:
+            raise PolicyIntegrityError(
+                "deferred policy cannot imply strategy or values"
+            )
+        _validate_parameter_types(self.parameters, definition.parameter_types)
         if (
             self.effective_end is not None
             and self.effective_end <= self.effective_start
@@ -167,16 +298,163 @@ def seal_policy(**values: Any) -> CompanyPolicyVersion:
     )
 
 
-def resolve_policy(
+def _validate_parameter_types(
+    parameters: Mapping[str, Any], parameter_types: Mapping[str, str]
+) -> None:
+    unknown = set(parameters) - set(parameter_types)
+    if unknown:
+        raise PolicyIntegrityError("policy contains undefined parameters")
+    for key, value in parameters.items():
+        kind = parameter_types[key]
+        valid = {
+            "integer": isinstance(value, int) and not isinstance(value, bool),
+            "string": isinstance(value, str),
+            "reference": isinstance(value, str),
+            "string_list": isinstance(value, list)
+            and all(isinstance(item, str) for item in value),
+            "reference_list": isinstance(value, list)
+            and all(isinstance(item, str) for item in value),
+        }[kind]
+        if not valid:
+            raise PolicyIntegrityError("policy parameter type mismatch")
+
+
+@dataclass(frozen=True)
+class PolicyResolution:
+    company_id: UUID
+    branch_id: UUID | None
+    family_key: str
+    as_of: date
+    state: PolicyResolutionState
+    policy: CompanyPolicyVersion | None
+    reason: str
+
+
+@dataclass(frozen=True)
+class PolicyParameterRecord:
+    parameter_id: UUID
+    company_id: UUID
+    branch_id: UUID | None
+    family_key: str
+    parameter_key: str
+    parameter_version: int
+    value: object
+    effective_start: date
+    effective_end: date | None
+    approved_by_user_id: UUID
+    approved_at: datetime
+    definition_version: str
+    parameter_digest: str
+
+    def canonical_content(self) -> dict[str, object]:
+        return {
+            "parameter_id": str(self.parameter_id),
+            "company_id": str(self.company_id),
+            "branch_id": str(self.branch_id) if self.branch_id else None,
+            "family_key": self.family_key,
+            "parameter_key": self.parameter_key,
+            "parameter_version": self.parameter_version,
+            "value": self.value,
+            "effective_start": self.effective_start.isoformat(),
+            "effective_end": self.effective_end.isoformat()
+            if self.effective_end
+            else None,
+            "approved_by_user_id": str(self.approved_by_user_id),
+            "approved_at": self.approved_at.isoformat(),
+            "definition_version": self.definition_version,
+        }
+
+    def validate(self) -> None:
+        definition = POLICY_FAMILY_REGISTRY.get(self.family_key)
+        if definition is None or self.parameter_key not in definition.parameter_types:
+            raise PolicyIntegrityError("unsupported policy parameter")
+        if self.branch_id is not None or self.parameter_version < 1:
+            raise PolicyIntegrityError("invalid parameter scope or version")
+        if (
+            self.effective_end is not None
+            and self.effective_end <= self.effective_start
+        ):
+            raise PolicyIntegrityError("invalid parameter effective interval")
+        _validate_parameter_types(
+            {self.parameter_key: self.value}, definition.parameter_types
+        )
+        if canonical_digest(self.canonical_content()) != self.parameter_digest:
+            raise PolicyIntegrityError("policy parameter digest mismatch")
+
+
+def seal_policy_parameter(**values: Any) -> PolicyParameterRecord:
+    draft = PolicyParameterRecord(**values, parameter_digest="")
+    return PolicyParameterRecord(
+        **values, parameter_digest=canonical_digest(draft.canonical_content())
+    )
+
+
+def resolve_policy_authority(
     policies: Sequence[CompanyPolicyVersion],
     *,
     company_id: UUID,
     family_key: str,
     as_of: date,
     branch_id: UUID | None = None,
-) -> CompanyPolicyVersion:
+) -> PolicyResolution:
     if branch_id is not None:
-        raise PolicyResolutionError("branch policy resolution is not supported in v1")
+        return PolicyResolution(
+            company_id,
+            branch_id,
+            family_key,
+            as_of,
+            PolicyResolutionState.CONFLICT,
+            None,
+            "branch_policy_resolution_unsupported_v1",
+        )
+    applicable = _applicable_policies(policies, company_id, family_key, as_of)
+    if not applicable:
+        return PolicyResolution(
+            company_id,
+            None,
+            family_key,
+            as_of,
+            PolicyResolutionState.UNRESOLVED,
+            None,
+            "no_applicable_approved_policy",
+        )
+    if len(applicable) > 1:
+        return PolicyResolution(
+            company_id,
+            None,
+            family_key,
+            as_of,
+            PolicyResolutionState.CONFLICT,
+            None,
+            "ambiguous_overlapping_policy",
+        )
+    policy = applicable[0]
+    state = (
+        PolicyResolutionState.DEFERRED
+        if policy.disposition is PolicyDisposition.DEFERRED
+        else PolicyResolutionState.APPROVED
+    )
+    return PolicyResolution(
+        company_id,
+        None,
+        family_key,
+        as_of,
+        state,
+        policy,
+        "explicitly_deferred"
+        if state is PolicyResolutionState.DEFERRED
+        else "approved_applicable_policy",
+    )
+
+
+def _applicable_policies(
+    policies: Sequence[CompanyPolicyVersion],
+    company_id: UUID,
+    family_key: str,
+    as_of: date,
+) -> list[CompanyPolicyVersion]:
+    for policy in policies:
+        policy.validate()
     shadowed_ids = {
         policy.supersedes_policy_id
         for policy in policies
@@ -191,18 +469,40 @@ def resolve_policy(
             PolicyLifecycle.RETIRED,
         }
     }
-    candidates = []
-    for policy in policies:
-        policy.validate()
-        if (
-            policy.company_id == company_id
-            and policy.family_key == family_key
-            and policy.lifecycle is PolicyLifecycle.APPROVED
-            and policy.policy_id not in shadowed_ids
-            and policy.effective_start <= as_of
-            and (policy.effective_end is None or as_of < policy.effective_end)
-        ):
-            candidates.append(policy)
+    return [
+        policy
+        for policy in policies
+        if policy.company_id == company_id
+        and policy.family_key == family_key
+        and policy.lifecycle is PolicyLifecycle.APPROVED
+        and policy.policy_id not in shadowed_ids
+        and policy.effective_start <= as_of
+        and (policy.effective_end is None or as_of < policy.effective_end)
+    ]
+
+
+def resolve_policy(
+    policies: Sequence[CompanyPolicyVersion],
+    *,
+    company_id: UUID,
+    family_key: str,
+    as_of: date,
+    branch_id: UUID | None = None,
+) -> CompanyPolicyVersion:
+    if branch_id is not None:
+        raise PolicyResolutionError("branch policy resolution is not supported in v1")
+    resolution = resolve_policy_authority(
+        policies,
+        company_id=company_id,
+        family_key=family_key,
+        as_of=as_of,
+        branch_id=branch_id,
+    )
+    candidates = (
+        [resolution.policy]
+        if resolution.state is PolicyResolutionState.APPROVED and resolution.policy
+        else []
+    )
     if len(candidates) != 1:
         raise PolicyResolutionError(
             "required policy is missing or has ambiguous overlapping approval"
@@ -255,6 +555,7 @@ class PolicySnapshot:
     reconciliation_key: str
     as_of: date
     policies: tuple[CompanyPolicyVersion, ...]
+    deferred_family_keys: tuple[str, ...]
     definition_version: str
     snapshot_digest: str
 
@@ -266,6 +567,7 @@ class PolicySnapshot:
             "reconciliation_key": self.reconciliation_key,
             "as_of": self.as_of.isoformat(),
             "policy_digests": sorted(policy.policy_digest for policy in self.policies),
+            "deferred_family_keys": sorted(self.deferred_family_keys),
             "definition_version": self.definition_version,
         }
 
@@ -291,8 +593,8 @@ def build_policy_snapshot(
     as_of: date,
     required_families: Sequence[str],
 ) -> PolicySnapshot:
-    selected = tuple(
-        resolve_policy(
+    resolutions = tuple(
+        resolve_policy_authority(
             policies,
             company_id=company_id,
             family_key=family,
@@ -301,6 +603,14 @@ def build_policy_snapshot(
         )
         for family in sorted(set(required_families))
     )
+    if any(
+        item.state in {PolicyResolutionState.UNRESOLVED, PolicyResolutionState.CONFLICT}
+        for item in resolutions
+    ):
+        raise PolicyResolutionError(
+            "policy snapshot has unresolved or conflicting family"
+        )
+    selected = tuple(item.policy for item in resolutions if item.policy is not None)
     base = PolicySnapshot(
         company_id=company_id,
         branch_id=branch_id,
@@ -308,6 +618,11 @@ def build_policy_snapshot(
         reconciliation_key=reconciliation_key,
         as_of=as_of,
         policies=selected,
+        deferred_family_keys=tuple(
+            item.family_key
+            for item in resolutions
+            if item.state is PolicyResolutionState.DEFERRED
+        ),
         definition_version=SNAPSHOT_DEFINITION_VERSION,
         snapshot_digest="",
     )
@@ -318,6 +633,7 @@ def build_policy_snapshot(
         reconciliation_key=base.reconciliation_key,
         as_of=base.as_of,
         policies=base.policies,
+        deferred_family_keys=base.deferred_family_keys,
         definition_version=base.definition_version,
         snapshot_digest=canonical_digest(base.canonical_content()),
     )
