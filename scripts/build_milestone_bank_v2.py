@@ -595,8 +595,8 @@ def build() -> dict[str, Any]:
                 dependencies = [previous]
             state = family.first_state if index == 1 else "BLOCKED_DEPENDENCY"
             owner = family.first_owner if index == 1 else False
-            finance = family.first_finance if index == 1 else False
-            external = family.first_external if index == 1 else "none"
+            finance = family.first_finance
+            external = family.first_external
             readiness = (
                 family.first_gate
                 if index == 1
