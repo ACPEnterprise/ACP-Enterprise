@@ -165,6 +165,124 @@ class OwnerDecisionRecordBinding:
 
 
 @dataclass(frozen=True)
+class BranchScopeBinding:
+    group_identifier: str
+    binding_digest: str
+    selected_alternative: str
+    company_id: UUID
+    branch_id: UUID
+    source_business_unit_to_branch: tuple[tuple[str, UUID], ...]
+    default_branch_for_missing_business_unit: UUID
+    preserve_source_business_unit_evidence: bool
+    bound_at: datetime
+    authority: str
+
+    @classmethod
+    def bind(
+        cls,
+        group: OwnerDecisionGroup,
+        *,
+        binding_digest: str,
+        company_id: UUID,
+        branch_id: UUID,
+        source_business_unit_ids: tuple[str, ...],
+        authority: str,
+        bound_at: datetime | None = None,
+    ) -> BranchScopeBinding:
+        alternative = "OWNER_MAP_BUSINESS_UNIT_AND_DEFAULT"
+        if binding_digest != group.binding_digest:
+            raise ValueError(
+                "binding digest does not match the reviewed decision group"
+            )
+        if alternative not in {item.identifier for item in group.alternatives}:
+            raise ValueError("Branch mapping alternative is not defined")
+        if not source_business_unit_ids or len(source_business_unit_ids) != len(
+            set(source_business_unit_ids)
+        ):
+            raise ValueError("unique source Business Unit identities are required")
+        if any(not item.startswith("buu_") for item in source_business_unit_ids):
+            raise ValueError("native HCP Business Unit identities are required")
+        return cls(
+            group_identifier=group.identifier,
+            binding_digest=binding_digest,
+            selected_alternative=alternative,
+            company_id=company_id,
+            branch_id=branch_id,
+            source_business_unit_to_branch=tuple(
+                (item, branch_id) for item in sorted(source_business_unit_ids)
+            ),
+            default_branch_for_missing_business_unit=branch_id,
+            preserve_source_business_unit_evidence=True,
+            bound_at=bound_at or datetime.now(timezone.utc),
+            authority=authority.strip(),
+        )
+
+    @property
+    def receipt_digest(self) -> str:
+        return canonical_sha256({"contract": CONTRACT_VERSION, "binding": asdict(self)})
+
+
+@dataclass(frozen=True)
+class UnlinkedEstimateExceptionBinding:
+    group_identifier: str
+    binding_digest: str
+    selected_alternative: str
+    exception_contract_identifier: str
+    native_estimate_ids: tuple[str, ...]
+    prohibited_effects: tuple[str, ...]
+    preserve_source_evidence: bool
+    reversible_before_cutover: bool
+    bound_at: datetime
+    authority: str
+
+    @classmethod
+    def bind(
+        cls,
+        group: OwnerDecisionGroup,
+        *,
+        binding_digest: str,
+        native_estimate_ids: tuple[str, ...],
+        authority: str,
+        bound_at: datetime | None = None,
+    ) -> UnlinkedEstimateExceptionBinding:
+        alternative = "MIGRATE_UNLINKED_EXCEPTION_IF_SUPPORTED"
+        if binding_digest != group.binding_digest:
+            raise ValueError(
+                "binding digest does not match the reviewed decision group"
+            )
+        if alternative not in {item.identifier for item in group.alternatives}:
+            raise ValueError("unlinked Estimate alternative is not defined")
+        if len(native_estimate_ids) != 24 or len(set(native_estimate_ids)) != 24:
+            raise ValueError("the reviewed 24 unique Estimate identities are required")
+        if any(not item.startswith("csr_") for item in native_estimate_ids):
+            raise ValueError("native HCP Estimate identities are required")
+        return cls(
+            group_identifier=group.identifier,
+            binding_digest=binding_digest,
+            selected_alternative=alternative,
+            exception_contract_identifier="UNLINKED_NON_OPERATIONAL_ESTIMATE",
+            native_estimate_ids=tuple(sorted(native_estimate_ids)),
+            prohibited_effects=(
+                "accepted_accounting_truth",
+                "job_activation",
+                "job_completion",
+                "job_creation",
+                "job_dispatch",
+                "job_financial_posting",
+                "job_scheduling",
+            ),
+            preserve_source_evidence=True,
+            reversible_before_cutover=True,
+            bound_at=bound_at or datetime.now(timezone.utc),
+            authority=authority.strip(),
+        )
+
+    @property
+    def receipt_digest(self) -> str:
+        return canonical_sha256({"contract": CONTRACT_VERSION, "binding": asdict(self)})
+
+
+@dataclass(frozen=True)
 class NonProductionTarget:
     environment: str
     database_url: str
