@@ -60,12 +60,18 @@ def test_current_projection_reconciles_completion_and_releases_successor() -> No
     assert milestones["BANK.PLAT.001"].completion_commit_sha == (
         "0f6559ecddb7ca3854c79ea7b5cb31432318976a"
     )
+    assert milestones["BANK.PLAT.002"].current_state == "COMPLETE"
+    assert milestones["BANK.PLAT.002"].canonical_milestone_id == "BANK.PLAT.002"
+    assert milestones["BANK.PLAT.002"].completion_commit_sha == (
+        "b88a48d37da0343e49ad916bd0901beb85303c35"
+    )
     assert milestones["BANK.PUR.002"].current_state == "EXECUTABLE"
-    assert milestones["BANK.PLAT.002"].current_state == "EXECUTABLE"
+    assert milestones["BANK.PLAT.003"].current_state == "EXECUTABLE"
     assert "BANK.PUR.001" not in projection.executable_milestone_ids
     assert "BANK.PLAT.001" not in projection.executable_milestone_ids
     assert "BANK.PUR.002" in projection.executable_milestone_ids
-    assert "BANK.PLAT.002" in projection.executable_milestone_ids
+    assert "BANK.PLAT.002" not in projection.executable_milestone_ids
+    assert "BANK.PLAT.003" in projection.executable_milestone_ids
     assert "BANK.BEA.001" in projection.executable_milestone_ids
 
     accounting = milestones["BANK.ACC.001"]
@@ -92,6 +98,26 @@ def test_unresolved_predecessor_blocks_successor() -> None:
     milestone = _by_id(evaluate_readiness(bank, authority))["BANK.PLAT.001"]
     assert milestone.current_state == "BLOCKED_DEPENDENCY"
     assert milestone.blocked_reasons == ("dependency_not_complete:BANK.PUR.001",)
+
+
+def test_platform_002_acceptance_changes_only_itself_and_direct_successor() -> None:
+    bank = load_milestone_bank()
+    current = _by_id(load_current_readiness_projection())
+    raw = _authority_raw()
+    raw["completion_evidence"] = [
+        item
+        for item in raw["completion_evidence"]  # type: ignore[union-attr]
+        if item["bank_milestone_id"] != "BANK.PLAT.002"
+    ]
+    prior = _by_id(evaluate_readiness(bank, ingest_authority_snapshot(_resign(raw), bank)))
+
+    changed = {
+        milestone_id
+        for milestone_id in current
+        if current[milestone_id].current_state != prior[milestone_id].current_state
+    }
+
+    assert changed == {"BANK.PLAT.002", "BANK.PLAT.003"}
 
 
 @pytest.mark.parametrize(
@@ -156,7 +182,7 @@ def test_collision_blocks_dependency_ready_candidate() -> None:
     raw["completion_evidence"] = [
         item
         for item in raw["completion_evidence"]  # type: ignore[union-attr]
-        if item["bank_milestone_id"] != "BANK.PLAT.001"
+        if item["bank_milestone_id"] not in {"BANK.PLAT.001", "BANK.PLAT.002"}
     ]
     raw["active_ownership"] = [
         {

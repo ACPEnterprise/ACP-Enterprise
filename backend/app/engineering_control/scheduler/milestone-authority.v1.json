@@ -22,6 +22,13 @@
       "evidence_reference": "owner-accepted Phase-1 operational integration checkpoint evidence"
     },
     {
+      "bank_milestone_id": "BANK.PLAT.002",
+      "canonical_milestone_id": "BANK.PLAT.002",
+      "evidence_kind": "AUTHORITATIVE_INTEGRATION_ACCEPTANCE",
+      "authoritative_commit_sha": "b88a48d37da0343e49ad916bd0901beb85303c35",
+      "evidence_reference": "owner-accepted authorization matrix continuous verification implementation and validation evidence"
+    },
+    {
       "bank_milestone_id": "BANK.DF.001",
       "canonical_milestone_id": "BANK.DF.001",
       "evidence_kind": "AUTHORITATIVE_INTEGRATION_ACCEPTANCE",
@@ -57,5 +64,5 @@
   ],
   "gate_resolutions": [],
   "active_ownership": [],
-  "fingerprint": "4062c8e37d32b433e8105be6cf46dbc2ea6534fbfb5d6667f1a0f287c2e47709"
+  "fingerprint": "f6cf961efd884372f55acc58ca8ffa80b17980f8318ca4059beabb3c7de3b042"
 }
