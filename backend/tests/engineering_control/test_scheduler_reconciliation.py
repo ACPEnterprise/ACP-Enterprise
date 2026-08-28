@@ -69,8 +69,11 @@ def test_manifest_is_deterministic_complete_and_unique(manifest) -> None:
         "BE.GAP.1",
         "BE.9",
         "INV.2A",
-        "TECH.1",
-    }
+            "TECH.1",
+            "PHONE.FACTORY.PROOF.OM1",
+            "PHONE.FACTORY.PROOF.OM2",
+            "PHONE.FACTORY.PROOF.LAPTOP1",
+        }
     assert (
         next(
             item for item in manifest.milestones if item.milestone_code == "PLAT.1"
