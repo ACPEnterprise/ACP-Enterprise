@@ -3,7 +3,7 @@
   "authority_id": "BANK.DF.002.AUTHORITY",
   "bank_id": "BANK.2",
   "bank_fingerprint": "f0af5713c967b92588ed1a82d36f5adc864fc4b235064dad0c5f5d11b158d4b3",
-  "authoritative_repository_sha": "0f6559ecddb7ca3854c79ea7b5cb31432318976a",
+  "authoritative_repository_sha": "bb3194d4c41c9c7b8ba0ea826f858a055f9cc816",
   "repository_ref": "origin/customer-management-v1",
   "completion_inventory_scope": "ALL_BANK_MILESTONES",
   "completion_evidence": [
@@ -34,14 +34,16 @@
       "evidence_kind": "AUTHORITATIVE_INTEGRATION_ACCEPTANCE",
       "authoritative_commit_sha": "b691f887e41d25c3ea721b8fa85133ffbffae961",
       "evidence_reference": "validated BANK.DF.002 readiness-evaluator implementation"
+    },
+    {
+      "bank_milestone_id": "BANK.ACC.001",
+      "canonical_milestone_id": "ACC.IC.1",
+      "evidence_kind": "AUTHORITATIVE_INTEGRATION_ACCEPTANCE",
+      "authoritative_commit_sha": "65377ad5cba31c0945324965f81dd60e7102174c",
+      "evidence_reference": "Accounting authority chain: ACC.CORE.1 ee87e572; Invoice/AR 43018e22; Payments 1e631689; AP 6260b006; ACC.POST.1 359e3afa; ACC.RPT.1 1f012258; ACC.MIG.1 d772702a; ACC.IC.1 65377ad5; provider-neutral QBO evidence 819b2685/30ffdd27/dc3a7eff remains non-authoritative"
     }
   ],
   "identity_reconciliation_required": [
-    {
-      "bank_milestone_id": "BANK.ACC.001",
-      "candidate_canonical_ids": ["ACC.CORE.1", "ACC.POST.1", "ACC.RPT.1"],
-      "reason": "BANK Accounting authority boundary spans multiple historical canonical milestones"
-    },
     {
       "bank_milestone_id": "BANK.ECO.001",
       "candidate_canonical_ids": ["BE.8", "BE.EVIDENCE.1", "BE.GAP.1"],
@@ -55,5 +57,5 @@
   ],
   "gate_resolutions": [],
   "active_ownership": [],
-  "fingerprint": "056d34533efe90b65eba87b18c5ae7d1d6bcd16b2a870be406b3fe045949c3ff"
+  "fingerprint": "4062c8e37d32b433e8105be6cf46dbc2ea6534fbfb5d6667f1a0f287c2e47709"
 }

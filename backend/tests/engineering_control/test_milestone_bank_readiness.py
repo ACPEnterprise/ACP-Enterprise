@@ -68,6 +68,16 @@ def test_current_projection_reconciles_completion_and_releases_successor() -> No
     assert "BANK.PLAT.002" in projection.executable_milestone_ids
     assert "BANK.BEA.001" in projection.executable_milestone_ids
 
+    accounting = milestones["BANK.ACC.001"]
+    assert accounting.current_state == "COMPLETE"
+    assert accounting.canonical_milestone_id == "ACC.IC.1"
+    assert accounting.completion_commit_sha == (
+        "65377ad5cba31c0945324965f81dd60e7102174c"
+    )
+    posting_acceptance = milestones["BANK.ACC.002"]
+    assert posting_acceptance.current_state == "BLOCKED_FINANCE_DECISION"
+    assert posting_acceptance.blocked_reasons == ("finance_decision_required",)
+
 
 def test_unresolved_predecessor_blocks_successor() -> None:
     bank = load_milestone_bank()
@@ -88,7 +98,6 @@ def test_unresolved_predecessor_blocks_successor() -> None:
     ("milestone_id", "expected"),
     [
         ("BANK.CRM.001", "BLOCKED_OWNER_DECISION"),
-        ("BANK.ACC.001", "BLOCKED_FINANCE_DECISION"),
         ("BANK.MIG.001", "BLOCKED_EXTERNAL"),
     ],
 )
@@ -115,7 +124,6 @@ def test_active_ownership_blocks_duplicate_selection() -> None:
 def test_packaged_ambiguous_historical_identities_fail_closed_per_record() -> None:
     projection = load_current_readiness_projection()
     assert projection.ambiguous_identity_mappings == (
-        "BANK.ACC.001",
         "BANK.ECO.001",
         "BANK.MIG.001",
     )
@@ -236,3 +244,15 @@ def test_packaged_authority_is_valid() -> None:
     bank = load_milestone_bank()
     authority = load_authority_snapshot(bank)
     assert authority.bank_fingerprint == bank.fingerprint
+    accounting = next(
+        item
+        for item in authority.completion_evidence
+        if item.bank_milestone_id == "BANK.ACC.001"
+    )
+    assert accounting.canonical_milestone_id == "ACC.IC.1"
+    assert "QBO evidence" in accounting.evidence_reference
+    assert "remains non-authoritative" in accounting.evidence_reference
+    assert not any(
+        item.bank_milestone_id == "BANK.ACC.001"
+        for item in authority.identity_reconciliation_required
+    )
