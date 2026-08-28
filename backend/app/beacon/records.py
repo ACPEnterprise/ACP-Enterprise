@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import TypeAlias
+from typing import TYPE_CHECKING, TypeAlias
 from uuid import UUID
 
 from app.beacon.contracts import (
@@ -17,6 +17,9 @@ from app.beacon.contracts import (
     BeaconSeverity,
     BeaconSignalSource,
 )
+
+if TYPE_CHECKING:
+    from app.beacon.quality import EvidenceQualityEnvelope
 
 BeaconFactValue: TypeAlias = str | int | bool
 
@@ -107,6 +110,7 @@ class BeaconSignal:
     priority: BeaconPriority
     lifecycle: BeaconLifecycleProjection
     confidence: BeaconConfidence
+    evidence_quality: EvidenceQualityEnvelope | None
     supporting_facts: tuple[BeaconSupportingFact, ...]
     recommended_action: str
     created_at: datetime

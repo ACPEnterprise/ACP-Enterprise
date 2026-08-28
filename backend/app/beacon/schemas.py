@@ -20,6 +20,13 @@ from app.beacon.contracts import (
     BeaconSignalSource,
 )
 from app.beacon.evidence_evaluation import EvaluationReadiness
+from app.beacon.quality import (
+    EvidenceCompletenessState,
+    EvidenceConfidenceState,
+    EvidenceFreshnessState,
+    EvidenceReconciliationState,
+    StaleEvidenceBehavior,
+)
 
 
 class BeaconConfidenceResponse(BaseModel):
@@ -27,6 +34,28 @@ class BeaconConfidenceResponse(BaseModel):
 
     level: BeaconConfidenceLevel
     basis: str
+
+
+class BeaconEvidenceQualityResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    definition_id: str
+    definition_version: int
+    source_authority: str
+    effective_at: datetime | None
+    observed_as_of: datetime | None
+    evaluated_at: datetime
+    completeness: EvidenceCompletenessState
+    reconciliation: EvidenceReconciliationState
+    freshness: EvidenceFreshnessState
+    confidence: EvidenceConfidenceState
+    freshness_policy_id: str | None
+    freshness_policy_version: int | None
+    stale_behavior: StaleEvidenceBehavior | None
+    limitations: tuple[str, ...]
+    quality_digest: str
+    conclusion_admissible: bool
+    explanation: str
 
 
 class BeaconEvidenceResponse(BaseModel):
@@ -113,6 +142,7 @@ class BeaconSignalResponse(BaseModel):
     priority: BeaconPriorityResponse
     lifecycle: BeaconLifecycleProjectionResponse
     confidence: BeaconConfidenceResponse
+    evidence_quality: BeaconEvidenceQualityResponse | None
     supporting_facts: tuple[BeaconSupportingFactResponse, ...]
     recommended_action: str
     created_at: datetime
@@ -186,3 +216,22 @@ class EvidenceEvaluationRegistryResponse(BaseModel):
     company_id: UUID
     active_branch_id: UUID | None
     registrations: tuple[EvidenceEvaluationRegistrationResponse, ...]
+
+
+class DefinitionQualitySemanticsResponse(BaseModel):
+    definition_id: str
+    readiness: EvaluationReadiness
+    confidence_semantics_available: bool
+    freshness_semantics_available: bool
+    freshness_policy_id: str | None
+    freshness_policy_version: int | None
+    policy_source: str | None
+    blocker: str | None
+
+
+class DefinitionQualityRegistryResponse(BaseModel):
+    catalog_id: str
+    catalog_digest: str
+    company_id: UUID
+    active_branch_id: UUID | None
+    definitions: tuple[DefinitionQualitySemanticsResponse, ...]

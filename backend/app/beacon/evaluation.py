@@ -23,6 +23,12 @@ from app.beacon.definitions import (
     BeaconSignalDefinitionRegistry,
 )
 from app.beacon.prioritization import BeaconPrioritizer, beacon_prioritizer
+from app.beacon.quality import (
+    EVIDENCE_QUALITY_SERVICE,
+    EvidenceCompletenessState,
+    EvidenceQualityInput,
+    EvidenceReconciliationState,
+)
 from app.beacon.records import (
     BeaconCondition,
     BeaconLifecycleEvent,
@@ -360,6 +366,46 @@ class SignalEvaluationService:
         condition: BeaconCondition,
         definition: BeaconSignalDefinition,
     ) -> BeaconSignal:
+        quality_definition_id = {
+            "scheduling.overdue_committed_appointments": (
+                "operational.scheduling.appointment_overdue"
+            ),
+            "operations.paused_jobs": "operational.job.intermediate_state_stalled",
+        }.get(condition.rule_code)
+        evidence = tuple(
+            item for fact in condition.supporting_facts for item in fact.evidence
+        )
+        evidence_quality = (
+            EVIDENCE_QUALITY_SERVICE.evaluate(
+                EvidenceQualityInput(
+                    definition_id=quality_definition_id,
+                    source_authority=(
+                        "SqlBeaconFactRepository authoritative Company snapshot"
+                    ),
+                    evidence_identities=tuple(
+                        f"{item.entity_type}:{item.entity_id}:"
+                        f"{item.event_id or 'record-state'}"
+                        for item in evidence
+                    ),
+                    effective_at=min(
+                        (
+                            item.occurred_at
+                            for item in evidence
+                            if item.occurred_at is not None
+                        ),
+                        default=None,
+                    ),
+                    observed_as_of=condition.evaluated_at,
+                    evaluated_at=condition.evaluated_at,
+                    completeness=EvidenceCompletenessState.COMPLETE,
+                    reconciliation=EvidenceReconciliationState.RECONCILED,
+                    limitations=(),
+                    evidence_digest=condition.evidence_digest,
+                )
+            )
+            if quality_definition_id
+            else None
+        )
         return BeaconSignal(
             id=uuid5(
                 NAMESPACE_URL,
@@ -394,6 +440,7 @@ class SignalEvaluationService:
                 temporarily_suppressed=False,
             ),
             confidence=condition.confidence,
+            evidence_quality=evidence_quality,
             supporting_facts=condition.supporting_facts,
             recommended_action=definition.recommended_action,
             created_at=condition.evaluated_at,
