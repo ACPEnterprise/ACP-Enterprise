@@ -37,6 +37,15 @@ from .measurement_package import (
     seal_measurement_readiness_package,
     verify_measurement_readiness_package,
 )
+from .policy_authority import (
+    POLICY_FAMILY_REGISTRY,
+    CompanyPolicyVersion,
+    PolicyLifecycle,
+    PolicySnapshot,
+    build_policy_snapshot,
+    resolve_policy,
+    seal_policy,
+)
 from .source_adapters import (
     PublicOperationalEvidence,
     adapt_public_operational_evidence,
@@ -52,9 +61,11 @@ from .source_conformance import (
 )
 
 __all__ = [
+    "POLICY_FAMILY_REGISTRY",
     "AdmissionState",
     "CalculationAdmissionRequest",
     "CalculationAdmissionResult",
+    "CompanyPolicyVersion",
     "ComponentMeasurementGate",
     "ContributionMeasurementGate",
     "EconomicComponent",
@@ -71,7 +82,9 @@ __all__ = [
     "MeasurementGateState",
     "MeasurementPackageIntegrityError",
     "MeasurementReadinessPackage",
+    "PolicyLifecycle",
     "PolicyPrerequisite",
+    "PolicySnapshot",
     "PrerequisiteState",
     "PublicOperationalEvidence",
     "SourceConformanceAssessment",
@@ -83,9 +96,12 @@ __all__ = [
     "adapt_qbo_economics_evidence",
     "adapt_qbo_source_reported_measurement",
     "assess_source_conformance",
+    "build_policy_snapshot",
     "evaluate_calculation_admission",
     "evaluate_contribution_measurement_gate",
     "evaluate_economic_findings",
+    "resolve_policy",
     "seal_measurement_readiness_package",
+    "seal_policy",
     "verify_measurement_readiness_package",
 ]

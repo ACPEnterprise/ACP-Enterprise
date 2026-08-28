@@ -11,6 +11,7 @@ from app.platform.permissions.codes import (
     CommunicationsPermission,
     CustomerPermission,
     DispatchPermission,
+    EconomicsPolicyPermission,
     EngineeringCapacityPermission,
     EngineeringCommandPermission,
     EngineeringExecutionPermission,
@@ -219,6 +220,18 @@ ACCOUNTING_DEFINITIONS = tuple(
     for code in sorted(AccountingPermission.ALL)
 )
 
+ECONOMICS_POLICY_DEFINITIONS = tuple(
+    PermissionDefinition(
+        code=code,
+        name=code.replace("_", " ").title(),
+        resource="economics_policy",
+        action=code.removeprefix("COMPANY_ECONOMICS_POLICY_").lower(),
+        scope=PermissionScope.COMPANY,
+        reserved=True,
+    )
+    for code in sorted(EconomicsPolicyPermission.ALL)
+)
+
 PRICE_BOOK_DEFINITIONS = tuple(
     PermissionDefinition(
         code=code,
@@ -364,6 +377,7 @@ permission_catalog = PermissionCatalog(
     + INVENTORY_DEFINITIONS
     + PURCHASING_DEFINITIONS
     + ACCOUNTING_DEFINITIONS
+    + ECONOMICS_POLICY_DEFINITIONS
     + PRICE_BOOK_DEFINITIONS
     + COMMUNICATIONS_DEFINITIONS
     + ESTIMATE_DEFINITIONS
