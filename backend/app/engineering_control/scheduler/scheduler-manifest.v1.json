@@ -1,14 +1,15 @@
 {
   "schema_version": 1,
   "scheduler_version": "MMQ.5-2026-08-28.10",
-  "fingerprint": "53a2a2fd445adcc2456d0bdb77f46f9232a8c8b8ffb2d26375006437b2be7c9b",
+  "fingerprint": "1d321312b4ffedcf24a96f9ebb495354c7c46e46c9df3c273fb7c463ce065e2f",
   "authoritative_repository_head": "d63c6f28e926a84cd6322414a5f1591087df69d9",
   "source_documents": [
     "docs/project/master-milestone-queue.md",
     "docs/project/version-1-implementation-roadmap.md",
     "docs/project/continuous-production-scheduler.md",
     "docs/project/five-day-continuous-production-plan.md",
-    "docs/architecture/mission-control-mmq-reconciliation.md"
+    "docs/architecture/mission-control-mmq-reconciliation.md",
+    "docs/architecture/mission-control-read-only-execution.md"
   ],
   "integration_warnings": [
     "MIG.2 remains blocked by IC.2, RPT.3, immutable non-Production input evidence, and separate TYPE C operation authority.",

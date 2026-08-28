@@ -32,7 +32,7 @@ def manifest():
 
 
 def test_manifest_is_deterministic_complete_and_unique(manifest) -> None:
-    assert manifest.scheduler_version == "MMQ.5-2026-08-27.9"
+    assert manifest.scheduler_version == "MMQ.5-2026-08-28.10"
     assert (
         manifest.fingerprint
         == "9efea5198540c476bf1064b26151d86f273102bb1d5e594a56466a2bb570ae7a"
@@ -302,7 +302,12 @@ async def test_apply_requires_checkpoint_two_authority() -> None:
 
 def test_start_authority_states_are_fail_closed(manifest) -> None:
     states = {item.milestone_code: item.readiness_state for item in manifest.milestones}
-    assert {code for code, state in states.items() if state == "ready"} == {"TECH.1"}
+    assert {code for code, state in states.items() if state == "ready"} == {
+        "TECH.1",
+        "PHONE.FACTORY.PROOF.OM1",
+        "PHONE.FACTORY.PROOF.OM2",
+        "PHONE.FACTORY.PROOF.LAPTOP1",
+    }
     assert states["PRICEBOOK.1"] == "complete"
     assert states["PHONE-BUG.1"] == "complete"
     assert states["PLAT.1"] == "complete"
