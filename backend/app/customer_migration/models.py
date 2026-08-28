@@ -44,6 +44,22 @@ class CustomerMigrationRun(Base):
             "+ unresolved_count",
             name="ck_customer_migration_runs_counts_reconcile",
         ),
+        CheckConstraint(
+            "source_system <> 'housecall_pro_source4' OR master_run_id IS NOT NULL",
+            name="ck_customer_source4_master_required",
+        ),
+        ForeignKeyConstraint(
+            ["master_run_id", "company_id", "branch_id", "initiated_by_user_id"],
+            [
+                "hcp_migration_master_runs.id",
+                "hcp_migration_master_runs.company_id",
+                "hcp_migration_master_runs.branch_id",
+                "hcp_migration_master_runs.actor_user_id",
+            ],
+            name="fk_customer_run_master_scope",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("master_run_id", name="uq_customer_master_run"),
     )
 
     id: Mapped[UUID] = mapped_column(
@@ -64,6 +80,7 @@ class CustomerMigrationRun(Base):
         ForeignKey("users.id", ondelete="RESTRICT"),
         nullable=False,
     )
+    master_run_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
     source_system: Mapped[str] = mapped_column(String(50), nullable=False)
     source_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
     mode: Mapped[str] = mapped_column(String(20), nullable=False)

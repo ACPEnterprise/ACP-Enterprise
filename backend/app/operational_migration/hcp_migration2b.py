@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.customer_migration.adapter_import import ReviewedCustomerAdapterOutput
 from app.customer_migration.adapter_import_policy import CustomerAdapterImportPolicy
+from app.operational_migration.hcp_rehearsal_authority import require_sanctioned_context
 from app.operational_migration.models import (
     HcpCustomerSourceLineage,
     HcpEmployeeSourceCrosswalk,
@@ -22,7 +23,6 @@ from app.operational_migration.models import (
 )
 from app.platform.employees.models import Employee
 from app.platform.permissions.authorization import AuthorizationContext
-from app.platform.permissions.codes import MigrationPermission
 
 SOURCE4_PACKAGE_DIGEST = (
     "f77e3e09457efcbf6d42137be1af43be6ad0adbea8eab2c12ca320730fd96901"
@@ -76,12 +76,7 @@ def _digest(value: str, field: str) -> str:
 
 
 def _authorized(context: AuthorizationContext) -> None:
-    if context.active_branch is None or not context.can_access_branch(
-        context.active_branch.id
-    ):
-        raise ValueError("authorized migration Branch is required")
-    if not context.has_permission(MigrationPermission.EXECUTE_REHEARSAL):
-        raise ValueError("migration rehearsal permission is required")
+    require_sanctioned_context(context)
 
 
 @dataclass(frozen=True)
@@ -107,7 +102,10 @@ def qualify_customer_admission(
     duplicates = set(reviewed.duplicate_source_identities)
     clusters = selected_policy.similarity_evidence(reviewed.aggregates)
     review_identities = {
-        identity for values in clusters.values() for cluster in values for identity in cluster
+        identity
+        for values in clusters.values()
+        for cluster in values
+        for identity in cluster
     }
     admissible = [
         item
@@ -139,7 +137,9 @@ class MasterRunCommand:
     baseline_counts: dict[str, int]
     source_counts: dict[str, int]
 
-    def input_payload(self, *, company_id: UUID, branch_id: UUID, actor_id: UUID) -> dict[str, object]:
+    def input_payload(
+        self, *, company_id: UUID, branch_id: UUID, actor_id: UUID
+    ) -> dict[str, object]:
         return {
             "contract": MASTER_CONTRACT,
             "company_id": str(company_id),
@@ -158,7 +158,7 @@ class MasterRunCommand:
             raise ValueError("all five owner receipts are required")
         for value in self.owner_receipts.values():
             _digest(str(value), "owner_receipt")
-        if self.schema_head != "a4c8e0f2b735":
+        if self.schema_head != "c6e0a2b4d957":
             raise ValueError("unexpected rehearsal schema head")
         if not self.supported_entities or len(self.supported_entities) != len(
             set(self.supported_entities)
@@ -197,8 +197,10 @@ async def prepare_master_run(
             or existing.branch_id != context.active_branch.id
         ):
             raise ValueError("master run attestation conflict")
-        if existing.status == "prepared" and existing.attestation_digest != canonical_sha256(
-            {"input": payload, "status": "prepared"}
+        if (
+            existing.status == "prepared"
+            and existing.attestation_digest
+            != canonical_sha256({"input": payload, "status": "prepared"})
         ):
             raise ValueError("prepared master run attestation was changed")
         return existing, False
@@ -222,9 +224,12 @@ async def prepare_master_run(
         exception_counts={},
         rejection_counts={},
         unresolved_counts={},
+        non_applicable_counts={},
+        child_run_ids={},
         reconciliation_digest=None,
         replay_state={"attempt": 0, "state": "not_started"},
         resume_state={"cursor": None, "state": "not_started"},
+        rollback_state={"business_rows": "not_requested", "audit_evidence": "retained"},
         input_digest=input_digest,
         attestation_digest=canonical_sha256({"input": payload, "status": "prepared"}),
         status="prepared",
@@ -244,6 +249,8 @@ class MasterRunOutcome:
     exception_counts: dict[str, int]
     rejection_counts: dict[str, int]
     unresolved_counts: dict[str, int]
+    non_applicable_counts: dict[str, int]
+    child_run_ids: dict[str, str]
     replay_state: dict[str, object]
     resume_state: dict[str, object]
     status: str
@@ -258,6 +265,7 @@ class MasterRunOutcome:
             self.exception_counts,
             self.rejection_counts,
             self.unresolved_counts,
+            self.non_applicable_counts,
         ):
             if any(value < 0 for value in counts.values()):
                 raise ValueError("master outcome counts cannot be negative")
@@ -310,6 +318,8 @@ async def attest_master_run_outcome(
     run.exception_counts = outcome.exception_counts
     run.rejection_counts = outcome.rejection_counts
     run.unresolved_counts = outcome.unresolved_counts
+    run.non_applicable_counts = outcome.non_applicable_counts
+    run.child_run_ids = outcome.child_run_ids
     run.replay_state = outcome.replay_state
     run.resume_state = outcome.resume_state
     run.reconciliation_digest = reconciliation
@@ -406,7 +416,9 @@ class EmployeeCrosswalkCommand:
 
     @property
     def evidence_digest(self) -> str:
-        return canonical_sha256({"contract": EMPLOYEE_CROSSWALK_CONTRACT, **asdict(self)})
+        return canonical_sha256(
+            {"contract": EMPLOYEE_CROSSWALK_CONTRACT, **asdict(self)}
+        )
 
     def validate(self) -> None:
         if not self.native_employee_id.startswith("pro_"):

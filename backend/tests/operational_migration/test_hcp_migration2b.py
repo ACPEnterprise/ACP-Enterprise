@@ -1,6 +1,7 @@
 from uuid import UUID
 
 import pytest
+
 from app.customer_migration.adapter_import_policy import CustomerAdapterImportPolicy
 from app.customers.schemas import CustomerCreate, CustomerType
 from app.operational_migration.hcp_migration2b import (
@@ -49,8 +50,10 @@ def master_command(**overrides: object) -> MasterRunCommand:
         "package_digest": SOURCE4_PACKAGE_DIGEST,
         "collection_digests": {"customers": "a" * 64},
         "transformation_contracts": {"customer": "hcp_customer/v1"},
-        "owner_receipts": {f"receipt-{index}": str(index) * 64 for index in range(1, 6)},
-        "schema_head": "a4c8e0f2b735",
+        "owner_receipts": {
+            f"receipt-{index}": str(index) * 64 for index in range(1, 6)
+        },
+        "schema_head": "c6e0a2b4d957",
         "implementation_version": "hcp-migration-2b/v1",
         "supported_entities": ("customer", "job"),
         "baseline_counts": {"customers": 0},
@@ -66,7 +69,9 @@ def test_master_attestation_inputs_are_deterministic_and_tamper_evident() -> Non
     payload = command.input_payload(
         company_id=UUID(int=1), branch_id=UUID(int=2), actor_id=UUID(int=3)
     )
-    assert canonical_sha256(payload) == canonical_sha256(dict(reversed(list(payload.items()))))
+    assert canonical_sha256(payload) == canonical_sha256(
+        dict(reversed(list(payload.items())))
+    )
     changed = master_command(source_counts={"customers": 2})
     assert canonical_sha256(payload) != canonical_sha256(
         changed.input_payload(
@@ -90,6 +95,8 @@ def test_master_outcome_keeps_holds_distinct_from_other_counts() -> None:
         exception_counts={"job": 0},
         rejection_counts={"job": 0},
         unresolved_counts={"job": 0},
+        non_applicable_counts={"job": 0},
+        child_run_ids={"operational": str(UUID(int=1))},
         replay_state={"stable": True},
         resume_state={"cursor": None},
         status="completed",

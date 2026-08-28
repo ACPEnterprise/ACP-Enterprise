@@ -12,6 +12,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.operational_migration.hcp_owner_disposition import NonProductionTarget
+from app.operational_migration.hcp_rehearsal_authority import require_sanctioned_context
 from app.operational_migration.models import UnlinkedEstimateEvidence
 from app.platform.bootstrap.repository import BOOTSTRAP_ADVISORY_LOCK_ID
 from app.platform.branch.models import Branch
@@ -223,6 +224,7 @@ class UnlinkedEstimateEvidenceCommand:
     option_evidence: tuple[dict[str, object], ...]
     source_timestamps: dict[str, object]
     source_context: dict[str, object]
+    synthetic_qualification: bool = False
     disposition: str = "UNLINKED_NON_OPERATIONAL_ESTIMATE"
 
     @property
@@ -259,6 +261,7 @@ async def persist_unlinked_estimate_evidence(
     *,
     context: AuthorizationContext,
     command: UnlinkedEstimateEvidenceCommand,
+    master_run_id: UUID | None = None,
 ) -> UnlinkedEstimateEvidence:
     command.validate()
     if context.active_branch is None or not context.can_access_branch(
@@ -267,6 +270,10 @@ async def persist_unlinked_estimate_evidence(
         raise ValueError("authorized rehearsal Branch is required")
     if not context.has_permission(MigrationPermission.EXECUTE_REHEARSAL):
         raise ValueError("migration rehearsal permission is required")
+    if master_run_id is None and not command.synthetic_qualification:
+        raise ValueError("real unlinked Estimate evidence requires a master run")
+    if master_run_id is not None:
+        require_sanctioned_context(context)
     existing = await session.scalar(
         select(UnlinkedEstimateEvidence).where(
             UnlinkedEstimateEvidence.company_id == context.company.id,
@@ -282,6 +289,8 @@ async def persist_unlinked_estimate_evidence(
         company_id=context.company.id,
         branch_id=context.active_branch.id,
         recorded_by_user_id=context.user.id,
+        master_run_id=master_run_id,
+        synthetic_qualification=command.synthetic_qualification,
         source_system="housecall_pro",
         native_estimate_id=command.native_estimate_id,
         source_digest=command.source_digest,

@@ -43,13 +43,31 @@ class HcpMigrationMasterRun(Base):
         UniqueConstraint(
             "company_id", "branch_id", "input_digest", name="uq_hcp_master_input"
         ),
+        UniqueConstraint(
+            "company_id",
+            "branch_id",
+            "package_digest",
+            name="uq_hcp_master_package_scope",
+        ),
+        UniqueConstraint(
+            "id", "company_id", "branch_id", name="uq_hcp_master_run_scope"
+        ),
+        UniqueConstraint(
+            "id",
+            "company_id",
+            "branch_id",
+            "actor_user_id",
+            name="uq_hcp_master_run_actor_scope",
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True)
     company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     actor_user_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
     )
     package_digest: Mapped[str] = mapped_column(String(64), nullable=False)
     collection_digests: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
@@ -68,13 +86,18 @@ class HcpMigrationMasterRun(Base):
     exception_counts: Mapped[dict[str, int]] = mapped_column(JSONB, nullable=False)
     rejection_counts: Mapped[dict[str, int]] = mapped_column(JSONB, nullable=False)
     unresolved_counts: Mapped[dict[str, int]] = mapped_column(JSONB, nullable=False)
+    non_applicable_counts: Mapped[dict[str, int]] = mapped_column(JSONB, nullable=False)
+    child_run_ids: Mapped[dict[str, str]] = mapped_column(JSONB, nullable=False)
     reconciliation_digest: Mapped[str | None] = mapped_column(String(64))
     replay_state: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
     resume_state: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    rollback_state: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
     input_digest: Mapped[str] = mapped_column(String(64), nullable=False)
     attestation_digest: Mapped[str] = mapped_column(String(64), nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False)
-    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
@@ -135,8 +158,7 @@ class HcpEmployeeSourceCrosswalk(Base):
             name="ck_hcp_employee_crosswalk_disposition",
         ),
         CheckConstraint(
-            "disposition <> 'EXCLUDE_EMPLOYEE_HOLD_ASSIGNMENTS' "
-            "OR employee_id IS NULL",
+            "disposition <> 'EXCLUDE_EMPLOYEE_HOLD_ASSIGNMENTS' OR employee_id IS NULL",
             name="ck_hcp_employee_crosswalk_excluded_no_target",
         ),
         ForeignKeyConstraint(
@@ -146,7 +168,9 @@ class HcpEmployeeSourceCrosswalk(Base):
             ondelete="RESTRICT",
         ),
         UniqueConstraint(
-            "company_id", "native_employee_id", "evidence_version",
+            "company_id",
+            "native_employee_id",
+            "evidence_version",
             name="uq_hcp_employee_crosswalk_version",
         ),
         UniqueConstraint(
@@ -202,7 +226,10 @@ class HcpMigrationHold(Base):
             ondelete="RESTRICT",
         ),
         UniqueConstraint(
-            "company_id", "master_run_id", "entity_kind", "native_id",
+            "company_id",
+            "master_run_id",
+            "entity_kind",
+            "native_id",
             name="uq_hcp_hold_native_run",
         ),
         UniqueConstraint("company_id", "hold_digest", name="uq_hcp_hold_replay"),
@@ -253,6 +280,25 @@ class OperationalMigrationRun(Base):
             "+ unresolved_count",
             name="ck_operational_migration_runs_reconcile",
         ),
+        CheckConstraint(
+            "source_system <> 'housecall_pro_source4' OR "
+            "(master_run_id IS NOT NULL AND master_domain IN ('operational','financial'))",
+            name="ck_operational_source4_master_required",
+        ),
+        ForeignKeyConstraint(
+            ["master_run_id", "company_id", "branch_id", "initiated_by_user_id"],
+            [
+                "hcp_migration_master_runs.id",
+                "hcp_migration_master_runs.company_id",
+                "hcp_migration_master_runs.branch_id",
+                "hcp_migration_master_runs.actor_user_id",
+            ],
+            name="fk_operational_run_master_scope",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "master_run_id", "master_domain", name="uq_operational_master_domain"
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(
@@ -273,6 +319,8 @@ class OperationalMigrationRun(Base):
         ForeignKey("users.id", ondelete="RESTRICT"),
         nullable=False,
     )
+    master_run_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    master_domain: Mapped[str | None] = mapped_column(String(20))
     source_system: Mapped[str] = mapped_column(String(80), nullable=False)
     source_digest: Mapped[str] = mapped_column(String(64), nullable=False)
     mode: Mapped[str] = mapped_column(String(20), nullable=False)
@@ -374,10 +422,25 @@ class UnlinkedEstimateEvidence(Base):
             "operational_effects_enabled = false AND accounting_truth_accepted = false",
             name="ck_unlinked_estimate_non_operational",
         ),
+        CheckConstraint(
+            "master_run_id IS NOT NULL OR synthetic_qualification = true",
+            name="ck_unlinked_estimate_master_or_synthetic",
+        ),
         ForeignKeyConstraint(
             ["company_id", "branch_id"],
             ["branches.company_id", "branches.id"],
             name="fk_unlinked_estimate_evidence_branch_scope",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["master_run_id", "company_id", "branch_id", "recorded_by_user_id"],
+            [
+                "hcp_migration_master_runs.id",
+                "hcp_migration_master_runs.company_id",
+                "hcp_migration_master_runs.branch_id",
+                "hcp_migration_master_runs.actor_user_id",
+            ],
+            name="fk_unlinked_estimate_master_scope",
             ondelete="RESTRICT",
         ),
         UniqueConstraint(
@@ -403,6 +466,12 @@ class UnlinkedEstimateEvidence(Base):
         PGUUID(as_uuid=True),
         ForeignKey("users.id", ondelete="RESTRICT"),
         nullable=False,
+    )
+    master_run_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+    )
+    synthetic_qualification: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
     )
     source_system: Mapped[str] = mapped_column(String(80), nullable=False)
     native_estimate_id: Mapped[str] = mapped_column(String(191), nullable=False)

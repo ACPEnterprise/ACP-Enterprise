@@ -1,7 +1,7 @@
 import hashlib
 import json
 import re
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from typing import Protocol
 from uuid import UUID
@@ -29,6 +29,10 @@ from app.customers.schemas import (
     ServiceLocationCreate,
 )
 from app.customers.service import CustomerService
+from app.operational_migration.hcp_rehearsal_authority import (
+    SOURCE4_SYSTEM,
+    require_sanctioned_context,
+)
 from app.platform.audit.service import AuditEntry, AuditService, audit_service
 from app.platform.permissions.authorization import AuthorizationContext
 
@@ -413,8 +417,7 @@ class CustomerAdapterImportService:
     ) -> None:
         selected_ids = {item.source_identity_sha256 for item in selected}
         blocked = selected_ids.intersection(
-            reviewed.rejected_source_identities
-            + reviewed.duplicate_source_identities
+            reviewed.rejected_source_identities + reviewed.duplicate_source_identities
         )
         if blocked:
             raise CustomerAdapterImportError(
@@ -470,6 +473,7 @@ class CustomerAdapterImportService:
         context: AuthorizationContext,
         reviewed: ReviewedCustomerAdapterOutput,
         selected_count: int,
+        master_run_id: UUID | None,
     ) -> UUID:
         assert context.active_branch is not None
         async with factory() as session, session.begin():
@@ -477,6 +481,7 @@ class CustomerAdapterImportService:
                 company_id=context.company.id,
                 branch_id=context.active_branch.id,
                 initiated_by_user_id=context.user.id,
+                master_run_id=master_run_id,
                 source_system=reviewed.source_system,
                 source_sha256=reviewed.source_sha256,
                 mode="import",
@@ -594,6 +599,12 @@ class CustomerAdapterImportService:
         context: AuthorizationContext,
         reviewed: ReviewedCustomerAdapterOutput,
         boundary: ApprovedCustomerImportBoundary,
+        master_run_id: UUID | None = None,
+        lineage_callback: Callable[
+            [AsyncSession, CustomerSourceIdentity, ReviewedCustomerAggregate],
+            Awaitable[None],
+        ]
+        | None = None,
     ) -> CustomerAdapterImportReport:
         try:
             reviewed.validate_integrity()
@@ -604,6 +615,14 @@ class CustomerAdapterImportService:
             context.active_branch.id
         ):
             raise CustomerAdapterImportError("an authorized active Branch is required")
+        if reviewed.source_system == SOURCE4_SYSTEM and (
+            master_run_id is None or lineage_callback is None
+        ):
+            raise CustomerAdapterImportError(
+                "SOURCE.4 Customer import requires master run and lineage callback"
+            )
+        if reviewed.source_system == SOURCE4_SYSTEM:
+            require_sanctioned_context(context)
         if reviewed.source_sha256 != boundary.source_sha256:
             raise CustomerAdapterImportError("source checksum mismatch")
         if reviewed.schema_version != boundary.schema_version:
@@ -653,6 +672,7 @@ class CustomerAdapterImportService:
             context=context,
             reviewed=reviewed,
             selected_count=len(selected),
+            master_run_id=master_run_id,
         )
         for aggregate in selected:
             try:
@@ -699,16 +719,18 @@ class CustomerAdapterImportService:
                             data=location,
                         )
                     assert context.active_branch is not None
-                    session.add(
-                        CustomerSourceIdentity(
-                            company_id=context.company.id,
-                            branch_id=context.active_branch.id,
-                            customer_id=customer.id,
-                            source_system=reviewed.source_system,
-                            source_customer_id=aggregate.source_identity,
-                            first_run_id=run_id,
-                        )
+                    source_identity = CustomerSourceIdentity(
+                        company_id=context.company.id,
+                        branch_id=context.active_branch.id,
+                        customer_id=customer.id,
+                        source_system=reviewed.source_system,
+                        source_customer_id=aggregate.source_identity,
+                        first_run_id=run_id,
                     )
+                    session.add(source_identity)
+                    await session.flush()
+                    if lineage_callback is not None:
+                        await lineage_callback(session, source_identity, aggregate)
                     await self._advance(session, run_id=run_id, disposition="accepted")
                     self._audit(
                         session,
