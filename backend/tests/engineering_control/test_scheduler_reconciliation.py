@@ -35,7 +35,7 @@ def test_manifest_is_deterministic_complete_and_unique(manifest) -> None:
     assert manifest.scheduler_version == "MMQ.5-2026-08-28.10"
     assert (
         manifest.fingerprint
-        == "9efea5198540c476bf1064b26151d86f273102bb1d5e594a56466a2bb570ae7a"
+        == "1d321312b4ffedcf24a96f9ebb495354c7c46e46c9df3c273fb7c463ce065e2f"
     )
     assert (
         manifest.authoritative_repository_head
