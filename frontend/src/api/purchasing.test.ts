@@ -3,6 +3,8 @@ import { apiClient } from "./client";
 import {
   addPurchaseOrderLine,
   createOperationalVendor,
+  recordPurchaseOrderReceipt,
+  resolvePurchaseOrderDiscrepancy,
   transitionPurchaseOrder,
 } from "./purchasing";
 vi.mock("./client", () => ({ apiClient: { get: vi.fn(), post: vi.fn() } }));
@@ -38,6 +40,35 @@ describe("Purchasing API", () => {
     expect(apiClient.post).toHaveBeenLastCalledWith(
       "/api/v1/purchasing/purchase-orders/po-1/issue",
       expect.objectContaining({ expected_version: 4 }),
+    );
+    await recordPurchaseOrderReceipt("po-1", {
+      expected_po_version: 5,
+      receiving_event_identity: "dock-1",
+      received_at: "2026-08-28T19:00:00Z",
+      effective_date: "2026-08-28",
+      idempotency_key: "receipt-1",
+      lines: [
+        {
+          purchase_order_line_id: "line-1",
+          accepted_quantity: "2",
+          rejected_quantity: "0",
+        },
+      ],
+    });
+    expect(apiClient.post).toHaveBeenLastCalledWith(
+      "/api/v1/purchasing/purchase-orders/po-1/receipts",
+      expect.objectContaining({ idempotency_key: "receipt-1" }),
+    );
+    await resolvePurchaseOrderDiscrepancy("po-1", "disc-1", {
+      expected_po_version: 6,
+      expected_discrepancy_version: 1,
+      resolution: "resolved_rejected",
+      note: "Return damaged item",
+      idempotency_key: "resolve-1",
+    });
+    expect(apiClient.post).toHaveBeenLastCalledWith(
+      "/api/v1/purchasing/purchase-orders/po-1/discrepancies/disc-1/resolve",
+      expect.objectContaining({ resolution: "resolved_rejected" }),
     );
   });
 });

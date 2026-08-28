@@ -51,6 +51,21 @@ class EventType(str, Enum):
     PURCHASING_PURCHASE_ORDER_ISSUED = "purchasing.purchase_order_issued"
     PURCHASING_PURCHASE_ORDER_CANCELLED = "purchasing.purchase_order_cancelled"
     PURCHASING_PURCHASE_ORDER_CLOSED = "purchasing.purchase_order_closed"
+    PURCHASING_PURCHASE_ORDER_RECEIPT_RECORDED = (
+        "purchasing.purchase_order.receipt_recorded"
+    )
+    PURCHASING_PURCHASE_ORDER_PARTIALLY_RECEIVED = (
+        "purchasing.purchase_order.partially_received"
+    )
+    PURCHASING_PURCHASE_ORDER_FULLY_RECEIVED = (
+        "purchasing.purchase_order.fully_received"
+    )
+    PURCHASING_PURCHASE_ORDER_DISCREPANCY_OPENED = (
+        "purchasing.purchase_order.discrepancy_opened"
+    )
+    PURCHASING_PURCHASE_ORDER_DISCREPANCY_RESOLVED = (
+        "purchasing.purchase_order.discrepancy_resolved"
+    )
 
     # Operations
     OPERATIONS_SERVICE_REQUEST_ACCEPTED = "operations.service_request.accepted"

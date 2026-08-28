@@ -1,6 +1,7 @@
 import hashlib
 import json
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
@@ -17,12 +18,16 @@ from .errors import PurchasingConflict, PurchasingNotFound, PurchasingValidation
 from .models import (
     OperationalVendor,
     PurchaseOrder,
+    PurchaseOrderDiscrepancy,
     PurchaseOrderIssuanceEvidence,
     PurchaseOrderLine,
+    PurchaseOrderReceipt,
+    PurchaseOrderReceiptLine,
     PurchasingCommandReceipt,
 )
 from .repository import PurchasingRepository, purchasing_repository
 from .schemas import (
+    DiscrepancyItem,
     PurchaseOrderCreate,
     PurchaseOrderItem,
     PurchaseOrderLineItem,
@@ -30,6 +35,10 @@ from .schemas import (
     PurchaseOrderLineWrite,
     PurchaseOrderUpdate,
     PurchasingWorkspace,
+    ReceiptItem,
+    ReceiptLineItem,
+    RecordReceiptCommand,
+    ResolveDiscrepancyCommand,
     TransitionCommand,
     VendorCreate,
     VendorItem,
@@ -595,6 +604,285 @@ class PurchasingService:
             )
         return order
 
+    async def record_receipt(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        po_id: UUID,
+        payload: RecordReceiptCommand,
+    ) -> PurchaseOrderReceipt:
+        data = {"po_id": str(po_id), **payload.model_dump(mode="json")}
+        categories = {
+            "quantity_short",
+            "quantity_over",
+            "wrong_item",
+            "damaged_item",
+            "rejected_item",
+            "missing_line",
+        }
+        async with session.begin():
+            replay = await self._replay(
+                session,
+                context,
+                "po.receipt.record",
+                payload.idempotency_key,
+                data,
+                "purchase_order_receipt",
+            )
+            if replay:
+                record = await self.repository.receiving_event(
+                    session, context.company.id, replay
+                )
+                if record is None:
+                    raise PurchasingConflict("Receipt replay target is missing")
+                return record
+            order = await self._order(session, context, po_id, lock=True)
+            replay = await self._replay(
+                session,
+                context,
+                "po.receipt.record",
+                payload.idempotency_key,
+                data,
+                "purchase_order_receipt",
+            )
+            if replay:
+                record = await self.repository.receiving_event(
+                    session, context.company.id, replay
+                )
+                if record is None:
+                    raise PurchasingConflict("Receipt replay target is missing")
+                return record
+            if order.status != "issued":
+                raise PurchasingValidation(
+                    "Only an issued Purchase Order may be received"
+                )
+            if order.version != payload.expected_po_version:
+                raise PurchasingConflict("Purchase Order version is stale")
+            command_ids = [item.purchase_order_line_id for item in payload.lines]
+            if len(command_ids) != len(set(command_ids)):
+                raise PurchasingValidation(
+                    "A PO line may appear only once per receiving event"
+                )
+            lines = {
+                line.id: line
+                for line in await self.repository.lines(
+                    session, context.company.id, order.id
+                )
+            }
+            totals = await self.repository.accepted_totals(
+                session, context.company.id, order.id
+            )
+            receipt = PurchaseOrderReceipt(
+                company_id=order.company_id,
+                branch_id=order.branch_id,
+                purchase_order_id=order.id,
+                vendor_id=order.vendor_id,
+                receiving_event_identity=payload.receiving_event_identity.strip(),
+                status="recorded",
+                receiver_user_id=context.user.id,
+                received_at=payload.received_at,
+                effective_date=payload.effective_date,
+                source_reference=payload.source_reference,
+                payload_digest=digest(data),
+            )
+            session.add(receipt)
+            await session.flush()
+            opened: list[PurchaseOrderDiscrepancy] = []
+            for outcome in payload.lines:
+                line = lines.get(outcome.purchase_order_line_id)
+                if line is None:
+                    raise PurchasingValidation(
+                        "Receipt line does not belong to this Purchase Order"
+                    )
+                category = outcome.discrepancy_category
+                if category is not None and category not in categories:
+                    raise PurchasingValidation("Unsupported discrepancy category")
+                prior = totals.get(line.id, Decimal(0))
+                cumulative = prior + outcome.accepted_quantity
+                if cumulative > line.quantity:
+                    raise PurchasingValidation(
+                        "Accepted quantity exceeds ordered quantity; record discrepancy without accepting overage"
+                    )
+                outstanding = line.quantity - cumulative
+                receipt_line = PurchaseOrderReceiptLine(
+                    company_id=order.company_id,
+                    receipt_id=receipt.id,
+                    purchase_order_line_id=line.id,
+                    ordered_quantity_snapshot=line.quantity,
+                    accepted_quantity=outcome.accepted_quantity,
+                    rejected_quantity=outcome.rejected_quantity,
+                    cumulative_accepted_quantity=cumulative,
+                    outstanding_quantity=outstanding,
+                    unit_snapshot=line.unit,
+                    discrepancy_category=category,
+                    observed_condition=outcome.observed_condition,
+                )
+                session.add(receipt_line)
+                await session.flush()
+                totals[line.id] = cumulative
+                if category:
+                    observed = (outcome.observed_condition or "").strip()
+                    if not observed:
+                        raise PurchasingValidation(
+                            "Discrepancy observed condition is required"
+                        )
+                    discrepancy = PurchaseOrderDiscrepancy(
+                        company_id=order.company_id,
+                        branch_id=order.branch_id,
+                        purchase_order_id=order.id,
+                        purchase_order_line_id=line.id,
+                        receipt_id=receipt.id,
+                        receipt_line_id=receipt_line.id,
+                        category=category,
+                        expected_fact=f"ordered={line.quantity} {line.unit}; prior_accepted={prior}",
+                        actual_fact=(
+                            f"accepted={outcome.accepted_quantity}; rejected={outcome.rejected_quantity}"
+                        ),
+                        observed_condition=observed,
+                        opened_by_user_id=context.user.id,
+                        opened_at=now(),
+                    )
+                    session.add(discrepancy)
+                    opened.append(discrepancy)
+            if opened:
+                receipt.status = "discrepancy_outstanding"
+            order.version += 1
+            order.updated_at = now()
+            self._receipt(
+                session,
+                context,
+                "po.receipt.record",
+                payload.idempotency_key,
+                data,
+                "purchase_order_receipt",
+                receipt.id,
+            )
+            self._event(
+                session,
+                context,
+                EventType.PURCHASING_PURCHASE_ORDER_RECEIPT_RECORDED,
+                "purchase_order_receipt",
+                receipt.id,
+                order.branch_id,
+                {
+                    "purchase_order_id": str(order.id),
+                    "receipt_id": str(receipt.id),
+                    "receiving_event_identity": receipt.receiving_event_identity,
+                    "discrepancy_count": len(opened),
+                    "purchase_order_version": order.version,
+                },
+            )
+            state = self._receiving_state(lines.values(), totals, bool(opened))
+            if state == "fully_received":
+                event_type = EventType.PURCHASING_PURCHASE_ORDER_FULLY_RECEIVED
+            else:
+                event_type = EventType.PURCHASING_PURCHASE_ORDER_PARTIALLY_RECEIVED
+            self._event(
+                session,
+                context,
+                event_type,
+                "purchase_order",
+                order.id,
+                order.branch_id,
+                {
+                    "purchase_order_id": str(order.id),
+                    "receiving_status": state,
+                    "version": order.version,
+                },
+            )
+            for discrepancy in opened:
+                await session.flush()
+                self._event(
+                    session,
+                    context,
+                    EventType.PURCHASING_PURCHASE_ORDER_DISCREPANCY_OPENED,
+                    "purchase_order_discrepancy",
+                    discrepancy.id,
+                    order.branch_id,
+                    {
+                        "purchase_order_id": str(order.id),
+                        "receipt_id": str(receipt.id),
+                        "category": discrepancy.category,
+                        "status": discrepancy.status,
+                    },
+                )
+        return receipt
+
+    async def resolve_discrepancy(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        po_id: UUID,
+        discrepancy_id: UUID,
+        payload: ResolveDiscrepancyCommand,
+    ) -> PurchaseOrderDiscrepancy:
+        data = {
+            "po_id": str(po_id),
+            "discrepancy_id": str(discrepancy_id),
+            **payload.model_dump(mode="json"),
+        }
+        async with session.begin():
+            replay = await self._replay(
+                session,
+                context,
+                "po.discrepancy.resolve",
+                payload.idempotency_key,
+                data,
+                "purchase_order_discrepancy",
+            )
+            if replay:
+                record = await self.repository.discrepancy(
+                    session, context.company.id, replay
+                )
+                if record is None:
+                    raise PurchasingConflict("Discrepancy replay target is missing")
+                return record
+            order = await self._order(session, context, po_id, lock=True)
+            if order.version != payload.expected_po_version:
+                raise PurchasingConflict("Purchase Order version is stale")
+            record = await self.repository.discrepancy(
+                session, context.company.id, discrepancy_id, lock=True
+            )
+            if record is None or record.purchase_order_id != order.id:
+                raise PurchasingNotFound("Purchase Order discrepancy was not found")
+            if record.status != "open":
+                raise PurchasingValidation("Only an open discrepancy may be resolved")
+            if record.version != payload.expected_discrepancy_version:
+                raise PurchasingConflict("Discrepancy version is stale")
+            record.status = payload.resolution
+            record.resolution_note = payload.note.strip()
+            record.resolved_by_user_id = context.user.id
+            record.resolved_at = now()
+            record.version += 1
+            order.version += 1
+            order.updated_at = now()
+            self._receipt(
+                session,
+                context,
+                "po.discrepancy.resolve",
+                payload.idempotency_key,
+                data,
+                "purchase_order_discrepancy",
+                record.id,
+            )
+            self._event(
+                session,
+                context,
+                EventType.PURCHASING_PURCHASE_ORDER_DISCREPANCY_RESOLVED,
+                "purchase_order_discrepancy",
+                record.id,
+                order.branch_id,
+                {
+                    "purchase_order_id": str(order.id),
+                    "discrepancy_id": str(record.id),
+                    "status": record.status,
+                    "version": record.version,
+                },
+            )
+        return record
+
     async def _order(
         self,
         session: AsyncSession,
@@ -616,14 +904,72 @@ class PurchasingService:
     ) -> PurchaseOrderItem:
         lines = await self.repository.lines(session, order.company_id, order.id)
         evidence = await self.repository.evidence(session, order.company_id, order.id)
+        receipts = await self.repository.receiving_events(
+            session, order.company_id, order.id
+        )
+        discrepancies = await self.repository.discrepancies(
+            session, order.company_id, order.id
+        )
+        totals = await self.repository.accepted_totals(
+            session, order.company_id, order.id
+        )
+        open_discrepancy = any(item.status == "open" for item in discrepancies)
+        receipt_items = []
+        for receipt in receipts:
+            receipt_items.append(
+                ReceiptItem.model_validate(receipt).model_copy(
+                    update={
+                        "lines": tuple(
+                            ReceiptLineItem.model_validate(item)
+                            for item in await self.repository.receipt_lines(
+                                session, order.company_id, receipt.id
+                            )
+                        )
+                    }
+                )
+            )
         return PurchaseOrderItem.model_validate(order).model_copy(
             update={
                 "lines": tuple(
-                    PurchaseOrderLineItem.model_validate(line) for line in lines
+                    PurchaseOrderLineItem.model_validate(line).model_copy(
+                        update={
+                            "cumulative_accepted_quantity": totals.get(
+                                line.id, Decimal(0)
+                            ),
+                            "outstanding_quantity": line.quantity
+                            - totals.get(line.id, Decimal(0)),
+                        }
+                    )
+                    for line in lines
                 ),
                 "issuance_digest": evidence.digest if evidence else None,
+                "receiving_status": self._receiving_state(
+                    lines, totals, open_discrepancy
+                ),
+                "receipts": tuple(receipt_items),
+                "discrepancies": tuple(
+                    DiscrepancyItem.model_validate(item) for item in discrepancies
+                ),
             }
         )
+
+    @staticmethod
+    def _receiving_state(
+        lines: Any, totals: dict[UUID, Decimal], discrepancy: bool
+    ) -> str:
+        line_list = tuple(lines)
+        accepted = sum(
+            (totals.get(line.id, Decimal(0)) for line in line_list), Decimal(0)
+        )
+        if discrepancy:
+            return "discrepancy_outstanding"
+        if accepted == 0:
+            return "not_received"
+        if line_list and all(
+            totals.get(line.id, Decimal(0)) == line.quantity for line in line_list
+        ):
+            return "fully_received"
+        return "partially_received"
 
     @staticmethod
     def _draft(order: PurchaseOrder, expected_version: int) -> None:

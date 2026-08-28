@@ -40,6 +40,9 @@ describe("PurchasingRoute", () => {
             version: 3,
             lines: [],
             issuance_digest: null,
+            receiving_status: "not_received",
+            receipts: [],
+            discrepancies: [],
           },
         ],
       },
@@ -52,6 +55,8 @@ describe("PurchasingRoute", () => {
       addLine: mutation,
       updateLine: mutation,
       transition: mutation,
+      recordReceipt: mutation,
+      resolveDiscrepancy: mutation,
     } as never);
   });
   it("fails closed without read permission", () => {

@@ -1,3 +1,5 @@
+import asyncio
+from datetime import datetime, timezone
 from decimal import Decimal
 from uuid import uuid4
 
@@ -23,10 +25,16 @@ from app.purchasing.errors import (
     PurchasingNotFound,
     PurchasingValidation,
 )
-from app.purchasing.models import PurchaseOrderIssuanceEvidence
+from app.purchasing.models import (
+    PurchaseOrderDiscrepancy,
+    PurchaseOrderIssuanceEvidence,
+)
 from app.purchasing.schemas import (
     PurchaseOrderCreate,
     PurchaseOrderLineWrite,
+    ReceiptLineCommand,
+    RecordReceiptCommand,
+    ResolveDiscrepancyCommand,
     TransitionCommand,
     VendorCreate,
     VendorUpdate,
@@ -410,3 +418,260 @@ async def test_purchasing_api_requires_authentication() -> None:
     ) as client:
         response = await client.get("/api/v1/purchasing")
     assert response.status_code in {401, 403}
+
+
+async def issued_order(factory, branch, preparer, approver, *, quantity: str = "10"):
+    service = PurchasingService()
+    async with factory() as session:
+        vendor = await service.create_vendor(
+            session,
+            context=preparer,
+            payload=VendorCreate(
+                code=f"vendor-{uuid4().hex[:8]}",
+                display_name="Receipt Vendor",
+                idempotency_key=f"vendor-{uuid4()}",
+            ),
+        )
+        order = await service.create_order(
+            session,
+            context=preparer,
+            payload=PurchaseOrderCreate(
+                branch_id=branch.id,
+                vendor_id=vendor.id,
+                po_number=f"PO-{uuid4().hex[:8]}",
+                currency="USD",
+                idempotency_key=f"po-{uuid4()}",
+            ),
+        )
+        line = await service.add_line(
+            session,
+            context=preparer,
+            po_id=order.id,
+            payload=PurchaseOrderLineWrite(
+                expected_po_version=order.version,
+                description="Copper fitting",
+                quantity=Decimal(quantity),
+                unit="each",
+                unit_cost=Decimal(4),
+                idempotency_key=f"line-{uuid4()}",
+            ),
+        )
+        order = await service.transition(
+            session,
+            context=preparer,
+            po_id=order.id,
+            target="submit",
+            payload=command(order.version, f"submit-{uuid4()}"),
+        )
+        order = await service.transition(
+            session,
+            context=approver,
+            po_id=order.id,
+            target="approve",
+            payload=command(order.version, f"approve-{uuid4()}"),
+        )
+        order = await service.transition(
+            session,
+            context=approver,
+            po_id=order.id,
+            target="issue",
+            payload=command(order.version, f"issue-{uuid4()}"),
+        )
+        return order.id, line.id, order.version
+
+
+def receipt(
+    version: int,
+    line_id,
+    accepted: str,
+    key: str,
+    *,
+    rejected: str = "0",
+    category: str | None = None,
+):
+    return RecordReceiptCommand(
+        expected_po_version=version,
+        receiving_event_identity=f"event-{key}",
+        received_at=datetime.now(timezone.utc),
+        effective_date=datetime.now(timezone.utc).date(),
+        idempotency_key=key,
+        lines=(
+            ReceiptLineCommand(
+                purchase_order_line_id=line_id,
+                accepted_quantity=Decimal(accepted),
+                rejected_quantity=Decimal(rejected),
+                discrepancy_category=category,
+                observed_condition="Package visibly damaged" if category else None,
+            ),
+        ),
+    )
+
+
+@pytest.mark.asyncio
+async def test_partial_receipts_accumulate_finalize_and_replay(
+    purchasing_fixture,
+) -> None:
+    factory, _, _, branch, _, preparer, approver = purchasing_fixture
+    service = PurchasingService()
+    po_id, line_id, version = await issued_order(factory, branch, preparer, approver)
+    async with factory() as session:
+        first_payload = receipt(version, line_id, "3", "receipt-first")
+        first = await service.record_receipt(
+            session, context=approver, po_id=po_id, payload=first_payload
+        )
+        replay = await service.record_receipt(
+            session, context=approver, po_id=po_id, payload=first_payload
+        )
+        assert replay.id == first.id
+        item = await service.get_order(session, context=approver, po_id=po_id)
+        assert item.receiving_status == "partially_received"
+        assert item.lines[0].cumulative_accepted_quantity == Decimal(3)
+        assert item.lines[0].outstanding_quantity == Decimal(7)
+        await session.rollback()
+        with pytest.raises(PurchasingConflict):
+            await service.record_receipt(
+                session,
+                context=approver,
+                po_id=po_id,
+                payload=first_payload.model_copy(
+                    update={"source_reference": "changed"}
+                ),
+            )
+        second = await service.record_receipt(
+            session,
+            context=approver,
+            po_id=po_id,
+            payload=receipt(item.version, line_id, "4", "receipt-second"),
+        )
+        item = await service.get_order(session, context=approver, po_id=po_id)
+        assert second.id != first.id and item.lines[0].outstanding_quantity == Decimal(
+            3
+        )
+        await session.rollback()
+        await service.record_receipt(
+            session,
+            context=approver,
+            po_id=po_id,
+            payload=receipt(item.version, line_id, "3", "receipt-final"),
+        )
+        item = await service.get_order(session, context=approver, po_id=po_id)
+        assert item.receiving_status == "fully_received"
+        assert len(item.receipts) == 3
+        await session.rollback()
+        with pytest.raises(PurchasingValidation):
+            await service.record_receipt(
+                session,
+                context=approver,
+                po_id=po_id,
+                payload=receipt(item.version, line_id, "1", "receipt-over"),
+            )
+
+
+@pytest.mark.asyncio
+async def test_discrepancy_is_durable_resolvable_and_has_no_financial_or_stock_effect(
+    purchasing_fixture,
+) -> None:
+    factory, _, _, branch, _, preparer, approver = purchasing_fixture
+    service = PurchasingService()
+    po_id, line_id, version = await issued_order(factory, branch, preparer, approver)
+    async with factory() as session:
+        before = tuple(
+            [
+                await session.scalar(select(func.count()).select_from(model))
+                for model in (StockMovement, VendorBill, Journal)
+            ]
+        )
+        await session.rollback()
+        await service.record_receipt(
+            session,
+            context=approver,
+            po_id=po_id,
+            payload=receipt(
+                version,
+                line_id,
+                "2",
+                "receipt-damaged",
+                rejected="1",
+                category="damaged_item",
+            ),
+        )
+        item = await service.get_order(session, context=approver, po_id=po_id)
+        assert item.receiving_status == "discrepancy_outstanding"
+        discrepancy = item.discrepancies[0]
+        assert discrepancy.status == "open"
+        await session.rollback()
+        resolved = await service.resolve_discrepancy(
+            session,
+            context=approver,
+            po_id=po_id,
+            discrepancy_id=discrepancy.id,
+            payload=ResolveDiscrepancyCommand(
+                expected_po_version=item.version,
+                expected_discrepancy_version=1,
+                resolution="resolved_rejected",
+                note="Return damaged unit",
+                idempotency_key="resolve-damaged",
+            ),
+        )
+        assert (
+            resolved.status == "resolved_rejected"
+            and resolved.resolved_by_user_id == approver.user.id
+        )
+        after = tuple(
+            [
+                await session.scalar(select(func.count()).select_from(model))
+                for model in (StockMovement, VendorBill, Journal)
+            ]
+        )
+        assert after == before
+        assert (
+            await session.scalar(
+                select(func.count()).select_from(PurchaseOrderDiscrepancy)
+            )
+            >= 1
+        )
+        events = tuple(
+            (
+                await session.scalars(
+                    select(BusinessEvent).where(
+                        BusinessEvent.entity_id.in_(
+                            (item.receipts[0].id, discrepancy.id)
+                        )
+                    )
+                )
+            ).all()
+        )
+        assert {event.event_type for event in events} >= {
+            "purchasing.purchase_order.receipt_recorded",
+            "purchasing.purchase_order.discrepancy_opened",
+            "purchasing.purchase_order.discrepancy_resolved",
+        }
+
+
+@pytest.mark.asyncio
+async def test_concurrent_receiving_serializes_without_double_count(
+    purchasing_fixture,
+) -> None:
+    factory, _, _, branch, _, preparer, approver = purchasing_fixture
+    service = PurchasingService()
+    po_id, line_id, version = await issued_order(
+        factory, branch, preparer, approver, quantity="5"
+    )
+
+    async def attempt(key: str):
+        async with factory() as session:
+            return await service.record_receipt(
+                session,
+                context=approver,
+                po_id=po_id,
+                payload=receipt(version, line_id, "4", key),
+            )
+
+    results = await asyncio.gather(
+        attempt("race-one"), attempt("race-two"), return_exceptions=True
+    )
+    assert sum(not isinstance(result, Exception) for result in results) == 1
+    assert any(isinstance(result, PurchasingConflict) for result in results)
+    async with factory() as session:
+        item = await service.get_order(session, context=approver, po_id=po_id)
+        assert item.lines[0].cumulative_accepted_quantity == Decimal(4)

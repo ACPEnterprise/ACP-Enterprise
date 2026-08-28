@@ -11,6 +11,10 @@ import type {
   PurchasingWorkspace,
   VendorCreate,
   VendorUpdate,
+  RecordPurchaseOrderReceipt,
+  ResolvePurchaseOrderDiscrepancy,
+  PurchaseOrderReceipt,
+  PurchaseOrderDiscrepancy,
 } from "../types/purchasing";
 
 const root = "/api/v1/purchasing";
@@ -66,6 +70,27 @@ export const transitionPurchaseOrder = async (
   (
     await apiClient.post<PurchaseOrder>(
       `${root}/purchase-orders/${id}/${action}`,
+      input,
+    )
+  ).data;
+export const recordPurchaseOrderReceipt = async (
+  id: string,
+  input: RecordPurchaseOrderReceipt,
+): Promise<PurchaseOrderReceipt> =>
+  (
+    await apiClient.post<PurchaseOrderReceipt>(
+      `${root}/purchase-orders/${id}/receipts`,
+      input,
+    )
+  ).data;
+export const resolvePurchaseOrderDiscrepancy = async (
+  id: string,
+  discrepancyId: string,
+  input: ResolvePurchaseOrderDiscrepancy,
+): Promise<PurchaseOrderDiscrepancy> =>
+  (
+    await apiClient.post<PurchaseOrderDiscrepancy>(
+      `${root}/purchase-orders/${id}/discrepancies/${discrepancyId}/resolve`,
       input,
     )
   ).data;

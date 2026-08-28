@@ -8,6 +8,8 @@ import {
   updateOperationalVendor,
   updatePurchaseOrder,
   updatePurchaseOrderLine,
+  recordPurchaseOrderReceipt,
+  resolvePurchaseOrderDiscrepancy,
 } from "../api/purchasing";
 import type {
   PurchaseOrderLineCreate,
@@ -15,6 +17,8 @@ import type {
   PurchaseOrderUpdate,
   PurchasingTransition,
   VendorUpdate,
+  RecordPurchaseOrderReceipt,
+  ResolvePurchaseOrderDiscrepancy,
 } from "../types/purchasing";
 
 const keys = {
@@ -81,6 +85,28 @@ export function usePurchasingMutations() {
         action: "submit" | "approve" | "issue" | "cancel" | "close";
         input: PurchasingTransition;
       }) => transitionPurchaseOrder(id, action, input),
+      onSuccess: refresh,
+    }),
+    recordReceipt: useMutation({
+      mutationFn: ({
+        id,
+        input,
+      }: {
+        id: string;
+        input: RecordPurchaseOrderReceipt;
+      }) => recordPurchaseOrderReceipt(id, input),
+      onSuccess: refresh,
+    }),
+    resolveDiscrepancy: useMutation({
+      mutationFn: ({
+        id,
+        discrepancyId,
+        input,
+      }: {
+        id: string;
+        discrepancyId: string;
+        input: ResolvePurchaseOrderDiscrepancy;
+      }) => resolvePurchaseOrderDiscrepancy(id, discrepancyId, input),
       onSuccess: refresh,
     }),
   };

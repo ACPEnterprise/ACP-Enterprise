@@ -16,6 +16,7 @@ from .errors import (
     PurchasingValidation,
 )
 from .schemas import (
+    DiscrepancyItem,
     PurchaseOrderCreate,
     PurchaseOrderItem,
     PurchaseOrderLineItem,
@@ -23,6 +24,10 @@ from .schemas import (
     PurchaseOrderLineWrite,
     PurchaseOrderUpdate,
     PurchasingWorkspace,
+    ReceiptItem,
+    ReceiptLineItem,
+    RecordReceiptCommand,
+    ResolveDiscrepancyCommand,
     TransitionCommand,
     VendorCreate,
     VendorItem,
@@ -43,6 +48,13 @@ ApproveContext = Annotated[
 ]
 IssueContext = Annotated[
     AuthorizationContext, Depends(require_permission(PurchasingPermission.ISSUE))
+]
+ReceiveContext = Annotated[
+    AuthorizationContext, Depends(require_permission(PurchasingPermission.RECEIVE))
+]
+ResolveContext = Annotated[
+    AuthorizationContext,
+    Depends(require_permission(PurchasingPermission.RESOLVE_DISCREPANCY)),
 ]
 
 
@@ -230,6 +242,58 @@ async def close(
     session: DatabaseSession,
 ) -> PurchaseOrderItem:
     return await _transition(po_id, "close", payload, context, session)
+
+
+@router.post(
+    "/purchase-orders/{po_id}/receipts",
+    response_model=ReceiptItem,
+    status_code=status.HTTP_201_CREATED,
+)
+async def record_receipt(
+    po_id: UUID,
+    payload: RecordReceiptCommand,
+    context: ReceiveContext,
+    session: DatabaseSession,
+) -> ReceiptItem:
+    try:
+        record = await purchasing_service.record_receipt(
+            session, context=context, po_id=po_id, payload=payload
+        )
+        lines = await purchasing_service.repository.receipt_lines(
+            session, context.company.id, record.id
+        )
+        return ReceiptItem.model_validate(record).model_copy(
+            update={
+                "lines": tuple(ReceiptLineItem.model_validate(item) for item in lines)
+            }
+        )
+    except PurchasingError as error:
+        raise http_error(error) from error
+
+
+@router.post(
+    "/purchase-orders/{po_id}/discrepancies/{discrepancy_id}/resolve",
+    response_model=DiscrepancyItem,
+)
+async def resolve_discrepancy(
+    po_id: UUID,
+    discrepancy_id: UUID,
+    payload: ResolveDiscrepancyCommand,
+    context: ResolveContext,
+    session: DatabaseSession,
+) -> DiscrepancyItem:
+    try:
+        return DiscrepancyItem.model_validate(
+            await purchasing_service.resolve_discrepancy(
+                session,
+                context=context,
+                po_id=po_id,
+                discrepancy_id=discrepancy_id,
+                payload=payload,
+            )
+        )
+    except PurchasingError as error:
+        raise http_error(error) from error
 
 
 async def _transition(

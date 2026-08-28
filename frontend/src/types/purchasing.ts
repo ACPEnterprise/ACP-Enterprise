@@ -18,6 +18,33 @@ export interface PurchaseOrderLine {
   unit_cost: string;
   extended_cost: string;
   version: number;
+  cumulative_accepted_quantity: string;
+  outstanding_quantity: string;
+}
+export interface PurchaseOrderReceiptLine {
+  id: string;
+  purchase_order_line_id: string;
+  accepted_quantity: string;
+  rejected_quantity: string;
+  cumulative_accepted_quantity: string;
+  outstanding_quantity: string;
+  discrepancy_category: string | null;
+}
+export interface PurchaseOrderReceipt {
+  id: string;
+  receiving_event_identity: string;
+  status: string;
+  received_at: string;
+  effective_date: string;
+  lines: readonly PurchaseOrderReceiptLine[];
+}
+export interface PurchaseOrderDiscrepancy {
+  id: string;
+  purchase_order_line_id: string;
+  category: string;
+  status: string;
+  observed_condition: string;
+  version: number;
 }
 export interface PurchaseOrder {
   id: string;
@@ -30,6 +57,9 @@ export interface PurchaseOrder {
   version: number;
   lines: readonly PurchaseOrderLine[];
   issuance_digest: string | null;
+  receiving_status: string;
+  receipts: readonly PurchaseOrderReceipt[];
+  discrepancies: readonly PurchaseOrderDiscrepancy[];
 }
 export interface PurchasingWorkspace {
   vendors: readonly OperationalVendor[];
@@ -80,5 +110,27 @@ export interface PurchaseOrderLineUpdate extends PurchaseOrderLineCreate {
 export interface PurchasingTransition {
   expected_version: number;
   reason?: string | null;
+  idempotency_key: string;
+}
+export interface RecordPurchaseOrderReceipt {
+  expected_po_version: number;
+  receiving_event_identity: string;
+  received_at: string;
+  effective_date: string;
+  source_reference?: string | null;
+  idempotency_key: string;
+  lines: readonly {
+    purchase_order_line_id: string;
+    accepted_quantity: string;
+    rejected_quantity: string;
+    discrepancy_category?: string | null;
+    observed_condition?: string | null;
+  }[];
+}
+export interface ResolvePurchaseOrderDiscrepancy {
+  expected_po_version: number;
+  expected_discrepancy_version: number;
+  resolution: "resolved_accepted" | "resolved_rejected";
+  note: string;
   idempotency_key: string;
 }

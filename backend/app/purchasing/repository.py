@@ -1,3 +1,4 @@
+from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy import Select, func, select
@@ -6,8 +7,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from .models import (
     OperationalVendor,
     PurchaseOrder,
+    PurchaseOrderDiscrepancy,
     PurchaseOrderIssuanceEvidence,
     PurchaseOrderLine,
+    PurchaseOrderReceipt,
+    PurchaseOrderReceiptLine,
     PurchasingCommandReceipt,
 )
 
@@ -136,6 +140,104 @@ class PurchasingRepository:
                 PurchasingCommandReceipt.idempotency_key == key,
             )
         )
+
+    async def receiving_events(
+        self, session: AsyncSession, company_id: UUID, po_id: UUID
+    ) -> tuple[PurchaseOrderReceipt, ...]:
+        return tuple(
+            (
+                await session.scalars(
+                    select(PurchaseOrderReceipt)
+                    .where(
+                        PurchaseOrderReceipt.company_id == company_id,
+                        PurchaseOrderReceipt.purchase_order_id == po_id,
+                    )
+                    .order_by(PurchaseOrderReceipt.received_at, PurchaseOrderReceipt.id)
+                )
+            ).all()
+        )
+
+    async def receiving_event(
+        self, session: AsyncSession, company_id: UUID, receipt_id: UUID
+    ) -> PurchaseOrderReceipt | None:
+        return await session.scalar(
+            select(PurchaseOrderReceipt).where(
+                PurchaseOrderReceipt.company_id == company_id,
+                PurchaseOrderReceipt.id == receipt_id,
+            )
+        )
+
+    async def receipt_lines(
+        self, session: AsyncSession, company_id: UUID, receipt_id: UUID
+    ) -> tuple[PurchaseOrderReceiptLine, ...]:
+        return tuple(
+            (
+                await session.scalars(
+                    select(PurchaseOrderReceiptLine)
+                    .where(
+                        PurchaseOrderReceiptLine.company_id == company_id,
+                        PurchaseOrderReceiptLine.receipt_id == receipt_id,
+                    )
+                    .order_by(PurchaseOrderReceiptLine.purchase_order_line_id)
+                )
+            ).all()
+        )
+
+    async def accepted_totals(
+        self, session: AsyncSession, company_id: UUID, po_id: UUID
+    ) -> dict[UUID, Decimal]:
+        rows = (
+            await session.execute(
+                select(
+                    PurchaseOrderReceiptLine.purchase_order_line_id,
+                    func.coalesce(
+                        func.sum(PurchaseOrderReceiptLine.accepted_quantity), 0
+                    ),
+                )
+                .join(
+                    PurchaseOrderReceipt,
+                    PurchaseOrderReceipt.id == PurchaseOrderReceiptLine.receipt_id,
+                )
+                .where(
+                    PurchaseOrderReceiptLine.company_id == company_id,
+                    PurchaseOrderReceipt.purchase_order_id == po_id,
+                )
+                .group_by(PurchaseOrderReceiptLine.purchase_order_line_id)
+            )
+        ).all()
+        return {line_id: total for line_id, total in rows}
+
+    async def discrepancies(
+        self, session: AsyncSession, company_id: UUID, po_id: UUID
+    ) -> tuple[PurchaseOrderDiscrepancy, ...]:
+        return tuple(
+            (
+                await session.scalars(
+                    select(PurchaseOrderDiscrepancy)
+                    .where(
+                        PurchaseOrderDiscrepancy.company_id == company_id,
+                        PurchaseOrderDiscrepancy.purchase_order_id == po_id,
+                    )
+                    .order_by(
+                        PurchaseOrderDiscrepancy.opened_at, PurchaseOrderDiscrepancy.id
+                    )
+                )
+            ).all()
+        )
+
+    async def discrepancy(
+        self,
+        session: AsyncSession,
+        company_id: UUID,
+        discrepancy_id: UUID,
+        *,
+        lock: bool = False,
+    ) -> PurchaseOrderDiscrepancy | None:
+        query = select(PurchaseOrderDiscrepancy).where(
+            PurchaseOrderDiscrepancy.company_id == company_id,
+            PurchaseOrderDiscrepancy.id == discrepancy_id,
+        )
+        return await session.scalar(query.with_for_update() if lock else query)
 
 
 purchasing_repository = PurchasingRepository()

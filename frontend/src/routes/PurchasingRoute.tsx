@@ -21,6 +21,8 @@ export function PurchasingRoute() {
   const canManage = useHasPermission("COMPANY_PURCHASING_MANAGE");
   const canApprove = useHasPermission("COMPANY_PURCHASING_APPROVE");
   const canIssue = useHasPermission("COMPANY_PURCHASING_ISSUE");
+  const canReceive = useHasPermission("COMPANY_PURCHASING_RECEIVE");
+  const canResolve = useHasPermission("COMPANY_PURCHASING_RESOLVE_DISCREPANCY");
   const [search, setSearch] = useState("");
   const purchasing = usePurchasing(search || undefined, canRead);
   const mutations = usePurchasingMutations();
@@ -49,6 +51,15 @@ export function PurchasingRoute() {
     quantity: "1",
     unit: "each",
     unit_cost: "0",
+  });
+  const [receipt, setReceipt] = useState({
+    po_id: "",
+    line_id: "",
+    accepted_quantity: "0",
+    rejected_quantity: "0",
+    discrepancy_category: "",
+    observed_condition: "",
+    effective_date: "",
   });
   if (!activeCompany)
     return (
@@ -180,7 +191,9 @@ export function PurchasingRoute() {
     mutations.updateOrder.isError ||
     mutations.addLine.isError ||
     mutations.updateLine.isError ||
-    mutations.transition.isError;
+    mutations.transition.isError ||
+    mutations.recordReceipt.isError ||
+    mutations.resolveDiscrepancy.isError;
   return (
     <div className="mx-auto max-w-6xl space-y-6 pb-12">
       <header>
@@ -492,6 +505,7 @@ export function PurchasingRoute() {
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <strong>{po.po_number}</strong> <Badge>{po.status}</Badge>
+                    <Badge>{po.receiving_status}</Badge>
                     <p className="text-sm text-content-muted">
                       {po.lines.length} lines · {po.currency}
                       {po.issuance_digest
@@ -545,6 +559,29 @@ export function PurchasingRoute() {
                         Close without receipt
                       </Button>
                     )}
+                    {canReceive &&
+                      po.status === "issued" &&
+                      po.lines.length > 0 && (
+                        <Button
+                          onClick={() =>
+                            setReceipt({
+                              po_id: po.id,
+                              line_id:
+                                po.lines.find(
+                                  (item) =>
+                                    Number(item.outstanding_quantity) > 0,
+                                )?.id ?? po.lines[0].id,
+                              accepted_quantity: "0",
+                              rejected_quantity: "0",
+                              discrepancy_category: "",
+                              observed_condition: "",
+                              effective_date: "",
+                            })
+                          }
+                        >
+                          Record receipt
+                        </Button>
+                      )}
                   </div>
                 </div>
                 {po.lines.length > 0 && (
@@ -553,6 +590,7 @@ export function PurchasingRoute() {
                       <li key={item.id}>
                         {item.line_number}. {item.description} — {item.quantity}{" "}
                         {item.unit} @ {item.unit_cost}
+                        {` · accepted ${item.cumulative_accepted_quantity} · remaining ${item.outstanding_quantity}`}
                         {canManage && po.status === "draft" && (
                           <Button
                             className="ml-2"
@@ -575,11 +613,188 @@ export function PurchasingRoute() {
                     ))}
                   </ul>
                 )}
+                {po.discrepancies
+                  .filter((item) => item.status === "open")
+                  .map((item) => (
+                    <div
+                      key={item.id}
+                      className="mt-2 rounded border border-warning p-3 text-sm"
+                    >
+                      <strong>{item.category}</strong>:{" "}
+                      {item.observed_condition}
+                      {canResolve && (
+                        <div className="mt-2 flex gap-2">
+                          <Button
+                            onClick={() =>
+                              void mutations.resolveDiscrepancy.mutateAsync({
+                                id: po.id,
+                                discrepancyId: item.id,
+                                input: {
+                                  expected_po_version: po.version,
+                                  expected_discrepancy_version: item.version,
+                                  resolution: "resolved_accepted",
+                                  note: "Operational discrepancy accepted; no financial consequence created",
+                                  idempotency_key: crypto.randomUUID(),
+                                },
+                              })
+                            }
+                          >
+                            Accept disposition
+                          </Button>
+                          <Button
+                            onClick={() =>
+                              void mutations.resolveDiscrepancy.mutateAsync({
+                                id: po.id,
+                                discrepancyId: item.id,
+                                input: {
+                                  expected_po_version: po.version,
+                                  expected_discrepancy_version: item.version,
+                                  resolution: "resolved_rejected",
+                                  note: "Operational discrepancy rejected; no financial consequence created",
+                                  idempotency_key: crypto.randomUUID(),
+                                },
+                              })
+                            }
+                          >
+                            Reject disposition
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
               </li>
             ))}
           </ul>
         </CardContent>
       </Card>
+      {canReceive && receipt.po_id && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Record receiving event</CardTitle>
+            <CardDescription>
+              Accepted quantity updates Purchasing evidence only. Inventory
+              location, AP, and Accounting effects remain separately controlled.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form
+              className="grid gap-3 md:grid-cols-3"
+              onSubmit={(event) => {
+                event.preventDefault();
+                const po = purchasing.data?.purchase_orders.find(
+                  (item) => item.id === receipt.po_id,
+                );
+                if (!po) return;
+                void mutations.recordReceipt
+                  .mutateAsync({
+                    id: po.id,
+                    input: {
+                      expected_po_version: po.version,
+                      receiving_event_identity: crypto.randomUUID(),
+                      received_at: new Date().toISOString(),
+                      effective_date: receipt.effective_date,
+                      idempotency_key: crypto.randomUUID(),
+                      lines: [
+                        {
+                          purchase_order_line_id: receipt.line_id,
+                          accepted_quantity: receipt.accepted_quantity,
+                          rejected_quantity: receipt.rejected_quantity,
+                          discrepancy_category:
+                            receipt.discrepancy_category || null,
+                          observed_condition:
+                            receipt.observed_condition || null,
+                        },
+                      ],
+                    },
+                  })
+                  .then(() => setReceipt({ ...receipt, po_id: "" }));
+              }}
+            >
+              <Select
+                aria-label="Receipt PO line"
+                value={receipt.line_id}
+                onChange={(event) =>
+                  setReceipt({ ...receipt, line_id: event.target.value })
+                }
+              >
+                {purchasing.data?.purchase_orders
+                  .find((item) => item.id === receipt.po_id)
+                  ?.lines.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.description} ({item.outstanding_quantity} remaining)
+                    </option>
+                  ))}
+              </Select>
+              <Input
+                aria-label="Accepted quantity"
+                type="number"
+                min="0"
+                step="0.000001"
+                value={receipt.accepted_quantity}
+                onChange={(event) =>
+                  setReceipt({
+                    ...receipt,
+                    accepted_quantity: event.target.value,
+                  })
+                }
+              />
+              <Input
+                aria-label="Rejected quantity"
+                type="number"
+                min="0"
+                step="0.000001"
+                value={receipt.rejected_quantity}
+                onChange={(event) =>
+                  setReceipt({
+                    ...receipt,
+                    rejected_quantity: event.target.value,
+                  })
+                }
+              />
+              <Select
+                aria-label="Discrepancy category"
+                value={receipt.discrepancy_category}
+                onChange={(event) =>
+                  setReceipt({
+                    ...receipt,
+                    discrepancy_category: event.target.value,
+                  })
+                }
+              >
+                <option value="">No discrepancy</option>
+                <option value="quantity_short">Quantity short</option>
+                <option value="quantity_over">Quantity over</option>
+                <option value="wrong_item">Wrong item</option>
+                <option value="damaged_item">Damaged item</option>
+                <option value="rejected_item">Rejected item</option>
+                <option value="missing_line">Missing line</option>
+              </Select>
+              <Input
+                aria-label="Observed condition"
+                value={receipt.observed_condition}
+                onChange={(event) =>
+                  setReceipt({
+                    ...receipt,
+                    observed_condition: event.target.value,
+                  })
+                }
+              />
+              <Input
+                aria-label="Receipt effective date"
+                type="date"
+                required
+                value={receipt.effective_date}
+                onChange={(event) =>
+                  setReceipt({ ...receipt, effective_date: event.target.value })
+                }
+              />
+              <Button type="submit" loading={mutations.recordReceipt.isPending}>
+                Record receipt
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

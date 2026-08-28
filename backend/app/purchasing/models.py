@@ -275,3 +275,189 @@ class PurchasingCommandReceipt(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
     )
+
+
+class PurchaseOrderReceipt(Base):
+    __tablename__ = "purchasing_purchase_order_receipts"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "purchase_order_id"],
+            ["purchasing_purchase_orders.company_id", "purchasing_purchase_orders.id"],
+            name="fk_purchasing_receipt_po",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "company_id", "receiving_event_identity", name="uq_purchasing_receipt_event"
+        ),
+        UniqueConstraint("company_id", "id", name="uq_purchasing_receipt_company"),
+        CheckConstraint(
+            "status IN ('recorded','discrepancy_outstanding')",
+            name="ck_purchasing_receipt_status",
+        ),
+        Index(
+            "ix_purchasing_receipt_po",
+            "company_id",
+            "purchase_order_id",
+            "received_at",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    purchase_order_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), nullable=False
+    )
+    vendor_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    receiving_event_identity: Mapped[str] = mapped_column(String(128), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    receiver_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    received_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    effective_date: Mapped[date] = mapped_column(Date, nullable=False)
+    source_reference: Mapped[str | None] = mapped_column(String(240))
+    payload_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
+class PurchaseOrderReceiptLine(Base):
+    __tablename__ = "purchasing_purchase_order_receipt_lines"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "receipt_id"],
+            [
+                "purchasing_purchase_order_receipts.company_id",
+                "purchasing_purchase_order_receipts.id",
+            ],
+            name="fk_purchasing_receipt_line_receipt",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "purchase_order_line_id"],
+            [
+                "purchasing_purchase_order_lines.company_id",
+                "purchasing_purchase_order_lines.id",
+            ],
+            name="fk_purchasing_receipt_line_po_line",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint("accepted_quantity >= 0", name="ck_receipt_line_accepted"),
+        CheckConstraint("rejected_quantity >= 0", name="ck_receipt_line_rejected"),
+        CheckConstraint(
+            "accepted_quantity + rejected_quantity > 0 OR discrepancy_category IS NOT NULL",
+            name="ck_receipt_line_outcome",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "receipt_id",
+            "purchase_order_line_id",
+            name="uq_purchasing_receipt_po_line",
+        ),
+        UniqueConstraint("company_id", "id", name="uq_purchasing_receipt_line_company"),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    receipt_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    purchase_order_line_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), nullable=False
+    )
+    ordered_quantity_snapshot: Mapped[Decimal] = mapped_column(
+        Numeric(18, 6), nullable=False
+    )
+    accepted_quantity: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False)
+    rejected_quantity: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False)
+    cumulative_accepted_quantity: Mapped[Decimal] = mapped_column(
+        Numeric(18, 6), nullable=False
+    )
+    outstanding_quantity: Mapped[Decimal] = mapped_column(
+        Numeric(18, 6), nullable=False
+    )
+    unit_snapshot: Mapped[str] = mapped_column(String(40), nullable=False)
+    discrepancy_category: Mapped[str | None] = mapped_column(String(40))
+    observed_condition: Mapped[str | None] = mapped_column(Text)
+
+
+class PurchaseOrderDiscrepancy(Base):
+    __tablename__ = "purchasing_purchase_order_discrepancies"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "receipt_id"],
+            [
+                "purchasing_purchase_order_receipts.company_id",
+                "purchasing_purchase_order_receipts.id",
+            ],
+            name="fk_purchasing_discrepancy_receipt",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "receipt_line_id"],
+            [
+                "purchasing_purchase_order_receipt_lines.company_id",
+                "purchasing_purchase_order_receipt_lines.id",
+            ],
+            name="fk_purchasing_discrepancy_receipt_line",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "category IN ('quantity_short','quantity_over','wrong_item','damaged_item','rejected_item','missing_line')",
+            name="ck_purchasing_discrepancy_category",
+        ),
+        CheckConstraint(
+            "status IN ('open','resolved_accepted','resolved_rejected')",
+            name="ck_purchasing_discrepancy_status",
+        ),
+        CheckConstraint("version >= 1", name="ck_purchasing_discrepancy_version"),
+        UniqueConstraint(
+            "company_id", "receipt_line_id", name="uq_purchasing_discrepancy_line"
+        ),
+        UniqueConstraint("company_id", "id", name="uq_purchasing_discrepancy_company"),
+        Index(
+            "ix_purchasing_discrepancy_open",
+            "company_id",
+            "purchase_order_id",
+            "status",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    purchase_order_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), nullable=False
+    )
+    purchase_order_line_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), nullable=False
+    )
+    receipt_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    receipt_line_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    category: Mapped[str] = mapped_column(String(40), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="open")
+    expected_fact: Mapped[str] = mapped_column(Text, nullable=False)
+    actual_fact: Mapped[str] = mapped_column(Text, nullable=False)
+    observed_condition: Mapped[str] = mapped_column(Text, nullable=False)
+    opened_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    opened_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    resolved_by_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT")
+    )
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    resolution_note: Mapped[str | None] = mapped_column(Text)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)

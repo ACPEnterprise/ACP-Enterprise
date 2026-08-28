@@ -94,6 +94,86 @@ class PurchaseOrderLineItem(PurchasingSchema):
     extended_cost: Decimal
     expected_date: date | None
     version: int
+    cumulative_accepted_quantity: Decimal = Decimal(0)
+    outstanding_quantity: Decimal = Decimal(0)
+
+
+class ReceiptLineCommand(PurchasingSchema):
+    purchase_order_line_id: UUID
+    accepted_quantity: Decimal = Field(ge=0, max_digits=18, decimal_places=6)
+    rejected_quantity: Decimal = Field(
+        default=Decimal(0), ge=0, max_digits=18, decimal_places=6
+    )
+    discrepancy_category: str | None = None
+    observed_condition: str | None = Field(default=None, max_length=1000)
+
+    @model_validator(mode="after")
+    def require_outcome(self) -> "ReceiptLineCommand":
+        if (
+            self.accepted_quantity + self.rejected_quantity <= 0
+            and not self.discrepancy_category
+        ):
+            raise ValueError("Receipt line requires quantity or discrepancy evidence")
+        if self.rejected_quantity > 0 and not self.discrepancy_category:
+            raise ValueError("Rejected quantity requires discrepancy evidence")
+        return self
+
+
+class RecordReceiptCommand(Command):
+    expected_po_version: int = Field(ge=1)
+    receiving_event_identity: str = Field(min_length=1, max_length=128)
+    received_at: datetime
+    effective_date: date
+    source_reference: str | None = Field(default=None, max_length=240)
+    lines: tuple[ReceiptLineCommand, ...] = Field(min_length=1)
+
+
+class ResolveDiscrepancyCommand(Command):
+    expected_po_version: int = Field(ge=1)
+    expected_discrepancy_version: int = Field(ge=1)
+    resolution: str = Field(pattern=r"^(resolved_accepted|resolved_rejected)$")
+    note: str = Field(min_length=1, max_length=1000)
+
+
+class ReceiptLineItem(PurchasingSchema):
+    id: UUID
+    purchase_order_line_id: UUID
+    ordered_quantity_snapshot: Decimal
+    accepted_quantity: Decimal
+    rejected_quantity: Decimal
+    cumulative_accepted_quantity: Decimal
+    outstanding_quantity: Decimal
+    unit_snapshot: str
+    discrepancy_category: str | None
+    observed_condition: str | None
+
+
+class ReceiptItem(PurchasingSchema):
+    id: UUID
+    receiving_event_identity: str
+    status: str
+    receiver_user_id: UUID
+    received_at: datetime
+    effective_date: date
+    source_reference: str | None
+    lines: tuple[ReceiptLineItem, ...] = ()
+
+
+class DiscrepancyItem(PurchasingSchema):
+    id: UUID
+    purchase_order_line_id: UUID
+    receipt_id: UUID
+    category: str
+    status: str
+    expected_fact: str
+    actual_fact: str
+    observed_condition: str
+    opened_by_user_id: UUID
+    opened_at: datetime
+    resolved_by_user_id: UUID | None
+    resolved_at: datetime | None
+    resolution_note: str | None
+    version: int
 
 
 class PurchaseOrderItem(PurchasingSchema):
@@ -115,6 +195,9 @@ class PurchaseOrderItem(PurchasingSchema):
     updated_at: datetime
     lines: tuple[PurchaseOrderLineItem, ...] = ()
     issuance_digest: str | None = None
+    receiving_status: str = "not_received"
+    receipts: tuple[ReceiptItem, ...] = ()
+    discrepancies: tuple[DiscrepancyItem, ...] = ()
 
 
 class PurchasingWorkspace(PurchasingSchema):
