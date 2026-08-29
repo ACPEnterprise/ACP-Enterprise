@@ -281,6 +281,7 @@ class RecordReceiptCommand(Command):
     received_at: datetime
     effective_date: date
     source_reference: str | None = Field(default=None, max_length=240)
+    receiving_location_id: UUID | None = None
     lines: tuple[ReceiptLineCommand, ...] = Field(min_length=1)
 
 
@@ -302,6 +303,9 @@ class ReceiptLineItem(PurchasingSchema):
     unit_snapshot: str
     discrepancy_category: str | None
     observed_condition: str | None
+    inventory_movement_id: UUID | None = None
+    unit_cost_snapshot: Decimal | None = None
+    currency_snapshot: str | None = None
 
 
 class ReceiptItem(PurchasingSchema):
@@ -312,6 +316,8 @@ class ReceiptItem(PurchasingSchema):
     received_at: datetime
     effective_date: date
     source_reference: str | None
+    receiving_location_id: UUID | None = None
+    inventory_application_state: str = "pending"
     lines: tuple[ReceiptLineItem, ...] = ()
 
 
@@ -381,6 +387,31 @@ class PurchaseReturnItem(PurchasingSchema):
     canceled_at: datetime | None
     source_reference: str | None
     version: int
+    inventory_movement_id: UUID | None = None
+
+
+class ReceivingReconciliationLine(PurchasingSchema):
+    purchase_order_line_id: UUID
+    inventory_item_id: UUID | None
+    ordered_quantity: Decimal
+    accepted_quantity: Decimal
+    returned_quantity: Decimal
+    inventory_received_quantity: Decimal
+    inventory_returned_quantity: Decimal
+    outstanding_quantity: Decimal
+    receipt_state: str
+    bill_state: str
+    reconciliation_state: str
+    cost_evidence_state: str
+
+
+class ReceivingReconciliation(PurchasingSchema):
+    company_id: UUID
+    branch_id: UUID
+    purchase_order_id: UUID
+    vendor_id: UUID
+    lines: tuple[ReceivingReconciliationLine, ...]
+    evidence_digest: str
 
 
 class PurchaseOrderItem(PurchasingSchema):

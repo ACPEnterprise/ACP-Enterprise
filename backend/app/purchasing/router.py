@@ -36,6 +36,7 @@ from .schemas import (
     PurchasingWorkspace,
     ReceiptItem,
     ReceiptLineItem,
+    ReceivingReconciliation,
     RecordReceiptCommand,
     ReplenishmentDecisionCommand,
     ReplenishmentDecisionItem,
@@ -431,6 +432,23 @@ async def record_receipt(
             update={
                 "lines": tuple(ReceiptLineItem.model_validate(item) for item in lines)
             }
+        )
+    except PurchasingError as error:
+        raise http_error(error) from error
+
+
+@router.get(
+    "/purchase-orders/{po_id}/receiving-reconciliation",
+    response_model=ReceivingReconciliation,
+)
+async def receiving_reconciliation(
+    po_id: UUID,
+    context: ReadContext,
+    session: DatabaseSession,
+) -> ReceivingReconciliation:
+    try:
+        return await purchasing_service.receiving_reconciliation(
+            session, context=context, po_id=po_id
         )
     except PurchasingError as error:
         raise http_error(error) from error

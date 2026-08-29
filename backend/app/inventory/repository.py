@@ -1363,8 +1363,9 @@ class InventoryRepository:
             "increase",
             "adjustment_in",
             "material_issue_reversal",
+            "purchase_receipt",
         }
-        outbound = {"decrease", "adjustment_out", "material_issue"}
+        outbound = {"decrease", "adjustment_out", "material_issue", "purchase_return"}
         if spec.movement_type in inbound:
             valid = (
                 spec.source_location_id is None
