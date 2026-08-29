@@ -46,6 +46,7 @@ from app.operational_migration.hcp_migration2c import (
     EmployeeCandidateCommand,
     HcpMigration2Orchestrator,
 )
+from app.operational_migration.hcp_migration2i import ChildOutcomeCounts
 from app.operational_migration.hcp_owner_disposition import NonProductionTarget
 from app.operational_migration.service import (
     AppointmentMigrationRecord,
@@ -377,11 +378,15 @@ class HcpMigration2ExecutionPlan:
             "unlinked_estimate",
         }
         if not required.issubset(self.master.source_counts):
-            raise SafeEvidenceError("execution_plan_domain_incomplete", self.plan_digest)
+            raise SafeEvidenceError(
+                "execution_plan_domain_incomplete", self.plan_digest
+            )
         if len({item.native_employee_id for item in self.employees}) != len(
             self.employees
         ):
-            raise SafeEvidenceError("execution_plan_employee_duplicate", self.plan_digest)
+            raise SafeEvidenceError(
+                "execution_plan_employee_duplicate", self.plan_digest
+            )
         for values in (
             self.jobs,
             self.appointments,
@@ -392,7 +397,9 @@ class HcpMigration2ExecutionPlan:
         ):
             identities = [item.source_id for item in values]
             if len(identities) != len(set(identities)):
-                raise SafeEvidenceError("execution_plan_native_identity_duplicate", self.plan_digest)
+                raise SafeEvidenceError(
+                    "execution_plan_native_identity_duplicate", self.plan_digest
+                )
         unlinked_identities = [
             item.native_estimate_id for item in self.unlinked_estimates
         ]
@@ -426,14 +433,16 @@ class HcpMigration2ExecutionPlan:
             raise SafeEvidenceError(
                 "execution_plan_outcome_accounting_incomplete", self.plan_digest
             )
-        financial_metadata = [
-            item.external_metadata for item in self.invoices
-        ] + [item.external_metadata for item in self.payments]
+        financial_metadata = [item.external_metadata for item in self.invoices] + [
+            item.external_metadata for item in self.payments
+        ]
         if any(
             metadata and metadata.get("accepted_accounting_truth") is not False
             for metadata in financial_metadata
         ):
-            raise SafeEvidenceError("execution_plan_financial_authority_invalid", self.plan_digest)
+            raise SafeEvidenceError(
+                "execution_plan_financial_authority_invalid", self.plan_digest
+            )
         self.completion.validate_reconciliation(self.master.source_counts)
 
 
@@ -559,6 +568,61 @@ class HcpMigration2Runner:
             master_run_id=master_id,
             notes=plan.notes,
         )
+        async with factory() as session, session.begin():
+            expected_customer = len(plan.customers.admission.candidates)
+            customer_actual = ChildOutcomeCounts(
+                customer_report.attempted,
+                customer_report.accepted,
+                customer_report.rejected,
+                customer_report.duplicate,
+                customer_report.attempted
+                - customer_report.accepted
+                - customer_report.rejected
+                - customer_report.duplicate,
+            )
+            reports = {
+                "operational": (operational, len(plan.jobs) + len(plan.appointments)),
+                "financial": (
+                    financial,
+                    len(plan.estimates) + len(plan.invoices) + len(plan.payments),
+                ),
+                "history": (history, len(plan.notes)),
+            }
+            await self.orchestrator.admit_child_outcome(
+                session,
+                context=context,
+                master_run_id=master_id,
+                child_run_id=UUID(str(customer_report.run_id)),
+                domain="customer",
+                plan_digest=plan.plan_digest,
+                execution_status="completed",
+                expected=ChildOutcomeCounts(
+                    expected_customer, expected_customer, 0, 0, 0
+                ),
+                actual=customer_actual,
+                reason_code="validated_plan_outcome_comparison",
+            )
+            for domain, (report, expected_source) in reports.items():
+                await self.orchestrator.admit_child_outcome(
+                    session,
+                    context=context,
+                    master_run_id=master_id,
+                    child_run_id=report.run_id,
+                    domain=domain,
+                    plan_digest=plan.plan_digest,
+                    execution_status="completed",
+                    expected=ChildOutcomeCounts(
+                        expected_source, expected_source, 0, 0, 0
+                    ),
+                    actual=ChildOutcomeCounts(
+                        report.source,
+                        report.accepted,
+                        report.rejected,
+                        report.duplicate,
+                        report.unresolved,
+                    ),
+                    reason_code="validated_plan_outcome_comparison",
+                )
         async with factory() as session, session.begin():
             for hold_command in plan.holds:
                 await self.orchestrator.persist_held_subject(

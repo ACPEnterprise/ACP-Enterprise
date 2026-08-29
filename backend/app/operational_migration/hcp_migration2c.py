@@ -61,6 +61,11 @@ from app.operational_migration.hcp_migration2b import (
     persist_plan_outcome,
     prepare_master_run,
 )
+from app.operational_migration.hcp_migration2i import (
+    ChildOutcomeCounts,
+    qualify_child_repair,
+    record_child_admission,
+)
 from app.operational_migration.hcp_owner_disposition import NonProductionTarget
 from app.operational_migration.hcp_rehearsal_authority import (
     SOURCE4_SYSTEM,
@@ -70,11 +75,14 @@ from app.operational_migration.hcp_rehearsal_authority import (
 from app.operational_migration.models import (
     HcpCustomerSourceLineage,
     HcpEmployeeSourceCrosswalk,
+    HcpMigrationChildAdmission,
+    HcpMigrationChildRepair,
     HcpMigrationHold,
     HcpMigrationMasterRun,
     HcpMigrationPlanOutcome,
     OperationalMigrationRun,
     UnlinkedEstimateEvidence,
+    utc_now,
 )
 from app.operational_migration.service import (
     AppointmentMigrationRecord,
@@ -774,6 +782,126 @@ class HcpMigration2Orchestrator:
             master_run_id=master_run_id,
         )
 
+    async def run_operational_repair(
+        self,
+        factory: async_sessionmaker[AsyncSession],
+        *,
+        context: AuthorizationContext,
+        repair_id: UUID,
+        jobs: tuple[JobMigrationRecord, ...],
+        appointments: tuple[AppointmentMigrationRecord, ...],
+    ) -> MigrationReport:
+        async with factory() as session, session.begin():
+            repair = await session.get(HcpMigrationChildRepair, repair_id)
+            if repair is not None and repair.status == "completed":
+                existing = await session.get(
+                    OperationalMigrationRun, repair.repair_child_run_id
+                )
+                if existing is None:
+                    raise ValueError("completed operational repair child is missing")
+                return MigrationReport(
+                    existing.id,
+                    existing.mode,
+                    existing.source_count,
+                    existing.accepted_count,
+                    existing.rejected_count,
+                    existing.duplicate_count,
+                    existing.unresolved_count,
+                )
+            if (
+                repair is None
+                or repair.domain != "operational"
+                or repair.status not in {"qualified", "running"}
+            ):
+                raise ValueError("operational child repair is not qualified")
+            await self._active_master(
+                session, context=context, master_run_id=repair.master_run_id
+            )
+            original_id = repair.original_child_run_id
+            master_id = repair.master_run_id
+            repair.status = "running"
+        report = await self._operations.run(
+            factory,
+            context=context,
+            source_system=SOURCE4_SYSTEM,
+            jobs=jobs,
+            appointments=appointments,
+            dry_run=False,
+            master_run_id=master_id,
+            repair_of_run_id=original_id,
+            repair_generation=1,
+        )
+        async with factory() as session, session.begin():
+            repair = await session.get(HcpMigrationChildRepair, repair_id)
+            assert repair is not None
+            if repair.repair_child_run_id not in {None, report.run_id}:
+                raise ValueError("contradictory operational repair execution")
+            repair.repair_child_run_id = report.run_id
+            repair.status = "completed"
+            repair.completed_at = utc_now()
+        return report
+
+    async def run_financial_repair(
+        self,
+        factory: async_sessionmaker[AsyncSession],
+        *,
+        context: AuthorizationContext,
+        repair_id: UUID,
+        estimates: tuple[EstimateMigrationRecord, ...],
+        invoices: tuple[InvoiceMigrationRecord, ...],
+        payments: tuple[PaymentMigrationRecord, ...],
+    ) -> MigrationReport:
+        async with factory() as session, session.begin():
+            repair = await session.get(HcpMigrationChildRepair, repair_id)
+            if repair is not None and repair.status == "completed":
+                existing = await session.get(
+                    OperationalMigrationRun, repair.repair_child_run_id
+                )
+                if existing is None:
+                    raise ValueError("completed financial repair child is missing")
+                return MigrationReport(
+                    existing.id,
+                    existing.mode,
+                    existing.source_count,
+                    existing.accepted_count,
+                    existing.rejected_count,
+                    existing.duplicate_count,
+                    existing.unresolved_count,
+                )
+            if (
+                repair is None
+                or repair.domain != "financial"
+                or repair.status not in {"qualified", "running"}
+            ):
+                raise ValueError("financial child repair is not qualified")
+            await self._active_master(
+                session, context=context, master_run_id=repair.master_run_id
+            )
+            original_id = repair.original_child_run_id
+            master_id = repair.master_run_id
+            repair.status = "running"
+        report = await self._financials.run(
+            factory,
+            context=context,
+            source_system=SOURCE4_SYSTEM,
+            estimates=estimates,
+            invoices=invoices,
+            payments=payments,
+            dry_run=False,
+            master_run_id=master_id,
+            repair_of_run_id=original_id,
+            repair_generation=1,
+        )
+        async with factory() as session, session.begin():
+            repair = await session.get(HcpMigrationChildRepair, repair_id)
+            assert repair is not None
+            if repair.repair_child_run_id not in {None, report.run_id}:
+                raise ValueError("contradictory financial repair execution")
+            repair.repair_child_run_id = report.run_id
+            repair.status = "completed"
+            repair.completed_at = utc_now()
+        return report
+
     async def run_history(
         self,
         factory: async_sessionmaker[AsyncSession],
@@ -1018,6 +1146,60 @@ class HcpMigration2Orchestrator:
         await session.flush()
         return run
 
+    async def admit_child_outcome(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        master_run_id: UUID,
+        child_run_id: UUID,
+        domain: str,
+        plan_digest: str,
+        expected: ChildOutcomeCounts,
+        actual: ChildOutcomeCounts,
+        execution_status: str,
+        reason_code: str,
+    ) -> HcpMigrationChildAdmission:
+        await self._active_master(session, context=context, master_run_id=master_run_id)
+        return await record_child_admission(
+            session,
+            context=context,
+            master_run_id=master_run_id,
+            child_run_id=child_run_id,
+            domain=domain,
+            execution_status=execution_status,
+            plan_digest=plan_digest,
+            expected=expected,
+            actual=actual,
+            reason_code=reason_code,
+        )
+
+    async def qualify_child_repair(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        master_run_id: UUID,
+        original_child_run_id: UUID,
+        domain: str,
+        original_plan_digest: str,
+        repair_plan_digest: str,
+        immutable_input_digest: str,
+        reason_code: str,
+    ) -> object:
+        await self._active_master(session, context=context, master_run_id=master_run_id)
+        return await qualify_child_repair(
+            session,
+            context=context,
+            master_run_id=master_run_id,
+            original_child_run_id=original_child_run_id,
+            domain=domain,
+            original_plan_digest=original_plan_digest,
+            repair_plan_digest=repair_plan_digest,
+            immutable_input_digest=immutable_input_digest,
+            reason_code=reason_code,
+        )
+
     async def complete(
         self,
         session: AsyncSession,
@@ -1044,13 +1226,37 @@ class HcpMigration2Orchestrator:
                 )
             ).all()
         )
-        by_domain = {item.master_domain: item for item in operational_runs}
-        if customer_run is None or set(by_domain) != {
-            "operational",
-            "financial",
-            "history",
-        }:
-            raise ValueError("required child migration run is missing")
+        conforming_admissions = tuple(
+            (
+                await session.scalars(
+                    select(HcpMigrationChildAdmission).where(
+                        HcpMigrationChildAdmission.master_run_id == master_run_id,
+                        HcpMigrationChildAdmission.conformance == "PLAN_CONFORMING",
+                    )
+                )
+            ).all()
+        )
+        admitted_by_domain = {item.domain: item for item in conforming_admissions}
+        if customer_run is None or set(admitted_by_domain) != set(
+            REQUIRED_CHILD_DOMAINS
+        ):
+            raise ValueError("required child migration result is not plan-conforming")
+        operational_by_id = {item.id: item for item in operational_runs}
+        by_domain = {
+            domain: operational_by_id[admission.child_run_id]
+            for domain, admission in admitted_by_domain.items()
+            if domain != "customer" and admission.child_run_id in operational_by_id
+        }
+        if (
+            set(by_domain)
+            != {
+                "operational",
+                "financial",
+                "history",
+            }
+            or admitted_by_domain["customer"].child_run_id != customer_run.id
+        ):
+            raise ValueError("admitted child migration run is missing")
         child_runs: dict[str, CustomerMigrationRun | OperationalMigrationRun] = {
             "customer": customer_run,
             "operational": by_domain["operational"],
@@ -1195,16 +1401,19 @@ class HcpMigration2Orchestrator:
             "exception": history.unresolved_count,
             "rejected": history.rejected_count,
         }
-        planned_note_exceptions = actual_plan_outcomes[
-            "EXPLICIT_EXCEPTION"
-        ].get("note", 0)
+        planned_note_exceptions = actual_plan_outcomes["EXPLICIT_EXCEPTION"].get(
+            "note", 0
+        )
         actual_note_outcomes["exception"] += planned_note_exceptions
         if actual_note_outcomes != requirements.note_outcomes:
             raise ValueError("Note/history reconciliation is incomplete")
         if holds_by_code != requirements.holds_by_code:
             raise ValueError("HOLD reconciliation is incomplete")
-        if hold_counts != requirements.hold_counts:
-            raise ValueError("HOLD entity accounting is incomplete")
+        from app.operational_migration.hcp_migration2i import (
+            require_equivalent_hold_counts,
+        )
+
+        require_equivalent_hold_counts(hold_counts, requirements.hold_counts)
         if unlinked_count != requirements.unlinked_estimates:
             raise ValueError("unlinked Estimate reconciliation is incomplete")
         requirements.validate_reconciliation(run.source_counts)

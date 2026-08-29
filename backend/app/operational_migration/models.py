@@ -351,7 +351,13 @@ class OperationalMigrationRun(Base):
             ondelete="RESTRICT",
         ),
         UniqueConstraint(
-            "master_run_id", "master_domain", name="uq_operational_master_domain"
+            "master_run_id",
+            "master_domain",
+            "repair_generation",
+            name="uq_operational_master_domain_generation",
+        ),
+        UniqueConstraint(
+            "id", "company_id", "branch_id", name="uq_operational_run_scope"
         ),
     )
 
@@ -375,6 +381,11 @@ class OperationalMigrationRun(Base):
     )
     master_run_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
     master_domain: Mapped[str | None] = mapped_column(String(20))
+    repair_of_run_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("operational_migration_runs.id", ondelete="RESTRICT"),
+    )
+    repair_generation: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     source_system: Mapped[str] = mapped_column(String(80), nullable=False)
     source_digest: Mapped[str] = mapped_column(String(64), nullable=False)
     mode: Mapped[str] = mapped_column(String(20), nullable=False)
@@ -385,6 +396,125 @@ class OperationalMigrationRun(Base):
     duplicate_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     unresolved_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class HcpMigrationChildAdmission(Base):
+    """Immutable plan-conformance decision for a master child execution."""
+
+    __tablename__ = "hcp_migration_child_admissions"
+    __table_args__ = (
+        CheckConstraint(
+            "domain IN ('customer','operational','financial','history')",
+            name="ck_hcp_child_admission_domain",
+        ),
+        CheckConstraint(
+            "conformance IN ('PLAN_CONFORMING','PLAN_NONCONFORMING')",
+            name="ck_hcp_child_admission_conformance",
+        ),
+        ForeignKeyConstraint(
+            ["master_run_id", "company_id", "branch_id"],
+            [
+                "hcp_migration_master_runs.id",
+                "hcp_migration_master_runs.company_id",
+                "hcp_migration_master_runs.branch_id",
+            ],
+            name="fk_hcp_child_admission_master_scope",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "master_run_id", "domain", "child_run_id", name="uq_hcp_child_admission"
+        ),
+        UniqueConstraint(
+            "master_run_id",
+            "domain",
+            "admission_digest",
+            name="uq_hcp_child_admission_replay",
+        ),
+        Index(
+            "uq_hcp_child_admission_conforming_domain",
+            "master_run_id",
+            "domain",
+            unique=True,
+            postgresql_where=text("conformance = 'PLAN_CONFORMING'"),
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True)
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    master_run_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    child_run_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    domain: Mapped[str] = mapped_column(String(20), nullable=False)
+    execution_status: Mapped[str] = mapped_column(String(40), nullable=False)
+    conformance: Mapped[str] = mapped_column(String(30), nullable=False)
+    plan_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    expected_counts: Mapped[dict[str, int]] = mapped_column(JSONB, nullable=False)
+    actual_counts: Mapped[dict[str, int]] = mapped_column(JSONB, nullable=False)
+    reason_code: Mapped[str] = mapped_column(String(100), nullable=False)
+    admission_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    recorded_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
+class HcpMigrationChildRepair(Base):
+    """Evidence-preserving lineage for a nonconforming child requalification."""
+
+    __tablename__ = "hcp_migration_child_repairs"
+    __table_args__ = (
+        CheckConstraint(
+            "domain IN ('operational','financial','history')",
+            name="ck_hcp_child_repair_domain",
+        ),
+        CheckConstraint(
+            "status IN ('qualified','running','completed','failed')",
+            name="ck_hcp_child_repair_status",
+        ),
+        ForeignKeyConstraint(
+            ["master_run_id", "company_id", "branch_id"],
+            [
+                "hcp_migration_master_runs.id",
+                "hcp_migration_master_runs.company_id",
+                "hcp_migration_master_runs.branch_id",
+            ],
+            name="fk_hcp_child_repair_master_scope",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["original_child_run_id", "company_id", "branch_id"],
+            [
+                "operational_migration_runs.id",
+                "operational_migration_runs.company_id",
+                "operational_migration_runs.branch_id",
+            ],
+            name="fk_hcp_child_repair_original_scope",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "master_run_id", "domain", "repair_digest", name="uq_hcp_child_repair_replay"
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True)
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    master_run_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    original_child_run_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    repair_child_run_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("operational_migration_runs.id", ondelete="RESTRICT"),
+    )
+    domain: Mapped[str] = mapped_column(String(20), nullable=False)
+    reason_code: Mapped[str] = mapped_column(String(100), nullable=False)
+    original_plan_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    repair_plan_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    immutable_input_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    repair_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
     )
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

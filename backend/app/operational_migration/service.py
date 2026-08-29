@@ -275,6 +275,8 @@ class OperationalMigrationService:
         appointments: Sequence[AppointmentMigrationRecord],
         dry_run: bool,
         master_run_id: UUID | None = None,
+        repair_of_run_id: UUID | None = None,
+        repair_generation: int = 0,
         progress_callback: Callable[[MigrationProgress], None] | None = None,
     ) -> MigrationReport:
         source_system = self._validate_source_system(source_system)
@@ -294,6 +296,8 @@ class OperationalMigrationService:
                 initiated_by_user_id=context.user.id,
                 master_run_id=master_run_id,
                 master_domain="operational" if master_run_id is not None else None,
+                repair_of_run_id=repair_of_run_id,
+                repair_generation=repair_generation,
                 source_system=source_system,
                 source_digest=digest,
                 mode="dry_run" if dry_run else "import",
