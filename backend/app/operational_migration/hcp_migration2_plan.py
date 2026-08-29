@@ -2896,6 +2896,52 @@ class HcpMigration2Application:
             "reconciliation_digest": completed.reconciliation_digest,
         }
 
+    async def qualify_financial_superseding_repair(
+        self,
+        factory: async_sessionmaker[AsyncSession],
+        *,
+        context: AuthorizationContext,
+        target: NonProductionTarget,
+        authority: HcpMigration2FinancialSupersedingAuthority,
+    ) -> dict[str, object]:
+        """Run the complete Financial successor admission without mutation."""
+        (
+            _plan,
+            _repair,
+            adjusted,
+            superseding,
+            master,
+            _original_operational,
+            _original_financial,
+            operational_repair,
+            _appointment_superseding,
+        ) = await self._prepare_financial_supersession(
+            factory, context=context, target=target, authority=authority
+        )
+        return {
+            "state": "FINANCIAL_SUPERSESSION_QUALIFIED",
+            "master_run_id": str(master.id),
+            "master_status": master.status,
+            "financial_successor_plan_id": str(superseding.id),
+            "financial_successor_plan_digest": superseding.digest,
+            "invoice_evidence_count": len(superseding.invoice_evidence),
+            "payment_evidence_count": len(superseding.payment_evidence),
+            "retained_invoice_count": len(
+                superseding.retained_invoice_identity_digests
+            ),
+            "retained_payment_count": len(
+                superseding.retained_payment_identity_digests
+            ),
+            "financial_repair_generation": authority.repair_generation,
+            "operational_repair_id": str(operational_repair.id),
+            "reconciliation_digest": canonical_sha256(
+                {
+                    "persisted": adjusted.persisted_counts,
+                    "exceptions": adjusted.exception_counts,
+                }
+            ),
+        }
+
     async def replay_completed_financial_superseding(
         self,
         factory: async_sessionmaker[AsyncSession],
