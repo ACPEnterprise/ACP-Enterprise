@@ -1,2 +1,1 @@
 """Shared request reliability contracts."""
-

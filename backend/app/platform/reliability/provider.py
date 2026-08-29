@@ -75,4 +75,3 @@ def retry_disposition(
     }:
         return RetryDisposition.NO_RETRY
     return RetryDisposition.UNSAFE_TO_RETRY
-
