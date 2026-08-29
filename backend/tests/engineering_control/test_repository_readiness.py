@@ -2,10 +2,63 @@ from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 from app.engineering_control.repository_readiness import (
+    active_readiness_target_eligible,
     readiness_is_current,
     readiness_requires_milestone_update,
     readiness_semantics,
 )
+
+
+def target_eligible(**changes: object) -> bool:
+    values: dict[str, object] = {
+        "milestone_status": "ready",
+        "milestone_reconciliation_state": "current",
+        "command_id": None,
+        "execution_id": None,
+        "execution_state": None,
+        "execution_finished_at": None,
+        "execution_evidence": None,
+    }
+    values.update(changes)
+    return active_readiness_target_eligible(**values)  # type: ignore[arg-type]
+
+
+def test_actionable_ready_milestone_is_an_active_target() -> None:
+    assert target_eligible()
+    assert target_eligible(command_id=uuid4())
+
+
+def test_complete_or_noncurrent_milestone_is_not_an_active_target() -> None:
+    assert not target_eligible(milestone_status="completed")
+    assert not target_eligible(milestone_reconciliation_state="superseded")
+
+
+def test_historical_reconciliation_execution_is_not_an_active_target() -> None:
+    assert not target_eligible(
+        command_id=uuid4(),
+        execution_id=uuid4(),
+        execution_state="running",
+        execution_evidence={"reconciliation_required": True},
+    )
+
+
+def test_projecting_historical_terminal_command_ready_does_not_reopen_it() -> None:
+    assert not target_eligible(
+        command_id=uuid4(),
+        execution_id=uuid4(),
+        execution_state="completed",
+        execution_finished_at=datetime.now(timezone.utc),
+    )
+
+
+def test_current_running_execution_remains_an_active_target() -> None:
+    assert target_eligible(
+        milestone_status="running",
+        command_id=uuid4(),
+        execution_id=uuid4(),
+        execution_state="running",
+        execution_evidence={},
+    )
 
 
 def evidence(now: datetime, **changes: object) -> dict[str, object]:

@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.engineering_capacity.models import EngineeringWorkerCapacity
@@ -14,9 +14,45 @@ from app.engineering_control.scheduler.models import (
     EngineeringCapacityBinding,
     EngineeringPermanentCapacity,
 )
+from app.engineering_execution.models import EngineeringExecution
 from app.worker_control.models import EngineeringWorker
 
 READINESS_TTL = timedelta(minutes=2)
+ACTIVE_EXECUTION_STATES = frozenset({"queued", "starting", "running"})
+
+
+def active_readiness_target_eligible(
+    *,
+    milestone_status: str,
+    milestone_reconciliation_state: str,
+    command_id: UUID | None,
+    execution_id: UUID | None,
+    execution_state: str | None,
+    execution_finished_at: datetime | None,
+    execution_evidence: dict[str, object] | None,
+) -> bool:
+    """Return whether a milestone still needs repository preparation.
+
+    A command with an existing execution is immutable historical lineage unless
+    that execution is the milestone's currently running authority.  In
+    particular, changing a milestone projection back to ``ready`` must not make
+    a completed or reconciliation-required execution an active worker target.
+    """
+
+    if (
+        milestone_status not in {"ready", "running"}
+        or milestone_reconciliation_state != "current"
+    ):
+        return False
+    if command_id is None or execution_id is None:
+        return True
+    evidence = execution_evidence or {}
+    return (
+        milestone_status == "running"
+        and execution_state in ACTIVE_EXECUTION_STATES
+        and execution_finished_at is None
+        and evidence.get("reconciliation_required") is not True
+    )
 
 
 def readiness_semantics(readiness: object) -> dict[str, object] | None:
@@ -153,10 +189,23 @@ class RepositoryReadinessService:
     ) -> tuple[RepositoryReadinessTarget, ...]:
         rows = (
             await session.execute(
-                select(EngineeringMilestone, EngineeringRoadmap)
+                select(
+                    EngineeringMilestone,
+                    EngineeringRoadmap,
+                    EngineeringExecution,
+                )
                 .join(
                     EngineeringRoadmap,
                     EngineeringRoadmap.id == EngineeringMilestone.roadmap_id,
+                )
+                .outerjoin(
+                    EngineeringExecution,
+                    and_(
+                        EngineeringExecution.company_id
+                        == EngineeringMilestone.company_id,
+                        EngineeringExecution.command_id
+                        == EngineeringMilestone.command_id,
+                    ),
                 )
                 .join(
                     EngineeringPermanentCapacity,
@@ -192,7 +241,20 @@ class RepositoryReadinessService:
                 branch=roadmap.expected_branch,
                 candidate_head=roadmap.expected_head,
             )
-            for milestone, roadmap in rows
+            for milestone, roadmap, execution in rows
+            if active_readiness_target_eligible(
+                milestone_status=milestone.status,
+                milestone_reconciliation_state=milestone.reconciliation_state,
+                command_id=milestone.command_id,
+                execution_id=execution.id if execution is not None else None,
+                execution_state=execution.state if execution is not None else None,
+                execution_finished_at=(
+                    execution.finished_at if execution is not None else None
+                ),
+                execution_evidence=(
+                    execution.evidence_summary if execution is not None else None
+                ),
+            )
         )
 
     async def record(
