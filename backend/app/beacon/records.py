@@ -16,6 +16,7 @@ from app.beacon.contracts import (
     BeaconRankingFactorAvailability,
     BeaconSeverity,
     BeaconSignalSource,
+    BeaconWorkflowAction,
 )
 
 if TYPE_CHECKING:
@@ -122,3 +123,34 @@ class BeaconSignal:
 class BeaconAttentionQueue:
     active: tuple[BeaconSignal, ...]
     snoozed: tuple[BeaconSignal, ...]
+
+
+@dataclass(frozen=True)
+class BeaconWorkflowState:
+    company_id: UUID
+    branch_id: UUID | None
+    condition_key: UUID
+    signal_id: UUID
+    definition_id: str
+    definition_version: int
+    evidence_digest: str
+    workflow_version: int
+    acknowledged: bool
+    acknowledged_by_user_id: UUID | None
+    acknowledged_at: datetime | None
+    owner_user_id: UUID | None
+    owned_since: datetime | None
+    last_action: BeaconWorkflowAction | None
+    last_actor_user_id: UUID | None
+    updated_at: datetime | None
+
+
+@dataclass(frozen=True)
+class BeaconWorkflowEvent:
+    id: UUID
+    state: BeaconWorkflowState
+    action: BeaconWorkflowAction
+    actor_user_id: UUID
+    previous_owner_user_id: UUID | None
+    request_id: UUID
+    occurred_at: datetime

@@ -18,6 +18,7 @@ from app.beacon.contracts import (
     BeaconRankingFactorAvailability,
     BeaconSeverity,
     BeaconSignalSource,
+    BeaconWorkflowAction,
 )
 from app.beacon.evidence_evaluation import EvaluationReadiness
 from app.beacon.quality import (
@@ -200,6 +201,63 @@ class BeaconSnoozeCommandRequest(BeaconLifecycleCommandRequest):
 
 class BeaconLifecycleHistoryResponse(BaseModel):
     items: tuple[BeaconLifecycleEventResponse, ...]
+
+
+class BeaconWorkflowCommandRequest(BaseModel):
+    evidence_digest: str = Field(min_length=64, max_length=64)
+    request_id: UUID
+    expected_version: int | None = Field(default=None, ge=0)
+    owner_user_id: UUID | None = None
+
+
+class BeaconWorkflowStateResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    company_id: UUID
+    branch_id: UUID | None
+    condition_key: UUID
+    signal_id: UUID
+    definition_id: str
+    definition_version: int
+    evidence_digest: str
+    workflow_version: int
+    acknowledged: bool
+    acknowledged_by_user_id: UUID | None
+    acknowledged_at: datetime | None
+    owner_user_id: UUID | None
+    owned_since: datetime | None
+    last_action: BeaconWorkflowAction | None
+    last_actor_user_id: UUID | None
+    updated_at: datetime | None
+
+
+class BeaconWorkflowEventResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    state: BeaconWorkflowStateResponse
+    action: BeaconWorkflowAction
+    actor_user_id: UUID
+    previous_owner_user_id: UUID | None
+    request_id: UUID
+    occurred_at: datetime
+
+
+class BeaconWorkflowHistoryResponse(BaseModel):
+    items: tuple[BeaconWorkflowEventResponse, ...]
+
+
+class OperationalWorkflowSignalResponse(BaseModel):
+    signal: BeaconSignalResponse
+    ranking: OperationalRankingResponse
+    workflow: BeaconWorkflowStateResponse | None
+
+
+class OperationalWorkflowQueueResponse(BaseModel):
+    view: str
+    ranking_version: str
+    ranking_digest: str
+    items: tuple[OperationalWorkflowSignalResponse, ...]
 
 
 class OperationalSignalDefinitionResponse(BaseModel):

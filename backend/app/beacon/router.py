@@ -1,16 +1,18 @@
 from datetime import datetime, timezone
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.beacon.catalog import OPERATIONAL_SIGNAL_CATALOG
-from app.beacon.contracts import BeaconLifecycleAction
+from app.beacon.contracts import BeaconLifecycleAction, BeaconWorkflowAction
 from app.beacon.errors import (
     BeaconSignalNotFoundError,
     BeaconSignalStaleError,
     BeaconSnoozeInvalidError,
+    BeaconWorkflowConflictError,
+    BeaconWorkflowOwnerInvalidError,
 )
 from app.beacon.evidence_evaluation import EVIDENCE_EVALUATION_REGISTRY
 from app.beacon.lifecycle import (
@@ -25,15 +27,23 @@ from app.beacon.schemas import (
     BeaconSignalPage,
     BeaconSignalResponse,
     BeaconSnoozeCommandRequest,
+    BeaconWorkflowCommandRequest,
+    BeaconWorkflowEventResponse,
+    BeaconWorkflowHistoryResponse,
+    BeaconWorkflowStateResponse,
     DefinitionQualityRegistryResponse,
     DefinitionQualitySemanticsResponse,
     EvidenceEvaluationRegistrationResponse,
     EvidenceEvaluationRegistryResponse,
     OperationalAttentionQueueResponse,
+    OperationalRankingResponse,
     OperationalSignalCatalogResponse,
     OperationalSignalDefinitionResponse,
+    OperationalWorkflowQueueResponse,
+    OperationalWorkflowSignalResponse,
 )
 from app.beacon.service import SIGNAL_TTL, beacon_query_service
+from app.beacon.workflow import BeaconWorkflowCommand, beacon_workflow_service
 from app.database.session import get_database_session
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import AnalyticsPermission, BeaconPermission
@@ -172,6 +182,51 @@ async def list_prioritized_operational_signals(
     return OperationalAttentionQueueResponse.model_validate(queue, from_attributes=True)
 
 
+@router.get(
+    "/operational-signals/workflow",
+    response_model=OperationalWorkflowQueueResponse,
+    summary="List operational attention with explicit workflow filters",
+)
+async def list_operational_workflow_signals(
+    session: DatabaseSession,
+    context: BeaconReader,
+    view: Literal["all", "unowned", "mine", "acknowledged"] = "all",
+) -> OperationalWorkflowQueueResponse:
+    queue = await beacon_query_service.get_operational_attention_queue(
+        session, context=context
+    )
+    items: list[OperationalWorkflowSignalResponse] = []
+    for item in queue.items:
+        workflow = await beacon_workflow_service.current(
+            session, context=context, condition_key=item.signal.condition_key
+        )
+        if view == "unowned" and workflow and workflow.owner_user_id is not None:
+            continue
+        if view == "mine" and (
+            workflow is None or workflow.owner_user_id != context.user.id
+        ):
+            continue
+        if view == "acknowledged" and (workflow is None or not workflow.acknowledged):
+            continue
+        items.append(
+            OperationalWorkflowSignalResponse(
+                signal=BeaconSignalResponse.model_validate(item.signal),
+                ranking=OperationalRankingResponse.model_validate(item.ranking),
+                workflow=(
+                    BeaconWorkflowStateResponse.model_validate(workflow)
+                    if workflow
+                    else None
+                ),
+            )
+        )
+    return OperationalWorkflowQueueResponse(
+        view=view,
+        ranking_version=queue.ranking_version,
+        ranking_digest=queue.ranking_digest,
+        items=tuple(items),
+    )
+
+
 def _lifecycle_http_error(error: Exception) -> HTTPException:
     if isinstance(error, BeaconSignalNotFoundError):
         return HTTPException(status.HTTP_404_NOT_FOUND, str(error))
@@ -211,20 +266,125 @@ async def _record_action(
 
 @router.post(
     "/signals/{signal_id}/acknowledge",
-    response_model=BeaconLifecycleEventResponse,
+    response_model=BeaconWorkflowEventResponse,
 )
 async def acknowledge_signal(
     signal_id: UUID,
-    data: BeaconLifecycleCommandRequest,
+    data: BeaconWorkflowCommandRequest,
     context: BeaconReviewer,
     session: DatabaseSession,
-) -> BeaconLifecycleEventResponse:
-    return await _record_action(
-        signal_id=signal_id,
-        evidence_digest=data.evidence_digest,
-        action=BeaconLifecycleAction.ACKNOWLEDGE,
-        context=context,
-        session=session,
+) -> BeaconWorkflowEventResponse:
+    try:
+        event = await beacon_workflow_service.mutate(
+            session,
+            context=context,
+            command=BeaconWorkflowCommand(
+                signal_id=signal_id,
+                evidence_digest=data.evidence_digest,
+                request_id=data.request_id,
+                action=BeaconWorkflowAction.ACKNOWLEDGE,
+            ),
+        )
+    except (BeaconSignalNotFoundError, BeaconSignalStaleError) as error:
+        raise _lifecycle_http_error(error) from error
+    return BeaconWorkflowEventResponse.model_validate(event)
+
+
+async def _workflow_mutation(signal_id, data, action, context, session):
+    try:
+        event = await beacon_workflow_service.mutate(
+            session,
+            context=context,
+            command=BeaconWorkflowCommand(
+                signal_id=signal_id,
+                evidence_digest=data.evidence_digest,
+                request_id=data.request_id,
+                action=action,
+                expected_version=data.expected_version,
+                owner_user_id=data.owner_user_id,
+            ),
+        )
+    except (BeaconSignalNotFoundError, BeaconSignalStaleError) as error:
+        raise _lifecycle_http_error(error) from error
+    except BeaconWorkflowConflictError as error:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
+    except BeaconWorkflowOwnerInvalidError as error:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(error)) from error
+    return BeaconWorkflowEventResponse.model_validate(event)
+
+
+@router.post("/signals/{signal_id}/claim", response_model=BeaconWorkflowEventResponse)
+async def claim_signal(
+    signal_id: UUID,
+    data: BeaconWorkflowCommandRequest,
+    context: BeaconReader,
+    session: DatabaseSession,
+):
+    return await _workflow_mutation(
+        signal_id, data, BeaconWorkflowAction.CLAIM, context, session
+    )
+
+
+@router.post("/signals/{signal_id}/assign", response_model=BeaconWorkflowEventResponse)
+async def assign_signal(
+    signal_id: UUID,
+    data: BeaconWorkflowCommandRequest,
+    context: BeaconReader,
+    session: DatabaseSession,
+):
+    return await _workflow_mutation(
+        signal_id, data, BeaconWorkflowAction.ASSIGN, context, session
+    )
+
+
+@router.post(
+    "/signals/{signal_id}/transfer", response_model=BeaconWorkflowEventResponse
+)
+async def transfer_signal(
+    signal_id: UUID,
+    data: BeaconWorkflowCommandRequest,
+    context: BeaconReader,
+    session: DatabaseSession,
+):
+    return await _workflow_mutation(
+        signal_id, data, BeaconWorkflowAction.TRANSFER, context, session
+    )
+
+
+@router.post("/signals/{signal_id}/release", response_model=BeaconWorkflowEventResponse)
+async def release_signal(
+    signal_id: UUID,
+    data: BeaconWorkflowCommandRequest,
+    context: BeaconReader,
+    session: DatabaseSession,
+):
+    return await _workflow_mutation(
+        signal_id, data, BeaconWorkflowAction.RELEASE, context, session
+    )
+
+
+@router.get("/workflow", response_model=BeaconWorkflowStateResponse | None)
+async def current_workflow(
+    condition_key: UUID, context: BeaconReader, session: DatabaseSession
+):
+    state = await beacon_workflow_service.current(
+        session, context=context, condition_key=condition_key
+    )
+    return BeaconWorkflowStateResponse.model_validate(state) if state else None
+
+
+@router.get("/workflow-history", response_model=BeaconWorkflowHistoryResponse)
+async def workflow_history(
+    condition_key: UUID,
+    context: BeaconReader,
+    session: DatabaseSession,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+):
+    events = await beacon_workflow_service.history(
+        session, context=context, condition_key=condition_key, limit=limit
+    )
+    return BeaconWorkflowHistoryResponse(
+        items=tuple(BeaconWorkflowEventResponse.model_validate(item) for item in events)
     )
 
 

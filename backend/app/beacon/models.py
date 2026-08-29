@@ -7,7 +7,9 @@ from sqlalchemy import (
     ForeignKey,
     ForeignKeyConstraint,
     Index,
+    Integer,
     String,
+    UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -28,8 +30,39 @@ class BeaconSignalReviewEventModel(Base):
             name="fk_beacon_review_events_actor_membership",
             ondelete="RESTRICT",
         ),
+        ForeignKeyConstraint(
+            ["company_id", "branch_id"],
+            ["branches.company_id", "branches.id"],
+            name="fk_beacon_workflow_branch",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["actor_user_id"],
+            ["users.id"],
+            name="fk_beacon_workflow_actor_user",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["acknowledged_by_user_id"],
+            ["users.id"],
+            name="fk_beacon_workflow_acknowledger_user",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["previous_owner_user_id"],
+            ["users.id"],
+            name="fk_beacon_workflow_previous_owner_user",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["owner_user_id"],
+            ["users.id"],
+            name="fk_beacon_workflow_owner_user",
+            ondelete="RESTRICT",
+        ),
         CheckConstraint(
-            "action IN ('acknowledge','review','snooze')",
+            "action IN ('acknowledge','review','snooze','claim','assign',"
+            "'transfer','release')",
             name="ck_beacon_review_events_action",
         ),
         CheckConstraint(
@@ -50,6 +83,16 @@ class BeaconSignalReviewEventModel(Base):
             "signal_source IN ('scheduling','jobs','invoices')",
             name="ck_beacon_review_events_signal_source",
         ),
+        CheckConstraint(
+            "workflow_version IS NULL OR workflow_version > 0",
+            name="ck_beacon_workflow_version_positive",
+        ),
+        CheckConstraint(
+            "workflow_version IS NULL OR (definition_id IS NOT NULL AND "
+            "definition_version > 0 AND actor_user_id IS NOT NULL AND "
+            "workflow_request_id IS NOT NULL)",
+            name="ck_beacon_workflow_definition",
+        ),
         Index(
             "ix_beacon_review_events_company_condition",
             "company_id",
@@ -62,6 +105,17 @@ class BeaconSignalReviewEventModel(Base):
             "company_id",
             "created_at",
             "id",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "condition_key",
+            "workflow_version",
+            name="uq_beacon_review_events_workflow_version",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "workflow_request_id",
+            name="uq_beacon_review_events_workflow_request",
         ),
     )
 
@@ -87,3 +141,14 @@ class BeaconSignalReviewEventModel(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
     )
+    definition_id: Mapped[str | None] = mapped_column(String(160))
+    definition_version: Mapped[int | None] = mapped_column(Integer)
+    branch_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    actor_user_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    workflow_request_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    workflow_version: Mapped[int | None] = mapped_column(Integer)
+    acknowledged_by_user_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    previous_owner_user_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    owner_user_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    owned_since: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

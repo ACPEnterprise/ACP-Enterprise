@@ -2,6 +2,13 @@ from enum import Enum
 
 
 class EventType(str, Enum):
+    # Beacon workflow
+    BEACON_SIGNAL_ACKNOWLEDGED = "beacon.signal_acknowledged"
+    BEACON_SIGNAL_CLAIMED = "beacon.signal_claimed"
+    BEACON_SIGNAL_ASSIGNED = "beacon.signal_assigned"
+    BEACON_SIGNAL_TRANSFERRED = "beacon.signal_transferred"
+    BEACON_SIGNAL_RELEASED = "beacon.signal_released"
+
     # Workday Time
     WORKDAY_PUNCH_RECORDED = "timekeeping.punch_recorded"
     WORKDAY_MANUAL_TIME_RECORDED = "timekeeping.manual_time_recorded"

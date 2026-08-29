@@ -22,7 +22,10 @@ describe("Beacon lifecycle API", () => {
     await recordBeaconLifecycleAction(signal, "acknowledge");
     expect(apiClient.post).toHaveBeenLastCalledWith(
       "/api/v1/beacon/signals/signal-id/acknowledge",
-      { evidence_digest: signal.evidence_digest },
+      {
+        evidence_digest: signal.evidence_digest,
+        request_id: expect.any(String),
+      },
     );
 
     await recordBeaconLifecycleAction(

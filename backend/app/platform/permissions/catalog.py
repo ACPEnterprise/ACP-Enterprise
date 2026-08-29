@@ -146,9 +146,9 @@ ANALYTICS_DEFINITIONS = tuple(
 BEACON_DEFINITIONS = tuple(
     PermissionDefinition(
         code=code,
-        name="Company Beacon Review",
+        name=code.replace("_", " ").title(),
         resource="beacon",
-        action="review",
+        action=code.removeprefix("COMPANY_BEACON_").lower(),
         scope=PermissionScope.COMPANY,
     )
     for code in sorted(BeaconPermission.ALL)

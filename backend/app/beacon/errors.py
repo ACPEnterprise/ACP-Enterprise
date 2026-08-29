@@ -12,3 +12,11 @@ class BeaconSignalStaleError(BeaconLifecycleError):
 
 class BeaconSnoozeInvalidError(BeaconLifecycleError):
     pass
+
+
+class BeaconWorkflowConflictError(BeaconLifecycleError):
+    pass
+
+
+class BeaconWorkflowOwnerInvalidError(BeaconLifecycleError):
+    pass

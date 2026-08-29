@@ -77,6 +77,14 @@ class BeaconLifecycleStatus(StrEnum):
     SNOOZED = "snoozed"
 
 
+class BeaconWorkflowAction(StrEnum):
+    ACKNOWLEDGE = "acknowledge"
+    CLAIM = "claim"
+    ASSIGN = "assign"
+    TRANSFER = "transfer"
+    RELEASE = "release"
+
+
 @dataclass(frozen=True)
 class BeaconConfidence:
     level: BeaconConfidenceLevel

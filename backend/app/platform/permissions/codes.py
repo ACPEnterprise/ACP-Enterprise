@@ -41,8 +41,10 @@ class AnalyticsPermission:
 
 class BeaconPermission:
     REVIEW = "COMPANY_BEACON_REVIEW"
+    OWN = "COMPANY_BEACON_OWN"
+    ASSIGN = "COMPANY_BEACON_ASSIGN"
 
-    ALL = frozenset({REVIEW})
+    ALL = frozenset({REVIEW, OWN, ASSIGN})
 
 
 class SchedulingPermission:

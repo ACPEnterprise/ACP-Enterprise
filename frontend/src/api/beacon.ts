@@ -111,6 +111,7 @@ export async function recordBeaconLifecycleAction(
 ): Promise<BeaconLifecycleEvent> {
   const payload = {
     evidence_digest: signal.evidence_digest,
+    ...(action === "acknowledge" ? { request_id: crypto.randomUUID() } : {}),
     ...(action === "snooze" ? { snooze_until: snoozeUntil } : {}),
   };
   return (
