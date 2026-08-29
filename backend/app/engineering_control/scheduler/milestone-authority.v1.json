@@ -50,6 +50,13 @@
       "evidence_reference": "owner-accepted Purchase Order close and cancellation evidence implementation, immutable terminal-disposition evidence, explicit fully-satisfied and cancellation semantics, fail-closed discrepancy/return/change-order gates, idempotency, concurrency, authorization, Business Events, operator workflow, and no inferred Inventory, AP, Accounting, Job-cost, or Economics effects"
     },
     {
+      "bank_milestone_id": "BANK.PUR.006",
+      "canonical_milestone_id": "BANK.PUR.006",
+      "evidence_kind": "AUTHORITATIVE_INTEGRATION_ACCEPTANCE",
+      "authoritative_commit_sha": "3b6349400bfa675e85a8bb71785507144284ed4f",
+      "evidence_reference": "owner-accepted provider-neutral Vendor performance evidence boundary: deterministic read-time projection over accepted Purchasing facts, explicit missing/conflicting semantics, Company/Branch isolation, measured quantities/costs/lead times/discrepancies/returns without fault attribution, and no Vendor score, AP/Accounting inference, Economics result, Beacon signal, or AI invocation"
+    },
+    {
       "bank_milestone_id": "BANK.PLAT.002",
       "canonical_milestone_id": "BANK.PLAT.002",
       "evidence_kind": "AUTHORITATIVE_INTEGRATION_ACCEPTANCE",
@@ -120,5 +127,5 @@
   ],
   "gate_resolutions": [],
   "active_ownership": [],
-  "fingerprint": "0105c49c0a278f8fbe405458d98d39a2952df869ac77cb6bb0113c5f4573b4c7"
+  "fingerprint": "0ebecdd8c326f9346f723f61039b78222daba5412a2324b5834b77788c4c1b1a"
 }
