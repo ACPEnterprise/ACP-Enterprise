@@ -1,0 +1,33 @@
+{
+  "schema_version": "1.0",
+  "qualification_id": "BANK.BEA.004.QUALIFICATION.1",
+  "milestone_id": "BANK.BEA.004",
+  "state": "QUALIFIED_AWAITING_OWNER_ACCEPTANCE",
+  "implementation_sha": "2a6a83c9a6a7e20ab9ce5af7964ed27ae28e27d0",
+  "qualification_base_sha": "aa28572ac5e3339937e81264420720dbea1ebd77",
+  "repository_ref": "origin/customer-management-v1",
+  "contract_digest": "80d68c5567ed2684a0653c7b065d1c77cd43745236cb6e8fd379d1eff8015ab2",
+  "ranking_version": "BANK.BEA.004.v1",
+  "authorized_dimensions": [
+    "declared signal severity",
+    "catalog definition priority band",
+    "versioned operational urgency fact where explicitly registered",
+    "stable signal UUID"
+  ],
+  "qualification_evidence": [
+    "ranking is deterministic under input reordering and stable replay",
+    "changed authoritative ordering evidence changes the bound ranking digest",
+    "confidence and freshness remain BEA.003 evidence classifications and are not reinterpreted as invented weights",
+    "inadmissible, expired, and suppressed signals are excluded before ordering",
+    "Company-scoped source projection and active-Branch projection context remain digest-bound",
+    "structured ranking reasons expose only safe classification and policy facts",
+    "no operational mutation, notification delivery, financial action, AI authority, Preview, or Production authority is introduced"
+  ],
+  "autonomous_action": "PROHIBITED",
+  "schema_impact": "NONE",
+  "successor_gate": {
+    "milestone_id": "BANK.BEA.005",
+    "state": "BLOCKED_PENDING_BANK_BEA_004_OWNER_ACCEPTANCE"
+  },
+  "qualification_fingerprint": "ccebae77da16c3f1044a03af88c8a734a6cc7662e95406132a9b405eaaf362b1"
+}
