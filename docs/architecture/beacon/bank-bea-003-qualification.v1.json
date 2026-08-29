@@ -4,7 +4,7 @@
   "milestone_id": "BANK.BEA.003",
   "state": "QUALIFIED_AWAITING_OWNER_ACCEPTANCE",
   "implementation_sha": "cce44ec4227418b7543d05b977b81c9656e21f25",
-  "qualification_base_sha": "3f896a5734ed0cedf6a1d8aaf91b5117415e55d5",
+  "qualification_base_sha": "bebd3dcb7cdc349ee58f46167e81457f95d4ce9b",
   "repository_ref": "origin/customer-management-v1",
   "semantics_digest": "8996c04bb8d79b2a1100f2adbe2f6cb86fea936b1b4afd2990871173d09ccc6c",
   "definition_count": 21,
@@ -23,5 +23,5 @@
     "milestone_id": "BANK.BEA.004",
     "state": "BLOCKED_PENDING_BANK_BEA_003_OWNER_ACCEPTANCE"
   },
-  "qualification_fingerprint": "4bd4ea25c6294df386894e85e082c2bc7914937195cd642ce6696c9d1e3efa25"
+  "qualification_fingerprint": "8b6dc2604653dbda37aa5a8c07398410c85ee4eb586fa7577cfef3a3807f6a9f"
 }
