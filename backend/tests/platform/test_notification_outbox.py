@@ -5,7 +5,7 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import delete, func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -14,7 +14,10 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from app.core.config import settings
-from app.platform.notifications.models import NotificationOutbox
+from app.platform.notifications.models import (
+    NotificationDeliveryEvidence,
+    NotificationOutbox,
+)
 from app.platform.notifications.repository import NotificationOutboxRepository
 
 
@@ -29,12 +32,18 @@ async def outbox_database() -> AsyncIterator[
     engine = create_async_engine(settings.database_url)
     factory = async_sessionmaker(engine, expire_on_commit=False)
     async with factory() as session, session.begin():
-        await session.execute(delete(NotificationOutbox))
+        await session.execute(
+            text("TRUNCATE notification_delivery_evidence, notification_outbox CASCADE")
+        )
     try:
         yield engine, factory
     finally:
         async with factory() as session, session.begin():
-            await session.execute(delete(NotificationOutbox))
+            await session.execute(
+                text(
+                    "TRUNCATE notification_delivery_evidence, notification_outbox CASCADE"
+                )
+            )
         await engine.dispose()
 
 
@@ -296,3 +305,208 @@ async def test_mark_sent_requires_the_active_claim_token(
         assert sent.status == "sent"
         assert sent.sent_at == now
         assert sent.claim_token is None
+
+
+@pytest.mark.asyncio
+async def test_contradictory_intent_replay_fails_closed(
+    outbox_database: tuple[AsyncEngine, async_sessionmaker[AsyncSession]],
+) -> None:
+    _, factory = outbox_database
+    now = utc_now()
+    key = f"intent:{uuid4()}"
+    correlation_id = uuid4()
+    async with factory() as session, session.begin():
+        await NotificationOutboxRepository.enqueue(
+            session,
+            notification_type="customer.notice",
+            template_identifier="notice-v1",
+            recipient="customer@example.com",
+            payload={"subject_id": "one"},
+            correlation_id=correlation_id,
+            idempotency_key=key,
+            scheduled_at=now,
+            now=now,
+        )
+        with pytest.raises(ValueError, match="contradictory intent"):
+            await NotificationOutboxRepository.enqueue(
+                session,
+                notification_type="customer.notice",
+                template_identifier="notice-v1",
+                recipient="customer@example.com",
+                payload={"subject_id": "two"},
+                correlation_id=correlation_id,
+                idempotency_key=key,
+                scheduled_at=now,
+                now=now,
+            )
+
+
+@pytest.mark.asyncio
+async def test_indeterminate_provider_result_blocks_unsafe_resend(
+    outbox_database: tuple[AsyncEngine, async_sessionmaker[AsyncSession]],
+) -> None:
+    _, factory = outbox_database
+    record = await enqueue_fixture(factory)
+    now = utc_now()
+    async with factory() as session, session.begin():
+        claimed = await NotificationOutboxRepository.claim_batch(
+            session, worker_id="provider-worker", now=now, limit=1
+        )
+        token = claimed[0].claim_token
+        assert token is not None
+        assert await NotificationOutboxRepository.record_provider_submission(
+            session,
+            notification_id=record.id,
+            claim_token=token,
+            submitted_at=now,
+            provider_reference="synthetic-provider-reference",
+        )
+        assert not await NotificationOutboxRepository.schedule_retry(
+            session,
+            notification_id=record.id,
+            claim_token=token,
+            scheduled_at=now + timedelta(minutes=1),
+            error_code="response_lost",
+            error_category="indeterminate",
+            now=now,
+        )
+        assert await NotificationOutboxRepository.mark_ambiguous(
+            session,
+            notification_id=record.id,
+            claim_token=token,
+            error_code="response_lost",
+            at=now,
+        )
+
+    async with factory() as session:
+        ambiguous = await session.get(NotificationOutbox, record.id)
+        evidence = list(
+            (
+                await session.scalars(
+                    select(NotificationDeliveryEvidence)
+                    .where(NotificationDeliveryEvidence.outbox_id == record.id)
+                    .order_by(NotificationDeliveryEvidence.sequence)
+                )
+            ).all()
+        )
+        assert ambiguous is not None and ambiguous.status == "ambiguous"
+        assert [entry.outcome for entry in evidence] == [
+            "claimed",
+            "submitted",
+            "ambiguous",
+        ]
+
+
+@pytest.mark.asyncio
+async def test_terminal_cleanup_archives_instead_of_deleting(
+    outbox_database: tuple[AsyncEngine, async_sessionmaker[AsyncSession]],
+) -> None:
+    _, factory = outbox_database
+    record = await enqueue_fixture(factory)
+    now = utc_now()
+    async with factory() as session, session.begin():
+        claimed = await NotificationOutboxRepository.claim_batch(
+            session, worker_id="archive-worker", now=now, limit=1
+        )
+        token = claimed[0].claim_token
+        assert token is not None
+        assert await NotificationOutboxRepository.mark_sent(
+            session,
+            notification_id=record.id,
+            claim_token=token,
+            sent_at=now,
+        )
+    async with factory() as session, session.begin():
+        assert (
+            await NotificationOutboxRepository.cleanup_completed_notifications(
+                session,
+                completed_before=now + timedelta(seconds=1),
+                limit=1,
+            )
+            == 1
+        )
+    async with factory() as session:
+        archived = await session.get(NotificationOutbox, record.id)
+        assert archived is not None
+        assert archived.archived_at == now + timedelta(seconds=1)
+
+
+@pytest.mark.asyncio
+async def test_company_and_branch_scoped_acquisition_does_not_cross_tenants(
+    outbox_database: tuple[AsyncEngine, async_sessionmaker[AsyncSession]],
+) -> None:
+    _, factory = outbox_database
+    now = utc_now()
+    company_a, company_b, branch_a, branch_b = (uuid4() for _ in range(4))
+    async with factory() as session, session.begin():
+        for company_id, branch_id in ((company_a, branch_a), (company_b, branch_b)):
+            await NotificationOutboxRepository.enqueue(
+                session,
+                notification_type="customer.notice",
+                template_identifier="notice-v1",
+                recipient="synthetic@example.com",
+                payload={"company_id": str(company_id)},
+                correlation_id=uuid4(),
+                idempotency_key=f"tenant:{company_id}",
+                scheduled_at=now,
+                now=now,
+                company_id=company_id,
+                branch_id=branch_id,
+            )
+
+    async with factory() as session, session.begin():
+        claimed = await NotificationOutboxRepository.claim_batch(
+            session,
+            worker_id="tenant-worker",
+            now=now,
+            limit=10,
+            company_id=company_a,
+            branch_id=branch_a,
+        )
+        assert len(claimed) == 1
+        assert claimed[0].company_id == company_a
+        assert claimed[0].branch_id == branch_a
+
+
+@pytest.mark.asyncio
+async def test_authorized_suppression_is_terminal_and_auditable(
+    outbox_database: tuple[AsyncEngine, async_sessionmaker[AsyncSession]],
+) -> None:
+    _, factory = outbox_database
+    record = await enqueue_fixture(factory)
+    now = utc_now()
+    actor = uuid4()
+    reason_digest = "a" * 64
+    async with factory() as session, session.begin():
+        assert not await NotificationOutboxRepository.suppress_or_cancel(
+            session,
+            notification_id=record.id,
+            target="suppressed",
+            actor_user_id=actor,
+            reason_digest=reason_digest,
+            authorized=False,
+            now=now,
+        )
+        assert await NotificationOutboxRepository.suppress_or_cancel(
+            session,
+            notification_id=record.id,
+            target="suppressed",
+            actor_user_id=actor,
+            reason_digest=reason_digest,
+            authorized=True,
+            now=now,
+        )
+        assert not await NotificationOutboxRepository.claim_batch(
+            session, worker_id="provider-worker", now=now, limit=10
+        )
+
+    async with factory() as session:
+        evidence = await session.scalar(
+            select(NotificationDeliveryEvidence).where(
+                NotificationDeliveryEvidence.outbox_id == record.id
+            )
+        )
+        assert evidence is not None
+        assert evidence.outcome == "suppressed"
+        assert evidence.actor_user_id == actor
+        assert evidence.reason_digest == reason_digest
