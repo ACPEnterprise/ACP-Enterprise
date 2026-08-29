@@ -1,0 +1,10 @@
+{
+  "contractVersion": "1",
+  "environment": "preview",
+  "channel": "preview",
+  "apiBaseUrl": "https://preview.allcountyhomeservices.com",
+  "bundleIdentifier": "com.acpenterprise.employee",
+  "associatedDomain": "applinks:employee.acpenterprise.com",
+  "easCliVersion": "16.28.0",
+  "signed": false
+}
