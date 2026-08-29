@@ -1101,6 +1101,46 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     },
     {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "inventory",
+      "mechanism": "Company-scoped adjustment identity and one linked stock movement",
+      "method": "POST",
+      "operation_id": "post_adjustment_api_v1_inventory_adjustments_post",
+      "path": "/api/v1/inventory/adjustments",
+      "reason": "Repeated adjustment evidence converges on one immutable adjustment and movement.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "inventory",
+      "mechanism": "Company-scoped durable cycle-count session identity",
+      "method": "POST",
+      "operation_id": "start_cycle_count_api_v1_inventory_cycle_counts_post",
+      "path": "/api/v1/inventory/cycle-counts",
+      "reason": "Repeated count-session creation converges on the same scoped authority.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "inventory",
+      "mechanism": "locked aggregate version and terminal completed state",
+      "method": "POST",
+      "operation_id": "complete_cycle_count_api_v1_inventory_cycle_counts__cycle_count_id__complete_post",
+      "path": "/api/v1/inventory/cycle-counts/{cycle_count_id}/complete",
+      "reason": "Completion applies each quantified variance once and converges on terminal state.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "inventory",
+      "mechanism": "Company-scoped count-entry identity and immutable observed quantity",
+      "method": "POST",
+      "operation_id": "record_cycle_count_api_v1_inventory_cycle_counts__cycle_count_id__entries_post",
+      "path": "/api/v1/inventory/cycle-counts/{cycle_count_id}/entries",
+      "reason": "Repeated observed-count evidence converges and contradictory reuse fails closed.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
       "classification": "IMMUTABLE_APPEND_ONLY",
       "domain": "engineering",
       "mechanism": "domain-owned deterministic evidence/receipt identity",
@@ -2376,6 +2416,6 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "81f7a01508dae51ef7a7538726c887b8d55f06d2a2430705670805828b07f1b8",
+  "fingerprint": "a4323497247935305bcda3ad812db6dec83ef0579d2e6276c1b916e9543eb43d",
   "schema_version": "1"
 }
