@@ -1,5 +1,8 @@
+import hashlib
+import json
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+from pathlib import Path
 from uuid import UUID, uuid4
 
 import pytest
@@ -34,6 +37,29 @@ from app.purchasing.schemas import (
 from app.purchasing.service import PurchasingService
 
 pytest_plugins = ("tests.purchasing.test_purchasing_foundation",)
+
+QUALIFICATION_PATH = (
+    Path(__file__).parents[3]
+    / "docs/architecture/purchasing/bank-pur-008-qualification.v1.json"
+)
+
+
+def test_bank_pur_008_qualification_artifact_is_canonical() -> None:
+    payload = json.loads(QUALIFICATION_PATH.read_text())
+    fingerprint = payload.pop("qualification_fingerprint")
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+
+    assert payload["implementation_sha"] == "e9483c9"
+    assert payload["repair_sha"] == "a6af6ed6a9fbee0f12c13e3489012787275bd09d"
+    assert payload["qualification_base_sha"] == (
+        "aa28572ac5e3339937e81264420720dbea1ebd77"
+    )
+    assert payload["migration_revision"] == "b9s1o3q5t720"
+    assert payload["state"] == "QUALIFIED_AWAITING_OWNER_ACCEPTANCE"
+    assert payload["successor_gate"]["state"] == (
+        "BLOCKED_PENDING_BANK_PUR_008_OWNER_ACCEPTANCE"
+    )
+    assert fingerprint == hashlib.sha256(canonical.encode()).hexdigest()
 
 
 async def _recommendation_setup(purchasing_fixture):
