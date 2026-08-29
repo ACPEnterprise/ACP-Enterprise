@@ -544,6 +544,8 @@ ENTITY_QUERY_NAMES: Mapping[EntityKind, str] = {
     EntityKind.SALES_RECEIPT: "SalesReceipt",
     EntityKind.ESTIMATE: "Estimate",
     EntityKind.PURCHASE_ORDER: "PurchaseOrder",
+    EntityKind.TERM: "Term",
+    EntityKind.PAYMENT_METHOD: "PaymentMethod",
 }
 
 
