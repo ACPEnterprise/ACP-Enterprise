@@ -11,10 +11,12 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.accounting.models import Journal
 from app.accounts_payable.models import AccountingVendor, VendorBill
+from app.business_economics.models import CompanyFinancePolicyVersion
 from app.core.config import settings
 from app.events.models import BusinessEvent
-from app.inventory.models import StockMovement
+from app.inventory.models import InventoryItem, MaterialIssue, StockMovement
 from app.main import app
+from app.payments.models import PaymentIntent, Refund
 from app.platform.branch.models import Branch
 from app.platform.company.membership_models import Membership
 from app.platform.company.models import Company
@@ -574,6 +576,221 @@ async def test_issued_po_change_is_versioned_idempotent_and_stale_safe(
             )
 
 
+def price_change(
+    version: int,
+    line_id,
+    key: str,
+    *,
+    base_revision: int = 1,
+    unit_cost: str = "6.25",
+) -> RequestPurchaseOrderChangeCommand:
+    return RequestPurchaseOrderChangeCommand(
+        expected_po_version=version,
+        base_revision=base_revision,
+        change_identity=f"CO-{key}",
+        reason="Vendor supplied a revised unit price",
+        idempotency_key=f"request-{key}",
+        changes=(
+            PurchaseOrderChangeOperation(
+                operation="set_unit_cost",
+                line_id=line_id,
+                unit_cost=Decimal(unit_cost),
+            ),
+        ),
+    )
+
+
+@pytest.mark.asyncio
+async def test_pre_receipt_price_change_is_authorized_and_versioned(
+    purchasing_fixture,
+) -> None:
+    factory, _, _, branch, _, preparer, approver = purchasing_fixture
+    service = PurchasingService()
+    po_id, line_id, version = await issued_order(factory, branch, preparer, approver)
+    async with factory() as session:
+        requested = await service.request_change(
+            session,
+            context=preparer,
+            po_id=po_id,
+            payload=price_change(version, line_id, "PRE-RECEIPT"),
+        )
+        change_id = requested.id
+    async with factory() as session:
+        approved = await service.decide_change(
+            session,
+            context=approver,
+            po_id=po_id,
+            change_id=change_id,
+            action="approve",
+            payload=DecidePurchaseOrderChangeCommand(
+                expected_po_version=version,
+                expected_base_revision=1,
+                idempotency_key="approve-pre-receipt",
+            ),
+        )
+        order = await service.get_order(session, context=approver, po_id=po_id)
+        assert approved.status == "approved"
+        assert approved.downstream_reconciliation_required is False
+        assert order.effective_revision == 2
+        assert order.lines[0].unit_cost == Decimal("6.25")
+        assert order.revisions[0].effective_snapshot["lines"][0]["unit_cost"] == "4"
+
+
+@pytest.mark.parametrize("accepted,rejected", [("1", "0"), ("10", "0")])
+@pytest.mark.asyncio
+async def test_accepted_receiving_blocks_price_change_without_side_effects(
+    purchasing_fixture, accepted: str, rejected: str
+) -> None:
+    factory, _, _, branch, _, preparer, approver = purchasing_fixture
+    service = PurchasingService()
+    po_id, line_id, version = await issued_order(factory, branch, preparer, approver)
+    async with factory() as session:
+        await service.record_receipt(
+            session,
+            context=approver,
+            po_id=po_id,
+            payload=receipt(version, line_id, accepted, f"PRICE-{accepted}", rejected=rejected),
+        )
+    async with factory() as session:
+        order = await service.get_order(session, context=approver, po_id=po_id)
+        current_version = order.version
+    async with factory() as session:
+        requested = await service.request_change(
+            session,
+            context=preparer,
+            po_id=po_id,
+            payload=price_change(current_version, line_id, f"POST-{accepted}"),
+        )
+        before = tuple(
+            [
+                await session.scalar(select(func.count()).select_from(model))
+                for model in (
+                    InventoryItem,
+                    StockMovement,
+                    MaterialIssue,
+                    AccountingVendor,
+                    VendorBill,
+                    Journal,
+                    PaymentIntent,
+                    Refund,
+                    CompanyFinancePolicyVersion,
+                )
+            ]
+        )
+        revision_count = await session.scalar(
+            select(func.count()).select_from(PurchaseOrderRevision).where(
+                PurchaseOrderRevision.purchase_order_id == po_id
+            )
+        )
+        event_count = await session.scalar(
+            select(func.count()).select_from(BusinessEvent).where(
+                BusinessEvent.entity_id == requested.id
+            )
+        )
+        change_id = requested.id
+        await session.rollback()
+        with pytest.raises(
+            PurchasingValidation, match="POST_RECEIPT_PRICE_CHANGE_POLICY_REQUIRED"
+        ):
+            await service.decide_change(
+                session,
+                context=approver,
+                po_id=po_id,
+                change_id=change_id,
+                action="approve",
+                payload=DecidePurchaseOrderChangeCommand(
+                    expected_po_version=current_version,
+                    expected_base_revision=1,
+                    idempotency_key=f"approve-post-{accepted}",
+                ),
+            )
+    async with factory() as session:
+        order = await service.get_order(session, context=approver, po_id=po_id)
+        change = await service.repository.change_order(
+            session, order.company_id, change_id
+        )
+        after = tuple(
+            [
+                await session.scalar(select(func.count()).select_from(model))
+                for model in (
+                    InventoryItem,
+                    StockMovement,
+                    MaterialIssue,
+                    AccountingVendor,
+                    VendorBill,
+                    Journal,
+                    PaymentIntent,
+                    Refund,
+                    CompanyFinancePolicyVersion,
+                )
+            ]
+        )
+        assert after == before
+        assert order.effective_revision == 1
+        assert order.lines[0].unit_cost == Decimal("4.0000")
+        assert change is not None and change.status == "requested"
+        assert change.downstream_reconciliation_required is False
+        assert await session.scalar(
+            select(func.count()).select_from(PurchaseOrderRevision).where(
+                PurchaseOrderRevision.purchase_order_id == po_id
+            )
+        ) == revision_count
+        assert await session.scalar(
+            select(func.count()).select_from(BusinessEvent).where(
+                BusinessEvent.entity_id == change_id
+            )
+        ) == event_count
+
+
+@pytest.mark.asyncio
+async def test_rejected_only_receipt_does_not_block_price_change(
+    purchasing_fixture,
+) -> None:
+    factory, _, _, branch, _, preparer, approver = purchasing_fixture
+    service = PurchasingService()
+    po_id, line_id, version = await issued_order(factory, branch, preparer, approver)
+    async with factory() as session:
+        await service.record_receipt(
+            session,
+            context=approver,
+            po_id=po_id,
+            payload=receipt(
+                version,
+                line_id,
+                "0",
+                "PRICE-REJECTED-ONLY",
+                rejected="1",
+                category="damaged_item",
+            ),
+        )
+    async with factory() as session:
+        order = await service.get_order(session, context=approver, po_id=po_id)
+        current_version = order.version
+    async with factory() as session:
+        requested = await service.request_change(
+            session,
+            context=preparer,
+            po_id=po_id,
+            payload=price_change(current_version, line_id, "REJECTED-ONLY"),
+        )
+        change_id = requested.id
+    async with factory() as session:
+        await service.decide_change(
+            session,
+            context=approver,
+            po_id=po_id,
+            change_id=change_id,
+            action="approve",
+            payload=DecidePurchaseOrderChangeCommand(
+                expected_po_version=current_version,
+                expected_base_revision=1,
+                idempotency_key="approve-rejected-only",
+            ),
+        )
+        order = await service.get_order(session, context=approver, po_id=po_id)
+        assert order.lines[0].unit_cost == Decimal("6.25")
+
+
 def receipt(
     version: int,
     line_id,
@@ -962,6 +1179,79 @@ async def test_purchase_return_authorization_lifecycle_cancel_and_events(
             "purchasing.purchase_return.returned",
             "purchasing.purchase_return.closed",
         }.issubset(events)
+
+
+@pytest.mark.asyncio
+async def test_returned_receiving_history_still_blocks_price_change(
+    purchasing_fixture,
+) -> None:
+    factory, _, _, branch, _, preparer, approver = purchasing_fixture
+    service = PurchasingService()
+    po_id, line_id, version = await issued_order(
+        factory, branch, preparer, approver, quantity="2"
+    )
+    async with factory() as session:
+        receipt_record = await service.record_receipt(
+            session,
+            context=approver,
+            po_id=po_id,
+            payload=receipt(version, line_id, "2", "PRICE-RETURN-SOURCE"),
+        )
+        receipt_id = receipt_record.id
+    async with factory() as session:
+        order = await service.get_order(session, context=approver, po_id=po_id)
+        receipt_line_id = (
+            await service.repository.receipt_lines(
+                session, order.company_id, receipt_id
+            )
+        )[0].id
+        current_version = order.version
+    async with factory() as session:
+        returned = await service.create_purchase_return(
+            session,
+            context=approver,
+            po_id=po_id,
+            payload=return_command(
+                current_version,
+                receipt_id,
+                receipt_line_id,
+                "2",
+                "PRICE-FULL-RETURN",
+                authorization_required=False,
+            ),
+        )
+        assert returned.quantity == Decimal(2)
+    async with factory() as session:
+        order = await service.get_order(session, context=approver, po_id=po_id)
+        current_version = order.version
+    async with factory() as session:
+        requested = await service.request_change(
+            session,
+            context=preparer,
+            po_id=po_id,
+            payload=price_change(current_version, line_id, "AFTER-FULL-RETURN"),
+        )
+        change_id = requested.id
+    async with factory() as session:
+        with pytest.raises(
+            PurchasingValidation, match="POST_RECEIPT_PRICE_CHANGE_POLICY_REQUIRED"
+        ):
+            await service.decide_change(
+                session,
+                context=approver,
+                po_id=po_id,
+                change_id=change_id,
+                action="approve",
+                payload=DecidePurchaseOrderChangeCommand(
+                    expected_po_version=current_version,
+                    expected_base_revision=1,
+                    idempotency_key="approve-after-full-return",
+                ),
+            )
+    async with factory() as session:
+        order = await service.get_order(session, context=approver, po_id=po_id)
+        assert order.effective_revision == 1
+        assert order.lines[0].unit_cost == Decimal("4.0000")
 
 
 @pytest.mark.asyncio

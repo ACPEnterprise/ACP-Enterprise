@@ -1373,11 +1373,15 @@ class PurchasingService:
                         line.extended_cost = quantity * line.unit_cost
                         line.version += 1
                     elif op == "set_unit_cost" and line:
+                        if received.get(line.id, Decimal(0)) > 0:
+                            raise PurchasingValidation(
+                                "POST_RECEIPT_PRICE_CHANGE_POLICY_REQUIRED: "
+                                "unit cost cannot change after accepted receiving "
+                                "without a separately approved valuation or prospective policy"
+                            )
                         line.unit_cost = Decimal(str(change["unit_cost"]))
                         line.extended_cost = line.quantity * line.unit_cost
                         line.version += 1
-                        if received.get(line.id, Decimal(0)) > 0:
-                            record.downstream_reconciliation_required = True
                     elif op == "cancel_line" and line:
                         if received.get(line.id, Decimal(0)) > 0:
                             raise PurchasingValidation(
