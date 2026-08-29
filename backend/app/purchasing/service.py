@@ -12,7 +12,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.events.schemas import BusinessEventCreate
 from app.events.service import BusinessEventService
 from app.events.types import EventType
-from app.inventory.models import InventoryItem, InventoryQuantity
+from app.inventory.contracts import PostStockMovement
+from app.inventory.errors import InventoryConflict, InventoryError, InventoryNotFound
+from app.inventory.models import InventoryItem, InventoryQuantity, StockMovement
+from app.inventory.repository import InventoryRepository
 from app.platform.permissions.authorization import AuthorizationContext
 
 from .errors import PurchasingConflict, PurchasingNotFound, PurchasingValidation
@@ -56,6 +59,8 @@ from .schemas import (
     PurchasingWorkspace,
     ReceiptItem,
     ReceiptLineItem,
+    ReceivingReconciliation,
+    ReceivingReconciliationLine,
     RecordReceiptCommand,
     ReplenishmentDecisionCommand,
     ReplenishmentDecisionItem,
@@ -86,8 +91,13 @@ def digest(value: Any) -> str:
 
 
 class PurchasingService:
-    def __init__(self, repository: PurchasingRepository | None = None) -> None:
+    def __init__(
+        self,
+        repository: PurchasingRepository | None = None,
+        inventory: InventoryRepository | None = None,
+    ) -> None:
         self.repository = repository or purchasing_repository
+        self.inventory = inventory or InventoryRepository()
 
     @staticmethod
     def branch(context: AuthorizationContext, branch_id: UUID) -> None:
@@ -117,6 +127,122 @@ class PurchasingService:
     ) -> PurchaseOrderItem:
         order = await self._order(session, context, po_id)
         return await self._item(session, order)
+
+    async def receiving_reconciliation(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        po_id: UUID,
+    ) -> ReceivingReconciliation:
+        order = await self._order(session, context, po_id)
+        lines = await self.repository.lines(session, context.company.id, order.id)
+        receipt_lines = await session.scalars(
+            select(PurchaseOrderReceiptLine)
+            .join(
+                PurchaseOrderReceipt,
+                PurchaseOrderReceipt.id == PurchaseOrderReceiptLine.receipt_id,
+            )
+            .where(
+                PurchaseOrderReceiptLine.company_id == context.company.id,
+                PurchaseOrderReceipt.purchase_order_id == order.id,
+            )
+        )
+        receipt_rows = tuple(receipt_lines.all())
+        returns = await self.repository.purchase_returns(
+            session, context.company.id, order.id
+        )
+        movement_ids = {
+            row.inventory_movement_id
+            for row in receipt_rows
+            if row.inventory_movement_id is not None
+        } | {
+            row.inventory_movement_id
+            for row in returns
+            if row.inventory_movement_id is not None
+        }
+        movements = {}
+        if movement_ids:
+            movement_rows = await session.scalars(
+                select(StockMovement).where(
+                    StockMovement.company_id == context.company.id,
+                    StockMovement.id.in_(movement_ids),
+                )
+            )
+            movements = {row.id: row for row in movement_rows.all()}
+        result_lines: list[ReceivingReconciliationLine] = []
+        for line in lines:
+            accepted = sum(
+                (
+                    row.accepted_quantity
+                    for row in receipt_rows
+                    if row.purchase_order_line_id == line.id
+                ),
+                Decimal(0),
+            )
+            line_returns = [
+                row
+                for row in returns
+                if row.purchase_order_line_id == line.id
+                and row.status not in {"canceled", "denied"}
+            ]
+            returned = sum((row.quantity for row in line_returns), Decimal(0))
+            inventory_received = sum(
+                (
+                    movements[row.inventory_movement_id].quantity
+                    for row in receipt_rows
+                    if row.purchase_order_line_id == line.id
+                    and row.inventory_movement_id in movements
+                ),
+                Decimal(0),
+            )
+            inventory_returned = sum(
+                (
+                    movements[row.inventory_movement_id].quantity
+                    for row in line_returns
+                    if row.inventory_movement_id in movements
+                ),
+                Decimal(0),
+            )
+            if accepted == 0:
+                receipt_state = "missing_receipt"
+            elif accepted < line.quantity:
+                receipt_state = "partial"
+            else:
+                receipt_state = "matched"
+            if inventory_received != accepted or inventory_returned > returned:
+                reconciliation_state = "conflicting"
+            elif accepted < line.quantity:
+                reconciliation_state = "partial"
+            else:
+                reconciliation_state = "matched"
+            result_lines.append(
+                ReceivingReconciliationLine(
+                    purchase_order_line_id=line.id,
+                    inventory_item_id=line.inventory_item_id,
+                    ordered_quantity=line.quantity,
+                    accepted_quantity=accepted,
+                    returned_quantity=returned,
+                    inventory_received_quantity=inventory_received,
+                    inventory_returned_quantity=inventory_returned,
+                    outstanding_quantity=line.quantity - accepted,
+                    receipt_state=receipt_state,
+                    bill_state="missing_bill",
+                    reconciliation_state=reconciliation_state,
+                    cost_evidence_state=(
+                        "po_cost_unposted" if line.unit_cost is not None else "unresolved"
+                    ),
+                )
+            )
+        evidence = [item.model_dump(mode="json") for item in result_lines]
+        return ReceivingReconciliation(
+            company_id=order.company_id,
+            branch_id=order.branch_id,
+            purchase_order_id=order.id,
+            vendor_id=order.vendor_id,
+            lines=tuple(result_lines),
+            evidence_digest=digest(evidence),
+        )
 
     async def branch_policies(
         self, session: AsyncSession, *, context: AuthorizationContext
@@ -1669,6 +1795,17 @@ class PurchasingService:
                 )
             if order.version != payload.expected_po_version:
                 raise PurchasingConflict("Purchase Order version is stale")
+            event_identity = payload.receiving_event_identity.strip()
+            existing_event = await session.scalar(
+                select(PurchaseOrderReceipt).where(
+                    PurchaseOrderReceipt.company_id == context.company.id,
+                    PurchaseOrderReceipt.receiving_event_identity == event_identity,
+                )
+            )
+            if existing_event is not None:
+                raise PurchasingConflict(
+                    "Receiving event identity already names different command evidence"
+                )
             command_ids = [item.purchase_order_line_id for item in payload.lines]
             if len(command_ids) != len(set(command_ids)):
                 raise PurchasingValidation(
@@ -1683,17 +1820,30 @@ class PurchasingService:
             totals = await self.repository.accepted_totals(
                 session, context.company.id, order.id
             )
+            if payload.receiving_location_id is not None:
+                receiving_location = await self.inventory.get_location(
+                    session,
+                    company_id=order.company_id,
+                    branch_id=order.branch_id,
+                    location_id=payload.receiving_location_id,
+                )
+                if receiving_location is None or receiving_location.status != "active":
+                    raise PurchasingValidation(
+                        "RECEIVING_LOCATION_NOT_FOUND: location is outside the Purchase Order Branch or inactive"
+                    )
             receipt = PurchaseOrderReceipt(
                 company_id=order.company_id,
                 branch_id=order.branch_id,
                 purchase_order_id=order.id,
                 vendor_id=order.vendor_id,
-                receiving_event_identity=payload.receiving_event_identity.strip(),
+                receiving_event_identity=event_identity,
                 status="recorded",
                 receiver_user_id=context.user.id,
                 received_at=payload.received_at,
                 effective_date=payload.effective_date,
                 source_reference=payload.source_reference,
+                receiving_location_id=payload.receiving_location_id,
+                inventory_application_state="pending",
                 payload_digest=digest(data),
             )
             session.add(receipt)
@@ -1727,9 +1877,45 @@ class PurchasingService:
                     unit_snapshot=line.unit,
                     discrepancy_category=category,
                     observed_condition=outcome.observed_condition,
+                    unit_cost_snapshot=line.unit_cost,
+                    currency_snapshot=order.currency,
                 )
                 session.add(receipt_line)
                 await session.flush()
+                if outcome.accepted_quantity > 0 and payload.receiving_location_id:
+                    if line.inventory_item_id is None:
+                        raise PurchasingValidation(
+                            "UNKNOWN_INVENTORY_ITEM: accepted receipt line is not mapped to an Inventory item"
+                        )
+                    try:
+                        movement = await self.inventory.post_movement(
+                            session,
+                            spec=PostStockMovement(
+                                company_id=order.company_id,
+                                branch_id=order.branch_id,
+                                item_id=line.inventory_item_id,
+                                movement_type="purchase_receipt",
+                                quantity=outcome.accepted_quantity,
+                                occurred_at=payload.received_at,
+                                actor_user_id=context.user.id,
+                                idempotency_key=f"purchase-receipt:{receipt_line.id}",
+                                destination_location_id=payload.receiving_location_id,
+                                provenance_type="purchase_order_receipt_line",
+                                provenance_id=receipt_line.id,
+                                unit_cost=line.unit_cost,
+                                currency=order.currency,
+                                valuation_method="po_cost_evidence_unposted",
+                            ),
+                        )
+                    except InventoryNotFound as error:
+                        raise PurchasingValidation(
+                            "RECEIVING_LOCATION_OR_ITEM_NOT_FOUND"
+                        ) from error
+                    except InventoryConflict as error:
+                        raise PurchasingConflict(str(error)) from error
+                    except InventoryError as error:
+                        raise PurchasingValidation(str(error)) from error
+                    receipt_line.inventory_movement_id = movement.id
                 totals[line.id] = cumulative
                 if category:
                     observed = (outcome.observed_condition or "").strip()
@@ -1757,6 +1943,13 @@ class PurchasingService:
                     opened.append(discrepancy)
             if opened:
                 receipt.status = "discrepancy_outstanding"
+            accepted_lines = [
+                item for item in payload.lines if item.accepted_quantity > 0
+            ]
+            if not accepted_lines:
+                receipt.inventory_application_state = "not_applicable"
+            elif payload.receiving_location_id:
+                receipt.inventory_application_state = "applied"
             order.version += 1
             order.updated_at = now()
             self._receipt(
@@ -1781,8 +1974,24 @@ class PurchasingService:
                     "receiving_event_identity": receipt.receiving_event_identity,
                     "discrepancy_count": len(opened),
                     "purchase_order_version": order.version,
+                    "inventory_application_state": receipt.inventory_application_state,
                 },
             )
+            if receipt.inventory_application_state == "applied":
+                self._event(
+                    session,
+                    context,
+                    EventType.INVENTORY_PURCHASE_RECEIPT_POSTED,
+                    "purchase_order_receipt",
+                    receipt.id,
+                    order.branch_id,
+                    {
+                        "purchase_order_id": str(order.id),
+                        "receipt_id": str(receipt.id),
+                        "receiving_location_id": str(receipt.receiving_location_id),
+                        "movement_count": len(accepted_lines),
+                    },
+                )
             state = self._receiving_state(lines.values(), totals, bool(opened))
             if state == "fully_received":
                 event_type = EventType.PURCHASING_PURCHASE_ORDER_FULLY_RECEIVED
@@ -2114,6 +2323,62 @@ class PurchasingService:
                 record.status = "return_ready"
                 event_type = EventType.PURCHASING_PURCHASE_RETURN_READY
             elif action == "mark_returned" and record.status == "return_ready":
+                receipt_line = await session.get(
+                    PurchaseOrderReceiptLine, record.receipt_line_id
+                )
+                if receipt_line is None or receipt_line.company_id != context.company.id:
+                    raise PurchasingConflict("Authoritative receipt line is missing")
+                if receipt_line.inventory_movement_id is not None:
+                    original = await session.scalar(
+                        select(StockMovement).where(
+                            StockMovement.company_id == context.company.id,
+                            StockMovement.id == receipt_line.inventory_movement_id,
+                        )
+                    )
+                    if original is None or original.destination_location_id is None:
+                        raise PurchasingConflict(
+                            "Authoritative receipt Inventory movement is unavailable"
+                        )
+                    try:
+                        movement = await self.inventory.post_movement(
+                            session,
+                            spec=PostStockMovement(
+                                company_id=record.company_id,
+                                branch_id=record.branch_id,
+                                item_id=original.item_id,
+                                movement_type="purchase_return",
+                                quantity=record.quantity,
+                                occurred_at=payload.occurred_at,
+                                actor_user_id=context.user.id,
+                                idempotency_key=f"purchase-return:{record.id}",
+                                source_location_id=original.destination_location_id,
+                                provenance_type="purchase_return",
+                                provenance_id=record.id,
+                                reversal_of_id=original.id,
+                                unit_cost=original.unit_cost,
+                                currency=original.currency,
+                                valuation_method="po_cost_evidence_reversal_unposted",
+                            ),
+                        )
+                    except InventoryConflict as error:
+                        raise PurchasingConflict(str(error)) from error
+                    except InventoryError as error:
+                        raise PurchasingValidation(str(error)) from error
+                    record.inventory_movement_id = movement.id
+                    self._event(
+                        session,
+                        context,
+                        EventType.INVENTORY_PURCHASE_RETURN_POSTED,
+                        "purchase_return",
+                        record.id,
+                        order.branch_id,
+                        {
+                            "purchase_order_id": str(order.id),
+                            "purchase_return_id": str(record.id),
+                            "movement_id": str(movement.id),
+                            "reversal_of_id": str(original.id),
+                        },
+                    )
                 record.status, record.returned_at = "returned", payload.occurred_at
                 event_type = EventType.PURCHASING_PURCHASE_RETURN_RETURNED
             elif action == "vendor_received" and record.status == "returned":

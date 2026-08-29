@@ -904,7 +904,15 @@ async def test_purchasing_api_requires_authentication() -> None:
     assert response.status_code in {401, 403}
 
 
-async def issued_order(factory, branch, preparer, approver, *, quantity: str = "10"):
+async def issued_order(
+    factory,
+    branch,
+    preparer,
+    approver,
+    *,
+    quantity: str = "10",
+    inventory_item_id=None,
+):
     service = PurchasingService()
     async with factory() as session:
         vendor = await service.create_vendor(
@@ -937,6 +945,7 @@ async def issued_order(factory, branch, preparer, approver, *, quantity: str = "
                 quantity=Decimal(quantity),
                 unit="each",
                 unit_cost=Decimal(4),
+                inventory_item_id=inventory_item_id,
                 idempotency_key=f"line-{uuid4()}",
             ),
         )
@@ -1282,6 +1291,7 @@ def receipt(
     *,
     rejected: str = "0",
     category: str | None = None,
+    receiving_location_id=None,
 ):
     return RecordReceiptCommand(
         expected_po_version=version,
@@ -1289,6 +1299,7 @@ def receipt(
         received_at=datetime.now(timezone.utc),
         effective_date=datetime.now(timezone.utc).date(),
         idempotency_key=key,
+        receiving_location_id=receiving_location_id,
         lines=(
             ReceiptLineCommand(
                 purchase_order_line_id=line_id,
@@ -1311,6 +1322,293 @@ def disposition(
         confirm_terminal_action=True,
         idempotency_key=key,
     )
+
+
+@pytest.mark.asyncio
+async def test_inventory_receiving_posts_one_native_movement_and_replay_is_safe(
+    purchasing_fixture,
+) -> None:
+    factory, company, _, branch, _, preparer, approver = purchasing_fixture
+    service = PurchasingService()
+    async with factory() as session, session.begin():
+        item = InventoryItem(
+            company_id=company.id,
+            code=f"REC-{uuid4().hex[:8].upper()}",
+            name="Receipt-bound fitting",
+            stocking_unit="each",
+            status="active",
+            created_by_user_id=preparer.user.id,
+            updated_by_user_id=preparer.user.id,
+        )
+        location = StockLocation(
+            company_id=company.id,
+            branch_id=branch.id,
+            code=f"REC{uuid4().hex[:7].upper()}",
+            name="Receiving dock",
+            location_type="warehouse",
+            status="active",
+            created_by_user_id=preparer.user.id,
+            updated_by_user_id=preparer.user.id,
+        )
+        session.add_all([item, location])
+        await session.flush()
+        item_id, location_id = item.id, location.id
+    po_id, line_id, version = await issued_order(
+        factory,
+        branch,
+        preparer,
+        approver,
+        inventory_item_id=item_id,
+    )
+    command = receipt(
+        version,
+        line_id,
+        "4",
+        "inventory-receipt",
+        receiving_location_id=location_id,
+    )
+    async with factory() as session:
+        boundary_before = tuple(
+            [
+                await session.scalar(select(func.count()).select_from(model))
+                for model in (VendorBill, Journal, PaymentIntent, Refund)
+            ]
+        )
+    async def apply_receipt():
+        async with factory() as session:
+            return await service.record_receipt(
+                session, context=approver, po_id=po_id, payload=command
+            )
+
+    first, replay = await asyncio.gather(apply_receipt(), apply_receipt())
+    async with factory() as session:
+        reconciliation = await service.receiving_reconciliation(
+            session, context=approver, po_id=po_id
+        )
+        movements = (
+            await session.scalars(
+                select(StockMovement).where(
+                    StockMovement.provenance_type == "purchase_order_receipt_line",
+                    StockMovement.company_id == company.id,
+                )
+            )
+        ).all()
+        quantity = await session.scalar(
+            select(InventoryQuantity).where(
+                InventoryQuantity.company_id == company.id,
+                InventoryQuantity.item_id == item_id,
+                InventoryQuantity.location_id == location_id,
+            )
+        )
+        boundary_counts = tuple(
+            [
+                await session.scalar(select(func.count()).select_from(model))
+                for model in (VendorBill, Journal, PaymentIntent, Refund)
+            ]
+        )
+    assert replay.id == first.id
+    assert first.inventory_application_state == "applied"
+    assert len(movements) == 1
+    assert movements[0].movement_type == "purchase_receipt"
+    assert movements[0].unit_cost == Decimal(4)
+    assert movements[0].valuation_method == "po_cost_evidence_unposted"
+    assert quantity is not None and quantity.on_hand == Decimal(4)
+    assert boundary_counts == boundary_before
+    assert reconciliation.lines[0].reconciliation_state == "partial"
+    assert reconciliation.lines[0].bill_state == "missing_bill"
+    assert reconciliation.lines[0].inventory_received_quantity == Decimal(4)
+
+
+@pytest.mark.asyncio
+async def test_inventory_receiving_fails_closed_for_unmapped_item_or_wrong_branch(
+    purchasing_fixture,
+) -> None:
+    factory, company, _, branch, other_branch, preparer, approver = purchasing_fixture
+    service = PurchasingService()
+    async with factory() as session, session.begin():
+        wrong_location = StockLocation(
+            company_id=company.id,
+            branch_id=other_branch.id,
+            code=f"BAD{uuid4().hex[:7].upper()}",
+            name="Wrong receiving dock",
+            location_type="warehouse",
+            status="active",
+            created_by_user_id=preparer.user.id,
+            updated_by_user_id=preparer.user.id,
+        )
+        correct_location = StockLocation(
+            company_id=company.id,
+            branch_id=branch.id,
+            code=f"OK{uuid4().hex[:8].upper()}",
+            name="Correct receiving dock",
+            location_type="warehouse",
+            status="active",
+            created_by_user_id=preparer.user.id,
+            updated_by_user_id=preparer.user.id,
+        )
+        session.add_all([wrong_location, correct_location])
+        await session.flush()
+        wrong_location_id, correct_location_id = wrong_location.id, correct_location.id
+    po_id, line_id, version = await issued_order(
+        factory, branch, preparer, approver
+    )
+    async with factory() as session:
+        with pytest.raises(PurchasingValidation, match="RECEIVING_LOCATION_NOT_FOUND"):
+            await service.record_receipt(
+                session,
+                context=approver,
+                po_id=po_id,
+                payload=receipt(
+                    version,
+                    line_id,
+                    "1",
+                    "unmapped-item",
+                    receiving_location_id=wrong_location_id,
+                ),
+            )
+    async with factory() as session:
+        with pytest.raises(PurchasingValidation, match="UNKNOWN_INVENTORY_ITEM"):
+            await service.record_receipt(
+                session,
+                context=approver,
+                po_id=po_id,
+                payload=receipt(
+                    version,
+                    line_id,
+                    "1",
+                    "unmapped-item-valid-location",
+                    receiving_location_id=correct_location_id,
+                ),
+            )
+    async with factory() as session:
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(StockMovement)
+                .where(StockMovement.company_id == company.id)
+            )
+            == 0
+        )
+
+
+@pytest.mark.asyncio
+async def test_physical_purchase_return_posts_one_inverse_inventory_movement(
+    purchasing_fixture,
+) -> None:
+    factory, company, _, branch, _, preparer, approver = purchasing_fixture
+    service = PurchasingService()
+    async with factory() as session, session.begin():
+        item = InventoryItem(
+            company_id=company.id,
+            code=f"RTN-{uuid4().hex[:8].upper()}",
+            name="Return-bound fitting",
+            stocking_unit="each",
+            status="active",
+            created_by_user_id=preparer.user.id,
+            updated_by_user_id=preparer.user.id,
+        )
+        location = StockLocation(
+            company_id=company.id,
+            branch_id=branch.id,
+            code=f"RTN{uuid4().hex[:7].upper()}",
+            name="Return dock",
+            location_type="warehouse",
+            status="active",
+            created_by_user_id=preparer.user.id,
+            updated_by_user_id=preparer.user.id,
+        )
+        session.add_all([item, location])
+        await session.flush()
+        item_id, location_id = item.id, location.id
+    po_id, line_id, version = await issued_order(
+        factory,
+        branch,
+        preparer,
+        approver,
+        quantity="3",
+        inventory_item_id=item_id,
+    )
+    async with factory() as session:
+        received = await service.record_receipt(
+            session,
+            context=approver,
+            po_id=po_id,
+            payload=receipt(
+                version,
+                line_id,
+                "3",
+                "return-source-inventory",
+                receiving_location_id=location_id,
+            ),
+        )
+        order = await service.get_order(session, context=approver, po_id=po_id)
+        receipt_line = (
+            await service.repository.receipt_lines(
+                session, company.id, received.id
+            )
+        )[0]
+        receipt_id, receipt_line_id = received.id, receipt_line.id
+        await session.rollback()
+        purchase_return = await service.create_purchase_return(
+            session,
+            context=approver,
+            po_id=po_id,
+            payload=return_command(
+                order.version,
+                receipt_id,
+                receipt_line_id,
+                "1",
+                "inventory-return",
+                authorization_required=False,
+            ),
+        )
+        ready = await service.transition_purchase_return(
+            session,
+            context=approver,
+            po_id=po_id,
+            return_id=purchase_return.id,
+            action="mark_ready",
+            payload=return_transition(
+                order.version + 1,
+                purchase_return.version,
+                "inventory-return-ready",
+            ),
+        )
+        returned = await service.transition_purchase_return(
+            session,
+            context=approver,
+            po_id=po_id,
+            return_id=ready.id,
+            action="mark_returned",
+            payload=return_transition(
+                order.version + 2,
+                ready.version,
+                "inventory-return-physical",
+            ),
+        )
+        return_movement_id = returned.inventory_movement_id
+    async with factory() as session:
+        movements = (
+            await session.scalars(
+                select(StockMovement)
+                .where(StockMovement.company_id == company.id)
+                .order_by(StockMovement.posted_at)
+            )
+        ).all()
+        quantity = await session.scalar(
+            select(InventoryQuantity).where(
+                InventoryQuantity.company_id == company.id,
+                InventoryQuantity.item_id == item_id,
+                InventoryQuantity.location_id == location_id,
+            )
+        )
+    assert [movement.movement_type for movement in movements] == [
+        "purchase_receipt",
+        "purchase_return",
+    ]
+    assert return_movement_id == movements[1].id
+    assert movements[1].reversal_of_id == movements[0].id
+    assert quantity is not None and quantity.on_hand == Decimal(2)
 
 
 @pytest.mark.asyncio
