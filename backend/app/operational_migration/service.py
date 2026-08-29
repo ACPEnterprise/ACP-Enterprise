@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.customer_migration.models import (
@@ -17,6 +18,10 @@ from app.jobs.errors import JobError
 from app.jobs.models import Job
 from app.jobs.service import JobService
 from app.jobs.types import JobPriority
+from app.operational_migration.hcp_rehearsal_authority import (
+    SOURCE4_SYSTEM,
+    require_sanctioned_context,
+)
 from app.operational_migration.models import (
     AppointmentSourceIdentity,
     JobSourceIdentity,
@@ -270,25 +275,56 @@ class OperationalMigrationService:
         jobs: Sequence[JobMigrationRecord],
         appointments: Sequence[AppointmentMigrationRecord],
         dry_run: bool,
+        master_run_id: UUID | None = None,
+        repair_of_run_id: UUID | None = None,
+        repair_generation: int = 0,
+        resume_run_id: UUID | None = None,
         progress_callback: Callable[[MigrationProgress], None] | None = None,
     ) -> MigrationReport:
         source_system = self._validate_source_system(source_system)
+        if source_system == SOURCE4_SYSTEM and master_run_id is None:
+            raise ValueError("SOURCE.4 operational import requires a master run")
+        if source_system == SOURCE4_SYSTEM:
+            require_sanctioned_context(context)
         if context.active_branch is None or not context.can_access_branch(
             context.active_branch.id
         ):
             raise ValueError("An authorized active Branch is required.")
         digest = self._digest(source_system, jobs, appointments)
         async with factory() as session, session.begin():
-            run = OperationalMigrationRun(
-                company_id=context.company.id,
-                branch_id=context.active_branch.id,
-                initiated_by_user_id=context.user.id,
-                source_system=source_system,
-                source_digest=digest,
-                mode="dry_run" if dry_run else "import",
-                status="running",
+            run = (
+                await self._repository.get_run_for_update(session, resume_run_id)
+                if resume_run_id is not None
+                else None
             )
-            await self._repository.create_run(session, run)
+            if run is not None:
+                if (
+                    run.source_digest != digest
+                    or run.master_run_id != master_run_id
+                    or run.repair_of_run_id != repair_of_run_id
+                    or run.repair_generation != repair_generation
+                    or run.status not in {"running", "failed"}
+                ):
+                    raise ValueError("operational resume authority is contradictory")
+                run.status = "running"
+                run.completed_at = None
+            elif resume_run_id is not None:
+                raise ValueError("operational resume run is missing")
+            else:
+                run = OperationalMigrationRun(
+                    company_id=context.company.id,
+                    branch_id=context.active_branch.id,
+                    initiated_by_user_id=context.user.id,
+                    master_run_id=master_run_id,
+                    master_domain="operational" if master_run_id is not None else None,
+                    repair_of_run_id=repair_of_run_id,
+                    repair_generation=repair_generation,
+                    source_system=source_system,
+                    source_digest=digest,
+                    mode="dry_run" if dry_run else "import",
+                    status="running",
+                )
+                await self._repository.create_run(session, run)
             run_id = run.id
 
         counts = {
@@ -352,6 +388,7 @@ class OperationalMigrationService:
                             seen_fingerprints=seen_fingerprints["job"],
                             persist_identity=True,
                             progress_callback=progress_callback,
+                            resume_run_id=resume_run_id,
                         )
                 for index, appointment_record in enumerate(appointments, start=1):
                     async with factory() as session, session.begin():
@@ -369,6 +406,7 @@ class OperationalMigrationService:
                             seen_fingerprints=seen_fingerprints["appointment"],
                             persist_identity=True,
                             progress_callback=progress_callback,
+                            resume_run_id=resume_run_id,
                         )
         except Exception:
             await self._finalize(
@@ -431,6 +469,7 @@ class OperationalMigrationService:
         seen_fingerprints: set[tuple[object, ...]],
         persist_identity: bool,
         progress_callback: Callable[[MigrationProgress], None] | None,
+        resume_run_id: UUID | None = None,
     ) -> None:
         assert context.active_branch is not None
         disposition: Disposition = "accepted"
@@ -469,7 +508,9 @@ class OperationalMigrationService:
                     if record.source_job_number
                     else 0
                 )
-                if existing:
+                if existing and existing.first_run_id == resume_run_id:
+                    disposition = "accepted"
+                elif existing:
                     disposition, reason, detail = (
                         "duplicate",
                         "source_identity_exists",
@@ -587,6 +628,7 @@ class OperationalMigrationService:
         seen_fingerprints: set[tuple[object, ...]],
         persist_identity: bool,
         progress_callback: Callable[[MigrationProgress], None] | None,
+        resume_run_id: UUID | None = None,
     ) -> None:
         assert context.active_branch is not None
         disposition: Disposition = "accepted"
@@ -615,7 +657,9 @@ class OperationalMigrationService:
                     source_system=source_system,
                     source_appointment_id=record.source_id,
                 )
-                if existing:
+                if existing and existing.first_run_id == resume_run_id:
+                    disposition = "accepted"
+                elif existing:
                     disposition, reason, detail = (
                         "duplicate",
                         "source_identity_exists",
@@ -680,12 +724,22 @@ class OperationalMigrationService:
                         service_location_id=appointment.service_location_id,
                         status=status,
                     )
+                    migration_metadata = record.external_metadata or {}
+                    visit_sequence = migration_metadata.get("visit_sequence")
+                    if migration_metadata.get("repair_contract") and not isinstance(
+                        visit_sequence, int
+                    ):
+                        raise MigrationRecordError(
+                            "Appointment visit sequence is absent from the repair plan."
+                        )
                     await self._jobs.stage_migrated_appointment_link(
                         session,
                         context=context,
                         job=job,
                         appointment=reference,
-                        visit_sequence=1,
+                        visit_sequence=(
+                            visit_sequence if isinstance(visit_sequence, int) else 1
+                        ),
                     )
                     if persist_identity:
                         assert job_identity is not None
@@ -796,9 +850,14 @@ class OperationalMigrationService:
             run.status = status
             run.completed_at = utc_now()
             for entity_type, value in counts.items():
-                self._repository.add_progress(
-                    session,
-                    OperationalMigrationProgress(
+                progress = await session.scalar(
+                    select(OperationalMigrationProgress).where(
+                        OperationalMigrationProgress.run_id == run_id,
+                        OperationalMigrationProgress.entity_type == entity_type,
+                    )
+                )
+                if progress is None:
+                    progress = OperationalMigrationProgress(
                         run_id=run_id,
                         entity_type=entity_type,
                         source_count=value.source,
@@ -807,8 +866,15 @@ class OperationalMigrationService:
                         rejected_count=value.rejected,
                         duplicate_count=value.duplicate,
                         unresolved_count=value.unresolved,
-                    ),
-                )
+                    )
+                    self._repository.add_progress(session, progress)
+                else:
+                    progress.source_count = value.source
+                    progress.processed_count = value.processed
+                    progress.accepted_count = value.accepted
+                    progress.rejected_count = value.rejected
+                    progress.duplicate_count = value.duplicate
+                    progress.unresolved_count = value.unresolved
             for (
                 entity_type,
                 index,
@@ -817,22 +883,32 @@ class OperationalMigrationService:
                 reason,
                 detail,
             ) in exceptions:
-                self._repository.add_exception(
-                    session,
-                    OperationalMigrationException(
-                        run_id=run_id,
-                        entity_type=entity_type,
-                        record_index=index,
-                        source_id_sha256=(
-                            hashlib.sha256(source_id.encode()).hexdigest()
-                            if source_id
-                            else None
-                        ),
-                        disposition=disposition,
-                        reason_code=reason,
-                        detail=detail,
-                    ),
+                existing_exception = await session.scalar(
+                    select(OperationalMigrationException.id).where(
+                        OperationalMigrationException.run_id == run_id,
+                        OperationalMigrationException.entity_type == entity_type,
+                        OperationalMigrationException.record_index == index,
+                        OperationalMigrationException.disposition == disposition,
+                        OperationalMigrationException.reason_code == reason,
+                    )
                 )
+                if existing_exception is None:
+                    self._repository.add_exception(
+                        session,
+                        OperationalMigrationException(
+                            run_id=run_id,
+                            entity_type=entity_type,
+                            record_index=index,
+                            source_id_sha256=(
+                                hashlib.sha256(source_id.encode()).hexdigest()
+                                if source_id
+                                else None
+                            ),
+                            disposition=disposition,
+                            reason_code=reason,
+                            detail=detail,
+                        ),
+                    )
         return MigrationReport(
             run_id=run_id,
             mode=run.mode,

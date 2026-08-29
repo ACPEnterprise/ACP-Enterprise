@@ -1,0 +1,31 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: acp_hcp_rehearsal_import
+      POSTGRES_USER: acp_hcp_rehearsal
+      POSTGRES_PASSWORD: ${HCP_REHEARSAL_POSTGRES_PASSWORD:?Set a dedicated rehearsal password}
+    ports:
+      - "127.0.0.1:55432:5432"
+    volumes:
+      - hcp_rehearsal_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U acp_hcp_rehearsal -d acp_hcp_rehearsal_import"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    labels:
+      acp.environment: migration_rehearsal
+      acp.production_access: "false"
+      acp.preview_access: "false"
+    restart: "no"
+    networks:
+      migration_rehearsal:
+
+volumes:
+  hcp_rehearsal_postgres_data:
+    name: acp_hcp_rehearsal_empty
+
+networks:
+  migration_rehearsal:
+    internal: true

@@ -18,6 +18,10 @@ from app.financials.service import (
     MigrateInvoice,
     MigratePayment,
 )
+from app.operational_migration.hcp_rehearsal_authority import (
+    SOURCE4_SYSTEM,
+    require_sanctioned_context,
+)
 from app.operational_migration.models import (
     EstimateLineItemSourceIdentity,
     EstimateSourceIdentity,
@@ -190,9 +194,16 @@ class FinancialMigrationService:
         invoices: Sequence[InvoiceMigrationRecord],
         payments: Sequence[PaymentMigrationRecord],
         dry_run: bool,
+        master_run_id: UUID | None = None,
+        repair_of_run_id: UUID | None = None,
+        repair_generation: int = 0,
         progress_callback: Callable[[FinancialMigrationProgress], None] | None = None,
     ) -> MigrationReport:
         source_system = self._source_system(source_system)
+        if source_system == SOURCE4_SYSTEM and master_run_id is None:
+            raise ValueError("SOURCE.4 financial import requires a master run")
+        if source_system == SOURCE4_SYSTEM:
+            require_sanctioned_context(context)
         if context.active_branch is None or not context.can_access_branch(
             context.active_branch.id
         ):
@@ -203,6 +214,10 @@ class FinancialMigrationService:
                 company_id=context.company.id,
                 branch_id=context.active_branch.id,
                 initiated_by_user_id=context.user.id,
+                master_run_id=master_run_id,
+                master_domain="financial" if master_run_id is not None else None,
+                repair_of_run_id=repair_of_run_id,
+                repair_generation=repair_generation,
                 source_system=source_system,
                 source_digest=digest,
                 mode="dry_run" if dry_run else "import",

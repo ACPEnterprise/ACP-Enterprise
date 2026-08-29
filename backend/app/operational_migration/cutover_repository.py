@@ -136,6 +136,22 @@ class CutoverMigrationRepository:
         )
 
     @staticmethod
+    async def history_by_source(
+        session: AsyncSession,
+        *,
+        company_id: UUID,
+        source_system: str,
+        source_hash: str,
+    ) -> MigrationHistoryEntry | None:
+        return await session.scalar(
+            select(MigrationHistoryEntry).where(
+                MigrationHistoryEntry.company_id == company_id,
+                MigrationHistoryEntry.source_system == source_system,
+                MigrationHistoryEntry.source_id_sha256 == source_hash,
+            )
+        )
+
+    @staticmethod
     async def artifact_by_source(
         session: AsyncSession,
         *,
