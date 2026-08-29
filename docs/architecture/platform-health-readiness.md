@@ -1,8 +1,9 @@
 # Platform health and readiness
 
 ACP exposes liveness separately from readiness. `/health/live` proves only that
-the process can answer HTTP. `/health` and `/health/ready` return a typed,
-hierarchical projection whose component states are `HEALTHY`, `DEGRADED`,
+the process can answer HTTP. `/health` preserves the accepted compact compatibility
+projection, while `/health/ready` returns a typed hierarchical projection whose
+component states are `HEALTHY`, `DEGRADED`,
 `NOT_READY`, `BLOCKED`, or `UNKNOWN`.
 
 Database authority and exact single-head schema agreement are hard readiness
