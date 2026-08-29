@@ -1981,13 +1981,13 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     },
     {
-      "classification": "EXPLICIT_EXEMPTION",
+      "classification": "IDEMPOTENCY_REQUIRED",
       "domain": "timekeeping",
-      "mechanism": "legacy compatibility boundary; no shared durable receipt asserted",
+      "mechanism": "domain durable command/receipt identity and request digest",
       "method": "POST",
       "operation_id": "manual_entry_api_v1_timekeeping_entries_manual_post",
       "path": "/api/v1/timekeeping/entries/manual",
-      "reason": "Existing public mutation lacks a proven cross-network replay receipt; PLAT.008 documents rather than breaking or redesigning this domain.",
+      "reason": "Accepted Idempotency-Key header identity is enforced by the domain contract.",
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     },
     {
@@ -2021,13 +2021,13 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     },
     {
-      "classification": "EXPLICIT_EXEMPTION",
+      "classification": "IDEMPOTENCY_REQUIRED",
       "domain": "timekeeping",
-      "mechanism": "legacy compatibility boundary; no shared durable receipt asserted",
+      "mechanism": "domain durable command/receipt identity and request digest",
       "method": "POST",
       "operation_id": "punch_api_v1_timekeeping_me_punches_post",
       "path": "/api/v1/timekeeping/me/punches",
-      "reason": "Existing public mutation lacks a proven cross-network replay receipt; PLAT.008 documents rather than breaking or redesigning this domain.",
+      "reason": "Accepted Idempotency-Key header identity is enforced by the domain contract.",
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     },
     {
@@ -2311,6 +2311,6 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "ff10765b56a65e5365dc0cabc00186bf5a240a6fd5bda995ebf3b621109fa25f",
+  "fingerprint": "1207e9ca99953f52ae471991eabe6e30c54e07bae0ac87df241d9806d3047268",
   "schema_version": "1"
 }
