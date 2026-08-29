@@ -193,5 +193,9 @@ def test_sealed_source4_requalification_has_exact_safe_counts() -> None:
             "payment": 3337,
         }.items()
     )
+    assert len(repair.additional_plan_outcomes) == 13711
+    assert all(
+        item.outcome == "EXPLICIT_EXCEPTION" for item in repair.additional_plan_outcomes
+    )
     assert repair.original_plan_digest == plan.plan_digest
     assert len(repair.repair_plan_digest) == 64

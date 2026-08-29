@@ -15,7 +15,10 @@ from app.operational_migration.financial import (
     InvoiceMigrationRecord,
     PaymentMigrationRecord,
 )
-from app.operational_migration.hcp_migration2b import canonical_sha256
+from app.operational_migration.hcp_migration2b import (
+    PlanOutcomeCommand,
+    canonical_sha256,
+)
 from app.operational_migration.models import (
     HcpMigrationChildAdmission,
     HcpMigrationChildRepair,
@@ -227,6 +230,7 @@ class ChildRepairPlan:
     financial: FinancialEligibility
     persisted_counts: dict[str, int]
     exception_counts: dict[str, int]
+    additional_plan_outcomes: tuple[PlanOutcomeCommand, ...]
     repair_plan_digest: str
 
     @classmethod
@@ -264,6 +268,46 @@ class ChildRepairPlan:
                 + len(financial.payment_outcomes),
             }
         )
+        outcome_identities = (
+            *(
+                ("job", identity, reason)
+                for identity, reason in operational.job_outcomes
+            ),
+            *(
+                ("appointment", identity, reason)
+                for identity, reason in operational.appointment_outcomes
+            ),
+            *(
+                ("estimate", identity, "authoritative_job_parent_not_admitted")
+                for identity in financial.estimate_outcomes
+            ),
+            *(
+                ("invoice", identity, "authoritative_job_parent_not_admitted")
+                for identity in financial.invoice_outcomes
+            ),
+            *(
+                ("payment", identity, "authoritative_invoice_parent_not_admitted")
+                for identity in financial.payment_outcomes
+            ),
+        )
+        outcomes = tuple(
+            sorted(
+                (
+                    PlanOutcomeCommand(
+                        entity_kind=entity,
+                        native_identity_sha256=canonical_sha256(identity),
+                        outcome="EXPLICIT_EXCEPTION",
+                        reason_code=reason,
+                        evidence_digest=canonical_sha256([identity, reason]),
+                        transformation_version=REPAIR_VERSION,
+                    )
+                    for entity, identity, reason in outcome_identities
+                ),
+                key=lambda item: (item.entity_kind, item.native_identity_sha256),
+            )
+        )
+        for outcome in outcomes:
+            outcome.validate()
         digest = canonical_sha256(
             {
                 "version": REPAIR_VERSION,
@@ -273,6 +317,7 @@ class ChildRepairPlan:
                 "financial_digest": financial.digest,
                 "persisted_counts": persisted,
                 "exception_counts": exceptions,
+                "additional_plan_outcomes": [item.outcome_digest for item in outcomes],
             }
         )
         return cls(
@@ -282,6 +327,7 @@ class ChildRepairPlan:
             financial,
             dict(sorted(persisted.items())),
             dict(sorted(exceptions.items())),
+            outcomes,
             digest,
         )
 
