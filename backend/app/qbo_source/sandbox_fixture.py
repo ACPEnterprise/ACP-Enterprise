@@ -219,7 +219,6 @@ class SandboxFixtureService:
             ("account-depreciation", _account("ACP Qualification Accumulated Depreciation", "Fixed Asset", "OtherFixedAssets")),
             ("account-equity", _account("ACP Qualification Owner Equity", "Equity", "OwnersEquity")),
             ("account-credit-card", _account("ACP Qualification Credit Card", "Credit Card", "CreditCard")),
-            ("account-undeposited", _account("ACP Qualification Undeposited Funds", "Other Current Asset", "UndepositedFunds")),
         )
         fixture_accounts: dict[str, dict[str, object]] = {}
         for key, payload in account_specs:

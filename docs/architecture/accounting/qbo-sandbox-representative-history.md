@@ -31,7 +31,7 @@ native IDs and payload digests but no OAuth material.
 
 The fixture includes qualification-only accounts for cash, AR, AP, income,
 COGS, expense, payroll, liability, fixed asset, depreciation, equity, credit
-card, and undeposited funds. It includes two Customers, one Vendor, two Items,
+card, and reuses Intuit's existing undeposited-funds account. It includes two Customers, one Vendor, two Items,
 Terms and Payment Method evidence, four Invoices, three Payments, one Credit
 Memo, two Bills, one Bill Payment, one cash Purchase, one Vendor Credit, two
 balanced Journal Entries, and one balance-sheet Transfer.
