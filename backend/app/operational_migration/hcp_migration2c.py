@@ -1186,7 +1186,7 @@ class HcpMigration2Orchestrator:
         repair_plan_digest: str,
         immutable_input_digest: str,
         reason_code: str,
-    ) -> object:
+    ) -> HcpMigrationChildRepair:
         await self._active_master(session, context=context, master_run_id=master_run_id)
         return await qualify_child_repair(
             session,
@@ -1208,6 +1208,7 @@ class HcpMigration2Orchestrator:
         master_run_id: UUID,
         expected_input_digest: str,
         requirements: CompletionRequirements,
+        requalified_authority: dict[str, object] | None = None,
     ) -> HcpMigrationMasterRun:
         run = await self._active_master(
             session, context=context, master_run_id=master_run_id
@@ -1421,6 +1422,12 @@ class HcpMigration2Orchestrator:
         child_run_ids = {
             domain: str(child.id) for domain, child in sorted(child_runs.items())
         }
+        replay_state: dict[str, object] = {
+            "state": "completed",
+            "deterministic": True,
+        }
+        if requalified_authority is not None:
+            replay_state["requalified_completion"] = requalified_authority
         outcome = MasterRunOutcome(
             transformed_counts=requirements.transformed_counts,
             persisted_counts=requirements.persisted_counts,
@@ -1430,7 +1437,7 @@ class HcpMigration2Orchestrator:
             unresolved_counts=requirements.unresolved_counts,
             non_applicable_counts=requirements.non_applicable_counts,
             child_run_ids=child_run_ids,
-            replay_state={"state": "completed", "deterministic": True},
+            replay_state=replay_state,
             resume_state={"state": "completed", "cursor": "reconciled"},
             status="completed",
         )

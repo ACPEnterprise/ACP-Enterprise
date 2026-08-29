@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Mapping, Sequence
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
@@ -21,6 +21,8 @@ from app.customer_migration.models import (
     CustomerMigrationRun,
     CustomerMigrationSourceArtifact,
     CustomerMigrationSourceRow,
+    CustomerSourceIdentity,
+    ServiceLocationSourceIdentity,
 )
 from app.customers.models import Customer, CustomerContact, ServiceLocation
 from app.financials.models import Estimate, Invoice, Payment
@@ -51,6 +53,7 @@ from app.operational_migration.hcp_migration2c import (
     EmployeeCandidateCommand,
 )
 from app.operational_migration.hcp_migration2i import (
+    ChildOutcomeCounts,
     ChildRepairPlan,
     requalify_financial_commands,
     requalify_operational_commands,
@@ -70,7 +73,11 @@ from app.operational_migration.hcp_source4_contracts import (
     PAYMENT_COLUMNS,
 )
 from app.operational_migration.models import (
+    HcpMigrationChildAdmission,
+    HcpMigrationChildRepair,
+    HcpMigrationHold,
     HcpMigrationMasterRun,
+    HcpMigrationPlanOutcome,
     OperationalMigrationRun,
 )
 from app.operational_migration.transformation import (
@@ -84,6 +91,42 @@ from app.scheduling.models import Appointment
 
 BUILDER_VERSION = "hcp-migration-2g-plan-builder/v1"
 PLAN_NAMESPACE = UUID("97f2dc73-7473-5275-9ea2-dfc24fb0ea58")
+
+
+@dataclass(frozen=True)
+class HcpMigration2RepairAuthority:
+    master_run_id: UUID
+    original_plan_id: UUID
+    original_plan_digest: str
+    repair_plan_digest: str
+    customer_child_run_id: UUID
+    operational_child_run_id: UUID
+    financial_child_run_id: UUID
+    history_child_run_id: UUID
+
+
+@dataclass(frozen=True)
+class HcpMigration2RepairResult:
+    state: str
+    master_run_id: UUID
+    master_status: str
+    repair_plan_digest: str
+    operational_repair_run_id: UUID
+    financial_repair_run_id: UUID
+    reconciliation_digest: str | None
+
+    def safe_output(self) -> dict[str, object]:
+        return {
+            "state": self.state,
+            "master_run_id": str(self.master_run_id),
+            "master_status": self.master_status,
+            "repair_plan_digest": self.repair_plan_digest,
+            "operational_repair_run_id": str(self.operational_repair_run_id),
+            "financial_repair_run_id": str(self.financial_repair_run_id),
+            "reconciliation_digest": self.reconciliation_digest,
+        }
+
+
 SCHEMA_HEAD = "f3a5c7e9b102"
 
 T = TypeVar("T")
@@ -105,6 +148,9 @@ class HcpMigration2PlanSummary:
 class RehearsalAdmissionState(StrEnum):
     NO_MASTER = "NO_MASTER"
     MATCHING_INCOMPLETE_MASTER = "MATCHING_INCOMPLETE_MASTER"
+    MATCHING_INCOMPLETE_MASTER_WITH_ACCEPTED_REPAIR_PLAN = (
+        "MATCHING_INCOMPLETE_MASTER_WITH_ACCEPTED_REPAIR_PLAN"
+    )
     COMPLETED_MASTER = "COMPLETED_MASTER"
     CONTRADICTORY_MASTER = "CONTRADICTORY_MASTER"
     MULTIPLE_UNEXPECTED_MASTERS = "MULTIPLE_UNEXPECTED_MASTERS"
@@ -1169,6 +1215,21 @@ class HcpMigration2Application:
             return RehearsalAdmissionState.MATCHING_INCOMPLETE_MASTER
         return RehearsalAdmissionState.CONTRADICTORY_MASTER
 
+    @classmethod
+    def classify_application_admission(
+        cls,
+        masters: Sequence[HcpMigrationMasterRun],
+        *,
+        repair_authority: HcpMigration2RepairAuthority | None,
+    ) -> RehearsalAdmissionState:
+        state = cls.classify_master_admission(masters)
+        if (
+            state == RehearsalAdmissionState.MATCHING_INCOMPLETE_MASTER
+            and repair_authority is not None
+        ):
+            return RehearsalAdmissionState.MATCHING_INCOMPLETE_MASTER_WITH_ACCEPTED_REPAIR_PLAN
+        return state
+
     @staticmethod
     def _expected_master_attestation(
         master: HcpMigrationMasterRun, payload: dict[str, object]
@@ -1389,13 +1450,608 @@ class HcpMigration2Application:
         ):
             raise SafeEvidenceError("resume_staging_evidence_conflict", staging_digest)
 
+    async def _prepare_repair(
+        self,
+        factory: async_sessionmaker[AsyncSession],
+        *,
+        context: AuthorizationContext,
+        target: NonProductionTarget,
+        authority: HcpMigration2RepairAuthority,
+    ) -> tuple[
+        HcpMigration2ExecutionPlan,
+        ChildRepairPlan,
+        HcpMigrationMasterRun,
+        CustomerMigrationRun,
+        OperationalMigrationRun,
+        OperationalMigrationRun,
+        OperationalMigrationRun,
+    ]:
+        plan, _ = await self.prepare(factory, context=context, target=target)
+        if context.active_branch is None:
+            raise SafeEvidenceError(
+                "repair_scope_invalid", authority.repair_plan_digest
+            )
+        async with factory() as session:
+            master = await session.get(HcpMigrationMasterRun, authority.master_run_id)
+            customer = await session.get(
+                CustomerMigrationRun, authority.customer_child_run_id
+            )
+            operational = await session.get(
+                OperationalMigrationRun, authority.operational_child_run_id
+            )
+            financial = await session.get(
+                OperationalMigrationRun, authority.financial_child_run_id
+            )
+            history = await session.get(
+                OperationalMigrationRun, authority.history_child_run_id
+            )
+            customer_ids = frozenset(
+                (
+                    await session.scalars(
+                        select(CustomerSourceIdentity.source_customer_id)
+                        .join(
+                            CustomerMigrationRun,
+                            CustomerMigrationRun.id
+                            == CustomerSourceIdentity.first_run_id,
+                        )
+                        .where(
+                            CustomerSourceIdentity.source_system
+                            == "housecall_pro_source4",
+                            CustomerSourceIdentity.company_id == context.company.id,
+                            CustomerMigrationRun.master_run_id
+                            == authority.master_run_id,
+                        )
+                    )
+                ).all()
+            )
+            location_ids = frozenset(
+                (
+                    await session.scalars(
+                        select(ServiceLocationSourceIdentity.source_location_id).where(
+                            ServiceLocationSourceIdentity.source_system
+                            == "housecall_pro_source4",
+                            ServiceLocationSourceIdentity.company_id
+                            == context.company.id,
+                            ServiceLocationSourceIdentity.branch_id
+                            == context.active_branch.id,
+                            ServiceLocationSourceIdentity.master_run_id
+                            == authority.master_run_id,
+                        )
+                    )
+                ).all()
+            )
+        if (
+            master is None
+            or customer is None
+            or operational is None
+            or financial is None
+            or history is None
+        ):
+            raise SafeEvidenceError(
+                "repair_authoritative_run_missing", authority.repair_plan_digest
+            )
+        if (
+            master.status not in {"running", "interrupted"}
+            or plan.plan_id != authority.original_plan_id
+            or plan.plan_digest != authority.original_plan_digest
+            or customer.master_run_id != master.id
+            or operational.master_run_id != master.id
+            or financial.master_run_id != master.id
+            or history.master_run_id != master.id
+            or operational.master_domain != "operational"
+            or financial.master_domain != "financial"
+            or history.master_domain != "history"
+            or customer.status != "completed"
+            or customer.accepted_count != customer.source_count
+            or operational.status != "completed"
+            or financial.status != "completed"
+            or history.status != "completed"
+            or operational.accepted_count == operational.source_count
+            or financial.accepted_count == financial.source_count
+        ):
+            raise SafeEvidenceError(
+                "repair_original_child_authority_conflict",
+                authority.repair_plan_digest,
+            )
+        repair = self.builder.build_child_repair_plan(
+            original=plan,
+            persisted_customer_ids=customer_ids,
+            persisted_location_ids=location_ids,
+        )
+        if repair.repair_plan_digest != authority.repair_plan_digest:
+            raise SafeEvidenceError(
+                "repair_plan_digest_mismatch", repair.repair_plan_digest
+            )
+        return plan, repair, master, customer, operational, financial, history
+
+    @staticmethod
+    def _run_counts(
+        run: CustomerMigrationRun | OperationalMigrationRun,
+    ) -> ChildOutcomeCounts:
+        return ChildOutcomeCounts(
+            source=run.source_count,
+            accepted=run.accepted_count,
+            rejected=run.rejected_count,
+            duplicate=run.duplicate_count,
+            unresolved=run.unresolved_count,
+        )
+
+    @staticmethod
+    def _requalified_completion_authority(
+        *,
+        plan: HcpMigration2ExecutionPlan,
+        repair: ChildRepairPlan,
+        requirements: CompletionRequirements,
+        original_operational_run_id: UUID,
+        original_financial_run_id: UUID,
+        repaired_operational_run_id: UUID,
+        repaired_financial_run_id: UUID,
+    ) -> dict[str, object]:
+        return {
+            "contract": "hcp-migration-2j-requalified-completion/v1",
+            "original_plan_id": str(plan.plan_id),
+            "original_plan_digest": plan.plan_digest,
+            "repair_plan_digest": repair.repair_plan_digest,
+            "repair_generation": 1,
+            "original_children": {
+                "operational": str(original_operational_run_id),
+                "financial": str(original_financial_run_id),
+            },
+            "admitted_repair_children": {
+                "operational": str(repaired_operational_run_id),
+                "financial": str(repaired_financial_run_id),
+            },
+            "requirements_digest": canonical_sha256(asdict(requirements)),
+        }
+
+    async def execute_repair(
+        self,
+        factory: async_sessionmaker[AsyncSession],
+        *,
+        context: AuthorizationContext,
+        target: NonProductionTarget,
+        authority: HcpMigration2RepairAuthority,
+    ) -> dict[str, object]:
+        (
+            plan,
+            repair,
+            master,
+            customer,
+            original_operational,
+            original_financial,
+            history,
+        ) = await self._prepare_repair(
+            factory, context=context, target=target, authority=authority
+        )
+        original_operational_expected = ChildOutcomeCounts(
+            len(plan.jobs) + len(plan.appointments),
+            len(plan.jobs) + len(plan.appointments),
+            0,
+            0,
+            0,
+        )
+        original_financial_expected = ChildOutcomeCounts(
+            len(plan.estimates) + len(plan.invoices) + len(plan.payments),
+            len(plan.estimates) + len(plan.invoices) + len(plan.payments),
+            0,
+            0,
+            0,
+        )
+        async with factory() as session, session.begin():
+            await self.runner.orchestrator.admit_child_outcome(
+                session,
+                context=context,
+                master_run_id=master.id,
+                child_run_id=customer.id,
+                domain="customer",
+                plan_digest=plan.plan_digest,
+                execution_status=customer.status,
+                expected=self._run_counts(customer),
+                actual=self._run_counts(customer),
+                reason_code="existing_customer_child_reused",
+            )
+            await self.runner.orchestrator.admit_child_outcome(
+                session,
+                context=context,
+                master_run_id=master.id,
+                child_run_id=history.id,
+                domain="history",
+                plan_digest=plan.plan_digest,
+                execution_status=history.status,
+                expected=self._run_counts(history),
+                actual=self._run_counts(history),
+                reason_code="existing_history_child_reused",
+            )
+            await self.runner.orchestrator.admit_child_outcome(
+                session,
+                context=context,
+                master_run_id=master.id,
+                child_run_id=original_operational.id,
+                domain="operational",
+                plan_digest=plan.plan_digest,
+                execution_status=original_operational.status,
+                expected=original_operational_expected,
+                actual=self._run_counts(original_operational),
+                reason_code="original_child_plan_nonconforming",
+            )
+            await self.runner.orchestrator.admit_child_outcome(
+                session,
+                context=context,
+                master_run_id=master.id,
+                child_run_id=original_financial.id,
+                domain="financial",
+                plan_digest=plan.plan_digest,
+                execution_status=original_financial.status,
+                expected=original_financial_expected,
+                actual=self._run_counts(original_financial),
+                reason_code="original_child_plan_nonconforming",
+            )
+            operational_repair = await self.runner.orchestrator.qualify_child_repair(
+                session,
+                context=context,
+                master_run_id=master.id,
+                original_child_run_id=original_operational.id,
+                domain="operational",
+                original_plan_digest=plan.plan_digest,
+                repair_plan_digest=repair.repair_plan_digest,
+                immutable_input_digest=master.input_digest,
+                reason_code="operational_child_outcome_requalification",
+            )
+            financial_repair = await self.runner.orchestrator.qualify_child_repair(
+                session,
+                context=context,
+                master_run_id=master.id,
+                original_child_run_id=original_financial.id,
+                domain="financial",
+                original_plan_digest=plan.plan_digest,
+                repair_plan_digest=repair.repair_plan_digest,
+                immutable_input_digest=master.input_digest,
+                reason_code="financial_parent_eligibility_requalification",
+            )
+        operational_report = await self.runner.orchestrator.run_operational_repair(
+            factory,
+            context=context,
+            repair_id=operational_repair.id,
+            jobs=repair.operational.jobs,
+            appointments=repair.operational.appointments,
+        )
+        operational_expected = ChildOutcomeCounts(
+            len(repair.operational.jobs) + len(repair.operational.appointments),
+            len(repair.operational.jobs) + len(repair.operational.appointments),
+            0,
+            0,
+            0,
+        )
+        operational_actual = ChildOutcomeCounts(
+            operational_report.source,
+            operational_report.accepted,
+            operational_report.rejected,
+            operational_report.duplicate,
+            operational_report.unresolved,
+        )
+        async with factory() as session, session.begin():
+            operational_admission = await self.runner.orchestrator.admit_child_outcome(
+                session,
+                context=context,
+                master_run_id=master.id,
+                child_run_id=operational_report.run_id,
+                domain="operational",
+                plan_digest=repair.repair_plan_digest,
+                execution_status="completed",
+                expected=operational_expected,
+                actual=operational_actual,
+                reason_code="requalified_operational_child",
+            )
+            if operational_admission.conformance != "PLAN_CONFORMING":
+                raise SafeEvidenceError(
+                    "operational_repair_nonconforming", repair.repair_plan_digest
+                )
+        financial_report = await self.runner.orchestrator.run_financial_repair(
+            factory,
+            context=context,
+            repair_id=financial_repair.id,
+            estimates=repair.financial.estimates,
+            invoices=repair.financial.invoices,
+            payments=repair.financial.payments,
+        )
+        financial_expected = ChildOutcomeCounts(
+            len(repair.financial.estimates)
+            + len(repair.financial.invoices)
+            + len(repair.financial.payments),
+            len(repair.financial.estimates)
+            + len(repair.financial.invoices)
+            + len(repair.financial.payments),
+            0,
+            0,
+            0,
+        )
+        financial_actual = ChildOutcomeCounts(
+            financial_report.source,
+            financial_report.accepted,
+            financial_report.rejected,
+            financial_report.duplicate,
+            financial_report.unresolved,
+        )
+        requirements = replace(
+            plan.completion,
+            transformed_counts=repair.persisted_counts,
+            persisted_counts=repair.persisted_counts,
+            exception_counts=repair.exception_counts,
+        )
+        requirements.validate_reconciliation(plan.master.source_counts)
+        async with factory() as session, session.begin():
+            financial_admission = await self.runner.orchestrator.admit_child_outcome(
+                session,
+                context=context,
+                master_run_id=master.id,
+                child_run_id=financial_report.run_id,
+                domain="financial",
+                plan_digest=repair.repair_plan_digest,
+                execution_status="completed",
+                expected=financial_expected,
+                actual=financial_actual,
+                reason_code="requalified_financial_child",
+            )
+            if financial_admission.conformance != "PLAN_CONFORMING":
+                raise SafeEvidenceError(
+                    "financial_repair_nonconforming", repair.repair_plan_digest
+                )
+            for hold in plan.holds:
+                await self.runner.orchestrator.persist_held_subject(
+                    session,
+                    context=context,
+                    master_run_id=master.id,
+                    command=hold,
+                )
+            for outcome in (*plan.plan_outcomes, *repair.additional_plan_outcomes):
+                await self.runner.orchestrator.persist_plan_outcome(
+                    session,
+                    context=context,
+                    master_run_id=master.id,
+                    command=outcome,
+                )
+            requalified_authority = self._requalified_completion_authority(
+                plan=plan,
+                repair=repair,
+                requirements=requirements,
+                original_operational_run_id=original_operational.id,
+                original_financial_run_id=original_financial.id,
+                repaired_operational_run_id=operational_report.run_id,
+                repaired_financial_run_id=financial_report.run_id,
+            )
+            completed = await self.runner.orchestrator.complete(
+                session,
+                context=context,
+                master_run_id=master.id,
+                expected_input_digest=master.input_digest,
+                requirements=requirements,
+                requalified_authority=requalified_authority,
+            )
+        return HcpMigration2RepairResult(
+            state="REPAIR_COMPLETED",
+            master_run_id=completed.id,
+            master_status=completed.status,
+            repair_plan_digest=repair.repair_plan_digest,
+            operational_repair_run_id=operational_report.run_id,
+            financial_repair_run_id=financial_report.run_id,
+            reconciliation_digest=completed.reconciliation_digest,
+        ).safe_output()
+
+    async def replay_completed(
+        self,
+        factory: async_sessionmaker[AsyncSession],
+        *,
+        context: AuthorizationContext,
+        target: NonProductionTarget,
+        authority: HcpMigration2RepairAuthority,
+    ) -> dict[str, object]:
+        async with factory() as session:
+            await self.runner.orchestrator.qualify_target(
+                session, context=context, target=target
+            )
+            master = await session.get(HcpMigrationMasterRun, authority.master_run_id)
+            if master is None or master.status != "completed":
+                raise SafeEvidenceError(
+                    "completed_master_replay_state_invalid",
+                    authority.repair_plan_digest,
+                )
+            plan, _ = self.builder.build(baseline_counts=dict(master.baseline_counts))
+            customer_ids = frozenset(
+                (
+                    await session.scalars(
+                        select(CustomerSourceIdentity.source_customer_id)
+                        .join(
+                            CustomerMigrationRun,
+                            CustomerMigrationRun.id
+                            == CustomerSourceIdentity.first_run_id,
+                        )
+                        .where(
+                            CustomerSourceIdentity.source_system
+                            == "housecall_pro_source4",
+                            CustomerSourceIdentity.company_id == master.company_id,
+                            CustomerMigrationRun.master_run_id == master.id,
+                        )
+                    )
+                ).all()
+            )
+            location_ids = frozenset(
+                (
+                    await session.scalars(
+                        select(ServiceLocationSourceIdentity.source_location_id).where(
+                            ServiceLocationSourceIdentity.source_system
+                            == "housecall_pro_source4",
+                            ServiceLocationSourceIdentity.company_id
+                            == master.company_id,
+                            ServiceLocationSourceIdentity.branch_id == master.branch_id,
+                            ServiceLocationSourceIdentity.master_run_id == master.id,
+                        )
+                    )
+                ).all()
+            )
+            repairs = tuple(
+                (
+                    await session.scalars(
+                        select(HcpMigrationChildRepair).where(
+                            HcpMigrationChildRepair.master_run_id == master.id
+                        )
+                    )
+                ).all()
+            )
+            admissions = tuple(
+                (
+                    await session.scalars(
+                        select(HcpMigrationChildAdmission).where(
+                            HcpMigrationChildAdmission.master_run_id == master.id,
+                            HcpMigrationChildAdmission.conformance == "PLAN_CONFORMING",
+                        )
+                    )
+                ).all()
+            )
+            hold_count = int(
+                await session.scalar(
+                    select(func.count())
+                    .select_from(HcpMigrationHold)
+                    .where(HcpMigrationHold.master_run_id == master.id)
+                )
+                or 0
+            )
+            outcome_count = int(
+                await session.scalar(
+                    select(func.count())
+                    .select_from(HcpMigrationPlanOutcome)
+                    .where(HcpMigrationPlanOutcome.master_run_id == master.id)
+                )
+                or 0
+            )
+        repair = self.builder.build_child_repair_plan(
+            original=plan,
+            persisted_customer_ids=customer_ids,
+            persisted_location_ids=location_ids,
+        )
+        replay_authority = master.replay_state.get("requalified_completion")
+        repaired_children = {item.domain: item.repair_child_run_id for item in repairs}
+        repairs_by_domain = {item.domain: item for item in repairs}
+        admissions_by_domain = {item.domain: item for item in admissions}
+        repaired_operational_id = repaired_children.get("operational")
+        repaired_financial_id = repaired_children.get("financial")
+        if repaired_operational_id is None or repaired_financial_id is None:
+            raise SafeEvidenceError(
+                "completed_master_repair_child_missing",
+                authority.repair_plan_digest,
+            )
+        expected_replay_authority = self._requalified_completion_authority(
+            plan=plan,
+            repair=repair,
+            requirements=replace(
+                plan.completion,
+                transformed_counts=repair.persisted_counts,
+                persisted_counts=repair.persisted_counts,
+                exception_counts=repair.exception_counts,
+            ),
+            original_operational_run_id=authority.operational_child_run_id,
+            original_financial_run_id=authority.financial_child_run_id,
+            repaired_operational_run_id=repaired_operational_id,
+            repaired_financial_run_id=repaired_financial_id,
+        )
+        if (
+            plan.plan_id != authority.original_plan_id
+            or plan.plan_digest != authority.original_plan_digest
+            or repair.repair_plan_digest != authority.repair_plan_digest
+            or len(repairs) != 2
+            or {item.domain for item in repairs} != {"operational", "financial"}
+            or any(item.status != "completed" for item in repairs)
+            or repairs_by_domain["operational"].original_child_run_id
+            != authority.operational_child_run_id
+            or repairs_by_domain["financial"].original_child_run_id
+            != authority.financial_child_run_id
+            or any(
+                item.original_plan_digest != plan.plan_digest
+                or item.repair_plan_digest != repair.repair_plan_digest
+                or item.immutable_input_digest != master.input_digest
+                for item in repairs
+            )
+            or {item.domain for item in admissions}
+            != {"customer", "operational", "financial", "history"}
+            or admissions_by_domain["customer"].child_run_id
+            != authority.customer_child_run_id
+            or admissions_by_domain["history"].child_run_id
+            != authority.history_child_run_id
+            or admissions_by_domain["operational"].child_run_id
+            != repaired_operational_id
+            or admissions_by_domain["financial"].child_run_id != repaired_financial_id
+            or admissions_by_domain["customer"].plan_digest != plan.plan_digest
+            or admissions_by_domain["history"].plan_digest != plan.plan_digest
+            or admissions_by_domain["operational"].plan_digest
+            != repair.repair_plan_digest
+            or admissions_by_domain["financial"].plan_digest
+            != repair.repair_plan_digest
+            or master.package_digest != plan.master.package_digest
+            or master.collection_digests != plan.master.collection_digests
+            or master.owner_receipts != plan.master.owner_receipts
+            or master.company_id != context.company.id
+            or context.active_branch is None
+            or master.branch_id != context.active_branch.id
+            or master.actor_user_id != context.user.id
+            or hold_count != len(plan.holds)
+            or outcome_count
+            != len(plan.plan_outcomes) + len(repair.additional_plan_outcomes)
+            or master.reconciliation_digest is None
+            or replay_authority != expected_replay_authority
+        ):
+            raise SafeEvidenceError(
+                "completed_master_replay_conflict", authority.repair_plan_digest
+            )
+        return {
+            "state": "COMPLETED_REPLAY_VERIFIED",
+            "master_run_id": str(master.id),
+            "master_status": master.status,
+            "repair_plan_digest": repair.repair_plan_digest,
+            "reconciliation_digest": master.reconciliation_digest,
+        }
+
     async def execute(
         self,
         factory: async_sessionmaker[AsyncSession],
         *,
         context: AuthorizationContext,
         target: NonProductionTarget,
+        repair_authority: HcpMigration2RepairAuthority | None = None,
     ) -> dict[str, object]:
+        async with factory() as session:
+            masters = tuple(
+                (await session.scalars(select(HcpMigrationMasterRun))).all()
+            )
+        state = self.classify_application_admission(
+            masters, repair_authority=repair_authority
+        )
+        if state == RehearsalAdmissionState.COMPLETED_MASTER:
+            if repair_authority is None:
+                raise SafeEvidenceError(
+                    "completed_master_repair_authority_required",
+                    masters[0].input_digest,
+                )
+            return await self.replay_completed(
+                factory,
+                context=context,
+                target=target,
+                authority=repair_authority,
+            )
+        if (
+            state
+            == RehearsalAdmissionState.MATCHING_INCOMPLETE_MASTER_WITH_ACCEPTED_REPAIR_PLAN
+        ):
+            assert repair_authority is not None
+            return await self.execute_repair(
+                factory,
+                context=context,
+                target=target,
+                authority=repair_authority,
+            )
+        if repair_authority is not None:
+            raise SafeEvidenceError(
+                "repair_application_state_invalid",
+                repair_authority.repair_plan_digest,
+            )
         plan, summary = await self.prepare(factory, context=context, target=target)
         result = await self.runner.execute(
             factory, context=context, target=target, plan=plan
