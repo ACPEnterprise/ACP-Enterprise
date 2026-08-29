@@ -332,7 +332,60 @@ class WorkstreamRuntimeService:
         session_id: UUID | None = None,
         now: datetime | None = None,
     ) -> tuple[EngineeringWorkstreamControl, ...]:
+        from app.engineering_capacity.models import EngineeringWorkerCapacity
+        from app.engineering_control.mobile.roadmaps import EngineeringMilestone
+        from app.engineering_control.scheduler.models import (
+            EngineeringCapacityBinding,
+            EngineeringPermanentCapacity,
+        )
+
         checked = now or datetime.now(timezone.utc)
+        has_permanent_assignment = (
+            select(EngineeringMilestone.id)
+            .where(
+                EngineeringMilestone.company_id
+                == EngineeringWorkstreamControl.company_id,
+                EngineeringMilestone.command_id
+                == EngineeringWorkstreamControl.command_id,
+                EngineeringMilestone.permanent_capacity_identity.is_not(None),
+            )
+            .correlate(EngineeringWorkstreamControl)
+            .exists()
+        )
+        assigned_to_worker = (
+            select(EngineeringMilestone.id)
+            .join(
+                EngineeringPermanentCapacity,
+                EngineeringPermanentCapacity.identity_code
+                == EngineeringMilestone.permanent_capacity_identity,
+            )
+            .join(
+                EngineeringCapacityBinding,
+                EngineeringCapacityBinding.permanent_capacity_id
+                == EngineeringPermanentCapacity.id,
+            )
+            .join(
+                EngineeringWorkerCapacity,
+                EngineeringWorkerCapacity.id
+                == EngineeringCapacityBinding.worker_capacity_id,
+            )
+            .where(
+                EngineeringMilestone.company_id
+                == EngineeringWorkstreamControl.company_id,
+                EngineeringMilestone.command_id
+                == EngineeringWorkstreamControl.command_id,
+                EngineeringPermanentCapacity.company_id
+                == EngineeringWorkstreamControl.company_id,
+                EngineeringCapacityBinding.company_id
+                == EngineeringWorkstreamControl.company_id,
+                EngineeringCapacityBinding.state == "active",
+                EngineeringWorkerCapacity.company_id
+                == EngineeringWorkstreamControl.company_id,
+                EngineeringWorkerCapacity.worker_id == context.worker_id,
+            )
+            .correlate(EngineeringWorkstreamControl)
+            .exists()
+        )
         rows = await db.scalars(
             select(EngineeringWorkstreamControl)
             .outerjoin(
@@ -348,6 +401,11 @@ class WorkstreamRuntimeService:
             )
             .where(
                 EngineeringWorkstreamControl.company_id == context.company_id,
+                or_(
+                    EngineeringWorkstreamControl.requested_action != "start",
+                    ~has_permanent_assignment,
+                    assigned_to_worker,
+                ),
                 or_(
                     EngineeringWorkstreamRuntime.id.is_(None),
                     EngineeringWorkstreamRuntime.acknowledged_control_version
@@ -413,6 +471,14 @@ class WorkstreamRuntimeService:
             or control.requested_action != action
         ):
             raise WorkstreamRuntimeError("Owner request is stale.")
+        if action == "start" and not await self._start_control_assigned_to_worker(
+            db,
+            control=control,
+            worker_id=context.worker_id,
+        ):
+            raise WorkstreamRuntimeError(
+                "Start control is assigned to another permanent worker capacity."
+            )
         runtime = await db.scalar(
             select(EngineeringWorkstreamRuntime)
             .where(
@@ -481,6 +547,71 @@ class WorkstreamRuntimeService:
         )
         await db.flush()
         return runtime
+
+    @staticmethod
+    async def _start_control_assigned_to_worker(
+        db: AsyncSession,
+        *,
+        control: EngineeringWorkstreamControl,
+        worker_id: UUID,
+    ) -> bool:
+        """Fail closed when a Start control belongs to another permanent worker."""
+
+        from app.engineering_capacity.models import EngineeringWorkerCapacity
+        from app.engineering_control.mobile.roadmaps import EngineeringMilestone
+        from app.engineering_control.scheduler.models import (
+            EngineeringCapacityBinding,
+            EngineeringPermanentCapacity,
+        )
+
+        assignment = await db.execute(
+            select(
+                EngineeringMilestone.permanent_capacity_identity,
+                EngineeringWorkerCapacity.worker_id,
+            )
+            .outerjoin(
+                EngineeringPermanentCapacity,
+                (
+                    EngineeringPermanentCapacity.company_id
+                    == EngineeringMilestone.company_id
+                )
+                & (
+                    EngineeringPermanentCapacity.identity_code
+                    == EngineeringMilestone.permanent_capacity_identity
+                ),
+            )
+            .outerjoin(
+                EngineeringCapacityBinding,
+                (
+                    EngineeringCapacityBinding.company_id
+                    == EngineeringMilestone.company_id
+                )
+                & (
+                    EngineeringCapacityBinding.permanent_capacity_id
+                    == EngineeringPermanentCapacity.id
+                )
+                & (EngineeringCapacityBinding.state == "active"),
+            )
+            .outerjoin(
+                EngineeringWorkerCapacity,
+                (
+                    EngineeringWorkerCapacity.company_id
+                    == EngineeringMilestone.company_id
+                )
+                & (
+                    EngineeringWorkerCapacity.id
+                    == EngineeringCapacityBinding.worker_capacity_id
+                ),
+            )
+            .where(
+                EngineeringMilestone.company_id == control.company_id,
+                EngineeringMilestone.command_id == control.command_id,
+            )
+        )
+        row = assignment.one_or_none()
+        if row is None or row.permanent_capacity_identity is None:
+            return True
+        return row.worker_id == worker_id
 
     async def transition(
         self,

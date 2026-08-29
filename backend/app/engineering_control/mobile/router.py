@@ -268,7 +268,7 @@ def _attention(
             runtime is None or runtime.runtime_state in {"queued", "acknowledged"}
         ):
             return (
-                "running",
+                "awaiting_dispatch",
                 "Authorized — awaiting automatic worker dispatch.",
                 (),
             )
@@ -625,6 +625,9 @@ async def list_roadmaps(context: ReadContext, session: DatabaseSession) -> Roadm
     )
     completed = tuple(item for item in milestones if item.status == "completed")
     blocked = tuple(item for item in milestones if item.status == "blocked")
+    awaiting_dispatch_items = tuple(
+        item for item in milestone_items if item.attention_class == "awaiting_dispatch"
+    )
     running_items = tuple(
         item for item in milestone_items if item.attention_class == "running"
     )
@@ -656,6 +659,7 @@ async def list_roadmaps(context: ReadContext, session: DatabaseSession) -> Roadm
         milestones=milestone_items,
         waiting_for_me=actionable,
         owner_attention=actionable,
+        awaiting_dispatch_milestones=awaiting_dispatch_items,
         running_milestones=running_items,
         dependency_waiting_milestones=dependency_items,
         capacity_waiting_milestones=capacity_items,

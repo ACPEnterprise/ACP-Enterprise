@@ -18,7 +18,9 @@ from app.engineering_execution.models import EngineeringExecution
 from app.worker_control.models import EngineeringWorker
 
 READINESS_TTL = timedelta(minutes=2)
-ACTIVE_EXECUTION_STATES = frozenset({"queued", "starting", "running"})
+ACTIVE_EXECUTION_STATES = frozenset(
+    {"execution_not_connected", "queued", "starting", "running"}
+)
 
 
 def repository_preparation_required(
@@ -42,9 +44,12 @@ def active_readiness_target_eligible(
     """Return whether a milestone still needs repository preparation.
 
     A command with an existing execution is immutable historical lineage unless
-    that execution is the milestone's currently running authority.  In
-    particular, changing a milestone projection back to ``ready`` must not make
-    a completed or reconciliation-required execution an active worker target.
+    that execution is the milestone's currently running authority. A running
+    execution that has not connected yet remains a target: its assigned worker
+    must keep repository preparation fresh until controlled dispatch either
+    advances or terminally rejects it. In particular, changing a milestone
+    projection back to ``ready`` must not make a completed or reconciliation-
+    required execution an active worker target.
     """
 
     if (

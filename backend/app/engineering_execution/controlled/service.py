@@ -1237,17 +1237,23 @@ class ControlledExecutionService:
                 readiness_is_current,
             )
 
-            if (
+            authoritative_head_changed = (
                 roadmap.expected_head != command.expected_head
-                or not readiness_is_current(
-                    dict(milestone.starting_commit_evidence),
-                    repository_key=command.repository_key,
-                    branch=command.expected_branch,
-                    candidate_head=command.expected_head,
-                    worker_id=worker_session.context.worker_id,
-                    now=occurred_at,
+            )
+            repository_readiness_current = readiness_is_current(
+                dict(milestone.starting_commit_evidence),
+                repository_key=command.repository_key,
+                branch=command.expected_branch,
+                candidate_head=command.expected_head,
+                worker_id=worker_session.context.worker_id,
+                now=occurred_at,
+            )
+            if authoritative_head_changed or not repository_readiness_current:
+                rejection_reason = (
+                    "stale_authoritative_repository_head"
+                    if authoritative_head_changed
+                    else "provider_repository_readiness_not_current"
                 )
-            ):
                 execution.state = EngineeringExecutionState.FAILED.value
                 execution.status = EngineeringExecutionStatus.FAILED.value
                 execution.failure_classification = "controlled_execution_failed"
@@ -1256,7 +1262,7 @@ class ControlledExecutionService:
                     **dict(execution.evidence_summary),
                     "terminal_rejection": True,
                     "rejection_stage": "automatic_offer_admission",
-                    "rejection_reason": "stale_authoritative_repository_head",
+                    "rejection_reason": rejection_reason,
                     "repository_mutated": False,
                 }
                 execution.updated_at = occurred_at
@@ -1269,9 +1275,11 @@ class ControlledExecutionService:
                 )
                 if runtime is not None:
                     runtime.runtime_state = "failed"
-                    runtime.reason_code = "stale_authoritative_repository_head"
+                    runtime.reason_code = rejection_reason
                     runtime.current_activity = (
                         "Execution base changed before worker dispatch"
+                        if authoritative_head_changed
+                        else "Assigned worker repository readiness expired before dispatch"
                     )
                     runtime.updated_at = occurred_at
                     runtime.version += 1

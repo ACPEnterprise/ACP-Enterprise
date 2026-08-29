@@ -255,6 +255,12 @@ export function MissionRoadmapPanel() {
   const data = query.data;
   const sections = [
     {
+      title: "Authorized — Awaiting Dispatch",
+      icon: Route,
+      color: "text-violet-400",
+      items: data.awaiting_dispatch_milestones ?? [],
+    },
+    {
       title: "Running",
       icon: CircleDot,
       color: "text-blue-400",

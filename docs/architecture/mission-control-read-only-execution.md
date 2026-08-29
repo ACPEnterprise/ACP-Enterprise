@@ -24,3 +24,9 @@ The fresh `PHONE.FACTORY.1P` qualification packets are
 `PHONE.FACTORY.PROOF2.3`. They retain the same inspect/validate-only contract,
 freeze the deployed authoritative head at reconciliation and command admission,
 and create no command, execution, offer, or lease until the owner presses Start.
+
+The repaired offer-admission qualification set supersedes those actionable
+definitions with `PHONE.FACTORY.PROOF3.1`, `PHONE.FACTORY.PROOF3.2`, and
+`PHONE.FACTORY.PROOF3.3`. Their permanent OM1/OM2/Laptop1 affinities constrain
+control acknowledgement and readiness refresh without granting repository
+mutation authority. The prior PROOF2 execution evidence remains historical.

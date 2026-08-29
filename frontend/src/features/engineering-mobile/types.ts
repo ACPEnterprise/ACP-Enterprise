@@ -167,6 +167,7 @@ export type MobileWorkstreamRuntimeState = MobileWorkstreamPipelineStatus;
 export type MobileWorkstreamPipelineStatus =
   | "queued"
   | "acknowledged"
+  | "awaiting_dispatch"
   | "running"
   | "paused"
   | "waiting_for_owner"
@@ -256,6 +257,7 @@ export type MilestoneAction =
   | "archive";
 export type OwnerAttentionClass =
   | "owner_action_required"
+  | "awaiting_dispatch"
   | "running"
   | "waiting_on_dependency"
   | "waiting_on_capacity"
@@ -359,6 +361,7 @@ export interface RoadmapPage {
   milestones: readonly MilestoneItem[];
   waiting_for_me: readonly MilestoneItem[];
   owner_attention: readonly MilestoneItem[];
+  awaiting_dispatch_milestones?: readonly MilestoneItem[];
   running_milestones: readonly MilestoneItem[];
   dependency_waiting_milestones: readonly MilestoneItem[];
   capacity_waiting_milestones: readonly MilestoneItem[];
