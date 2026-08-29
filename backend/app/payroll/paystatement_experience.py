@@ -101,7 +101,21 @@ class DeterministicPayStatementRenderer:
             if statement.supersedes_statement_id
             else "Original statement"
         )
-        document = f"""<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><title>Pay statement {statement.id}</title><style>body{{font:16px system-ui;color:#17212b;max-width:760px;margin:32px auto}}h1{{border-bottom:3px solid #285f78;padding-bottom:12px}}table{{width:100%;border-collapse:collapse}}th,td{{padding:10px;border-bottom:1px solid #ccd6dc;text-align:left}}.total{{font-weight:700}}.notice{{background:#f2f6f8;padding:12px}}</style></head><body><h1>Pay Statement</h1><p><strong>{html.escape(company_name)}</strong><br>{html.escape(employee_name)}</p><p>Pay period: {html.escape(str(content["period_start"]))} through {html.escape(str(content["period_end"]))}<br>Statement version: {statement.statement_version} · {correction}</p><h2>Earnings</h2><table><tbody>{rows}<tr class=\"total\"><td>Gross pay</td><td>{html.escape(statement.currency)} {html.escape(str(content["gross_pay"]))}</td></tr></tbody></table><h2>Employee taxes and deductions</h2><table><tbody><tr><td>Employee taxes</td><td>{html.escape(statement.currency)} {html.escape(str(content["employee_taxes"]))}</td></tr><tr><td>Employee deductions</td><td>{html.escape(statement.currency)} {html.escape(str(content["employee_deductions"]))}</td></tr><tr class=\"total\"><td>Net pay</td><td>{html.escape(statement.currency)} {html.escape(str(content["net_pay"]))}</td></tr></tbody></table><p>Payment method: {html.escape(str(content.get("payment_method") or "Not available"))}<br>Payment status: {html.escape(statement.payment_status.replace("_", " ").title())}</p><p class=\"notice\">Year-to-date totals are unavailable because complete authoritative history is not available. Jurisdiction-specific legal content is not configured.</p><footer>Statement ID: {statement.id}<br>Statement digest: {statement.statement_digest}</footer></body></html>"""
+        ytd = content.get("ytd")
+        ytd_rows = (
+            "".join(
+                f"<tr><td>{html.escape(str(key).replace('_', ' ').title())}</td><td>{html.escape(statement.currency)} {html.escape(str(value))}</td></tr>"
+                for key, value in ytd.items()
+            )
+            if statement.ytd_status == "authoritative" and isinstance(ytd, dict)
+            else ""
+        )
+        ytd_section = (
+            f"<h2>Year to date</h2><table><tbody>{ytd_rows}</tbody></table>"
+            if ytd_rows
+            else '<p class="notice">Year-to-date totals are unavailable because complete authoritative history is not available.</p>'
+        )
+        document = f"""<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><title>Pay statement {statement.id}</title><style>body{{font:16px system-ui;color:#17212b;max-width:760px;margin:32px auto}}h1{{border-bottom:3px solid #285f78;padding-bottom:12px}}table{{width:100%;border-collapse:collapse}}th,td{{padding:10px;border-bottom:1px solid #ccd6dc;text-align:left}}.total{{font-weight:700}}.notice{{background:#f2f6f8;padding:12px}}</style></head><body><h1>Pay Statement</h1><p><strong>{html.escape(company_name)}</strong><br>{html.escape(employee_name)}</p><p>Pay period: {html.escape(str(content["period_start"]))} through {html.escape(str(content["period_end"]))}<br>Statement version: {statement.statement_version} · {correction}</p><h2>Earnings</h2><table><tbody>{rows}<tr class=\"total\"><td>Gross pay</td><td>{html.escape(statement.currency)} {html.escape(str(content["gross_pay"]))}</td></tr></tbody></table><h2>Employee taxes and deductions</h2><table><tbody><tr><td>Employee taxes</td><td>{html.escape(statement.currency)} {html.escape(str(content["employee_taxes"]))}</td></tr><tr><td>Employee deductions</td><td>{html.escape(statement.currency)} {html.escape(str(content["employee_deductions"]))}</td></tr><tr class=\"total\"><td>Net pay</td><td>{html.escape(statement.currency)} {html.escape(str(content["net_pay"]))}</td></tr></tbody></table><p>Payment method: {html.escape(str(content.get("payment_method") or "Not available"))}<br>Payment status: {html.escape(statement.payment_status.replace("_", " ").title())}</p>{ytd_section}<p class=\"notice\">Jurisdiction-specific legal content is not configured.</p><footer>Statement ID: {statement.id}<br>Statement digest: {statement.statement_digest}</footer></body></html>"""
         return document.encode("utf-8")
 
 
@@ -347,7 +361,7 @@ class PayrollPayStatementExperienceService:
 
     @staticmethod
     def _economic(v: PayrollPayStatementRecord) -> dict[str, object]:
-        return {
+        value: dict[str, object] = {
             "company_id": str(v.company_id),
             "employee_id": str(v.employee_id),
             "pay_period_id": str(v.pay_period_id),
@@ -371,6 +385,10 @@ class PayrollPayStatementExperienceService:
             "ytd_status": v.ytd_status,
             "definition_version": v.definition_version,
         }
+        if v.reporting_snapshot_id is not None:
+            value["reporting_snapshot_id"] = str(v.reporting_snapshot_id)
+            value["reporting_digest"] = v.reporting_digest
+        return value
 
     async def _statement(
         self, session: AsyncSession, company_id: UUID, statement_id: UUID
