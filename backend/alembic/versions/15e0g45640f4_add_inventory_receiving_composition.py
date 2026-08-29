@@ -1,7 +1,7 @@
 """add inventory receiving composition
 
 Revision ID: 15e0g45640f4
-Revises: 14d9f34539f3
+Revises: d1t3p5r7v942
 """
 
 from collections.abc import Sequence
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "15e0g45640f4"
-down_revision: str | Sequence[str] | None = "14d9f34539f3"
+down_revision: str | Sequence[str] | None = "d1t3p5r7v942"
 branch_labels = None
 depends_on = None
 
