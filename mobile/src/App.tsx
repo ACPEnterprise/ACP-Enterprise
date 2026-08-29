@@ -18,11 +18,12 @@ import { deviceNetworkMonitor } from "./network/networkMonitor";
 import { safeLogger } from "./diagnostics/safeLogger";
 import { RestrictedStateScreen } from "./screens/RestrictedStateScreen";
 import type { AppEnvironment } from "./config/environment";
+import { PrivacyShield } from "./components/PrivacyShield";
 
 export default function App() {
   const [configuration] = useState<{ environment: AppEnvironment | null; error: boolean }>(() => { try { return { environment: readEnvironment(), error: false }; } catch { return { environment: null, error: true }; } });
   if (configuration.error || !configuration.environment) return <Screen><Text accessibilityRole="alert">ACP Employee is not configured. Contact support.</Text></Screen>;
-  return <RuntimeApp environment={configuration.environment} />;
+  return <PrivacyShield><RuntimeApp environment={configuration.environment} /></PrivacyShield>;
 }
 
 type RuntimeState = "boot" | "restore_error" | "anonymous" | "authenticated" | "onboarding_incomplete" | "access_limited";

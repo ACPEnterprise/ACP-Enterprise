@@ -28,5 +28,12 @@ build/
 # Logs
 *.log
 
+# Mobile signing material (external distribution gates)
+*.jks
+*.keystore
+*.p12
+*.mobileprovision
+mobile/android/key.properties
+
 # Local Development Factory reports
 .development-factory/
