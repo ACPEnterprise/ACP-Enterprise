@@ -60,6 +60,7 @@ from app.platform.launch_controls import validate_launch_role_matrix
 from app.platform.onboarding.router import router as identity_onboarding_router
 from app.platform.permissions.catalog import permission_catalog
 from app.platform.permissions.router import router as authorization_router
+from app.platform.reliability.correlation import CorrelationMiddleware
 from app.platform.security.middleware import (
     SecurityHeadersMiddleware,
     TrustedProxyMiddleware,
@@ -147,6 +148,7 @@ app.add_middleware(
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.allowed_hosts)
 app.add_middleware(TrustedProxyMiddleware, configuration=settings)
 app.add_middleware(SecurityHeadersMiddleware, configuration=settings)
+app.add_middleware(CorrelationMiddleware)
 
 app.include_router(health_router)
 app.include_router(events_router)
