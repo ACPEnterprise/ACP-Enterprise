@@ -256,6 +256,22 @@ export function PurchasingRoute() {
           as_of: new Date().toISOString(),
           targets: [{ branch_id: branchId, inventory_item_id: itemId, target_available_quantity: target }],
         })}
+        onDecision={(decision, reason, vendorId, poNumber, quantity, unitCost) => {
+          const workbench = mutations.replenishmentWorkbench.data;
+          const item = workbench?.recommendations[0];
+          if (!workbench || !item) return Promise.reject(new Error("Recommendation unavailable"));
+          return mutations.decideReplenishment.mutateAsync({
+            branch_id: item.branch_id, inventory_item_id: item.inventory_item_id,
+            recommendation_as_of: workbench.as_of, target_available_quantity: item.target_available_quantity,
+            recommendation_digest: item.evidence_digest, decision, reason,
+            approved_quantity: decision === "approved" ? quantity : null,
+            vendor_id: decision === "approved" ? vendorId : null,
+            po_number: decision === "approved" ? poNumber : null,
+            currency: decision === "approved" ? "USD" : null,
+            unit_cost: decision === "approved" ? unitCost : null,
+            idempotency_key: crypto.randomUUID(),
+          });
+        }}
       />
       <Card>
         <CardHeader>

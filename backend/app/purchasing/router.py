@@ -35,6 +35,8 @@ from .schemas import (
     ReceiptItem,
     ReceiptLineItem,
     RecordReceiptCommand,
+    ReplenishmentDecisionCommand,
+    ReplenishmentDecisionItem,
     ReplenishmentWorkbench,
     ReplenishmentWorkbenchRequest,
     RequestPurchaseOrderChangeCommand,
@@ -127,6 +129,20 @@ async def replenishment_workbench(
 ) -> ReplenishmentWorkbench:
     try:
         return await purchasing_service.replenishment_workbench(
+            session, context=context, payload=payload
+        )
+    except PurchasingError as error:
+        raise http_error(error) from error
+
+
+@router.post("/replenishment/decisions", response_model=ReplenishmentDecisionItem)
+async def decide_replenishment(
+    payload: ReplenishmentDecisionCommand,
+    context: ApproveContext,
+    session: DatabaseSession,
+) -> ReplenishmentDecisionItem:
+    try:
+        return await purchasing_service.decide_replenishment(
             session, context=context, payload=payload
         )
     except PurchasingError as error:
