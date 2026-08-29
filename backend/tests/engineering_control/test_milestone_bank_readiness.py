@@ -109,7 +109,7 @@ def test_current_projection_reconciles_completion_and_releases_successor() -> No
     assert milestones["BANK.PUR.005"].current_state == "COMPLETE"
     assert milestones["BANK.PUR.005"].canonical_milestone_id == "BANK.PUR.005"
     assert milestones["BANK.PUR.005"].completion_commit_sha == (
-        "43e95bc6e394d2deb2e73aaea9155fc4596a035f"
+        "76f58871db4961e944907ddaa09eda53a1cc5056"
     )
     assert milestones["BANK.PUR.006"].current_state == "COMPLETE"
     assert milestones["BANK.PUR.006"].canonical_milestone_id == "BANK.PUR.006"
@@ -452,7 +452,15 @@ def test_pur_005_acceptance_changes_only_itself_and_direct_successor() -> None:
         item for item in evidence if item["bank_milestone_id"] == "BANK.PUR.005"
     )
     assert pur_005["authoritative_commit_sha"] == (
-        "43e95bc6e394d2deb2e73aaea9155fc4596a035f"
+        "76f58871db4961e944907ddaa09eda53a1cc5056"
+    )
+    assert "43e95bc6e394d2deb2e73aaea9155fc4596a035f" in pur_005[
+        "evidence_reference"
+    ]
+    assert "t1k3g5i7l942" in pur_005["evidence_reference"]
+    assert (
+        "aa04e2b347a70d46a00f13a6b71ac97fcda47bf6878fdc86ed8c5c507f54df0c"
+        in pur_005["evidence_reference"]
     )
     raw["completion_evidence"] = [
         item for item in evidence if item["bank_milestone_id"] != "BANK.PUR.005"

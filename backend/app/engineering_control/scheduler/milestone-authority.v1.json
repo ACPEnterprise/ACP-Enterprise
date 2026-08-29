@@ -3,7 +3,7 @@
   "authority_id": "BANK.DF.002.AUTHORITY",
   "bank_id": "BANK.2",
   "bank_fingerprint": "f0af5713c967b92588ed1a82d36f5adc864fc4b235064dad0c5f5d11b158d4b3",
-  "authoritative_repository_sha": "6b5e8c16121a80852f79a9474e7dabd395d6dba7",
+  "authoritative_repository_sha": "76f58871db4961e944907ddaa09eda53a1cc5056",
   "repository_ref": "origin/customer-management-v1",
   "completion_inventory_scope": "ALL_BANK_MILESTONES",
   "completion_evidence": [
@@ -46,8 +46,8 @@
       "bank_milestone_id": "BANK.PUR.005",
       "canonical_milestone_id": "BANK.PUR.005",
       "evidence_kind": "AUTHORITATIVE_INTEGRATION_ACCEPTANCE",
-      "authoritative_commit_sha": "43e95bc6e394d2deb2e73aaea9155fc4596a035f",
-      "evidence_reference": "owner-accepted Purchase Order close and cancellation evidence implementation, immutable terminal-disposition evidence, explicit fully-satisfied and cancellation semantics, fail-closed discrepancy/return/change-order gates, idempotency, concurrency, authorization, Business Events, operator workflow, and no inferred Inventory, AP, Accounting, Job-cost, or Economics effects"
+      "authoritative_commit_sha": "76f58871db4961e944907ddaa09eda53a1cc5056",
+      "evidence_reference": "owner-accepted repaired Purchase Order close and cancellation authority: implementation 43e95bc6e394d2deb2e73aaea9155fc4596a035f repaired by 76f58871db4961e944907ddaa09eda53a1cc5056 with exact prior PUR.4 line-cancellation attribution, fail-closed fully-satisfied semantics, mixed-line quantity reconciliation, zero downstream mutation qualification, and drift-free corrective migration t1k3g5i7l942; premature acceptance fingerprint aa04e2b347a70d46a00f13a6b71ac97fcda47bf6878fdc86ed8c5c507f54df0c is preserved as superseded evidence"
     },
     {
       "bank_milestone_id": "BANK.PUR.006",
@@ -134,5 +134,5 @@
   ],
   "gate_resolutions": [],
   "active_ownership": [],
-  "fingerprint": "aa91c7ca398b51cc4315dc061ecfbf7c66b96c7c1c3dcda26138293a973e535a"
+  "fingerprint": "3891c720e0fd76088c21b51d7be7b6d99abbe16bcd6d223a7ba84098c51aa9d1"
 }
