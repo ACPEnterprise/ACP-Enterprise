@@ -509,6 +509,7 @@ def evaluate_payroll_admission(
     time_input: PayrollTimeInputSnapshot | None,
     pay_period_schedule_definition_id: str | None = None,
     pay_period_schedule_version: int | None = None,
+    pay_period_id: UUID | None = None,
     resolution_conflict: bool = False,
 ) -> PayrollAdmissionResult:
     blockers: list[str] = []
@@ -543,8 +544,18 @@ def evaluate_payroll_admission(
         state = PayrollAdmissionState.BLOCKED_COMPENSATION
         blockers.append("approved_effective_compensation_authority_missing")
     elif time_input is None:
-        state = PayrollAdmissionState.BLOCKED_TIME
-        blockers.append("sealed_approved_time_input_missing")
+        salaried_without_required_time = (
+            compensation is not None
+            and compensation.compensation_type is CompensationType.SALARIED
+            and policy.definition.salaried_time_requirement
+            is SalariedTimeRequirement.NOT_REQUIRED
+        )
+        if not salaried_without_required_time:
+            state = PayrollAdmissionState.BLOCKED_TIME
+            blockers.append("sealed_approved_time_input_missing")
+        elif pay_period_id is None:
+            state = PayrollAdmissionState.BLOCKED_TIME
+            blockers.append("pay_period_identity_missing")
     else:
         try:
             time_input.verify()
@@ -578,7 +589,9 @@ def evaluate_payroll_admission(
             if compensation is not None
             else None
         ),
-        "pay_period_id": str(time_input.pay_period_id) if time_input else None,
+        "pay_period_id": str(time_input.pay_period_id if time_input else pay_period_id)
+        if (time_input is not None or pay_period_id is not None)
+        else None,
         "state": state.value,
         "blockers": tuple(sorted(blockers)),
         "policy_id": str(policy.policy_id) if policy else None,
@@ -604,7 +617,7 @@ def evaluate_payroll_admission(
             if compensation is not None
             else None
         ),
-        pay_period_id=time_input.pay_period_id if time_input else None,
+        pay_period_id=time_input.pay_period_id if time_input else pay_period_id,
         state=state,
         blockers=tuple(sorted(blockers)),
         policy_id=policy.policy_id if policy else None,
