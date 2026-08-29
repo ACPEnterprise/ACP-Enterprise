@@ -3,8 +3,6 @@ from decimal import Decimal
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import func, select
-
 from app.accounting.models import Journal
 from app.accounts_payable.models import VendorBill
 from app.business_economics.models import CompanyFinancePolicyVersion
@@ -18,6 +16,7 @@ from app.purchasing.models import (
 )
 from app.purchasing.schemas import BranchPurchasingPolicyWrite
 from app.purchasing.service import PurchasingService
+from sqlalchemy import func, select
 
 pytest_plugins = ("tests.purchasing.test_purchasing_foundation",)
 
