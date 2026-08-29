@@ -461,3 +461,85 @@ class PayrollGrossCalculationReviewRecord(Base):
     result_digest: Mapped[str] = mapped_column(String(64), nullable=False)
     review_digest: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
     reviewed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class PayrollTaxDeductionResultRecord(Base):
+    __tablename__ = "payroll_tax_deduction_results"
+    __table_args__ = (
+        CheckConstraint(
+            "lifecycle IN ('calculated','under_review','approved','rejected','superseded','voided')",
+            name="ck_payroll_tax_result_lifecycle",
+        ),
+        CheckConstraint(
+            "review_state IN ('not_started','under_review','accepted','rejected')",
+            name="ck_payroll_tax_result_review_state",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "gross_result_id"],
+            ["payroll_gross_calculation_results.company_id", "payroll_gross_calculation_results.id"],
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("company_id", "id", name="uq_payroll_tax_result_company_id"),
+        UniqueConstraint("company_id", "result_identity", name="uq_payroll_tax_result_identity"),
+        UniqueConstraint("company_id", "calculation_digest", name="uq_payroll_tax_result_digest"),
+        UniqueConstraint("supersedes_result_id", name="uq_payroll_tax_result_successor"),
+        Index(
+            "uq_payroll_tax_result_active_subject",
+            "company_id", "employee_id", "pay_period_id",
+            unique=True,
+            postgresql_where=text("lifecycle IN ('calculated','under_review','approved')"),
+        ),
+        Index("ix_payroll_tax_result_period", "company_id", "pay_period_id", "employee_id"),
+    )
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    employee_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    pay_period_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    gross_result_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    gross_calculation_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    result_identity: Mapped[str] = mapped_column(String(96), nullable=False)
+    calculation_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    admission_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    authority_evidence: Mapped[list[dict[str, object]]] = mapped_column(JSONB, nullable=False)
+    components: Mapped[list[dict[str, object]]] = mapped_column(JSONB, nullable=False)
+    gross_pay: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
+    employee_tax_total: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
+    employee_deduction_total: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
+    employer_contribution_total: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
+    net_pay_candidate: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
+    money_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    calculation_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    calculated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_by_user_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    lifecycle: Mapped[str] = mapped_column(String(24), nullable=False)
+    review_state: Mapped[str] = mapped_column(String(24), nullable=False)
+    supersedes_result_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("payroll_tax_deduction_results.id", ondelete="RESTRICT")
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+
+class PayrollTaxDeductionReviewRecord(Base):
+    __tablename__ = "payroll_tax_deduction_reviews"
+    __table_args__ = (
+        CheckConstraint("decision IN ('initiated','accepted','rejected')", name="ck_payroll_tax_review_decision"),
+        ForeignKeyConstraint(
+            ["company_id", "result_id"],
+            ["payroll_tax_deduction_results.company_id", "payroll_tax_deduction_results.id"],
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("result_id", "review_sequence", name="uq_payroll_tax_review_sequence"),
+        UniqueConstraint("review_digest", name="uq_payroll_tax_review_digest"),
+    )
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    result_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    review_sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    reviewer_user_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    decision: Mapped[str] = mapped_column(String(20), nullable=False)
+    reason_code: Mapped[str] = mapped_column(String(80), nullable=False)
+    safe_note: Mapped[str | None] = mapped_column(Text)
+    result_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    review_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    reviewed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
