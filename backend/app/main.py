@@ -13,6 +13,9 @@ from app.api.health import router as health_router
 from app.beacon.router import router as beacon_router
 from app.communications.router import router as communications_router
 from app.core.config import settings
+from app.customer_migration.native_location_review import (
+    router as location_identity_router,
+)
 from app.customers.router import router as customers_router
 from app.database.session import AsyncSessionFactory, engine
 from app.dispatch.router import router as dispatch_router
@@ -151,6 +154,7 @@ app.include_router(accounting_router)
 app.include_router(financial_reporting_router)
 app.include_router(beacon_router)
 app.include_router(customers_router)
+app.include_router(location_identity_router)
 app.include_router(auth_router)
 app.include_router(authorization_router)
 app.include_router(platform_audit_router)

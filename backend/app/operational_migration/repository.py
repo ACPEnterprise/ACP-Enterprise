@@ -7,6 +7,7 @@ from app.customer_migration.models import (
     CustomerSourceIdentity,
     ServiceLocationSourceIdentity,
 )
+from app.customers.models import ServiceLocation
 from app.jobs.models import Job
 from app.operational_migration.models import (
     AppointmentSourceIdentity,
@@ -75,6 +76,39 @@ class OperationalMigrationRepository:
                 ServiceLocationSourceIdentity.source_location_id == source_location_id,
             )
         )
+
+    @staticmethod
+    async def get_only_customer_location(
+        session: AsyncSession,
+        *,
+        customer_id: UUID,
+    ) -> ServiceLocation | None:
+        """Return a target only when the migrated Customer has one location.
+
+        This supports deterministic identity repair for the customer adapter's
+        original primary-location import, which created the operational row but
+        did not persist its source-identity companion.
+        """
+        locations = list(
+            (
+                await session.scalars(
+                    select(ServiceLocation)
+                    .where(
+                        ServiceLocation.customer_id == customer_id,
+                    )
+                    .limit(2)
+                )
+            ).all()
+        )
+        return locations[0] if len(locations) == 1 else None
+
+    @staticmethod
+    async def add_location_identity(
+        session: AsyncSession, identity: ServiceLocationSourceIdentity
+    ) -> ServiceLocationSourceIdentity:
+        session.add(identity)
+        await session.flush()
+        return identity
 
     @staticmethod
     async def get_job_identity(
