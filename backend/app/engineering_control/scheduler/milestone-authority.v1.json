@@ -64,6 +64,13 @@
       "evidence_reference": "owner-accepted deterministic Company/Branch replenishment recommendation workbench over authoritative Inventory quantity and issued/open Purchase Order evidence with explicit operator targets, fail-closed missing evidence, canonical provenance/digests, read-only API/operator UX, and zero Inventory, AP, Accounting, or Economics mutation"
     },
     {
+      "bank_milestone_id": "BANK.PUR.008",
+      "canonical_milestone_id": "BANK.PUR.008",
+      "evidence_kind": "AUTHORITATIVE_INTEGRATION_ACCEPTANCE",
+      "authoritative_commit_sha": "a6af6ed6a9fbee0f12c13e3489012787275bd09d",
+      "evidence_reference": "owner-accepted replenishment approval and Purchase Order linkage implementation e9483c9, repaired by a6af6ed6a9fbee0f12c13e3489012787275bd09d and independently qualified by 24fb5c64f011160808dd3208465afcf804acf8e6 through protected PR #15 merge 31cc517a21bb3a2ce39e0573374cbdfc870703d2; qualification fingerprint 6877c9af1896931abd9472815357df4966f6ff52c6120057830c96074cfe4af4 proves database-enforced immutable decision evidence, tenant-bound Vendor/item/PO linkage, replay/concurrency controls, and zero Inventory, AP, or Accounting mutation"
+    },
+    {
       "bank_milestone_id": "BANK.BEA.001",
       "canonical_milestone_id": "BANK.BEA.001",
       "evidence_kind": "AUTHORITATIVE_INTEGRATION_ACCEPTANCE",
@@ -162,5 +169,5 @@
   ],
   "gate_resolutions": [],
   "active_ownership": [],
-  "fingerprint": "cc47a9f41711edb80d3e83f92527c7ef790a3a5299d76ddcf254b2e1e989f3d9"
+  "fingerprint": "629c06a117976bac396da692adddb23a0c4ab48c5dbed1a4a824f910fa6c7453"
 }
