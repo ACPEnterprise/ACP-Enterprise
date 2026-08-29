@@ -173,5 +173,25 @@ def test_sealed_source4_requalification_has_exact_safe_counts() -> None:
     assert len(repair.financial.estimates) == 14
     assert len(repair.financial.invoices) == 780
     assert len(repair.financial.payments) == 684
+    assert (
+        repair.persisted_counts.items()
+        >= {
+            "job": 1094,
+            "appointment": 1249,
+            "estimate": 14,
+            "invoice": 780,
+            "payment": 684,
+        }.items()
+    )
+    assert (
+        repair.exception_counts.items()
+        >= {
+            "job": 4411,
+            "appointment": 1970,
+            "estimate": 32,
+            "invoice": 4587,
+            "payment": 3337,
+        }.items()
+    )
     assert repair.original_plan_digest == plan.plan_digest
     assert len(repair.repair_plan_digest) == 64

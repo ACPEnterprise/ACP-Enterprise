@@ -225,6 +225,8 @@ class ChildRepairPlan:
     original_plan_digest: str
     operational: OperationalEligibility
     financial: FinancialEligibility
+    persisted_counts: dict[str, int]
+    exception_counts: dict[str, int]
     repair_plan_digest: str
 
     @classmethod
@@ -235,7 +237,33 @@ class ChildRepairPlan:
         original_plan_digest: str,
         operational: OperationalEligibility,
         financial: FinancialEligibility,
+        original_persisted_counts: Mapping[str, int] | None = None,
+        original_exception_counts: Mapping[str, int] | None = None,
     ) -> ChildRepairPlan:
+        persisted = dict(original_persisted_counts or {})
+        persisted.update(
+            {
+                "job": len(operational.jobs),
+                "appointment": len(operational.appointments),
+                "estimate": len(financial.estimates),
+                "invoice": len(financial.invoices),
+                "payment": len(financial.payments),
+            }
+        )
+        exceptions = dict(original_exception_counts or {})
+        exceptions.update(
+            {
+                "job": exceptions.get("job", 0) + len(operational.job_outcomes),
+                "appointment": exceptions.get("appointment", 0)
+                + len(operational.appointment_outcomes),
+                "estimate": exceptions.get("estimate", 0)
+                + len(financial.estimate_outcomes),
+                "invoice": exceptions.get("invoice", 0)
+                + len(financial.invoice_outcomes),
+                "payment": exceptions.get("payment", 0)
+                + len(financial.payment_outcomes),
+            }
+        )
         digest = canonical_sha256(
             {
                 "version": REPAIR_VERSION,
@@ -243,6 +271,8 @@ class ChildRepairPlan:
                 "original_plan_digest": original_plan_digest,
                 "operational_digest": operational.digest,
                 "financial_digest": financial.digest,
+                "persisted_counts": persisted,
+                "exception_counts": exceptions,
             }
         )
         return cls(
@@ -250,6 +280,8 @@ class ChildRepairPlan:
             original_plan_digest,
             operational,
             financial,
+            dict(sorted(persisted.items())),
+            dict(sorted(exceptions.items())),
             digest,
         )
 

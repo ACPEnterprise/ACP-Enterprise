@@ -1133,6 +1133,8 @@ class HcpMigration2ExecutionPlanBuilder:
             original_plan_digest=original.plan_digest,
             operational=operational,
             financial=financial,
+            original_persisted_counts=original.completion.persisted_counts,
+            original_exception_counts=original.completion.exception_counts,
         )
 
 
