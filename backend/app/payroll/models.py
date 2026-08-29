@@ -682,3 +682,134 @@ class PayrollRunReviewRecord(Base):
     run_digest: Mapped[str] = mapped_column(String(64), nullable=False)
     review_digest: Mapped[str] = mapped_column(String(64), nullable=False)
     reviewed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class PayrollPaymentDestinationVersion(Base):
+    __tablename__ = "payroll_payment_destination_versions"
+    __table_args__ = (
+        CheckConstraint(
+            "method_type IN ('direct_deposit','paper_check','other')",
+            name="ck_payroll_payment_destination_method",
+        ),
+        CheckConstraint(
+            "lifecycle IN ('draft','approved','superseded','revoked','expired')",
+            name="ck_payroll_payment_destination_lifecycle",
+        ),
+        CheckConstraint(
+            "effective_end IS NULL OR effective_end > effective_start",
+            name="ck_payroll_payment_destination_interval",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "employee_id"],
+            ["employees.company_id", "employees.id"],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "protected_envelope_id"],
+            ["payroll_protected_input_envelopes.company_id", "payroll_protected_input_envelopes.id"],
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("company_id", "id", name="uq_payroll_payment_destination_company_id"),
+        UniqueConstraint("company_id", "employee_id", "destination_version", name="uq_payroll_payment_destination_version"),
+        Index("ix_payroll_payment_destination_resolution", "company_id", "employee_id", "lifecycle", "effective_start", "effective_end"),
+    )
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    employee_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    destination_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    definition_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    method_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    destination_reference: Mapped[str] = mapped_column(String(120), nullable=False)
+    protected_envelope_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    masked_display: Mapped[str] = mapped_column(String(80), nullable=False)
+    verification_evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    effective_start: Mapped[date] = mapped_column(Date, nullable=False)
+    effective_end: Mapped[date | None] = mapped_column(Date)
+    lifecycle: Mapped[str] = mapped_column(String(20), nullable=False)
+    authority_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    supersedes_destination_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), ForeignKey("payroll_payment_destination_versions.id", ondelete="RESTRICT"))
+    created_by_user_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    approved_by_user_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"))
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    audit_reason: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+
+class PayrollPaymentReleaseRecord(Base):
+    __tablename__ = "payroll_payment_releases"
+    __table_args__ = (
+        CheckConstraint("lifecycle IN ('draft','under_review','approved_for_release','rejected','superseded','voided')", name="ck_payroll_payment_release_lifecycle"),
+        CheckConstraint("review_state IN ('not_started','under_review','accepted','rejected')", name="ck_payroll_payment_release_review_state"),
+        ForeignKeyConstraint(["company_id", "payroll_run_id"], ["payroll_runs.company_id", "payroll_runs.id"], ondelete="RESTRICT"),
+        UniqueConstraint("company_id", "id", name="uq_payroll_payment_release_company_id"),
+        UniqueConstraint("company_id", "package_identity", name="uq_payroll_payment_release_identity"),
+        UniqueConstraint("company_id", "package_digest", name="uq_payroll_payment_release_digest"),
+        UniqueConstraint("supersedes_release_id", name="uq_payroll_payment_release_successor"),
+        Index("uq_payroll_payment_release_active_run", "company_id", "payroll_run_id", unique=True, postgresql_where=text("lifecycle IN ('draft','under_review','approved_for_release')")),
+    )
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    payroll_run_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    payroll_run_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    pay_period_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    definition_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    package_identity: Mapped[str] = mapped_column(String(96), nullable=False)
+    package_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    aggregate_release_amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
+    assembled_by_user_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    assembled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    lifecycle: Mapped[str] = mapped_column(String(28), nullable=False)
+    review_state: Mapped[str] = mapped_column(String(24), nullable=False)
+    supersedes_release_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), ForeignKey("payroll_payment_releases.id", ondelete="RESTRICT"))
+    execution_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+
+class PayrollPaymentInstructionRecord(Base):
+    __tablename__ = "payroll_payment_instructions"
+    __table_args__ = (
+        CheckConstraint("disposition IN ('ready','blocked','excluded','not_applicable')", name="ck_payroll_payment_instruction_disposition"),
+        ForeignKeyConstraint(["company_id", "release_id"], ["payroll_payment_releases.company_id", "payroll_payment_releases.id"], ondelete="RESTRICT"),
+        ForeignKeyConstraint(["company_id", "employee_id"], ["employees.company_id", "employees.id"], ondelete="RESTRICT"),
+        UniqueConstraint("release_id", "employee_id", name="uq_payroll_payment_instruction_employee"),
+        UniqueConstraint("company_id", "instruction_identity", name="uq_payroll_payment_instruction_identity"),
+    )
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    release_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    employee_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    disposition: Mapped[str] = mapped_column(String(24), nullable=False)
+    run_member_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    tax_result_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    tax_result_digest: Mapped[str | None] = mapped_column(String(64))
+    destination_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), ForeignKey("payroll_payment_destination_versions.id", ondelete="RESTRICT"))
+    destination_digest: Mapped[str | None] = mapped_column(String(64))
+    method_type: Mapped[str | None] = mapped_column(String(32))
+    protected_destination_reference: Mapped[str | None] = mapped_column(String(120))
+    amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    blocker_evidence_digest: Mapped[str | None] = mapped_column(String(64))
+    instruction_identity: Mapped[str] = mapped_column(String(96), nullable=False)
+    instruction_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+
+
+class PayrollPaymentReleaseReviewRecord(Base):
+    __tablename__ = "payroll_payment_release_reviews"
+    __table_args__ = (
+        CheckConstraint("decision IN ('initiated','accepted','rejected','approved')", name="ck_payroll_payment_release_review_decision"),
+        ForeignKeyConstraint(["company_id", "release_id"], ["payroll_payment_releases.company_id", "payroll_payment_releases.id"], ondelete="RESTRICT"),
+        UniqueConstraint("release_id", "review_sequence", name="uq_payroll_payment_release_review_sequence"),
+        UniqueConstraint("review_digest", name="uq_payroll_payment_release_review_digest"),
+    )
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    release_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    review_sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    actor_user_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    decision: Mapped[str] = mapped_column(String(20), nullable=False)
+    reason_code: Mapped[str] = mapped_column(String(80), nullable=False)
+    safe_note: Mapped[str | None] = mapped_column(Text)
+    package_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    review_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    reviewed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
