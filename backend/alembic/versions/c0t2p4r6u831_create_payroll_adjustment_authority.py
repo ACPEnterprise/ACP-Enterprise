@@ -1,7 +1,7 @@
 """create append-only Payroll adjustment authority
 
 Revision ID: c0t2p4r6u831
-Revises: b9s1o3q5t720
+Revises: c0t2q4s6u831
 """
 from collections.abc import Sequence
 
@@ -11,7 +11,7 @@ from sqlalchemy.dialects import postgresql
 from alembic import op
 
 revision: str = "c0t2p4r6u831"
-down_revision: str | Sequence[str] | None = "b9s1o3q5t720"
+down_revision: str | Sequence[str] | None = "c0t2q4s6u831"
 branch_labels = None
 depends_on = None
 
