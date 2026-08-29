@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from app.core.config import Settings
 from app.platform.health.contracts import ComponentHealth, HealthState, SystemReadiness
 
+
 class PlatformHealthService:
     """Produces safe health evidence without promoting optional capability state."""
 
