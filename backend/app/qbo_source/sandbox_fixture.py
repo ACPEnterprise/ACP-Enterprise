@@ -212,7 +212,7 @@ class SandboxFixtureService:
             ("account-service-income", _account("ACP Qualification Service Revenue", "Income", "ServiceFeeIncome")),
             ("account-product-income", _account("ACP Qualification Material Revenue", "Income", "SalesOfProductIncome")),
             ("account-cogs", _account("ACP Qualification Materials COGS", "Cost of Goods Sold", "SuppliesMaterialsCogs")),
-            ("account-expense", _account("ACP Qualification Operating Expense", "Expense", "OtherMiscellaneousExpense")),
+            ("account-expense", _account("ACP Qualification Operating Expense", "Expense", "OtherMiscellaneousServiceCost")),
             ("account-payroll-expense", _account("ACP Qualification Payroll Expense", "Expense", "PayrollExpenses")),
             ("account-payroll-liability", _account("ACP Qualification Payroll Liability", "Other Current Liability", "PayrollTaxPayable")),
             ("account-fixed-asset", _account("ACP Qualification Fixed Asset", "Fixed Asset", "FurnitureAndFixtures")),
