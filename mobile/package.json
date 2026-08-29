@@ -11,7 +11,12 @@
     "lint": "eslint .",
     "test": "jest --runInBand",
     "export": "expo export --platform all",
-    "config:validate": "tsx scripts/validate-config.ts"
+    "config:validate": "tsx scripts/validate-config.ts",
+    "beta:aasa": "tsx scripts/beta-aasa.ts",
+    "beta:fixture": "tsx scripts/beta-fixture.ts",
+    "beta:manifest": "tsx scripts/beta-manifest.ts",
+    "beta:preflight": "tsx scripts/beta-preflight.ts",
+    "beta:qualify": "bash scripts/beta-release-qualify.sh"
   },
   "dependencies": {
     "@react-native-community/netinfo": "11.4.1",

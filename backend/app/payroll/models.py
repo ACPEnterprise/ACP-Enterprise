@@ -993,6 +993,7 @@ class PayrollPayStatementRecord(Base):
         ForeignKeyConstraint(["company_id", "gross_result_id"], ["payroll_gross_calculation_results.company_id", "payroll_gross_calculation_results.id"], ondelete="RESTRICT"),
         ForeignKeyConstraint(["company_id", "tax_result_id"], ["payroll_tax_deduction_results.company_id", "payroll_tax_deduction_results.id"], ondelete="RESTRICT"),
         UniqueConstraint("company_id", "statement_identity", name="uq_payroll_pay_statement_identity"),
+        UniqueConstraint("company_id", "id", name="uq_payroll_pay_statement_company_id"),
         UniqueConstraint("company_id", "statement_digest", name="uq_payroll_pay_statement_digest"),
         UniqueConstraint("supersedes_statement_id", name="uq_payroll_pay_statement_successor"),
         Index("ix_payroll_pay_statement_employee_period", "company_id", "employee_id", "pay_period_id", "created_at"),
@@ -1023,6 +1024,63 @@ class PayrollPayStatementRecord(Base):
     issued_by_user_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"))
     issued_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_by_user_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+
+class PayrollPayStatementArtifactRecord(Base):
+    """Protected render evidence subordinate to an issued pay statement."""
+    __tablename__ = "payroll_pay_statement_artifacts"
+    __table_args__ = (
+        CheckConstraint("lifecycle IN ('generated','retained','superseded','voided')", name="ck_payroll_pay_statement_artifact_lifecycle"),
+        ForeignKeyConstraint(["company_id", "statement_id"], ["payroll_pay_statements.company_id", "payroll_pay_statements.id"], ondelete="RESTRICT"),
+        UniqueConstraint("company_id", "artifact_identity", name="uq_payroll_pay_statement_artifact_identity"),
+        UniqueConstraint("company_id", "storage_reference", name="uq_payroll_pay_statement_artifact_storage"),
+        Index("ix_payroll_pay_statement_artifact_statement", "company_id", "statement_id", "created_at"),
+    )
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    employee_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    statement_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    statement_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    render_contract_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    template_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    renderer_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    media_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    artifact_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    artifact_identity: Mapped[str] = mapped_column(String(128), nullable=False)
+    storage_reference: Mapped[str] = mapped_column(String(128), nullable=False)
+    byte_size: Mapped[int] = mapped_column(Integer, nullable=False)
+    lifecycle: Mapped[str] = mapped_column(String(16), nullable=False)
+    retention_state: Mapped[str] = mapped_column(String(24), nullable=False, default="preserve")
+    created_by_user_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+
+class PayrollPayStatementDeliveryRecord(Base):
+    """Safe link-only delivery intent; never contains statement contents."""
+    __tablename__ = "payroll_pay_statement_deliveries"
+    __table_args__ = (
+        CheckConstraint("channel IN ('authenticated_web','authenticated_app','email_link','push_link')", name="ck_payroll_pay_statement_delivery_channel"),
+        CheckConstraint("lifecycle IN ('prepared','acknowledged','failed','revoked')", name="ck_payroll_pay_statement_delivery_lifecycle"),
+        ForeignKeyConstraint(["company_id", "statement_id"], ["payroll_pay_statements.company_id", "payroll_pay_statements.id"], ondelete="RESTRICT"),
+        UniqueConstraint("company_id", "delivery_identity", name="uq_payroll_pay_statement_delivery_identity"),
+        Index("ix_payroll_pay_statement_delivery_statement", "company_id", "statement_id", "created_at"),
+    )
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    employee_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    statement_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    statement_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    channel: Mapped[str] = mapped_column(String(32), nullable=False)
+    link_target: Mapped[str] = mapped_column(String(256), nullable=False)
+    provider_identity: Mapped[str] = mapped_column(String(80), nullable=False)
+    provider_version: Mapped[str] = mapped_column(String(40), nullable=False)
+    delivery_identity: Mapped[str] = mapped_column(String(128), nullable=False)
+    delivery_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    lifecycle: Mapped[str] = mapped_column(String(16), nullable=False)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_by_user_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
 
 

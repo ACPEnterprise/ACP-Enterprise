@@ -3,8 +3,10 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   getBeaconSignals,
   recordBeaconLifecycleAction,
+  recordBeaconWorkflowAction,
   type BeaconLifecycleAction,
   type BeaconSignal,
+  type BeaconWorkflowAction,
 } from "../api/beacon";
 
 export function useBeaconSignals() {
@@ -12,6 +14,32 @@ export function useBeaconSignals() {
     queryKey: ["beacon-signals"],
     queryFn: getBeaconSignals,
     refetchInterval: 60_000,
+  });
+}
+
+export function useBeaconWorkflowActions() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      signal,
+      action,
+      expectedVersion,
+      ownerUserId,
+    }: {
+      signal: BeaconSignal;
+      action: BeaconWorkflowAction;
+      expectedVersion?: number;
+      ownerUserId?: string;
+    }) =>
+      recordBeaconWorkflowAction(
+        signal,
+        action,
+        expectedVersion,
+        ownerUserId,
+      ),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["beacon-signals"] });
+    },
   });
 }
 
