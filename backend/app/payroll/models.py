@@ -981,6 +981,51 @@ class PayrollAccountingConsumptionRecord(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
 
 
+class PayrollPayStatementRecord(Base):
+    """Immutable employee-facing projection of approved Payroll evidence."""
+
+    __tablename__ = "payroll_pay_statements"
+    __table_args__ = (
+        CheckConstraint("lifecycle IN ('created','issued','superseded','voided')", name="ck_payroll_pay_statement_lifecycle"),
+        CheckConstraint("payment_status IN ('not_available','pending','acknowledged','partially_settled','settled','failed','unresolved')", name="ck_payroll_pay_statement_payment_status"),
+        ForeignKeyConstraint(["company_id", "run_id"], ["payroll_runs.company_id", "payroll_runs.id"], ondelete="RESTRICT"),
+        ForeignKeyConstraint(["company_id", "employee_id"], ["employees.company_id", "employees.id"], ondelete="RESTRICT"),
+        ForeignKeyConstraint(["company_id", "gross_result_id"], ["payroll_gross_calculation_results.company_id", "payroll_gross_calculation_results.id"], ondelete="RESTRICT"),
+        ForeignKeyConstraint(["company_id", "tax_result_id"], ["payroll_tax_deduction_results.company_id", "payroll_tax_deduction_results.id"], ondelete="RESTRICT"),
+        UniqueConstraint("company_id", "statement_identity", name="uq_payroll_pay_statement_identity"),
+        UniqueConstraint("company_id", "statement_digest", name="uq_payroll_pay_statement_digest"),
+        UniqueConstraint("supersedes_statement_id", name="uq_payroll_pay_statement_successor"),
+        Index("ix_payroll_pay_statement_employee_period", "company_id", "employee_id", "pay_period_id", "created_at"),
+    )
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    employee_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    pay_period_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    run_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    run_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    gross_result_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    gross_result_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    tax_result_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    tax_result_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    adjustment_result_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), ForeignKey("payroll_adjustment_results.id", ondelete="RESTRICT"))
+    adjustment_digest: Mapped[str | None] = mapped_column(String(64))
+    statement_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    definition_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    payment_status: Mapped[str] = mapped_column(String(24), nullable=False)
+    payment_evidence_digest: Mapped[str | None] = mapped_column(String(64))
+    content: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    ytd_status: Mapped[str] = mapped_column(String(24), nullable=False)
+    statement_identity: Mapped[str] = mapped_column(String(128), nullable=False)
+    statement_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    lifecycle: Mapped[str] = mapped_column(String(16), nullable=False)
+    supersedes_statement_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), ForeignKey("payroll_pay_statements.id", ondelete="RESTRICT"))
+    issued_by_user_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"))
+    issued_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_by_user_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+
 class PayrollAdjustmentAuthorityRecord(Base):
     __tablename__ = "payroll_adjustment_authorities"
     __table_args__ = (
