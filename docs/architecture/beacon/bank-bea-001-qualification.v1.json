@@ -1,0 +1,44 @@
+{
+  "schema_version": "1.0",
+  "qualification_id": "BANK.BEA.001.QUALIFICATION.1",
+  "milestone_id": "BANK.BEA.001",
+  "state": "QUALIFIED_AWAITING_OWNER_ACCEPTANCE",
+  "implementation_sha": "0f6559ecddb7ca3854c79ea7b5cb31432318976a",
+  "qualification_base_sha": "711731f3a82e97a90f7a1ea5fb47079b915d0cfb",
+  "repository_ref": "origin/customer-management-v1",
+  "catalog_id": "BANK.BEA.001",
+  "catalog_version": 1,
+  "catalog_digest": "fb4e23b03e53d39b89dee5d6a421f3f7d17caa1e0068465b343e8abd6dfb12d9",
+  "definition_count": 21,
+  "families": [
+    "customer_service_location",
+    "dispatch",
+    "estimate_workflow",
+    "invoice_payment_workflow",
+    "job_lifecycle",
+    "scheduling",
+    "workforce_technician"
+  ],
+  "qualification_evidence": [
+    "implementation is in authoritative ancestry and its five-file boundary remains present",
+    "catalog identity, version, definitions, definition digests, and catalog digest are deterministic",
+    "only definitions with accepted adapters are admitted for evaluation",
+    "Company and optional Branch identities participate in signal identity",
+    "missing, invalid, duplicate, or conflicting evidence fails closed",
+    "catalog API exposes explanation-safe metadata and no raw source evidence",
+    "catalog contains no economics, profitability, autonomous remediation, worker scheduling, or Production authority",
+    "current Beacon regressions preserve later compatible authoritative descendants"
+  ],
+  "excluded_authority": [
+    "owner acceptance",
+    "autonomous operational mutation",
+    "economics or profitability interpretation",
+    "worker scheduling",
+    "Preview or Production"
+  ],
+  "successor_gate": {
+    "milestone_id": "BANK.BEA.002",
+    "state": "BLOCKED_PENDING_BANK_BEA_001_OWNER_ACCEPTANCE"
+  },
+  "qualification_fingerprint": "21d188d97695f5e88193dc8db40172d4f56e6cfcde8bec8b10584774ab7cfd80"
+}
