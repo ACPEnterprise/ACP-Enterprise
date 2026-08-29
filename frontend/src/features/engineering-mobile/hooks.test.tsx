@@ -30,7 +30,7 @@ describe("useMilestoneAction stale-version recovery", () => {
     queryClient.setQueryData(mobileEngineeringKeys.roadmaps(), { marker: "stale" });
   });
 
-  it("refetches current roadmap data without retrying the owner action", async () => {
+  it("refetches current roadmap data and preserves the rejected action error", async () => {
     vi.mocked(mobileApi.actOnMilestone).mockRejectedValueOnce(
       new axios.AxiosError(
         "conflict",
@@ -46,7 +46,7 @@ describe("useMilestoneAction stale-version recovery", () => {
     act(() => result.current.mutate({ id: "milestone-1", version: 7, action: "start" }));
 
     await waitFor(() => expect(mobileApi.listRoadmaps).toHaveBeenCalledOnce());
-    await waitFor(() => expect(result.current.isError).toBe(false));
+    await waitFor(() => expect(result.current.isError).toBe(true));
     expect(mobileApi.actOnMilestone).toHaveBeenCalledOnce();
     expect(queryClient.getQueryData(mobileEngineeringKeys.roadmaps())).toEqual({ marker: "fresh" });
   });

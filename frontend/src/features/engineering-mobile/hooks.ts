@@ -146,9 +146,9 @@ export function useMilestoneAction() {
         error.response?.status === 409 &&
         detail === "Milestone version is stale."
       ) {
-        void queryClient
-          .refetchQueries({ queryKey: mobileEngineeringKeys.roadmaps() })
-          .then(() => mutation.reset());
+        void queryClient.refetchQueries({
+          queryKey: mobileEngineeringKeys.roadmaps(),
+        });
       }
     },
   });

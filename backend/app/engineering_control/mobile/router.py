@@ -231,6 +231,12 @@ def _attention(
                 else "External work is progressing outside Mission Control."
             )
             return "waiting_on_external", reason, ()
+    if item.status == "ready" and item.readiness_state == "preparing_environment":
+        return (
+            "waiting_on_dependency",
+            "Preparing execution environment for the current repository release.",
+            (),
+        )
     if item.status == "ready" and historical_execution_authority_over:
         return (
             "informational",

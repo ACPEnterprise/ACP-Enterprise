@@ -1451,6 +1451,21 @@ def test_historical_execution_definition_is_not_owner_startable() -> None:
     assert actions == ()
 
 
+def test_read_only_preparing_environment_remains_visible_without_start() -> None:
+    item = SimpleNamespace(
+        reconciliation_state="current",
+        status="ready",
+        readiness_state="preparing_environment",
+        requested_code_changes=False,
+    )
+    attention, reason, actions = _attention(item, None, None)
+    assert attention == "waiting_on_dependency"
+    assert reason == (
+        "Preparing execution environment for the current repository release."
+    )
+    assert actions == ()
+
+
 def test_reconciliation_runtime_overrides_capacity_projection() -> None:
     item = SimpleNamespace(
         reconciliation_state="current",
