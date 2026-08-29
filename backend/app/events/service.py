@@ -4,7 +4,8 @@ from uuid import uuid4
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.events.models import BusinessEvent
+from app.events.delivery_contracts import delivery_consumers, event_version
+from app.events.models import BusinessEvent, BusinessEventDelivery
 from app.events.schemas import BusinessEventCreate
 
 
@@ -15,7 +16,9 @@ class BusinessEventService:
         event_data: BusinessEventCreate,
     ) -> BusinessEvent:
         """Add an event to the current transaction without committing it."""
+        now = event_data.occurred_at or datetime.now(timezone.utc)
         event = BusinessEvent(
+            id=uuid4(),
             event_type=event_data.event_type.value,
             entity_type=event_data.entity_type,
             entity_id=event_data.entity_id,
@@ -24,9 +27,31 @@ class BusinessEventService:
             user_id=event_data.user_id,
             payload=event_data.payload,
             correlation_id=event_data.correlation_id or uuid4(),
-            occurred_at=event_data.occurred_at or datetime.now(timezone.utc),
+            occurred_at=now,
         )
         session.add(event)
+        consumers = delivery_consumers(event_data.event_type.value)
+        version = event_version(event_data.payload) if consumers else "1.0"
+        for consumer in consumers:
+            if version not in consumer.supported_versions:
+                raise ValueError(
+                    "Business Event version is unsupported by its consumer."
+                )
+            session.add(
+                BusinessEventDelivery(
+                    event_id=event.id,
+                    consumer_name=consumer.name,
+                    event_version=version,
+                    company_id=event.company_id,
+                    branch_id=event.branch_id,
+                    status="pending",
+                    attempt_count=0,
+                    replay_count=0,
+                    next_attempt_at=now,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
         return event
 
     @staticmethod
