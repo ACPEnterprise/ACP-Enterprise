@@ -204,6 +204,37 @@ export interface ReplenishmentDecision {
   id: string; decision: "approved" | "rejected"; reason: string;
   purchase_order_id: string | null; approval_evidence_digest: string;
 }
+export interface BranchPurchasingPolicyRevision {
+  version: number;
+  target_available_quantity: string;
+  status: "active" | "inactive";
+  provenance_reference: string;
+  reason: string;
+  evidence_digest: string;
+  actor_user_id: string;
+  occurred_at: string;
+}
+export interface BranchPurchasingPolicy {
+  id: string;
+  company_id: string;
+  branch_id: string;
+  inventory_item_id: string;
+  target_available_quantity: string;
+  status: "active" | "inactive";
+  provenance_reference: string;
+  version: number;
+  revisions: readonly BranchPurchasingPolicyRevision[];
+}
+export interface BranchPurchasingPolicyWrite {
+  branch_id: string;
+  inventory_item_id: string;
+  target_available_quantity: string;
+  status: "active" | "inactive";
+  provenance_reference: string;
+  reason: string;
+  expected_version?: number | null;
+  idempotency_key: string;
+}
 export interface VendorCreate {
   code: string;
   display_name: string;

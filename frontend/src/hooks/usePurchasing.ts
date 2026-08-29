@@ -17,6 +17,8 @@ import {
   dispositionPurchaseOrder,
   getReplenishmentWorkbench,
   decideReplenishment,
+  getBranchPurchasingPolicies,
+  configureBranchPurchasingPolicy,
 } from "../api/purchasing";
 import type {
   PurchaseOrderLineCreate,
@@ -31,16 +33,24 @@ import type {
   RequestPurchaseOrderChange,
   DecidePurchaseOrderChange,
   PurchaseOrderDispositionCommand,
+  BranchPurchasingPolicyWrite,
 } from "../types/purchasing";
 
 const keys = {
   all: ["purchasing"] as const,
   workspace: (search?: string) => ["purchasing", "workspace", search] as const,
+  policies: ["purchasing", "branch-policies"] as const,
 };
 export const usePurchasing = (search?: string, enabled = true) =>
   useQuery({
     queryKey: keys.workspace(search),
     queryFn: () => getPurchasingWorkspace(search),
+    enabled,
+  });
+export const useBranchPurchasingPolicies = (enabled = true) =>
+  useQuery({
+    queryKey: keys.policies,
+    queryFn: getBranchPurchasingPolicies,
     enabled,
   });
 export function usePurchasingMutations() {
@@ -49,6 +59,11 @@ export function usePurchasingMutations() {
   return {
     replenishmentWorkbench: useMutation({ mutationFn: getReplenishmentWorkbench }),
     decideReplenishment: useMutation({ mutationFn: decideReplenishment, onSuccess: refresh }),
+    configureBranchPolicy: useMutation({
+      mutationFn: (input: BranchPurchasingPolicyWrite) =>
+        configureBranchPurchasingPolicy(input),
+      onSuccess: refresh,
+    }),
     createVendor: useMutation({
       mutationFn: createOperationalVendor,
       onSuccess: refresh,

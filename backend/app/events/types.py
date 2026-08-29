@@ -171,6 +171,7 @@ class EventType(str, Enum):
     PURCHASING_REPLENISHMENT_APPROVED = "purchasing.replenishment.approved"
     PURCHASING_REPLENISHMENT_REJECTED = "purchasing.replenishment.rejected"
     PURCHASING_REPLENISHMENT_LINKED = "purchasing.replenishment.purchase_order_linked"
+    PURCHASING_BRANCH_POLICY_CONFIGURED = "purchasing.branch_policy.configured"
 
     # Operations
     OPERATIONS_SERVICE_REQUEST_ACCEPTED = "operations.service_request.accepted"

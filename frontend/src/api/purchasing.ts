@@ -27,6 +27,8 @@ import type {
   ReplenishmentWorkbenchRequest,
   ReplenishmentDecision,
   ReplenishmentDecisionCommand,
+  BranchPurchasingPolicy,
+  BranchPurchasingPolicyWrite,
 } from "../types/purchasing";
 
 const root = "/api/v1/purchasing";
@@ -40,6 +42,12 @@ export const getReplenishmentWorkbench = async (
   (await apiClient.post<ReplenishmentWorkbench>(`${root}/replenishment/workbench`, input)).data;
 export const decideReplenishment = async (input: ReplenishmentDecisionCommand): Promise<ReplenishmentDecision> =>
   (await apiClient.post<ReplenishmentDecision>(`${root}/replenishment/decisions`, input)).data;
+export const getBranchPurchasingPolicies = async (): Promise<readonly BranchPurchasingPolicy[]> =>
+  (await apiClient.get<readonly BranchPurchasingPolicy[]>(`${root}/branch-policies`)).data;
+export const configureBranchPurchasingPolicy = async (
+  input: BranchPurchasingPolicyWrite,
+): Promise<BranchPurchasingPolicy> =>
+  (await apiClient.put<BranchPurchasingPolicy>(`${root}/branch-policies`, input)).data;
 export const createOperationalVendor = async (
   input: VendorCreate,
 ): Promise<OperationalVendor> =>

@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import axios from "axios";
 import { useAuth, useHasPermission } from "../auth";
-import { usePurchasing, usePurchasingMutations } from "../hooks/usePurchasing";
+import { useBranchPurchasingPolicies, usePurchasing, usePurchasingMutations } from "../hooks/usePurchasing";
 import {
   Alert,
   Badge,
@@ -18,6 +18,7 @@ import {
 import { PurchaseOrderChangeControls } from "../components/PurchaseOrderChangeControls";
 import { PurchaseOrderDispositionControls } from "../components/PurchaseOrderDispositionControls";
 import { ReplenishmentWorkbench } from "../components/purchasing/ReplenishmentWorkbench";
+import { BranchPurchasingPolicyWorkbench } from "../components/purchasing/BranchPurchasingPolicyWorkbench";
 
 function changeErrorMessage(error: unknown): string | null {
   if (!error) return null;
@@ -46,6 +47,7 @@ export function PurchasingRoute() {
   const canCancelOrder = useHasPermission("COMPANY_PURCHASING_CANCEL");
   const [search, setSearch] = useState("");
   const purchasing = usePurchasing(search || undefined, canRead);
+  const branchPolicies = useBranchPurchasingPolicies(canRead);
   const mutations = usePurchasingMutations();
   const [vendor, setVendor] = useState({
     id: "",
@@ -272,6 +274,13 @@ export function PurchasingRoute() {
             idempotency_key: crypto.randomUUID(),
           });
         }}
+      />
+      <BranchPurchasingPolicyWorkbench
+        policies={branchPolicies.data ?? []}
+        canManage={canManage}
+        pending={mutations.configureBranchPolicy.isPending}
+        error={branchPolicies.isError || mutations.configureBranchPolicy.isError}
+        onSave={(input) => mutations.configureBranchPolicy.mutateAsync(input)}
       />
       <Card>
         <CardHeader>
