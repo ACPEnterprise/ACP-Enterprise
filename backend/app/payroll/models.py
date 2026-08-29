@@ -813,3 +813,76 @@ class PayrollPaymentReleaseReviewRecord(Base):
     package_digest: Mapped[str] = mapped_column(String(64), nullable=False)
     review_digest: Mapped[str] = mapped_column(String(64), nullable=False)
     reviewed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class PayrollPaymentExecutionRecord(Base):
+    __tablename__ = "payroll_payment_executions"
+    __table_args__ = (
+        CheckConstraint("lifecycle IN ('authorized','submission_pending','submitted','provider_acknowledged','settlement_pending','partially_settled','settled','rejected','failed','canceled','uncertain')", name="ck_payroll_payment_execution_lifecycle"),
+        ForeignKeyConstraint(["company_id", "release_id"], ["payroll_payment_releases.company_id", "payroll_payment_releases.id"], ondelete="RESTRICT"),
+        UniqueConstraint("company_id", "id", name="uq_payroll_payment_execution_company_id"),
+        UniqueConstraint("company_id", "execution_identity", name="uq_payroll_payment_execution_identity"),
+        UniqueConstraint("company_id", "execution_digest", name="uq_payroll_payment_execution_digest"),
+        Index("uq_payroll_payment_execution_active_release", "company_id", "release_id", unique=True, postgresql_where=text("lifecycle IN ('authorized','submission_pending','submitted','provider_acknowledged','settlement_pending','partially_settled','uncertain')")),
+    )
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    release_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    payroll_run_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    package_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    definition_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    provider_identity: Mapped[str] = mapped_column(String(80), nullable=False)
+    provider_version: Mapped[str] = mapped_column(String(40), nullable=False)
+    execution_idempotency_key: Mapped[str] = mapped_column(String(96), nullable=False)
+    execution_identity: Mapped[str] = mapped_column(String(96), nullable=False)
+    execution_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    authorized_total: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
+    lifecycle: Mapped[str] = mapped_column(String(32), nullable=False)
+    authorized_by_user_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    authorized_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    provider_reference: Mapped[str | None] = mapped_column(String(120))
+    request_digest: Mapped[str | None] = mapped_column(String(64))
+    response_digest: Mapped[str | None] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+
+class PayrollPaymentExecutionItemRecord(Base):
+    __tablename__ = "payroll_payment_execution_items"
+    __table_args__ = (
+        CheckConstraint("lifecycle IN ('authorized','submitted','acknowledged','settlement_pending','settled','rejected','failed','unresolved')", name="ck_payroll_payment_execution_item_lifecycle"),
+        ForeignKeyConstraint(["company_id", "execution_id"], ["payroll_payment_executions.company_id", "payroll_payment_executions.id"], ondelete="RESTRICT"),
+        ForeignKeyConstraint(["instruction_id"], ["payroll_payment_instructions.id"], ondelete="RESTRICT"),
+        UniqueConstraint("execution_id", "instruction_id", name="uq_payroll_payment_execution_item_instruction"),
+    )
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    execution_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    instruction_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    instruction_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    lifecycle: Mapped[str] = mapped_column(String(24), nullable=False)
+    provider_safe_reference: Mapped[str | None] = mapped_column(String(120))
+    evidence_digest: Mapped[str | None] = mapped_column(String(64))
+
+
+class PayrollPaymentExecutionEvidenceRecord(Base):
+    __tablename__ = "payroll_payment_execution_evidence"
+    __table_args__ = (
+        CheckConstraint("evidence_type IN ('submission','acknowledgement','settlement','failure','uncertain')", name="ck_payroll_payment_execution_evidence_type"),
+        ForeignKeyConstraint(["company_id", "execution_id"], ["payroll_payment_executions.company_id", "payroll_payment_executions.id"], ondelete="RESTRICT"),
+        UniqueConstraint("execution_id", "evidence_digest", name="uq_payroll_payment_execution_evidence_digest"),
+    )
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    execution_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    evidence_type: Mapped[str] = mapped_column(String(24), nullable=False)
+    provider_identity: Mapped[str] = mapped_column(String(80), nullable=False)
+    provider_version: Mapped[str] = mapped_column(String(40), nullable=False)
+    provider_safe_reference: Mapped[str | None] = mapped_column(String(120))
+    request_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    response_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    recorded_by_user_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
