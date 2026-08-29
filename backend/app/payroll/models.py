@@ -1010,6 +1010,8 @@ class PayrollPayStatementRecord(Base):
     tax_result_digest: Mapped[str] = mapped_column(String(64), nullable=False)
     adjustment_result_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), ForeignKey("payroll_adjustment_results.id", ondelete="RESTRICT"))
     adjustment_digest: Mapped[str | None] = mapped_column(String(64))
+    reporting_snapshot_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), ForeignKey("payroll_reporting_snapshots.id", ondelete="RESTRICT"))
+    reporting_digest: Mapped[str | None] = mapped_column(String(64))
     statement_version: Mapped[int] = mapped_column(Integer, nullable=False)
     definition_version: Mapped[str] = mapped_column(String(80), nullable=False)
     currency: Mapped[str] = mapped_column(String(3), nullable=False)
@@ -1081,6 +1083,86 @@ class PayrollPayStatementDeliveryRecord(Base):
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_by_user_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
     acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+
+class PayrollHistoryCoverageRecord(Base):
+    """Approved declaration of complete native or admitted historical coverage."""
+    __tablename__ = "payroll_history_coverage"
+    __table_args__ = (
+        CheckConstraint("lifecycle IN ('draft','approved','superseded','retired')", name="ck_payroll_history_coverage_lifecycle"),
+        CheckConstraint("coverage_end >= coverage_start", name="ck_payroll_history_coverage_interval"),
+        UniqueConstraint("company_id", "coverage_identity", name="uq_payroll_history_coverage_identity"),
+        Index("ix_payroll_history_coverage_resolution", "company_id", "lifecycle", "coverage_start", "coverage_end"),
+    )
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("companies.id", ondelete="RESTRICT"), nullable=False)
+    coverage_start: Mapped[date] = mapped_column(Date, nullable=False)
+    coverage_end: Mapped[date] = mapped_column(Date, nullable=False)
+    source_authority: Mapped[str] = mapped_column(String(80), nullable=False)
+    source_evidence: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    complete: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    coverage_identity: Mapped[str] = mapped_column(String(128), nullable=False)
+    evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    lifecycle: Mapped[str] = mapped_column(String(16), nullable=False)
+    created_by_user_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    approved_by_user_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"))
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+
+class PayrollReportingSnapshotRecord(Base):
+    """Immutable pay-period, quarter, or year reporting composition."""
+    __tablename__ = "payroll_reporting_snapshots"
+    __table_args__ = (
+        CheckConstraint("period_kind IN ('pay_period','quarter','year')", name="ck_payroll_reporting_period_kind"),
+        CheckConstraint("state IN ('authoritative','partial','unavailable','conflicting')", name="ck_payroll_reporting_state"),
+        UniqueConstraint("company_id", "report_identity", name="uq_payroll_reporting_identity"),
+        Index("ix_payroll_reporting_period", "company_id", "period_start", "period_end", "employee_id"),
+    )
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("companies.id", ondelete="RESTRICT"), nullable=False)
+    employee_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    period_identity: Mapped[str] = mapped_column(String(120), nullable=False)
+    period_kind: Mapped[str] = mapped_column(String(20), nullable=False)
+    period_start: Mapped[date] = mapped_column(Date, nullable=False)
+    period_end: Mapped[date] = mapped_column(Date, nullable=False)
+    currency: Mapped[str | None] = mapped_column(String(3))
+    state: Mapped[str] = mapped_column(String(20), nullable=False)
+    totals: Mapped[dict[str, object] | None] = mapped_column(JSONB)
+    source_ids: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    source_digests: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    coverage_evidence_id: Mapped[str | None] = mapped_column(String(128))
+    blockers: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    reconciliation_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    report_identity: Mapped[str] = mapped_column(String(128), nullable=False)
+    report_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    definition_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    created_by_user_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+
+class PayrollFilingPackageRecord(Base):
+    """Provider-neutral filing evidence; never represents submission."""
+    __tablename__ = "payroll_filing_packages"
+    __table_args__ = (
+        CheckConstraint("state IN ('prepared_not_submitted','superseded','voided')", name="ck_payroll_filing_package_state"),
+        UniqueConstraint("company_id", "package_identity", name="uq_payroll_filing_package_identity"),
+    )
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("companies.id", ondelete="RESTRICT"), nullable=False)
+    reporting_snapshot_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("payroll_reporting_snapshots.id", ondelete="RESTRICT"), nullable=False)
+    reporting_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    configuration_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    configuration_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    jurisdiction_reference: Mapped[str] = mapped_column(String(120), nullable=False)
+    package_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    schema_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    payload_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    package_identity: Mapped[str] = mapped_column(String(128), nullable=False)
+    package_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    state: Mapped[str] = mapped_column(String(32), nullable=False)
+    created_by_user_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
 
 
