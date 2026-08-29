@@ -88,8 +88,8 @@
       "bank_milestone_id": "BANK.PLAT.006",
       "canonical_milestone_id": "BANK.PLAT.006",
       "evidence_kind": "AUTHORITATIVE_INTEGRATION_ACCEPTANCE",
-      "authoritative_commit_sha": "f77cc2fb68372ec439271321120b17230f8567b7",
-      "evidence_reference": "owner-accepted notification outbox resilience hardening: durable tenant-scoped intent and append-only delivery evidence, contradictory-replay rejection, bounded retry and stale-claim recovery, explicit provider ambiguity, safe provider-idempotency handling, authorized suppression/cancellation, Business Event lineage, and no exactly-once external-delivery claim"
+      "authoritative_commit_sha": "e37a1ffca0e61f80ca5f7c87e81784276e88b614",
+      "evidence_reference": "independently requalified BANK.PLAT.006 with tenant-scoped outbox idempotency repair e37a1ffca0e61f80ca5f7c87e81784276e88b614 and corrective migration s0j2f4h6k831: Company-scoped exact replay and contradictory-replay rejection, cross-Company same-key coexistence and mutation isolation, durable append-only delivery evidence, bounded retry and stale-claim recovery, explicit provider ambiguity, Business Event lineage, authorization, audit, safe output, fresh upgrade, downgrade/re-upgrade, one head, and zero Alembic drift; supersedes premature f77cc2fb68372ec439271321120b17230f8567b7 acceptance evidence without erasing its history and makes no exactly-once external-delivery claim"
     },
     {
       "bank_milestone_id": "BANK.PLAT.007",
@@ -134,5 +134,5 @@
   ],
   "gate_resolutions": [],
   "active_ownership": [],
-  "fingerprint": "3891c720e0fd76088c21b51d7be7b6d99abbe16bcd6d223a7ba84098c51aa9d1"
+  "fingerprint": "7981bcc1bcdc89310de362e6b93ba606fffd9af7c73d9dadc35823dcf67da439"
 }

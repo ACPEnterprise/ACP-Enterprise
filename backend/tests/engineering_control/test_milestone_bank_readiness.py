@@ -83,7 +83,7 @@ def test_current_projection_reconciles_completion_and_releases_successor() -> No
     assert milestones["BANK.PLAT.006"].current_state == "COMPLETE"
     assert milestones["BANK.PLAT.006"].canonical_milestone_id == "BANK.PLAT.006"
     assert milestones["BANK.PLAT.006"].completion_commit_sha == (
-        "f77cc2fb68372ec439271321120b17230f8567b7"
+        "e37a1ffca0e61f80ca5f7c87e81784276e88b614"
     )
     assert milestones["BANK.PLAT.007"].current_state == "COMPLETE"
     assert milestones["BANK.PLAT.007"].canonical_milestone_id == "BANK.PLAT.007"
@@ -305,8 +305,10 @@ def test_platform_006_acceptance_changes_only_itself_and_direct_successor() -> N
         item for item in evidence if item["bank_milestone_id"] == "BANK.PLAT.006"
     )
     assert plat_006["authoritative_commit_sha"] == (
-        "f77cc2fb68372ec439271321120b17230f8567b7"
+        "e37a1ffca0e61f80ca5f7c87e81784276e88b614"
     )
+    assert "corrective migration s0j2f4h6k831" in plat_006["evidence_reference"]
+    assert "supersedes premature f77cc2f" in plat_006["evidence_reference"]
     assert "no exactly-once external-delivery claim" in plat_006["evidence_reference"]
     raw["completion_evidence"] = [
         item for item in evidence if item["bank_milestone_id"] != "BANK.PLAT.006"
