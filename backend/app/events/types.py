@@ -68,6 +68,10 @@ class EventType(str, Enum):
     PAYROLL_ACCOUNTING_MAPPING_CREATED = "payroll.accounting_mapping_created"
     PAYROLL_ACCOUNTING_MAPPING_APPROVED = "payroll.accounting_mapping_approved"
     PAYROLL_ACCOUNTING_FACT_PREPARED = "payroll.accounting_fact_prepared"
+    PAYROLL_ADJUSTMENT_CREATED = "payroll.adjustment_created"
+    PAYROLL_ADJUSTMENT_REVIEWED = "payroll.adjustment_reviewed"
+    PAYROLL_ADJUSTMENT_APPROVED = "payroll.adjustment_approved"
+    PAYROLL_ADJUSTMENT_SUPERSEDED = "payroll.adjustment_superseded"
 
     # Accounts Payable
     ACCOUNTS_PAYABLE_VENDOR_CREATED = "accounts_payable.vendor_created"
