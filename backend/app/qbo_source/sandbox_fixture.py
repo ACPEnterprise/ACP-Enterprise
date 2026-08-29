@@ -257,7 +257,6 @@ class SandboxFixtureService:
             "payment-method",
             {
                 "Name": "ACP Qualification Electronic Payment",
-                "Type": "NON_CREDIT_CARD",
             },
             name_field="Name",
         )
