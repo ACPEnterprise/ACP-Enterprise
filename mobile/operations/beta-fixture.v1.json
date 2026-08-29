@@ -1,0 +1,25 @@
+{
+  "contractVersion": "1",
+  "environment": "preview",
+  "fixtureKey": "acp-employee-beta-v1",
+  "syntheticMarker": "SYNTHETIC_BETA_ONLY",
+  "company": { "externalKey": "synthetic-beta-company", "displayName": "Synthetic Beta Services" },
+  "branch": { "externalKey": "synthetic-beta-branch", "displayName": "Synthetic Beta Branch", "timezone": "America/New_York" },
+  "user": { "externalKey": "synthetic-beta-user", "loginPlaceholder": "OWNER_SUPPLIED_SYNTHETIC_PREVIEW_LOGIN" },
+  "employee": { "externalKey": "synthetic-beta-employee", "displayName": "Synthetic Beta Technician" },
+  "permissions": [
+    "COMPANY_TIMEKEEPING_OWN_READ",
+    "COMPANY_TIMEKEEPING_OWN_PUNCH",
+    "COMPANY_EMPLOYEE_OPERATIONS_OWN_DAY_READ"
+  ],
+  "customer": { "externalKey": "synthetic-beta-customer", "displayName": "Synthetic Test Customer" },
+  "serviceLocation": { "externalKey": "synthetic-beta-location", "address": "100 Test Fixture Way, Example, NY 10001" },
+  "job": { "externalKey": "synthetic-beta-job", "serviceCategory": "Synthetic plumbing inspection" },
+  "appointment": { "externalKey": "synthetic-beta-appointment", "assignmentRole": "PRIMARY" },
+  "prohibitedData": ["compensation", "wage", "payroll", "bank", "tax"],
+  "scenarios": [
+    "NO_ACTIVE_SHIFT", "CLOCKED_IN", "BREAK_ACTIVE", "CLOCKED_OUT", "MY_TIME_HISTORY",
+    "MY_DAY_ONE_ASSIGNMENT", "JOB_WORKSPACE", "REASSIGNMENT_REMOVAL", "OFFLINE_STALE",
+    "SESSION_EXPIRATION", "PERMISSION_DENIED", "NETWORK_RECOVERY"
+  ]
+}
