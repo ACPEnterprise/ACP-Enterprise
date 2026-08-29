@@ -31,6 +31,13 @@ class EventType(str, Enum):
     PAYROLL_GROSS_REVIEW_REJECTED = "payroll.gross_review_rejected"
     PAYROLL_GROSS_CALCULATION_SUPERSEDED = "payroll.gross_calculation_superseded"
     PAYROLL_GROSS_CALCULATION_VOIDED = "payroll.gross_calculation_voided"
+    PAYROLL_INPUT_AUTHORITY_DRAFTED = "payroll.input_authority_drafted"
+    PAYROLL_INPUT_AUTHORITY_APPROVED = "payroll.input_authority_approved"
+    PAYROLL_INPUT_AUTHORITY_SUPERSEDED = "payroll.input_authority_superseded"
+    PAYROLL_INPUT_AUTHORITY_RETIRED = "payroll.input_authority_retired"
+    PAYROLL_TAX_DEDUCTION_ADMISSION_EVALUATED = (
+        "payroll.tax_deduction_admission_evaluated"
+    )
 
     # Accounts Payable
     ACCOUNTS_PAYABLE_VENDOR_CREATED = "accounts_payable.vendor_created"
