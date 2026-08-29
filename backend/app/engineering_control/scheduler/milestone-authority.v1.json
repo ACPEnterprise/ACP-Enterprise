@@ -3,7 +3,7 @@
   "authority_id": "BANK.DF.002.AUTHORITY",
   "bank_id": "BANK.2",
   "bank_fingerprint": "f0af5713c967b92588ed1a82d36f5adc864fc4b235064dad0c5f5d11b158d4b3",
-  "authoritative_repository_sha": "76f58871db4961e944907ddaa09eda53a1cc5056",
+  "authoritative_repository_sha": "a4bbc539db61742f88b63bf8be036468aed3f5e8",
   "repository_ref": "origin/customer-management-v1",
   "completion_inventory_scope": "ALL_BANK_MILESTONES",
   "completion_evidence": [
@@ -55,6 +55,13 @@
       "evidence_kind": "AUTHORITATIVE_INTEGRATION_ACCEPTANCE",
       "authoritative_commit_sha": "3b6349400bfa675e85a8bb71785507144284ed4f",
       "evidence_reference": "owner-accepted provider-neutral Vendor performance evidence boundary: deterministic read-time projection over accepted Purchasing facts, explicit missing/conflicting semantics, Company/Branch isolation, measured quantities/costs/lead times/discrepancies/returns without fault attribution, and no Vendor score, AP/Accounting inference, Economics result, Beacon signal, or AI invocation"
+    },
+    {
+      "bank_milestone_id": "BANK.PUR.007",
+      "canonical_milestone_id": "BANK.PUR.007",
+      "evidence_kind": "AUTHORITATIVE_INTEGRATION_ACCEPTANCE",
+      "authoritative_commit_sha": "8f9eab8355087756648fe12c9d42294b5ee3d2c3",
+      "evidence_reference": "owner-accepted deterministic Company/Branch replenishment recommendation workbench over authoritative Inventory quantity and issued/open Purchase Order evidence with explicit operator targets, fail-closed missing evidence, canonical provenance/digests, read-only API/operator UX, and zero Inventory, AP, Accounting, or Economics mutation"
     },
     {
       "bank_milestone_id": "BANK.BEA.001",
@@ -141,5 +148,5 @@
   ],
   "gate_resolutions": [],
   "active_ownership": [],
-  "fingerprint": "f60d9733ad8d17a9824314200386b183e3a80d94d937616d54ac7b85437e2b6d"
+  "fingerprint": "2ea787b05554fca50f4dc6beac2324a66a77fb02cf66afdab338fcee37429e1d"
 }
