@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.customer_migration.adapter_import_policy import (
     CustomerAdapterImportPolicy,
+    CustomerEventPopulation,
     customer_adapter_import_policy,
 )
 from app.customer_migration.adapter_import_repository import (
@@ -341,6 +342,8 @@ class ExpectedCustomerImportCounts:
     service_locations: int
     billing_addresses: int
     business_events: int
+    customer_admission_events: int | None = None
+    event_population_digest: str | None = None
 
 
 @dataclass(frozen=True)
@@ -368,6 +371,14 @@ class ApprovedCustomerImportBoundary:
         )
         if digest != self.pilot_boundary_sha256:
             raise ValueError("pilot boundary digest mismatch")
+        event_fields = (
+            self.expected.customer_admission_events,
+            self.expected.event_population_digest,
+        )
+        if any(value is not None for value in event_fields):
+            if not isinstance(event_fields[0], int) or event_fields[0] < 0:
+                raise ValueError("Customer admission-event count is invalid")
+            _require_sha256(str(event_fields[1]), "event_population_digest")
 
 
 @dataclass(frozen=True)
@@ -662,6 +673,9 @@ class CustomerAdapterImportService:
             existing_source_identities=existing_source_identities,
         )
         policy_counts = self.policy.expected_counts(selected)
+        event_population: CustomerEventPopulation | None = None
+        if reviewed.source_system == SOURCE4_SYSTEM:
+            event_population = self.policy.event_population(selected)
         if (
             policy_counts.customers,
             policy_counts.contacts,
@@ -676,6 +690,15 @@ class CustomerAdapterImportService:
             boundary.expected.business_events,
         ):
             raise CustomerAdapterImportError("approved count boundary mismatch")
+        if reviewed.source_system == SOURCE4_SYSTEM and (
+            event_population is None
+            or boundary.expected.customer_admission_events
+            != event_population.customer_admission_events
+            or boundary.expected.event_population_digest != event_population.digest
+        ):
+            raise CustomerAdapterImportError(
+                "approved event-population boundary mismatch"
+            )
         try:
             async with factory() as session:
                 await self._verify_staged_review(

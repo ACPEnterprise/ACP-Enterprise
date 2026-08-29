@@ -17,6 +17,7 @@ from app.customer_migration.adapter_import import (
     ReviewedCustomerAdapterOutput,
     ReviewedCustomerAggregate,
 )
+from app.customer_migration.adapter_import_policy import customer_adapter_import_policy
 from app.customers.schemas import (
     ContactCreate,
     CustomerCreate,
@@ -549,6 +550,7 @@ def build_reviewed_customer_output(
     )
     reviewed.validate_integrity()
     approved = tuple(item.source_identity_sha256 for item in aggregates)
+    event_population = customer_adapter_import_policy.event_population(aggregates)
     boundary = ApprovedCustomerImportBoundary(
         boundary_version=BOUNDARY_VERSION,
         source_sha256=source_digest,
@@ -564,7 +566,9 @@ def build_reviewed_customer_output(
                 len(item.service_location_json) for item in aggregates
             ),
             billing_addresses=0,
-            business_events=len(aggregates),
+            business_events=event_population.aggregate_domain_events,
+            customer_admission_events=event_population.customer_admission_events,
+            event_population_digest=event_population.digest,
         ),
     )
     boundary.validate()

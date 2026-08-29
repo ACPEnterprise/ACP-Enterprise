@@ -6,6 +6,7 @@ import hashlib
 import json
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
+from enum import StrEnum
 from pathlib import Path
 from typing import Any, TypeVar
 from uuid import UUID, uuid5
@@ -13,7 +14,13 @@ from uuid import UUID, uuid5
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.customer_migration.models import CustomerMigrationRun
+from app.customer_migration.models import (
+    CustomerMigrationCandidate,
+    CustomerMigrationChildException,
+    CustomerMigrationRun,
+    CustomerMigrationSourceArtifact,
+    CustomerMigrationSourceRow,
+)
 from app.customers.models import Customer, CustomerContact, ServiceLocation
 from app.financials.models import Estimate, Invoice, Payment
 from app.jobs.models import Job
@@ -30,12 +37,15 @@ from app.operational_migration.hcp_migration2a import (
     UnlinkedEstimateEvidenceCommand,
 )
 from app.operational_migration.hcp_migration2b import (
+    MASTER_CONTRACT,
+    MASTER_NAMESPACE,
     HoldCommand,
     MasterRunCommand,
     PlanOutcomeCommand,
 )
 from app.operational_migration.hcp_migration2c import (
     ORCHESTRATOR_VERSION,
+    STAGING_NAMESPACE,
     CompletionRequirements,
     EmployeeCandidateCommand,
 )
@@ -84,6 +94,14 @@ class HcpMigration2PlanSummary:
 
     def safe_output(self) -> dict[str, object]:
         return asdict(self)
+
+
+class RehearsalAdmissionState(StrEnum):
+    NO_MASTER = "NO_MASTER"
+    MATCHING_INCOMPLETE_MASTER = "MATCHING_INCOMPLETE_MASTER"
+    COMPLETED_MASTER = "COMPLETED_MASTER"
+    CONTRADICTORY_MASTER = "CONTRADICTORY_MASTER"
+    MULTIPLE_UNEXPECTED_MASTERS = "MULTIPLE_UNEXPECTED_MASTERS"
 
 
 def _objects(value: object, key: str) -> list[dict[str, Any]]:
@@ -752,6 +770,56 @@ class HcpMigration2Application:
         value = await session.scalar(select(func.count()).select_from(model))
         return int(value or 0)
 
+    @staticmethod
+    def classify_master_admission(
+        masters: Sequence[HcpMigrationMasterRun],
+    ) -> RehearsalAdmissionState:
+        if not masters:
+            return RehearsalAdmissionState.NO_MASTER
+        if len(masters) > 1:
+            return RehearsalAdmissionState.MULTIPLE_UNEXPECTED_MASTERS
+        if masters[0].status == "completed":
+            return RehearsalAdmissionState.COMPLETED_MASTER
+        if masters[0].status in {"prepared", "running", "interrupted"}:
+            return RehearsalAdmissionState.MATCHING_INCOMPLETE_MASTER
+        return RehearsalAdmissionState.CONTRADICTORY_MASTER
+
+    @staticmethod
+    def _expected_master_attestation(
+        master: HcpMigrationMasterRun, payload: dict[str, object]
+    ) -> str:
+        if master.status in {"prepared", "running"}:
+            return canonical_sha256({"input": payload, "status": "prepared"})
+        if master.status != "interrupted":
+            raise SafeEvidenceError(
+                "resume_master_attestation_state_invalid", master.input_digest
+            )
+        outcome = {
+            "transformed_counts": master.transformed_counts,
+            "persisted_counts": master.persisted_counts,
+            "hold_counts": master.hold_counts,
+            "exception_counts": master.exception_counts,
+            "rejection_counts": master.rejection_counts,
+            "unresolved_counts": master.unresolved_counts,
+            "non_applicable_counts": master.non_applicable_counts,
+            "child_run_ids": master.child_run_ids,
+            "replay_state": master.replay_state,
+            "resume_state": master.resume_state,
+            "status": master.status,
+        }
+        reconciliation = canonical_sha256(
+            {"input_digest": master.input_digest, "outcome": outcome}
+        )
+        return canonical_sha256(
+            {
+                "contract": MASTER_CONTRACT,
+                "run_id": str(master.id),
+                "input_digest": master.input_digest,
+                "reconciliation_digest": reconciliation,
+                "outcome": outcome,
+            }
+        )
+
     async def prepare(
         self,
         factory: async_sessionmaker[AsyncSession],
@@ -759,6 +827,7 @@ class HcpMigration2Application:
         context: AuthorizationContext,
         target: NonProductionTarget,
     ) -> tuple[HcpMigration2ExecutionPlan, HcpMigration2PlanSummary]:
+        existing_master: HcpMigrationMasterRun | None = None
         async with factory() as session:
             await self.runner.orchestrator.qualify_target(
                 session, context=context, target=target
@@ -777,11 +846,163 @@ class HcpMigration2Application:
                 "customer_runs": await self._count(session, CustomerMigrationRun),
                 "operational_runs": await self._count(session, OperationalMigrationRun),
             }
-        if any(counts.values()):
-            raise SafeEvidenceError(
-                "rehearsal_target_baseline_not_pristine", canonical_sha256(counts)
+            masters = tuple(
+                (await session.scalars(select(HcpMigrationMasterRun))).all()
             )
-        return self.builder.build(baseline_counts=counts)
+        admission_state = self.classify_master_admission(masters)
+        if admission_state == RehearsalAdmissionState.MULTIPLE_UNEXPECTED_MASTERS:
+            raise SafeEvidenceError(
+                "multiple_unexpected_masters", canonical_sha256({"count": len(masters)})
+            )
+        if admission_state == RehearsalAdmissionState.NO_MASTER:
+            if any(counts.values()):
+                raise SafeEvidenceError(
+                    "rehearsal_target_baseline_not_pristine", canonical_sha256(counts)
+                )
+            baseline = counts
+        else:
+            existing_master = masters[0]
+            if admission_state == RehearsalAdmissionState.COMPLETED_MASTER:
+                raise SafeEvidenceError(
+                    "completed_master_requires_replay_path",
+                    existing_master.input_digest,
+                )
+            if admission_state == RehearsalAdmissionState.CONTRADICTORY_MASTER:
+                raise SafeEvidenceError(
+                    "contradictory_master_state", existing_master.input_digest
+                )
+            baseline = dict(existing_master.baseline_counts)
+
+        plan, summary = self.builder.build(baseline_counts=baseline)
+        if existing_master is not None:
+            await self._qualify_incomplete_resume(
+                factory,
+                context=context,
+                master=existing_master,
+                plan=plan,
+            )
+        return plan, summary
+
+    async def _qualify_incomplete_resume(
+        self,
+        factory: async_sessionmaker[AsyncSession],
+        *,
+        context: AuthorizationContext,
+        master: HcpMigrationMasterRun,
+        plan: HcpMigration2ExecutionPlan,
+    ) -> None:
+        if context.active_branch is None:
+            raise SafeEvidenceError("resume_scope_invalid", master.input_digest)
+        payload = plan.master.input_payload(
+            company_id=context.company.id,
+            branch_id=context.active_branch.id,
+            actor_id=context.user.id,
+        )
+        input_digest = canonical_sha256(payload)
+        expected_master_id = uuid5(MASTER_NAMESPACE, input_digest)
+        expected_attestation = self._expected_master_attestation(master, payload)
+        immutable_match = all(
+            (
+                master.id == expected_master_id,
+                master.input_digest == input_digest,
+                master.attestation_digest == expected_attestation,
+                master.package_digest == plan.master.package_digest,
+                master.collection_digests == plan.master.collection_digests,
+                master.transformation_contracts == plan.master.transformation_contracts,
+                master.owner_receipts == plan.master.owner_receipts,
+                master.company_id == context.company.id,
+                master.branch_id == context.active_branch.id,
+                master.actor_user_id == context.user.id,
+                master.schema_head == plan.master.schema_head,
+                master.implementation_version == plan.master.implementation_version,
+                master.supported_entities == sorted(plan.master.supported_entities),
+                master.baseline_counts == plan.master.baseline_counts,
+                master.source_counts == plan.master.source_counts,
+                master.collection_digests.get("plan_digest") == plan.plan_digest,
+                master.transformation_contracts.get("builder_version")
+                == plan.builder_version,
+            )
+        )
+        if not immutable_match:
+            raise SafeEvidenceError("incomplete_master_resume_conflict", input_digest)
+
+        staging_counts = {
+            "customers": len(plan.customers.reviewed.aggregates),
+            "contacts": sum(
+                item.contact_json is not None
+                for item in plan.customers.reviewed.aggregates
+            ),
+            "locations": sum(
+                len(item.service_location_json)
+                for item in plan.customers.reviewed.aggregates
+            ),
+            "child_exceptions": sum(
+                len(item.location_exception_ids)
+                for item in plan.customers.admission.candidates
+            ),
+        }
+        staging_digest = canonical_sha256(
+            {
+                "contract": "hcp-source4-master-bound-customer-staging/v1",
+                "master_run_id": str(master.id),
+                "package_digest": master.package_digest,
+                "hybrid_admission_digest": plan.customers.admission.digest,
+                "review_digest": plan.customers.reviewed.review_sha256,
+                "transformation_digest": (
+                    plan.customers.reviewed.transformation_sha256
+                ),
+                "company_id": str(context.company.id),
+                "branch_id": str(context.active_branch.id),
+                "actor_id": str(context.user.id),
+                "counts": staging_counts,
+            }
+        )
+        artifact_id = uuid5(STAGING_NAMESPACE, staging_digest)
+        async with factory() as session:
+            artifacts = tuple(
+                (
+                    await session.scalars(
+                        select(CustomerMigrationSourceArtifact).where(
+                            CustomerMigrationSourceArtifact.master_run_id == master.id
+                        )
+                    )
+                ).all()
+            )
+            if len(artifacts) != 1:
+                raise SafeEvidenceError(
+                    "resume_staging_cardinality_invalid", staging_digest
+                )
+            artifact = artifacts[0]
+            staged_rows = await session.scalar(
+                select(func.count())
+                .select_from(CustomerMigrationSourceRow)
+                .where(CustomerMigrationSourceRow.artifact_id == artifact_id)
+            )
+            staged_candidates = await session.scalar(
+                select(func.count())
+                .select_from(CustomerMigrationCandidate)
+                .join(CustomerMigrationSourceRow)
+                .where(CustomerMigrationSourceRow.artifact_id == artifact_id)
+            )
+            staged_exceptions = await session.scalar(
+                select(func.count())
+                .select_from(CustomerMigrationChildException)
+                .join(CustomerMigrationSourceRow)
+                .where(CustomerMigrationSourceRow.artifact_id == artifact_id)
+            )
+        if (
+            artifact.id != artifact_id
+            or artifact.staging_digest != staging_digest
+            or artifact.source_sha256 != plan.customers.admission.digest
+            or artifact.row_count != staging_counts["customers"]
+            or staged_rows != staging_counts["customers"]
+            or staged_candidates
+            != staging_counts["customers"]
+            + staging_counts["contacts"]
+            + staging_counts["locations"]
+            or staged_exceptions != staging_counts["child_exceptions"]
+        ):
+            raise SafeEvidenceError("resume_staging_evidence_conflict", staging_digest)
 
     async def execute(
         self,
