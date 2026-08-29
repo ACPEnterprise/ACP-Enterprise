@@ -29,6 +29,20 @@ function changeErrorMessage(error: unknown): string | null {
   return "The change-order service could not complete the request. No change was assumed effective.";
 }
 
+function replenishmentDecisionErrorMessage(error: unknown): string | null {
+  if (!axios.isAxiosError(error)) return error ? "The replenishment disposition could not be recorded. No purchasing intent was created." : null;
+  const detail = typeof error.response?.data?.detail === "string" ? error.response.data.detail : "";
+  if (detail.includes("STALE_REPLENISHMENT_RECOMMENDATION")) return "This recommendation is stale. Its evidence must be recalculated before disposition.";
+  if (error.response?.status === 403) return "You are not authorized to record a replenishment disposition.";
+  if (error.response?.status === 409) return "The disposition conflicts with current Purchasing evidence. Recalculate and review the recommendation.";
+  if (error.response?.status === 422) return "The disposition is invalid for the current recommendation, Vendor, or quantity evidence.";
+  return "The replenishment disposition could not be recorded. No purchasing intent was created.";
+}
+
+function isStaleReplenishmentError(error: unknown): boolean {
+  return axios.isAxiosError(error) && typeof error.response?.data?.detail === "string" && error.response.data.detail.includes("STALE_REPLENISHMENT_RECOMMENDATION");
+}
+
 export function PurchasingRoute() {
   const { activeCompany } = useAuth();
   const canRead = useHasPermission("COMPANY_PURCHASING_READ");
@@ -251,28 +265,42 @@ export function PurchasingRoute() {
         </Alert>
       )}
       <ReplenishmentWorkbench
+        canApprove={canApprove}
         pending={mutations.replenishmentWorkbench.isPending}
+        decisionPending={mutations.decideReplenishment.isPending}
         result={mutations.replenishmentWorkbench.data}
         error={mutations.replenishmentWorkbench.isError}
-        onRun={(branchId, itemId, target) => mutations.replenishmentWorkbench.mutateAsync({
-          as_of: new Date().toISOString(),
-          targets: [{ branch_id: branchId, inventory_item_id: itemId, target_available_quantity: target }],
-        })}
-        onDecision={(decision, reason, vendorId, poNumber, quantity, unitCost) => {
+        decisionError={replenishmentDecisionErrorMessage(mutations.decideReplenishment.error)}
+        decisionSucceeded={mutations.decideReplenishment.isSuccess && !mutations.replenishmentWorkbench.data}
+        onRun={(branchId, itemId, target) => {
+          mutations.decideReplenishment.reset();
+          return mutations.replenishmentWorkbench.mutateAsync({
+            as_of: new Date().toISOString(),
+            targets: [{ branch_id: branchId, inventory_item_id: itemId, target_available_quantity: target }],
+          });
+        }}
+        onDecision={async (decision, reason, vendorId, poNumber, quantity, unitCost) => {
           const workbench = mutations.replenishmentWorkbench.data;
           const item = workbench?.recommendations[0];
           if (!workbench || !item) return Promise.reject(new Error("Recommendation unavailable"));
-          return mutations.decideReplenishment.mutateAsync({
-            branch_id: item.branch_id, inventory_item_id: item.inventory_item_id,
-            recommendation_as_of: workbench.as_of, target_available_quantity: item.target_available_quantity,
-            recommendation_digest: item.evidence_digest, decision, reason,
-            approved_quantity: decision === "approved" ? quantity : null,
-            vendor_id: decision === "approved" ? vendorId : null,
-            po_number: decision === "approved" ? poNumber : null,
-            currency: decision === "approved" ? "USD" : null,
-            unit_cost: decision === "approved" ? unitCost : null,
-            idempotency_key: crypto.randomUUID(),
-          });
+          try {
+            const result = await mutations.decideReplenishment.mutateAsync({
+              branch_id: item.branch_id, inventory_item_id: item.inventory_item_id,
+              recommendation_as_of: workbench.as_of, target_available_quantity: item.target_available_quantity,
+              recommendation_digest: item.evidence_digest, decision, reason,
+              approved_quantity: decision === "approved" ? quantity : null,
+              vendor_id: decision === "approved" ? vendorId : null,
+              po_number: decision === "approved" ? poNumber : null,
+              currency: decision === "approved" ? "USD" : null,
+              unit_cost: decision === "approved" ? unitCost : null,
+              idempotency_key: crypto.randomUUID(),
+            });
+            mutations.replenishmentWorkbench.reset();
+            return result;
+          } catch (error) {
+            if (isStaleReplenishmentError(error)) mutations.replenishmentWorkbench.reset();
+            throw error;
+          }
         }}
       />
       <BranchPurchasingPolicyWorkbench
