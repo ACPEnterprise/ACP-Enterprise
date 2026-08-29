@@ -28,6 +28,16 @@ from app.customers.schemas import (
 from app.events.schemas import BusinessEventCreate
 from app.events.service import BusinessEventService
 from app.events.types import EventType
+from app.platform.idempotency.contracts import (
+    IdempotencyIdentity,
+    canonical_request_digest,
+)
+from app.platform.idempotency.reliability import (
+    AuthoritativeOutcome,
+    MutationDisposition,
+    RetentionClass,
+    mutation_reliability_service,
+)
 from app.platform.permissions.authorization import AuthorizationContext
 
 
@@ -124,33 +134,79 @@ class CustomerService:
         data: CustomerCreate,
     ) -> Customer:
         async with session.begin():
-            customer_number = await CustomerRepository.next_customer_number(
-                session, context.company.id
-            )
-            values = values_for_model(data.model_dump())
-            customer = Customer(
-                **values,
-                company_id=context.company.id,
-                customer_number=customer_number,
-                normalized_name=normalize_search_text(data.display_name),
-            )
-            session.add(customer)
-            await session.flush()
-            self._stage_event(
-                session,
-                context=context,
-                event_type=EventType.CUSTOMER_CREATED,
-                entity_type="customer",
-                entity_id=customer.id,
-                payload={
-                    "customer_number": customer.customer_number,
-                    "customer_type": customer.customer_type,
-                    "status": customer.status,
-                },
-            )
+            customer = await self._stage_customer(session, context=context, data=data)
         return await self.get_customer(
             session, context=context, customer_id=customer.id
         )
+
+    async def create_customer_idempotent(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        data: CustomerCreate,
+        idempotency_key: str,
+    ) -> tuple[Customer, MutationDisposition]:
+        async def mutate() -> AuthoritativeOutcome[Customer]:
+            customer = await self._stage_customer(session, context=context, data=data)
+            return AuthoritativeOutcome(customer, "customer", customer.id, 201)
+
+        async def recover(result_id: UUID) -> Customer | None:
+            return await CustomerRepository.get(
+                session, company_id=context.company.id, customer_id=result_id
+            )
+
+        result = await mutation_reliability_service.execute(
+            session,
+            identity=IdempotencyIdentity(
+                company_id=context.company.id,
+                branch_id=context.active_branch.id if context.active_branch else None,
+                operation="customers.create",
+                idempotency_key=idempotency_key,
+            ),
+            actor_user_id=context.user.id,
+            request_digest=canonical_request_digest(data.model_dump(mode="json")),
+            retention_class=RetentionClass.OPERATIONAL,
+            mutate=mutate,
+            recover=recover,
+        )
+        customer = await self.get_customer(
+            session, context=context, customer_id=result.value.id
+        )
+        return customer, result.disposition
+
+    async def _stage_customer(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        data: CustomerCreate,
+    ) -> Customer:
+        customer_number = await CustomerRepository.next_customer_number(
+            session, context.company.id
+        )
+        values = values_for_model(data.model_dump())
+        customer = Customer(
+            **values,
+            company_id=context.company.id,
+            customer_number=customer_number,
+            normalized_name=normalize_search_text(data.display_name),
+        )
+        session.add(customer)
+        await session.flush()
+        self._stage_event(
+            session,
+            context=context,
+            event_type=EventType.CUSTOMER_CREATED,
+            entity_type="customer",
+            entity_id=customer.id,
+            payload={
+                "customer_number": customer.customer_number,
+                "customer_type": customer.customer_type,
+                "status": customer.status,
+            },
+        )
+        return customer
 
     async def stage_migrated_customer(
         self,
