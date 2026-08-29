@@ -6,6 +6,15 @@ from uuid import UUID, uuid4
 import httpx
 import pytest
 import pytest_asyncio
+from fastapi import FastAPI
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
+
 from app.core.config import settings
 from app.customers.models import Customer, CustomerContact
 from app.customers.router import router as customer_router
@@ -20,14 +29,6 @@ from app.platform.permissions.codes import CustomerPermission
 from app.platform.permissions.dependencies import get_authorization_context
 from app.platform.permissions.models import Permission
 from app.platform.users.models import User, UserCredential
-from fastapi import FastAPI
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import (
-    AsyncEngine,
-    AsyncSession,
-    async_sessionmaker,
-    create_async_engine,
-)
 
 
 @dataclass(frozen=True)
