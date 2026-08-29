@@ -72,6 +72,11 @@ class EventType(str, Enum):
     PAYROLL_ADJUSTMENT_REVIEWED = "payroll.adjustment_reviewed"
     PAYROLL_ADJUSTMENT_APPROVED = "payroll.adjustment_approved"
     PAYROLL_ADJUSTMENT_SUPERSEDED = "payroll.adjustment_superseded"
+    PAYROLL_ADJUSTMENT_RESULT_PERSISTED = "payroll.adjustment_result_persisted"
+    PAYROLL_ADJUSTMENT_RESULT_REVIEWED = "payroll.adjustment_result_reviewed"
+    PAYROLL_ADJUSTMENT_RESULT_APPROVED = "payroll.adjustment_result_approved"
+    PAYROLL_ADJUSTMENT_RESULT_SUPERSEDED = "payroll.adjustment_result_superseded"
+    PAYROLL_ADJUSTMENT_RESULT_APPLIED = "payroll.adjustment_result_applied"
 
     # Accounts Payable
     ACCOUNTS_PAYABLE_VENDOR_CREATED = "accounts_payable.vendor_created"

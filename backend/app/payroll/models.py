@@ -1003,3 +1003,80 @@ class PayrollAdjustmentReviewRecord(Base):
     adjustment_digest: Mapped[str] = mapped_column(String(64), nullable=False)
     review_digest: Mapped[str] = mapped_column(String(64), nullable=False)
     reviewed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class PayrollAdjustmentResultRecord(Base):
+    __tablename__ = "payroll_adjustment_results"
+    __table_args__ = (
+        CheckConstraint("lifecycle IN ('calculated','under_review','approved','applied_to_successor_authority','rejected','superseded','voided')", name="ck_payroll_adjustment_result_lifecycle"),
+        ForeignKeyConstraint(["company_id", "adjustment_id"], ["payroll_adjustment_authorities.company_id", "payroll_adjustment_authorities.id"], ondelete="RESTRICT"),
+        UniqueConstraint("company_id", "id", name="uq_payroll_adjustment_result_company_id"),
+        UniqueConstraint("company_id", "result_identity", name="uq_payroll_adjustment_result_identity"),
+        UniqueConstraint("company_id", "calculation_digest", name="uq_payroll_adjustment_result_digest"),
+        UniqueConstraint("supersedes_result_id", name="uq_payroll_adjustment_result_successor"),
+        Index("uq_payroll_adjustment_result_active", "company_id", "adjustment_id", unique=True, postgresql_where=text("lifecycle IN ('calculated','under_review','approved')")),
+    )
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    employee_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    original_pay_period_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    correction_pay_period_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    adjustment_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    adjustment_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_type: Mapped[str] = mapped_column(String(48), nullable=False)
+    source_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    source_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    classification: Mapped[str] = mapped_column(String(48), nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    components: Mapped[list[dict[str, object]]] = mapped_column(JSONB, nullable=False)
+    consequences: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    result_identity: Mapped[str] = mapped_column(String(128), nullable=False)
+    calculation_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    calculation_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    calculated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_by_user_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    lifecycle: Mapped[str] = mapped_column(String(40), nullable=False)
+    approved_by_user_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"))
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    supersedes_result_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), ForeignKey("payroll_adjustment_results.id", ondelete="RESTRICT"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+
+class PayrollAdjustmentResultReviewRecord(Base):
+    __tablename__ = "payroll_adjustment_result_reviews"
+    __table_args__ = (
+        CheckConstraint("decision IN ('initiated','accepted','rejected','approved')", name="ck_payroll_adjustment_result_review_decision"),
+        ForeignKeyConstraint(["company_id", "result_id"], ["payroll_adjustment_results.company_id", "payroll_adjustment_results.id"], ondelete="RESTRICT"),
+        UniqueConstraint("result_id", "sequence", name="uq_payroll_adjustment_result_review_sequence"),
+        UniqueConstraint("review_digest", name="uq_payroll_adjustment_result_review_digest"),
+    )
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    result_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    reviewer_user_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    decision: Mapped[str] = mapped_column(String(20), nullable=False)
+    reason_code: Mapped[str] = mapped_column(String(80), nullable=False)
+    safe_note: Mapped[str | None] = mapped_column(Text)
+    result_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    review_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    reviewed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class PayrollAdjustmentApplicationRecord(Base):
+    __tablename__ = "payroll_adjustment_applications"
+    __table_args__ = (
+        ForeignKeyConstraint(["company_id", "result_id"], ["payroll_adjustment_results.company_id", "payroll_adjustment_results.id"], ondelete="RESTRICT"),
+        UniqueConstraint("result_id", "purpose", name="uq_payroll_adjustment_application_purpose"),
+        UniqueConstraint("application_digest", name="uq_payroll_adjustment_application_digest"),
+    )
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    result_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    purpose: Mapped[str] = mapped_column(String(64), nullable=False)
+    successor_authority_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    result_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    authorized_components: Mapped[list[dict[str, object]]] = mapped_column(JSONB, nullable=False)
+    application_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    applied_by_user_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    applied_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
