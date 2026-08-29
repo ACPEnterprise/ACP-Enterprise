@@ -17,6 +17,11 @@ describe("employee app foundation", () => {
   it("maps only the narrow own-day permission to My Day", () => { expect(capabilitiesFromPermissions(["COMPANY_EMPLOYEE_OPERATIONS_OWN_DAY_READ"])).toContain("my_day.view"); expect(capabilitiesFromPermissions(["COMPANY_DISPATCH_READ"])).not.toContain("my_day.view"); });
   it("recognizes activation links without retaining their secret", () => { expect(isActivationLink("https://employee.acpenterprise.com/activate?token=secret")).toBe(true); expect(isActivationLink("https://employee.acpenterprise.com/home")).toBe(false); });
   it("fails closed for inactive production configuration", () => { expect(() => readEnvironment({ environment: "production", apiBaseUrl: "https://production-api.example.invalid", compatibilityVersion: "v1" })).toThrow(); });
+  it("pins Preview configuration to the authorized ACP endpoint", () => {
+    expect(readEnvironment({ environment: "preview", apiBaseUrl: "https://preview.allcountyhomeservices.com", compatibilityVersion: "v1" }).apiBaseUrl).toBe("https://preview.allcountyhomeservices.com");
+    expect(() => readEnvironment({ environment: "preview", apiBaseUrl: "https://other.example.com", compatibilityVersion: "v1" })).toThrow();
+  });
+  it("requires an explicit activation flag even for a valid production URL", () => { expect(() => readEnvironment({ environment: "production", apiBaseUrl: "https://api.acpenterprise.com", compatibilityVersion: "v1", productionActivated: false })).toThrow("Production is inactive"); });
   it("accepts explicit development configuration", () => { expect(readEnvironment({ environment: "development", apiBaseUrl: "http://localhost:8000", compatibilityVersion: "v1" }).environment).toBe("development"); });
 });
 

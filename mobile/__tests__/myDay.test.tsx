@@ -51,7 +51,7 @@ describe("native employee My Day", () => {
     const h = harness();
     render(<MyDayScreen service={h.service} network={h.network} />);
     expect(await screen.findByText("Synthetic Customer One")).toBeOnTheScreen();
-    const cards = screen.getAllByLabelText(/^Assignment,/);
+    const cards = screen.getAllByLabelText(/^Open assignment detail/);
     expect(cards[0]).toHaveAccessibleName(/Synthetic Customer One/);
     expect(cards[1]).toHaveAccessibleName(/Synthetic Customer Two/);
     expect(screen.getAllByText("100 Example Way, Example City, NY 10001")).toHaveLength(2);
@@ -86,7 +86,7 @@ describe("native employee My Day", () => {
     await screen.findByText("Synthetic Customer One");
     h.setConnected(false);
     expect(await screen.findByText(/last confirmed and may be stale/i)).toBeOnTheScreen();
-    expect(screen.getAllByLabelText(/^Stale assignment,/)).toHaveLength(2);
+    expect(screen.getAllByLabelText(/^Open assignment detail.*stale/)).toHaveLength(2);
     h.setResult(day([second]));
     h.setConnected(true);
     await waitFor(() => expect(screen.queryByText("Synthetic Customer One")).not.toBeOnTheScreen());
@@ -131,7 +131,7 @@ describe("native employee My Day", () => {
   it("provides card and refresh accessibility semantics", async () => {
     const h = harness();
     render(<MyDayScreen service={h.service} network={h.network} />);
-    expect(await screen.findByLabelText(/Assignment,.*Synthetic Customer One/)).toBeOnTheScreen();
+    expect((await screen.findByLabelText(/Open assignment detail.*Synthetic Customer One/)).props.accessibilityRole).toBe("button");
     expect(screen.getByTestId("my-day-scroll").props.refreshControl.props.accessibilityLabel).toBe("Refresh authoritative assigned work");
   });
 

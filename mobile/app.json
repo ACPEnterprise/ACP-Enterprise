@@ -9,11 +9,18 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": false,
+      "buildNumber": "1",
       "bundleIdentifier": "com.acpenterprise.employee",
       "associatedDomains": ["applinks:employee.acpenterprise.com"]
     },
     "android": {
+      "versionCode": 1,
       "package": "com.acpenterprise.employee",
+      "blockedPermissions": [
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.SYSTEM_ALERT_WINDOW"
+      ],
       "intentFilters": [{
         "action": "VIEW",
         "autoVerify": true,
@@ -21,11 +28,12 @@
         "category": ["BROWSABLE", "DEFAULT"]
       }]
     },
-    "plugins": ["expo-secure-store"],
+    "plugins": [["expo-secure-store", {"configureAndroidBackup": true, "faceIDPermission": false}]],
     "extra": {
       "environment": "development",
       "apiBaseUrl": "http://localhost:8000",
-      "compatibilityVersion": "2026-08-01"
+      "compatibilityVersion": "2026-08-01",
+      "productionActivated": false
     },
     "runtimeVersion": {"policy": "appVersion"},
     "updates": {"enabled": false}
