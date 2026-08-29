@@ -77,6 +77,17 @@ class EventType(str, Enum):
     PAYROLL_ADJUSTMENT_RESULT_APPROVED = "payroll.adjustment_result_approved"
     PAYROLL_ADJUSTMENT_RESULT_SUPERSEDED = "payroll.adjustment_result_superseded"
     PAYROLL_ADJUSTMENT_RESULT_APPLIED = "payroll.adjustment_result_applied"
+    PAYROLL_REMITTANCE_POLICY_CREATED = "payroll.remittance_policy_created"
+    PAYROLL_REMITTANCE_POLICY_APPROVED = "payroll.remittance_policy_approved"
+    PAYROLL_REMITTANCE_DESTINATION_CREATED = "payroll.remittance_destination_created"
+    PAYROLL_REMITTANCE_DESTINATION_APPROVED = "payroll.remittance_destination_approved"
+    PAYROLL_REMITTANCE_OBLIGATION_IDENTIFIED = "payroll.remittance_obligation_identified"
+    PAYROLL_REMITTANCE_REVIEWED = "payroll.remittance_reviewed"
+    PAYROLL_REMITTANCE_APPROVED = "payroll.remittance_approved"
+    PAYROLL_REMITTANCE_INSTRUCTION_PREPARED = "payroll.remittance_instruction_prepared"
+    PAYROLL_REMITTANCE_ACKNOWLEDGED = "payroll.remittance_acknowledged"
+    PAYROLL_REMITTANCE_SETTLED = "payroll.remittance_settled"
+    PAYROLL_REMITTANCE_RETURNED = "payroll.remittance_returned"
 
     # Accounts Payable
     ACCOUNTS_PAYABLE_VENDOR_CREATED = "accounts_payable.vendor_created"
