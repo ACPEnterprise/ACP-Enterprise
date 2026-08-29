@@ -11,6 +11,9 @@ import {
 } from "lucide-react";
 import { Link } from "react-router";
 
+import { useAuth } from "../auth/useAuth";
+import { useEffectivePermissions } from "../auth/usePermissions";
+
 import {
   CommandCenterPanel,
   ExecutiveMetricCard,
@@ -22,6 +25,7 @@ import { useAnalyticsSummary } from "../hooks/useAnalyticsSummary";
 import {
   useBeaconLifecycleActions,
   useBeaconSignals,
+  useBeaconWorkflowActions,
 } from "../hooks/useBeaconSignals";
 import { useJobs } from "../hooks/useJobs";
 
@@ -46,9 +50,12 @@ function metricState(
 }
 
 export function CommandCenterRoute() {
+  const { user } = useAuth();
+  const permissions = useEffectivePermissions();
   const analytics = useAnalyticsSummary();
   const beacon = useBeaconSignals();
   const beaconLifecycle = useBeaconLifecycleActions();
+  const beaconWorkflow = useBeaconWorkflowActions();
   const jobs = useJobs({ page: 1, pageSize: 1 });
   const revenue = analytics.data
     ? { value: formatCurrency(analytics.data.booked_revenue.value) }
@@ -114,12 +121,26 @@ export function CommandCenterRoute() {
         signals={beacon.data?.items}
         snoozedSignals={beacon.data?.snoozed_items}
         canReview={beacon.data?.lifecycle_commands_available ?? false}
+        canOwn={permissions.has("COMPANY_BEACON_OWN")}
+        canAssign={permissions.has("COMPANY_BEACON_ASSIGN")}
+        currentUserId={user?.id ?? null}
+        evaluatedAt={beacon.data?.evaluated_at ?? null}
         loading={beacon.isLoading}
         error={beacon.isError}
         lifecycleError={beaconLifecycle.isError}
         lifecyclePending={beaconLifecycle.isPending}
+        workflowError={beaconWorkflow.isError}
+        workflowPending={beaconWorkflow.isPending}
         onLifecycleAction={(signal, action, snoozeUntil) =>
           beaconLifecycle.mutate({ signal, action, snoozeUntil })
+        }
+        onWorkflowAction={(signal, action, expectedVersion, ownerUserId) =>
+          beaconWorkflow.mutate({
+            signal,
+            action,
+            expectedVersion,
+            ownerUserId,
+          })
         }
         retry={() => void beacon.refetch()}
       />

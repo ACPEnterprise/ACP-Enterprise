@@ -8,8 +8,13 @@ import type {
   BeaconSeverity,
   BeaconSignal,
   BeaconSupportingFact,
+  BeaconWorkflowAction,
+  BeaconWorkflowEvent,
 } from "../../api/beacon";
-import { getBeaconLifecycleHistory } from "../../api/beacon";
+import {
+  getBeaconLifecycleHistory,
+  getBeaconWorkflowHistory,
+} from "../../api/beacon";
 import { Alert, Badge, Button, EmptyState, Input, Spinner } from "../../ui";
 import { CommandCenterPanel } from "./CommandCenterPrimitives";
 
@@ -49,16 +54,33 @@ function factValue(fact: BeaconSupportingFact): string {
 function SignalRow({
   signal,
   canReview,
+  canOwn,
+  canAssign,
+  currentUserId,
+  evaluatedAt,
   lifecyclePending,
+  workflowPending,
   onLifecycleAction,
+  onWorkflowAction,
 }: {
   readonly signal: BeaconSignal;
   readonly canReview: boolean;
+  readonly canOwn: boolean;
+  readonly canAssign: boolean;
+  readonly currentUserId: string | null;
+  readonly evaluatedAt: string | null;
   readonly lifecyclePending: boolean;
+  readonly workflowPending: boolean;
   readonly onLifecycleAction: (
     signal: BeaconSignal,
     action: BeaconLifecycleAction,
     snoozeUntil?: string,
+  ) => void;
+  readonly onWorkflowAction: (
+    signal: BeaconSignal,
+    action: BeaconWorkflowAction,
+    expectedVersion?: number,
+    ownerUserId?: string,
   ) => void;
 }) {
   const severity = severityPresentation[signal.severity];
@@ -69,12 +91,33 @@ function SignalRow({
   );
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState(false);
+  const [workflowHistory, setWorkflowHistory] = useState<
+    readonly BeaconWorkflowEvent[] | null
+  >(null);
+  const [ownerUserId, setOwnerUserId] = useState("");
+  const workflow = signal.workflow ?? null;
+  const isMine = workflow?.owner_user_id === currentUserId;
+  const isExpired = evaluatedAt
+    ? new Date(signal.expires_at).getTime() <= new Date(evaluatedAt).getTime()
+    : false;
 
   const loadHistory = async () => {
     setHistoryLoading(true);
     setHistoryError(false);
     try {
       setHistory(await getBeaconLifecycleHistory(signal.condition_key));
+    } catch {
+      setHistoryError(true);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  const loadWorkflowHistory = async () => {
+    setHistoryLoading(true);
+    setHistoryError(false);
+    try {
+      setWorkflowHistory(await getBeaconWorkflowHistory(signal.condition_key));
     } catch {
       setHistoryError(true);
     } finally {
@@ -140,6 +183,22 @@ function SignalRow({
         <span className="font-semibold text-content">Recommended action:</span>{" "}
         {signal.recommended_action}
       </p>
+      <div className="mt-ui-3 rounded-md border border-stroke bg-surface-muted p-ui-3 text-body-s">
+        <p className="font-semibold text-content">Operator responsibility</p>
+        <p className="mt-ui-1 text-content-secondary">
+          {workflow?.acknowledged_at
+            ? `Acknowledged ${new Date(workflow.acknowledged_at).toLocaleString()}`
+            : "Not acknowledged"}
+          {workflow?.owner_user_id
+            ? ` · Owner ${workflow.owner_user_id}${isMine ? " (you)" : ""}`
+            : " · Unowned"}
+          {isExpired ? " · Evidence expired" : ""}
+        </p>
+        <p className="mt-ui-1 text-content-muted">
+          Acknowledgement and ownership record review responsibility only. They
+          do not resolve the signal or grant authority over its source domain.
+        </p>
+      </div>
       {signal.lifecycle.status !== "active" && (
         <p className="mt-ui-3 text-body-s text-content-muted">
           Owner lifecycle status:{" "}
@@ -150,13 +209,6 @@ function SignalRow({
       <div className="mt-ui-4 flex flex-wrap items-end gap-ui-2">
         {canReview && (
           <>
-            <Button
-              disabled={lifecyclePending}
-              variant="outline"
-              onClick={() => onLifecycleAction(signal, "acknowledge")}
-            >
-              Acknowledge
-            </Button>
             <Button
               disabled={lifecyclePending}
               variant="outline"
@@ -188,12 +240,86 @@ function SignalRow({
             </Button>
           </>
         )}
+        {canReview && !workflow?.acknowledged && (
+          <Button
+            disabled={workflowPending || isExpired}
+            variant="outline"
+            onClick={() =>
+              onWorkflowAction(signal, "acknowledge", undefined, undefined)
+            }
+          >
+            Acknowledge responsibility
+          </Button>
+        )}
+        {canOwn && !workflow?.owner_user_id && (
+          <Button
+            disabled={workflowPending || isExpired}
+            variant="outline"
+            onClick={() =>
+              onWorkflowAction(
+                signal,
+                "claim",
+                workflow?.workflow_version ?? 0,
+              )
+            }
+          >
+            Take ownership
+          </Button>
+        )}
+        {(isMine || canAssign) && workflow?.owner_user_id && (
+          <Button
+            disabled={workflowPending || isExpired}
+            variant="outline"
+            onClick={() =>
+              onWorkflowAction(
+                signal,
+                "release",
+                workflow.workflow_version,
+              )
+            }
+          >
+            Release ownership
+          </Button>
+        )}
+        {canAssign && (
+          <>
+            <label className="min-w-64 flex-1 text-body-s text-content-secondary">
+              Owner user ID
+              <Input
+                className="mt-ui-1"
+                value={ownerUserId}
+                onChange={(event) => setOwnerUserId(event.target.value)}
+              />
+            </label>
+            <Button
+              disabled={!ownerUserId || workflowPending || isExpired}
+              variant="outline"
+              onClick={() =>
+                onWorkflowAction(
+                  signal,
+                  workflow?.owner_user_id ? "transfer" : "assign",
+                  workflow?.workflow_version ?? 0,
+                  ownerUserId,
+                )
+              }
+            >
+              {workflow?.owner_user_id ? "Transfer ownership" : "Assign owner"}
+            </Button>
+          </>
+        )}
         <Button
           disabled={historyLoading}
           variant="ghost"
           onClick={() => void loadHistory()}
         >
           View review history
+        </Button>
+        <Button
+          disabled={historyLoading}
+          variant="ghost"
+          onClick={() => void loadWorkflowHistory()}
+        >
+          View ownership history
         </Button>
       </div>
       {historyError && (
@@ -223,6 +349,27 @@ function SignalRow({
           )}
         </div>
       )}
+      {workflowHistory && (
+        <div className="mt-ui-3 rounded-md border border-stroke p-ui-3">
+          <h4 className="font-semibold text-content">Ownership history</h4>
+          {workflowHistory.length === 0 ? (
+            <p className="mt-ui-1 text-body-s text-content-muted">
+              No acknowledgement or ownership actions recorded.
+            </p>
+          ) : (
+            <ol className="mt-ui-2 space-y-ui-2">
+              {workflowHistory.map((event) => (
+                <li className="text-body-s text-content-secondary" key={event.id}>
+                  {event.action} · {new Date(event.occurred_at).toLocaleString()}
+                  {event.state.owner_user_id
+                    ? ` · owner ${event.state.owner_user_id}`
+                    : " · unowned"}
+                </li>
+              ))}
+            </ol>
+          )}
+        </div>
+      )}
     </li>
   );
 }
@@ -231,24 +378,43 @@ export function BeaconPanel({
   signals,
   snoozedSignals,
   canReview,
+  canOwn,
+  canAssign,
+  currentUserId,
+  evaluatedAt,
   loading,
   error,
   lifecycleError,
   lifecyclePending,
+  workflowError,
+  workflowPending,
   onLifecycleAction,
+  onWorkflowAction,
   retry,
 }: {
   readonly signals: readonly BeaconSignal[] | undefined;
   readonly snoozedSignals: readonly BeaconSignal[] | undefined;
   readonly canReview: boolean;
+  readonly canOwn: boolean;
+  readonly canAssign: boolean;
+  readonly currentUserId: string | null;
+  readonly evaluatedAt: string | null;
   readonly loading: boolean;
   readonly error: boolean;
   readonly lifecycleError: boolean;
   readonly lifecyclePending: boolean;
+  readonly workflowError: boolean;
+  readonly workflowPending: boolean;
   readonly onLifecycleAction: (
     signal: BeaconSignal,
     action: BeaconLifecycleAction,
     snoozeUntil?: string,
+  ) => void;
+  readonly onWorkflowAction: (
+    signal: BeaconSignal,
+    action: BeaconWorkflowAction,
+    expectedVersion?: number,
+    ownerUserId?: string,
   ) => void;
   readonly retry: () => void;
 }) {
@@ -288,6 +454,12 @@ export function BeaconPanel({
           has not been changed.
         </Alert>
       )}
+      {workflowError && (
+        <Alert variant="danger" title="Responsibility action not recorded">
+          Beacon rejected the request because it was stale, conflicted, forbidden,
+          or invalid. Refresh the authoritative queue before trying again.
+        </Alert>
+      )}
       {!loading &&
         !error &&
         signals?.length === 0 &&
@@ -302,10 +474,16 @@ export function BeaconPanel({
           {signals.map((signal) => (
             <SignalRow
               canReview={canReview}
+              canOwn={canOwn}
+              canAssign={canAssign}
+              currentUserId={currentUserId}
+              evaluatedAt={evaluatedAt}
               key={signal.id}
               lifecyclePending={lifecyclePending}
+              workflowPending={workflowPending}
               signal={signal}
               onLifecycleAction={onLifecycleAction}
+              onWorkflowAction={onWorkflowAction}
             />
           ))}
         </ol>
@@ -329,10 +507,16 @@ export function BeaconPanel({
             {snoozedSignals.map((signal) => (
               <SignalRow
                 canReview={false}
+                canOwn={false}
+                canAssign={false}
+                currentUserId={currentUserId}
+                evaluatedAt={evaluatedAt}
                 key={signal.id}
                 lifecyclePending={lifecyclePending}
+                workflowPending={workflowPending}
                 signal={signal}
                 onLifecycleAction={onLifecycleAction}
+                onWorkflowAction={onWorkflowAction}
               />
             ))}
           </ol>
