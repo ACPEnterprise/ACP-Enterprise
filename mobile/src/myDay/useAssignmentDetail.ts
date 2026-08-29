@@ -39,7 +39,10 @@ export function useAssignmentDetail(service: EmployeeOperationsService, network:
 
   useEffect(() => { void Promise.resolve().then(refresh); }, [refresh]);
   useEffect(() => network.subscribe((connected) => { if (connected) void refresh(); else setStatus("offline"); }), [network, refresh]);
-  useEffect(() => AppState.addEventListener("change", (next) => { if (next === "active") void refresh(); }).remove, [refresh]);
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (next) => { if (next === "active") void refresh(); });
+    return () => subscription.remove();
+  }, [refresh]);
 
   return { assignment, timezone, status, refreshing, refresh };
 }

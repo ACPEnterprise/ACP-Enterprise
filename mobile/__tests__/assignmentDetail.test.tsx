@@ -1,7 +1,8 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
+import { Linking } from "react-native";
 import type { DayAssignment, EmployeeDay, EmployeeOperationsService } from "../src/api/employeeOperations";
 import { ApiFailure } from "../src/api/types";
-import { AssignmentDetailScreen } from "../src/screens/AssignmentDetailScreen";
+import { directionsUrl, JobWorkspaceScreen } from "../src/screens/JobWorkspaceScreen";
 import { MyDayScreen } from "../src/screens/MyDayScreen";
 
 const assignment: DayAssignment = {
@@ -31,10 +32,11 @@ function harness(initial = projectedDay(), connected = true) {
 }
 
 function detail(h: ReturnType<typeof harness>, appointmentId = assignment.appointment_id, initial: DayAssignment | null = assignment) {
-  return <AssignmentDetailScreen appointmentId={appointmentId} initialAssignment={initial} initialTimezone="America/New_York" service={h.service} network={h.network} />;
+  return <JobWorkspaceScreen appointmentId={appointmentId} initialAssignment={initial} initialTimezone="America/New_York" service={h.service} network={h.network} />;
 }
 
-describe("native employee assignment detail", () => {
+describe("native employee Job workspace", () => {
+  afterEach(() => jest.restoreAllMocks());
   it("opens an own-assignment detail from My Day", async () => {
     const h = harness(); const open = jest.fn();
     render(<MyDayScreen service={h.service} network={h.network} onOpenAssignment={open} />);
@@ -51,7 +53,8 @@ describe("native employee assignment detail", () => {
     expect(screen.getByText("Appointment APT-SAFE-01")).toBeOnTheScreen();
     expect(screen.getByText("Job JOB-SAFE-01")).toBeOnTheScreen();
     expect(screen.getByLabelText(/Authoritative assignment detail.*Synthetic Detail Customer/)).toBeOnTheScreen();
-    expect(screen.getByTestId("assignment-detail-scroll").props.refreshControl.props.accessibilityLabel).toBe("Refresh authoritative assignment detail");
+    expect(screen.getByText("Read-only assigned work. Job status and My Time remain independent.")).toBeOnTheScreen();
+    expect(screen.getByTestId("job-workspace-scroll").props.refreshControl.props.accessibilityLabel).toBe("Refresh authoritative Job workspace");
   });
 
   it("fails closed for guessed, cross-Company, or cross-Branch identifiers", async () => {
@@ -66,7 +69,7 @@ describe("native employee assignment detail", () => {
     const h = harness(); render(detail(h));
     await screen.findByText("Synthetic Detail Customer");
     h.replace(projectedDay([]));
-    await act(async () => screen.getByTestId("assignment-detail-scroll").props.refreshControl.props.onRefresh());
+    await act(async () => screen.getByTestId("job-workspace-scroll").props.refreshControl.props.onRefresh());
     await waitFor(() => expect(screen.queryByText("Synthetic Detail Customer")).not.toBeOnTheScreen());
     expect(screen.getByText(/no longer available/i)).toBeOnTheScreen();
   });
@@ -74,10 +77,10 @@ describe("native employee assignment detail", () => {
   it("reflects authoritative cancellation and rescheduling", async () => {
     const h = harness(); render(detail(h)); await screen.findByText("Synthetic Detail Customer");
     h.replace(projectedDay([{ ...assignment, appointment_status: "cancelled" }]));
-    await act(async () => screen.getByTestId("assignment-detail-scroll").props.refreshControl.props.onRefresh());
+    await act(async () => screen.getByTestId("job-workspace-scroll").props.refreshControl.props.onRefresh());
     expect(await screen.findByText("Appointment status: cancelled")).toBeOnTheScreen();
     h.replace(projectedDay([]));
-    await act(async () => screen.getByTestId("assignment-detail-scroll").props.refreshControl.props.onRefresh());
+    await act(async () => screen.getByTestId("job-workspace-scroll").props.refreshControl.props.onRefresh());
     expect(await screen.findByText(/no longer available/i)).toBeOnTheScreen();
   });
 
@@ -107,5 +110,26 @@ describe("native employee assignment detail", () => {
     expect(screen.queryByText(/Start Job|Finish Job|Arrive|Dispatch|Reassign|Cancel Job|Reschedule|Complete|Pause|employee_id/i)).not.toBeOnTheScreen();
     expect(screen.queryByText(/phone|email|estimate|invoice|payment|balance|margin|cost|payroll|compensation|note|description|customer history/i)).not.toBeOnTheScreen();
     expect(Object.keys(h.service)).toEqual(["day"]);
+  });
+
+  it("creates a bounded system-map handoff without location tracking", () => {
+    expect(directionsUrl(assignment, "ios")).toBe("https://maps.apple.com/?daddr=Synthetic%20Detail%20Site%2C%20200%20Example%20Avenue%2C%20Unit%202%2C%20Example%20City%2C%20NY%2010002");
+    expect(directionsUrl(assignment, "android")).toBe("geo:0,0?q=Synthetic%20Detail%20Site%2C%20200%20Example%20Avenue%2C%20Unit%202%2C%20Example%20City%2C%20NY%2010002");
+  });
+
+  it("opens directions only after an explicit employee action", async () => {
+    const canOpen = jest.spyOn(Linking, "canOpenURL").mockResolvedValue(true);
+    const open = jest.spyOn(Linking, "openURL").mockResolvedValue(undefined);
+    const h = harness(); render(detail(h));
+    fireEvent.press(await screen.findByLabelText("Open directions to Synthetic Detail Site"));
+    await waitFor(() => expect(open).toHaveBeenCalledWith(expect.stringContaining("maps.apple.com")));
+    expect(canOpen).toHaveBeenCalledTimes(1);
+  });
+
+  it("fails safely when no system map application is available", async () => {
+    jest.spyOn(Linking, "canOpenURL").mockResolvedValue(false);
+    const h = harness(); render(detail(h));
+    fireEvent.press(await screen.findByLabelText("Open directions to Synthetic Detail Site"));
+    expect(await screen.findByRole("alert", { name: /Directions are unavailable/i })).toBeOnTheScreen();
   });
 });
