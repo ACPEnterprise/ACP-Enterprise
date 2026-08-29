@@ -3,6 +3,7 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
+
 from app.engineering_control.repository_readiness import (
     RepositoryReadinessService,
     RepositoryReadinessTarget,
@@ -64,6 +65,28 @@ def test_current_running_execution_remains_an_active_target() -> None:
         execution_id=uuid4(),
         execution_state="running",
         execution_evidence={},
+    )
+
+
+def test_current_pre_dispatch_execution_remains_an_active_target() -> None:
+    assert target_eligible(
+        milestone_status="running",
+        command_id=uuid4(),
+        execution_id=uuid4(),
+        execution_state="execution_not_connected",
+        execution_finished_at=None,
+        execution_evidence={"execution_connected": False},
+    )
+
+
+def test_terminal_pre_dispatch_rejection_is_not_an_active_target() -> None:
+    assert not target_eligible(
+        milestone_status="running",
+        command_id=uuid4(),
+        execution_id=uuid4(),
+        execution_state="failed",
+        execution_finished_at=datetime.now(timezone.utc),
+        execution_evidence={"terminal_rejection": True},
     )
 
 
