@@ -93,7 +93,7 @@ def test_current_projection_reconciles_completion_and_releases_successor() -> No
     assert milestones["BANK.PUR.004"].current_state == "COMPLETE"
     assert milestones["BANK.PUR.004"].canonical_milestone_id == "BANK.PUR.004"
     assert milestones["BANK.PUR.004"].completion_commit_sha == (
-        "eb8c047eb3cb3d44fc183a9ba7239cd8292d806a"
+        "a95cf5ea85c3c0e26f87babf76d00a4e90a0ffd5"
     )
     assert milestones["BANK.PUR.005"].current_state == "EXECUTABLE"
     assert milestones["BANK.PLAT.006"].current_state == "EXECUTABLE"
@@ -331,10 +331,12 @@ def test_pur_004_end_to_end_acceptance_changes_only_itself_and_successor() -> No
         item for item in evidence if item["bank_milestone_id"] == "BANK.PUR.004"
     )
     assert pur_004["authoritative_commit_sha"] == (
-        "eb8c047eb3cb3d44fc183a9ba7239cd8292d806a"
+        "a95cf5ea85c3c0e26f87babf76d00a4e90a0ffd5"
     )
     assert "f94a95816904d0f84ba9e35da81cad24bafe9814" in pur_004["evidence_reference"]
     assert "eb8c047eb3cb3d44fc183a9ba7239cd8292d806a" in pur_004["evidence_reference"]
+    assert "p7g9c1e3h608" in pur_004["evidence_reference"]
+    assert "6ced94045c9f71fca35836aa3f4884b3f97de1bb" in pur_004["evidence_reference"]
     raw["completion_evidence"] = [
         item for item in evidence if item["bank_milestone_id"] != "BANK.PUR.004"
     ]
