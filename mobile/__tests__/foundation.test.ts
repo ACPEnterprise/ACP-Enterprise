@@ -3,7 +3,7 @@ import { SessionRepository } from "../src/auth/sessionRepository";
 import type { Session } from "../src/auth/types";
 import { readEnvironment } from "../src/config/environment";
 import { isActivationLink } from "../src/linking/linking";
-import { can } from "../src/permissions/capabilities";
+import { can, capabilitiesFromPermissions } from "../src/permissions/capabilities";
 import type { ProtectedStorage } from "../src/storage/secureStorage";
 import { createTimekeepingService } from "../src/api/timekeeping";
 
@@ -14,6 +14,7 @@ describe("employee app foundation", () => {
   it("uses protected session abstraction and logout clears it", async () => { const storage = memoryStorage(); const repo = new SessionRepository(storage); await repo.save(session); expect(await repo.load()).toEqual(session); await repo.clear(); expect(await repo.load()).toBeNull(); });
   it("clears stale malformed sessions", async () => { const storage = memoryStorage(); storage.values.set("acp.employee.session.v1", "{}"); expect(await new SessionRepository(storage).load()).toBeNull(); expect(storage.values.size).toBe(0); });
   it("represents permission-gated navigation", () => { expect(can(["home.view"], "time.self.view")).toBe(false); expect(can(["time.self.view"], "time.self.view")).toBe(true); });
+  it("maps only the narrow own-day permission to My Day", () => { expect(capabilitiesFromPermissions(["COMPANY_EMPLOYEE_OPERATIONS_OWN_DAY_READ"])).toContain("my_day.view"); expect(capabilitiesFromPermissions(["COMPANY_DISPATCH_READ"])).not.toContain("my_day.view"); });
   it("recognizes activation links without retaining their secret", () => { expect(isActivationLink("https://employee.acpenterprise.com/activate?token=secret")).toBe(true); expect(isActivationLink("https://employee.acpenterprise.com/home")).toBe(false); });
   it("fails closed for inactive production configuration", () => { expect(() => readEnvironment({ environment: "production", apiBaseUrl: "https://production-api.example.invalid", compatibilityVersion: "v1" })).toThrow(); });
   it("accepts explicit development configuration", () => { expect(readEnvironment({ environment: "development", apiBaseUrl: "http://localhost:8000", compatibilityVersion: "v1" }).environment).toBe("development"); });

@@ -5,5 +5,6 @@ export function capabilitiesFromPermissions(permissionCodes: readonly string[]):
   const capabilities: Capability[] = ["home.view"];
   if (permissionCodes.includes("COMPANY_TIMEKEEPING_OWN_READ")) capabilities.push("time.self.view");
   if (permissionCodes.includes("COMPANY_TIMEKEEPING_OWN_PUNCH")) capabilities.push("time.self.punch");
+  if (permissionCodes.includes("COMPANY_EMPLOYEE_OPERATIONS_OWN_DAY_READ")) capabilities.push("my_day.view");
   return capabilities;
 }

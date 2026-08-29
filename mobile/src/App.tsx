@@ -11,6 +11,7 @@ import { SessionRepository } from "./auth/sessionRepository";
 import { deviceProtectedStorage } from "./storage/secureStorage";
 import { ApiClient } from "./api/client";
 import { createTimekeepingService } from "./api/timekeeping";
+import { createEmployeeOperationsService } from "./api/employeeOperations";
 import { getCapabilities } from "./api/authorization";
 import { deviceNetworkMonitor } from "./network/networkMonitor";
 import { safeLogger } from "./diagnostics/safeLogger";
@@ -32,6 +33,7 @@ function RuntimeApp({ authenticated, environment, sessions, onExpired }: { authe
   const [capabilities, setCapabilities] = useState<readonly Capability[]>(INITIAL_CAPABILITIES);
   const client = useMemo(() => new ApiClient(environment.apiBaseUrl, sessions, deviceNetworkMonitor, safeLogger, onExpired), [environment.apiBaseUrl, onExpired, sessions]);
   const timekeeping = useMemo(() => createTimekeepingService(client), [client]);
+  const employeeOperations = useMemo(() => createEmployeeOperationsService(client), [client]);
   useEffect(() => { if (authenticated) void getCapabilities(client).then(setCapabilities).catch(() => setCapabilities(["home.view"])); }, [authenticated, client]);
-  return <ErrorBoundary><StatusBar style="auto" /><AppNavigator authenticated={authenticated} capabilities={capabilities} timekeeping={timekeeping} network={deviceNetworkMonitor} /></ErrorBoundary>;
+  return <ErrorBoundary><StatusBar style="auto" /><AppNavigator authenticated={authenticated} capabilities={capabilities} timekeeping={timekeeping} employeeOperations={employeeOperations} network={deviceNetworkMonitor} /></ErrorBoundary>;
 }
