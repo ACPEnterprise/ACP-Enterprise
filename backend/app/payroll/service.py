@@ -22,12 +22,15 @@ from .contracts import (
     AuthorityLifecycle,
     CompanyPayrollPolicyDefinition,
     CompensationType,
+    OvertimeExceptionScope,
     OvertimePolicy,
+    OvertimePremiumTreatment,
     PayrollAdmissionResult,
     PayrollAuthorityError,
     PayrollAuthorizationError,
     PayrollConflictError,
     SalariedTimeRequirement,
+    ScopedOvertimeException,
     canonical_digest,
     evaluate_payroll_admission,
 )
@@ -627,6 +630,38 @@ class PayrollAuthorityService:
                 ),
                 excluded_earning_categories=tuple(
                     str(item) for item in overtime_value["excluded_earning_categories"]
+                ),
+                scoped_exceptions=tuple(
+                    ScopedOvertimeException(
+                        exception_id=str(item["exception_id"]),
+                        scope=OvertimeExceptionScope(str(item["scope"])),
+                        employee_id=(
+                            UUID(str(item["employee_id"]))
+                            if item.get("employee_id") is not None
+                            else None
+                        ),
+                        worker_class_reference=(
+                            str(item["worker_class_reference"])
+                            if item.get("worker_class_reference") is not None
+                            else None
+                        ),
+                        treatment=OvertimePremiumTreatment(str(item["treatment"])),
+                        effective_start=date.fromisoformat(
+                            str(item["effective_start"])
+                        ),
+                        effective_end=(
+                            date.fromisoformat(str(item["effective_end"]))
+                            if item.get("effective_end") is not None
+                            else None
+                        ),
+                        decision_evidence_digest=str(item["decision_evidence_digest"]),
+                        legal_compliance_review_required=bool(
+                            item["legal_compliance_review_required"]
+                        ),
+                        definition_version=str(item["definition_version"]),
+                    )
+                    for item in overtime_value.get("scoped_exceptions", ())
+                    if isinstance(item, dict)
                 ),
             )
         result = CompanyPayrollPolicyDefinition(

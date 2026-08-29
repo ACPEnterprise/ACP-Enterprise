@@ -57,6 +57,16 @@ class CorrectionTiming(StrEnum):
     AFTER_PAYMENT = "after_payment"
 
 
+class OvertimeExceptionScope(StrEnum):
+    EMPLOYEE = "employee"
+    WORKER_CLASS = "worker_class"
+
+
+class OvertimePremiumTreatment(StrEnum):
+    COMPANY_STANDARD = "company_standard"
+    STRAIGHT_TIME_ALL_APPROVED_HOURS = "straight_time_all_approved_hours"
+
+
 class PayrollAdmissionState(StrEnum):
     READY_FOR_CALCULATION = "ready_for_calculation"
     BLOCKED_IDENTITY = "blocked_identity"
@@ -85,9 +95,10 @@ class OvertimePolicy:
     workweek_start_time: str
     included_earning_categories: tuple[str, ...]
     excluded_earning_categories: tuple[str, ...]
+    scoped_exceptions: tuple[ScopedOvertimeException, ...] = ()
 
     def canonical_content(self) -> dict[str, object]:
-        return {
+        content: dict[str, object] = {
             "weekly_threshold_minutes": self.weekly_threshold_minutes,
             "daily_threshold_minutes": self.daily_threshold_minutes,
             "multiplier": str(self.multiplier) if self.multiplier is not None else None,
@@ -102,6 +113,11 @@ class OvertimePolicy:
             "included_earning_categories": self.included_earning_categories,
             "excluded_earning_categories": self.excluded_earning_categories,
         }
+        if self.scoped_exceptions:
+            content["scoped_exceptions"] = tuple(
+                item.canonical_content() for item in self.scoped_exceptions
+            )
+        return content
 
     def validate(self) -> None:
         if self.workweek_start_day not in range(7):
@@ -116,6 +132,154 @@ class OvertimePolicy:
         for multiplier in (self.multiplier, self.double_time_multiplier):
             if multiplier is not None and multiplier <= 0:
                 raise PayrollAuthorityError("overtime multipliers must be positive")
+        for item in self.scoped_exceptions:
+            item.validate()
+
+
+@dataclass(frozen=True)
+class ScopedOvertimeException:
+    exception_id: str
+    scope: OvertimeExceptionScope
+    employee_id: UUID | None
+    worker_class_reference: str | None
+    treatment: OvertimePremiumTreatment
+    effective_start: date
+    effective_end: date | None
+    decision_evidence_digest: str
+    legal_compliance_review_required: bool
+    definition_version: str = "payroll.overtime-exception.v1"
+
+    def canonical_content(self) -> dict[str, object]:
+        return {
+            "definition_version": self.definition_version,
+            "exception_id": self.exception_id,
+            "scope": self.scope.value,
+            "employee_id": str(self.employee_id) if self.employee_id else None,
+            "worker_class_reference": self.worker_class_reference,
+            "treatment": self.treatment.value,
+            "effective_start": self.effective_start.isoformat(),
+            "effective_end": self.effective_end.isoformat()
+            if self.effective_end
+            else None,
+            "decision_evidence_digest": self.decision_evidence_digest,
+            "legal_compliance_review_required": self.legal_compliance_review_required,
+        }
+
+    def validate(self) -> None:
+        if self.definition_version != "payroll.overtime-exception.v1":
+            raise PayrollAuthorityError("unsupported overtime exception version")
+        if (
+            self.effective_end is not None
+            and self.effective_end <= self.effective_start
+        ):
+            raise PayrollAuthorityError("invalid overtime exception interval")
+        if self.scope is OvertimeExceptionScope.EMPLOYEE:
+            if self.employee_id is None or self.worker_class_reference is not None:
+                raise PayrollAuthorityError("Employee exception scope is malformed")
+        elif self.employee_id is not None or not self.worker_class_reference:
+            raise PayrollAuthorityError("worker-class exception scope is malformed")
+        if self.treatment is OvertimePremiumTreatment.COMPANY_STANDARD:
+            raise PayrollAuthorityError(
+                "scoped exception cannot restate Company standard"
+            )
+
+
+@dataclass(frozen=True)
+class ResolvedOvertimeTreatment:
+    source: str
+    treatment: OvertimePremiumTreatment
+    exception_id: str | None
+    weekly_threshold_minutes: int | None
+    premium_multiplier: Decimal | None
+    all_approved_minutes_regular_rate_payable: bool
+    legal_compliance_review_required: bool
+
+
+@dataclass(frozen=True)
+class OvertimeMinuteQualification:
+    approved_hours_worked_minutes: int
+    regular_rate_payable_minutes: int
+    premium_eligible_minutes: int
+    premium_multiplier: Decimal | None
+
+
+def resolve_overtime_treatment(
+    policy: OvertimePolicy,
+    *,
+    as_of: date,
+    employee_id: UUID | None,
+    worker_class_reference: str | None,
+) -> ResolvedOvertimeTreatment:
+    """Resolve an approved scope without asserting statutory eligibility."""
+    policy.validate()
+    applicable = tuple(
+        item
+        for item in policy.scoped_exceptions
+        if item.effective_start <= as_of
+        and (item.effective_end is None or as_of < item.effective_end)
+        and (
+            (
+                item.scope is OvertimeExceptionScope.EMPLOYEE
+                and item.employee_id == employee_id
+            )
+            or (
+                item.scope is OvertimeExceptionScope.WORKER_CLASS
+                and item.worker_class_reference == worker_class_reference
+            )
+        )
+    )
+    employee_matches = tuple(
+        item for item in applicable if item.scope is OvertimeExceptionScope.EMPLOYEE
+    )
+    class_matches = tuple(
+        item for item in applicable if item.scope is OvertimeExceptionScope.WORKER_CLASS
+    )
+    selected = employee_matches or class_matches
+    if len(selected) > 1:
+        raise PayrollConflictError("overtime exception resolution is ambiguous")
+    if selected:
+        exception = selected[0]
+        return ResolvedOvertimeTreatment(
+            source=f"scoped_exception:{exception.scope.value}",
+            treatment=exception.treatment,
+            exception_id=exception.exception_id,
+            weekly_threshold_minutes=None,
+            premium_multiplier=None,
+            all_approved_minutes_regular_rate_payable=True,
+            legal_compliance_review_required=exception.legal_compliance_review_required,
+        )
+    return ResolvedOvertimeTreatment(
+        source="company_policy",
+        treatment=OvertimePremiumTreatment.COMPANY_STANDARD,
+        exception_id=None,
+        weekly_threshold_minutes=policy.weekly_threshold_minutes,
+        premium_multiplier=policy.multiplier,
+        all_approved_minutes_regular_rate_payable=True,
+        legal_compliance_review_required=False,
+    )
+
+
+def qualify_overtime_minutes(
+    approved_hours_worked_minutes: int,
+    treatment: ResolvedOvertimeTreatment,
+) -> OvertimeMinuteQualification:
+    """Qualify synthetic time only; this does not calculate monetary Payroll."""
+    if approved_hours_worked_minutes < 0:
+        raise PayrollAuthorityError("approved minutes cannot be negative")
+    premium_minutes = 0
+    if (
+        treatment.treatment is OvertimePremiumTreatment.COMPANY_STANDARD
+        and treatment.weekly_threshold_minutes is not None
+    ):
+        premium_minutes = max(
+            0, approved_hours_worked_minutes - treatment.weekly_threshold_minutes
+        )
+    return OvertimeMinuteQualification(
+        approved_hours_worked_minutes=approved_hours_worked_minutes,
+        regular_rate_payable_minutes=approved_hours_worked_minutes,
+        premium_eligible_minutes=premium_minutes,
+        premium_multiplier=treatment.premium_multiplier,
+    )
 
 
 @dataclass(frozen=True)
