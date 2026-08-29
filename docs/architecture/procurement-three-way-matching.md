@@ -23,3 +23,7 @@ Evaluation uses a Company-and-bill advisory transaction lock, stable idempotency
 ## Domain boundaries
 
 Evaluation and review emit only safe procurement events. They create no Inventory movement, AP subledger liability, Journal, payment, refund, or Economics fact. A physical return does not fabricate a Vendor credit; its absence remains `return_pending_credit`. Cost is evidence only—no valuation method or Company tolerance policy is selected.
+
+## Vendor operational evidence
+
+The read-only Vendor performance projection is definition-versioned and evaluated at an explicit cutoff over the caller's authorized Company/Branch scope. It reports attributable ordered, accepted, returned, net-accepted, fulfillment-ratio, completed lead-time sample, discrepancy, and matched price-variance evidence. Each Vendor row and report has a deterministic evidence digest. It produces no rating, financial impact, preferred-Vendor policy, or autonomous selection.

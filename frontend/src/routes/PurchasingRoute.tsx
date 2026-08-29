@@ -20,6 +20,7 @@ import { PurchaseOrderChangeControls } from "../components/PurchaseOrderChangeCo
 import { PurchaseOrderDispositionControls } from "../components/PurchaseOrderDispositionControls";
 import { ReplenishmentWorkbench } from "../components/purchasing/ReplenishmentWorkbench";
 import { BranchPurchasingPolicyWorkbench } from "../components/purchasing/BranchPurchasingPolicyWorkbench";
+import { VendorPerformanceEvidence } from "../components/purchasing/VendorPerformanceEvidence";
 
 function changeErrorMessage(error: unknown): string | null {
   if (!error) return null;
@@ -306,6 +307,7 @@ export function PurchasingRoute() {
           }
         }}
       />
+      <VendorPerformanceEvidence />
       <BranchPurchasingPolicyWorkbench
         policies={branchPolicies.data ?? []}
         canManage={canManage}

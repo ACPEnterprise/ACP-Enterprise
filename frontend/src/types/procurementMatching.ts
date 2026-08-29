@@ -64,3 +64,26 @@ export type ResolveProcurementMatchInput = {
   note: string;
   idempotency_key: string;
 };
+
+export type VendorPerformanceReport = {
+  definition_version: number;
+  company_id: string;
+  branch_id: string | null;
+  evaluated_at: string;
+  evidence_digest: string;
+  items: Array<{
+    vendor_id: string;
+    purchase_order_count: number;
+    ordered_quantity: string;
+    accepted_received_quantity: string;
+    returned_quantity: string;
+    net_accepted_quantity: string;
+    fulfillment_ratio: string | null;
+    return_ratio: string | null;
+    completed_lead_time_samples: number;
+    average_lead_time_days: string | null;
+    discrepancy_count: number;
+    price_variance_line_count: number;
+    evidence_digest: string;
+  }>;
+};
