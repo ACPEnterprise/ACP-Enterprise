@@ -6,20 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.platform.audit.models import AuditRecord
 from app.platform.security.metrics import security_metrics
-
-SENSITIVE_KEYS = frozenset(
-    {
-        "api_key",
-        "authorization",
-        "cookie",
-        "credential",
-        "password",
-        "private_key",
-        "secret",
-        "session_cookie",
-        "token",
-    }
-)
+from app.platform.security.safe_output import validate_no_sensitive_fields
 
 
 @dataclass(frozen=True)
@@ -69,18 +56,7 @@ class AuditService:
         if entry.outcome not in {"success", "failure", "denied"}:
             raise ValueError("Audit outcome is invalid")
 
-        def visit(value: object, key: str = "") -> None:
-            normalized = key.lower().replace("-", "_").replace(" ", "_")
-            if any(marker in normalized for marker in SENSITIVE_KEYS):
-                raise ValueError("Sensitive values are prohibited in audit details")
-            if isinstance(value, dict):
-                for child_key, child_value in value.items():
-                    visit(child_value, str(child_key))
-            elif isinstance(value, (list, tuple)):
-                for child in value:
-                    visit(child, key)
-
-        visit(entry.details)
+        validate_no_sensitive_fields(entry.details, boundary="audit details")
 
 
 audit_service = AuditService()

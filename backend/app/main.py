@@ -59,6 +59,7 @@ from app.platform.security.middleware import (
     SecurityHeadersMiddleware,
     TrustedProxyMiddleware,
 )
+from app.platform.security.safe_output import install_sensitive_data_logging_controls
 from app.platform.users.identity_router import (
     administration_router as identity_administration_router,
 )
@@ -86,6 +87,7 @@ logging.basicConfig(
     level=getattr(logging, settings.log_level),
     format="%(asctime)s %(levelname)s %(name)s %(message)s",
 )
+install_sensitive_data_logging_controls()
 
 
 @asynccontextmanager

@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.events.delivery_contracts import delivery_consumers, event_version
 from app.events.models import BusinessEvent, BusinessEventDelivery
 from app.events.schemas import BusinessEventCreate
+from app.platform.security.safe_output import validate_no_sensitive_fields
 
 
 class BusinessEventService:
@@ -16,6 +17,11 @@ class BusinessEventService:
         event_data: BusinessEventCreate,
     ) -> BusinessEvent:
         """Add an event to the current transaction without committing it."""
+        validate_no_sensitive_fields(
+            event_data.payload,
+            boundary="Business Event payload",
+            include_personal=False,
+        )
         now = event_data.occurred_at or datetime.now(timezone.utc)
         event = BusinessEvent(
             id=uuid4(),
