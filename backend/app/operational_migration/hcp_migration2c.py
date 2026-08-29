@@ -819,6 +819,15 @@ class HcpMigration2Orchestrator:
             )
             original_id = repair.original_child_run_id
             master_id = repair.master_run_id
+            repair_generation = repair.repair_generation
+            resume_run = await session.scalar(
+                select(OperationalMigrationRun).where(
+                    OperationalMigrationRun.master_run_id == master_id,
+                    OperationalMigrationRun.master_domain == "operational",
+                    OperationalMigrationRun.repair_generation == repair_generation,
+                )
+            )
+            resume_run_id = resume_run.id if resume_run is not None else None
             repair.status = "running"
         report = await self._operations.run(
             factory,
@@ -829,7 +838,8 @@ class HcpMigration2Orchestrator:
             dry_run=False,
             master_run_id=master_id,
             repair_of_run_id=original_id,
-            repair_generation=1,
+            repair_generation=repair_generation,
+            resume_run_id=resume_run_id,
         )
         async with factory() as session, session.begin():
             repair = await session.get(HcpMigrationChildRepair, repair_id)
@@ -1186,6 +1196,10 @@ class HcpMigration2Orchestrator:
         repair_plan_digest: str,
         immutable_input_digest: str,
         reason_code: str,
+        repair_generation: int = 1,
+        parent_repair_id: UUID | None = None,
+        failed_child_run_id: UUID | None = None,
+        sequence_plan_id: UUID | None = None,
     ) -> HcpMigrationChildRepair:
         await self._active_master(session, context=context, master_run_id=master_run_id)
         return await qualify_child_repair(
@@ -1198,6 +1212,10 @@ class HcpMigration2Orchestrator:
             repair_plan_digest=repair_plan_digest,
             immutable_input_digest=immutable_input_digest,
             reason_code=reason_code,
+            repair_generation=repair_generation,
+            parent_repair_id=parent_repair_id,
+            failed_child_run_id=failed_child_run_id,
+            sequence_plan_id=sequence_plan_id,
         )
 
     async def complete(

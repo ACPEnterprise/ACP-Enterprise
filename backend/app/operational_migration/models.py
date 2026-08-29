@@ -475,6 +475,9 @@ class HcpMigrationChildRepair(Base):
             "status IN ('qualified','running','completed','failed')",
             name="ck_hcp_child_repair_status",
         ),
+        CheckConstraint(
+            "repair_generation >= 1", name="ck_hcp_child_repair_generation"
+        ),
         ForeignKeyConstraint(
             ["master_run_id", "company_id", "branch_id"],
             [
@@ -504,6 +507,12 @@ class HcpMigrationChildRepair(Base):
         UniqueConstraint(
             "id", "company_id", "branch_id", name="uq_hcp_child_repair_scope"
         ),
+        UniqueConstraint(
+            "master_run_id",
+            "domain",
+            "repair_generation",
+            name="uq_hcp_child_repair_generation",
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True)
@@ -517,6 +526,24 @@ class HcpMigrationChildRepair(Base):
         PGUUID(as_uuid=True),
         ForeignKey("operational_migration_runs.id", ondelete="RESTRICT"),
     )
+    parent_repair_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("hcp_migration_child_repairs.id", ondelete="RESTRICT"),
+    )
+    failed_child_run_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("operational_migration_runs.id", ondelete="RESTRICT"),
+    )
+    sequence_plan_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey(
+            "hcp_appointment_sequence_plans.id",
+            name="fk_hcp_child_repair_sequence_plan",
+            ondelete="RESTRICT",
+            use_alter=True,
+        ),
+    )
+    repair_generation: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     domain: Mapped[str] = mapped_column(String(20), nullable=False)
     reason_code: Mapped[str] = mapped_column(String(100), nullable=False)
     original_plan_digest: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -590,6 +617,12 @@ class HcpAppointmentSequencePlan(Base):
     )
     sequencing_digest: Mapped[str] = mapped_column(String(64), nullable=False)
     checkpoint_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    retained_identity_digests: Mapped[list[str]] = mapped_column(
+        JSONB, nullable=False, default=list
+    )
+    remaining_identity_digests: Mapped[list[str]] = mapped_column(
+        JSONB, nullable=False, default=list
+    )
     plan_digest: Mapped[str] = mapped_column(String(64), nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False)
     created_at: Mapped[datetime] = mapped_column(

@@ -188,7 +188,7 @@ def requalify_operational_commands(
         else:
             appointment_exceptions[code] = appointment_exceptions.get(code, 0) + 1
             appointment_outcomes.append((appointment.source_id, code))
-    payload = {
+    payload: dict[str, object] = {
         "version": REPAIR_VERSION,
         "jobs": [asdict(item) for item in admitted],
         "appointments": [asdict(item) for item in admitted_appointments],
@@ -489,6 +489,10 @@ async def qualify_child_repair(
     repair_plan_digest: str,
     immutable_input_digest: str,
     reason_code: str,
+    repair_generation: int = 1,
+    parent_repair_id: UUID | None = None,
+    failed_child_run_id: UUID | None = None,
+    sequence_plan_id: UUID | None = None,
 ) -> HcpMigrationChildRepair:
     master = await session.get(HcpMigrationMasterRun, master_run_id)
     original = await session.get(OperationalMigrationRun, original_child_run_id)
@@ -502,7 +506,7 @@ async def qualify_child_repair(
         or original.branch_id != context.active_branch.id
     ):
         raise ValueError("child repair scope is invalid")
-    payload = {
+    payload: dict[str, object] = {
         "version": REPAIR_VERSION,
         "master": str(master_run_id),
         "original_child": str(original_child_run_id),
@@ -512,6 +516,22 @@ async def qualify_child_repair(
         "immutable_input": immutable_input_digest,
         "reason": reason_code,
     }
+    if repair_generation != 1 or any(
+        value is not None
+        for value in (parent_repair_id, failed_child_run_id, sequence_plan_id)
+    ):
+        payload.update(
+            {
+                "repair_generation": repair_generation,
+                "parent_repair_id": (
+                    str(parent_repair_id) if parent_repair_id else None
+                ),
+                "failed_child_run_id": (
+                    str(failed_child_run_id) if failed_child_run_id else None
+                ),
+                "sequence_plan_id": str(sequence_plan_id) if sequence_plan_id else None,
+            }
+        )
     digest = canonical_sha256(payload)
     existing = await session.scalar(
         select(HcpMigrationChildRepair).where(
@@ -526,7 +546,7 @@ async def qualify_child_repair(
         select(HcpMigrationChildRepair).where(
             HcpMigrationChildRepair.master_run_id == master_run_id,
             HcpMigrationChildRepair.domain == domain,
-            HcpMigrationChildRepair.original_child_run_id == original_child_run_id,
+            HcpMigrationChildRepair.repair_generation == repair_generation,
         )
     )
     if contradictory is not None:
@@ -544,6 +564,10 @@ async def qualify_child_repair(
         immutable_input_digest=immutable_input_digest,
         repair_digest=digest,
         status="qualified",
+        repair_generation=repair_generation,
+        parent_repair_id=parent_repair_id,
+        failed_child_run_id=failed_child_run_id,
+        sequence_plan_id=sequence_plan_id,
     )
     session.add(row)
     await session.flush()

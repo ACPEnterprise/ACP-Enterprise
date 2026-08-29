@@ -26,7 +26,7 @@ from app.customer_migration.models import (
 )
 from app.customers.models import Customer, CustomerContact, ServiceLocation
 from app.financials.models import Estimate, Invoice, Payment
-from app.jobs.models import Job
+from app.jobs.models import Job, JobAppointmentLink
 from app.operational_migration.hcp_hybrid_customer import canonical_sha256
 from app.operational_migration.hcp_migration2_runner import (
     HcpMigration2ExecutionPlan,
@@ -59,10 +59,12 @@ from app.operational_migration.hcp_migration2i import (
     requalify_operational_commands,
 )
 from app.operational_migration.hcp_migration2k1 import (
+    SEQUENCING_CONTRACT_VERSION,
     AppointmentCorrectionCheckpoint,
     AppointmentSequencePlan,
     RetainedAppointmentProjection,
     SupersedingAppointmentRepairPlan,
+    apply_job_sequence_corrections,
     build_appointment_sequence_plan,
     qualify_retained_checkpoint,
 )
@@ -81,11 +83,15 @@ from app.operational_migration.hcp_source4_contracts import (
     PAYMENT_COLUMNS,
 )
 from app.operational_migration.models import (
+    AppointmentSourceIdentity,
+    HcpAppointmentSequenceCorrection,
+    HcpAppointmentSequencePlan,
     HcpMigrationChildAdmission,
     HcpMigrationChildRepair,
     HcpMigrationHold,
     HcpMigrationMasterRun,
     HcpMigrationPlanOutcome,
+    JobSourceIdentity,
     OperationalMigrationRun,
 )
 from app.operational_migration.transformation import (
@@ -111,6 +117,43 @@ class HcpMigration2RepairAuthority:
     operational_child_run_id: UUID
     financial_child_run_id: UUID
     history_child_run_id: UUID
+
+
+@dataclass(frozen=True)
+class HcpMigration2SupersedingRepairAuthority:
+    master_run_id: UUID
+    original_plan_id: UUID
+    original_plan_digest: str
+    generation1_repair_id: UUID
+    generation1_repair_plan_digest: str
+    failed_operational_child_run_id: UUID
+    superseding_plan_id: UUID
+    superseding_plan_digest: str
+    repair_generation: int
+    sequencing_contract_version: str
+    sequence_digest: str
+    checkpoint_digest: str
+    customer_child_run_id: UUID
+    original_operational_child_run_id: UUID
+    original_financial_child_run_id: UUID
+    history_child_run_id: UUID
+    company_id: UUID
+    branch_id: UUID
+    actor_id: UUID
+    package_digest: str
+    builder_version: str
+
+    def generation1_authority(self) -> HcpMigration2RepairAuthority:
+        return HcpMigration2RepairAuthority(
+            master_run_id=self.master_run_id,
+            original_plan_id=self.original_plan_id,
+            original_plan_digest=self.original_plan_digest,
+            repair_plan_digest=self.generation1_repair_plan_digest,
+            customer_child_run_id=self.customer_child_run_id,
+            operational_child_run_id=self.original_operational_child_run_id,
+            financial_child_run_id=self.original_financial_child_run_id,
+            history_child_run_id=self.history_child_run_id,
+        )
 
 
 @dataclass(frozen=True)
@@ -1257,7 +1300,11 @@ class HcpMigration2Application:
         cls,
         masters: Sequence[HcpMigrationMasterRun],
         *,
-        repair_authority: HcpMigration2RepairAuthority | None,
+        repair_authority: (
+            HcpMigration2RepairAuthority
+            | HcpMigration2SupersedingRepairAuthority
+            | None
+        ),
     ) -> RehearsalAdmissionState:
         state = cls.classify_master_admission(masters)
         if (
@@ -1623,8 +1670,11 @@ class HcpMigration2Application:
         original_financial_run_id: UUID,
         repaired_operational_run_id: UUID,
         repaired_financial_run_id: UUID,
+        superseding: SupersedingAppointmentRepairPlan | None = None,
+        generation1_repair_id: UUID | None = None,
+        failed_operational_child_run_id: UUID | None = None,
     ) -> dict[str, object]:
-        return {
+        authority: dict[str, object] = {
             "contract": "hcp-migration-2j-requalified-completion/v1",
             "original_plan_id": str(plan.plan_id),
             "original_plan_digest": plan.plan_digest,
@@ -1640,6 +1690,190 @@ class HcpMigration2Application:
             },
             "requirements_digest": canonical_sha256(asdict(requirements)),
         }
+        if superseding is not None:
+            authority.update(
+                {
+                    "contract": "hcp-migration-2k2-requalified-completion/v1",
+                    "repair_generation": superseding.generation,
+                    "generation1_repair_id": str(generation1_repair_id),
+                    "failed_operational_child_run_id": str(
+                        failed_operational_child_run_id
+                    ),
+                    "superseding_plan_id": str(superseding.id),
+                    "superseding_plan_digest": superseding.digest,
+                    "sequence_digest": superseding.sequencing_digest,
+                    "checkpoint_digest": superseding.checkpoint_digest,
+                }
+            )
+        return authority
+
+    async def _retained_appointment_checkpoint(
+        self,
+        session: AsyncSession,
+        *,
+        authority: HcpMigration2SupersedingRepairAuthority,
+    ) -> tuple[RetainedAppointmentProjection, ...]:
+        rows = tuple(
+            (
+                await session.execute(
+                    select(
+                        JobAppointmentLink.id,
+                        JobAppointmentLink.job_id,
+                        JobAppointmentLink.appointment_id,
+                        AppointmentSourceIdentity.source_appointment_id,
+                        JobAppointmentLink.visit_sequence,
+                    )
+                    .join(
+                        AppointmentSourceIdentity,
+                        AppointmentSourceIdentity.appointment_id
+                        == JobAppointmentLink.appointment_id,
+                    )
+                    .join(
+                        OperationalMigrationRun,
+                        OperationalMigrationRun.id
+                        == AppointmentSourceIdentity.first_run_id,
+                    )
+                    .where(
+                        JobAppointmentLink.company_id == authority.company_id,
+                        JobAppointmentLink.branch_id == authority.branch_id,
+                        AppointmentSourceIdentity.source_system
+                        == "housecall_pro_source4",
+                        OperationalMigrationRun.master_run_id
+                        == authority.master_run_id,
+                    )
+                    .order_by(JobAppointmentLink.id)
+                )
+            ).all()
+        )
+        return tuple(RetainedAppointmentProjection(*row) for row in rows)
+
+    async def _prepare_superseding_repair(
+        self,
+        factory: async_sessionmaker[AsyncSession],
+        *,
+        context: AuthorizationContext,
+        target: NonProductionTarget,
+        authority: HcpMigration2SupersedingRepairAuthority,
+    ) -> tuple[
+        HcpMigration2ExecutionPlan,
+        ChildRepairPlan,
+        HcpMigrationMasterRun,
+        OperationalMigrationRun,
+        OperationalMigrationRun,
+        AppointmentSequencePlan,
+        AppointmentCorrectionCheckpoint,
+        SupersedingAppointmentRepairPlan,
+        tuple[RetainedAppointmentProjection, ...],
+    ]:
+        (
+            plan,
+            repair,
+            master,
+            _customer,
+            original_operational,
+            original_financial,
+            _history,
+        ) = await self._prepare_repair(
+            factory,
+            context=context,
+            target=target,
+            authority=authority.generation1_authority(),
+        )
+        async with factory() as session:
+            generation1 = await session.get(
+                HcpMigrationChildRepair, authority.generation1_repair_id
+            )
+            failed_child = await session.get(
+                OperationalMigrationRun, authority.failed_operational_child_run_id
+            )
+            retained = await self._retained_appointment_checkpoint(
+                session, authority=authority
+            )
+            job_count = int(
+                await session.scalar(
+                    select(func.count())
+                    .select_from(JobSourceIdentity)
+                    .join(
+                        OperationalMigrationRun,
+                        OperationalMigrationRun.id == JobSourceIdentity.first_run_id,
+                    )
+                    .where(
+                        JobSourceIdentity.company_id == authority.company_id,
+                        JobSourceIdentity.branch_id == authority.branch_id,
+                        JobSourceIdentity.source_system == "housecall_pro_source4",
+                        OperationalMigrationRun.master_run_id
+                        == authority.master_run_id,
+                    )
+                )
+                or 0
+            )
+            competing = await session.scalar(
+                select(HcpMigrationChildRepair).where(
+                    HcpMigrationChildRepair.master_run_id == master.id,
+                    HcpMigrationChildRepair.domain == "operational",
+                    HcpMigrationChildRepair.repair_generation
+                    == authority.repair_generation,
+                )
+            )
+        sequence, checkpoint, superseding = (
+            self.builder.build_appointment_correction_plan(
+                master_id=master.id,
+                repair_id=authority.generation1_repair_id,
+                repair=repair,
+                retained=retained,
+                accepted_job_count=job_count,
+            )
+        )
+        if (
+            authority.repair_generation != 2
+            or authority.sequencing_contract_version != SEQUENCING_CONTRACT_VERSION
+            or generation1 is None
+            or generation1.master_run_id != master.id
+            or generation1.repair_plan_digest
+            != authority.generation1_repair_plan_digest
+            or generation1.repair_generation != 1
+            or failed_child is None
+            or failed_child.status != "failed"
+            or failed_child.repair_of_run_id != original_operational.id
+            or failed_child.repair_generation != 1
+            or authority.company_id != context.company.id
+            or context.active_branch is None
+            or authority.branch_id != context.active_branch.id
+            or authority.actor_id != context.user.id
+            or authority.package_digest != plan.master.package_digest
+            or authority.builder_version != plan.builder_version
+            or superseding.id != authority.superseding_plan_id
+            or superseding.digest != authority.superseding_plan_digest
+            or sequence.digest != authority.sequence_digest
+            or checkpoint.digest != authority.checkpoint_digest
+            or checkpoint.retained_count != len(retained)
+            or checkpoint.reused_count + checkpoint.correction_count != len(retained)
+            or (
+                competing is not None
+                and (
+                    competing.repair_plan_digest != superseding.digest
+                    or competing.parent_repair_id != authority.generation1_repair_id
+                    or competing.failed_child_run_id
+                    != authority.failed_operational_child_run_id
+                    or competing.sequence_plan_id != authority.superseding_plan_id
+                )
+            )
+        ):
+            raise SafeEvidenceError(
+                "superseding_repair_authority_conflict",
+                authority.superseding_plan_digest,
+            )
+        return (
+            plan,
+            repair,
+            master,
+            original_operational,
+            original_financial,
+            sequence,
+            checkpoint,
+            superseding,
+            retained,
+        )
 
     async def execute_repair(
         self,
@@ -1874,6 +2108,253 @@ class HcpMigration2Application:
             reconciliation_digest=completed.reconciliation_digest,
         ).safe_output()
 
+    async def execute_superseding_repair(
+        self,
+        factory: async_sessionmaker[AsyncSession],
+        *,
+        context: AuthorizationContext,
+        target: NonProductionTarget,
+        authority: HcpMigration2SupersedingRepairAuthority,
+    ) -> dict[str, object]:
+        """Apply and resume one deterministic generation-2 repair authority."""
+        (
+            plan,
+            repair,
+            master,
+            original_operational,
+            original_financial,
+            sequence,
+            checkpoint,
+            superseding,
+            retained,
+        ) = await self._prepare_superseding_repair(
+            factory, context=context, target=target, authority=authority
+        )
+        async with factory() as session, session.begin():
+            retained_identity_digests = sorted(
+                canonical_sha256(item.source_id) for item in retained
+            )
+            retained_source_ids = frozenset(item.source_id for item in retained)
+            remaining_identity_digests = sorted(
+                canonical_sha256(item.source_id)
+                for item in sequence.appointments
+                if item.source_id not in retained_source_ids
+            )
+            sequence_row = await session.get(HcpAppointmentSequencePlan, superseding.id)
+            if sequence_row is None:
+                sequence_row = HcpAppointmentSequencePlan(
+                    id=superseding.id,
+                    company_id=context.company.id,
+                    branch_id=context.active_branch.id,  # type: ignore[union-attr]
+                    master_run_id=master.id,
+                    repair_id=authority.generation1_repair_id,
+                    generation=superseding.generation,
+                    original_plan_digest=plan.plan_digest,
+                    superseded_repair_plan_digest=repair.repair_plan_digest,
+                    sequencing_contract_version=superseding.sequencing_contract_version,
+                    sequencing_digest=superseding.sequencing_digest,
+                    checkpoint_digest=superseding.checkpoint_digest,
+                    retained_identity_digests=retained_identity_digests,
+                    remaining_identity_digests=remaining_identity_digests,
+                    plan_digest=superseding.digest,
+                    status="qualified",
+                )
+                session.add(sequence_row)
+                await session.flush()
+            elif (
+                sequence_row.master_run_id != master.id
+                or sequence_row.repair_id != authority.generation1_repair_id
+                or sequence_row.plan_digest != superseding.digest
+                or sequence_row.sequencing_digest != sequence.digest
+                or sequence_row.checkpoint_digest != checkpoint.digest
+                or sequence_row.generation != 2
+                or sequence_row.retained_identity_digests != retained_identity_digests
+                or sequence_row.remaining_identity_digests != remaining_identity_digests
+            ):
+                raise SafeEvidenceError(
+                    "superseding_sequence_plan_conflict", superseding.digest
+                )
+        # The durable sequence authority is its own checkpoint. A retry after
+        # this commit reuses it and cannot invent another generation.
+        async with factory() as session, session.begin():
+            sequence_row = await session.get(HcpAppointmentSequencePlan, superseding.id)
+            if sequence_row is None:
+                raise SafeEvidenceError(
+                    "superseding_sequence_plan_checkpoint_missing", superseding.digest
+                )
+            await apply_job_sequence_corrections(
+                session,
+                company_id=context.company.id,
+                branch_id=context.active_branch.id,  # type: ignore[union-attr]
+                sequence_plan_id=sequence_row.id,
+                failed_child_run_id=authority.failed_operational_child_run_id,
+                corrections=checkpoint.corrections,
+            )
+            sequence_row.status = "applied"
+            generation2 = await self.runner.orchestrator.qualify_child_repair(
+                session,
+                context=context,
+                master_run_id=master.id,
+                original_child_run_id=authority.failed_operational_child_run_id,
+                domain="operational",
+                original_plan_digest=repair.repair_plan_digest,
+                repair_plan_digest=superseding.digest,
+                immutable_input_digest=master.input_digest,
+                reason_code="appointment_sequence_superseding_repair",
+                repair_generation=2,
+                parent_repair_id=authority.generation1_repair_id,
+                failed_child_run_id=authority.failed_operational_child_run_id,
+                sequence_plan_id=sequence_row.id,
+            )
+        retained_ids = frozenset(item.source_id for item in retained)
+        remaining_appointments = tuple(
+            item for item in sequence.appointments if item.source_id not in retained_ids
+        )
+        operational_report = await self.runner.orchestrator.run_operational_repair(
+            factory,
+            context=context,
+            repair_id=generation2.id,
+            jobs=(),
+            appointments=remaining_appointments,
+        )
+        operational_expected = ChildOutcomeCounts(
+            source=len(remaining_appointments),
+            accepted=len(remaining_appointments),
+            rejected=0,
+            duplicate=0,
+            unresolved=0,
+        )
+        operational_actual = ChildOutcomeCounts(
+            source=operational_report.source,
+            accepted=operational_report.accepted,
+            rejected=operational_report.rejected,
+            duplicate=operational_report.duplicate,
+            unresolved=operational_report.unresolved,
+        )
+        async with factory() as session, session.begin():
+            operational_admission = await self.runner.orchestrator.admit_child_outcome(
+                session,
+                context=context,
+                master_run_id=master.id,
+                child_run_id=operational_report.run_id,
+                domain="operational",
+                plan_digest=superseding.digest,
+                execution_status="completed",
+                expected=operational_expected,
+                actual=operational_actual,
+                reason_code="generation2_operational_checkpoint_continuation",
+            )
+            if operational_admission.conformance != "PLAN_CONFORMING":
+                raise SafeEvidenceError(
+                    "generation2_operational_nonconforming", superseding.digest
+                )
+            financial_repair = await self.runner.orchestrator.qualify_child_repair(
+                session,
+                context=context,
+                master_run_id=master.id,
+                original_child_run_id=original_financial.id,
+                domain="financial",
+                original_plan_digest=plan.plan_digest,
+                repair_plan_digest=repair.repair_plan_digest,
+                immutable_input_digest=master.input_digest,
+                reason_code="financial_parent_eligibility_requalification",
+            )
+        financial_report = await self.runner.orchestrator.run_financial_repair(
+            factory,
+            context=context,
+            repair_id=financial_repair.id,
+            estimates=repair.financial.estimates,
+            invoices=repair.financial.invoices,
+            payments=repair.financial.payments,
+        )
+        financial_expected = ChildOutcomeCounts(
+            source=(
+                len(repair.financial.estimates)
+                + len(repair.financial.invoices)
+                + len(repair.financial.payments)
+            ),
+            accepted=(
+                len(repair.financial.estimates)
+                + len(repair.financial.invoices)
+                + len(repair.financial.payments)
+            ),
+            rejected=0,
+            duplicate=0,
+            unresolved=0,
+        )
+        financial_actual = ChildOutcomeCounts(
+            source=financial_report.source,
+            accepted=financial_report.accepted,
+            rejected=financial_report.rejected,
+            duplicate=financial_report.duplicate,
+            unresolved=financial_report.unresolved,
+        )
+        requirements = replace(
+            plan.completion,
+            transformed_counts=repair.persisted_counts,
+            persisted_counts=repair.persisted_counts,
+            exception_counts=repair.exception_counts,
+        )
+        requirements.validate_reconciliation(plan.master.source_counts)
+        async with factory() as session, session.begin():
+            financial_admission = await self.runner.orchestrator.admit_child_outcome(
+                session,
+                context=context,
+                master_run_id=master.id,
+                child_run_id=financial_report.run_id,
+                domain="financial",
+                plan_digest=repair.repair_plan_digest,
+                execution_status="completed",
+                expected=financial_expected,
+                actual=financial_actual,
+                reason_code="requalified_financial_child_after_generation2",
+            )
+            if financial_admission.conformance != "PLAN_CONFORMING":
+                raise SafeEvidenceError(
+                    "financial_repair_nonconforming", repair.repair_plan_digest
+                )
+            for hold in plan.holds:
+                await self.runner.orchestrator.persist_held_subject(
+                    session, context=context, master_run_id=master.id, command=hold
+                )
+            for outcome in (*plan.plan_outcomes, *repair.additional_plan_outcomes):
+                await self.runner.orchestrator.persist_plan_outcome(
+                    session,
+                    context=context,
+                    master_run_id=master.id,
+                    command=outcome,
+                )
+            requalified_authority = self._requalified_completion_authority(
+                plan=plan,
+                repair=repair,
+                requirements=requirements,
+                original_operational_run_id=original_operational.id,
+                original_financial_run_id=original_financial.id,
+                repaired_operational_run_id=operational_report.run_id,
+                repaired_financial_run_id=financial_report.run_id,
+                superseding=superseding,
+                generation1_repair_id=authority.generation1_repair_id,
+                failed_operational_child_run_id=authority.failed_operational_child_run_id,
+            )
+            completed = await self.runner.orchestrator.complete(
+                session,
+                context=context,
+                master_run_id=master.id,
+                expected_input_digest=master.input_digest,
+                requirements=requirements,
+                requalified_authority=requalified_authority,
+            )
+        return {
+            "state": "GENERATION2_REPAIR_COMPLETED",
+            "master_run_id": str(completed.id),
+            "master_status": completed.status,
+            "superseding_plan_id": str(superseding.id),
+            "superseding_plan_digest": superseding.digest,
+            "operational_repair_run_id": str(operational_report.run_id),
+            "financial_repair_run_id": str(financial_report.run_id),
+            "reconciliation_digest": completed.reconciliation_digest,
+        }
+
     async def replay_completed(
         self,
         factory: async_sessionmaker[AsyncSession],
@@ -2046,13 +2527,131 @@ class HcpMigration2Application:
             "reconciliation_digest": master.reconciliation_digest,
         }
 
+    async def replay_completed_superseding(
+        self,
+        factory: async_sessionmaker[AsyncSession],
+        *,
+        context: AuthorizationContext,
+        target: NonProductionTarget,
+        authority: HcpMigration2SupersedingRepairAuthority,
+    ) -> dict[str, object]:
+        """Verify a completed generation-2 envelope without reapplying it."""
+        async with factory() as session:
+            await self.runner.orchestrator.qualify_target(
+                session, context=context, target=target
+            )
+            master = await session.get(HcpMigrationMasterRun, authority.master_run_id)
+            sequence_row = await session.get(
+                HcpAppointmentSequencePlan, authority.superseding_plan_id
+            )
+            generation1 = await session.get(
+                HcpMigrationChildRepair, authority.generation1_repair_id
+            )
+            generation2 = await session.scalar(
+                select(HcpMigrationChildRepair).where(
+                    HcpMigrationChildRepair.master_run_id == authority.master_run_id,
+                    HcpMigrationChildRepair.domain == "operational",
+                    HcpMigrationChildRepair.repair_generation == 2,
+                )
+            )
+            correction_count = int(
+                await session.scalar(
+                    select(func.count())
+                    .select_from(HcpAppointmentSequenceCorrection)
+                    .where(
+                        HcpAppointmentSequenceCorrection.sequence_plan_id
+                        == authority.superseding_plan_id
+                    )
+                )
+                or 0
+            )
+            source_ids = tuple(
+                (
+                    await session.scalars(
+                        select(AppointmentSourceIdentity.source_appointment_id)
+                        .join(
+                            OperationalMigrationRun,
+                            OperationalMigrationRun.id
+                            == AppointmentSourceIdentity.first_run_id,
+                        )
+                        .where(
+                            AppointmentSourceIdentity.company_id
+                            == authority.company_id,
+                            AppointmentSourceIdentity.branch_id == authority.branch_id,
+                            AppointmentSourceIdentity.source_system
+                            == "housecall_pro_source4",
+                            OperationalMigrationRun.master_run_id
+                            == authority.master_run_id,
+                        )
+                    )
+                ).all()
+            )
+            admission = await session.scalar(
+                select(HcpMigrationChildAdmission).where(
+                    HcpMigrationChildAdmission.master_run_id == authority.master_run_id,
+                    HcpMigrationChildAdmission.domain == "operational",
+                    HcpMigrationChildAdmission.conformance == "PLAN_CONFORMING",
+                )
+            )
+        if sequence_row is None:
+            raise SafeEvidenceError(
+                "completed_superseding_sequence_plan_missing",
+                authority.superseding_plan_digest,
+            )
+        expected_identities = set(sequence_row.retained_identity_digests) | set(
+            sequence_row.remaining_identity_digests
+        )
+        if (
+            master is None
+            or master.status != "completed"
+            or master.company_id != authority.company_id
+            or master.branch_id != authority.branch_id
+            or master.actor_user_id != authority.actor_id
+            or sequence_row.master_run_id != master.id
+            or sequence_row.plan_digest != authority.superseding_plan_digest
+            or sequence_row.sequencing_digest != authority.sequence_digest
+            or sequence_row.checkpoint_digest != authority.checkpoint_digest
+            or sequence_row.status != "applied"
+            or generation1 is None
+            or generation1.repair_plan_digest
+            != authority.generation1_repair_plan_digest
+            or generation2 is None
+            or generation2.parent_repair_id != generation1.id
+            or generation2.failed_child_run_id
+            != authority.failed_operational_child_run_id
+            or generation2.sequence_plan_id != sequence_row.id
+            or generation2.repair_plan_digest != authority.superseding_plan_digest
+            or generation2.status != "completed"
+            or admission is None
+            or admission.child_run_id != generation2.repair_child_run_id
+            or admission.plan_digest != authority.superseding_plan_digest
+            or correction_count != 6
+            or expected_identities != {canonical_sha256(value) for value in source_ids}
+        ):
+            raise SafeEvidenceError(
+                "completed_superseding_replay_conflict",
+                authority.superseding_plan_digest,
+            )
+        return {
+            "state": "COMPLETED_REPLAY_VERIFIED",
+            "master_run_id": str(master.id),
+            "master_status": master.status,
+            "superseding_plan_id": str(sequence_row.id),
+            "superseding_plan_digest": sequence_row.plan_digest,
+            "reconciliation_digest": master.reconciliation_digest,
+        }
+
     async def execute(
         self,
         factory: async_sessionmaker[AsyncSession],
         *,
         context: AuthorizationContext,
         target: NonProductionTarget,
-        repair_authority: HcpMigration2RepairAuthority | None = None,
+        repair_authority: (
+            HcpMigration2RepairAuthority
+            | HcpMigration2SupersedingRepairAuthority
+            | None
+        ) = None,
     ) -> dict[str, object]:
         async with factory() as session:
             masters = tuple(
@@ -2067,6 +2666,13 @@ class HcpMigration2Application:
                     "completed_master_repair_authority_required",
                     masters[0].input_digest,
                 )
+            if isinstance(repair_authority, HcpMigration2SupersedingRepairAuthority):
+                return await self.replay_completed_superseding(
+                    factory,
+                    context=context,
+                    target=target,
+                    authority=repair_authority,
+                )
             return await self.replay_completed(
                 factory,
                 context=context,
@@ -2078,6 +2684,13 @@ class HcpMigration2Application:
             == RehearsalAdmissionState.MATCHING_INCOMPLETE_MASTER_WITH_ACCEPTED_REPAIR_PLAN
         ):
             assert repair_authority is not None
+            if isinstance(repair_authority, HcpMigration2SupersedingRepairAuthority):
+                return await self.execute_superseding_repair(
+                    factory,
+                    context=context,
+                    target=target,
+                    authority=repair_authority,
+                )
             return await self.execute_repair(
                 factory,
                 context=context,
@@ -2087,7 +2700,13 @@ class HcpMigration2Application:
         if repair_authority is not None:
             raise SafeEvidenceError(
                 "repair_application_state_invalid",
-                repair_authority.repair_plan_digest,
+                (
+                    repair_authority.superseding_plan_digest
+                    if isinstance(
+                        repair_authority, HcpMigration2SupersedingRepairAuthority
+                    )
+                    else repair_authority.repair_plan_digest
+                ),
             )
         plan, summary = await self.prepare(factory, context=context, target=target)
         result = await self.runner.execute(
