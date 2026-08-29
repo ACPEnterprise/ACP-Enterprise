@@ -1,4 +1,4 @@
-import { RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import type { DayAssignment, EmployeeOperationsService } from "../api/employeeOperations";
 import { colors, spacing } from "../design/tokens";
 import type { NetworkMonitor } from "../network/networkMonitor";
@@ -17,9 +17,9 @@ function address(assignment: DayAssignment) {
   return [location.address_line_1, location.address_line_2, `${location.city}, ${location.state} ${location.postal_code}`, location.country === "US" ? null : location.country].filter(Boolean).join(", ");
 }
 
-function AssignmentCard({ assignment, timezone, stale }: { assignment: DayAssignment; timezone: string; stale: boolean }) {
+function AssignmentCard({ assignment, timezone, stale, onOpen }: { assignment: DayAssignment; timezone: string; stale: boolean; onOpen?(): void }) {
   const identity = assignment.job_number ? `Job ${assignment.job_number}` : `Appointment ${assignment.appointment_number}`;
-  return <View accessible accessibilityLabel={`${stale ? "Stale assignment" : "Assignment"}, ${formatWindow(assignment.window_start_at, timezone)} to ${formatWindow(assignment.window_end_at, timezone)}, ${assignment.customer_display_name}, ${address(assignment)}, ${assignment.appointment_status}, ${assignment.assignment_role}`} style={styles.card}>
+  return <Pressable accessibilityRole="button" accessibilityLabel={`Open assignment detail for ${assignment.customer_display_name}, ${stale ? "stale, " : ""}${formatWindow(assignment.window_start_at, timezone)} to ${formatWindow(assignment.window_end_at, timezone)}, ${assignment.appointment_status}, ${assignment.assignment_role}`} disabled={!onOpen} onPress={onOpen} style={styles.card}>
     <Text style={styles.window}>{formatWindow(assignment.window_start_at, timezone)} – {formatWindow(assignment.window_end_at, timezone)}</Text>
     <Text style={styles.customer}>{assignment.customer_display_name}</Text>
     <Text style={styles.address}>{address(assignment)}</Text>
@@ -29,10 +29,10 @@ function AssignmentCard({ assignment, timezone, stale }: { assignment: DayAssign
       <Text>{assignment.appointment_status} · {assignment.assignment_role === "primary" ? "Primary assignment" : "Crew assignment"}</Text>
       {assignment.job_status && <Text>Job status: {assignment.job_status}</Text>}
     </View>
-  </View>;
+  </Pressable>;
 }
 
-export function MyDayScreen({ service, network }: { service: EmployeeOperationsService; network: NetworkMonitor }) {
+export function MyDayScreen({ service, network, onOpenAssignment }: { service: EmployeeOperationsService; network: NetworkMonitor; onOpenAssignment?(assignment: DayAssignment, timezone: string): void }) {
   const myDay = useMyDay(service, network);
   const stale = (myDay.status === "offline" || myDay.status === "error") && myDay.day !== null;
   const message = myDay.status === "not_authorized" ? "My Day is not available for your account."
@@ -47,7 +47,7 @@ export function MyDayScreen({ service, network }: { service: EmployeeOperationsS
     {message && <Text accessibilityRole="alert" style={stale ? styles.stale : styles.message}>{message}</Text>}
     {myDay.status === "loading" && !myDay.day && <Text accessibilityLabel="Loading authoritative assigned work">Loading assigned work…</Text>}
     {myDay.status === "empty" && <View accessible accessibilityLabel="No assigned work today" style={styles.empty}><Text style={styles.emptyTitle}>Your day is clear</Text><Text>No work is currently assigned to you today.</Text></View>}
-    {myDay.day?.assignments.map((assignment) => <AssignmentCard key={assignment.appointment_id} assignment={assignment} timezone={myDay.day!.timezone} stale={stale} />)}
+    {myDay.day?.assignments.map((assignment) => <AssignmentCard key={assignment.appointment_id} assignment={assignment} timezone={myDay.day!.timezone} stale={stale} onOpen={onOpenAssignment ? () => onOpenAssignment(assignment, myDay.day!.timezone) : undefined} />)}
   </ScrollView>;
 }
 
