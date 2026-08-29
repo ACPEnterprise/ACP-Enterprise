@@ -1,0 +1,28 @@
+{
+  "version": "BANK.PLAT.004.v1",
+  "domains": [
+    {"domain":"customers_contacts_locations","class":"B","scope":"company","evidence":"backend/tests/customers/test_service.py"},
+    {"domain":"jobs","class":"B","scope":"company_branch","evidence":"backend/tests/jobs/test_jobs_service.py"},
+    {"domain":"scheduling_appointments","class":"B","scope":"company_branch","evidence":"backend/tests/scheduling/test_scheduling_service.py"},
+    {"domain":"dispatch","class":"B","scope":"company_branch","evidence":"backend/tests/dispatch/test_dispatch_service.py"},
+    {"domain":"workforce_employees","class":"C","scope":"company_branch","evidence":"backend/tests/workforce/test_workforce_capability_persistence.py"},
+    {"domain":"workday_time","class":"C","scope":"company_branch","evidence":"backend/tests/timekeeping/test_workday_authority.py"},
+    {"domain":"inventory","class":"A","scope":"company_branch","evidence":"backend/tests/inventory/test_inventory_adjustments.py"},
+    {"domain":"purchasing","class":"A","scope":"company_branch","evidence":"backend/tests/purchasing/test_purchasing_foundation.py"},
+    {"domain":"price_book","class":"C","scope":"company","evidence":"backend/tests/price_book/test_price_book_service.py"},
+    {"domain":"estimates","class":"A","scope":"company_branch","evidence":"backend/tests/estimates/test_estimate_workflow.py"},
+    {"domain":"invoices_ar","class":"A","scope":"company_branch","evidence":"backend/tests/invoicing/test_invoice_ar.py"},
+    {"domain":"payments","class":"B","scope":"company_branch","evidence":"backend/tests/payments/test_provider_boundary.py"},
+    {"domain":"accounts_payable","class":"A","scope":"company_branch","evidence":"backend/tests/accounts_payable/test_invariants.py"},
+    {"domain":"accounting","class":"A","scope":"company_branch","evidence":"backend/tests/accounting/test_contract.py"},
+    {"domain":"business_events","class":"C","scope":"company","evidence":"backend/tests/customers/test_service.py"},
+    {"domain":"beacon","class":"C","scope":"company","evidence":"backend/tests/beacon/test_lifecycle.py"},
+    {"domain":"business_economics_policy","class":"C","scope":"company","evidence":"backend/tests/business_economics/test_policy_authority.py"},
+    {"domain":"platform_authorization","class":"D","scope":"company_branch","evidence":"backend/tests/platform/test_company_administration.py"},
+    {"domain":"platform_audit_read","class":"D","scope":"company_branch","evidence":"backend/tests/platform/test_enterprise_security_hardening.py"},
+    {"domain":"communications","class":"B","scope":"company","evidence":"backend/tests/communications/test_launch_communications.py"},
+    {"domain":"analytics_read_models","class":"E","scope":"company","evidence":"backend/tests/analytics/test_analytics.py"},
+    {"domain":"hcp_migration_runtime","class":"F","scope":"externally_company_bound","evidence":"backend/tests/operational_migration/test_operational_migration.py","reason":"active OM1 Migration mutation boundary"},
+    {"domain":"engineering_control_worker_factory","class":"F","scope":"platform","evidence":"backend/tests/engineering_control/test_workstream_runtime.py","reason":"active Enterprise mutation boundary"}
+  ]
+}
