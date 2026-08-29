@@ -1,7 +1,7 @@
 """create protected Payroll tax and deduction input authority
 
 Revision ID: w4n6j8l0o275
-Revises: v3m5i7k9n164
+Revises: w4n6i8k0p275
 """
 
 from collections.abc import Sequence
@@ -12,7 +12,7 @@ from sqlalchemy.dialects import postgresql
 from alembic import op
 
 revision: str = "w4n6j8l0o275"
-down_revision: str | Sequence[str] | None = "v3m5i7k9n164"
+down_revision: str | Sequence[str] | None = "w4n6i8k0p275"
 branch_labels = None
 depends_on = None
 
