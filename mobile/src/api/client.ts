@@ -15,6 +15,8 @@ export class ApiClient {
       const response = await fetch(new URL(path, this.baseUrl), { ...init, signal: controller.signal, headers: { Accept: "application/json", "Content-Type": "application/json", "X-ACP-Mobile-Version": "0.1.0", ...(session ? { Authorization: `Bearer ${session.access_token}` } : {}), ...init.headers } });
       if (response.status === 401) { await this.sessions.clear(); this.onExpired(); throw new ApiFailure("unauthenticated", "Session expired"); }
       if (response.status === 403) throw new ApiFailure("forbidden", "Permission denied");
+      if (response.status === 409) throw new ApiFailure("conflict", "Authoritative state changed");
+      if (response.status === 422) throw new ApiFailure("not_ready", "Employee timekeeping is not ready");
       if (!response.ok) { this.logger.error("ACP API request failed", { path, status: response.status }); throw new ApiFailure("unavailable", "Server unavailable"); }
       const result = schema.safeParse(await response.json());
       if (!result.success) throw new ApiFailure("malformed_response", "Malformed server response");

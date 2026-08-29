@@ -20,6 +20,7 @@
     "@react-navigation/native-stack": "^7.3.26",
     "expo": "~54.0.20",
     "expo-constants": "~18.0.10",
+    "expo-crypto": "~15.0.9",
     "expo-linking": "~8.0.8",
     "expo-secure-store": "~15.0.7",
     "expo-status-bar": "~3.0.8",
@@ -47,7 +48,12 @@
   },
   "jest": {
     "preset": "jest-expo",
-    "setupFilesAfterEnv": ["<rootDir>/jest.setup.ts"],
-    "testPathIgnorePatterns": ["/node_modules/", "/dist/"]
+    "setupFilesAfterEnv": [
+      "<rootDir>/jest.setup.ts"
+    ],
+    "testPathIgnorePatterns": [
+      "/node_modules/",
+      "/dist/"
+    ]
   }
 }

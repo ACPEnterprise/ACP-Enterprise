@@ -5,6 +5,7 @@ import { readEnvironment } from "../src/config/environment";
 import { isActivationLink } from "../src/linking/linking";
 import { can } from "../src/permissions/capabilities";
 import type { ProtectedStorage } from "../src/storage/secureStorage";
+import { createTimekeepingService } from "../src/api/timekeeping";
 
 const session: Session = { user: { id: "synthetic-user", display_name: "Test Employee", normalized_email: "test@example.invalid" }, session_id: "synthetic-session", access_token: "secret-access", refresh_token: "secret-refresh", access_token_expires_at: "2099-01-01T00:00:00Z", refresh_token_expires_at: "2099-01-02T00:00:00Z" };
 function memoryStorage(): ProtectedStorage & { values: Map<string, string> } { const values = new Map<string, string>(); return { values, get: async (key) => values.get(key) ?? null, set: async (key, value) => { values.set(key, value); }, remove: async (key) => { values.delete(key); } }; }
@@ -24,4 +25,15 @@ describe("central API client", () => {
   it("returns explicit offline state and performs no request", async () => { const fetchSpy = jest.spyOn(global, "fetch"); const client = new ApiClient("http://localhost:8000", new SessionRepository(memoryStorage()), { isConnected: async () => false, subscribe: () => () => undefined }, logger, jest.fn()); await expect(client.request("/api/v1/test", { safeParse: jest.fn() } as never)).rejects.toMatchObject({ kind: "offline" }); expect(fetchSpy).not.toHaveBeenCalled(); });
   it("clears an unauthorized session and expires safely", async () => { const repo = new SessionRepository(memoryStorage()); await repo.save(session); jest.spyOn(global, "fetch").mockResolvedValue(new Response("{}", { status: 401 })); const expired = jest.fn(); const client = new ApiClient("http://localhost:8000", repo, { isConnected: async () => true, subscribe: () => () => undefined }, logger, expired); await expect(client.request("/api/v1/test", { safeParse: jest.fn() } as never)).rejects.toMatchObject({ kind: "unauthenticated" }); expect(await repo.load()).toBeNull(); expect(expired).toHaveBeenCalled(); });
   it("does not fabricate success for denial or server failure", async () => { for (const [status, kind] of [[403, "forbidden"], [503, "unavailable"]] as const) { jest.spyOn(global, "fetch").mockResolvedValueOnce(new Response("{}", { status })); const client = new ApiClient("http://localhost:8000", new SessionRepository(memoryStorage()), { isConnected: async () => true, subscribe: () => () => undefined }, logger, jest.fn()); await expect(client.request("/api/v1/test", { safeParse: jest.fn() } as never)).rejects.toMatchObject({ kind }); } });
+});
+
+describe("authoritative punch contract", () => {
+  it("sends only action and idempotency identity, never employee or client time", async () => {
+    const request = jest.fn(async (...args: unknown[]) => { void args; return { punch_id: "synthetic", action: "clock_in", occurred_at: "2026-08-28T12:00:00Z", state: { state: "clocked_in", last_action: "clock_in", occurred_at: "2026-08-28T12:00:00Z", server_observed_at: "2026-08-28T12:00:01Z", elapsed_seconds: 1 }, completed_entry: null }; });
+    await createTimekeepingService({ request } as never).punch("clock_in", "opaque-key");
+    const [path, , init] = request.mock.calls[0]! as [string, unknown, { headers: Record<string, string>; body: string }];
+    expect(path).toBe("/api/v1/timekeeping/me/punches");
+    expect(init.headers).toEqual({ "Idempotency-Key": "opaque-key" });
+    expect(JSON.parse(init.body)).toEqual({ action: "clock_in" });
+  });
 });
