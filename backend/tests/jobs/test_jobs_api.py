@@ -1,3 +1,4 @@
+import asyncio
 from collections.abc import AsyncIterator, Callable, Mapping
 from dataclasses import dataclass
 from uuid import uuid4
@@ -5,9 +6,6 @@ from uuid import uuid4
 import httpx
 import pytest
 import pytest_asyncio
-from fastapi import FastAPI
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
-
 from app.database.session import get_database_session
 from app.jobs.router import router
 from app.platform.permissions.authorization import (
@@ -16,6 +14,9 @@ from app.platform.permissions.authorization import (
 )
 from app.platform.permissions.codes import JobPermission
 from app.platform.permissions.dependencies import get_authorization_context
+from fastapi import FastAPI
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
+
 from tests.jobs.test_jobs_persistence import JobsFixture, build_appointment
 from tests.jobs.test_jobs_query import _context_from_fixture
 
@@ -151,6 +152,34 @@ async def test_create_list_detail_and_query_mapping(jobs_api: JobsApiFixture) ->
     detail = await _request(jobs_api.app, "GET", f"/api/v1/jobs/{body['id']}")
     assert detail.status_code == 200
     assert detail.json()["customer"]["id"] == str(jobs_api.fixture.customer_id)
+
+
+@pytest.mark.asyncio
+async def test_job_create_concurrent_replay_and_contradiction(
+    jobs_api: JobsApiFixture,
+) -> None:
+    payload = _payload(jobs_api.fixture)
+    headers = {"Idempotency-Key": "job-mobile-network-retry"}
+    first, replay = await asyncio.gather(
+        _request(jobs_api.app, "POST", "/api/v1/jobs", json=payload, headers=headers),
+        _request(jobs_api.app, "POST", "/api/v1/jobs", json=payload, headers=headers),
+    )
+    assert {first.status_code, replay.status_code} == {201}
+    assert first.json()["id"] == replay.json()["id"]
+    assert {first.headers["Idempotency-Status"], replay.headers["Idempotency-Status"]} == {
+        "executed",
+        "replayed",
+    }
+    conflict = await _request(
+        jobs_api.app,
+        "POST",
+        "/api/v1/jobs",
+        json={**payload, "priority": "low"},
+        headers=headers,
+    )
+    assert conflict.status_code == 409
+    assert conflict.json()["detail"]["code"] == "idempotency_conflict"
+    assert "sql" not in conflict.text.lower()
 
 
 @pytest.mark.asyncio
