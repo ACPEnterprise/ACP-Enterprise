@@ -7,6 +7,7 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
+
 from app.main import app
 from app.platform.contracts.manifest import platform_contract_manifest
 from app.platform.idempotency.contracts import (
