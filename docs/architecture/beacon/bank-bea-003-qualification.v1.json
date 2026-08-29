@@ -1,0 +1,27 @@
+{
+  "schema_version": "1.0",
+  "qualification_id": "BANK.BEA.003.QUALIFICATION.1",
+  "milestone_id": "BANK.BEA.003",
+  "state": "QUALIFIED_AWAITING_OWNER_ACCEPTANCE",
+  "implementation_sha": "cce44ec4227418b7543d05b977b81c9656e21f25",
+  "qualification_base_sha": "bebd3dcb7cdc349ee58f46167e81457f95d4ce9b",
+  "repository_ref": "origin/customer-management-v1",
+  "semantics_digest": "8996c04bb8d79b2a1100f2adbe2f6cb86fea936b1b4afd2990871173d09ccc6c",
+  "definition_count": 21,
+  "freshness_policy_count": 2,
+  "qualification_evidence": [
+    "semantic confidence is evidence-bound and never numeric or probabilistic",
+    "missing policy or timestamp remains unknown and cannot admit a conclusion",
+    "conflicting evidence remains explicit and fail closed",
+    "durable-event and deterministic-as-of evidence is freshness-not-applicable rather than stale",
+    "only two definition-v1 TTL contracts authorize current-state freshness windows",
+    "quality identity is deterministic under reordered evidence and changes with relevant evidence",
+    "Company and active-Branch API scope is explicit and raw evidence is not exposed",
+    "QBO, HCP, Economics, AI, autonomous mutation, Preview, and Production authority remain excluded"
+  ],
+  "successor_gate": {
+    "milestone_id": "BANK.BEA.004",
+    "state": "BLOCKED_PENDING_BANK_BEA_003_OWNER_ACCEPTANCE"
+  },
+  "qualification_fingerprint": "8b6dc2604653dbda37aa5a8c07398410c85ee4eb586fa7577cfef3a3807f6a9f"
+}
