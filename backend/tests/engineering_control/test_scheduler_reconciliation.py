@@ -2,9 +2,6 @@ from pathlib import Path
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from app.core.config import settings
 from app.engineering_control.mobile.roadmaps import (
     EngineeringMilestone,
@@ -19,6 +16,9 @@ from app.engineering_control.scheduler.reconciliation import (
     SchedulerReconciliationService,
 )
 from app.engineering_control.service import EngineeringControlService
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
 from tests.engineering_control.test_engineering_command_service import (
     create_input,
     seed_service_fixture,
@@ -35,7 +35,7 @@ def test_manifest_is_deterministic_complete_and_unique(manifest) -> None:
     assert manifest.scheduler_version == "MMQ.5-2026-08-28.10"
     assert (
         manifest.fingerprint
-        == "1d321312b4ffedcf24a96f9ebb495354c7c46e46c9df3c273fb7c463ce065e2f"
+        == "ca667f00a36b421df7af7f92bcde91581686d12e9cdff48f0f70ac54d70963c6"
     )
     assert (
         manifest.authoritative_repository_head
@@ -73,6 +73,9 @@ def test_manifest_is_deterministic_complete_and_unique(manifest) -> None:
             "PHONE.FACTORY.PROOF.OM1",
             "PHONE.FACTORY.PROOF.OM2",
             "PHONE.FACTORY.PROOF.LAPTOP1",
+            "PHONE.FACTORY.PROOF2.1",
+            "PHONE.FACTORY.PROOF2.2",
+            "PHONE.FACTORY.PROOF2.3",
         }
     assert (
         next(
@@ -310,6 +313,9 @@ def test_start_authority_states_are_fail_closed(manifest) -> None:
         "PHONE.FACTORY.PROOF.OM1",
         "PHONE.FACTORY.PROOF.OM2",
         "PHONE.FACTORY.PROOF.LAPTOP1",
+        "PHONE.FACTORY.PROOF2.1",
+        "PHONE.FACTORY.PROOF2.2",
+        "PHONE.FACTORY.PROOF2.3",
     }
     assert states["PRICEBOOK.1"] == "complete"
     assert states["PHONE-BUG.1"] == "complete"

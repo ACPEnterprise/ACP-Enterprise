@@ -18,3 +18,9 @@ The three non-production qualification packets are:
 Each packet remains owner-Start gated, is bound to one qualified physical
 capacity identity, and requires exact current authoritative/provider-ready
 repository evidence. Logical terminal lanes do not create capacity.
+
+The fresh `PHONE.FACTORY.1P` qualification packets are
+`PHONE.FACTORY.PROOF2.1`, `PHONE.FACTORY.PROOF2.2`, and
+`PHONE.FACTORY.PROOF2.3`. They retain the same inspect/validate-only contract,
+freeze the deployed authoritative head at reconciliation and command admission,
+and create no command, execution, offer, or lease until the owner presses Start.

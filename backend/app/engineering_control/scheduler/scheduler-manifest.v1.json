@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "scheduler_version": "MMQ.5-2026-08-28.10",
-  "fingerprint": "1d321312b4ffedcf24a96f9ebb495354c7c46e46c9df3c273fb7c463ce065e2f",
+  "fingerprint": "ca667f00a36b421df7af7f92bcde91581686d12e9cdff48f0f70ac54d70963c6",
   "authoritative_repository_head": "d63c6f28e926a84cd6322414a5f1591087df69d9",
   "source_documents": [
     "docs/project/master-milestone-queue.md",
@@ -237,6 +237,39 @@
         "boundary_id": "PHONE.FACTORY.PROOF.LAPTOP1", "boundary_version": 1, "fingerprint": "4ff8400fd74f59060706ba8922fb61c1f32cd1263d5823fc56cc5000d3c488af",
         "allowed_paths": ["**"], "forbidden_paths": [".git/**", ".env*", "**/.env*", "backend/alembic/versions/**", "deploy/**", "infrastructure/**", "**/*credential*", "**/*private-key*"],
         "permitted_operations": ["inspect", "validate"], "validation_requirements": ["git diff --check", "frontend tests", "eslint", "typescript"], "capability_profile": "inspect_validate_only"
+      }
+    },
+    {
+      "milestone_code": "PHONE.FACTORY.PROOF2.1", "title": "Fresh Backend and Repository Validation Proof", "workstream": "Phone Factory Qualification", "permanent_capacity_identity": "OM1", "repository_key": "acp-enterprise",
+      "branch_strategy": "Read-only inspection and validation in an isolated controlled workspace; never publish.", "starting_commit_rule": "Require the exact deployed authoritative and provider-ready customer-management-v1 head.", "starting_commit_evidence": {"non_production": true, "requested_code_changes": false, "repository_mutation_allowed": false, "proof_role": "backend_repository_validation", "authoritative_head": "6ced94045c9f71fca35836aa3f4884b3f97de1bb"},
+      "implementation_classification": "TYPE_C", "migration_classification": "none", "shared_contract_classification": "none", "integration_checkpoint": "PHONE.FACTORY.1P", "readiness_state": "ready", "dependency_evidence": [],
+      "owner_checkpoint": "One authenticated phone Start authorizes automatic inspect/validate-only dispatch; no second dispatch action.", "completion_evidence": ["Exact repository identity", "Backend and repository validation evidence", "repository_mutated=false"], "legacy_titles": [],
+      "execution_boundary": {
+        "boundary_id": "PHONE.FACTORY.PROOF2.1", "boundary_version": 1, "fingerprint": "cbb59d4e53b23765431ef9e3416dee204ad56695a4fcbf708eba2a74eaf41843",
+        "allowed_paths": ["backend/app/platform/**", "backend/tests/platform/**", "docs/architecture/**"], "forbidden_paths": [".git/**", ".env*", "**/.env*", "backend/alembic/versions/**", "deploy/**", "infrastructure/**", "**/*credential*", "**/*private-key*"],
+        "permitted_operations": ["inspect", "validate"], "validation_requirements": ["git diff --check"], "capability_profile": "inspect_validate_only"
+      }
+    },
+    {
+      "milestone_code": "PHONE.FACTORY.PROOF2.2", "title": "Fresh Frontend and Platform Validation Proof", "workstream": "Phone Factory Qualification", "permanent_capacity_identity": "OM2", "repository_key": "acp-enterprise",
+      "branch_strategy": "Read-only inspection and validation in an isolated controlled workspace; never publish.", "starting_commit_rule": "Require the exact deployed authoritative and provider-ready customer-management-v1 head.", "starting_commit_evidence": {"non_production": true, "requested_code_changes": false, "repository_mutation_allowed": false, "proof_role": "frontend_platform_validation", "authoritative_head": "6ced94045c9f71fca35836aa3f4884b3f97de1bb"},
+      "implementation_classification": "TYPE_C", "migration_classification": "none", "shared_contract_classification": "none", "integration_checkpoint": "PHONE.FACTORY.1P", "readiness_state": "ready", "dependency_evidence": [],
+      "owner_checkpoint": "One authenticated phone Start authorizes automatic inspect/validate-only dispatch; no second dispatch action.", "completion_evidence": ["Exact repository identity", "Frontend and platform validation evidence", "repository_mutated=false"], "legacy_titles": [],
+      "execution_boundary": {
+        "boundary_id": "PHONE.FACTORY.PROOF2.2", "boundary_version": 1, "fingerprint": "98fd1b583d67eae8ae14f7ac8ebe5f9db86cc1ddfecd5710d13d03ef95202af9",
+        "allowed_paths": ["frontend/src/**", "frontend/package.json", "frontend/package-lock.json", "docs/architecture/**"], "forbidden_paths": [".git/**", ".env*", "**/.env*", "backend/alembic/versions/**", "deploy/**", "infrastructure/**", "**/*credential*", "**/*private-key*"],
+        "permitted_operations": ["inspect", "validate"], "validation_requirements": ["git diff --check"], "capability_profile": "inspect_validate_only"
+      }
+    },
+    {
+      "milestone_code": "PHONE.FACTORY.PROOF2.3", "title": "Fresh Alembic and Readiness Validation Proof", "workstream": "Phone Factory Qualification", "permanent_capacity_identity": "LAP", "repository_key": "acp-enterprise",
+      "branch_strategy": "Read-only inspection and validation in an isolated controlled workspace; never publish.", "starting_commit_rule": "Require the exact deployed authoritative and provider-ready customer-management-v1 head.", "starting_commit_evidence": {"non_production": true, "requested_code_changes": false, "repository_mutation_allowed": false, "proof_role": "alembic_readiness_validation", "authoritative_head": "6ced94045c9f71fca35836aa3f4884b3f97de1bb"},
+      "implementation_classification": "TYPE_C", "migration_classification": "none", "shared_contract_classification": "none", "integration_checkpoint": "PHONE.FACTORY.1P", "readiness_state": "ready", "dependency_evidence": [],
+      "owner_checkpoint": "One authenticated phone Start authorizes automatic inspect/validate-only dispatch; no second dispatch action.", "completion_evidence": ["Exact repository identity", "Alembic and readiness metadata validation evidence", "repository_mutated=false"], "legacy_titles": [],
+      "execution_boundary": {
+        "boundary_id": "PHONE.FACTORY.PROOF2.3", "boundary_version": 1, "fingerprint": "bf3aeb87d63353da8b1cd27eaffa75990218debb0bbf2de2d52f8e344d75f079",
+        "allowed_paths": ["backend/alembic.ini", "backend/alembic/env.py", "backend/app/engineering_control/repository_readiness.py", "backend/app/engineering_control/scheduler/**", "docs/architecture/**"], "forbidden_paths": [".git/**", ".env*", "**/.env*", "backend/alembic/versions/**", "deploy/**", "infrastructure/**", "**/*credential*", "**/*private-key*"],
+        "permitted_operations": ["inspect", "validate"], "validation_requirements": ["git diff --check"], "capability_profile": "inspect_validate_only"
       }
     }
   ]
