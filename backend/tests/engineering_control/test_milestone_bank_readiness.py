@@ -80,6 +80,12 @@ def test_current_projection_reconciles_completion_and_releases_successor() -> No
     assert milestones["BANK.PLAT.005"].completion_commit_sha == (
         "e874fc2aa1c2060fea7706ab7521e779997c2948"
     )
+    assert milestones["BANK.PLAT.006"].current_state == "COMPLETE"
+    assert milestones["BANK.PLAT.006"].canonical_milestone_id == "BANK.PLAT.006"
+    assert milestones["BANK.PLAT.006"].completion_commit_sha == (
+        "f77cc2fb68372ec439271321120b17230f8567b7"
+    )
+    assert milestones["BANK.PLAT.007"].current_state == "EXECUTABLE"
     assert milestones["BANK.PUR.002"].current_state == "COMPLETE"
     assert milestones["BANK.PUR.002"].canonical_milestone_id == "PUR.2"
     assert milestones["BANK.PUR.002"].completion_commit_sha == (
@@ -101,7 +107,6 @@ def test_current_projection_reconciles_completion_and_releases_successor() -> No
         "43e95bc6e394d2deb2e73aaea9155fc4596a035f"
     )
     assert milestones["BANK.PUR.006"].current_state == "EXECUTABLE"
-    assert milestones["BANK.PLAT.006"].current_state == "EXECUTABLE"
     assert "BANK.PUR.001" not in projection.executable_milestone_ids
     assert "BANK.PLAT.001" not in projection.executable_milestone_ids
     assert "BANK.PUR.002" not in projection.executable_milestone_ids
@@ -113,7 +118,8 @@ def test_current_projection_reconciles_completion_and_releases_successor() -> No
     assert "BANK.PLAT.003" not in projection.executable_milestone_ids
     assert "BANK.PLAT.004" not in projection.executable_milestone_ids
     assert "BANK.PLAT.005" not in projection.executable_milestone_ids
-    assert "BANK.PLAT.006" in projection.executable_milestone_ids
+    assert "BANK.PLAT.006" not in projection.executable_milestone_ids
+    assert "BANK.PLAT.007" in projection.executable_milestone_ids
     assert "BANK.BEA.001" in projection.executable_milestone_ids
 
     accounting = milestones["BANK.ACC.001"]
@@ -172,7 +178,6 @@ def test_platform_002_acceptance_changes_only_itself_and_direct_successor() -> N
         "BANK.PLAT.003",
         "BANK.PLAT.004",
         "BANK.PLAT.005",
-        "BANK.PLAT.006",
     }
 
 
@@ -209,7 +214,6 @@ def test_platform_003_acceptance_changes_only_itself_and_direct_successor() -> N
         "BANK.PLAT.003",
         "BANK.PLAT.004",
         "BANK.PLAT.005",
-        "BANK.PLAT.006",
     }
 
 
@@ -244,7 +248,7 @@ def test_platform_004_acceptance_changes_only_itself_and_direct_successor() -> N
         if current[milestone_id].current_state != prior[milestone_id].current_state
     }
 
-    assert changed == {"BANK.PLAT.004", "BANK.PLAT.005", "BANK.PLAT.006"}
+    assert changed == {"BANK.PLAT.004", "BANK.PLAT.005"}
 
 
 def test_platform_005_acceptance_changes_only_itself_and_direct_successor() -> None:
@@ -276,7 +280,36 @@ def test_platform_005_acceptance_changes_only_itself_and_direct_successor() -> N
         if current[milestone_id].current_state != prior[milestone_id].current_state
     }
 
-    assert changed == {"BANK.PLAT.005", "BANK.PLAT.006"}
+    assert changed == {"BANK.PLAT.005"}
+
+
+def test_platform_006_acceptance_changes_only_itself_and_direct_successor() -> None:
+    bank = load_milestone_bank()
+    current = _by_id(load_current_readiness_projection())
+    raw = _authority_raw()
+    evidence = raw["completion_evidence"]
+    assert isinstance(evidence, list)
+    plat_006 = next(
+        item for item in evidence if item["bank_milestone_id"] == "BANK.PLAT.006"
+    )
+    assert plat_006["authoritative_commit_sha"] == (
+        "f77cc2fb68372ec439271321120b17230f8567b7"
+    )
+    assert "no exactly-once external-delivery claim" in plat_006["evidence_reference"]
+    raw["completion_evidence"] = [
+        item for item in evidence if item["bank_milestone_id"] != "BANK.PLAT.006"
+    ]
+    prior = _by_id(
+        evaluate_readiness(bank, ingest_authority_snapshot(_resign(raw), bank))
+    )
+
+    changed = {
+        milestone_id
+        for milestone_id in current
+        if current[milestone_id].current_state != prior[milestone_id].current_state
+    }
+
+    assert changed == {"BANK.PLAT.006", "BANK.PLAT.007"}
 
 
 def test_pur_002_acceptance_changes_only_itself_and_direct_successor() -> None:

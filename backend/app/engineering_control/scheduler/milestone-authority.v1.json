@@ -3,7 +3,7 @@
   "authority_id": "BANK.DF.002.AUTHORITY",
   "bank_id": "BANK.2",
   "bank_fingerprint": "f0af5713c967b92588ed1a82d36f5adc864fc4b235064dad0c5f5d11b158d4b3",
-  "authoritative_repository_sha": "e874fc2aa1c2060fea7706ab7521e779997c2948",
+  "authoritative_repository_sha": "f77cc2fb68372ec439271321120b17230f8567b7",
   "repository_ref": "origin/customer-management-v1",
   "completion_inventory_scope": "ALL_BANK_MILESTONES",
   "completion_evidence": [
@@ -78,6 +78,13 @@
       "evidence_reference": "owner-accepted Business Event delivery and replay hardening: at-least-once acquisition, effectively-once logical application, bounded retry and durable terminal failure, original-event replay, explicit aggregate ordering, Company/Branch isolation, authorized replay, audit lineage, and fail-closed event versions; no exactly-once transport or global-ordering claim"
     },
     {
+      "bank_milestone_id": "BANK.PLAT.006",
+      "canonical_milestone_id": "BANK.PLAT.006",
+      "evidence_kind": "AUTHORITATIVE_INTEGRATION_ACCEPTANCE",
+      "authoritative_commit_sha": "f77cc2fb68372ec439271321120b17230f8567b7",
+      "evidence_reference": "owner-accepted notification outbox resilience hardening: durable tenant-scoped intent and append-only delivery evidence, contradictory-replay rejection, bounded retry and stale-claim recovery, explicit provider ambiguity, safe provider-idempotency handling, authorized suppression/cancellation, Business Event lineage, and no exactly-once external-delivery claim"
+    },
+    {
       "bank_milestone_id": "BANK.DF.001",
       "canonical_milestone_id": "BANK.DF.001",
       "evidence_kind": "AUTHORITATIVE_INTEGRATION_ACCEPTANCE",
@@ -113,5 +120,5 @@
   ],
   "gate_resolutions": [],
   "active_ownership": [],
-  "fingerprint": "aa04e2b347a70d46a00f13a6b71ac97fcda47bf6878fdc86ed8c5c507f54df0c"
+  "fingerprint": "0105c49c0a278f8fbe405458d98d39a2952df869ac77cb6bb0113c5f4573b4c7"
 }
