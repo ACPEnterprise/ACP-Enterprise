@@ -121,7 +121,12 @@ def test_current_projection_reconciles_completion_and_releases_successor() -> No
     assert milestones["BANK.PUR.007"].completion_commit_sha == (
         "8f9eab8355087756648fe12c9d42294b5ee3d2c3"
     )
-    assert milestones["BANK.PUR.008"].current_state == "EXECUTABLE"
+    assert milestones["BANK.PUR.008"].current_state == "COMPLETE"
+    assert milestones["BANK.PUR.008"].canonical_milestone_id == "BANK.PUR.008"
+    assert milestones["BANK.PUR.008"].completion_commit_sha == (
+        "a6af6ed6a9fbee0f12c13e3489012787275bd09d"
+    )
+    assert milestones["BANK.PUR.009"].current_state == "EXECUTABLE"
     assert "BANK.PUR.001" not in projection.executable_milestone_ids
     assert "BANK.PLAT.001" not in projection.executable_milestone_ids
     assert "BANK.PUR.002" not in projection.executable_milestone_ids
@@ -130,7 +135,8 @@ def test_current_projection_reconciles_completion_and_releases_successor() -> No
     assert "BANK.PUR.005" not in projection.executable_milestone_ids
     assert "BANK.PUR.006" not in projection.executable_milestone_ids
     assert "BANK.PUR.007" not in projection.executable_milestone_ids
-    assert "BANK.PUR.008" in projection.executable_milestone_ids
+    assert "BANK.PUR.008" not in projection.executable_milestone_ids
+    assert "BANK.PUR.009" in projection.executable_milestone_ids
     assert "BANK.PLAT.002" not in projection.executable_milestone_ids
     assert "BANK.PLAT.003" not in projection.executable_milestone_ids
     assert "BANK.PLAT.004" not in projection.executable_milestone_ids
@@ -596,7 +602,40 @@ def test_pur_007_acceptance_changes_only_itself_and_direct_successor() -> None:
         if current[milestone_id].current_state != prior[milestone_id].current_state
     }
 
-    assert changed == {"BANK.PUR.007", "BANK.PUR.008"}
+    # PUR.8 has independently accepted evidence, so removing PUR.7 changes
+    # only PUR.7 rather than invalidating completed downstream history.
+    assert changed == {"BANK.PUR.007"}
+
+
+def test_pur_008_acceptance_changes_only_itself_and_direct_successor() -> None:
+    bank = load_milestone_bank()
+    current = _by_id(load_current_readiness_projection())
+    raw = _authority_raw()
+    evidence = raw["completion_evidence"]
+    assert isinstance(evidence, list)
+    pur_008 = next(
+        item for item in evidence if item["bank_milestone_id"] == "BANK.PUR.008"
+    )
+    assert pur_008["authoritative_commit_sha"] == (
+        "a6af6ed6a9fbee0f12c13e3489012787275bd09d"
+    )
+    assert "6877c9af1896931abd9472815357df4966f6ff52c6120057830c96074cfe4af4" in (
+        pur_008["evidence_reference"]
+    )
+    raw["completion_evidence"] = [
+        item for item in evidence if item["bank_milestone_id"] != "BANK.PUR.008"
+    ]
+    prior = _by_id(
+        evaluate_readiness(bank, ingest_authority_snapshot(_resign(raw), bank))
+    )
+
+    changed = {
+        milestone_id
+        for milestone_id in current
+        if current[milestone_id].current_state != prior[milestone_id].current_state
+    }
+
+    assert changed == {"BANK.PUR.008", "BANK.PUR.009"}
 
 
 @pytest.mark.parametrize(
@@ -643,7 +682,7 @@ def test_active_collision_domain_blocks_other_work() -> None:
     raw = _authority_raw()
     raw["active_ownership"] = [
         {
-            "bank_milestone_id": "BANK.PUR.008",
+            "bank_milestone_id": "BANK.PUR.009",
             "owner_reference": "authoritative-reservation:example",
             "collision_domain": "purchasing_vendor_po",
         }
@@ -651,7 +690,7 @@ def test_active_collision_domain_blocks_other_work() -> None:
     authority = ingest_authority_snapshot(_resign(raw), bank)
     milestone = _by_id(evaluate_readiness(bank, authority))["BANK.PLAT.001"]
     assert milestone.current_state == "COMPLETE"
-    purchasing = _by_id(evaluate_readiness(bank, authority))["BANK.PUR.008"]
+    purchasing = _by_id(evaluate_readiness(bank, authority))["BANK.PUR.009"]
     assert purchasing.current_state == "ACTIVE_OWNED"
 
 
