@@ -48,4 +48,3 @@ class CorrelationMiddleware:
             await self.app(scope, receive, send_with_correlation)
         finally:
             request_correlation_id.reset(token)
-

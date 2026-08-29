@@ -22,4 +22,3 @@ def inject_failure(point: FailurePoint, configuration: Settings) -> None:
     if configuration.environment != "test":
         raise RuntimeError("failure injection is prohibited outside test")
     raise InjectedReliabilityFailure(point.value)
-
