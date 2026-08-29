@@ -47,6 +47,7 @@ DOMAIN_REPLAY_EVIDENCE = {
     "purchasing": "tests/purchasing/test_purchasing_foundation.py",
     "scheduling": "tests/scheduling/test_scheduling_api.py",
     "technician": "tests/field_service/test_contract_surface.py",
+    "timekeeping": "tests/timekeeping/test_workday_authority.py",
     "worker_transport": "tests/worker_control/transport/test_worker_transport.py",
 }
 
@@ -97,7 +98,7 @@ def test_required_operations_expose_an_accepted_request_identity() -> None:
         for entry in mutation_coverage_registry.entries
         if entry.classification is MutationClassification.REQUIRED
     )
-    assert len(required) == 88
+    assert len(required) == 90
     for entry in required:
         operation = operations[entry.identity]
         schema = (
@@ -106,9 +107,15 @@ def test_required_operations_expose_an_accepted_request_identity() -> None:
             .get("application/json", {})
             .get("schema", {})
         )
-        assert _schema_properties(schema, components) & IDEMPOTENCY_FIELDS, (
-            entry.identity
-        )
+        header_names = {
+            parameter.get("name")
+            for parameter in operation.get("parameters", [])
+            if parameter.get("in") == "header"
+        }
+        assert (
+            _schema_properties(schema, components) & IDEMPOTENCY_FIELDS
+            or "Idempotency-Key" in header_names
+        ), entry.identity
 
 
 def test_required_domains_have_replay_and_conflict_evidence() -> None:
