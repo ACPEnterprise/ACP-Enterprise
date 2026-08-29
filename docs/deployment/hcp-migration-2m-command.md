@@ -3,10 +3,13 @@
 The repository-owned executable boundary is:
 
 ```text
+python -m app.operational_migration.hcp_migration2_command prepare-authority --output /protected/runtime/hcp-migration-2-authority.json
 python -m app.operational_migration.hcp_migration2_command MODE --authority-file /protected/path/hcp-migration-2-authority.json
 ```
 
 `MODE` is `qualify`, `execute`, or `replay`. `execute` and `replay` additionally require `--authorize-execution`. Qualification is read-only. Execution invokes `HcpMigration2Application.execute()` exactly once; replay uses the same call and the application's completed-master path.
+
+`prepare-authority` derives the sealed authority from the protected SOURCE.4 package and existing retained master/repair records. It atomically creates a `0600` file beneath a `0700` directory, reuses identical authority, and rejects contradictory authority. Operators do not supply internal IDs or digests.
 
 The authority JSON must be stored outside Git with mode `0600`. It contains only protected path references and sealed IDs/digests: repository SHA, SOURCE.4/package and owner-evidence paths, master/original-plan/repair/sequence/checkpoint authorities, Financial successor authority, Company, Branch, actor, builder version, and expected Alembic head. Never place source rows, credentials, tokens, customer data, or financial payloads in this file or on the command line.
 
