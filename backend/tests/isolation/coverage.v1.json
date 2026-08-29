@@ -17,7 +17,7 @@
     {"domain":"Dispatch","classification":"company_scoped","layers":["service","relationship"],"evidence":[{"path":"tests/dispatch/test_dispatch_service.py","test":"test_overlapping_assignment_and_company_scope_fail_closed"}]},
     {"domain":"Workforce/Employees","classification":"branch_scoped","layers":["persistence","relationship"],"evidence":[{"path":"tests/workforce/test_workforce_capability_persistence.py","test":"test_cross_company_catalog_associations_are_rejected"},{"path":"tests/workforce/test_workforce_capability_persistence.py","test":"test_branch_eligibility_enforces_company_and_dates"}]},
     {"domain":"Inventory","classification":"branch_scoped","layers":["repository","service","list","relationship","business_event"],"evidence":[{"path":"tests/inventory/test_inventory_application.py","test":"test_repository_lists_do_not_leak_other_branches"},{"path":"tests/inventory/test_inventory_adjustments.py","test":"test_adjustment_validation_and_company_branch_isolation"}]},
-    {"domain":"Purchasing","classification":"branch_scoped","layers":["service","relationship","concurrency"],"evidence":[{"path":"tests/purchasing/test_purchasing_foundation.py","test":"test_branch_isolation_cancel_and_manual_nonreceipt_close"}]},
+    {"domain":"Purchasing","classification":"branch_scoped","layers":["service","relationship","concurrency"],"evidence":[{"path":"tests/purchasing/test_purchasing_foundation.py","test":"test_branch_isolation_and_explicit_nonreceipt_cancellation"}]},
     {"domain":"Price Book","classification":"branch_scoped","layers":["service","relationship"],"evidence":[{"path":"tests/price_book/test_price_book_service.py","test":"test_branch_and_company_scope_fail_closed"}]},
     {"domain":"Estimates","classification":"branch_scoped","layers":["service","relationship","identifier","business_event"],"evidence":[{"path":"tests/estimates/test_estimate_foundation.py","test":"test_company_and_branch_snapshot_scope_fail_closed"},{"path":"tests/estimates/test_estimate_foundation.py","test":"test_number_allocation_is_company_scoped"}]},
     {"domain":"Invoices/AR","classification":"branch_scoped","layers":["service","relationship","identifier"],"evidence":[{"path":"tests/invoicing/test_invoice_ar.py","test":"test_company_branch_and_source_linkage_are_closed"}]},
@@ -37,5 +37,5 @@
     "Platform-global technical identities are not tenant resources.",
     "Payments and AP remain limited to their accepted Day-1 runtime contracts."
   ],
-  "fingerprint": "05c9724d62222157b1cb732839a6710ca409d9878179aa82f25cdae818e0cb9b"
+  "fingerprint": "43f3d0cfaa98462e63d4cbd699671d49cb8c5391b769dbba0c61ef5a3fc507bb"
 }
