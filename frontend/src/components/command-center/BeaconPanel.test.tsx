@@ -64,19 +64,27 @@ const signal: BeaconSignal = {
   ],
   recommended_action: "Review the authoritative invoice records.",
   created_at: "2026-07-28T16:00:00Z",
-  expires_at: "2026-07-28T16:15:00Z",
+  expires_at: "2099-07-28T16:15:00Z",
   expiration_policy: "replace_on_next_evaluation",
   escalation: null,
+  workflow: null,
 };
 
 const panelProps = {
   snoozedSignals: [],
   canReview: false,
+  canOwn: false,
+  canAssign: false,
+  currentUserId: "user-a",
+  evaluatedAt: "2026-07-28T16:00:00Z",
   loading: false,
   error: false,
   lifecycleError: false,
   lifecyclePending: false,
+  workflowError: false,
+  workflowPending: false,
   onLifecycleAction: vi.fn(),
+  onWorkflowAction: vi.fn(),
   retry: vi.fn(),
 };
 
@@ -155,11 +163,13 @@ describe("BeaconPanel", () => {
 
   it("shows lifecycle controls only with review permission", () => {
     const onLifecycleAction = vi.fn();
+    const onWorkflowAction = vi.fn();
     const { rerender } = render(
       <BeaconPanel
         {...panelProps}
         signals={[signal]}
         onLifecycleAction={onLifecycleAction}
+        onWorkflowAction={onWorkflowAction}
       />,
     );
     expect(
@@ -172,14 +182,68 @@ describe("BeaconPanel", () => {
         canReview
         signals={[signal]}
         onLifecycleAction={onLifecycleAction}
+        onWorkflowAction={onWorkflowAction}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: "Acknowledge" }));
-    expect(onLifecycleAction).toHaveBeenCalledWith(
+    fireEvent.click(
+      screen.getByRole("button", { name: "Acknowledge responsibility" }),
+    );
+    expect(onWorkflowAction).toHaveBeenCalledWith(
       signal,
       "acknowledge",
+      undefined,
+      undefined,
     );
     expect(screen.queryByRole("button", { name: /dismiss/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /resolve/i })).not.toBeInTheDocument();
+  });
+
+  it("shows ownership state and gates take, release, and transfer controls", () => {
+    const onWorkflowAction = vi.fn();
+    const { rerender } = render(
+      <BeaconPanel
+        {...panelProps}
+        canOwn
+        signals={[signal]}
+        onWorkflowAction={onWorkflowAction}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Take ownership" }));
+    expect(onWorkflowAction).toHaveBeenCalledWith(signal, "claim", 0);
+
+    const owned = {
+      ...signal,
+      workflow: {
+        company_id: "company-a",
+        branch_id: "branch-a",
+        condition_key: signal.condition_key,
+        signal_id: signal.id,
+        definition_id: signal.definition_id,
+        definition_version: 1,
+        evidence_digest: signal.evidence_digest,
+        workflow_version: 2,
+        acknowledged: true,
+        acknowledged_by_user_id: "user-a",
+        acknowledged_at: "2026-07-28T16:05:00Z",
+        owner_user_id: "user-a",
+        owned_since: "2026-07-28T16:06:00Z",
+        last_action: "claim" as const,
+        last_actor_user_id: "user-a",
+        updated_at: "2026-07-28T16:06:00Z",
+      },
+    };
+    rerender(
+      <BeaconPanel
+        {...panelProps}
+        canAssign
+        canOwn
+        signals={[owned]}
+        onWorkflowAction={onWorkflowAction}
+      />,
+    );
+    expect(screen.getByText(/Owner user-a \(you\)/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Release ownership" }));
+    expect(onWorkflowAction).toHaveBeenCalledWith(owned, "release", 2);
+    expect(screen.getByRole("button", { name: "Transfer ownership" })).toBeDisabled();
   });
 });
