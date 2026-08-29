@@ -892,7 +892,7 @@ class PayrollPaymentExecutionEvidenceRecord(Base):
 class PayrollAccountingPolicyVersion(Base):
     __tablename__ = "payroll_accounting_policy_versions"
     __table_args__ = (
-        CheckConstraint("recognition_event IN ('payroll_accrual','payment_release','wage_settlement','tax_remittance','deduction_remittance','return_adjustment')", name="ck_payroll_accounting_policy_event"),
+        CheckConstraint("recognition_event IN ('payroll_accrual','payment_release','wage_settlement','tax_remittance','deduction_remittance','return_adjustment','adjustment_applied')", name="ck_payroll_accounting_policy_event"),
         CheckConstraint("lifecycle IN ('draft','approved','superseded','retired')", name="ck_payroll_accounting_policy_lifecycle"),
         CheckConstraint("effective_end IS NULL OR effective_end > effective_start", name="ck_payroll_accounting_policy_interval"),
         UniqueConstraint("company_id", "recognition_event", "policy_version", name="uq_payroll_accounting_policy_version"),
@@ -919,7 +919,7 @@ class PayrollAccountingPolicyVersion(Base):
 class PayrollAccountingMappingVersion(Base):
     __tablename__ = "payroll_accounting_mapping_versions"
     __table_args__ = (
-        CheckConstraint("recognition_event IN ('payroll_accrual','payment_release','wage_settlement','tax_remittance','deduction_remittance','return_adjustment')", name="ck_payroll_accounting_mapping_event"),
+        CheckConstraint("recognition_event IN ('payroll_accrual','payment_release','wage_settlement','tax_remittance','deduction_remittance','return_adjustment','adjustment_applied')", name="ck_payroll_accounting_mapping_event"),
         CheckConstraint("posting_side IN ('debit','credit')", name="ck_payroll_accounting_mapping_side"),
         CheckConstraint("lifecycle IN ('draft','approved','superseded','retired')", name="ck_payroll_accounting_mapping_lifecycle"),
         CheckConstraint("effective_end IS NULL OR effective_end > effective_start", name="ck_payroll_accounting_mapping_interval"),
@@ -945,6 +945,39 @@ class PayrollAccountingMappingVersion(Base):
     approved_by_user_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"))
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     supersedes_mapping_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), ForeignKey("payroll_accounting_mapping_versions.id", ondelete="RESTRICT"), unique=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+
+class PayrollAccountingConsumptionRecord(Base):
+    """Append-only bridge from a Payroll economic event to native Accounting."""
+
+    __tablename__ = "payroll_accounting_consumptions"
+    __table_args__ = (
+        CheckConstraint(
+            "lifecycle IN ('prepared','posted','reconciliation_required','superseded','reversed')",
+            name="ck_payroll_accounting_consumption_lifecycle",
+        ),
+        UniqueConstraint("company_id", "candidate_identity", name="uq_payroll_accounting_consumption_identity"),
+        UniqueConstraint("company_id", "recognition_event", "source_event_id", name="uq_payroll_accounting_source_consumption"),
+        UniqueConstraint("company_id", "journal_id", name="uq_payroll_accounting_consumption_journal"),
+        Index("ix_payroll_accounting_consumption_source", "company_id", "source_type", "source_id"),
+    )
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("companies.id", ondelete="RESTRICT"), nullable=False)
+    recognition_event: Mapped[str] = mapped_column(String(32), nullable=False)
+    source_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    source_event_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    source_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    fact_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    candidate_identity: Mapped[str] = mapped_column(String(128), nullable=False)
+    amount: Mapped[Decimal] = mapped_column(Numeric(20, 4), nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    lifecycle: Mapped[str] = mapped_column(String(32), nullable=False)
+    journal_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), ForeignKey("accounting_journals.id", ondelete="RESTRICT"))
+    journal_version: Mapped[int | None] = mapped_column(Integer)
+    prepared_by_user_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    posted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
 
 
