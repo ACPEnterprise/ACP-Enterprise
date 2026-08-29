@@ -14,11 +14,11 @@ without reconciling the registry fails the Platform meta-test.
 
 | Classification | Current count | Meaning |
 |---|---:|---|
-| `IDEMPOTENCY_REQUIRED` | 88 | Existing domain request identity and durable receipt/replay contract |
+| `IDEMPOTENCY_REQUIRED` | 90 | Existing domain request identity and durable receipt/replay contract |
 | `NATURALLY_IDEMPOTENT` | 58 | Resource target state or optimistic aggregate version is stronger than a separate key |
 | `IMMUTABLE_APPEND_ONLY` | 7 | Accepted deterministic evidence/receipt identity owns replay |
 | `NON_MUTATING_READ_ONLY` | 5 | Query or qualification operation expressed as POST |
-| `EXPLICIT_EXEMPTION` | 73 | Compatibility boundary lacking a proven cross-network receipt; no compliance is claimed |
+| `EXPLICIT_EXEMPTION` | 71 | Compatibility boundary lacking a proven cross-network receipt; no compliance is claimed |
 
 An exemption is not evidence of idempotency. It prevents a legacy API from
 being silently described as safe and identifies where a separately bounded
