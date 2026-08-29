@@ -96,7 +96,11 @@ identity. Possession of a key does not bypass current
 `PurchasingPermission.APPROVE` authorization.
 
 The qualified coverage fingerprint is
-`332a6edbc0f97d9d37e0031b76fc058e52b2e91c2fdd1fc4af00c1277a9c9f8a`.
+`bf8282b9b1e88aa2f3de6d07e67866c3b5679d97ea972c7ab8971d7e0e2fc709`.
+The current-head Payroll pay-statement artifact mutation is classified as
+immutable append-only replay-safe: deterministic statement, renderer, template,
+and artifact evidence converges under Company-scoped advisory locking, with
+concrete replay coverage in the Payroll experience suite.
 
 PLATFORM.RELIABILITY.IDEMPOTENCY.1 adds an optional transactional receipt path
 for Customer and Job creation. Headerless calls remain explicit compatibility
