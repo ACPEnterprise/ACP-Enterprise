@@ -886,3 +886,62 @@ class PayrollPaymentExecutionEvidenceRecord(Base):
     evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
     recorded_by_user_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
     occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class PayrollAccountingPolicyVersion(Base):
+    __tablename__ = "payroll_accounting_policy_versions"
+    __table_args__ = (
+        CheckConstraint("recognition_event IN ('payroll_accrual','payment_release','wage_settlement','tax_remittance','deduction_remittance','return_adjustment')", name="ck_payroll_accounting_policy_event"),
+        CheckConstraint("lifecycle IN ('draft','approved','superseded','retired')", name="ck_payroll_accounting_policy_lifecycle"),
+        CheckConstraint("effective_end IS NULL OR effective_end > effective_start", name="ck_payroll_accounting_policy_interval"),
+        UniqueConstraint("company_id", "recognition_event", "policy_version", name="uq_payroll_accounting_policy_version"),
+        Index("ix_payroll_accounting_policy_resolution", "company_id", "recognition_event", "lifecycle", "effective_start", "effective_end"),
+    )
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("companies.id", ondelete="RESTRICT"), nullable=False)
+    policy_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    definition_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    recognition_event: Mapped[str] = mapped_column(String(32), nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    effective_start: Mapped[date] = mapped_column(Date, nullable=False)
+    effective_end: Mapped[date | None] = mapped_column(Date)
+    lifecycle: Mapped[str] = mapped_column(String(16), nullable=False)
+    decision_evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    policy_digest: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    created_by_user_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    approved_by_user_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"))
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    supersedes_policy_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), ForeignKey("payroll_accounting_policy_versions.id", ondelete="RESTRICT"), unique=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+
+class PayrollAccountingMappingVersion(Base):
+    __tablename__ = "payroll_accounting_mapping_versions"
+    __table_args__ = (
+        CheckConstraint("recognition_event IN ('payroll_accrual','payment_release','wage_settlement','tax_remittance','deduction_remittance','return_adjustment')", name="ck_payroll_accounting_mapping_event"),
+        CheckConstraint("posting_side IN ('debit','credit')", name="ck_payroll_accounting_mapping_side"),
+        CheckConstraint("lifecycle IN ('draft','approved','superseded','retired')", name="ck_payroll_accounting_mapping_lifecycle"),
+        CheckConstraint("effective_end IS NULL OR effective_end > effective_start", name="ck_payroll_accounting_mapping_interval"),
+        ForeignKeyConstraint(["company_id", "account_id"], ["accounting_accounts.company_id", "accounting_accounts.id"], ondelete="RESTRICT"),
+        UniqueConstraint("company_id", "recognition_event", "component", "mapping_version", name="uq_payroll_accounting_mapping_version"),
+        Index("ix_payroll_accounting_mapping_resolution", "company_id", "recognition_event", "component", "lifecycle", "effective_start", "effective_end"),
+    )
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    mapping_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    definition_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    recognition_event: Mapped[str] = mapped_column(String(32), nullable=False)
+    component: Mapped[str] = mapped_column(String(48), nullable=False)
+    posting_side: Mapped[str] = mapped_column(String(8), nullable=False)
+    account_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    effective_start: Mapped[date] = mapped_column(Date, nullable=False)
+    effective_end: Mapped[date | None] = mapped_column(Date)
+    lifecycle: Mapped[str] = mapped_column(String(16), nullable=False)
+    approval_evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    mapping_digest: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    created_by_user_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    approved_by_user_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"))
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    supersedes_mapping_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), ForeignKey("payroll_accounting_mapping_versions.id", ondelete="RESTRICT"), unique=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)

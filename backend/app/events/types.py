@@ -63,6 +63,11 @@ class EventType(str, Enum):
     PAYROLL_PAYMENT_EXECUTION_ACKNOWLEDGED = "payroll.payment_execution_acknowledged"
     PAYROLL_PAYMENT_SETTLEMENT_RECORDED = "payroll.payment_settlement_recorded"
     PAYROLL_PAYMENT_EXECUTION_FAILED = "payroll.payment_execution_failed"
+    PAYROLL_ACCOUNTING_POLICY_CREATED = "payroll.accounting_policy_created"
+    PAYROLL_ACCOUNTING_POLICY_APPROVED = "payroll.accounting_policy_approved"
+    PAYROLL_ACCOUNTING_MAPPING_CREATED = "payroll.accounting_mapping_created"
+    PAYROLL_ACCOUNTING_MAPPING_APPROVED = "payroll.accounting_mapping_approved"
+    PAYROLL_ACCOUNTING_FACT_PREPARED = "payroll.accounting_fact_prepared"
 
     # Accounts Payable
     ACCOUNTS_PAYABLE_VENDOR_CREATED = "accounts_payable.vendor_created"
