@@ -711,3 +711,76 @@ class PurchaseOrderDispositionEvidence(Base):
     occurred_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
     )
+
+
+class ReplenishmentDecisionEvidence(Base):
+    __tablename__ = "purchasing_replenishment_decisions"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "branch_id"],
+            ["branches.company_id", "branches.id"],
+            name="fk_purchasing_replenishment_branch",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "vendor_id"],
+            [
+                "purchasing_operational_vendors.company_id",
+                "purchasing_operational_vendors.id",
+            ],
+            name="fk_purchasing_replenishment_vendor",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "inventory_item_id"],
+            ["inventory_items.company_id", "inventory_items.id"],
+            name="fk_purchasing_replenishment_item",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "purchase_order_id"],
+            ["purchasing_purchase_orders.company_id", "purchasing_purchase_orders.id"],
+            name="fk_purchasing_replenishment_po",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "decision IN ('approved','rejected')",
+            name="ck_purchasing_replenishment_decision",
+        ),
+        UniqueConstraint(
+            "company_id", "idempotency_key", name="uq_purchasing_replenishment_key"
+        ),
+        UniqueConstraint(
+            "company_id",
+            "recommendation_digest",
+            name="uq_purchasing_replenishment_recommendation",
+        ),
+    )
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    inventory_item_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), nullable=False
+    )
+    recommendation_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    recommendation_snapshot: Mapped[dict[str, object]] = mapped_column(
+        JSONB, nullable=False
+    )
+    approval_evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    decision: Mapped[str] = mapped_column(String(20), nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    approved_quantity: Mapped[Decimal | None] = mapped_column(Numeric(18, 6))
+    vendor_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    purchase_order_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    actor_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    payload_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    decided_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )

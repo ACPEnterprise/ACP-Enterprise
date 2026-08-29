@@ -34,6 +34,7 @@ from app.purchasing.errors import (
     PurchasingValidation,
 )
 from app.purchasing.models import (
+    PurchaseOrder,
     PurchaseOrderDiscrepancy,
     PurchaseOrderDispositionEvidence,
     PurchaseOrderIssuanceEvidence,
@@ -50,6 +51,7 @@ from app.purchasing.schemas import (
     PurchaseReturnTransitionCommand,
     ReceiptLineCommand,
     RecordReceiptCommand,
+    ReplenishmentDecisionCommand,
     ReplenishmentTarget,
     ReplenishmentWorkbenchRequest,
     RequestPurchaseOrderChangeCommand,
@@ -160,6 +162,121 @@ async def test_replenishment_workbench_is_deterministic_isolated_and_read_only(
                             ),
                         )
                     }
+                ),
+            )
+
+
+@pytest.mark.asyncio
+async def test_replenishment_approval_is_stale_safe_idempotent_and_links_one_po(
+    purchasing_fixture,
+) -> None:
+    factory, company, _, branch, _, preparer, approver = purchasing_fixture
+    service = PurchasingService()
+    async with factory() as session:
+        vendor = await service.create_vendor(
+            session,
+            context=preparer,
+            payload=VendorCreate(
+                code=f"RV{uuid4().hex[:6]}",
+                display_name="Approved replenishment vendor",
+                idempotency_key=f"vendor-{uuid4()}",
+            ),
+        )
+    async with factory() as session, session.begin():
+        item = InventoryItem(
+            company_id=company.id,
+            code=f"RA-{uuid4().hex[:8].upper()}",
+            name="Approved item",
+            stocking_unit="each",
+            status="active",
+            created_by_user_id=preparer.user.id,
+            updated_by_user_id=preparer.user.id,
+        )
+        location = StockLocation(
+            company_id=company.id,
+            branch_id=branch.id,
+            code=f"RA{uuid4().hex[:7].upper()}",
+            name="Approval shelf",
+            location_type="warehouse",
+            status="active",
+            created_by_user_id=preparer.user.id,
+            updated_by_user_id=preparer.user.id,
+        )
+        session.add_all([item, location])
+        await session.flush()
+        session.add(
+            InventoryQuantity(
+                company_id=company.id,
+                branch_id=branch.id,
+                item_id=item.id,
+                location_id=location.id,
+                on_hand=Decimal(2),
+                reserved=Decimal(0),
+            )
+        )
+    request = ReplenishmentWorkbenchRequest(
+        as_of=datetime(2026, 8, 28, 23, tzinfo=timezone.utc),
+        targets=(
+            ReplenishmentTarget(
+                branch_id=branch.id,
+                inventory_item_id=item.id,
+                target_available_quantity=Decimal(7),
+            ),
+        ),
+    )
+    async with factory() as session:
+        recommendation = (
+            await service.replenishment_workbench(
+                session, context=approver, payload=request
+            )
+        ).recommendations[0]
+    decision = ReplenishmentDecisionCommand(
+        branch_id=branch.id,
+        inventory_item_id=item.id,
+        recommendation_as_of=request.as_of,
+        target_available_quantity=Decimal(7),
+        recommendation_digest=recommendation.evidence_digest,
+        decision="approved",
+        reason="Operator approved current evidence",
+        approved_quantity=Decimal(5),
+        vendor_id=vendor.id,
+        po_number=f"REP-{uuid4().hex[:8]}",
+        currency="USD",
+        unit_cost=Decimal("3.25"),
+        idempotency_key=f"approve-{uuid4()}",
+    )
+    async with factory() as session:
+        first = await service.decide_replenishment(
+            session, context=approver, payload=decision
+        )
+    async with factory() as session:
+        replay = await service.decide_replenishment(
+            session, context=approver, payload=decision
+        )
+        assert replay.id == first.id
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(PurchaseOrder)
+                .where(PurchaseOrder.id == first.purchase_order_id)
+            )
+            == 1
+        )
+    async with factory() as session, session.begin():
+        quantity = await session.scalar(
+            select(InventoryQuantity).where(InventoryQuantity.item_id == item.id)
+        )
+        assert quantity is not None
+        quantity.on_hand = Decimal(1)
+    async with factory() as session:
+        with pytest.raises(
+            PurchasingConflict, match="STALE_REPLENISHMENT_RECOMMENDATION"
+        ):
+            await service.decide_replenishment(
+                session,
+                context=approver,
+                payload=decision.model_copy(
+                    update={"idempotency_key": f"stale-{uuid4()}"}
                 ),
             )
 

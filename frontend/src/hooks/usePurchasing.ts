@@ -16,6 +16,7 @@ import {
   decidePurchaseOrderChange,
   dispositionPurchaseOrder,
   getReplenishmentWorkbench,
+  decideReplenishment,
 } from "../api/purchasing";
 import type {
   PurchaseOrderLineCreate,
@@ -47,6 +48,7 @@ export function usePurchasingMutations() {
   const refresh = () => client.invalidateQueries({ queryKey: keys.all });
   return {
     replenishmentWorkbench: useMutation({ mutationFn: getReplenishmentWorkbench }),
+    decideReplenishment: useMutation({ mutationFn: decideReplenishment, onSuccess: refresh }),
     createVendor: useMutation({
       mutationFn: createOperationalVendor,
       onSuccess: refresh,

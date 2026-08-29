@@ -127,6 +127,41 @@ class ReplenishmentWorkbench(PurchasingSchema):
     evidence_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
 
 
+class ReplenishmentDecisionCommand(Command):
+    branch_id: UUID
+    inventory_item_id: UUID
+    recommendation_as_of: datetime
+    target_available_quantity: Decimal = Field(ge=0, max_digits=18, decimal_places=6)
+    recommendation_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    decision: str = Field(pattern=r"^(approved|rejected)$")
+    reason: str = Field(min_length=1, max_length=1000)
+    approved_quantity: Decimal | None = Field(
+        default=None, gt=0, max_digits=18, decimal_places=6
+    )
+    vendor_id: UUID | None = None
+    po_number: str | None = Field(default=None, max_length=80)
+    currency: str | None = Field(default=None, pattern=r"^[A-Z]{3}$")
+    unit_cost: Decimal | None = Field(
+        default=None, ge=0, max_digits=18, decimal_places=4
+    )
+
+
+class ReplenishmentDecisionItem(PurchasingSchema):
+    id: UUID
+    branch_id: UUID
+    inventory_item_id: UUID
+    recommendation_digest: str
+    recommendation_snapshot: dict[str, object]
+    approval_evidence_digest: str
+    decision: str
+    reason: str
+    approved_quantity: Decimal | None
+    vendor_id: UUID | None
+    purchase_order_id: UUID | None
+    actor_user_id: UUID
+    decided_at: datetime
+
+
 class PurchaseOrderCreate(Command):
     branch_id: UUID
     vendor_id: UUID

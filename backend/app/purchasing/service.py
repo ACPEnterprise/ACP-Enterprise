@@ -28,6 +28,7 @@ from .models import (
     PurchaseOrderRevision,
     PurchaseReturn,
     PurchasingCommandReceipt,
+    ReplenishmentDecisionEvidence,
 )
 from .repository import PurchasingRepository, purchasing_repository
 from .schemas import (
@@ -50,7 +51,10 @@ from .schemas import (
     ReceiptItem,
     ReceiptLineItem,
     RecordReceiptCommand,
+    ReplenishmentDecisionCommand,
+    ReplenishmentDecisionItem,
     ReplenishmentRecommendation,
+    ReplenishmentTarget,
     ReplenishmentWorkbench,
     ReplenishmentWorkbenchRequest,
     RequestPurchaseOrderChangeCommand,
@@ -236,6 +240,167 @@ class PurchasingService:
             recommendations=tuple(recommendations),
             evidence_digest=digest(report),
         )
+
+    async def decide_replenishment(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        payload: ReplenishmentDecisionCommand,
+    ) -> ReplenishmentDecisionItem:
+        self.branch(context, payload.branch_id)
+        data = payload.model_dump(mode="json")
+        payload_digest = digest(data)
+        async with session.begin():
+            replay = await session.scalar(
+                select(ReplenishmentDecisionEvidence).where(
+                    ReplenishmentDecisionEvidence.company_id == context.company.id,
+                    ReplenishmentDecisionEvidence.idempotency_key
+                    == payload.idempotency_key,
+                )
+            )
+            if replay:
+                if replay.payload_digest != payload_digest:
+                    raise PurchasingConflict(
+                        "Replenishment decision idempotency identity conflicts"
+                    )
+                return ReplenishmentDecisionItem.model_validate(replay)
+            workbench = await self.replenishment_workbench(
+                session,
+                context=context,
+                payload=ReplenishmentWorkbenchRequest(
+                    as_of=payload.recommendation_as_of,
+                    targets=(
+                        ReplenishmentTarget(
+                            branch_id=payload.branch_id,
+                            inventory_item_id=payload.inventory_item_id,
+                            target_available_quantity=payload.target_available_quantity,
+                        ),
+                    ),
+                ),
+            )
+            recommendation = workbench.recommendations[0]
+            if recommendation.evidence_digest != payload.recommendation_digest:
+                raise PurchasingConflict("STALE_REPLENISHMENT_RECOMMENDATION")
+            vendor = None
+            order = None
+            approved_quantity = payload.approved_quantity
+            if payload.decision == "approved":
+                vendor_id = payload.vendor_id
+                po_number = payload.po_number
+                currency = payload.currency
+                unit_cost = payload.unit_cost
+                if (
+                    vendor_id is None
+                    or po_number is None
+                    or currency is None
+                    or unit_cost is None
+                    or approved_quantity is None
+                ):
+                    raise PurchasingValidation(
+                        "Approved replenishment requires explicit Vendor, PO identity, currency, quantity, and unit cost"
+                    )
+                if approved_quantity > recommendation.recommended_order_quantity:
+                    raise PurchasingValidation(
+                        "Approved quantity cannot exceed the recommendation"
+                    )
+                vendor = await self.repository.vendor(
+                    session, context.company.id, vendor_id
+                )
+                if vendor is None or vendor.status != "active":
+                    raise PurchasingValidation("Active operational Vendor is required")
+                item = await session.scalar(
+                    select(InventoryItem).where(
+                        InventoryItem.company_id == context.company.id,
+                        InventoryItem.id == payload.inventory_item_id,
+                        InventoryItem.status == "active",
+                    )
+                )
+                if item is None:
+                    raise PurchasingValidation("Active Inventory item is required")
+                order = PurchaseOrder(
+                    company_id=context.company.id,
+                    branch_id=payload.branch_id,
+                    vendor_id=vendor.id,
+                    po_number=po_number.strip().upper(),
+                    currency=currency,
+                    prepared_by_user_id=context.user.id,
+                )
+                session.add(order)
+                await session.flush()
+                session.add(
+                    PurchaseOrderLine(
+                        company_id=context.company.id,
+                        purchase_order_id=order.id,
+                        line_number=1,
+                        inventory_item_id=item.id,
+                        description=item.name,
+                        quantity=approved_quantity,
+                        unit=item.stocking_unit,
+                        unit_cost=unit_cost,
+                        extended_cost=approved_quantity * unit_cost,
+                        created_by_user_id=context.user.id,
+                    )
+                )
+                order.version += 1
+            snapshot = recommendation.model_dump(mode="json")
+            approval_digest = digest(
+                {
+                    "recommendation": snapshot,
+                    "decision": payload.decision,
+                    "quantity": str(approved_quantity) if approved_quantity else None,
+                    "vendor_id": str(vendor.id) if vendor else None,
+                    "purchase_order_id": str(order.id) if order else None,
+                    "actor": str(context.user.id),
+                    "reason": payload.reason,
+                }
+            )
+            record = ReplenishmentDecisionEvidence(
+                company_id=context.company.id,
+                branch_id=payload.branch_id,
+                inventory_item_id=payload.inventory_item_id,
+                recommendation_digest=payload.recommendation_digest,
+                recommendation_snapshot=snapshot,
+                approval_evidence_digest=approval_digest,
+                decision=payload.decision,
+                reason=payload.reason,
+                approved_quantity=approved_quantity
+                if payload.decision == "approved"
+                else None,
+                vendor_id=vendor.id if vendor else None,
+                purchase_order_id=order.id if order else None,
+                actor_user_id=context.user.id,
+                idempotency_key=payload.idempotency_key,
+                payload_digest=payload_digest,
+            )
+            session.add(record)
+            await session.flush()
+            self._event(
+                session,
+                context,
+                EventType.PURCHASING_REPLENISHMENT_APPROVED
+                if payload.decision == "approved"
+                else EventType.PURCHASING_REPLENISHMENT_REJECTED,
+                "replenishment_decision",
+                record.id,
+                record.branch_id,
+                {
+                    "decision_id": str(record.id),
+                    "recommendation_digest": record.recommendation_digest,
+                    "decision": record.decision,
+                },
+            )
+            if order is not None:
+                self._event(
+                    session,
+                    context,
+                    EventType.PURCHASING_REPLENISHMENT_LINKED,
+                    "replenishment_decision",
+                    record.id,
+                    record.branch_id,
+                    {"decision_id": str(record.id), "purchase_order_id": str(order.id)},
+                )
+            return ReplenishmentDecisionItem.model_validate(record)
 
     async def vendor_performance_evidence(
         self,

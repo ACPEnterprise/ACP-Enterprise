@@ -127,6 +127,9 @@ class EventType(str, Enum):
     PURCHASING_PURCHASE_ORDER_REMAINDER_CANCELED = (
         "purchasing.purchase_order.remainder_canceled"
     )
+    PURCHASING_REPLENISHMENT_APPROVED = "purchasing.replenishment.approved"
+    PURCHASING_REPLENISHMENT_REJECTED = "purchasing.replenishment.rejected"
+    PURCHASING_REPLENISHMENT_LINKED = "purchasing.replenishment.purchase_order_linked"
 
     # Operations
     OPERATIONS_SERVICE_REQUEST_ACCEPTED = "operations.service_request.accepted"

@@ -25,6 +25,8 @@ import type {
   PurchaseOrderDispositionCommand,
   ReplenishmentWorkbench,
   ReplenishmentWorkbenchRequest,
+  ReplenishmentDecision,
+  ReplenishmentDecisionCommand,
 } from "../types/purchasing";
 
 const root = "/api/v1/purchasing";
@@ -36,6 +38,8 @@ export const getReplenishmentWorkbench = async (
   input: ReplenishmentWorkbenchRequest,
 ): Promise<ReplenishmentWorkbench> =>
   (await apiClient.post<ReplenishmentWorkbench>(`${root}/replenishment/workbench`, input)).data;
+export const decideReplenishment = async (input: ReplenishmentDecisionCommand): Promise<ReplenishmentDecision> =>
+  (await apiClient.post<ReplenishmentDecision>(`${root}/replenishment/decisions`, input)).data;
 export const createOperationalVendor = async (
   input: VendorCreate,
 ): Promise<OperationalVendor> =>

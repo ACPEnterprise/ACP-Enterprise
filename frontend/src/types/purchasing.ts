@@ -193,6 +193,17 @@ export interface ReplenishmentWorkbench {
   recommendations: readonly ReplenishmentRecommendation[];
   evidence_digest: string;
 }
+export interface ReplenishmentDecisionCommand {
+  branch_id: string; inventory_item_id: string; recommendation_as_of: string;
+  target_available_quantity: string; recommendation_digest: string;
+  decision: "approved" | "rejected"; reason: string; approved_quantity?: string | null;
+  vendor_id?: string | null; po_number?: string | null; currency?: string | null;
+  unit_cost?: string | null; idempotency_key: string;
+}
+export interface ReplenishmentDecision {
+  id: string; decision: "approved" | "rejected"; reason: string;
+  purchase_order_id: string | null; approval_evidence_digest: string;
+}
 export interface VendorCreate {
   code: string;
   display_name: string;
