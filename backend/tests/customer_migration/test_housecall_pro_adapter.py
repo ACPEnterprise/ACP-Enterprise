@@ -191,6 +191,22 @@ def test_incomplete_billing_address_is_a_child_exception() -> None:
     assert report.child_exceptions[0].reason_code == "incomplete_address_group"
 
 
+def test_missing_contact_name_does_not_reject_parent_customer() -> None:
+    row = base_row()
+    row.update({"First Name": "Synthetic", "Email": "synthetic@example.invalid"})
+    raw = source_bytes(rows=[row])
+
+    report = adapter().transform(
+        raw, expected_source_sha256=hashlib.sha256(raw).hexdigest()
+    )
+
+    assert report.accepted == 1
+    assert report.rejected == 0
+    assert report.records[0].contact is None
+    assert report.child_exceptions[0].address_group_number == 0
+    assert report.child_exceptions[0].reason_code == "contact_name_unresolved"
+
+
 def test_maps_only_supported_fields_and_preserves_unmapped_values() -> None:
     row = base_row()
     row.update(

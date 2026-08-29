@@ -44,6 +44,22 @@ class CustomerMigrationRun(Base):
             "+ unresolved_count",
             name="ck_customer_migration_runs_counts_reconcile",
         ),
+        CheckConstraint(
+            "source_system <> 'housecall_pro_source4' OR master_run_id IS NOT NULL",
+            name="ck_customer_source4_master_required",
+        ),
+        ForeignKeyConstraint(
+            ["master_run_id", "company_id", "branch_id", "initiated_by_user_id"],
+            [
+                "hcp_migration_master_runs.id",
+                "hcp_migration_master_runs.company_id",
+                "hcp_migration_master_runs.branch_id",
+                "hcp_migration_master_runs.actor_user_id",
+            ],
+            name="fk_customer_run_master_scope",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("master_run_id", name="uq_customer_master_run"),
     )
 
     id: Mapped[UUID] = mapped_column(
@@ -64,6 +80,7 @@ class CustomerMigrationRun(Base):
         ForeignKey("users.id", ondelete="RESTRICT"),
         nullable=False,
     )
+    master_run_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
     source_system: Mapped[str] = mapped_column(String(50), nullable=False)
     source_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
     mode: Mapped[str] = mapped_column(String(20), nullable=False)
@@ -629,6 +646,23 @@ class ServiceLocationSourceIdentity(Base):
             "source_location_id",
             name="uq_service_location_source_identity",
         ),
+        CheckConstraint(
+            "source_system <> 'housecall_pro_source4' OR "
+            "(branch_id IS NOT NULL AND master_run_id IS NOT NULL AND "
+            "source_digest IS NOT NULL AND package_digest IS NOT NULL AND "
+            "transformation_version IS NOT NULL AND transformation_digest IS NOT NULL)",
+            name="ck_service_location_source4_lineage_required",
+        ),
+        ForeignKeyConstraint(
+            ["master_run_id", "company_id", "branch_id"],
+            [
+                "hcp_migration_master_runs.id",
+                "hcp_migration_master_runs.company_id",
+                "hcp_migration_master_runs.branch_id",
+            ],
+            name="fk_service_location_source_master_scope",
+            ondelete="RESTRICT",
+        ),
         UniqueConstraint(
             "company_id",
             "source_system",
@@ -652,6 +686,8 @@ class ServiceLocationSourceIdentity(Base):
         ForeignKey("companies.id", ondelete="RESTRICT"),
         nullable=False,
     )
+    branch_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    master_run_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
     customer_source_identity_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
         nullable=False,
@@ -666,6 +702,11 @@ class ServiceLocationSourceIdentity(Base):
     )
     source_system: Mapped[str] = mapped_column(String(50), nullable=False)
     source_location_id: Mapped[str] = mapped_column(String(191), nullable=False)
+    source_digest: Mapped[str | None] = mapped_column(String(64))
+    package_digest: Mapped[str | None] = mapped_column(String(64))
+    transformation_version: Mapped[str | None] = mapped_column(String(100))
+    transformation_digest: Mapped[str | None] = mapped_column(String(64))
+    source_context: Mapped[dict[str, object] | None] = mapped_column(JSONB)
     first_run_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("customer_migration_runs.id", ondelete="RESTRICT"),
@@ -906,6 +947,24 @@ class CustomerMigrationSourceArtifact(Base):
         ),
         CheckConstraint("byte_size >= 0", name="ck_customer_source_artifact_size"),
         CheckConstraint("row_count >= 0", name="ck_customer_source_artifact_rows"),
+        CheckConstraint(
+            "source_system <> 'housecall_pro_source4' OR "
+            "(master_run_id IS NOT NULL AND package_digest IS NOT NULL AND "
+            "hybrid_admission_digest IS NOT NULL AND actor_user_id IS NOT NULL AND "
+            "staging_digest IS NOT NULL)",
+            name="ck_customer_source4_artifact_master_required",
+        ),
+        ForeignKeyConstraint(
+            ["master_run_id", "company_id", "branch_id", "actor_user_id"],
+            [
+                "hcp_migration_master_runs.id",
+                "hcp_migration_master_runs.company_id",
+                "hcp_migration_master_runs.branch_id",
+                "hcp_migration_master_runs.actor_user_id",
+            ],
+            name="fk_customer_source_artifact_master_scope",
+            ondelete="RESTRICT",
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(
@@ -922,6 +981,11 @@ class CustomerMigrationSourceArtifact(Base):
         nullable=False,
     )
     source_system: Mapped[str] = mapped_column(String(50), nullable=False)
+    master_run_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    actor_user_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    package_digest: Mapped[str | None] = mapped_column(String(64))
+    hybrid_admission_digest: Mapped[str | None] = mapped_column(String(64))
+    staging_digest: Mapped[str | None] = mapped_column(String(64))
     source_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
     schema_version: Mapped[str] = mapped_column(String(100), nullable=False)
     transformation_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -1089,6 +1153,14 @@ class CustomerMigrationChildException(Base):
         nullable=False,
     )
     source_id_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_location_id: Mapped[str | None] = mapped_column(String(191))
+    parent_customer_source_id: Mapped[str | None] = mapped_column(String(191))
+    package_digest: Mapped[str | None] = mapped_column(String(64))
+    transformation_digest: Mapped[str | None] = mapped_column(String(64))
+    reconciliation_key: Mapped[str | None] = mapped_column(String(64))
+    resolution_state: Mapped[str] = mapped_column(
+        String(30), nullable=False, default="unresolved"
+    )
     contract_version: Mapped[str] = mapped_column(String(100), nullable=False)
     address_group_number: Mapped[int] = mapped_column(Integer, nullable=False)
     missing_fields: Mapped[list[str]] = mapped_column(JSONB, nullable=False)

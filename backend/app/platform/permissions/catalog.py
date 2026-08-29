@@ -26,6 +26,7 @@ from app.platform.permissions.codes import (
     PaymentPermission,
     PriceBookPermission,
     PurchasingPermission,
+    MigrationPermission,
     SchedulingPermission,
     WorkerControlPermission,
     WorkerIdentityPermission,
@@ -177,6 +178,17 @@ PAYROLL_DEFINITIONS = tuple(
         reserved=True,
     )
     for code in sorted(PayrollPermission.ALL)
+)
+
+MIGRATION_DEFINITIONS = tuple(
+    PermissionDefinition(
+        code=code,
+        name="Company Migration Rehearsal Execute",
+        resource="migration_rehearsal",
+        action="execute",
+        scope=PermissionScope.COMPANY,
+    )
+    for code in sorted(MigrationPermission.ALL)
 )
 
 SCHEDULING_DEFINITIONS = tuple(
@@ -410,6 +422,7 @@ permission_catalog = PermissionCatalog(
     + BEACON_DEFINITIONS
     + TIMEKEEPING_DEFINITIONS
     + PAYROLL_DEFINITIONS
+    + MIGRATION_DEFINITIONS
     + SCHEDULING_DEFINITIONS
     + JOB_DEFINITIONS
     + DISPATCH_DEFINITIONS

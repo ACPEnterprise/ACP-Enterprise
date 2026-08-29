@@ -125,6 +125,7 @@ class TransformationContract:
     version: str
     fields: tuple[SourceField, ...]
     builder: RecordBuilder
+    exact_columns: bool = False
 
     def __post_init__(self) -> None:
         if not self.provider or self.provider != self.provider.strip().lower():
@@ -267,6 +268,12 @@ class OperationalTransformationPipeline:
         unknown = set(export.columns) - contract.field_names
         if unknown:
             return self._fatal(export, code="unknown_columns", fields=tuple(unknown))
+        if contract.exact_columns and set(export.columns) != contract.field_names:
+            return self._fatal(
+                export,
+                code="changed_layout",
+                fields=tuple(contract.field_names - set(export.columns)),
+            )
         missing_columns = contract.required_fields - set(export.columns)
         if missing_columns:
             return self._fatal(
@@ -362,6 +369,10 @@ class OperationalTransformationPipeline:
 
 
 def housecall_pro_operational_pipeline() -> OperationalTransformationPipeline:
-    """Return a fail-closed pipeline until real export contracts are approved."""
+    """Return the exact sealed SOURCE.4 contracts; unknown layouts still fail."""
 
-    return OperationalTransformationPipeline(provider="housecall_pro")
+    from app.operational_migration.hcp_source4_contracts import source4_contracts
+
+    return OperationalTransformationPipeline(
+        provider="housecall_pro", contracts=source4_contracts()
+    )
