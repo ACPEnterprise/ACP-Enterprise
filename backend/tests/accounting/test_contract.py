@@ -136,7 +136,7 @@ def test_core_state_and_control_vocabularies_are_frozen() -> None:
 def test_exact_eleven_table_boundary_and_posting_constraints() -> None:
     names = {
         table.name
-        for table in Base.metadata.sorted_tables
+        for table in Base.metadata.tables.values()
         if table.name.startswith("accounting_")
     }
     assert names == {
