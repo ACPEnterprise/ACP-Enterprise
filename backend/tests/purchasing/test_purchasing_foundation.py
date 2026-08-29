@@ -1,5 +1,5 @@
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from uuid import uuid4
 
@@ -657,7 +657,9 @@ async def test_accepted_receiving_blocks_price_change_without_side_effects(
             session,
             context=approver,
             po_id=po_id,
-            payload=receipt(version, line_id, accepted, f"PRICE-{accepted}", rejected=rejected),
+            payload=receipt(
+                version, line_id, accepted, f"PRICE-{accepted}", rejected=rejected
+            ),
         )
     async with factory() as session:
         order = await service.get_order(session, context=approver, po_id=po_id)
@@ -686,14 +688,14 @@ async def test_accepted_receiving_blocks_price_change_without_side_effects(
             ]
         )
         revision_count = await session.scalar(
-            select(func.count()).select_from(PurchaseOrderRevision).where(
-                PurchaseOrderRevision.purchase_order_id == po_id
-            )
+            select(func.count())
+            .select_from(PurchaseOrderRevision)
+            .where(PurchaseOrderRevision.purchase_order_id == po_id)
         )
         event_count = await session.scalar(
-            select(func.count()).select_from(BusinessEvent).where(
-                BusinessEvent.entity_id == requested.id
-            )
+            select(func.count())
+            .select_from(BusinessEvent)
+            .where(BusinessEvent.entity_id == requested.id)
         )
         change_id = requested.id
         await session.rollback()
@@ -738,16 +740,22 @@ async def test_accepted_receiving_blocks_price_change_without_side_effects(
         assert order.lines[0].unit_cost == Decimal("4.0000")
         assert change is not None and change.status == "requested"
         assert change.downstream_reconciliation_required is False
-        assert await session.scalar(
-            select(func.count()).select_from(PurchaseOrderRevision).where(
-                PurchaseOrderRevision.purchase_order_id == po_id
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(PurchaseOrderRevision)
+                .where(PurchaseOrderRevision.purchase_order_id == po_id)
             )
-        ) == revision_count
-        assert await session.scalar(
-            select(func.count()).select_from(BusinessEvent).where(
-                BusinessEvent.entity_id == change_id
+            == revision_count
+        )
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(BusinessEvent)
+                .where(BusinessEvent.entity_id == change_id)
             )
-        ) == event_count
+            == event_count
+        )
 
 
 @pytest.mark.asyncio
@@ -883,6 +891,15 @@ async def test_fully_satisfied_disposition_is_evidenced_and_idempotent(
                 action="complete",
                 payload=payload.model_copy(update={"reason": "contradiction"}),
             )
+    async with factory() as session:
+        report = await service.vendor_performance_evidence(
+            session, context=approver, vendor_id=item.vendor_id
+        )
+    assert any(
+        evidence.evidence_type == "fulfillment.receipt_state"
+        and evidence.value == "fully_received"
+        for evidence in report.evidence
+    )
 
 
 @pytest.mark.asyncio
@@ -984,6 +1001,118 @@ async def test_disposition_blocks_open_discrepancy_and_stale_or_racing_action(
             .where(PurchaseOrderDispositionEvidence.purchase_order_id == po_id)
         )
         assert evidence_count == 0
+
+
+@pytest.mark.asyncio
+async def test_vendor_performance_evidence_is_deterministic_and_missing_is_explicit(
+    purchasing_fixture,
+) -> None:
+    factory, _, _, branch, _, preparer, approver = purchasing_fixture
+    service = PurchasingService()
+    po_id, _, _ = await issued_order(factory, branch, preparer, approver)
+    async with factory() as session:
+        order = await service.get_order(session, context=approver, po_id=po_id)
+    async with factory() as session:
+        first = await service.vendor_performance_evidence(
+            session, context=approver, vendor_id=order.vendor_id
+        )
+    async with factory() as session:
+        replay = await service.vendor_performance_evidence(
+            session, context=approver, vendor_id=order.vendor_id
+        )
+
+    assert first == replay
+    assert first.evidence_digest == replay.evidence_digest
+    assert first.summary.purchase_orders_observed == 1
+    assert first.summary.ordered_quantity_observed == Decimal(10)
+    promised = [
+        item
+        for item in first.evidence
+        if item.evidence_type == "fulfillment.promised_date"
+    ]
+    assert promised and promised[0].availability == "unavailable"
+    assert promised[0].value is None
+    assert not any(
+        token in item.evidence_type
+        for item in first.evidence
+        for token in ("score", "rating", "rank")
+    )
+    async with factory() as session:
+        empty_window = await service.vendor_performance_evidence(
+            session,
+            context=approver,
+            vendor_id=order.vendor_id,
+            from_at=datetime.now(timezone.utc) + timedelta(days=1),
+        )
+    assert empty_window.evidence == ()
+    assert empty_window.summary.purchase_orders_observed == 0
+
+
+@pytest.mark.asyncio
+async def test_vendor_receipt_and_discrepancy_evidence_preserves_observed_facts(
+    purchasing_fixture,
+) -> None:
+    factory, _, _, branch, _, preparer, approver = purchasing_fixture
+    service = PurchasingService()
+    po_id, line_id, version = await issued_order(factory, branch, preparer, approver)
+    async with factory() as session:
+        await service.record_receipt(
+            session,
+            context=approver,
+            po_id=po_id,
+            payload=receipt(
+                version,
+                line_id,
+                "4",
+                "vendor-evidence-partial",
+                rejected="1",
+                category="damaged_item",
+            ),
+        )
+    async with factory() as session:
+        order = await service.get_order(session, context=approver, po_id=po_id)
+    async with factory() as session:
+        report = await service.vendor_performance_evidence(
+            session, context=approver, vendor_id=order.vendor_id
+        )
+
+    assert report.summary.receipts_observed == 1
+    assert report.summary.accepted_quantity_observed == Decimal(4)
+    assert report.summary.rejected_quantity_observed == Decimal(1)
+    assert report.summary.discrepancies_observed == 1
+    discrepancy = next(
+        item
+        for item in report.evidence
+        if item.evidence_type == "discrepancy.damaged_item"
+    )
+    assert discrepancy.value == "open"
+    assert discrepancy.unit == "observed_fact_not_fault"
+    assert any(
+        item.evidence_type == "fulfillment.outstanding_quantity"
+        and item.value == "6.000000"
+        for item in report.evidence
+    )
+    assert any(
+        item.evidence_type == "fulfillment.receipt_state"
+        and item.value == "partially_received"
+        for item in report.evidence
+    )
+    assert any(
+        item.evidence_type == "lead_time.promised_to_receipt"
+        and item.availability == "unavailable"
+        for item in report.evidence
+    )
+
+
+@pytest.mark.asyncio
+async def test_vendor_evidence_is_company_scoped(purchasing_fixture) -> None:
+    factory, _, _, _, _, _, approver = purchasing_fixture
+    service = PurchasingService()
+    async with factory() as session:
+        with pytest.raises(PurchasingNotFound):
+            await service.vendor_performance_evidence(
+                session, context=approver, vendor_id=uuid4()
+            )
 
 
 @pytest.mark.asyncio
@@ -1243,6 +1372,16 @@ async def test_purchase_return_quantity_replay_and_non_financial_boundary(
             ]
         )
         assert after == before
+    async with factory() as session:
+        report = await service.vendor_performance_evidence(
+            session, context=approver, vendor_id=current.vendor_id
+        )
+    return_fact = next(
+        item for item in report.evidence if item.evidence_type == "return.lifecycle"
+    )
+    assert return_fact.value == "requested"
+    assert return_fact.unit == "operational_fact_not_fault"
+    assert report.summary.returns_observed == 1
 
 
 @pytest.mark.asyncio

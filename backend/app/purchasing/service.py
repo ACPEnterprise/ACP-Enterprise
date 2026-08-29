@@ -55,6 +55,9 @@ from .schemas import (
     TransitionCommand,
     VendorCreate,
     VendorItem,
+    VendorPerformanceEvidence,
+    VendorPerformanceEvidenceReport,
+    VendorPerformanceSummary,
     VendorUpdate,
 )
 
@@ -101,6 +104,443 @@ class PurchasingService:
     ) -> PurchaseOrderItem:
         order = await self._order(session, context, po_id)
         return await self._item(session, order)
+
+    async def vendor_performance_evidence(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        vendor_id: UUID,
+        from_at: datetime | None = None,
+        to_at: datetime | None = None,
+    ) -> VendorPerformanceEvidenceReport:
+        if from_at and to_at and from_at >= to_at:
+            raise PurchasingValidation("Evidence interval must have positive duration")
+        vendor = await self.repository.vendor(session, context.company.id, vendor_id)
+        if vendor is None:
+            raise PurchasingNotFound("Vendor was not found")
+        orders = await self.repository.purchase_orders_for_vendor(
+            session,
+            context.company.id,
+            vendor_id,
+            tuple(context.authorized_branch_ids),
+        )
+        evidence: list[VendorPerformanceEvidence] = []
+
+        def add(
+            *,
+            evidence_type: str,
+            availability: str,
+            value: object | None,
+            unit: str | None,
+            order: PurchaseOrder,
+            source_type: str,
+            source_id: UUID,
+            effective_at: datetime,
+            line_id: UUID | None = None,
+            receipt_id: UUID | None = None,
+            discrepancy_id: UUID | None = None,
+            return_id: UUID | None = None,
+            provenance: tuple[str, ...],
+        ) -> None:
+            if (from_at and effective_at < from_at) or (
+                to_at and effective_at >= to_at
+            ):
+                return
+            fact = {
+                "schema_version": 1,
+                "evidence_type": evidence_type,
+                "availability": availability,
+                "value": None if value is None else str(value),
+                "unit": unit,
+                "company_id": str(order.company_id),
+                "branch_id": str(order.branch_id),
+                "vendor_id": str(order.vendor_id),
+                "purchase_order_id": str(order.id),
+                "purchase_order_line_id": str(line_id) if line_id else None,
+                "receipt_id": str(receipt_id) if receipt_id else None,
+                "discrepancy_id": str(discrepancy_id) if discrepancy_id else None,
+                "return_id": str(return_id) if return_id else None,
+                "source_type": source_type,
+                "source_id": str(source_id),
+                "effective_at": effective_at.isoformat(),
+                "provenance": provenance,
+            }
+            fact_digest = digest(fact)
+            evidence.append(
+                VendorPerformanceEvidence(
+                    schema_version=1,
+                    evidence_id=fact_digest,
+                    evidence_type=evidence_type,
+                    availability=availability,
+                    value=None if value is None else str(value),
+                    unit=unit,
+                    company_id=order.company_id,
+                    branch_id=order.branch_id,
+                    vendor_id=order.vendor_id,
+                    purchase_order_id=order.id,
+                    purchase_order_line_id=line_id,
+                    receipt_id=receipt_id,
+                    discrepancy_id=discrepancy_id,
+                    return_id=return_id,
+                    source_type=source_type,
+                    source_id=source_id,
+                    effective_at=effective_at,
+                    provenance=provenance,
+                    digest=fact_digest,
+                )
+            )
+
+        for order in orders:
+            if order.vendor_id != vendor.id or order.company_id != context.company.id:
+                raise PurchasingConflict("Vendor evidence identity is contradictory")
+            issuance = await self.repository.evidence(
+                session, order.company_id, order.id
+            )
+            if issuance is None:
+                continue
+            issued_at = issuance.issued_at
+            add(
+                evidence_type="purchase_order.issued",
+                availability="available",
+                value=order.po_number,
+                unit="purchase_order",
+                order=order,
+                source_type="purchase_order_issuance_evidence",
+                source_id=issuance.id,
+                effective_at=issued_at,
+                provenance=(issuance.digest,),
+            )
+            snapshot_lines = issuance.snapshot.get("lines", [])
+            if not isinstance(snapshot_lines, list):
+                raise PurchasingConflict(
+                    "Purchase Order issuance evidence is malformed"
+                )
+            po_expected = issuance.snapshot.get("expected_date")
+            for raw_line in snapshot_lines:
+                if not isinstance(raw_line, dict):
+                    raise PurchasingConflict(
+                        "Purchase Order line evidence is malformed"
+                    )
+                line_id = UUID(str(raw_line["id"]))
+                provenance = (issuance.digest, f"line:{line_id}")
+                add(
+                    evidence_type="order.quantity",
+                    availability="available",
+                    value=raw_line["quantity"],
+                    unit=str(raw_line["unit"]),
+                    order=order,
+                    source_type="purchase_order_issuance_line",
+                    source_id=line_id,
+                    effective_at=issued_at,
+                    line_id=line_id,
+                    provenance=provenance,
+                )
+                add(
+                    evidence_type="order.unit_cost",
+                    availability="available",
+                    value=raw_line["unit_cost"],
+                    unit=f"{order.currency}_per_{raw_line['unit']}",
+                    order=order,
+                    source_type="purchase_order_issuance_line",
+                    source_id=line_id,
+                    effective_at=issued_at,
+                    line_id=line_id,
+                    provenance=provenance,
+                )
+                expected = raw_line.get("expected_date") or po_expected
+                add(
+                    evidence_type="fulfillment.promised_date",
+                    availability="available" if expected else "unavailable",
+                    value=expected,
+                    unit="date" if expected else None,
+                    order=order,
+                    source_type="purchase_order_issuance_line",
+                    source_id=line_id,
+                    effective_at=issued_at,
+                    line_id=line_id,
+                    provenance=provenance,
+                )
+
+            receipts = await self.repository.receiving_events(
+                session, order.company_id, order.id
+            )
+            first_receipt_at = receipts[0].received_at if receipts else None
+            for receipt in receipts:
+                if (
+                    receipt.vendor_id != order.vendor_id
+                    or receipt.branch_id != order.branch_id
+                ):
+                    raise PurchasingConflict(
+                        "Receipt Vendor or Branch evidence conflicts"
+                    )
+                receipt_lines = await self.repository.receipt_lines(
+                    session, order.company_id, receipt.id
+                )
+                for line in receipt_lines:
+                    receipt_provenance = (
+                        issuance.digest,
+                        receipt.payload_digest,
+                        f"receipt_line:{line.id}",
+                    )
+                    add(
+                        evidence_type="receipt.accepted_quantity",
+                        availability="available",
+                        value=line.accepted_quantity,
+                        unit=line.unit_snapshot,
+                        order=order,
+                        source_type="purchase_order_receipt_line",
+                        source_id=line.id,
+                        effective_at=receipt.received_at,
+                        line_id=line.purchase_order_line_id,
+                        receipt_id=receipt.id,
+                        provenance=receipt_provenance,
+                    )
+                    add(
+                        evidence_type="receipt.rejected_quantity",
+                        availability="available",
+                        value=line.rejected_quantity,
+                        unit=line.unit_snapshot,
+                        order=order,
+                        source_type="purchase_order_receipt_line",
+                        source_id=line.id,
+                        effective_at=receipt.received_at,
+                        line_id=line.purchase_order_line_id,
+                        receipt_id=receipt.id,
+                        provenance=receipt_provenance,
+                    )
+                    add(
+                        evidence_type="fulfillment.outstanding_quantity",
+                        availability="available",
+                        value=line.outstanding_quantity,
+                        unit=line.unit_snapshot,
+                        order=order,
+                        source_type="purchase_order_receipt_line",
+                        source_id=line.id,
+                        effective_at=receipt.received_at,
+                        line_id=line.purchase_order_line_id,
+                        receipt_id=receipt.id,
+                        provenance=receipt_provenance,
+                    )
+                    add(
+                        evidence_type="fulfillment.receipt_state",
+                        availability="available",
+                        value=(
+                            "fully_received"
+                            if line.outstanding_quantity == 0
+                            else "partially_received"
+                        ),
+                        unit="line_state",
+                        order=order,
+                        source_type="purchase_order_receipt_line",
+                        source_id=line.id,
+                        effective_at=receipt.received_at,
+                        line_id=line.purchase_order_line_id,
+                        receipt_id=receipt.id,
+                        provenance=receipt_provenance,
+                    )
+                    expected = next(
+                        (
+                            item.get("expected_date") or po_expected
+                            for item in snapshot_lines
+                            if isinstance(item, dict)
+                            and str(item.get("id")) == str(line.purchase_order_line_id)
+                        ),
+                        None,
+                    )
+                    promised_delta = None
+                    if expected:
+                        promised_delta = (
+                            receipt.effective_date - date.fromisoformat(str(expected))
+                        ).days
+                    add(
+                        evidence_type="lead_time.promised_to_receipt",
+                        availability="available" if expected else "unavailable",
+                        value=promised_delta,
+                        unit="days" if expected else None,
+                        order=order,
+                        source_type="purchase_order_receipt_line",
+                        source_id=line.id,
+                        effective_at=receipt.received_at,
+                        line_id=line.purchase_order_line_id,
+                        receipt_id=receipt.id,
+                        provenance=receipt_provenance,
+                    )
+                add(
+                    evidence_type="lead_time.order_to_receipt",
+                    availability="available",
+                    value=int((receipt.received_at - issued_at).total_seconds()),
+                    unit="seconds",
+                    order=order,
+                    source_type="purchase_order_receipt",
+                    source_id=receipt.id,
+                    effective_at=receipt.received_at,
+                    receipt_id=receipt.id,
+                    provenance=(issuance.digest, receipt.payload_digest),
+                )
+            if first_receipt_at is None:
+                add(
+                    evidence_type="lead_time.order_to_first_receipt",
+                    availability="unavailable",
+                    value=None,
+                    unit=None,
+                    order=order,
+                    source_type="purchase_order_issuance_evidence",
+                    source_id=issuance.id,
+                    effective_at=issued_at,
+                    provenance=(issuance.digest,),
+                )
+            else:
+                first = receipts[0]
+                add(
+                    evidence_type="lead_time.order_to_first_receipt",
+                    availability="available",
+                    value=int((first_receipt_at - issued_at).total_seconds()),
+                    unit="seconds",
+                    order=order,
+                    source_type="purchase_order_receipt",
+                    source_id=first.id,
+                    effective_at=first_receipt_at,
+                    receipt_id=first.id,
+                    provenance=(issuance.digest, first.payload_digest),
+                )
+
+            for discrepancy in await self.repository.discrepancies(
+                session, order.company_id, order.id
+            ):
+                add(
+                    evidence_type=f"discrepancy.{discrepancy.category}",
+                    availability="available",
+                    value=discrepancy.status,
+                    unit="observed_fact_not_fault",
+                    order=order,
+                    source_type="purchase_order_discrepancy",
+                    source_id=discrepancy.id,
+                    effective_at=discrepancy.opened_at,
+                    line_id=discrepancy.purchase_order_line_id,
+                    receipt_id=discrepancy.receipt_id,
+                    discrepancy_id=discrepancy.id,
+                    provenance=(
+                        f"expected:{discrepancy.expected_fact}",
+                        f"actual:{discrepancy.actual_fact}",
+                        f"version:{discrepancy.version}",
+                    ),
+                )
+            for purchase_return in await self.repository.purchase_returns(
+                session, order.company_id, order.id
+            ):
+                if purchase_return.vendor_id != order.vendor_id:
+                    raise PurchasingConflict(
+                        "Purchase Return Vendor evidence conflicts"
+                    )
+                add(
+                    evidence_type="return.lifecycle",
+                    availability="available",
+                    value=purchase_return.status,
+                    unit="operational_fact_not_fault",
+                    order=order,
+                    source_type="purchase_return",
+                    source_id=purchase_return.id,
+                    effective_at=purchase_return.updated_at,
+                    line_id=purchase_return.purchase_order_line_id,
+                    receipt_id=purchase_return.receipt_id,
+                    return_id=purchase_return.id,
+                    provenance=(
+                        f"reason:{purchase_return.reason}",
+                        f"authorization:{purchase_return.authorization_status}",
+                        f"version:{purchase_return.version}",
+                    ),
+                )
+            disposition = await self.repository.disposition(
+                session, order.company_id, order.id
+            )
+            if disposition:
+                add(
+                    evidence_type="purchase_order.disposition",
+                    availability="available",
+                    value=disposition.disposition,
+                    unit="control_evidence",
+                    order=order,
+                    source_type="purchase_order_disposition_evidence",
+                    source_id=disposition.id,
+                    effective_at=disposition.occurred_at,
+                    provenance=(disposition.evidence_digest,),
+                )
+
+        evidence.sort(key=lambda item: (item.effective_at, item.evidence_id))
+        availability_counts = {
+            state: sum(item.availability == state for item in evidence)
+            for state in ("available", "unavailable", "not_applicable", "conflicting")
+        }
+        summary = VendorPerformanceSummary(
+            purchase_orders_observed=sum(
+                item.evidence_type == "purchase_order.issued" for item in evidence
+            ),
+            receipts_observed=len(
+                {
+                    item.receipt_id
+                    for item in evidence
+                    if item.receipt_id is not None
+                    and item.evidence_type == "lead_time.order_to_receipt"
+                }
+            ),
+            discrepancies_observed=sum(
+                item.evidence_type.startswith("discrepancy.") for item in evidence
+            ),
+            returns_observed=sum(
+                item.evidence_type == "return.lifecycle" for item in evidence
+            ),
+            ordered_quantity_observed=sum(
+                (
+                    Decimal(item.value)
+                    for item in evidence
+                    if item.evidence_type == "order.quantity" and item.value is not None
+                ),
+                Decimal(0),
+            ),
+            accepted_quantity_observed=sum(
+                (
+                    Decimal(item.value)
+                    for item in evidence
+                    if item.evidence_type == "receipt.accepted_quantity"
+                    and item.value is not None
+                ),
+                Decimal(0),
+            ),
+            rejected_quantity_observed=sum(
+                (
+                    Decimal(item.value)
+                    for item in evidence
+                    if item.evidence_type == "receipt.rejected_quantity"
+                    and item.value is not None
+                ),
+                Decimal(0),
+            ),
+            lead_time_observations=sum(
+                item.evidence_type.startswith("lead_time.")
+                and item.availability == "available"
+                for item in evidence
+            ),
+            availability_counts=availability_counts,
+        )
+        report_payload = {
+            "schema_version": 1,
+            "company_id": str(context.company.id),
+            "vendor_id": str(vendor.id),
+            "from_at": from_at.isoformat() if from_at else None,
+            "to_at": to_at.isoformat() if to_at else None,
+            "evidence_digests": [item.digest for item in evidence],
+            "summary": summary.model_dump(mode="json"),
+        }
+        return VendorPerformanceEvidenceReport(
+            company_id=context.company.id,
+            vendor_id=vendor.id,
+            from_at=from_at,
+            to_at=to_at,
+            evidence=tuple(evidence),
+            summary=summary,
+            evidence_digest=digest(report_payload),
+        )
 
     async def create_vendor(
         self,

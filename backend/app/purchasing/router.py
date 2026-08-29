@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Annotated
 from uuid import UUID
 
@@ -39,6 +40,7 @@ from .schemas import (
     TransitionCommand,
     VendorCreate,
     VendorItem,
+    VendorPerformanceEvidenceReport,
     VendorUpdate,
 )
 from .service import purchasing_service
@@ -134,6 +136,29 @@ async def create_vendor(
             await purchasing_service.create_vendor(
                 session, context=context, payload=payload
             )
+        )
+    except PurchasingError as error:
+        raise http_error(error) from error
+
+
+@router.get(
+    "/vendors/{vendor_id}/performance-evidence",
+    response_model=VendorPerformanceEvidenceReport,
+)
+async def vendor_performance_evidence(
+    vendor_id: UUID,
+    context: ReadContext,
+    session: DatabaseSession,
+    from_at: Annotated[datetime | None, Query()] = None,
+    to_at: Annotated[datetime | None, Query()] = None,
+) -> VendorPerformanceEvidenceReport:
+    try:
+        return await purchasing_service.vendor_performance_evidence(
+            session,
+            context=context,
+            vendor_id=vendor_id,
+            from_at=from_at,
+            to_at=to_at,
         )
     except PurchasingError as error:
         raise http_error(error) from error
