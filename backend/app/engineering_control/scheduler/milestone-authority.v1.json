@@ -92,6 +92,13 @@
       "evidence_reference": "owner-accepted signal confidence and freshness semantics implementation cce44ec4227418b7543d05b977b81c9656e21f25, independently qualified by fb404672a7daba404b9dcecb97c3ee96905f6f41 and reconciled by 126f5c8c84800c2c658b007a92a873e53891cd3c through PR #12, with semantics digest 8996c04bb8d79b2a1100f2adbe2f6cb86fea936b1b4afd2990871173d09ccc6c and final qualification fingerprint 8b6dc2604653dbda37aa5a8c07398410c85ee4eb586fa7577cfef3a3807f6a9f"
     },
     {
+      "bank_milestone_id": "BANK.BEA.004",
+      "canonical_milestone_id": "BANK.BEA.004",
+      "evidence_kind": "AUTHORITATIVE_INTEGRATION_ACCEPTANCE",
+      "authoritative_commit_sha": "2a6a83c9a6a7e20ab9ce5af7964ed27ae28e27d0",
+      "evidence_reference": "owner-accepted deterministic signal prioritization and tie-breaking implementation 2a6a83c9a6a7e20ab9ce5af7964ed27ae28e27d0 under BANK.BEA.004.v1, independently qualified by b00f92b2e8601e590761dc811bd0c59885a06538 and integrated through PR #14 at b0c93dc8c558faadedfa662e74e5fa908cbb00ef, with qualification fingerprint ccebae77da16c3f1044a03af88c8a734a6cc7662e95406132a9b405eaaf362b1"
+    },
+    {
       "bank_milestone_id": "BANK.PLAT.002",
       "canonical_milestone_id": "BANK.PLAT.002",
       "evidence_kind": "AUTHORITATIVE_INTEGRATION_ACCEPTANCE",
@@ -169,5 +176,5 @@
   ],
   "gate_resolutions": [],
   "active_ownership": [],
-  "fingerprint": "629c06a117976bac396da692adddb23a0c4ab48c5dbed1a4a824f910fa6c7453"
+  "fingerprint": "612117f75b08d34f7865abda55aeb31e277cd10f80acfc4e85e4e6ffdf9d9c70"
 }
