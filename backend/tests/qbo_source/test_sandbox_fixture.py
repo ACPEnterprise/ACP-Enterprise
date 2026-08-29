@@ -128,7 +128,7 @@ async def test_fixture_creation_is_protected_and_idempotent(tmp_path: Path) -> N
     result = await service.create()
     assert result.state == "CREATED"
     assert result.counts == {
-        "account": 15,
+        "account": 14,
         "bill": 2,
         "bill_payment": 1,
         "credit_memo": 1,
@@ -144,7 +144,7 @@ async def test_fixture_creation_is_protected_and_idempotent(tmp_path: Path) -> N
         "vendor": 1,
         "vendor_credit": 1,
     }
-    assert transport.posts == 38
+    assert transport.posts == 37
     manifest = service.fixture_root / "fixture-manifest.json"
     expected = service.fixture_root / "expected-ledger.json"
     assert manifest.stat().st_mode & 0o777 == 0o600
@@ -153,7 +153,7 @@ async def test_fixture_creation_is_protected_and_idempotent(tmp_path: Path) -> N
     replay = await service.create()
     assert replay.state == "ALREADY_CURRENT"
     assert replay.fixture_digest == result.fixture_digest
-    assert transport.posts == 38
+    assert transport.posts == 37
 
 
 @pytest.mark.asyncio

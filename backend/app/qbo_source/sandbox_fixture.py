@@ -219,7 +219,6 @@ class SandboxFixtureService:
             ("account-depreciation", _account("ACP Qualification Accumulated Depreciation", "Fixed Asset", "OtherFixedAssets")),
             ("account-equity", _account("ACP Qualification Owner Equity", "Equity", "OwnersEquity")),
             ("account-credit-card", _account("ACP Qualification Credit Card", "Credit Card", "CreditCard")),
-            ("account-undeposited", _account("ACP Qualification Undeposited Funds", "Other Current Asset", "UndepositedFunds")),
         )
         fixture_accounts: dict[str, dict[str, object]] = {}
         for key, payload in account_specs:
@@ -257,7 +256,7 @@ class SandboxFixtureService:
             "PaymentMethod",
             "payment-method",
             {
-                "Name": "ACP Qualification Electronic Payment",
+                "Name": "ACP Qual EPay",
                 "Type": "NON_CREDIT_CARD",
             },
             name_field="Name",
@@ -484,8 +483,18 @@ class SandboxFixtureService:
         if not isinstance(record, dict):
             raise SandboxFixtureError("fixture_change_subject_missing")
         current = await self._get_entity("Customer", str(record["native_id"]))
-        before = _digest(current)
         marker = f"{FIXTURE_TAG}:CONTROLLED-CHANGE-V1"
+        existing_path = self.fixture_root / "controlled-change.json"
+        if current.get("Notes") == marker and existing_path.exists():
+            existing = _read_json(existing_path)
+            native_id_hash = hashlib.sha256(str(current["Id"]).encode()).hexdigest()
+            if existing.get("native_id_hash") != native_id_hash:
+                raise SandboxFixtureError("fixture_change_evidence_conflict")
+            return {
+                "state": "ALREADY_CURRENT",
+                "change_digest": str(existing["change_digest"]),
+            }
+        before = _digest(current)
         if current.get("Notes") != marker:
             updated = await self._post(
                 "Customer",
