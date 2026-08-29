@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import select, text
+from sqlalchemy import or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.accounts_payable.models import (
@@ -84,20 +84,19 @@ class ProcurementMatchingService:
                     )
                 return await self._item(session, replay)
             existing_bill_match = await session.scalar(
-                select(ProcurementMatch).where(
+                select(ProcurementMatch)
+                .where(
                     ProcurementMatch.company_id == context.company.id,
                     ProcurementMatch.vendor_bill_id == payload.vendor_bill_id,
+                    ProcurementMatch.superseded_at.is_(None),
                 )
+                .with_for_update()
             )
-            if existing_bill_match is not None:
-                if (
-                    existing_bill_match.purchase_order_id == payload.purchase_order_id
-                    and existing_bill_match.purchase_order_version
-                    == payload.expected_purchase_order_version
-                    and existing_bill_match.bill_version
-                    == payload.expected_bill_version
-                ):
-                    return await self._item(session, existing_bill_match)
+            if (
+                existing_bill_match is not None
+                and existing_bill_match.purchase_order_id
+                != payload.purchase_order_id
+            ):
                 raise ProcurementMatchingConflict(
                     "Vendor Bill already has contradictory matching authority"
                 )
@@ -200,6 +199,41 @@ class ProcurementMatchingService:
                     )
                 ).all()
             )
+            return_ids = tuple(str(row.id) for row in returns)
+            credits = (
+                tuple(
+                    (
+                        await session.scalars(
+                            select(VendorCredit).where(
+                                VendorCredit.company_id == context.company.id,
+                                VendorCredit.vendor_id == bill.vendor_id,
+                                VendorCredit.source_system == "purchasing_return",
+                                VendorCredit.source_identity.in_(return_ids),
+                            )
+                        )
+                    ).all()
+                )
+                if return_ids
+                else ()
+            )
+            source_digest = self._source_evidence_digest(
+                order=order,
+                bill=bill,
+                bill_revision=revision,
+                bill_lines=bill_lines,
+                po_lines=tuple(po_lines.values()),
+                receipt_rows=receipt_rows,
+                returns=returns,
+                credits=credits,
+            )
+            evaluation_sequence = 1
+            supersedes_match_id: UUID | None = None
+            if existing_bill_match is not None:
+                if existing_bill_match.source_evidence_digest == source_digest:
+                    return await self._item(session, existing_bill_match)
+                existing_bill_match.superseded_at = datetime.now(timezone.utc)
+                evaluation_sequence = existing_bill_match.evaluation_sequence + 1
+                supersedes_match_id = existing_bill_match.id
             mapping = await session.scalar(
                 select(VendorSourceMapping).where(
                     VendorSourceMapping.company_id == context.company.id,
@@ -225,6 +259,9 @@ class ProcurementMatchingService:
                 admission_state="blocked" if initial_state else "eligible",
                 purchase_order_version=order.version,
                 bill_version=bill.version,
+                source_evidence_digest=source_digest,
+                evaluation_sequence=evaluation_sequence,
+                supersedes_match_id=supersedes_match_id,
                 evidence_digest="0" * 64,
                 idempotency_key=payload.idempotency_key,
                 evaluated_by_user_id=context.user.id,
@@ -293,18 +330,28 @@ class ProcurementMatchingService:
                 )
                 quantity_variance = bill_line.quantity - net
                 price_variance = billed_unit - po_line.unit_cost
+                line_return_ids = {
+                    str(row.id)
+                    for row in returns
+                    if row.purchase_order_line_id == po_line.id
+                }
+                linked_credits = tuple(
+                    credit
+                    for credit in credits
+                    if credit.source_identity in line_return_ids
+                )
                 if accepted == 0:
                     state = "unreceived_billing"
+                elif returned > 0 and bill_line.quantity > net:
+                    state = (
+                        "requires_review" if linked_credits else "return_pending_credit"
+                    )
                 elif bill_line.quantity > net:
                     state = "overbilled"
                 elif quantity_variance != 0:
                     state = "quantity_variance"
                 elif price_variance != 0:
                     state = "price_variance"
-                elif returned > 0 and not await self._has_return_credit(
-                    session, context.company.id, returns, bill.vendor_id
-                ):
-                    state = "return_pending_credit"
                 elif accepted < po_line.quantity:
                     state = "partially_matched"
                 else:
@@ -324,6 +371,16 @@ class ProcurementMatchingService:
                         str(row.id)
                         for row in receipt_rows
                         if row.purchase_order_line_id == po_line.id
+                    ),
+                    "vendor_credit_evidence": sorted(
+                        (
+                            str(credit.id),
+                            credit.source_identity,
+                            str(credit.amount),
+                            credit.currency,
+                            credit.source_digest,
+                        )
+                        for credit in linked_credits
                     ),
                 }
                 row = ProcurementMatchLine(
@@ -392,6 +449,11 @@ class ProcurementMatchingService:
                     "po_version": order.version,
                     "bill": str(bill.id),
                     "bill_version": bill.version,
+                    "source_evidence_digest": source_digest,
+                    "evaluation_sequence": evaluation_sequence,
+                    "supersedes_match_id": (
+                        str(supersedes_match_id) if supersedes_match_id else None
+                    ),
                     "vendor_mapping": str(mapping.id) if mapping else None,
                     "evidence": evidence,
                     "exceptions": [
@@ -478,6 +540,10 @@ class ProcurementMatchingService:
                 or not context.can_access_branch(match.branch_id)
             ):
                 raise ProcurementMatchingNotFound("Match exception was not found")
+            if match.superseded_at is not None:
+                raise ProcurementMatchingConflict(
+                    "Match evidence was superseded by newer source authority"
+                )
             if (
                 match.version != payload.expected_match_version
                 or exception.version != payload.expected_exception_version
@@ -667,6 +733,10 @@ class ProcurementMatchingService:
                         ProcurementMatch.company_id == context.company.id,
                         ProcurementMatch.purchase_order_id.in_(order_ids),
                         ProcurementMatch.evaluated_at <= evaluated_at,
+                        or_(
+                            ProcurementMatch.superseded_at.is_(None),
+                            ProcurementMatch.superseded_at > evaluated_at,
+                        ),
                     )
                 )
             ).all()
@@ -796,25 +866,90 @@ class ProcurementMatchingService:
         )
 
     @staticmethod
-    async def _has_return_credit(
-        session: AsyncSession,
-        company_id: UUID,
+    def _source_evidence_digest(
+        *,
+        order: PurchaseOrder,
+        bill: VendorBill,
+        bill_revision: BillRevision,
+        bill_lines: tuple[BillLine, ...],
+        po_lines: tuple[PurchaseOrderLine, ...],
+        receipt_rows: tuple[PurchaseOrderReceiptLine, ...],
         returns: tuple[PurchaseReturn, ...],
-        vendor_id: UUID,
-    ) -> bool:
-        identities = [str(row.id) for row in returns]
-        if not identities:
-            return False
-        return (
-            await session.scalar(
-                select(VendorCredit.id).where(
-                    VendorCredit.company_id == company_id,
-                    VendorCredit.vendor_id == vendor_id,
-                    VendorCredit.source_system == "purchasing_return",
-                    VendorCredit.source_identity.in_(identities),
-                )
-            )
-            is not None
+        credits: tuple[VendorCredit, ...],
+    ) -> str:
+        return digest(
+            {
+                "definition_version": 2,
+                "purchase_order": (
+                    str(order.id),
+                    order.version,
+                    str(order.vendor_id),
+                    order.branch_id,
+                    order.currency,
+                ),
+                "purchase_order_lines": sorted(
+                    (
+                        str(row.id),
+                        str(row.quantity),
+                        str(row.unit_cost),
+                        str(row.inventory_item_id) if row.inventory_item_id else None,
+                        row.is_cancelled,
+                    )
+                    for row in po_lines
+                ),
+                "vendor_bill": (
+                    str(bill.id),
+                    bill.version,
+                    str(bill.vendor_id),
+                    bill.branch_id,
+                    bill.currency,
+                    bill_revision.revision,
+                    bill_revision.canonical_digest,
+                ),
+                "vendor_bill_lines": sorted(
+                    (
+                        str(row.id),
+                        row.purchasing_reference,
+                        row.receipt_reference,
+                        str(row.quantity),
+                        str(row.net_amount),
+                        str(row.tax_amount),
+                    )
+                    for row in bill_lines
+                ),
+                "receipts": sorted(
+                    (
+                        str(row.id),
+                        str(row.receipt_id),
+                        str(row.purchase_order_line_id),
+                        str(row.accepted_quantity),
+                        str(row.rejected_quantity),
+                        str(row.unit_cost_snapshot),
+                        row.currency_snapshot,
+                    )
+                    for row in receipt_rows
+                ),
+                "returns": sorted(
+                    (
+                        str(row.id),
+                        str(row.purchase_order_line_id),
+                        str(row.quantity),
+                        row.status,
+                        row.updated_at.isoformat(),
+                    )
+                    for row in returns
+                ),
+                "vendor_credits": sorted(
+                    (
+                        str(row.id),
+                        row.source_identity,
+                        row.source_digest,
+                        str(row.amount),
+                        row.currency,
+                    )
+                    for row in credits
+                ),
+            }
         )
 
     @staticmethod
@@ -853,6 +988,7 @@ class ProcurementMatchingService:
             "partially_matched": "quantity_variance",
             "unreceived_billing": "missing_receipt",
             "return_pending_credit": "return_pending_credit",
+            "requires_review": "return_pending_credit",
         }.get(state, state)
 
     @staticmethod
@@ -863,6 +999,7 @@ class ProcurementMatchingService:
             "item_conflict",
             "currency_conflict",
             "vendor_conflict",
+            "requires_review",
             "return_pending_credit",
             "overbilled",
             "unreceived_billing",
@@ -941,18 +1078,109 @@ class ProcurementMatchingService:
 procurement_matching_service = ProcurementMatchingService()
 
 
-async def is_current_eligible_match(
+async def _current_source_digest(
     session: AsyncSession, match: ProcurementMatch, bill: VendorBill
-) -> bool:
-    """Fail closed when PO, receipt, or bill authority changed after evaluation."""
-    current_order_version = await session.scalar(
-        select(PurchaseOrder.version).where(
+) -> str | None:
+    order = await session.scalar(
+        select(PurchaseOrder).where(
             PurchaseOrder.company_id == match.company_id,
             PurchaseOrder.id == match.purchase_order_id,
         )
     )
+    revision = await session.scalar(
+        select(BillRevision).where(
+            BillRevision.company_id == match.company_id,
+            BillRevision.bill_id == bill.id,
+            BillRevision.revision == bill.current_revision,
+        )
+    )
+    if order is None or revision is None:
+        return None
+    bill_lines = tuple(
+        (
+            await session.scalars(
+                select(BillLine).where(
+                    BillLine.company_id == match.company_id,
+                    BillLine.revision_id == revision.id,
+                )
+            )
+        ).all()
+    )
+    po_lines = tuple(
+        (
+            await session.scalars(
+                select(PurchaseOrderLine).where(
+                    PurchaseOrderLine.company_id == match.company_id,
+                    PurchaseOrderLine.purchase_order_id == order.id,
+                )
+            )
+        ).all()
+    )
+    receipt_rows = tuple(
+        (
+            await session.scalars(
+                select(PurchaseOrderReceiptLine)
+                .join(
+                    PurchaseOrderReceipt,
+                    PurchaseOrderReceipt.id == PurchaseOrderReceiptLine.receipt_id,
+                )
+                .where(
+                    PurchaseOrderReceiptLine.company_id == match.company_id,
+                    PurchaseOrderReceipt.purchase_order_id == order.id,
+                )
+            )
+        ).all()
+    )
+    returns = tuple(
+        (
+            await session.scalars(
+                select(PurchaseReturn).where(
+                    PurchaseReturn.company_id == match.company_id,
+                    PurchaseReturn.purchase_order_id == order.id,
+                    PurchaseReturn.status.in_(
+                        ("returned", "received_by_vendor", "closed")
+                    ),
+                )
+            )
+        ).all()
+    )
+    return_ids = tuple(str(row.id) for row in returns)
+    credits = (
+        tuple(
+            (
+                await session.scalars(
+                    select(VendorCredit).where(
+                        VendorCredit.company_id == match.company_id,
+                        VendorCredit.vendor_id == bill.vendor_id,
+                        VendorCredit.source_system == "purchasing_return",
+                        VendorCredit.source_identity.in_(return_ids),
+                    )
+                )
+            ).all()
+        )
+        if return_ids
+        else ()
+    )
+    return ProcurementMatchingService._source_evidence_digest(
+        order=order,
+        bill=bill,
+        bill_revision=revision,
+        bill_lines=bill_lines,
+        po_lines=po_lines,
+        receipt_rows=receipt_rows,
+        returns=returns,
+        credits=credits,
+    )
+
+
+async def is_current_eligible_match(
+    session: AsyncSession, match: ProcurementMatch, bill: VendorBill
+) -> bool:
+    """Fail closed when PO, receipt, or bill authority changed after evaluation."""
+    current_digest = await _current_source_digest(session, match, bill)
     return (
         match.admission_state == "eligible"
+        and match.superseded_at is None
         and match.bill_version == bill.version
-        and current_order_version == match.purchase_order_version
+        and current_digest == match.source_evidence_digest
     )

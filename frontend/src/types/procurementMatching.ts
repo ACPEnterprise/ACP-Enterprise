@@ -39,6 +39,10 @@ export type ProcurementMatch = {
   policy_reference: string | null;
   purchase_order_version: number;
   bill_version: number;
+  source_evidence_digest: string;
+  evaluation_sequence: number;
+  supersedes_match_id: string | null;
+  superseded_at: string | null;
   evidence_digest: string;
   evaluated_by_user_id: string;
   evaluated_at: string;

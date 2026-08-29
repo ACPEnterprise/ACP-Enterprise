@@ -16,6 +16,7 @@ from app.accounts_payable.models import (
     BillLine,
     BillRevision,
     VendorBill,
+    VendorCredit,
     VendorSourceMapping,
 )
 from app.core.config import settings
@@ -46,6 +47,7 @@ from app.purchasing.models import (
     PurchaseOrderLine,
     PurchaseOrderReceipt,
     PurchaseOrderReceiptLine,
+    PurchaseReturn,
 )
 
 
@@ -288,6 +290,54 @@ async def seed_evidence(
     return order, bill
 
 
+async def seed_physical_return(factory, company, actor, order, quantity=Decimal(2)):
+    now = datetime(2026, 8, 30, tzinfo=timezone.utc)
+    async with factory() as session, session.begin():
+        receipt = await session.scalar(
+            select(PurchaseOrderReceipt).where(
+                PurchaseOrderReceipt.company_id == company.id,
+                PurchaseOrderReceipt.purchase_order_id == order.id,
+            )
+        )
+        assert receipt is not None
+        line = await session.scalar(
+            select(PurchaseOrderReceiptLine).where(
+                PurchaseOrderReceiptLine.company_id == company.id,
+                PurchaseOrderReceiptLine.receipt_id == receipt.id,
+            )
+        )
+        assert line is not None
+        po_line = await session.get(PurchaseOrderLine, line.purchase_order_line_id)
+        assert po_line is not None
+        returned = PurchaseReturn(
+            company_id=company.id,
+            branch_id=order.branch_id,
+            purchase_order_id=order.id,
+            vendor_id=order.vendor_id,
+            receipt_id=receipt.id,
+            receipt_line_id=line.id,
+            purchase_order_line_id=po_line.id,
+            return_identity=f"return-{uuid4()}",
+            item_identity_snapshot=str(po_line.inventory_item_id or po_line.id),
+            accepted_quantity_snapshot=line.accepted_quantity,
+            quantity=quantity,
+            reason="defective",
+            reason_note="Synthetic return evidence",
+            status="returned",
+            authorization_status="received",
+            requested_by_user_id=actor.user.id,
+            requested_at=now,
+            effective_date=now.date(),
+            updated_by_user_id=actor.user.id,
+            updated_at=now,
+            authorization_at=now,
+            returned_at=now,
+        )
+        session.add(returned)
+        await session.flush()
+        return returned
+
+
 @pytest.mark.asyncio
 async def test_exact_match_is_idempotent_current_and_has_zero_downstream_effects(
     matching_fixture,
@@ -361,6 +411,96 @@ async def test_exact_match_is_idempotent_current_and_has_zero_downstream_effects
         current_bill = await session.get(VendorBill, bill.id)
         assert match is not None and current_bill is not None
         assert not await is_current_eligible_match(session, match, current_bill)
+
+
+@pytest.mark.asyncio
+async def test_return_and_vendor_credit_create_append_only_match_revisions(
+    matching_fixture,
+):
+    factory, company, _, evaluator, _ = matching_fixture
+    order, bill = await seed_evidence(
+        factory, company, evaluator.active_branch, evaluator
+    )
+    service = ProcurementMatchingService()
+
+    async def evaluate(key: str):
+        async with factory() as session:
+            return await service.evaluate(
+                session,
+                context=evaluator,
+                payload=EvaluateMatchCommand(
+                    purchase_order_id=order.id,
+                    vendor_bill_id=bill.id,
+                    expected_purchase_order_version=order.version,
+                    expected_bill_version=bill.version,
+                    idempotency_key=key,
+                ),
+            )
+
+    initial_key = f"initial-{uuid4()}"
+    initial = await evaluate(initial_key)
+    returned = await seed_physical_return(factory, company, evaluator, order)
+    async with factory() as session:
+        stale = await session.get(ProcurementMatch, initial.id)
+        current_bill = await session.get(VendorBill, bill.id)
+        assert stale is not None and current_bill is not None
+        assert not await is_current_eligible_match(session, stale, current_bill)
+
+    pending = await evaluate(f"return-{uuid4()}")
+    assert pending.state == "return_pending_credit"
+    assert pending.admission_state == "review_required"
+    assert pending.evaluation_sequence == 2
+    assert pending.supersedes_match_id == initial.id
+
+    async with factory() as session, session.begin():
+        ap_vendor = await session.get(AccountingVendor, bill.vendor_id)
+        mapping = await session.scalar(
+            select(APAccountMapping).where(APAccountMapping.company_id == company.id)
+        )
+        assert ap_vendor is not None and mapping is not None
+        session.add(
+            VendorCredit(
+                company_id=company.id,
+                vendor_id=ap_vendor.id,
+                credit_number=f"VC-{uuid4().hex[:8]}",
+                credit_date=date(2026, 8, 30),
+                currency="USD",
+                amount=Decimal(20),
+                available_amount=Decimal(20),
+                reason="Returned defective material",
+                mapping_id=mapping.id,
+                source_system="purchasing_return",
+                source_identity=str(returned.id),
+                source_digest="f" * 64,
+                created_by_user_id=evaluator.user.id,
+            )
+        )
+
+    reviewed = await evaluate(f"credit-{uuid4()}")
+    assert reviewed.state == "requires_review"
+    assert reviewed.admission_state == "review_required"
+    assert reviewed.evaluation_sequence == 3
+    assert reviewed.supersedes_match_id == pending.id
+    assert reviewed.lines[0].returned_quantity == Decimal(2)
+    assert reviewed.exceptions[0].category == "return_pending_credit"
+    historical_replay = await evaluate(initial_key)
+    assert historical_replay.id == initial.id
+    assert historical_replay.superseded_at is not None
+
+    async with factory() as session:
+        matches = tuple(
+            (
+                await session.scalars(
+                    select(ProcurementMatch)
+                    .where(ProcurementMatch.vendor_bill_id == bill.id)
+                    .order_by(ProcurementMatch.evaluation_sequence)
+                )
+            ).all()
+        )
+        assert [row.evaluation_sequence for row in matches] == [1, 2, 3]
+        assert matches[0].superseded_at is not None
+        assert matches[1].superseded_at is not None
+        assert matches[2].superseded_at is None
 
 
 @pytest.mark.asyncio
