@@ -4,7 +4,7 @@
   "milestone_id": "BANK.BEA.005",
   "state": "QUALIFIED_AWAITING_OWNER_ACCEPTANCE",
   "implementation_sha": "64e2cc6ce850529ad52682802cb47f5184a2de02",
-  "qualification_base_sha": "fc55fa2ad366b5db62ab6b761700ecd098c35a6e",
+  "qualification_base_sha": "8aab5bfccc09b21eb8209860a75f2e85db1e740e",
   "repository_ref": "origin/customer-management-v1",
   "contract_digest": "83566fa801277c386ff6fdba93e030027af46afcdd75b8024d0b7f2912f31650",
   "qualification_evidence": [
@@ -15,14 +15,30 @@
     "assignment and transfer preserve explicit exclusive-owner lifecycle semantics",
     "Company and Branch scope is enforced for mutation, replay, state, history, and owner eligibility",
     "workflow events preserve immutable actor, signal, evidence, owner, version, timestamp, audit, and Business Event lineage",
+    "the Command Center consumes the authoritative BEA.004 workflow projection and exposes permission-gated acknowledge, claim, assign, transfer, release, and history controls",
+    "operator conflicts and failures remain bounded, refreshable, and do not fabricate successful workflow state",
     "BEA.003 confidence/freshness and BEA.004 prioritization remain unchanged",
     "no source-domain mutation, autonomous action, protected-data disclosure, Preview, or Production authority is introduced"
   ],
   "schema_impact": "NONE_NEW_EXISTING_L3C5Y7A9D164_QUALIFIED",
+  "operator_surface": {
+    "projection": "/api/v1/beacon/operational-signals/workflow",
+    "history": "/api/v1/beacon/workflow-history",
+    "actions": [
+      "acknowledge",
+      "assign",
+      "claim",
+      "release",
+      "transfer"
+    ],
+    "permission_gated": true,
+    "backend_authoritative": true,
+    "autonomous_action": false
+  },
   "autonomous_action": "PROHIBITED",
   "successor_gate": {
     "milestone_id": "BANK.BEA.006",
     "state": "BLOCKED_PENDING_BANK_BEA_005_OWNER_ACCEPTANCE"
   },
-  "qualification_fingerprint": "b8224be8e874db6fe8704c0d8120a528cf90c24f5082cc982f0464e0d81e4b16"
+  "qualification_fingerprint": "935bdf25789b480e394e28e2c2ecc3b3d4b22e22d8511104300123f1fced3424"
 }

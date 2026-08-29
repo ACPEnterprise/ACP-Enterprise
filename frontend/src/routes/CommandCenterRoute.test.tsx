@@ -2,10 +2,13 @@ import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { describe, expect, it, vi } from "vitest";
 
+import { useAuth } from "../auth/useAuth";
+import { useEffectivePermissions } from "../auth/usePermissions";
 import { useAnalyticsSummary } from "../hooks/useAnalyticsSummary";
 import {
   useBeaconLifecycleActions,
   useBeaconSignals,
+  useBeaconWorkflowActions,
 } from "../hooks/useBeaconSignals";
 import { useJobs } from "../hooks/useJobs";
 import { CommandCenterRoute } from "./CommandCenterRoute";
@@ -13,14 +16,26 @@ import { CommandCenterRoute } from "./CommandCenterRoute";
 vi.mock("../hooks/useAnalyticsSummary");
 vi.mock("../hooks/useBeaconSignals");
 vi.mock("../hooks/useJobs");
+vi.mock("../auth/useAuth");
+vi.mock("../auth/usePermissions");
 
 const analyticsHook = vi.mocked(useAnalyticsSummary);
 const beaconHook = vi.mocked(useBeaconSignals);
 const beaconLifecycleHook = vi.mocked(useBeaconLifecycleActions);
+const beaconWorkflowHook = vi.mocked(useBeaconWorkflowActions);
 const jobsHook = vi.mocked(useJobs);
 
 describe("CommandCenterRoute", () => {
   it("renders connected metrics without fabricating workforce activity", () => {
+    vi.mocked(useAuth).mockReturnValue({ user: { id: "user-a" } } as ReturnType<
+      typeof useAuth
+    >);
+    vi.mocked(useEffectivePermissions).mockReturnValue(new Set());
+    beaconWorkflowHook.mockReturnValue({
+      mutate: vi.fn(),
+      isPending: false,
+      isError: false,
+    } as unknown as ReturnType<typeof useBeaconWorkflowActions>);
     beaconLifecycleHook.mockReturnValue({
       mutate: vi.fn(),
       isPending: false,
@@ -70,6 +85,15 @@ describe("CommandCenterRoute", () => {
   });
 
   it("renders honest unavailable states when connected APIs fail", () => {
+    vi.mocked(useAuth).mockReturnValue({ user: { id: "user-a" } } as ReturnType<
+      typeof useAuth
+    >);
+    vi.mocked(useEffectivePermissions).mockReturnValue(new Set());
+    beaconWorkflowHook.mockReturnValue({
+      mutate: vi.fn(),
+      isPending: false,
+      isError: false,
+    } as unknown as ReturnType<typeof useBeaconWorkflowActions>);
     beaconLifecycleHook.mockReturnValue({
       mutate: vi.fn(),
       isPending: false,
