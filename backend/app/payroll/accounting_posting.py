@@ -27,9 +27,14 @@ from .contracts import PayrollAuthorizationError, PayrollConflictError, canonica
 from .models import (
     PayrollAccountingMappingVersion,
     PayrollAccountingPolicyVersion,
+    PayrollAdjustmentApplicationRecord,
+    PayrollAdjustmentResultRecord,
     PayrollPaymentExecutionEvidenceRecord,
     PayrollPaymentExecutionItemRecord,
     PayrollPaymentExecutionRecord,
+    PayrollRemittanceEvidenceRecord,
+    PayrollRemittanceInstructionRecord,
+    PayrollRemittanceObligationRecord,
     PayrollRunMemberRecord,
     PayrollRunRecord,
 )
@@ -47,6 +52,7 @@ class PayrollRecognitionEvent(StrEnum):
     TAX_REMITTANCE = "tax_remittance"
     DEDUCTION_REMITTANCE = "deduction_remittance"
     RETURN_ADJUSTMENT = "return_adjustment"
+    ADJUSTMENT_APPLIED = "adjustment_applied"
 
 
 class PayrollAccountingComponent(StrEnum):
@@ -62,6 +68,12 @@ class PayrollAccountingComponent(StrEnum):
     WAGE_SETTLEMENT = "wage_settlement"
     TAX_REMITTANCE = "tax_remittance"
     DEDUCTION_REMITTANCE = "deduction_remittance"
+    TAX_LIABILITY_SETTLEMENT = "tax_liability_settlement"
+    DEDUCTION_LIABILITY_SETTLEMENT = "deduction_liability_settlement"
+    BENEFIT_LIABILITY_SETTLEMENT = "benefit_liability_settlement"
+    CASH_CLEARING = "cash_clearing"
+    ADJUSTMENT_DEBIT = "adjustment_debit"
+    ADJUSTMENT_CREDIT = "adjustment_credit"
 
 
 @dataclass(frozen=True)
@@ -189,6 +201,44 @@ class PayrollAccountingPostingService:
         amount = sum((item.amount for item in items), Decimal(0))
         components = {PayrollAccountingComponent.NET_PAY_LIABILITY_SETTLEMENT.value: amount, PayrollAccountingComponent.WAGE_SETTLEMENT.value: amount}
         return await self._prepare(session, context, PayrollRecognitionEvent.WAGE_SETTLEMENT, execution.payroll_run_id, evidence.id, canonical_digest({"execution_digest": execution.execution_digest, "settlement_digest": evidence.evidence_digest, "instruction_digests": tuple(sorted(item.evidence_digest or "" for item in items))}), execution.currency, components, effective_date, evidence.occurred_at, period_id)
+
+    async def prepare_remittance_settlement(self, session: AsyncSession, *, context: AuthorizationContext, obligation_id: UUID, effective_date: date, period_id: UUID) -> PayrollPostingFactCandidate:
+        """Project only explicitly settled remittance evidence; acknowledgement is insufficient."""
+        self._require(context, PayrollPermission.ACCOUNTING_PREPARE)
+        obligation = await session.scalar(select(PayrollRemittanceObligationRecord).where(PayrollRemittanceObligationRecord.company_id == context.company.id, PayrollRemittanceObligationRecord.id == obligation_id, PayrollRemittanceObligationRecord.lifecycle.in_(("settled", "partially_settled"))))
+        if obligation is None or obligation.settled_amount <= 0:
+            raise PayrollConflictError("explicit remittance settlement authority is required")
+        instruction = await session.scalar(select(PayrollRemittanceInstructionRecord).where(PayrollRemittanceInstructionRecord.company_id == context.company.id, PayrollRemittanceInstructionRecord.obligation_id == obligation.id))
+        if instruction is None:
+            raise PayrollConflictError("remittance instruction authority is unavailable")
+        evidence = tuple((await session.scalars(select(PayrollRemittanceEvidenceRecord).where(PayrollRemittanceEvidenceRecord.instruction_id == instruction.id, PayrollRemittanceEvidenceRecord.evidence_type == "settlement").order_by(PayrollRemittanceEvidenceRecord.occurred_at))).all())
+        proven = sum((item.amount or Decimal(0) for item in evidence), Decimal(0))
+        if not evidence or proven != obligation.settled_amount:
+            raise PayrollConflictError("remittance settlement evidence does not reconcile")
+        tax = obligation.classification in {"employee_tax_withholding", "employer_payroll_tax"}
+        benefit = obligation.classification == "employer_benefit_contribution"
+        event = PayrollRecognitionEvent.TAX_REMITTANCE if tax else PayrollRecognitionEvent.DEDUCTION_REMITTANCE
+        liability = PayrollAccountingComponent.TAX_LIABILITY_SETTLEMENT if tax else PayrollAccountingComponent.BENEFIT_LIABILITY_SETTLEMENT if benefit else PayrollAccountingComponent.DEDUCTION_LIABILITY_SETTLEMENT
+        components = {liability.value: proven, PayrollAccountingComponent.CASH_CLEARING.value: proven}
+        digest = canonical_digest({"obligation_digest": obligation.obligation_digest, "instruction_digest": instruction.instruction_digest, "settlement_evidence": tuple(item.evidence_digest for item in evidence), "settled_amount": str(proven)})
+        return await self._prepare(session, context, event, obligation.payroll_run_id, instruction.id, digest, obligation.currency, components, effective_date, evidence[-1].occurred_at, period_id)
+
+    async def prepare_adjustment(self, session: AsyncSession, *, context: AuthorizationContext, application_id: UUID, effective_date: date, period_id: UUID) -> PayrollPostingFactCandidate:
+        """Project an applied signed adjustment as an incremental, never historical, fact."""
+        self._require(context, PayrollPermission.ACCOUNTING_PREPARE)
+        application = await session.scalar(select(PayrollAdjustmentApplicationRecord).where(PayrollAdjustmentApplicationRecord.company_id == context.company.id, PayrollAdjustmentApplicationRecord.id == application_id))
+        if application is None or application.purpose != "accounting_adjustment":
+            raise PayrollConflictError("applied Accounting adjustment authority is required")
+        result = await session.scalar(select(PayrollAdjustmentResultRecord).where(PayrollAdjustmentResultRecord.company_id == context.company.id, PayrollAdjustmentResultRecord.id == application.result_id, PayrollAdjustmentResultRecord.lifecycle == "applied_to_successor_authority"))
+        if result is None or result.calculation_digest != application.result_digest:
+            raise PayrollConflictError("adjustment result authority does not verify")
+        debit = sum((Decimal(str(item["delta"])) for item in application.authorized_components if Decimal(str(item["delta"])) > 0), Decimal(0))
+        credit = -sum((Decimal(str(item["delta"])) for item in application.authorized_components if Decimal(str(item["delta"])) < 0), Decimal(0))
+        amount = debit or credit
+        if amount <= 0 or debit and credit and debit != credit:
+            raise PayrollConflictError("Accounting adjustment deltas do not form a deterministic balanced authority")
+        components = {PayrollAccountingComponent.ADJUSTMENT_DEBIT.value: amount, PayrollAccountingComponent.ADJUSTMENT_CREDIT.value: amount}
+        return await self._prepare(session, context, PayrollRecognitionEvent.ADJUSTMENT_APPLIED, result.id, application.id, application.application_digest, result.currency, components, effective_date, application.applied_at, period_id)
 
     async def _prepare(self, session: AsyncSession, context: AuthorizationContext, event: PayrollRecognitionEvent, source_id: UUID, source_event_id: UUID, source_digest: str, currency: str, components: dict[str, Decimal], effective_date: date, occurred_at: datetime, period_id: UUID) -> PayrollPostingFactCandidate:
         period = await accounting_repository.period(session, context.company.id, period_id)
