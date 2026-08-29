@@ -132,7 +132,14 @@ def test_current_projection_reconciles_completion_and_releases_successor() -> No
     assert "BANK.PLAT.006" not in projection.executable_milestone_ids
     assert "BANK.PLAT.007" not in projection.executable_milestone_ids
     assert "BANK.PLAT.008" in projection.executable_milestone_ids
-    assert "BANK.BEA.001" in projection.executable_milestone_ids
+    assert milestones["BANK.BEA.001"].current_state == "COMPLETE"
+    assert milestones["BANK.BEA.001"].canonical_milestone_id == "BANK.BEA.001"
+    assert milestones["BANK.BEA.001"].completion_commit_sha == (
+        "0f6559ecddb7ca3854c79ea7b5cb31432318976a"
+    )
+    assert milestones["BANK.BEA.002"].current_state == "EXECUTABLE"
+    assert "BANK.BEA.001" not in projection.executable_milestone_ids
+    assert "BANK.BEA.002" in projection.executable_milestone_ids
 
     accounting = milestones["BANK.ACC.001"]
     assert accounting.current_state == "COMPLETE"

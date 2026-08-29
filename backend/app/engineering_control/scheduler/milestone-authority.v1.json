@@ -57,6 +57,13 @@
       "evidence_reference": "owner-accepted provider-neutral Vendor performance evidence boundary: deterministic read-time projection over accepted Purchasing facts, explicit missing/conflicting semantics, Company/Branch isolation, measured quantities/costs/lead times/discrepancies/returns without fault attribution, and no Vendor score, AP/Accounting inference, Economics result, Beacon signal, or AI invocation"
     },
     {
+      "bank_milestone_id": "BANK.BEA.001",
+      "canonical_milestone_id": "BANK.BEA.001",
+      "evidence_kind": "AUTHORITATIVE_INTEGRATION_ACCEPTANCE",
+      "authoritative_commit_sha": "0f6559ecddb7ca3854c79ea7b5cb31432318976a",
+      "evidence_reference": "owner-accepted operational exception signal catalog implementation 0f6559ecddb7ca3854c79ea7b5cb31432318976a, independently qualified by 4edbe923ec19dd45549cef8145579b45ad637551 with qualification fingerprint 21d188d97695f5e88193dc8db40172d4f56e6cfcde8bec8b10584774ab7cfd80 and accepted catalog digest fb4e23b03e53d39b89dee5d6a421f3f7d17caa1e0068465b343e8abd6dfb12d9"
+    },
+    {
       "bank_milestone_id": "BANK.PLAT.002",
       "canonical_milestone_id": "BANK.PLAT.002",
       "evidence_kind": "AUTHORITATIVE_INTEGRATION_ACCEPTANCE",
@@ -134,5 +141,5 @@
   ],
   "gate_resolutions": [],
   "active_ownership": [],
-  "fingerprint": "7981bcc1bcdc89310de362e6b93ba606fffd9af7c73d9dadc35823dcf67da439"
+  "fingerprint": "f60d9733ad8d17a9824314200386b183e3a80d94d937616d54ac7b85437e2b6d"
 }
