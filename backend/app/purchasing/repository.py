@@ -5,6 +5,8 @@ from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .models import (
+    BranchPurchasingPolicy,
+    BranchPurchasingPolicyRevision,
     OperationalVendor,
     PurchaseOrder,
     PurchaseOrderChangeOrder,
@@ -21,6 +23,57 @@ from .models import (
 
 
 class PurchasingRepository:
+    async def branch_policy(
+        self,
+        session: AsyncSession,
+        company_id: UUID,
+        branch_id: UUID,
+        inventory_item_id: UUID,
+        *,
+        lock: bool = False,
+    ) -> BranchPurchasingPolicy | None:
+        query = select(BranchPurchasingPolicy).where(
+            BranchPurchasingPolicy.company_id == company_id,
+            BranchPurchasingPolicy.branch_id == branch_id,
+            BranchPurchasingPolicy.inventory_item_id == inventory_item_id,
+        )
+        return await session.scalar(query.with_for_update() if lock else query)
+
+    async def branch_policies(
+        self, session: AsyncSession, company_id: UUID, branch_ids: tuple[UUID, ...]
+    ) -> tuple[BranchPurchasingPolicy, ...]:
+        return tuple(
+            (
+                await session.scalars(
+                    select(BranchPurchasingPolicy)
+                    .where(
+                        BranchPurchasingPolicy.company_id == company_id,
+                        BranchPurchasingPolicy.branch_id.in_(branch_ids),
+                    )
+                    .order_by(
+                        BranchPurchasingPolicy.branch_id,
+                        BranchPurchasingPolicy.inventory_item_id,
+                    )
+                )
+            ).all()
+        )
+
+    async def branch_policy_revisions(
+        self, session: AsyncSession, company_id: UUID, policy_id: UUID
+    ) -> tuple[BranchPurchasingPolicyRevision, ...]:
+        return tuple(
+            (
+                await session.scalars(
+                    select(BranchPurchasingPolicyRevision)
+                    .where(
+                        BranchPurchasingPolicyRevision.company_id == company_id,
+                        BranchPurchasingPolicyRevision.policy_id == policy_id,
+                    )
+                    .order_by(BranchPurchasingPolicyRevision.version)
+                )
+            ).all()
+        )
+
     async def vendor(
         self,
         session: AsyncSession,

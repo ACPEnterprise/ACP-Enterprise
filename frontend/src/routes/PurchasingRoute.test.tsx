@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { usePurchasing, usePurchasingMutations } from "../hooks/usePurchasing";
+import { useBranchPurchasingPolicies, usePurchasing, usePurchasingMutations } from "../hooks/usePurchasing";
 import { PurchasingRoute } from "./PurchasingRoute";
 let permissions = new Set<string>();
 vi.mock("../auth", () => ({
@@ -11,6 +11,7 @@ vi.mock("../auth", () => ({
 }));
 vi.mock("../hooks/usePurchasing", () => ({
   usePurchasing: vi.fn(),
+  useBranchPurchasingPolicies: vi.fn(),
   usePurchasingMutations: vi.fn(),
 }));
 const mutation = { mutateAsync: vi.fn(), isPending: false, isError: false };
@@ -58,6 +59,10 @@ describe("PurchasingRoute", () => {
         ],
       },
     } as never);
+    vi.mocked(useBranchPurchasingPolicies).mockReturnValue({
+      isError: false,
+      data: [],
+    } as never);
     vi.mocked(usePurchasingMutations).mockReturnValue({
       createVendor: mutation,
       updateVendor: mutation,
@@ -75,6 +80,7 @@ describe("PurchasingRoute", () => {
       dispositionOrder: mutation,
       replenishmentWorkbench: replenishmentMutation,
       decideReplenishment: decisionMutation,
+      configureBranchPolicy: mutation,
     } as never);
   });
   it("keeps recommendations read-only without approval authority", () => {

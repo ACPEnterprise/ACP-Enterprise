@@ -162,6 +162,43 @@ class ReplenishmentDecisionItem(PurchasingSchema):
     decided_at: datetime
 
 
+class BranchPurchasingPolicyWrite(Command):
+    branch_id: UUID
+    inventory_item_id: UUID
+    target_available_quantity: Decimal = Field(ge=0, max_digits=18, decimal_places=6)
+    status: str = Field(pattern=r"^(active|inactive)$")
+    provenance_reference: str = Field(min_length=1, max_length=240)
+    reason: str = Field(min_length=1, max_length=1000)
+    expected_version: int | None = Field(default=None, ge=1)
+
+
+class BranchPurchasingPolicyRevisionItem(PurchasingSchema):
+    version: int
+    target_available_quantity: Decimal
+    status: str
+    provenance_reference: str
+    reason: str
+    evidence_digest: str
+    actor_user_id: UUID
+    occurred_at: datetime
+
+
+class BranchPurchasingPolicyItem(PurchasingSchema):
+    id: UUID
+    company_id: UUID
+    branch_id: UUID
+    inventory_item_id: UUID
+    target_available_quantity: Decimal
+    status: str
+    provenance_reference: str
+    version: int
+    created_by_user_id: UUID
+    updated_by_user_id: UUID
+    created_at: datetime
+    updated_at: datetime
+    revisions: tuple[BranchPurchasingPolicyRevisionItem, ...] = ()
+
+
 class PurchaseOrderCreate(Command):
     branch_id: UUID
     vendor_id: UUID
