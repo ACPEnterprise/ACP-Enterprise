@@ -3,7 +3,7 @@
   "authority_id": "BANK.DF.002.AUTHORITY",
   "bank_id": "BANK.2",
   "bank_fingerprint": "f0af5713c967b92588ed1a82d36f5adc864fc4b235064dad0c5f5d11b158d4b3",
-  "authoritative_repository_sha": "f77cc2fb68372ec439271321120b17230f8567b7",
+  "authoritative_repository_sha": "6b5e8c16121a80852f79a9474e7dabd395d6dba7",
   "repository_ref": "origin/customer-management-v1",
   "completion_inventory_scope": "ALL_BANK_MILESTONES",
   "completion_evidence": [
@@ -92,6 +92,13 @@
       "evidence_reference": "owner-accepted notification outbox resilience hardening: durable tenant-scoped intent and append-only delivery evidence, contradictory-replay rejection, bounded retry and stale-claim recovery, explicit provider ambiguity, safe provider-idempotency handling, authorized suppression/cancellation, Business Event lineage, and no exactly-once external-delivery claim"
     },
     {
+      "bank_milestone_id": "BANK.PLAT.007",
+      "canonical_milestone_id": "BANK.PLAT.007",
+      "evidence_kind": "AUTHORITATIVE_INTEGRATION_ACCEPTANCE",
+      "authoritative_commit_sha": "6b5e8c16121a80852f79a9474e7dabd395d6dba7",
+      "evidence_reference": "owner-accepted sensitive-data logging controls: centralized structural classification and recursive sanitation, deterministic safe digests, logging and exception protection, safe Audit and Business Event boundaries, synthetic leakage qualification, catalog fingerprint d480e5aa005637e6ade7c4ef8c9316bde8d52a98e5932b65fc7bcf0dc74d2c02, and updated isolation coverage fingerprint 43f3d0cfaa98462e63d4cbd699671d49cb8c5391b769dbba0c61ef5a3fc507bb"
+    },
+    {
       "bank_milestone_id": "BANK.DF.001",
       "canonical_milestone_id": "BANK.DF.001",
       "evidence_kind": "AUTHORITATIVE_INTEGRATION_ACCEPTANCE",
@@ -127,5 +134,5 @@
   ],
   "gate_resolutions": [],
   "active_ownership": [],
-  "fingerprint": "0ebecdd8c326f9346f723f61039b78222daba5412a2324b5834b77788c4c1b1a"
+  "fingerprint": "aa91c7ca398b51cc4315dc061ecfbf7c66b96c7c1c3dcda26138293a973e535a"
 }

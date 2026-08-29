@@ -85,7 +85,12 @@ def test_current_projection_reconciles_completion_and_releases_successor() -> No
     assert milestones["BANK.PLAT.006"].completion_commit_sha == (
         "f77cc2fb68372ec439271321120b17230f8567b7"
     )
-    assert milestones["BANK.PLAT.007"].current_state == "EXECUTABLE"
+    assert milestones["BANK.PLAT.007"].current_state == "COMPLETE"
+    assert milestones["BANK.PLAT.007"].canonical_milestone_id == "BANK.PLAT.007"
+    assert milestones["BANK.PLAT.007"].completion_commit_sha == (
+        "6b5e8c16121a80852f79a9474e7dabd395d6dba7"
+    )
+    assert milestones["BANK.PLAT.008"].current_state == "EXECUTABLE"
     assert milestones["BANK.PUR.002"].current_state == "COMPLETE"
     assert milestones["BANK.PUR.002"].canonical_milestone_id == "PUR.2"
     assert milestones["BANK.PUR.002"].completion_commit_sha == (
@@ -125,7 +130,8 @@ def test_current_projection_reconciles_completion_and_releases_successor() -> No
     assert "BANK.PLAT.004" not in projection.executable_milestone_ids
     assert "BANK.PLAT.005" not in projection.executable_milestone_ids
     assert "BANK.PLAT.006" not in projection.executable_milestone_ids
-    assert "BANK.PLAT.007" in projection.executable_milestone_ids
+    assert "BANK.PLAT.007" not in projection.executable_milestone_ids
+    assert "BANK.PLAT.008" in projection.executable_milestone_ids
     assert "BANK.BEA.001" in projection.executable_milestone_ids
 
     accounting = milestones["BANK.ACC.001"]
@@ -315,7 +321,43 @@ def test_platform_006_acceptance_changes_only_itself_and_direct_successor() -> N
         if current[milestone_id].current_state != prior[milestone_id].current_state
     }
 
-    assert changed == {"BANK.PLAT.006", "BANK.PLAT.007"}
+    assert changed == {"BANK.PLAT.006"}
+
+
+def test_platform_007_acceptance_changes_only_itself_and_direct_successor() -> None:
+    bank = load_milestone_bank()
+    current = _by_id(load_current_readiness_projection())
+    raw = _authority_raw()
+    evidence = raw["completion_evidence"]
+    assert isinstance(evidence, list)
+    plat_007 = next(
+        item for item in evidence if item["bank_milestone_id"] == "BANK.PLAT.007"
+    )
+    assert plat_007["authoritative_commit_sha"] == (
+        "6b5e8c16121a80852f79a9474e7dabd395d6dba7"
+    )
+    assert (
+        "d480e5aa005637e6ade7c4ef8c9316bde8d52a98e5932b65fc7bcf0dc74d2c02"
+        in plat_007["evidence_reference"]
+    )
+    assert (
+        "43f3d0cfaa98462e63d4cbd699671d49cb8c5391b769dbba0c61ef5a3fc507bb"
+        in plat_007["evidence_reference"]
+    )
+    raw["completion_evidence"] = [
+        item for item in evidence if item["bank_milestone_id"] != "BANK.PLAT.007"
+    ]
+    prior = _by_id(
+        evaluate_readiness(bank, ingest_authority_snapshot(_resign(raw), bank))
+    )
+
+    changed = {
+        milestone_id
+        for milestone_id in current
+        if current[milestone_id].current_state != prior[milestone_id].current_state
+    }
+
+    assert changed == {"BANK.PLAT.007", "BANK.PLAT.008"}
 
 
 def test_pur_002_acceptance_changes_only_itself_and_direct_successor() -> None:
