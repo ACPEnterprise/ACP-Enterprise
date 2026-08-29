@@ -1,0 +1,6 @@
+import { StyleSheet, Text } from "react-native";
+import { PrimaryButton } from "../components/PrimaryButton";
+import { Screen } from "../components/Screen";
+import { colors } from "../design/tokens";
+export function RestrictedStateScreen({ kind, onLogout }: { kind: "onboarding_incomplete" | "access_limited"; onLogout(): Promise<void> }) { const message = kind === "onboarding_incomplete" ? "Your ACP employee account is still being set up." : "Your account does not currently have access to ACP Employee capabilities."; return <Screen><Text accessibilityRole="header" style={styles.title}>{kind === "onboarding_incomplete" ? "Setup in progress" : "Access limited"}</Text><Text accessibilityRole="alert" style={styles.body}>{message}</Text><Text style={styles.note}>Contact your ACP administrator if you believe this is unexpected.</Text><PrimaryButton label="Sign Out" onPress={() => void onLogout()} /></Screen>; }
+const styles = StyleSheet.create({ title: { fontSize: 30, fontWeight: "800", color: colors.text }, body: { fontSize: 18, lineHeight: 26, color: colors.text }, note: { fontSize: 16, lineHeight: 24, color: colors.muted } });

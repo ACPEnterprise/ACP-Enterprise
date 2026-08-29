@@ -2,38 +2,46 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { StatusBar } from "expo-status-bar";
 import { Text } from "react-native";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { PrimaryButton } from "./components/PrimaryButton";
 import { Screen } from "./components/Screen";
 import { readEnvironment } from "./config/environment";
 import { AppNavigator } from "./navigation/AppNavigator";
-import { INITIAL_CAPABILITIES } from "./permissions/capabilities";
 import type { Capability } from "./permissions/capabilities";
 import { SessionRepository } from "./auth/sessionRepository";
+import { AuthenticationCoordinator } from "./auth/authenticationCoordinator";
+import type { EstablishedState } from "./auth/authenticationCoordinator";
 import { deviceProtectedStorage } from "./storage/secureStorage";
 import { ApiClient } from "./api/client";
 import { createTimekeepingService } from "./api/timekeeping";
 import { createEmployeeOperationsService } from "./api/employeeOperations";
-import { getCapabilities } from "./api/authorization";
 import { deviceNetworkMonitor } from "./network/networkMonitor";
 import { safeLogger } from "./diagnostics/safeLogger";
+import { RestrictedStateScreen } from "./screens/RestrictedStateScreen";
 import type { AppEnvironment } from "./config/environment";
 
 export default function App() {
-  const sessions = useMemo(() => new SessionRepository(deviceProtectedStorage), []);
-  const [state, setState] = useState<"restoring" | "anonymous" | "authenticated" | "configuration_error">("restoring");
-  const [environment, setEnvironment] = useState<AppEnvironment | null>(null);
-  const expire = useCallback(() => setState("anonymous"), []);
-  useEffect(() => { Promise.resolve().then(() => { const next = readEnvironment(); setEnvironment(next); return sessions.load(); }).then((session) => setState(session ? "authenticated" : "anonymous")).catch(() => setState("configuration_error")); }, [sessions]);
-  if (state === "restoring") return <Screen><Text>Starting ACP Employee…</Text></Screen>;
-  if (state === "configuration_error") return <Screen><Text accessibilityRole="alert">ACP Employee is not configured. Contact support.</Text></Screen>;
-  if (!environment) return <Screen><Text>Starting ACP Employee…</Text></Screen>;
-  return <RuntimeApp authenticated={state === "authenticated"} environment={environment} sessions={sessions} onExpired={expire} />;
+  const [configuration] = useState<{ environment: AppEnvironment | null; error: boolean }>(() => { try { return { environment: readEnvironment(), error: false }; } catch { return { environment: null, error: true }; } });
+  if (configuration.error || !configuration.environment) return <Screen><Text accessibilityRole="alert">ACP Employee is not configured. Contact support.</Text></Screen>;
+  return <RuntimeApp environment={configuration.environment} />;
 }
 
-function RuntimeApp({ authenticated, environment, sessions, onExpired }: { authenticated: boolean; environment: AppEnvironment; sessions: SessionRepository; onExpired(): void }) {
-  const [capabilities, setCapabilities] = useState<readonly Capability[]>(INITIAL_CAPABILITIES);
-  const client = useMemo(() => new ApiClient(environment.apiBaseUrl, sessions, deviceNetworkMonitor, safeLogger, onExpired), [environment.apiBaseUrl, onExpired, sessions]);
-  const timekeeping = useMemo(() => createTimekeepingService(client), [client]);
-  const employeeOperations = useMemo(() => createEmployeeOperationsService(client), [client]);
-  useEffect(() => { if (authenticated) void getCapabilities(client).then(setCapabilities).catch(() => setCapabilities(["home.view"])); }, [authenticated, client]);
-  return <ErrorBoundary><StatusBar style="auto" /><AppNavigator authenticated={authenticated} capabilities={capabilities} timekeeping={timekeeping} employeeOperations={employeeOperations} network={deviceNetworkMonitor} /></ErrorBoundary>;
+type RuntimeState = "boot" | "restore_error" | "anonymous" | "authenticated" | "onboarding_incomplete" | "access_limited";
+
+function RuntimeApp({ environment }: { environment: AppEnvironment }) {
+  const sessions = useMemo(() => new SessionRepository(deviceProtectedStorage), []);
+  const [state, setState] = useState<RuntimeState>("boot"); const [capabilities, setCapabilities] = useState<readonly Capability[]>([]);
+  const expire = useCallback(() => { setCapabilities([]); setState("anonymous"); }, []);
+  const client = useMemo(() => new ApiClient(environment.apiBaseUrl, sessions, deviceNetworkMonitor, safeLogger, expire), [environment.apiBaseUrl, expire, sessions]);
+  const timekeeping = useMemo(() => createTimekeepingService(client), [client]); const employeeOperations = useMemo(() => createEmployeeOperationsService(client), [client]);
+  const coordinator = useMemo(() => new AuthenticationCoordinator(client, sessions, async (allowed) => { if (allowed.includes("time.self.view")) await timekeeping.state(); else if (allowed.includes("my_day.view")) await employeeOperations.day(); }), [client, employeeOperations, sessions, timekeeping]);
+  const apply = useCallback((result: EstablishedState | { kind: "anonymous" }) => { if (result.kind === "authenticated") { setCapabilities(result.capabilities); setState("authenticated"); } else { setCapabilities([]); setState(result.kind); } }, []);
+  const restore = useCallback(async () => { setState("boot"); try { apply(await coordinator.restore()); } catch { setState("restore_error"); } }, [apply, coordinator]);
+  useEffect(() => { void coordinator.restore().then(apply).catch(() => setState("restore_error")); }, [apply, coordinator]);
+  const signIn = useCallback(async (email: string, password: string) => { apply(await coordinator.signIn(email, password)); }, [apply, coordinator]);
+  const activate = useCallback(async (token: string, password: string) => { await coordinator.activate(token, password); }, [coordinator]);
+  const signOut = useCallback(async () => { await coordinator.signOut(); setCapabilities([]); setState("anonymous"); }, [coordinator]);
+  if (state === "boot") return <Screen><Text accessibilityLabel="Verifying protected ACP session">Verifying your ACP session…</Text></Screen>;
+  if (state === "restore_error") return <Screen><Text accessibilityRole="alert">ACP could not verify this device session. Connect to the internet and try again.</Text><PrimaryButton label="Retry Session Verification" onPress={() => void restore()} /><PrimaryButton label="Clear Session and Sign In" onPress={() => void signOut()} /></Screen>;
+  if (state === "onboarding_incomplete" || state === "access_limited") return <RestrictedStateScreen kind={state} onLogout={signOut} />;
+  return <ErrorBoundary><StatusBar style="auto" /><AppNavigator authenticated={state === "authenticated"} capabilities={capabilities} timekeeping={timekeeping} employeeOperations={employeeOperations} network={deviceNetworkMonitor} onSignIn={signIn} onActivate={activate} onLogout={signOut} /></ErrorBoundary>;
 }

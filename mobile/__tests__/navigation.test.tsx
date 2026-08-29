@@ -7,7 +7,7 @@ const state = { state: "not_clocked_in", last_action: null, occurred_at: null, s
 const service: TimekeepingService = { state: async () => state, timecard: async () => ({ employee_id: "synthetic", punch_state: state, pay_period: null, entries: [] }), punch: jest.fn() };
 const network = { isConnected: async () => true, subscribe: () => () => undefined };
 describe("application shell", () => {
-  it("boots an unauthenticated sign-in foundation", () => { render(<SignInScreen />); expect(screen.getByText("ACP Employee")).toBeOnTheScreen(); });
+  it("boots an unauthenticated sign-in foundation", () => { render(<SignInScreen onSignIn={jest.fn()} />); expect(screen.getByText("ACP Employee")).toBeOnTheScreen(); });
   it("renders authenticated Home without business fixtures", () => { render(<HomeScreen />); expect(screen.getByText("Home")).toBeOnTheScreen(); expect(screen.queryByText(/job|hours|alert|schedule/i)).not.toBeOnTheScreen(); });
   it("renders the native My Time route boundary", async () => { render(<TimeScreen service={service} network={network} canPunch />); expect(screen.getByText("My Time")).toBeOnTheScreen(); expect(await screen.findByText("Clock In")).toBeOnTheScreen(); });
 });
