@@ -2,11 +2,12 @@ import hashlib
 import json
 from dataclasses import asdict, dataclass
 
+from app.platform.idempotency.coverage import mutation_coverage_registry
 from app.platform.permissions.catalog import permission_catalog
 
 PLATFORM_CONTRACT_VERSION = "1"
 AUTHORIZATION_PROJECTION_VERSION = "1"
-SHARED_API_CONTRACT_VERSION = "1"
+SHARED_API_CONTRACT_VERSION = "2"
 
 
 class PlatformContractDriftError(RuntimeError):
@@ -20,6 +21,7 @@ class PlatformContractManifest:
     permission_catalog_digest: str
     authorization_projection_version: str
     shared_api_contract_version: str
+    api_idempotency_coverage_fingerprint: str
     fingerprint: str
 
     def safe_dict(self) -> dict[str, str]:
@@ -59,6 +61,9 @@ def _build_manifest() -> PlatformContractManifest:
     codes_digest = _digest([item["code"] for item in definitions])
     catalog_digest = _digest(definitions)
     contract = {
+        "api_idempotency_coverage_fingerprint": (
+            mutation_coverage_registry.fingerprint
+        ),
         "authorization_projection_version": AUTHORIZATION_PROJECTION_VERSION,
         "permission_catalog_digest": catalog_digest,
         "permission_codes_digest": codes_digest,
