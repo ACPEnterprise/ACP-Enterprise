@@ -1433,6 +1433,24 @@ def test_code_milestone_without_repository_readiness_is_not_owner_startable() ->
     assert actions == ()
 
 
+def test_historical_execution_definition_is_not_owner_startable() -> None:
+    item = SimpleNamespace(
+        reconciliation_state="current",
+        status="ready",
+        readiness_state="ready",
+        requested_code_changes=False,
+    )
+    attention, reason, actions = _attention(
+        item,
+        None,
+        None,
+        historical_execution_authority_over=True,
+    )
+    assert attention == "informational"
+    assert "Historical execution evidence is preserved" in reason
+    assert actions == ()
+
+
 def test_reconciliation_runtime_overrides_capacity_projection() -> None:
     item = SimpleNamespace(
         reconciliation_state="current",
