@@ -2,6 +2,9 @@ from datetime import date
 from uuid import uuid4
 
 import pytest
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
 from app.accounting.models import Journal
 from app.payroll.accounting_finalization import PayrollAccountingFinalizationService
 from app.payroll.accounting_posting import (
@@ -12,9 +15,6 @@ from app.payroll.contracts import PayrollConflictError
 from app.payroll.permissions import PayrollPermission
 from app.platform.permissions.codes import AccountingPermission
 from app.platform.users.models import User
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-
 from tests.payroll.test_accounting_posting_authority import accounting_foundation
 from tests.payroll.test_gross_pay_finalization import FakeContext
 from tests.payroll.test_gross_pay_finalization import finalization_database as _database
