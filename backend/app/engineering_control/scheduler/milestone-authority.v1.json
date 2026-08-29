@@ -3,7 +3,7 @@
   "authority_id": "BANK.DF.002.AUTHORITY",
   "bank_id": "BANK.2",
   "bank_fingerprint": "f0af5713c967b92588ed1a82d36f5adc864fc4b235064dad0c5f5d11b158d4b3",
-  "authoritative_repository_sha": "82f84caf90195557266c885061569fe14268daa5",
+  "authoritative_repository_sha": "e874fc2aa1c2060fea7706ab7521e779997c2948",
   "repository_ref": "origin/customer-management-v1",
   "completion_inventory_scope": "ALL_BANK_MILESTONES",
   "completion_evidence": [
@@ -57,6 +57,13 @@
       "evidence_reference": "owner-accepted immutable audit completeness verification; 21-domain coverage fingerprint 49e35f171ac657be66727fa24f5311806fb27203dff8e4709181f62e12b85b43"
     },
     {
+      "bank_milestone_id": "BANK.PLAT.005",
+      "canonical_milestone_id": "BANK.PLAT.005",
+      "evidence_kind": "AUTHORITATIVE_INTEGRATION_ACCEPTANCE",
+      "authoritative_commit_sha": "e874fc2aa1c2060fea7706ab7521e779997c2948",
+      "evidence_reference": "owner-accepted Business Event delivery and replay hardening: at-least-once acquisition, effectively-once logical application, bounded retry and durable terminal failure, original-event replay, explicit aggregate ordering, Company/Branch isolation, authorized replay, audit lineage, and fail-closed event versions; no exactly-once transport or global-ordering claim"
+    },
+    {
       "bank_milestone_id": "BANK.DF.001",
       "canonical_milestone_id": "BANK.DF.001",
       "evidence_kind": "AUTHORITATIVE_INTEGRATION_ACCEPTANCE",
@@ -92,5 +99,5 @@
   ],
   "gate_resolutions": [],
   "active_ownership": [],
-  "fingerprint": "63070cfdb3c8a6b7237ce179fb28b243eee94e1c58b5afbd9adc1f9d06bbf654"
+  "fingerprint": "be73db6a90a5bd9e4d95e67d7547952caa73ceddc6cb7ec1e3192f23f872594c"
 }
