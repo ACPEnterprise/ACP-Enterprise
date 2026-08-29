@@ -1,23 +1,36 @@
 from uuid import UUID
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.events.models import BusinessEvent
 from app.events.schemas import BusinessEventCreate
 from app.events.service import BusinessEventService
 from app.events.types import EventType
 from app.inventory.contracts import (
+    AdjustmentRecord,
     AllocateReservation,
     AllocationRecord,
     CreateReservation,
     CreateStockLocation,
+    CycleCountEntryRecord,
+    CycleCountSessionRecord,
+    PostInventoryAdjustment,
     PostStockMovement,
+    RecordCycleCount,
     ReservationRecord,
+    StartCycleCount,
     StockLocationRecord,
     StockMovementRecord,
     TransitionReservation,
 )
 from app.inventory.repository import InventoryRepository
 from app.inventory.schemas import (
+    AdjustmentCreate,
+    CycleCountComplete,
+    CycleCountRecord,
+    CycleCountSessionResponse,
+    CycleCountStart,
     InventoryOverview,
     ItemResponse,
     LocationCreate,
@@ -104,7 +117,7 @@ class InventoryService:
                     external_entity_id=data.external_entity_id,
                 ),
             )
-            self._event(
+            await self._event(
                 session,
                 context,
                 EventType.INVENTORY_LOCATION_CREATED,
@@ -139,7 +152,7 @@ class InventoryService:
                     destination_location_id=data.destination_location_id,
                 ),
             )
-            self._event(
+            await self._event(
                 session,
                 context,
                 EventType.INVENTORY_TRANSFER_POSTED,
@@ -180,7 +193,7 @@ class InventoryService:
                     expires_at=data.expires_at,
                 ),
             )
-            self._event(
+            await self._event(
                 session,
                 context,
                 EventType.INVENTORY_RESERVATION_CREATED,
@@ -248,7 +261,7 @@ class InventoryService:
                     idempotency_key=data.idempotency_key,
                 ),
             )
-            self._event(
+            await self._event(
                 session,
                 context,
                 EventType.INVENTORY_RESERVATION_RELEASED,
@@ -260,6 +273,179 @@ class InventoryService:
                     "location_id": str(record.location_id),
                     "version": record.version,
                 },
+            )
+        return record
+
+    async def post_adjustment(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        data: AdjustmentCreate,
+    ) -> AdjustmentRecord:
+        self._branch(context, data.branch_id)
+        async with session.begin():
+            record = await self.repository.post_adjustment(
+                session,
+                spec=PostInventoryAdjustment(
+                    company_id=context.company.id,
+                    branch_id=data.branch_id,
+                    item_id=data.item_id,
+                    location_id=data.location_id,
+                    reason=data.reason,
+                    quantity_delta=data.quantity_delta,
+                    note=data.note,
+                    occurred_at=data.occurred_at,
+                    actor_user_id=context.user.id,
+                    idempotency_key=data.idempotency_key,
+                ),
+            )
+            await self._event(
+                session,
+                context,
+                EventType.INVENTORY_ADJUSTMENT_POSTED,
+                "inventory_adjustment",
+                record.id,
+                record.branch_id,
+                {
+                    "item_id": str(record.item_id),
+                    "location_id": str(record.location_id),
+                    "reason": record.reason,
+                    "quantity_delta": str(record.quantity_delta),
+                    "movement_id": str(record.movement_id),
+                },
+            )
+        return record
+
+    async def list_cycle_counts(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        branch_id: UUID | None,
+    ) -> tuple[CycleCountSessionResponse, ...]:
+        branches = (
+            tuple(context.authorized_branch_ids) if branch_id is None else (branch_id,)
+        )
+        if branch_id is not None:
+            self._branch(context, branch_id)
+        rows = await self.repository.list_cycle_counts(
+            session, company_id=context.company.id, branch_ids=branches
+        )
+        return tuple(
+            CycleCountSessionResponse.model_validate(cycle).model_copy(
+                update={"entries": tuple(entries)}
+            )
+            for cycle, entries in rows
+        )
+
+    async def start_cycle_count(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        data: CycleCountStart,
+    ) -> CycleCountSessionRecord:
+        self._branch(context, data.branch_id)
+        async with session.begin():
+            record = await self.repository.start_cycle_count(
+                session,
+                spec=StartCycleCount(
+                    company_id=context.company.id,
+                    branch_id=data.branch_id,
+                    location_id=data.location_id,
+                    name=data.name,
+                    actor_user_id=context.user.id,
+                    idempotency_key=data.idempotency_key,
+                ),
+            )
+            await self._event(
+                session,
+                context,
+                EventType.INVENTORY_CYCLE_COUNT_STARTED,
+                "inventory_cycle_count",
+                record.id,
+                record.branch_id,
+                {"location_id": str(record.location_id), "version": record.version},
+            )
+        return record
+
+    async def record_cycle_count(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        session_id: UUID,
+        data: CycleCountRecord,
+    ) -> CycleCountEntryRecord:
+        cycle = await self.repository.get_cycle_count(
+            session, company_id=context.company.id, session_id=session_id
+        )
+        if cycle is None or not context.can_access_branch(cycle.branch_id):
+            from app.inventory.errors import InventoryNotFound
+
+            raise InventoryNotFound("Cycle count was not found")
+        await session.rollback()
+        async with session.begin():
+            record = await self.repository.record_cycle_count(
+                session,
+                spec=RecordCycleCount(
+                    company_id=context.company.id,
+                    session_id=session_id,
+                    item_id=data.item_id,
+                    counted_quantity=data.counted_quantity,
+                    counted_at=data.counted_at,
+                    actor_user_id=context.user.id,
+                    idempotency_key=data.idempotency_key,
+                ),
+            )
+            await self._event(
+                session,
+                context,
+                EventType.INVENTORY_CYCLE_COUNT_RECORDED,
+                "inventory_cycle_count_entry",
+                record.id,
+                cycle.branch_id,
+                {
+                    "session_id": str(record.session_id),
+                    "item_id": str(record.item_id),
+                    "variance": str(record.variance),
+                },
+            )
+        return record
+
+    async def complete_cycle_count(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        session_id: UUID,
+        data: CycleCountComplete,
+    ) -> CycleCountSessionRecord:
+        cycle = await self.repository.get_cycle_count(
+            session, company_id=context.company.id, session_id=session_id
+        )
+        if cycle is None or not context.can_access_branch(cycle.branch_id):
+            from app.inventory.errors import InventoryNotFound
+
+            raise InventoryNotFound("Cycle count was not found")
+        await session.rollback()
+        async with session.begin():
+            record = await self.repository.complete_cycle_count(
+                session,
+                company_id=context.company.id,
+                session_id=session_id,
+                actor_user_id=context.user.id,
+                expected_version=data.expected_version,
+            )
+            await self._event(
+                session,
+                context,
+                EventType.INVENTORY_CYCLE_COUNT_COMPLETED,
+                "inventory_cycle_count",
+                record.id,
+                record.branch_id,
+                {"location_id": str(record.location_id), "version": record.version},
             )
         return record
 
@@ -280,7 +466,7 @@ class InventoryService:
         raise InventoryNotFound("Reservation was not found")
 
     @staticmethod
-    def _event(
+    async def _event(
         session: AsyncSession,
         context: AuthorizationContext,
         event_type: EventType,
@@ -289,6 +475,16 @@ class InventoryService:
         branch_id: UUID,
         payload: dict[str, object],
     ) -> None:
+        existing = await session.scalar(
+            select(BusinessEvent.id).where(
+                BusinessEvent.company_id == context.company.id,
+                BusinessEvent.event_type == event_type.value,
+                BusinessEvent.entity_type == entity_type,
+                BusinessEvent.entity_id == entity_id,
+            )
+        )
+        if existing is not None:
+            return
         BusinessEventService.stage(
             session,
             BusinessEventCreate(

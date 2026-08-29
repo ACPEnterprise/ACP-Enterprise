@@ -3,12 +3,14 @@ from decimal import Decimal
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import select
-
 from app.events.models import BusinessEvent
 from app.inventory.contracts import CreateStockLocation
 from app.inventory.errors import InventoryNotFound
 from app.inventory.schemas import (
+    AdjustmentCreate,
+    CycleCountComplete,
+    CycleCountRecord,
+    CycleCountStart,
     LocationCreate,
     ReservationAllocate,
     ReservationCreate,
@@ -17,6 +19,8 @@ from app.inventory.schemas import (
 from app.inventory.service import InventoryService
 from app.platform.company.membership_models import Membership
 from app.platform.permissions.authorization import AuthorizationContext
+from sqlalchemy import func, select
+
 from tests.inventory.test_inventory_foundation import (
     inventory_fixture,  # noqa: F401
     opening_spec,
@@ -118,9 +122,7 @@ async def test_repository_lists_do_not_leak_other_branches(
     inventory_fixture,  # noqa: F811
 ) -> None:
     factory, company, branch, other_branch, actor = inventory_fixture
-    repository, _, warehouse, _ = await seed_foundation(
-        factory, company, branch, actor
-    )
+    repository, _, warehouse, _ = await seed_foundation(factory, company, branch, actor)
     async with factory() as session, session.begin():
         await repository.create_location(
             session,
@@ -139,6 +141,99 @@ async def test_repository_lists_do_not_leak_other_branches(
         )
         assert warehouse.id in {record.id for record in records}
         assert all(record.branch_id == branch.id for record in records)
+
+
+@pytest.mark.asyncio
+async def test_adjustment_and_cycle_count_operator_services_are_idempotent_and_evented(
+    inventory_fixture,  # noqa: F811
+) -> None:
+    factory, company, branch, _, actor = inventory_fixture
+    repository, item, warehouse, _ = await seed_foundation(
+        factory, company, branch, actor
+    )
+    async with factory() as session, session.begin():
+        await repository.post_movement(
+            session, spec=opening_spec(company, branch, actor, item, warehouse)
+        )
+    authorization = await context(factory, company, branch, actor)
+    service = InventoryService(repository)
+    adjustment = AdjustmentCreate(
+        branch_id=branch.id,
+        item_id=item.id,
+        location_id=warehouse.id,
+        reason="damaged",
+        quantity_delta=Decimal(-1),
+        note="Synthetic damaged-count evidence",
+        occurred_at=datetime.now(timezone.utc),
+        idempotency_key=f"adjust-{uuid4()}",
+    )
+    async with factory() as session:
+        first = await service.post_adjustment(
+            session, context=authorization, data=adjustment
+        )
+        replay = await service.post_adjustment(
+            session, context=authorization, data=adjustment
+        )
+        assert first == replay
+        cycle = await service.start_cycle_count(
+            session,
+            context=authorization,
+            data=CycleCountStart(
+                branch_id=branch.id,
+                location_id=warehouse.id,
+                name="Operator cycle count",
+                idempotency_key=f"cycle-{uuid4()}",
+            ),
+        )
+        entry_data = CycleCountRecord(
+            item_id=item.id,
+            counted_quantity=Decimal(18),
+            counted_at=datetime.now(timezone.utc),
+            idempotency_key=f"entry-{uuid4()}",
+        )
+        entry = await service.record_cycle_count(
+            session,
+            context=authorization,
+            session_id=cycle.id,
+            data=entry_data,
+        )
+        entry_replay = await service.record_cycle_count(
+            session,
+            context=authorization,
+            session_id=cycle.id,
+            data=entry_data,
+        )
+        assert entry == entry_replay
+        completed = await service.complete_cycle_count(
+            session,
+            context=authorization,
+            session_id=cycle.id,
+            data=CycleCountComplete(expected_version=cycle.version),
+        )
+        assert completed.status == "completed"
+        history = await service.list_cycle_counts(
+            session, context=authorization, branch_id=branch.id
+        )
+        assert history[0].id == cycle.id
+        assert history[0].entries[0].variance == Decimal("-1.5")
+    async with factory() as session:
+        event_counts = {
+            event_type: await session.scalar(
+                select(func.count())
+                .select_from(BusinessEvent)
+                .where(
+                    BusinessEvent.company_id == company.id,
+                    BusinessEvent.event_type == event_type,
+                )
+            )
+            for event_type in (
+                "inventory.adjustment_posted",
+                "inventory.cycle_count_started",
+                "inventory.cycle_count_recorded",
+                "inventory.cycle_count_completed",
+            )
+        }
+        assert event_counts == {event_type: 1 for event_type in event_counts}
 
 
 @pytest.mark.asyncio
