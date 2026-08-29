@@ -1,0 +1,33 @@
+{
+  "expo": {
+    "name": "ACP Employee",
+    "slug": "acp-employee",
+    "scheme": "acpemployee",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.acpenterprise.employee",
+      "associatedDomains": ["applinks:employee.acpenterprise.com"]
+    },
+    "android": {
+      "package": "com.acpenterprise.employee",
+      "intentFilters": [{
+        "action": "VIEW",
+        "autoVerify": true,
+        "data": [{"scheme": "https", "host": "employee.acpenterprise.com", "pathPrefix": "/activate"}],
+        "category": ["BROWSABLE", "DEFAULT"]
+      }]
+    },
+    "plugins": ["expo-secure-store"],
+    "extra": {
+      "environment": "development",
+      "apiBaseUrl": "http://localhost:8000",
+      "compatibilityVersion": "2026-08-01"
+    },
+    "runtimeVersion": {"policy": "appVersion"},
+    "updates": {"enabled": false}
+  }
+}

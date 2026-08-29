@@ -4,6 +4,9 @@
 .env.*
 !.env.example
 !.env.preview.example
+!mobile/.env.example
+!mobile/.env.preview.example
+!mobile/.env.production.example
 
 # Python
 __pycache__/
