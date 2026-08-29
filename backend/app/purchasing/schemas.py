@@ -94,6 +94,7 @@ class PurchaseOrderLineItem(PurchasingSchema):
     extended_cost: Decimal
     expected_date: date | None
     version: int
+    is_cancelled: bool = False
     cumulative_accepted_quantity: Decimal = Decimal(0)
     outstanding_quantity: Decimal = Decimal(0)
 
@@ -242,6 +243,7 @@ class PurchaseOrderItem(PurchasingSchema):
     issued_by_user_id: UUID | None
     lifecycle_reason: str | None
     version: int
+    effective_revision: int = 1
     created_at: datetime
     updated_at: datetime
     lines: tuple[PurchaseOrderLineItem, ...] = ()
@@ -250,6 +252,66 @@ class PurchaseOrderItem(PurchasingSchema):
     receipts: tuple[ReceiptItem, ...] = ()
     discrepancies: tuple[DiscrepancyItem, ...] = ()
     returns: tuple[PurchaseReturnItem, ...] = ()
+    change_orders: tuple["PurchaseOrderChangeItem", ...] = ()
+    revisions: tuple["PurchaseOrderRevisionItem", ...] = ()
+
+
+class PurchaseOrderChangeOperation(PurchasingSchema):
+    operation: str = Field(
+        pattern=r"^(set_quantity|set_unit_cost|cancel_line|add_line|set_expected_date)$"
+    )
+    line_id: UUID | None = None
+    inventory_item_id: UUID | None = None
+    description: str | None = Field(default=None, max_length=1000)
+    quantity: Decimal | None = Field(
+        default=None, gt=0, max_digits=18, decimal_places=6
+    )
+    unit: str | None = Field(default=None, max_length=40)
+    unit_cost: Decimal | None = Field(
+        default=None, ge=0, max_digits=18, decimal_places=4
+    )
+    expected_date: date | None = None
+
+
+class RequestPurchaseOrderChangeCommand(Command):
+    expected_po_version: int = Field(ge=1)
+    base_revision: int = Field(ge=1)
+    change_identity: str = Field(min_length=1, max_length=128)
+    reason: str = Field(min_length=1, max_length=1000)
+    changes: tuple[PurchaseOrderChangeOperation, ...] = Field(min_length=1)
+
+
+class DecidePurchaseOrderChangeCommand(Command):
+    expected_po_version: int = Field(ge=1)
+    expected_base_revision: int = Field(ge=1)
+    reason: str | None = Field(default=None, max_length=1000)
+
+
+class PurchaseOrderChangeItem(PurchasingSchema):
+    id: UUID
+    change_identity: str
+    base_revision: int
+    proposed_changes: list[dict[str, object]]
+    reason: str
+    status: str
+    requested_by_user_id: UUID
+    requested_at: datetime
+    decided_by_user_id: UUID | None
+    decided_at: datetime | None
+    effective_revision: int | None
+    evidence_digest: str
+    downstream_reconciliation_required: bool
+
+
+class PurchaseOrderRevisionItem(PurchasingSchema):
+    id: UUID
+    revision_number: int
+    predecessor_revision: int | None
+    change_order_id: UUID | None
+    effective_snapshot: dict[str, object]
+    evidence_digest: str
+    effective_by_user_id: UUID
+    effective_at: datetime
 
 
 class PurchasingWorkspace(PurchasingSchema):

@@ -7,11 +7,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from .models import (
     OperationalVendor,
     PurchaseOrder,
+    PurchaseOrderChangeOrder,
     PurchaseOrderDiscrepancy,
     PurchaseOrderIssuanceEvidence,
     PurchaseOrderLine,
     PurchaseOrderReceipt,
     PurchaseOrderReceiptLine,
+    PurchaseOrderRevision,
     PurchaseReturn,
     PurchasingCommandReceipt,
 )
@@ -280,6 +282,55 @@ class PurchasingRepository:
             )
         )
         return Decimal(value or 0)
+
+    async def change_orders(
+        self, session: AsyncSession, company_id: UUID, po_id: UUID
+    ) -> tuple[PurchaseOrderChangeOrder, ...]:
+        return tuple(
+            (
+                await session.scalars(
+                    select(PurchaseOrderChangeOrder)
+                    .where(
+                        PurchaseOrderChangeOrder.company_id == company_id,
+                        PurchaseOrderChangeOrder.purchase_order_id == po_id,
+                    )
+                    .order_by(
+                        PurchaseOrderChangeOrder.requested_at,
+                        PurchaseOrderChangeOrder.id,
+                    )
+                )
+            ).all()
+        )
+
+    async def change_order(
+        self,
+        session: AsyncSession,
+        company_id: UUID,
+        change_id: UUID,
+        *,
+        lock: bool = False,
+    ) -> PurchaseOrderChangeOrder | None:
+        query = select(PurchaseOrderChangeOrder).where(
+            PurchaseOrderChangeOrder.company_id == company_id,
+            PurchaseOrderChangeOrder.id == change_id,
+        )
+        return await session.scalar(query.with_for_update() if lock else query)
+
+    async def revisions(
+        self, session: AsyncSession, company_id: UUID, po_id: UUID
+    ) -> tuple[PurchaseOrderRevision, ...]:
+        return tuple(
+            (
+                await session.scalars(
+                    select(PurchaseOrderRevision)
+                    .where(
+                        PurchaseOrderRevision.company_id == company_id,
+                        PurchaseOrderRevision.purchase_order_id == po_id,
+                    )
+                    .order_by(PurchaseOrderRevision.revision_number)
+                )
+            ).all()
+        )
 
 
 purchasing_repository = PurchasingRepository()

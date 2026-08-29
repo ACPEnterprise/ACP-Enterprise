@@ -1,6 +1,6 @@
 import hashlib
 import json
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Any
 from uuid import UUID
@@ -18,23 +18,28 @@ from .errors import PurchasingConflict, PurchasingNotFound, PurchasingValidation
 from .models import (
     OperationalVendor,
     PurchaseOrder,
+    PurchaseOrderChangeOrder,
     PurchaseOrderDiscrepancy,
     PurchaseOrderIssuanceEvidence,
     PurchaseOrderLine,
     PurchaseOrderReceipt,
     PurchaseOrderReceiptLine,
+    PurchaseOrderRevision,
     PurchaseReturn,
     PurchasingCommandReceipt,
 )
 from .repository import PurchasingRepository, purchasing_repository
 from .schemas import (
     CreatePurchaseReturnCommand,
+    DecidePurchaseOrderChangeCommand,
     DiscrepancyItem,
+    PurchaseOrderChangeItem,
     PurchaseOrderCreate,
     PurchaseOrderItem,
     PurchaseOrderLineItem,
     PurchaseOrderLineUpdate,
     PurchaseOrderLineWrite,
+    PurchaseOrderRevisionItem,
     PurchaseOrderUpdate,
     PurchaseReturnItem,
     PurchaseReturnTransitionCommand,
@@ -42,6 +47,7 @@ from .schemas import (
     ReceiptItem,
     ReceiptLineItem,
     RecordReceiptCommand,
+    RequestPurchaseOrderChangeCommand,
     ResolveDiscrepancyCommand,
     TransitionCommand,
     VendorCreate,
@@ -1163,6 +1169,345 @@ class PurchasingService:
             )
         return record
 
+    async def request_change(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        po_id: UUID,
+        payload: RequestPurchaseOrderChangeCommand,
+    ) -> PurchaseOrderChangeOrder:
+        data = {"po_id": str(po_id), **payload.model_dump(mode="json")}
+        async with session.begin():
+            replay = await self._replay(
+                session,
+                context,
+                "po.change.request",
+                payload.idempotency_key,
+                data,
+                "purchase_order_change",
+            )
+            if replay:
+                record = await self.repository.change_order(
+                    session, context.company.id, replay
+                )
+                if record is None:
+                    raise PurchasingConflict("Change replay target is missing")
+                return record
+            order = await self._order(session, context, po_id, lock=True)
+            if order.status not in {"issued", "closed"}:
+                raise PurchasingValidation(
+                    "Only an authoritative issued Purchase Order may be revised"
+                )
+            if (
+                order.version != payload.expected_po_version
+                or order.effective_revision != payload.base_revision
+            ):
+                raise PurchasingConflict("Purchase Order change base is stale")
+            lines = await self.repository.lines(session, order.company_id, order.id)
+            line_ids = {line.id for line in lines}
+            for change in payload.changes:
+                if (
+                    change.operation != "add_line"
+                    and change.operation != "set_expected_date"
+                    and change.line_id not in line_ids
+                ):
+                    raise PurchasingValidation(
+                        "Change references an invalid Purchase Order line"
+                    )
+                if change.operation == "set_quantity" and change.quantity is None:
+                    raise PurchasingValidation("Quantity change requires quantity")
+                if change.operation == "set_unit_cost" and change.unit_cost is None:
+                    raise PurchasingValidation("Price change requires unit cost")
+                if change.operation == "add_line" and (
+                    change.quantity is None
+                    or change.unit is None
+                    or change.unit_cost is None
+                    or (
+                        change.inventory_item_id is None
+                        and not (change.description or "").strip()
+                    )
+                ):
+                    raise PurchasingValidation(
+                        "Added line requires complete identity, quantity, unit, and cost"
+                    )
+            changes = payload.model_dump(mode="json")["changes"]
+            record = PurchaseOrderChangeOrder(
+                company_id=order.company_id,
+                branch_id=order.branch_id,
+                purchase_order_id=order.id,
+                change_identity=payload.change_identity,
+                base_revision=payload.base_revision,
+                proposed_changes=changes,
+                reason=payload.reason,
+                requested_by_user_id=context.user.id,
+                evidence_digest=digest(data),
+            )
+            session.add(record)
+            await session.flush()
+            self._receipt(
+                session,
+                context,
+                "po.change.request",
+                payload.idempotency_key,
+                data,
+                "purchase_order_change",
+                record.id,
+            )
+            self._event(
+                session,
+                context,
+                EventType.PURCHASING_PURCHASE_ORDER_CHANGE_REQUESTED,
+                "purchase_order_change",
+                record.id,
+                order.branch_id,
+                {
+                    "purchase_order_id": str(order.id),
+                    "base_revision": record.base_revision,
+                    "evidence_digest": record.evidence_digest,
+                },
+            )
+        return record
+
+    async def decide_change(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        po_id: UUID,
+        change_id: UUID,
+        action: str,
+        payload: DecidePurchaseOrderChangeCommand,
+    ) -> PurchaseOrderChangeOrder:
+        data = {
+            "po_id": str(po_id),
+            "change_id": str(change_id),
+            "action": action,
+            **payload.model_dump(mode="json"),
+        }
+        async with session.begin():
+            replay = await self._replay(
+                session,
+                context,
+                f"po.change.{action}",
+                payload.idempotency_key,
+                data,
+                "purchase_order_change",
+            )
+            if replay:
+                record = await self.repository.change_order(
+                    session, context.company.id, replay
+                )
+                if record is None:
+                    raise PurchasingConflict("Change replay target is missing")
+                return record
+            order = await self._order(session, context, po_id, lock=True)
+            record = await self.repository.change_order(
+                session, context.company.id, change_id, lock=True
+            )
+            if record is None or record.purchase_order_id != order.id:
+                raise PurchasingNotFound("Purchase Order change was not found")
+            if record.status != "requested":
+                raise PurchasingConflict("Purchase Order change is already decided")
+            if record.requested_by_user_id == context.user.id:
+                raise PurchasingValidation(
+                    "Requester may not approve or reject their own Purchase Order change"
+                )
+            if (
+                order.version != payload.expected_po_version
+                or order.effective_revision != payload.expected_base_revision
+                or record.base_revision != order.effective_revision
+            ):
+                raise PurchasingConflict("Purchase Order change base is stale")
+            if action == "reject":
+                record.status = "rejected"
+                record.decided_by_user_id = context.user.id
+                record.decided_at = now()
+                event_type = EventType.PURCHASING_PURCHASE_ORDER_CHANGE_REJECTED
+            elif action == "approve":
+                existing_revisions = await self.repository.revisions(
+                    session, order.company_id, order.id
+                )
+                if not existing_revisions:
+                    issuance = await self.repository.evidence(
+                        session, order.company_id, order.id
+                    )
+                    if issuance is None:
+                        raise PurchasingValidation(
+                            "Immutable issuance evidence is required before revision"
+                        )
+                    session.add(
+                        PurchaseOrderRevision(
+                            company_id=order.company_id,
+                            branch_id=order.branch_id,
+                            purchase_order_id=order.id,
+                            revision_number=1,
+                            predecessor_revision=None,
+                            change_order_id=None,
+                            effective_snapshot=issuance.snapshot,
+                            evidence_digest=issuance.digest,
+                            effective_by_user_id=issuance.issued_by_user_id,
+                            effective_at=issuance.issued_at,
+                        )
+                    )
+                lines = {
+                    line.id: line
+                    for line in await self.repository.lines(
+                        session, order.company_id, order.id
+                    )
+                }
+                received = await self.repository.accepted_totals(
+                    session, order.company_id, order.id
+                )
+                for change in record.proposed_changes:
+                    op, raw_id = change["operation"], change.get("line_id")
+                    line = lines.get(UUID(str(raw_id))) if raw_id else None
+                    if op == "set_quantity" and line:
+                        quantity = Decimal(str(change["quantity"]))
+                        accepted = received.get(line.id, Decimal(0))
+                        if quantity < accepted:
+                            raise PurchasingValidation(
+                                "Ordered quantity cannot fall below accepted receiving evidence"
+                            )
+                        line.quantity = quantity
+                        line.extended_cost = quantity * line.unit_cost
+                        line.version += 1
+                    elif op == "set_unit_cost" and line:
+                        line.unit_cost = Decimal(str(change["unit_cost"]))
+                        line.extended_cost = line.quantity * line.unit_cost
+                        line.version += 1
+                        if received.get(line.id, Decimal(0)) > 0:
+                            record.downstream_reconciliation_required = True
+                    elif op == "cancel_line" and line:
+                        if received.get(line.id, Decimal(0)) > 0:
+                            raise PurchasingValidation(
+                                "A received line cannot be canceled"
+                            )
+                        line.is_cancelled = True
+                        line.version += 1
+                    elif op == "set_expected_date":
+                        order.expected_date = (
+                            date.fromisoformat(str(change["expected_date"]))
+                            if change.get("expected_date")
+                            else None
+                        )
+                    elif op == "add_line":
+                        item_id = (
+                            UUID(str(change["inventory_item_id"]))
+                            if change.get("inventory_item_id")
+                            else None
+                        )
+                        await self._inventory_item(session, order.company_id, item_id)
+                        quantity, unit_cost = (
+                            Decimal(str(change["quantity"])),
+                            Decimal(str(change["unit_cost"])),
+                        )
+                        new_line = PurchaseOrderLine(
+                            company_id=order.company_id,
+                            purchase_order_id=order.id,
+                            line_number=await self.repository.next_line_number(
+                                session, order.company_id, order.id
+                            ),
+                            inventory_item_id=item_id,
+                            description=change.get("description") or "",
+                            quantity=quantity,
+                            unit=change["unit"],
+                            unit_cost=unit_cost,
+                            extended_cost=quantity * unit_cost,
+                            expected_date=change.get("expected_date"),
+                            created_by_user_id=context.user.id,
+                        )
+                        session.add(new_line)
+                new_revision = order.effective_revision + 1
+                snapshot = await self._effective_snapshot(session, order)
+                revision = PurchaseOrderRevision(
+                    company_id=order.company_id,
+                    branch_id=order.branch_id,
+                    purchase_order_id=order.id,
+                    revision_number=new_revision,
+                    predecessor_revision=order.effective_revision,
+                    change_order_id=record.id,
+                    effective_snapshot=snapshot,
+                    evidence_digest=digest(snapshot),
+                    effective_by_user_id=context.user.id,
+                )
+                session.add(revision)
+                record.status = "approved"
+                record.decided_by_user_id = context.user.id
+                record.decided_at = now()
+                record.effective_revision = new_revision
+                order.effective_revision = new_revision
+                order.version += 1
+                order.updated_at = now()
+                self._event(
+                    session,
+                    context,
+                    EventType.PURCHASING_PURCHASE_ORDER_REVISED,
+                    "purchase_order",
+                    order.id,
+                    order.branch_id,
+                    {
+                        "purchase_order_id": str(order.id),
+                        "revision": new_revision,
+                        "predecessor_revision": new_revision - 1,
+                        "change_order_id": str(record.id),
+                    },
+                )
+                event_type = EventType.PURCHASING_PURCHASE_ORDER_CHANGE_APPROVED
+            else:
+                raise PurchasingValidation("Unsupported Purchase Order change decision")
+            self._receipt(
+                session,
+                context,
+                f"po.change.{action}",
+                payload.idempotency_key,
+                data,
+                "purchase_order_change",
+                record.id,
+            )
+            self._event(
+                session,
+                context,
+                event_type,
+                "purchase_order_change",
+                record.id,
+                order.branch_id,
+                {
+                    "purchase_order_id": str(order.id),
+                    "status": record.status,
+                    "effective_revision": record.effective_revision,
+                },
+            )
+        return record
+
+    async def _effective_snapshot(
+        self, session: AsyncSession, order: PurchaseOrder
+    ) -> dict[str, object]:
+        lines = await self.repository.lines(session, order.company_id, order.id)
+        return {
+            "schema_version": 1,
+            "purchase_order_id": str(order.id),
+            "revision": order.effective_revision + 1,
+            "vendor_id": str(order.vendor_id),
+            "currency": order.currency,
+            "expected_date": str(order.expected_date) if order.expected_date else None,
+            "lines": [
+                {
+                    "id": str(line.id),
+                    "line_number": line.line_number,
+                    "inventory_item_id": str(line.inventory_item_id)
+                    if line.inventory_item_id
+                    else None,
+                    "description": line.description,
+                    "quantity": str(line.quantity),
+                    "unit": line.unit,
+                    "unit_cost": str(line.unit_cost),
+                    "is_cancelled": line.is_cancelled,
+                }
+                for line in lines
+            ],
+        }
+
     async def _order(
         self,
         session: AsyncSession,
@@ -1193,6 +1538,10 @@ class PurchasingService:
         purchase_returns = await self.repository.purchase_returns(
             session, order.company_id, order.id
         )
+        change_orders = await self.repository.change_orders(
+            session, order.company_id, order.id
+        )
+        revisions = await self.repository.revisions(session, order.company_id, order.id)
         totals = await self.repository.accepted_totals(
             session, order.company_id, order.id
         )
@@ -1248,6 +1597,13 @@ class PurchasingService:
                     DiscrepancyItem.model_validate(item) for item in discrepancies
                 ),
                 "returns": tuple(return_items),
+                "change_orders": tuple(
+                    PurchaseOrderChangeItem.model_validate(item)
+                    for item in change_orders
+                ),
+                "revisions": tuple(
+                    PurchaseOrderRevisionItem.model_validate(item) for item in revisions
+                ),
             }
         )
 

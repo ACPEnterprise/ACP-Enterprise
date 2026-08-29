@@ -28,15 +28,19 @@ from app.purchasing.errors import (
 from app.purchasing.models import (
     PurchaseOrderDiscrepancy,
     PurchaseOrderIssuanceEvidence,
+    PurchaseOrderRevision,
     PurchaseReturn,
 )
 from app.purchasing.schemas import (
     CreatePurchaseReturnCommand,
+    DecidePurchaseOrderChangeCommand,
+    PurchaseOrderChangeOperation,
     PurchaseOrderCreate,
     PurchaseOrderLineWrite,
     PurchaseReturnTransitionCommand,
     ReceiptLineCommand,
     RecordReceiptCommand,
+    RequestPurchaseOrderChangeCommand,
     ResolveDiscrepancyCommand,
     TransitionCommand,
     VendorCreate,
@@ -481,6 +485,93 @@ async def issued_order(factory, branch, preparer, approver, *, quantity: str = "
             payload=command(order.version, f"issue-{uuid4()}"),
         )
         return order.id, line.id, order.version
+
+
+@pytest.mark.asyncio
+async def test_issued_po_change_is_versioned_idempotent_and_stale_safe(
+    purchasing_fixture,
+) -> None:
+    factory, _, _, branch, _, preparer, approver = purchasing_fixture
+    service = PurchasingService()
+    po_id, line_id, version = await issued_order(factory, branch, preparer, approver)
+    request = RequestPurchaseOrderChangeCommand(
+        expected_po_version=version,
+        base_revision=1,
+        change_identity="CO-1",
+        reason="Vendor confirmed increased quantity",
+        idempotency_key="co-request-1",
+        changes=(
+            PurchaseOrderChangeOperation(
+                operation="set_quantity", line_id=line_id, quantity=Decimal(12)
+            ),
+        ),
+    )
+    async with factory() as session:
+        change = await service.request_change(
+            session, context=preparer, po_id=po_id, payload=request
+        )
+        replay = await service.request_change(
+            session, context=preparer, po_id=po_id, payload=request
+        )
+        assert replay.id == change.id and replay.status == "requested"
+        change_id = change.id
+        with pytest.raises(PurchasingConflict):
+            await service.request_change(
+                session,
+                context=preparer,
+                po_id=po_id,
+                payload=request.model_copy(update={"reason": "contradiction"}),
+            )
+    decision = DecidePurchaseOrderChangeCommand(
+        expected_po_version=version,
+        expected_base_revision=1,
+        idempotency_key="co-approve-1",
+    )
+    async with factory() as session:
+        with pytest.raises(PurchasingValidation):
+            await service.decide_change(
+                session,
+                context=preparer,
+                po_id=po_id,
+                change_id=change_id,
+                action="approve",
+                payload=decision,
+            )
+    async with factory() as session:
+        approved = await service.decide_change(
+            session,
+            context=approver,
+            po_id=po_id,
+            change_id=change_id,
+            action="approve",
+            payload=decision,
+        )
+        assert approved.status == "approved" and approved.effective_revision == 2
+        item = await service.get_order(session, context=preparer, po_id=po_id)
+        assert item.effective_revision == 2 and item.lines[0].quantity == Decimal(12)
+        assert [revision.revision_number for revision in item.revisions] == [1, 2]
+        assert item.revisions[0].effective_snapshot["lines"][0]["quantity"] == "10"
+        assert (
+            await session.scalar(
+                select(func.count()).select_from(PurchaseOrderRevision)
+            )
+            >= 2
+        )
+    async with factory() as session:
+        with pytest.raises(PurchasingConflict):
+            await service.request_change(
+                session,
+                context=preparer,
+                po_id=po_id,
+                payload=request.model_copy(
+                    update={
+                        "idempotency_key": "co-stale",
+                        "expected_po_version": version,
+                        "base_revision": 1,
+                        "change_identity": "CO-STALE",
+                    }
+                ),
+            )
 
 
 def receipt(

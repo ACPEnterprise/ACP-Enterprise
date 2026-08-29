@@ -138,6 +138,7 @@ class PurchaseOrder(Base):
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     lifecycle_reason: Mapped[str | None] = mapped_column(String(500))
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    effective_revision: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
     )
@@ -196,6 +197,7 @@ class PurchaseOrderLine(Base):
     extended_cost: Mapped[Decimal] = mapped_column(Numeric(22, 4), nullable=False)
     expected_date: Mapped[date | None] = mapped_column(Date)
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    is_cancelled: Mapped[bool] = mapped_column(nullable=False, default=False)
     created_by_user_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("users.id", ondelete="RESTRICT"),
@@ -570,3 +572,97 @@ class PurchaseReturn(Base):
     canceled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     source_reference: Mapped[str | None] = mapped_column(String(240))
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+
+
+class PurchaseOrderChangeOrder(Base):
+    __tablename__ = "purchasing_po_change_orders"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "purchase_order_id"],
+            ["purchasing_purchase_orders.company_id", "purchasing_purchase_orders.id"],
+            name="fk_purchasing_change_po",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "status IN ('requested','approved','rejected')",
+            name="ck_purchasing_change_status",
+        ),
+        UniqueConstraint(
+            "company_id", "change_identity", name="uq_purchasing_change_identity"
+        ),
+        UniqueConstraint("company_id", "id", name="uq_purchasing_change_company"),
+    )
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    purchase_order_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), nullable=False
+    )
+    change_identity: Mapped[str] = mapped_column(String(128), nullable=False)
+    base_revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    proposed_changes: Mapped[list[dict[str, object]]] = mapped_column(
+        JSONB, nullable=False
+    )
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="requested")
+    requested_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    requested_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+    decided_by_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT")
+    )
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    effective_revision: Mapped[int | None] = mapped_column(Integer)
+    evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    downstream_reconciliation_required: Mapped[bool] = mapped_column(
+        nullable=False, default=False
+    )
+
+
+class PurchaseOrderRevision(Base):
+    __tablename__ = "purchasing_po_revisions"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "purchase_order_id"],
+            ["purchasing_purchase_orders.company_id", "purchasing_purchase_orders.id"],
+            name="fk_purchasing_revision_po",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "purchase_order_id",
+            "revision_number",
+            name="uq_purchasing_revision_number",
+        ),
+    )
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    purchase_order_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), nullable=False
+    )
+    revision_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    predecessor_revision: Mapped[int | None] = mapped_column(Integer)
+    change_order_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("purchasing_po_change_orders.id", ondelete="RESTRICT"),
+    )
+    effective_snapshot: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    effective_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    effective_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )

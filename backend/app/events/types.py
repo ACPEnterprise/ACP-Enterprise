@@ -107,6 +107,16 @@ class EventType(str, Enum):
     )
     PURCHASING_PURCHASE_RETURN_CLOSED = "purchasing.purchase_return.closed"
     PURCHASING_PURCHASE_RETURN_CANCELED = "purchasing.purchase_return.canceled"
+    PURCHASING_PURCHASE_ORDER_CHANGE_REQUESTED = (
+        "purchasing.purchase_order.change_requested"
+    )
+    PURCHASING_PURCHASE_ORDER_CHANGE_APPROVED = (
+        "purchasing.purchase_order.change_approved"
+    )
+    PURCHASING_PURCHASE_ORDER_CHANGE_REJECTED = (
+        "purchasing.purchase_order.change_rejected"
+    )
+    PURCHASING_PURCHASE_ORDER_REVISED = "purchasing.purchase_order.revised"
 
     # Operations
     OPERATIONS_SERVICE_REQUEST_ACCEPTED = "operations.service_request.accepted"

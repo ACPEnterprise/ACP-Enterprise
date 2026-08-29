@@ -17,7 +17,9 @@ from .errors import (
 )
 from .schemas import (
     CreatePurchaseReturnCommand,
+    DecidePurchaseOrderChangeCommand,
     DiscrepancyItem,
+    PurchaseOrderChangeItem,
     PurchaseOrderCreate,
     PurchaseOrderItem,
     PurchaseOrderLineItem,
@@ -30,6 +32,7 @@ from .schemas import (
     ReceiptItem,
     ReceiptLineItem,
     RecordReceiptCommand,
+    RequestPurchaseOrderChangeCommand,
     ResolveDiscrepancyCommand,
     TransitionCommand,
     VendorCreate,
@@ -74,6 +77,14 @@ ReturnMoveContext = Annotated[
 ReturnCloseContext = Annotated[
     AuthorizationContext,
     Depends(require_permission(PurchasingPermission.RETURN_CLOSE)),
+]
+ChangeRequestContext = Annotated[
+    AuthorizationContext,
+    Depends(require_permission(PurchasingPermission.CHANGE_REQUEST)),
+]
+ChangeApproveContext = Annotated[
+    AuthorizationContext,
+    Depends(require_permission(PurchasingPermission.CHANGE_APPROVE)),
 ]
 
 
@@ -483,6 +494,79 @@ async def cancel_return(
     return await _return_transition(
         po_id, return_id, "cancel", payload, context, session
     )
+
+
+@router.post(
+    "/purchase-orders/{po_id}/changes",
+    response_model=PurchaseOrderChangeItem,
+    status_code=status.HTTP_201_CREATED,
+)
+async def request_po_change(
+    po_id: UUID,
+    payload: RequestPurchaseOrderChangeCommand,
+    context: ChangeRequestContext,
+    session: DatabaseSession,
+) -> PurchaseOrderChangeItem:
+    try:
+        return PurchaseOrderChangeItem.model_validate(
+            await purchasing_service.request_change(
+                session, context=context, po_id=po_id, payload=payload
+            )
+        )
+    except PurchasingError as error:
+        raise http_error(error) from error
+
+
+@router.post(
+    "/purchase-orders/{po_id}/changes/{change_id}/approve",
+    response_model=PurchaseOrderChangeItem,
+)
+async def approve_po_change(
+    po_id: UUID,
+    change_id: UUID,
+    payload: DecidePurchaseOrderChangeCommand,
+    context: ChangeApproveContext,
+    session: DatabaseSession,
+) -> PurchaseOrderChangeItem:
+    try:
+        return PurchaseOrderChangeItem.model_validate(
+            await purchasing_service.decide_change(
+                session,
+                context=context,
+                po_id=po_id,
+                change_id=change_id,
+                action="approve",
+                payload=payload,
+            )
+        )
+    except PurchasingError as error:
+        raise http_error(error) from error
+
+
+@router.post(
+    "/purchase-orders/{po_id}/changes/{change_id}/reject",
+    response_model=PurchaseOrderChangeItem,
+)
+async def reject_po_change(
+    po_id: UUID,
+    change_id: UUID,
+    payload: DecidePurchaseOrderChangeCommand,
+    context: ChangeApproveContext,
+    session: DatabaseSession,
+) -> PurchaseOrderChangeItem:
+    try:
+        return PurchaseOrderChangeItem.model_validate(
+            await purchasing_service.decide_change(
+                session,
+                context=context,
+                po_id=po_id,
+                change_id=change_id,
+                action="reject",
+                payload=payload,
+            )
+        )
+    except PurchasingError as error:
+        raise http_error(error) from error
 
 
 async def _transition(
