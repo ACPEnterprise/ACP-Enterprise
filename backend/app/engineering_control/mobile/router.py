@@ -17,6 +17,9 @@ from app.engineering_control.commands import (
 )
 from app.engineering_control.errors import EngineeringControlError
 from app.engineering_control.http_errors import engineering_http_error
+from app.engineering_control.repository_readiness import (
+    active_readiness_target_eligible,
+)
 from app.engineering_control.review.models import EngineeringExecutionReview
 from app.engineering_control.revision_evidence import (
     revision_evidence,
@@ -134,6 +137,7 @@ def _attention(
     revision_eligible: bool = False,
     historical_diagnostics_incomplete: bool = False,
     adopted_result_review: bool = False,
+    historical_execution_authority_over: bool = False,
 ) -> tuple[str, str, tuple[str, ...]]:
     if capacity_state == "reconciliation":
         return (
@@ -227,6 +231,12 @@ def _attention(
                 else "External work is progressing outside Mission Control."
             )
             return "waiting_on_external", reason, ()
+    if item.status == "ready" and historical_execution_authority_over:
+        return (
+            "informational",
+            "Historical execution evidence is preserved; this definition is not startable.",
+            (),
+        )
     if item.status == "ready" and item.readiness_state == "ready":
         return (
             "owner_action_required",
@@ -421,6 +431,21 @@ async def list_roadmaps(context: ReadContext, session: DatabaseSession) -> Roadm
             else ()
         )
     }
+    executions = {
+        item.command_id: item
+        for item in (
+            (
+                await session.scalars(
+                    select(EngineeringExecution).where(
+                        EngineeringExecution.company_id == context.company.id,
+                        EngineeringExecution.command_id.in_(command_ids),
+                    )
+                )
+            ).all()
+            if command_ids
+            else ()
+        )
+    }
     failed_executions = (
         (
             await session.scalars(
@@ -501,6 +526,18 @@ async def list_roadmaps(context: ReadContext, session: DatabaseSession) -> Roadm
                     else False
                 ),
                 item.command_id in adopted_result_reviews,
+                (
+                    item.command_id in executions
+                    and not active_readiness_target_eligible(
+                        milestone_status=item.status,
+                        milestone_reconciliation_state=item.reconciliation_state,
+                        command_id=item.command_id,
+                        execution_id=executions[item.command_id].id,
+                        execution_state=executions[item.command_id].state,
+                        execution_finished_at=executions[item.command_id].finished_at,
+                        execution_evidence=executions[item.command_id].evidence_summary,
+                    )
+                ),
             ),
         )
     )

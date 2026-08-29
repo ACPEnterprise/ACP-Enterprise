@@ -32,6 +32,7 @@ export type NavigationItemId =
   | "inventory"
   | "purchasing"
   | "technician"
+  | "workday"
   | "administration"
   | "employees"
   | "settings"

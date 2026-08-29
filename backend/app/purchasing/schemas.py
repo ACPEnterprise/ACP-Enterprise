@@ -44,6 +44,53 @@ class VendorItem(PurchasingSchema):
     updated_at: datetime
 
 
+class VendorPerformanceEvidence(PurchasingSchema):
+    schema_version: int = 1
+    evidence_id: str = Field(pattern=r"^[0-9a-f]{64}$")
+    evidence_type: str
+    availability: str = Field(
+        pattern=r"^(available|unavailable|not_applicable|conflicting)$"
+    )
+    value: str | None
+    unit: str | None
+    company_id: UUID
+    branch_id: UUID
+    vendor_id: UUID
+    purchase_order_id: UUID
+    purchase_order_line_id: UUID | None = None
+    receipt_id: UUID | None = None
+    discrepancy_id: UUID | None = None
+    return_id: UUID | None = None
+    source_type: str
+    source_id: UUID
+    effective_at: datetime
+    provenance: tuple[str, ...]
+    digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
+class VendorPerformanceSummary(PurchasingSchema):
+    purchase_orders_observed: int
+    receipts_observed: int
+    discrepancies_observed: int
+    returns_observed: int
+    ordered_quantity_observed: Decimal
+    accepted_quantity_observed: Decimal
+    rejected_quantity_observed: Decimal
+    lead_time_observations: int
+    availability_counts: dict[str, int]
+
+
+class VendorPerformanceEvidenceReport(PurchasingSchema):
+    schema_version: int = 1
+    company_id: UUID
+    vendor_id: UUID
+    from_at: datetime | None
+    to_at: datetime | None
+    evidence: tuple[VendorPerformanceEvidence, ...]
+    summary: VendorPerformanceSummary
+    evidence_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
 class PurchaseOrderCreate(Command):
     branch_id: UUID
     vendor_id: UUID

@@ -82,6 +82,27 @@ class PurchasingRepository:
             ).all()
         )
 
+    async def purchase_orders_for_vendor(
+        self,
+        session: AsyncSession,
+        company_id: UUID,
+        vendor_id: UUID,
+        branch_ids: tuple[UUID, ...],
+    ) -> tuple[PurchaseOrder, ...]:
+        return tuple(
+            (
+                await session.scalars(
+                    select(PurchaseOrder)
+                    .where(
+                        PurchaseOrder.company_id == company_id,
+                        PurchaseOrder.vendor_id == vendor_id,
+                        PurchaseOrder.branch_id.in_(branch_ids),
+                    )
+                    .order_by(PurchaseOrder.issued_at, PurchaseOrder.id)
+                )
+            ).all()
+        )
+
     async def lines(
         self, session: AsyncSession, company_id: UUID, po_id: UUID
     ) -> tuple[PurchaseOrderLine, ...]:
