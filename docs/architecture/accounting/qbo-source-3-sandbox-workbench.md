@@ -93,6 +93,29 @@ The machine-readable packet is [QBO real-company connection packet](../../projec
 
 The owner must create/approve the dedicated Intuit Production app; complete Intuit's Production requirements; choose the acquisition host; register the exact URI `https://<OWNER_APPROVED_ACQUISITION_HOST>/api/v1/integrations/qbo/oauth/callback`; create the named secret-manager entries; provision the encrypted evidence/state roots; initiate consent; select the exact All County QBO company; approve only `com.intuit.quickbooks.accounting`; and independently compare returned realm/CompanyInfo before any extraction approval.
 
+## Development credential provisioning
+
+Legacy Development credentials are imported only through the repository-owned
+sandbox command. The source files and target root must be protected paths outside
+the repository. Credential values are never command arguments or command output.
+
+```bash
+cd backend
+python -m app.qbo_source.credentials provision-development \
+  --client-id-file /protected/qbo/sandbox/secrets/client-id \
+  --client-secret-file /protected/qbo/sandbox/secrets/client-secret \
+  --secret-root /protected/qbo/sandbox/secrets \
+  --repository-root /app
+```
+
+The command accepts owner-held regular source files with restricted permissions,
+writes `development-client.json` atomically with mode `0600` beneath a mode `0700`
+directory, and is idempotent for the exact same pair. A conflicting existing
+document, symlink, unsafe owner or permissions, malformed value, repository-local
+source/target, or any Production provisioning request fails closed. Its JSON result
+contains only status, sandbox environment, protected target path, and permission
+metadata.
+
 Revocation uses Intuit account **Sign-in & security → Apps with access to your account** or the adapter's official revoke flow. Abort on state/callback mismatch, wrong realm/company, wrong scope, secret-store failure, evidence-root failure, CompanyInfo mismatch, unexpected write method, partial acquisition, or unexplained drift. Abort preserves acquired immutable evidence and deletes no source record. Consent, realm verification, sandbox success, and Production credential availability do not authorize real extraction; that is a separate owner gate.
 
 ## Next milestone
