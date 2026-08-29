@@ -35,10 +35,12 @@ SECRET_FIELDS = frozenset(
         "credential",
         "database_url",
         "invitation_secret",
+        "nested_token_hash",
         "password",
         "password_hash",
         "payment_token",
         "private_key",
+        "private_key_pem",
         "refresh_token",
         "reset_token",
         "routing_number",
@@ -47,7 +49,9 @@ SECRET_FIELDS = frozenset(
         "session_token",
         "ssh_private_key",
         "token",
+        "token_hash",
         "verification_token",
+        "worker_credential_id",
     }
 )
 
