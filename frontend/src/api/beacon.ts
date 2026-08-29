@@ -90,6 +90,16 @@ export interface BeaconSignal {
   created_at: string;
   expires_at: string;
   expiration_policy: "replace_on_next_evaluation";
+  escalation: {
+    state: "normal" | "escalated";
+    eligibility:
+      | "escalation_ready"
+      | "policy_missing"
+      | "not_evaluable"
+      | "not_applicable";
+    escalated_at: string | null;
+    reason: string;
+  } | null;
 }
 
 export interface BeaconSignalPage {

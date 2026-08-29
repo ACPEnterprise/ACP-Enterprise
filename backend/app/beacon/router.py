@@ -14,6 +14,7 @@ from app.beacon.errors import (
     BeaconWorkflowConflictError,
     BeaconWorkflowOwnerInvalidError,
 )
+from app.beacon.escalation import ESCALATION_REGISTRY, escalation_service
 from app.beacon.evidence_evaluation import EVIDENCE_EVALUATION_REGISTRY
 from app.beacon.lifecycle import (
     RecordBeaconLifecycleAction,
@@ -33,6 +34,9 @@ from app.beacon.schemas import (
     BeaconWorkflowStateResponse,
     DefinitionQualityRegistryResponse,
     DefinitionQualitySemanticsResponse,
+    EscalationProjectionResponse,
+    EscalationRegistrationResponse,
+    EscalationRegistryResponse,
     EvidenceEvaluationRegistrationResponse,
     EvidenceEvaluationRegistryResponse,
     OperationalAttentionQueueResponse,
@@ -142,6 +146,35 @@ async def signal_quality_semantics(
 
 
 @router.get(
+    "/escalation-readiness",
+    response_model=EscalationRegistryResponse,
+    summary="List deterministic escalation eligibility",
+)
+async def escalation_readiness(context: BeaconReader) -> EscalationRegistryResponse:
+    return EscalationRegistryResponse(
+        catalog_id=OPERATIONAL_SIGNAL_CATALOG.catalog_id,
+        catalog_digest=OPERATIONAL_SIGNAL_CATALOG.catalog_digest,
+        company_id=context.company.id,
+        active_branch_id=context.active_branch.id if context.active_branch else None,
+        registrations=tuple(
+            EscalationRegistrationResponse(
+                definition_id=item.definition_id,
+                definition_version=item.definition_version,
+                family=item.family,
+                evaluation_readiness=item.evaluation_readiness,
+                eligibility=item.eligibility,
+                rule_available=item.rule is not None,
+                rule_id=item.rule.rule_id if item.rule else None,
+                rule_version=item.rule.version if item.rule else None,
+                rule_digest=item.rule.rule_digest if item.rule else None,
+                blocker=item.blocker,
+            )
+            for item in ESCALATION_REGISTRY.registrations
+        ),
+    )
+
+
+@router.get(
     "/signals",
     response_model=BeaconSignalPage,
     summary="List deterministic operational signals",
@@ -156,11 +189,29 @@ async def list_beacon_signals(
         context=context,
         now=evaluated_at,
     )
+
+    async def response(item) -> BeaconSignalResponse:
+        base = BeaconSignalResponse.model_validate(item)
+        if item.evidence_quality is None:
+            return base
+        workflow = await beacon_workflow_service.current(
+            session, context=context, condition_key=item.condition_key
+        )
+        escalation = escalation_service.project(
+            item,
+            company_id=context.company.id,
+            branch_id=context.active_branch.id if context.active_branch else None,
+            workflow=workflow,
+        )
+        return base.model_copy(
+            update={
+                "escalation": EscalationProjectionResponse.model_validate(escalation)
+            }
+        )
+
     return BeaconSignalPage(
-        items=tuple(BeaconSignalResponse.model_validate(item) for item in queue.active),
-        snoozed_items=tuple(
-            BeaconSignalResponse.model_validate(item) for item in queue.snoozed
-        ),
+        items=tuple([await response(item) for item in queue.active]),
+        snoozed_items=tuple([await response(item) for item in queue.snoozed]),
         evaluated_at=evaluated_at,
         expires_at=evaluated_at + SIGNAL_TTL,
         lifecycle_commands_available=context.has_permission(BeaconPermission.REVIEW),
@@ -216,6 +267,16 @@ async def list_operational_workflow_signals(
                     BeaconWorkflowStateResponse.model_validate(workflow)
                     if workflow
                     else None
+                ),
+                escalation=EscalationProjectionResponse.model_validate(
+                    escalation_service.project(
+                        item.signal,
+                        company_id=context.company.id,
+                        branch_id=(
+                            context.active_branch.id if context.active_branch else None
+                        ),
+                        workflow=workflow,
+                    )
                 ),
             )
         )

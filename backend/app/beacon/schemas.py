@@ -20,6 +20,7 @@ from app.beacon.contracts import (
     BeaconSignalSource,
     BeaconWorkflowAction,
 )
+from app.beacon.escalation import EscalationEligibility, EscalationState
 from app.beacon.evidence_evaluation import EvaluationReadiness
 from app.beacon.quality import (
     EvidenceCompletenessState,
@@ -149,6 +150,7 @@ class BeaconSignalResponse(BaseModel):
     created_at: datetime
     expires_at: datetime
     expiration_policy: BeaconExpirationPolicy
+    escalation: "EscalationProjectionResponse | None" = None
 
 
 class BeaconSignalPage(BaseModel):
@@ -251,6 +253,7 @@ class OperationalWorkflowSignalResponse(BaseModel):
     signal: BeaconSignalResponse
     ranking: OperationalRankingResponse
     workflow: BeaconWorkflowStateResponse | None
+    escalation: "EscalationProjectionResponse"
 
 
 class OperationalWorkflowQueueResponse(BaseModel):
@@ -258,6 +261,45 @@ class OperationalWorkflowQueueResponse(BaseModel):
     ranking_version: str
     ranking_digest: str
     items: tuple[OperationalWorkflowSignalResponse, ...]
+
+
+class EscalationRegistrationResponse(BaseModel):
+    definition_id: str
+    definition_version: int
+    family: OperationalSignalFamily
+    evaluation_readiness: EvaluationReadiness
+    eligibility: EscalationEligibility
+    rule_available: bool
+    rule_id: str | None
+    rule_version: int | None
+    rule_digest: str | None
+    blocker: str | None
+
+
+class EscalationRegistryResponse(BaseModel):
+    catalog_id: str
+    catalog_digest: str
+    company_id: UUID
+    active_branch_id: UUID | None
+    registrations: tuple[EscalationRegistrationResponse, ...]
+
+
+class EscalationProjectionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    signal_id: UUID
+    condition_key: UUID
+    company_id: UUID
+    branch_id: UUID | None
+    state: EscalationState
+    eligibility: EscalationEligibility
+    escalation_rule_id: str | None
+    escalation_rule_version: int | None
+    escalation_rule_digest: str | None
+    escalated_at: datetime | None
+    reason: str
+    acknowledged: bool
+    owner_user_id: UUID | None
 
 
 class OperationalSignalDefinitionResponse(BaseModel):

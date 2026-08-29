@@ -102,12 +102,28 @@ function SignalRow({
           <Badge variant={priority.variant}>{priority.label}</Badge>
           <Badge variant={severity.variant}>{severity.label} severity</Badge>
           <Badge variant="neutral">{signal.confidence.level} confidence</Badge>
+          {signal.escalation && (
+            <Badge
+              variant={
+                signal.escalation.state === "escalated" ? "danger" : "neutral"
+              }
+            >
+              {signal.escalation.state === "escalated"
+                ? "Escalated"
+                : "Normal escalation"}
+            </Badge>
+          )}
         </div>
       </div>
       <p className="mt-ui-3 rounded-md border border-stroke bg-surface-muted p-ui-3 text-body-s text-content-secondary">
         <span className="font-semibold text-content">Why this priority:</span>{" "}
         {signal.priority.explanation}
       </p>
+      {signal.escalation && (
+        <p className="mt-ui-2 text-body-s text-content-muted">
+          Escalation: {signal.escalation.reason}
+        </p>
+      )}
       <dl className="mt-ui-3 grid gap-ui-2 text-body-s sm:grid-cols-2">
         {signal.supporting_facts.map((fact) => (
           <div className="rounded-md bg-surface-muted p-ui-3" key={fact.name}>

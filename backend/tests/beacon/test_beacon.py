@@ -22,6 +22,7 @@ from app.beacon.contracts import (
 from app.beacon.records import BeaconLifecycleEvent
 from app.beacon.router import router
 from app.beacon.service import BeaconQueryService, beacon_query_service
+from app.beacon.workflow import beacon_workflow_service
 from app.database.session import get_database_session
 from app.platform.permissions.authorization import (
     AuthorizationContext,
@@ -306,6 +307,11 @@ async def test_beacon_http_api_returns_bounded_company_scoped_signals(
         "lifecycle_repository",
         lifecycle_repository,
     )
+
+    async def no_workflow(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(beacon_workflow_service, "current", no_workflow)
     app = FastAPI()
     app.include_router(router)
 
@@ -331,6 +337,9 @@ async def test_beacon_http_api_returns_bounded_company_scoped_signals(
     assert body["items"][0]["source"] == "scheduling"
     assert body["items"][0]["priority"]["rank"] == 1
     assert body["items"][0]["priority"]["ranking_factors"]
+    assert body["items"][0]["escalation"]["state"] == "normal"
+    assert body["items"][0]["escalation"]["eligibility"] == "policy_missing"
+    assert body["items"][1]["escalation"] is None
     assert body["items"][0]["expiration_policy"] == "replace_on_next_evaluation"
     assert body["snoozed_items"] == []
     assert body["lifecycle_commands_available"] is False

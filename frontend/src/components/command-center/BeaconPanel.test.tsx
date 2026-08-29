@@ -66,6 +66,7 @@ const signal: BeaconSignal = {
   created_at: "2026-07-28T16:00:00Z",
   expires_at: "2026-07-28T16:15:00Z",
   expiration_policy: "replace_on_next_evaluation",
+  escalation: null,
 };
 
 const panelProps = {
