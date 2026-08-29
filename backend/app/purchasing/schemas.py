@@ -91,6 +91,42 @@ class VendorPerformanceEvidenceReport(PurchasingSchema):
     evidence_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
 
 
+class ReplenishmentTarget(PurchasingSchema):
+    branch_id: UUID
+    inventory_item_id: UUID
+    target_available_quantity: Decimal = Field(ge=0, max_digits=18, decimal_places=6)
+
+
+class ReplenishmentWorkbenchRequest(PurchasingSchema):
+    as_of: datetime
+    targets: tuple[ReplenishmentTarget, ...] = Field(min_length=1)
+
+
+class ReplenishmentRecommendation(PurchasingSchema):
+    branch_id: UUID
+    inventory_item_id: UUID
+    item_code: str
+    item_name: str
+    stocking_unit: str
+    target_available_quantity: Decimal
+    on_hand_quantity: Decimal
+    reserved_quantity: Decimal
+    available_quantity: Decimal
+    open_purchase_order_quantity: Decimal
+    recommended_order_quantity: Decimal
+    recommendation_state: str = Field(pattern=r"^(recommend_order|no_action)$")
+    provenance: tuple[str, ...]
+    evidence_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
+class ReplenishmentWorkbench(PurchasingSchema):
+    schema_version: int = 1
+    company_id: UUID
+    as_of: datetime
+    recommendations: tuple[ReplenishmentRecommendation, ...]
+    evidence_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
 class PurchaseOrderCreate(Command):
     branch_id: UUID
     vendor_id: UUID

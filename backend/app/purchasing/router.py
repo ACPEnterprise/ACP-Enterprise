@@ -35,6 +35,8 @@ from .schemas import (
     ReceiptItem,
     ReceiptLineItem,
     RecordReceiptCommand,
+    ReplenishmentWorkbench,
+    ReplenishmentWorkbenchRequest,
     RequestPurchaseOrderChangeCommand,
     ResolveDiscrepancyCommand,
     TransitionCommand,
@@ -115,6 +117,20 @@ async def workspace(
     search: Annotated[str | None, Query(max_length=200)] = None,
 ) -> PurchasingWorkspace:
     return await purchasing_service.workspace(session, context=context, search=search)
+
+
+@router.post("/replenishment/workbench", response_model=ReplenishmentWorkbench)
+async def replenishment_workbench(
+    payload: ReplenishmentWorkbenchRequest,
+    context: ReadContext,
+    session: DatabaseSession,
+) -> ReplenishmentWorkbench:
+    try:
+        return await purchasing_service.replenishment_workbench(
+            session, context=context, payload=payload
+        )
+    except PurchasingError as error:
+        raise http_error(error) from error
 
 
 @router.get("/purchase-orders/{po_id}", response_model=PurchaseOrderItem)

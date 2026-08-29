@@ -17,6 +17,7 @@ import {
 } from "../ui";
 import { PurchaseOrderChangeControls } from "../components/PurchaseOrderChangeControls";
 import { PurchaseOrderDispositionControls } from "../components/PurchaseOrderDispositionControls";
+import { ReplenishmentWorkbench } from "../components/purchasing/ReplenishmentWorkbench";
 
 function changeErrorMessage(error: unknown): string | null {
   if (!error) return null;
@@ -247,6 +248,15 @@ export function PurchasingRoute() {
           retrying.
         </Alert>
       )}
+      <ReplenishmentWorkbench
+        pending={mutations.replenishmentWorkbench.isPending}
+        result={mutations.replenishmentWorkbench.data}
+        error={mutations.replenishmentWorkbench.isError}
+        onRun={(branchId, itemId, target) => mutations.replenishmentWorkbench.mutateAsync({
+          as_of: new Date().toISOString(),
+          targets: [{ branch_id: branchId, inventory_item_id: itemId, target_available_quantity: target }],
+        })}
+      />
       <Card>
         <CardHeader>
           <CardTitle>Operational Vendors</CardTitle>

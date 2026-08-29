@@ -14,7 +14,13 @@ from app.accounts_payable.models import AccountingVendor, VendorBill
 from app.business_economics.models import CompanyFinancePolicyVersion
 from app.core.config import settings
 from app.events.models import BusinessEvent
-from app.inventory.models import InventoryItem, MaterialIssue, StockMovement
+from app.inventory.models import (
+    InventoryItem,
+    InventoryQuantity,
+    MaterialIssue,
+    StockLocation,
+    StockMovement,
+)
 from app.main import app
 from app.payments.models import PaymentIntent, Refund
 from app.platform.branch.models import Branch
@@ -44,6 +50,8 @@ from app.purchasing.schemas import (
     PurchaseReturnTransitionCommand,
     ReceiptLineCommand,
     RecordReceiptCommand,
+    ReplenishmentTarget,
+    ReplenishmentWorkbenchRequest,
     RequestPurchaseOrderChangeCommand,
     ResolveDiscrepancyCommand,
     TransitionCommand,
@@ -51,6 +59,109 @@ from app.purchasing.schemas import (
     VendorUpdate,
 )
 from app.purchasing.service import PurchasingService
+
+
+@pytest.mark.asyncio
+async def test_replenishment_workbench_is_deterministic_isolated_and_read_only(
+    purchasing_fixture,
+) -> None:
+    factory, company, _, branch, other_branch, preparer, _ = purchasing_fixture
+    service = PurchasingService()
+    async with factory() as session, session.begin():
+        item = InventoryItem(
+            company_id=company.id,
+            code=f"REP-{uuid4().hex[:8].upper()}",
+            name="Replenishment fitting",
+            stocking_unit="each",
+            status="active",
+            created_by_user_id=preparer.user.id,
+            updated_by_user_id=preparer.user.id,
+        )
+        location = StockLocation(
+            company_id=company.id,
+            branch_id=branch.id,
+            code=f"REP{uuid4().hex[:7].upper()}",
+            name="Replenishment shelf",
+            location_type="warehouse",
+            status="active",
+            created_by_user_id=preparer.user.id,
+            updated_by_user_id=preparer.user.id,
+        )
+        session.add_all([item, location])
+        await session.flush()
+        session.add(
+            InventoryQuantity(
+                company_id=company.id,
+                branch_id=branch.id,
+                item_id=item.id,
+                location_id=location.id,
+                on_hand=Decimal(3),
+                reserved=Decimal(1),
+            )
+        )
+    request = ReplenishmentWorkbenchRequest(
+        as_of=datetime(2026, 8, 28, 22, tzinfo=timezone.utc),
+        targets=(
+            ReplenishmentTarget(
+                branch_id=branch.id,
+                inventory_item_id=item.id,
+                target_available_quantity=Decimal(10),
+            ),
+        ),
+    )
+    async with factory() as session:
+        boundary_models = (
+            InventoryItem,
+            InventoryQuantity,
+            StockMovement,
+            MaterialIssue,
+            AccountingVendor,
+            VendorBill,
+            Journal,
+            PaymentIntent,
+            Refund,
+            CompanyFinancePolicyVersion,
+        )
+        before = tuple(
+            [
+                await session.scalar(select(func.count()).select_from(model))
+                for model in boundary_models
+            ]
+        )
+        first = await service.replenishment_workbench(
+            session, context=preparer, payload=request
+        )
+        replay = await service.replenishment_workbench(
+            session, context=preparer, payload=request
+        )
+        recommendation = first.recommendations[0]
+        after = tuple(
+            [
+                await session.scalar(select(func.count()).select_from(model))
+                for model in boundary_models
+            ]
+        )
+        assert first == replay
+        assert first.evidence_digest == replay.evidence_digest
+        assert recommendation.available_quantity == 2
+        assert recommendation.open_purchase_order_quantity == 0
+        assert recommendation.recommended_order_quantity == 8
+        assert recommendation.recommendation_state == "recommend_order"
+        assert after == before
+        with pytest.raises(PurchasingNotFound):
+            await service.replenishment_workbench(
+                session,
+                context=preparer,
+                payload=request.model_copy(
+                    update={
+                        "targets": (
+                            request.targets[0].model_copy(
+                                update={"branch_id": other_branch.id}
+                            ),
+                        )
+                    }
+                ),
+            )
 
 
 @pytest_asyncio.fixture

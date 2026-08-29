@@ -67,6 +67,7 @@ describe("PurchasingRoute", () => {
       requestChange: mutation,
       decideChange: mutation,
       dispositionOrder: mutation,
+      replenishmentWorkbench: mutation,
     } as never);
   });
   it("fails closed without read permission", () => {

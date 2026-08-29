@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.events.schemas import BusinessEventCreate
 from app.events.service import BusinessEventService
 from app.events.types import EventType
-from app.inventory.models import InventoryItem
+from app.inventory.models import InventoryItem, InventoryQuantity
 from app.platform.permissions.authorization import AuthorizationContext
 
 from .errors import PurchasingConflict, PurchasingNotFound, PurchasingValidation
@@ -50,6 +50,9 @@ from .schemas import (
     ReceiptItem,
     ReceiptLineItem,
     RecordReceiptCommand,
+    ReplenishmentRecommendation,
+    ReplenishmentWorkbench,
+    ReplenishmentWorkbenchRequest,
     RequestPurchaseOrderChangeCommand,
     ResolveDiscrepancyCommand,
     TransitionCommand,
@@ -104,6 +107,135 @@ class PurchasingService:
     ) -> PurchaseOrderItem:
         order = await self._order(session, context, po_id)
         return await self._item(session, order)
+
+    async def replenishment_workbench(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        payload: ReplenishmentWorkbenchRequest,
+    ) -> ReplenishmentWorkbench:
+        identities = [
+            (item.branch_id, item.inventory_item_id) for item in payload.targets
+        ]
+        if len(identities) != len(set(identities)):
+            raise PurchasingValidation("Replenishment targets must be unique")
+        recommendations: list[ReplenishmentRecommendation] = []
+        for target in sorted(
+            payload.targets,
+            key=lambda item: (str(item.branch_id), str(item.inventory_item_id)),
+        ):
+            self.branch(context, target.branch_id)
+            item = await session.scalar(
+                select(InventoryItem).where(
+                    InventoryItem.company_id == context.company.id,
+                    InventoryItem.id == target.inventory_item_id,
+                )
+            )
+            if item is None or item.status != "active":
+                raise PurchasingNotFound("Active Inventory Item was not found")
+            quantities = tuple(
+                (
+                    await session.scalars(
+                        select(InventoryQuantity).where(
+                            InventoryQuantity.company_id == context.company.id,
+                            InventoryQuantity.branch_id == target.branch_id,
+                            InventoryQuantity.item_id == target.inventory_item_id,
+                        )
+                    )
+                ).all()
+            )
+            if not quantities:
+                raise PurchasingValidation(
+                    "Authoritative Inventory quantity evidence is required"
+                )
+            on_hand = sum((row.on_hand for row in quantities), Decimal(0))
+            reserved = sum((row.reserved for row in quantities), Decimal(0))
+            available = on_hand - reserved
+            open_order = Decimal(0)
+            provenance = [
+                f"inventory_item:{item.id}:v{item.version}",
+                *sorted(
+                    f"inventory_quantity:{row.id}:v{row.version}:{row.updated_at.isoformat()}"
+                    for row in quantities
+                ),
+            ]
+            orders = await self.repository.purchase_orders(
+                session, context.company.id, (target.branch_id,)
+            )
+            for order in orders:
+                if order.status != "issued":
+                    continue
+                disposition = await self.repository.disposition(
+                    session, order.company_id, order.id
+                )
+                if disposition is not None:
+                    continue
+                accepted = await self.repository.accepted_totals(
+                    session, order.company_id, order.id
+                )
+                for line in await self.repository.lines(
+                    session, order.company_id, order.id
+                ):
+                    if line.inventory_item_id != item.id or line.is_cancelled:
+                        continue
+                    remainder = max(
+                        line.quantity - accepted.get(line.id, Decimal(0)), Decimal(0)
+                    )
+                    open_order += remainder
+                    provenance.append(
+                        f"purchase_order:{order.id}:v{order.version}:r{order.effective_revision}:line:{line.id}:v{line.version}"
+                    )
+            recommended = max(
+                target.target_available_quantity - available - open_order, Decimal(0)
+            )
+            fact = {
+                "company_id": str(context.company.id),
+                "branch_id": str(target.branch_id),
+                "inventory_item_id": str(item.id),
+                "as_of": payload.as_of.isoformat(),
+                "target": str(target.target_available_quantity),
+                "on_hand": str(on_hand),
+                "reserved": str(reserved),
+                "available": str(available),
+                "open_order": str(open_order),
+                "recommended": str(recommended),
+                "provenance": sorted(provenance),
+            }
+            recommendations.append(
+                ReplenishmentRecommendation(
+                    branch_id=target.branch_id,
+                    inventory_item_id=item.id,
+                    item_code=item.code,
+                    item_name=item.name,
+                    stocking_unit=item.stocking_unit,
+                    target_available_quantity=target.target_available_quantity,
+                    on_hand_quantity=on_hand,
+                    reserved_quantity=reserved,
+                    available_quantity=available,
+                    open_purchase_order_quantity=open_order,
+                    recommended_order_quantity=recommended,
+                    recommendation_state=(
+                        "recommend_order" if recommended > 0 else "no_action"
+                    ),
+                    provenance=tuple(sorted(provenance)),
+                    evidence_digest=digest(fact),
+                )
+            )
+        report = {
+            "schema_version": 1,
+            "company_id": str(context.company.id),
+            "as_of": payload.as_of.isoformat(),
+            "recommendations": [
+                item.model_dump(mode="json") for item in recommendations
+            ],
+        }
+        return ReplenishmentWorkbench(
+            company_id=context.company.id,
+            as_of=payload.as_of,
+            recommendations=tuple(recommendations),
+            evidence_digest=digest(report),
+        )
 
     async def vendor_performance_evidence(
         self,

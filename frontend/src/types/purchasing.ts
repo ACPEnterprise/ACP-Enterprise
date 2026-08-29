@@ -162,6 +162,37 @@ export interface PurchasingWorkspace {
   vendors: readonly OperationalVendor[];
   purchase_orders: readonly PurchaseOrder[];
 }
+export interface ReplenishmentWorkbenchRequest {
+  as_of: string;
+  targets: readonly {
+    branch_id: string;
+    inventory_item_id: string;
+    target_available_quantity: string;
+  }[];
+}
+export interface ReplenishmentRecommendation {
+  branch_id: string;
+  inventory_item_id: string;
+  item_code: string;
+  item_name: string;
+  stocking_unit: string;
+  target_available_quantity: string;
+  on_hand_quantity: string;
+  reserved_quantity: string;
+  available_quantity: string;
+  open_purchase_order_quantity: string;
+  recommended_order_quantity: string;
+  recommendation_state: "recommend_order" | "no_action";
+  provenance: readonly string[];
+  evidence_digest: string;
+}
+export interface ReplenishmentWorkbench {
+  schema_version: number;
+  company_id: string;
+  as_of: string;
+  recommendations: readonly ReplenishmentRecommendation[];
+  evidence_digest: string;
+}
 export interface VendorCreate {
   code: string;
   display_name: string;
