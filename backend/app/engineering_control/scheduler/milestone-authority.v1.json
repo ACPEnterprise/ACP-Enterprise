@@ -3,7 +3,7 @@
   "authority_id": "BANK.DF.002.AUTHORITY",
   "bank_id": "BANK.2",
   "bank_fingerprint": "f0af5713c967b92588ed1a82d36f5adc864fc4b235064dad0c5f5d11b158d4b3",
-  "authoritative_repository_sha": "6f051c8b549298790f51795b42c1644c0f4f131f",
+  "authoritative_repository_sha": "82f84caf90195557266c885061569fe14268daa5",
   "repository_ref": "origin/customer-management-v1",
   "completion_inventory_scope": "ALL_BANK_MILESTONES",
   "completion_evidence": [
@@ -27,6 +27,13 @@
       "evidence_kind": "AUTHORITATIVE_INTEGRATION_ACCEPTANCE",
       "authoritative_commit_sha": "04d74278b914b73ca96838128980218fced32546",
       "evidence_reference": "owner-accepted partial receiving and discrepancy workflow implementation, migration, UI/API, and fail-closed boundary evidence"
+    },
+    {
+      "bank_milestone_id": "BANK.PUR.003",
+      "canonical_milestone_id": "BANK.PUR.003",
+      "evidence_kind": "AUTHORITATIVE_INTEGRATION_ACCEPTANCE",
+      "authoritative_commit_sha": "624c69152e54364acb4d157143870d8024c698da",
+      "evidence_reference": "owner-accepted Purchase Return and vendor authorization workflow implementation, returnable-quantity accounting, migration, UI/API, authorization, Business Events, audit, idempotency, concurrency, and fail-closed downstream boundary evidence"
     },
     {
       "bank_milestone_id": "BANK.PLAT.002",
@@ -85,5 +92,5 @@
   ],
   "gate_resolutions": [],
   "active_ownership": [],
-  "fingerprint": "84e30e93384340ef9769a83ee57c0a591b8bb7cf5a5e2fa41b8d4e9ce25186f9"
+  "fingerprint": "63070cfdb3c8a6b7237ce179fb28b243eee94e1c58b5afbd9adc1f9d06bbf654"
 }
