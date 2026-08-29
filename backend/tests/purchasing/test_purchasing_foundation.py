@@ -263,6 +263,33 @@ async def test_replenishment_approval_is_stale_safe_idempotent_and_links_one_po(
             )
             == 1
         )
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(BusinessEvent)
+                .where(BusinessEvent.entity_id == first.id)
+            )
+            == 2
+        )
+    async with factory() as session:
+        with pytest.raises(
+            PurchasingConflict,
+            match="Replenishment decision idempotency identity conflicts",
+        ):
+            await service.decide_replenishment(
+                session,
+                context=approver,
+                payload=decision.model_copy(update={"reason": "Contradictory replay"}),
+            )
+    async with factory() as session:
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(BusinessEvent)
+                .where(BusinessEvent.entity_id == first.id)
+            )
+            == 2
+        )
     async with factory() as session, session.begin():
         quantity = await session.scalar(
             select(InventoryQuantity).where(InventoryQuantity.item_id == item.id)
