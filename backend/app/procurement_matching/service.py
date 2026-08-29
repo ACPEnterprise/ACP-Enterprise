@@ -35,6 +35,7 @@ from .errors import (
 from .models import ProcurementMatch, ProcurementMatchException, ProcurementMatchLine
 from .schemas import (
     EvaluateMatchCommand,
+    MatchCandidateItem,
     MatchExceptionItem,
     MatchItem,
     MatchLineItem,
@@ -51,6 +52,124 @@ def digest(value: object) -> str:
 
 
 class ProcurementMatchingService:
+    async def candidates(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+    ) -> tuple[MatchCandidateItem, ...]:
+        bills = tuple(
+            (
+                await session.scalars(
+                    select(VendorBill)
+                    .where(
+                        VendorBill.company_id == context.company.id,
+                        VendorBill.branch_id.in_(context.authorized_branch_ids),
+                        VendorBill.status.in_(("draft", "submitted")),
+                    )
+                    .order_by(VendorBill.received_date, VendorBill.bill_number)
+                )
+            ).all()
+        )
+        candidates: list[MatchCandidateItem] = []
+        for bill in bills:
+            revision = await session.scalar(
+                select(BillRevision).where(
+                    BillRevision.company_id == context.company.id,
+                    BillRevision.bill_id == bill.id,
+                    BillRevision.revision == bill.current_revision,
+                )
+            )
+            if revision is None:
+                continue
+            references = tuple(
+                value
+                for value in (
+                    await session.scalars(
+                        select(BillLine.purchasing_reference).where(
+                            BillLine.company_id == context.company.id,
+                            BillLine.revision_id == revision.id,
+                            BillLine.purchasing_reference.is_not(None),
+                        )
+                    )
+                ).all()
+                if value
+            )
+            if not references:
+                continue
+            line_ids: set[UUID] = set()
+            invalid_reference = False
+            for reference in references:
+                try:
+                    line_ids.add(UUID(reference))
+                except ValueError:
+                    invalid_reference = True
+            orders = tuple(
+                (
+                    await session.scalars(
+                        select(PurchaseOrder)
+                        .join(
+                            PurchaseOrderLine,
+                            PurchaseOrderLine.purchase_order_id == PurchaseOrder.id,
+                        )
+                        .where(
+                            PurchaseOrder.company_id == context.company.id,
+                            PurchaseOrder.branch_id == bill.branch_id,
+                            PurchaseOrderLine.company_id == context.company.id,
+                            PurchaseOrderLine.id.in_(tuple(line_ids)),
+                        )
+                        .distinct()
+                    )
+                ).all()
+                if line_ids
+                else ()
+            )
+            order = orders[0] if len(orders) == 1 else None
+            if invalid_reference or len(orders) > 1:
+                linkage_state = "conflicting_po"
+            elif references and order is None:
+                linkage_state = "missing_po"
+            else:
+                linkage_state = "ready"
+            active_match = await session.scalar(
+                select(ProcurementMatch).where(
+                    ProcurementMatch.company_id == context.company.id,
+                    ProcurementMatch.vendor_bill_id == bill.id,
+                    ProcurementMatch.superseded_at.is_(None),
+                )
+            )
+            current = False
+            if active_match is not None:
+                current = (
+                    await _current_source_digest(session, active_match, bill)
+                    == active_match.source_evidence_digest
+                )
+                if not current:
+                    linkage_state = "stale_match"
+            candidates.append(
+                MatchCandidateItem(
+                    vendor_bill_id=bill.id,
+                    vendor_bill_number=bill.bill_number,
+                    vendor_bill_version=bill.version,
+                    branch_id=bill.branch_id,
+                    accounting_vendor_id=bill.vendor_id,
+                    purchase_order_id=order.id if order else None,
+                    purchase_order_number=order.po_number if order else None,
+                    purchase_order_version=order.version if order else None,
+                    linkage_state=linkage_state,
+                    active_match_id=active_match.id if active_match else None,
+                    active_match_state=active_match.state if active_match else None,
+                    active_admission_state=(
+                        active_match.admission_state if active_match else None
+                    ),
+                    active_evaluation_sequence=(
+                        active_match.evaluation_sequence if active_match else None
+                    ),
+                    active_match_current=current,
+                )
+            )
+        return tuple(candidates)
+
     async def evaluate(
         self,
         session: AsyncSession,

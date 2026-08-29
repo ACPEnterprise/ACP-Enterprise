@@ -71,6 +71,23 @@ class MatchItem(MatchSchema):
     exceptions: tuple[MatchExceptionItem, ...] = ()
 
 
+class MatchCandidateItem(MatchSchema):
+    vendor_bill_id: UUID
+    vendor_bill_number: str
+    vendor_bill_version: int
+    branch_id: UUID
+    accounting_vendor_id: UUID
+    purchase_order_id: UUID | None
+    purchase_order_number: str | None
+    purchase_order_version: int | None
+    linkage_state: str
+    active_match_id: UUID | None
+    active_match_state: str | None
+    active_admission_state: str | None
+    active_evaluation_sequence: int | None
+    active_match_current: bool
+
+
 class ResolveMatchExceptionCommand(MatchSchema):
     expected_match_version: int = Field(ge=1)
     expected_exception_version: int = Field(ge=1)

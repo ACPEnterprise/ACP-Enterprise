@@ -59,6 +59,23 @@ export type EvaluateProcurementMatchInput = {
   idempotency_key: string;
 };
 
+export type ProcurementMatchCandidate = {
+  vendor_bill_id: string;
+  vendor_bill_number: string;
+  vendor_bill_version: number;
+  branch_id: string;
+  accounting_vendor_id: string;
+  purchase_order_id: string | null;
+  purchase_order_number: string | null;
+  purchase_order_version: number | null;
+  linkage_state: string;
+  active_match_id: string | null;
+  active_match_state: string | null;
+  active_admission_state: string | null;
+  active_evaluation_sequence: number | null;
+  active_match_current: boolean;
+};
+
 export type ResolveProcurementMatchInput = {
   matchId: string;
   exceptionId: string;
