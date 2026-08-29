@@ -23,6 +23,7 @@ from app.customer_migration.models import (
     CustomerSourceIdentity,
     utc_now,
 )
+from app.customers.models import ServiceLocation
 from app.customers.schemas import (
     ContactCreate,
     CustomerCreate,
@@ -139,6 +140,7 @@ class ReviewedCustomerAggregate:
     contact_json: str | None
     service_location_json: tuple[str, ...]
     billing_address_json: str | None
+    service_location_source_identities: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if self.row_number < 2:
@@ -149,6 +151,10 @@ class ReviewedCustomerAggregate:
         _require_sha256(self.source_row_sha256, "source_row_sha256")
         if _sha256(self.source_identity) != self.source_identity_sha256:
             raise ValueError("source identity digest does not match its value")
+        if self.service_location_source_identities and len(
+            self.service_location_source_identities
+        ) != len(self.service_location_json):
+            raise ValueError("Service Location source identities do not reconcile")
 
     @property
     def customer(self) -> CustomerCreate:
@@ -258,6 +264,7 @@ def review_adapter_output(
                 for location in record.service_locations
             ),
             billing_address_json=_canonical_model(record.billing_address),
+            service_location_source_identities=(),
         )
         for record in output.records
     )
@@ -605,6 +612,16 @@ class CustomerAdapterImportService:
             Awaitable[None],
         ]
         | None = None,
+        location_lineage_callback: Callable[
+            [
+                AsyncSession,
+                CustomerSourceIdentity,
+                ReviewedCustomerAggregate,
+                tuple[ServiceLocation, ...],
+            ],
+            Awaitable[None],
+        ]
+        | None = None,
     ) -> CustomerAdapterImportReport:
         try:
             reviewed.validate_integrity()
@@ -616,7 +633,9 @@ class CustomerAdapterImportService:
         ):
             raise CustomerAdapterImportError("an authorized active Branch is required")
         if reviewed.source_system == SOURCE4_SYSTEM and (
-            master_run_id is None or lineage_callback is None
+            master_run_id is None
+            or lineage_callback is None
+            or location_lineage_callback is None
         ):
             raise CustomerAdapterImportError(
                 "SOURCE.4 Customer import requires master run and lineage callback"
@@ -708,16 +727,20 @@ class CustomerAdapterImportService:
                         context=context,
                         customer_data=aggregate.customer,
                         contact_data=aggregate.contact,
-                        service_location_data=locations[0] if locations else None,
+                        service_location_data=None,
                         billing_address_data=aggregate.billing_address,
                     )
-                    for location in locations[1:]:
-                        await self.customer_service.stage_migrated_service_location(
-                            session,
-                            context=context,
-                            customer_id=customer.id,
-                            data=location,
-                        )
+                    persisted_locations = tuple(
+                        [
+                            await self.customer_service.stage_migrated_service_location(
+                                session,
+                                context=context,
+                                customer_id=customer.id,
+                                data=location,
+                            )
+                            for location in locations
+                        ]
+                    )
                     assert context.active_branch is not None
                     source_identity = CustomerSourceIdentity(
                         company_id=context.company.id,
@@ -731,6 +754,13 @@ class CustomerAdapterImportService:
                     await session.flush()
                     if lineage_callback is not None:
                         await lineage_callback(session, source_identity, aggregate)
+                    if location_lineage_callback is not None:
+                        await location_lineage_callback(
+                            session,
+                            source_identity,
+                            aggregate,
+                            persisted_locations,
+                        )
                     await self._advance(session, run_id=run_id, disposition="accepted")
                     self._audit(
                         session,

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from dataclasses import dataclass, replace
 from urllib.parse import urlparse
 from uuid import UUID, uuid5
@@ -16,7 +18,16 @@ from app.customer_migration.adapter_import import (
     ReviewedCustomerAdapterOutput,
     ReviewedCustomerAggregate,
 )
-from app.customer_migration.models import CustomerMigrationRun, CustomerSourceIdentity
+from app.customer_migration.models import (
+    CustomerMigrationCandidate,
+    CustomerMigrationChildException,
+    CustomerMigrationRun,
+    CustomerMigrationSourceArtifact,
+    CustomerMigrationSourceRow,
+    CustomerSourceIdentity,
+    ServiceLocationSourceIdentity,
+)
+from app.customers.models import ServiceLocation
 from app.operational_migration.cutover import (
     CutoverMigrationService,
     HistoryMigrationRecord,
@@ -91,8 +102,20 @@ TERMINAL_CHILD_STATUSES = frozenset(
     {"completed", "completed_with_exceptions", "failed"}
 )
 COMPLETABLE_CHILD_STATUSES = frozenset({"completed", "completed_with_exceptions"})
-ORCHESTRATOR_VERSION = "hcp-migration-2d-orchestrator/v1"
+ORCHESTRATOR_VERSION = "hcp-migration-2f-orchestrator/v1"
 EMPLOYEE_NAMESPACE = UUID("82f43837-ceec-5d02-bb92-cf65b9ac6af8")
+STAGING_NAMESPACE = UUID("b2ad788f-ae3a-5e22-8b12-4937bf65e44f")
+
+
+@dataclass(frozen=True)
+class HybridCustomerStagingReport:
+    artifact_id: UUID
+    staging_digest: str
+    customers: int
+    contacts: int
+    locations: int
+    child_exceptions: int
+    reused: bool
 
 
 @dataclass(frozen=True)
@@ -134,6 +157,8 @@ class EmployeeCandidateCommand:
 @dataclass(frozen=True)
 class CompletionRequirements:
     customer_lineage: int
+    location_identities: int
+    location_exceptions: int
     employee_crosswalks: int
     employee_candidates: int
     employee_excluded: int
@@ -401,6 +426,57 @@ class HcpMigration2Orchestrator:
                 ),
             )
 
+        async def location_lineage(
+            session: AsyncSession,
+            identity: CustomerSourceIdentity,
+            aggregate: ReviewedCustomerAggregate,
+            locations: tuple[ServiceLocation, ...],
+        ) -> None:
+            if len(aggregate.service_location_source_identities) != len(locations):
+                raise ValueError("source4_location_identity_count_mismatch")
+            candidate = admissible.get(aggregate.source_identity)
+            if candidate is None:
+                raise ValueError("source4_location_customer_admission_missing")
+            address_by_id = {
+                item.get("id"): item
+                for item in candidate.acquired_payload.get("addresses", [])
+            }
+            assert context.active_branch is not None
+            for source_location_id, location in zip(
+                aggregate.service_location_source_identities, locations, strict=True
+            ):
+                location_id = getattr(location, "id", None)
+                customer_id = getattr(location, "customer_id", None)
+                if location_id is None or customer_id != identity.customer_id:
+                    raise ValueError("source4_location_target_scope_invalid")
+                address = address_by_id.get(source_location_id)
+                if not isinstance(address, dict):
+                    raise TypeError("source4_location_assertion_missing")
+                session.add(
+                    ServiceLocationSourceIdentity(
+                        company_id=context.company.id,
+                        branch_id=context.active_branch.id,
+                        master_run_id=master_run_id,
+                        customer_source_identity_id=identity.id,
+                        service_location_id=location_id,
+                        customer_id=identity.customer_id,
+                        source_system=SOURCE4_SYSTEM,
+                        source_location_id=source_location_id,
+                        source_digest=canonical_sha256(address),
+                        package_digest=master.package_digest,
+                        transformation_version=reviewed.schema_version,
+                        transformation_digest=reviewed.transformation_sha256,
+                        source_context={
+                            "assertion": "authoritative_native_location",
+                            "ordinal": aggregate.service_location_source_identities.index(
+                                source_location_id
+                            ),
+                        },
+                        first_run_id=identity.first_run_id,
+                    )
+                )
+            await session.flush()
+
         return await self._customers.run(
             factory,
             context=context,
@@ -408,6 +484,193 @@ class HcpMigration2Orchestrator:
             boundary=boundary,
             master_run_id=master_run_id,
             lineage_callback=lineage,
+            location_lineage_callback=location_lineage,
+        )
+
+    async def stage_customers(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        master_run_id: UUID,
+        reviewed: ReviewedCustomerAdapterOutput,
+        hybrid_admission: HybridCustomerAdmission,
+    ) -> HybridCustomerStagingReport:
+        """Stage the derived hybrid contract after, and only under, its master."""
+        master = await self._active_master(
+            session, context=context, master_run_id=master_run_id
+        )
+        reviewed.validate_integrity()
+        hybrid_admission.validate()
+        if reviewed.source_system != SOURCE4_SYSTEM:
+            raise ValueError("protected_staging_source_system_invalid")
+        if reviewed.source_sha256 != hybrid_admission.digest:
+            raise ValueError("protected_staging_admission_digest_mismatch")
+        if (
+            master.transformation_contracts.get("hybrid_customer_admission_digest")
+            != hybrid_admission.digest
+        ):
+            raise ValueError("protected_staging_master_binding_mismatch")
+        counts = {
+            "customers": len(reviewed.aggregates),
+            "contacts": sum(
+                item.contact_json is not None for item in reviewed.aggregates
+            ),
+            "locations": sum(
+                len(item.service_location_json) for item in reviewed.aggregates
+            ),
+            "child_exceptions": sum(
+                len(item.location_exception_ids) for item in hybrid_admission.candidates
+            ),
+        }
+        staging_digest = canonical_sha256(
+            {
+                "contract": "hcp-source4-master-bound-customer-staging/v1",
+                "master_run_id": str(master_run_id),
+                "package_digest": master.package_digest,
+                "hybrid_admission_digest": hybrid_admission.digest,
+                "review_digest": reviewed.review_sha256,
+                "transformation_digest": reviewed.transformation_sha256,
+                "company_id": str(context.company.id),
+                "branch_id": str(master.branch_id),
+                "actor_id": str(context.user.id),
+                "counts": counts,
+            }
+        )
+        artifact_id = uuid5(STAGING_NAMESPACE, staging_digest)
+        existing = await session.get(CustomerMigrationSourceArtifact, artifact_id)
+        if existing is not None:
+            if (
+                existing.master_run_id != master_run_id
+                or existing.staging_digest != staging_digest
+                or existing.source_sha256 != hybrid_admission.digest
+                or existing.row_count != len(hybrid_admission.candidates)
+            ):
+                raise ValueError("protected_staging_replay_conflict")
+            staged_rows = await session.scalar(
+                select(func.count())
+                .select_from(CustomerMigrationSourceRow)
+                .where(CustomerMigrationSourceRow.artifact_id == artifact_id)
+            )
+            staged_candidates = await session.scalar(
+                select(func.count())
+                .select_from(CustomerMigrationCandidate)
+                .join(CustomerMigrationSourceRow)
+                .where(CustomerMigrationSourceRow.artifact_id == artifact_id)
+            )
+            staged_exceptions = await session.scalar(
+                select(func.count())
+                .select_from(CustomerMigrationChildException)
+                .join(CustomerMigrationSourceRow)
+                .where(CustomerMigrationSourceRow.artifact_id == artifact_id)
+            )
+            if (
+                staged_rows != counts["customers"]
+                or staged_candidates
+                != counts["customers"] + counts["contacts"] + counts["locations"]
+                or staged_exceptions != counts["child_exceptions"]
+            ):
+                raise ValueError("protected_staging_replay_incomplete")
+            return HybridCustomerStagingReport(
+                artifact_id, staging_digest, reused=True, **counts
+            )
+        assert context.active_branch is not None
+        artifact = CustomerMigrationSourceArtifact(
+            id=artifact_id,
+            company_id=context.company.id,
+            branch_id=context.active_branch.id,
+            source_system=SOURCE4_SYSTEM,
+            master_run_id=master_run_id,
+            actor_user_id=context.user.id,
+            package_digest=master.package_digest,
+            hybrid_admission_digest=hybrid_admission.digest,
+            staging_digest=staging_digest,
+            source_sha256=hybrid_admission.digest,
+            schema_version=reviewed.schema_version,
+            transformation_sha256=reviewed.transformation_sha256,
+            byte_size=0,
+            row_count=len(hybrid_admission.candidates),
+        )
+        session.add(artifact)
+        await session.flush()
+        candidate_by_id = {
+            item.native_customer_id: item for item in hybrid_admission.candidates
+        }
+        for aggregate in reviewed.aggregates:
+            source_row = CustomerMigrationSourceRow(
+                artifact_id=artifact.id,
+                row_number=aggregate.row_number,
+                source_identity=aggregate.source_identity,
+                source_id_sha256=aggregate.source_identity_sha256,
+                source_row_sha256=aggregate.source_row_sha256,
+                disposition="accepted",
+            )
+            session.add(source_row)
+            await session.flush()
+            payloads = [
+                ("customer", 0, aggregate.customer.model_dump(mode="json")),
+                *(
+                    [("contact", 0, aggregate.contact.model_dump(mode="json"))]
+                    if aggregate.contact is not None
+                    else []
+                ),
+                *[
+                    ("service_location", index, location.model_dump(mode="json"))
+                    for index, location in enumerate(aggregate.service_locations)
+                ],
+            ]
+            for entity_type, ordinal, payload in payloads:
+                session.add(
+                    CustomerMigrationCandidate(
+                        source_row_id=source_row.id,
+                        entity_type=entity_type,
+                        ordinal=ordinal,
+                        payload_sha256=hashlib.sha256(
+                            json.dumps(payload, sort_keys=True).encode()
+                        ).hexdigest(),
+                        payload=payload,
+                    )
+                )
+            candidate = candidate_by_id[aggregate.source_identity]
+            address_by_id = {
+                item.get("id"): item
+                for item in candidate.acquired_payload.get("addresses", [])
+            }
+            for ordinal, location_id in enumerate(candidate.location_exception_ids, 1):
+                address = address_by_id.get(location_id, {})
+                missing = tuple(
+                    key
+                    for key in ("id", "street", "city", "state", "zip")
+                    if not str(address.get(key) or "").strip()
+                )
+                evidence_digest = canonical_sha256(address)
+                session.add(
+                    CustomerMigrationChildException(
+                        source_row_id=source_row.id,
+                        source_id_sha256=canonical_sha256(location_id),
+                        source_location_id=location_id
+                        if location_id.startswith("adr_")
+                        else None,
+                        parent_customer_source_id=aggregate.source_identity,
+                        package_digest=master.package_digest,
+                        transformation_digest=reviewed.transformation_sha256,
+                        reconciliation_key=canonical_sha256(
+                            {
+                                "customer": aggregate.source_identity,
+                                "location": location_id,
+                            }
+                        ),
+                        resolution_state="unresolved",
+                        contract_version="hcp-source4-location-child-exception/v1",
+                        address_group_number=ordinal,
+                        missing_fields=list(missing),
+                        reason_code="incomplete_authoritative_location",
+                        evidence_sha256=evidence_digest,
+                    )
+                )
+        await session.flush()
+        return HybridCustomerStagingReport(
+            artifact.id, staging_digest, reused=False, **counts
         )
 
     async def run_operational(
@@ -812,6 +1075,18 @@ class HcpMigration2Orchestrator:
                 UnlinkedEstimateEvidence.synthetic_qualification.is_(False),
             )
         )
+        location_identity_count = await session.scalar(
+            select(func.count())
+            .select_from(ServiceLocationSourceIdentity)
+            .where(ServiceLocationSourceIdentity.master_run_id == master_run_id)
+        )
+        location_exception_count = await session.scalar(
+            select(func.count())
+            .select_from(CustomerMigrationChildException)
+            .join(CustomerMigrationSourceRow)
+            .join(CustomerMigrationSourceArtifact)
+            .where(CustomerMigrationSourceArtifact.master_run_id == master_run_id)
+        )
         hold_rows = tuple(
             (
                 await session.scalars(
@@ -840,6 +1115,13 @@ class HcpMigration2Orchestrator:
             or employee_count != candidate_count + excluded_count
         ):
             raise ValueError("Employee candidate/exclusion accounting is incomplete")
+        if (
+            location_identity_count != requirements.location_identities
+            or location_exception_count != requirements.location_exceptions
+        ):
+            raise ValueError(
+                "Service Location identity/exception accounting is incomplete"
+            )
         history = by_domain["history"]
         actual_note_outcomes = {
             "persisted": history.accepted_count,

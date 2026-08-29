@@ -53,7 +53,7 @@ def master_command() -> MasterRunCommand:
             "customer_parent_closure_digest": "7" * 64,
         },
         owner_receipts={f"receipt-{index}": str(index) * 64 for index in range(1, 6)},
-        schema_head="d7f1b3c5e068",
+        schema_head="e2f4a6b8c091",
         implementation_version=ORCHESTRATOR_VERSION,
         supported_entities=(
             "customer",
@@ -75,7 +75,7 @@ def master_command() -> MasterRunCommand:
 def test_current_master_command_is_deterministic_and_schema_bound() -> None:
     command = master_command()
     command.validate()
-    assert command.schema_head == "d7f1b3c5e068"
+    assert command.schema_head == "e2f4a6b8c091"
     assert command.implementation_version == ORCHESTRATOR_VERSION
 
 
@@ -95,6 +95,8 @@ def test_source4_operational_run_contract_requires_master_and_domain() -> None:
 def test_reconciliation_requires_every_source_subject_to_have_one_outcome() -> None:
     requirements = CompletionRequirements(
         customer_lineage=1,
+        location_identities=1,
+        location_exceptions=0,
         employee_crosswalks=7,
         employee_candidates=6,
         employee_excluded=1,

@@ -166,7 +166,7 @@ class MasterRunCommand:
             raise ValueError("all five owner receipts are required")
         for value in self.owner_receipts.values():
             _digest(str(value), "owner_receipt")
-        if self.schema_head != "d7f1b3c5e068":
+        if self.schema_head != "e2f4a6b8c091":
             raise ValueError("unexpected rehearsal schema head")
         if not self.supported_entities or len(self.supported_entities) != len(
             set(self.supported_entities)

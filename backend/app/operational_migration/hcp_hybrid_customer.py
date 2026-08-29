@@ -495,8 +495,13 @@ def build_reviewed_customer_output(
                 service_location_json=tuple(
                     item.model_dump_json() for item in locations
                 ),
-                billing_address_json=None,
-            )
+            billing_address_json=None,
+            service_location_source_identities=tuple(
+                address["id"]
+                for address in payload.get("addresses", [])
+                if address.get("id") in complete_ids
+            ),
+        )
         )
     rejected = tuple(
         sorted(
