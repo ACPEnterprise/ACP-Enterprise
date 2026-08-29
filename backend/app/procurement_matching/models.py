@@ -6,11 +6,13 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKeyConstraint,
+    Index,
     Integer,
     Numeric,
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -28,6 +30,15 @@ class ProcurementMatch(Base):
         ForeignKeyConstraint(
             ["company_id", "branch_id"],
             ["branches.company_id", "branches.id"],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "supersedes_match_id"],
+            [
+                "procurement_three_way_matches.company_id",
+                "procurement_three_way_matches.id",
+            ],
+            name="fk_procurement_match_supersedes",
             ondelete="RESTRICT",
         ),
         ForeignKeyConstraint(
@@ -49,11 +60,21 @@ class ProcurementMatch(Base):
             name="ck_procurement_match_admission",
         ),
         UniqueConstraint(
-            "company_id", "vendor_bill_id", name="uq_procurement_match_bill"
+            "company_id",
+            "vendor_bill_id",
+            "evaluation_sequence",
+            name="uq_procurement_match_bill_sequence",
         ),
         UniqueConstraint("company_id", "id", name="uq_procurement_match_company_id"),
         UniqueConstraint(
             "company_id", "idempotency_key", name="uq_procurement_match_idempotency"
+        ),
+        Index(
+            "uq_procurement_match_active_bill",
+            "company_id",
+            "vendor_bill_id",
+            unique=True,
+            postgresql_where=text("superseded_at IS NULL"),
         ),
     )
     id: Mapped[UUID] = mapped_column(
@@ -76,6 +97,10 @@ class ProcurementMatch(Base):
     policy_reference: Mapped[str | None] = mapped_column(String(160))
     purchase_order_version: Mapped[int] = mapped_column(Integer, nullable=False)
     bill_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    source_evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    evaluation_sequence: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    supersedes_match_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    superseded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
     idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
     evaluated_by_user_id: Mapped[UUID] = mapped_column(

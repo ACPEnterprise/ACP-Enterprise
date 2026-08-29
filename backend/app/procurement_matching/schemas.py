@@ -59,6 +59,10 @@ class MatchItem(MatchSchema):
     policy_reference: str | None
     purchase_order_version: int
     bill_version: int
+    source_evidence_digest: str
+    evaluation_sequence: int
+    supersedes_match_id: UUID | None
+    superseded_at: datetime | None
     evidence_digest: str
     evaluated_by_user_id: UUID
     evaluated_at: datetime
