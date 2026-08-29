@@ -216,7 +216,7 @@ class SandboxFixtureService:
             ("account-payroll-expense", _account("ACP Qualification Payroll Expense", "Expense", "PayrollExpenses")),
             ("account-payroll-liability", _account("ACP Qualification Payroll Liability", "Other Current Liability", "PayrollTaxPayable")),
             ("account-fixed-asset", _account("ACP Qualification Fixed Asset", "Fixed Asset", "FurnitureAndFixtures")),
-            ("account-depreciation", _account("ACP Qualification Accumulated Depreciation", "Fixed Asset", "AccumulatedDepreciation")),
+            ("account-depreciation", _account("ACP Qualification Accumulated Depreciation", "Fixed Asset", "OtherFixedAssets")),
             ("account-equity", _account("ACP Qualification Owner Equity", "Equity", "OwnersEquity")),
             ("account-credit-card", _account("ACP Qualification Credit Card", "Credit Card", "CreditCard")),
             ("account-undeposited", _account("ACP Qualification Undeposited Funds", "Other Current Asset", "UndepositedFunds")),
