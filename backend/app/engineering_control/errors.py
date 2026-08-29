@@ -48,3 +48,7 @@ class EngineeringCommandExpiredError(EngineeringCommandLifecycleError):
 
 class EngineeringCommandExecutionUnavailableError(EngineeringControlError):
     pass
+
+
+class ProviderRepositoryReadinessNotCurrentError(EngineeringControlError):
+    """The assigned provider readiness is not current for Start."""

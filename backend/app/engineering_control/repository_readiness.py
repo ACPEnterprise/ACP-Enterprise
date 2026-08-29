@@ -21,6 +21,14 @@ READINESS_TTL = timedelta(minutes=2)
 ACTIVE_EXECUTION_STATES = frozenset({"queued", "starting", "running"})
 
 
+def repository_preparation_required(
+    *, requested_code_changes: bool, evidence: dict[str, object]
+) -> bool:
+    """Return whether Start requires assigned-provider repository readiness."""
+
+    return requested_code_changes or "proof_role" in evidence
+
+
 def active_readiness_target_eligible(
     *,
     milestone_status: str,
@@ -124,11 +132,55 @@ def readiness_is_current(
         and readiness.get("branch") == branch
         and readiness.get("candidate_head") == candidate_head
         and readiness.get("observed_head") == candidate_head
+        and readiness.get("provider_software_sha") == candidate_head
         and (worker_id is None or readiness.get("worker_id") == str(worker_id))
     )
 
 
+def readiness_prepared_at(readiness: object) -> datetime | None:
+    if not isinstance(readiness, dict):
+        return None
+    try:
+        prepared_at = datetime.fromisoformat(str(readiness["prepared_at"]))
+    except (KeyError, TypeError, ValueError):
+        return None
+    return prepared_at if prepared_at.tzinfo is not None else None
+
+
 class RepositoryReadinessService:
+    async def start_admission_is_current(
+        self,
+        session: AsyncSession,
+        *,
+        company_id: UUID,
+        milestone_id: UUID,
+        repository_key: str,
+        branch: str,
+        authoritative_head: str,
+        requested_code_changes: bool,
+        evidence: dict[str, object],
+        now: datetime,
+    ) -> bool:
+        """Evaluate the canonical repository gate shared by Roadmap and Start."""
+
+        if not repository_preparation_required(
+            requested_code_changes=requested_code_changes,
+            evidence=evidence,
+        ):
+            return True
+        if evidence.get("authoritative_head") != authoritative_head:
+            return False
+        return await self.is_current_for_milestone(
+            session,
+            company_id=company_id,
+            milestone_id=milestone_id,
+            repository_key=repository_key,
+            branch=branch,
+            candidate_head=authoritative_head,
+            evidence=evidence,
+            now=now,
+        )
+
     async def is_current_for_milestone(
         self,
         session: AsyncSession,
@@ -273,6 +325,8 @@ class RepositoryReadinessService:
         ready: bool,
         reason_code: str | None,
     ) -> None:
+        if prepared_at.tzinfo is None:
+            raise ValueError("Repository readiness timestamp must include a timezone.")
         targets = {
             item.milestone_id: item
             for item in await self.targets(
@@ -310,19 +364,35 @@ class RepositoryReadinessService:
             "ready": ready and observed_head == candidate_head,
             "reason_code": reason_code,
         }
+        existing = evidence.get("provider_repository_readiness")
+        existing_prepared_at = readiness_prepared_at(existing)
+        if existing_prepared_at is not None:
+            if prepared_at < existing_prepared_at:
+                raise ValueError(
+                    "Repository readiness observation is older than durable evidence."
+                )
+            if prepared_at == existing_prepared_at and readiness_semantics(
+                existing
+            ) != readiness_semantics(incoming):
+                raise ValueError(
+                    "Repository readiness observation conflicts at the same timestamp."
+                )
         desired_readiness_state = (
             "ready"
             if ready and observed_head == candidate_head
             else "preparing_environment"
         )
         if not readiness_requires_milestone_update(
-            evidence.get("provider_repository_readiness"),
+            existing,
             incoming,
             current_readiness_state=milestone.readiness_state,
             desired_readiness_state=desired_readiness_state,
         ):
-            # The authenticated worker heartbeat is updated in the same transport
-            # cycle. Keep the owner's concurrency token stable for identical truth.
+            # Persist authenticated freshness without rotating the owner's
+            # optimistic-concurrency token for semantically identical truth.
+            if existing_prepared_at is None or prepared_at > existing_prepared_at:
+                evidence["provider_repository_readiness"] = incoming
+                milestone.starting_commit_evidence = evidence
             return
         evidence["provider_repository_readiness"] = incoming
         milestone.starting_commit_evidence = evidence

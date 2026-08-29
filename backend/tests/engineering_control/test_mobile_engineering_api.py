@@ -1433,6 +1433,33 @@ def test_code_milestone_without_repository_readiness_is_not_owner_startable() ->
     assert actions == ()
 
 
+def test_read_only_proof_uses_same_repository_gate_as_start() -> None:
+    item = SimpleNamespace(
+        reconciliation_state="current",
+        status="ready",
+        readiness_state="ready",
+        requested_code_changes=False,
+        starting_commit_evidence={"proof_role": "backend_validation"},
+        owning_branch="customer-management-v1",
+    )
+
+    attention, reason, actions = _attention(
+        item, None, None, repository_start_eligible=False
+    )
+    assert attention == "waiting_on_dependency"
+    assert reason == (
+        "Preparing execution environment for the current repository release."
+    )
+    assert actions == ()
+
+    attention, reason, actions = _attention(
+        item, None, None, repository_start_eligible=True
+    )
+    assert attention == "owner_action_required"
+    assert reason == "This milestone is ready to start."
+    assert "start" in actions
+
+
 def test_historical_execution_definition_is_not_owner_startable() -> None:
     item = SimpleNamespace(
         reconciliation_state="current",
