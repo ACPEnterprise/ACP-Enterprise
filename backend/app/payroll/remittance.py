@@ -208,6 +208,8 @@ class PayrollRemittanceService:
         amount = self._amount(run, classification)
         blocked = policy.destination_required and destination is None or policy.due_days_after_period is None
         members = tuple((await session.scalars(select(PayrollRunMemberRecord).where(PayrollRunMemberRecord.run_id == run.id, PayrollRunMemberRecord.disposition == "ready").order_by(PayrollRunMemberRecord.employee_id))).all())
+        if len(members) > 1 and not policy.aggregation_permitted:
+            raise PayrollConflictError("remittance policy does not permit liability aggregation")
         contributions = [{"employee_id": str(item.employee_id), "tax_result_id": str(item.tax_result_id), "tax_result_digest": item.tax_result_digest} for item in members]
         due = period.period_end + timedelta(days=policy.due_days_after_period) if policy.due_days_after_period is not None else None
         content = {"company_id": str(run.company_id), "run_id": str(run.id), "run_digest": run.run_digest, "period_id": str(run.pay_period_id), "classification": classification.value, "policy_id": str(policy.id), "policy_digest": policy.policy_digest, "destination_id": str(destination.id) if destination else None, "destination_digest": destination.destination_digest if destination else None, "amount": str(amount), "currency": run.currency, "due_date": due.isoformat() if due else None, "contributions": contributions, "supersedes_obligation_id": str(supersedes_obligation_id) if supersedes_obligation_id else None, "definition_version": REMITTANCE_VERSION}
