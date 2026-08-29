@@ -621,13 +621,13 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     },
     {
-      "classification": "IMMUTABLE_APPEND_ONLY",
+      "classification": "EXPLICIT_EXEMPTION",
       "domain": "customers",
-      "mechanism": "domain-owned deterministic evidence/receipt identity",
+      "mechanism": "legacy compatibility boundary; no deterministic request identity or replay receipt",
       "method": "POST",
       "operation_id": "record_customer_consent_api_v1_customers__customer_id__consents_post",
       "path": "/api/v1/customers/{customer_id}/consents",
-      "reason": "The accepted operation appends immutable evidence and owns deterministic replay identity.",
+      "reason": "Consent evidence receives a fresh server identity and cannot recover an earlier result after an uncertain network outcome.",
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     },
     {
@@ -651,13 +651,13 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     },
     {
-      "classification": "IMMUTABLE_APPEND_ONLY",
+      "classification": "EXPLICIT_EXEMPTION",
       "domain": "customers",
-      "mechanism": "domain-owned deterministic evidence/receipt identity",
+      "mechanism": "legacy compatibility boundary; no deterministic request identity or replay receipt",
       "method": "POST",
       "operation_id": "add_customer_note_api_v1_customers__customer_id__notes_post",
       "path": "/api/v1/customers/{customer_id}/notes",
-      "reason": "The accepted operation appends immutable evidence and owns deterministic replay identity.",
+      "reason": "Customer notes receive fresh server identities and cannot recover an earlier result after an uncertain network outcome.",
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     },
     {
@@ -1088,6 +1088,9 @@
       "operation_id": "acknowledge_recovery_api_v1_engineering_worker_recovery_acknowledgements_post",
       "path": "/api/v1/engineering/worker-recovery/acknowledgements",
       "reason": "The accepted operation appends immutable evidence and owns deterministic replay identity.",
+      "replay_evidence": [
+        "tests/worker_control/test_recovery_acknowledgement.py"
+      ],
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     },
     {
@@ -1171,13 +1174,13 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     },
     {
-      "classification": "IMMUTABLE_APPEND_ONLY",
+      "classification": "EXPLICIT_EXEMPTION",
       "domain": "events",
-      "mechanism": "domain-owned deterministic evidence/receipt identity",
+      "mechanism": "legacy compatibility boundary; no deterministic request identity or replay receipt",
       "method": "POST",
       "operation_id": "publish_event_api_v1_events_post",
       "path": "/api/v1/events",
-      "reason": "The accepted operation appends immutable evidence and owns deterministic replay identity.",
+      "reason": "Direct publication creates a fresh Business Event identity and cannot recover an earlier result after an uncertain network outcome.",
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     },
     {
@@ -1661,6 +1664,16 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     },
     {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "purchasing",
+      "mechanism": "Company-scoped durable replenishment decision identity and canonical command digest",
+      "method": "POST",
+      "operation_id": "decide_replenishment_api_v1_purchasing_replenishment_decisions_post",
+      "path": "/api/v1/purchasing/replenishment/decisions",
+      "reason": "Exact Company-scoped command replay returns the durable decision; contradictory identity reuse and stale recommendation evidence fail closed.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
       "classification": "NON_MUTATING_READ_ONLY",
       "domain": "purchasing",
       "mechanism": "query/qualification operation expressed as POST",
@@ -2068,6 +2081,9 @@
       "operation_id": "acknowledge_composition_api_v1_worker_transport_compositions_acknowledge_post",
       "path": "/api/v1/worker-transport/compositions/acknowledge",
       "reason": "The accepted operation appends immutable evidence and owns deterministic replay identity.",
+      "replay_evidence": [
+        "tests/worker_control/transport/persistence/test_transport_persistence.py"
+      ],
       "tenant_scope": "PLATFORM_GLOBAL"
     },
     {
@@ -2128,6 +2144,9 @@
       "operation_id": "submit_provider_progress_api_v1_worker_transport_progress_post",
       "path": "/api/v1/worker-transport/progress",
       "reason": "The accepted operation appends immutable evidence and owns deterministic replay identity.",
+      "replay_evidence": [
+        "tests/worker_control/transport/persistence/test_transport_persistence.py"
+      ],
       "tenant_scope": "PLATFORM_GLOBAL"
     },
     {
@@ -2158,6 +2177,9 @@
       "operation_id": "submit_result_api_v1_worker_transport_results_post",
       "path": "/api/v1/worker-transport/results",
       "reason": "The accepted operation appends immutable evidence and owns deterministic replay identity.",
+      "replay_evidence": [
+        "tests/worker_control/transport/persistence/test_transport_persistence.py"
+      ],
       "tenant_scope": "PLATFORM_GLOBAL"
     },
     {
@@ -2311,6 +2333,6 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "1207e9ca99953f52ae471991eabe6e30c54e07bae0ac87df241d9806d3047268",
+  "fingerprint": "8119a646beeb19e3754a4b4cc798eca4faeeb9c21b3e88788e9f31efb3c3774a",
   "schema_version": "1"
 }

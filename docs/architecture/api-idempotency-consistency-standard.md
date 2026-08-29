@@ -7,23 +7,31 @@ does not introduce a shared mutation service or replace stronger aggregate,
 append-only, provider, Accounting, Payments, AP, Purchasing, worker-transport,
 or notification-outbox identities.
 
-The versioned mutation coverage registry inventories all 231 current HTTP
+The versioned mutation coverage registry inventories all 232 current HTTP
 operations expressed with `POST`, `PUT`, `PATCH`, or `DELETE`. Its fingerprint
 is part of `PlatformContractManifest`; adding or changing a mutating route
 without reconciling the registry fails the Platform meta-test.
 
 | Classification | Current count | Meaning |
 |---|---:|---|
-| `IDEMPOTENCY_REQUIRED` | 90 | Existing domain request identity and durable receipt/replay contract |
+| `IDEMPOTENCY_REQUIRED` | 91 | Existing domain request identity and durable receipt/replay contract |
 | `NATURALLY_IDEMPOTENT` | 58 | Resource target state or optimistic aggregate version is stronger than a separate key |
-| `IMMUTABLE_APPEND_ONLY` | 7 | Accepted deterministic evidence/receipt identity owns replay |
+| `IMMUTABLE_APPEND_ONLY` | 4 | Accepted deterministic evidence/receipt identity owns replay, with concrete test evidence recorded in the registry |
 | `NON_MUTATING_READ_ONLY` | 5 | Query or qualification operation expressed as POST |
-| `EXPLICIT_EXEMPTION` | 71 | Compatibility boundary lacking a proven cross-network receipt; no compliance is claimed |
+| `EXPLICIT_EXEMPTION` | 74 | Compatibility boundary lacking a proven cross-network receipt; no compliance is claimed |
 
 An exemption is not evidence of idempotency. It prevents a legacy API from
 being silently described as safe and identifies where a separately bounded
 domain transition is required. PLAT.008 does not add breaking request fields or
 redesign those services.
+
+An append-only classification is accepted only when its registry record names
+concrete replay evidence. The registry fails closed if that evidence is absent.
+Customer note creation, Customer consent creation, and direct Business Event
+publication are explicit exemptions: each creates a fresh append-only identity,
+but none currently accepts a deterministic request identity that can recover an
+earlier result after an uncertain network outcome. Their domain behavior is
+unchanged; append-only storage alone is not described as replay safety.
 
 ## Canonical identity and digest
 
@@ -71,3 +79,21 @@ has no endpoint record; its command contracts remain domain-owned.
 PLAT.006 Company-scoped outbox uniqueness remains unchanged. No schema,
 endpoint, authorization, Business Event, audit, or source-domain mutation is
 introduced by this standard.
+
+### Purchasing replenishment decisions
+
+`POST /api/v1/purchasing/replenishment/decisions` is
+`IDEMPOTENCY_REQUIRED`. Its accepted identity is Company plus the command's
+`idempotency_key`; the durable decision stores a canonical digest of the full
+command. Exact replay returns the existing decision before recomputing the
+recommendation, so a lost response can be recovered without another Purchase
+Order or Business Event. Reusing the key with a different command conflicts.
+A new key carrying old recommendation evidence fails with
+`STALE_REPLENISHMENT_RECOMMENDATION`, and Company plus recommendation-digest
+uniqueness prevents a second disposition for the same evidence. Branch remains
+explicit authorization and evidence context rather than a globally shared
+identity. Possession of a key does not bypass current
+`PurchasingPermission.APPROVE` authorization.
+
+The qualified coverage fingerprint is
+`8119a646beeb19e3754a4b4cc798eca4faeeb9c21b3e88788e9f31efb3c3774a`.
