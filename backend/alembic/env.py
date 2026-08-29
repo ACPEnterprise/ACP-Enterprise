@@ -68,6 +68,7 @@ from app.platform.company import membership_models  # noqa: F401
 from app.platform.company import models as company_models  # noqa: F401
 from app.platform.employees import models as employee_models  # noqa: F401
 from app.platform.notifications import models as notification_models  # noqa: F401
+from app.platform.onboarding import models as onboarding_models  # noqa: F401
 from app.platform.permissions import models as permission_models  # noqa: F401
 from app.platform.users import identity_models  # noqa: F401
 from app.platform.users import models as user_models  # noqa: F401

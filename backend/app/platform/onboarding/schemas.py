@@ -1,0 +1,42 @@
+from uuid import UUID
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+
+class OnboardingInitiateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    request_key: str = Field(min_length=1, max_length=128)
+    branch_id: UUID
+    first_name: str = Field(min_length=1, max_length=100)
+    last_name: str = Field(min_length=1, max_length=100)
+    display_name: str = Field(min_length=1, max_length=200)
+    employee_type: str = Field(pattern="^(employee|contractor|vendor)$")
+    employee_number_prefix: str = Field(min_length=1, max_length=20)
+    employee_number_width: int = Field(ge=1, le=20)
+    role_ids: tuple[UUID, ...] = ()
+    login_email: str | None = Field(default=None, max_length=320)
+    existing_user_id: UUID | None = None
+
+    @model_validator(mode="after")
+    def one_login_source(self) -> "OnboardingInitiateRequest":
+        if (self.login_email is None) == (self.existing_user_id is None):
+            raise ValueError("exactly one login identity source is required")
+        return self
+
+
+class OnboardingActivateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    token: str = Field(min_length=20, max_length=1024)
+    password: str = Field(min_length=1, max_length=256)
+
+
+class OnboardingView(BaseModel):
+    id: UUID
+    employee_id: UUID
+    membership_id: UUID
+    branch_id: UUID
+    masked_login: str
+    status: str
+
+    model_config = ConfigDict(from_attributes=True, extra="forbid")

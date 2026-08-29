@@ -11,7 +11,6 @@ from sqlalchemy import (
     Index,
     String,
     UniqueConstraint,
-    text,
 )
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -76,11 +75,10 @@ class Employee(Base):
         UniqueConstraint("membership_id", name="uq_employees_membership_id"),
         UniqueConstraint("company_id", "id", name="uq_employees_company_id_id"),
         Index(
-            "uq_employees_active_company_employee_number",
+            "uq_employees_company_employee_number_permanent",
             "company_id",
             "employee_number",
             unique=True,
-            postgresql_where=text("archived_at IS NULL"),
         ),
         Index("ix_employees_company_id_status", "company_id", "status"),
     )

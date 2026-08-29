@@ -7,6 +7,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, settings
+from app.platform.audit.service import AuditEntry, audit_service
 from app.platform.auth.access_tokens import AccessTokenClaims, AccessTokenService
 from app.platform.auth.errors import (
     InvalidCredentialsError,
@@ -24,7 +25,6 @@ from app.platform.auth.models import (
 )
 from app.platform.auth.passwords import PasswordService
 from app.platform.auth.tokens import SecurityTokenService
-from app.platform.audit.service import AuditEntry, audit_service
 from app.platform.users.models import User, UserCredential
 
 
@@ -98,7 +98,6 @@ class CredentialService:
         user_id: UUID,
         password: str,
     ) -> UserCredential:
-        encoded_hash = self.password_service.hash_password(password)
         now = utc_now()
         async with session.begin():
             user = await session.scalar(
@@ -113,15 +112,23 @@ class CredentialService:
             )
             if existing is not None:
                 raise InvalidCredentialsError("Credential operation failed.")
-            credential = UserCredential(
-                user_id=user_id,
-                password_hash=encoded_hash,
-                password_changed_at=now,
-                failed_login_count=0,
-                credential_version=1,
+            credential = self.build_initial_credential(
+                user_id=user_id, password=password, now=now
             )
             session.add(credential)
         return credential
+
+    def build_initial_credential(
+        self, *, user_id: UUID, password: str, now: datetime
+    ) -> UserCredential:
+        """Build an initial credential for a caller-owned atomic transaction."""
+        return UserCredential(
+            user_id=user_id,
+            password_hash=self.password_service.hash_password(password),
+            password_changed_at=now,
+            failed_login_count=0,
+            credential_version=1,
+        )
 
     async def change_password(
         self,

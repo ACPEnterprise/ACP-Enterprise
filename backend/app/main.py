@@ -52,6 +52,7 @@ from app.platform.contracts.router import (
 )
 from app.platform.contracts.router import router as platform_contracts_router
 from app.platform.launch_controls import validate_launch_role_matrix
+from app.platform.onboarding.router import router as identity_onboarding_router
 from app.platform.permissions.catalog import permission_catalog
 from app.platform.permissions.router import router as authorization_router
 from app.platform.security.middleware import (
@@ -155,6 +156,7 @@ app.include_router(engineering_platform_contracts_router)
 app.include_router(company_admin_router)
 app.include_router(identity_self_service_router)
 app.include_router(identity_administration_router)
+app.include_router(identity_onboarding_router)
 app.include_router(scheduling_router)
 app.include_router(timekeeping_router)
 app.include_router(jobs_router)

@@ -6,6 +6,7 @@ class AdministrationPermission:
     ROLE_MANAGE = "COMPANY_ROLE_MANAGE"
     PERMISSION_MANAGE = "COMPANY_PERMISSION_MANAGE"
     COMPANY_ADMINISTER = "COMPANY_ADMINISTER"
+    IDENTITY_ONBOARDING_MANAGE = "COMPANY_IDENTITY_ONBOARDING_MANAGE"
 
     ALL = frozenset(
         {
@@ -16,6 +17,7 @@ class AdministrationPermission:
             ROLE_MANAGE,
             PERMISSION_MANAGE,
             COMPANY_ADMINISTER,
+            IDENTITY_ONBOARDING_MANAGE,
         }
     )
 

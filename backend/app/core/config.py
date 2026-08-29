@@ -67,6 +67,9 @@ class Settings(BaseSettings):
     refresh_token_lifetime_seconds: int = 2592000
     password_reset_lifetime_seconds: int = 3600
     email_verification_lifetime_seconds: int = 86400
+    identity_onboarding_invitation_lifetime_seconds: int = 86400
+    identity_onboarding_delivery_keys: dict[str, str] = Field(default_factory=dict)
+    identity_onboarding_active_delivery_kid: str | None = None
     credential_lockout_threshold: int = 5
     credential_lockout_duration_seconds: int = 900
 
