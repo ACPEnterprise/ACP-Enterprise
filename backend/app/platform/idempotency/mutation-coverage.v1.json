@@ -1081,6 +1081,26 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     },
     {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "purchasing",
+      "mechanism": "Company-scoped matching authority and canonical evidence digest",
+      "method": "POST",
+      "operation_id": "evaluate_match_api_v1_procurement_matching_matches_post",
+      "path": "/api/v1/procurement-matching/matches",
+      "reason": "Concurrent and repeated evaluation converges on one Vendor Bill matching authority.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "purchasing",
+      "mechanism": "Company-scoped durable resolution identity and canonical resolution digest",
+      "method": "POST",
+      "operation_id": "resolve_match_exception_api_v1_procurement_matching_matches__match_id__exceptions__exception_id__resolve_post",
+      "path": "/api/v1/procurement-matching/matches/{match_id}/exceptions/{exception_id}/resolve",
+      "reason": "Repeated exception disposition converges while contradictory reuse fails closed.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
       "classification": "IMMUTABLE_APPEND_ONLY",
       "domain": "engineering",
       "mechanism": "domain-owned deterministic evidence/receipt identity",
@@ -2356,6 +2376,6 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "bf8282b9b1e88aa2f3de6d07e67866c3b5679d97ea972c7ab8971d7e0e2fc709",
+  "fingerprint": "81f7a01508dae51ef7a7538726c887b8d55f06d2a2430705670805828b07f1b8",
   "schema_version": "1"
 }

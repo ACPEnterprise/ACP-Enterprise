@@ -41,6 +41,8 @@ from app.events.schemas import BusinessEventCreate
 from app.events.service import BusinessEventService
 from app.events.types import EventType
 from app.platform.audit.models import AuditRecord
+from app.procurement_matching.models import ProcurementMatch
+from app.procurement_matching.service import is_current_eligible_match
 
 CENT = Decimal("0.01")
 
@@ -156,6 +158,12 @@ class AccountsPayableService:
                 raise APConflict("Bill state or version changed.")
             if bill.prepared_by_user_id == actor_id:
                 raise APValidation("Bill preparer cannot approve the same bill.")
+            revision_for_match = await session.scalar(select(BillRevision).where(BillRevision.company_id == company_id, BillRevision.bill_id == bill.id, BillRevision.revision == bill.current_revision))
+            has_purchasing_reference = await session.scalar(select(BillLine.id).where(BillLine.company_id == company_id, BillLine.revision_id == revision_for_match.id, BillLine.purchasing_reference.is_not(None))) if revision_for_match else None
+            if has_purchasing_reference is not None:
+                procurement_match = await session.scalar(select(ProcurementMatch).where(ProcurementMatch.company_id == company_id, ProcurementMatch.vendor_bill_id == bill.id).with_for_update())
+                if procurement_match is None or not await is_current_eligible_match(session, procurement_match, bill):
+                    raise APConflict("PO-backed Vendor Bill requires current eligible three-way match evidence.")
             await self._validate_core(session, company_id, bill.currency, bill.bill_date)
             possible = await session.scalar(select(VendorBill).where(VendorBill.company_id == company_id, VendorBill.vendor_id == bill.vendor_id, VendorBill.id != bill.id, VendorBill.bill_date == bill.bill_date, VendorBill.currency == bill.currency, VendorBill.total_amount == bill.total_amount))
             override = await session.scalar(select(DuplicateOverride).where(DuplicateOverride.company_id == company_id, DuplicateOverride.bill_id == bill.id))

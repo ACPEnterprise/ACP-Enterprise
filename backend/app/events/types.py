@@ -108,6 +108,8 @@ class EventType(str, Enum):
     ACCOUNTS_PAYABLE_RECONCILIATION_REQUIRED = (
         "accounts_payable.reconciliation_required"
     )
+    PROCUREMENT_MATCH_EVALUATED = "procurement.match_evaluated"
+    PROCUREMENT_MATCH_EXCEPTION_RESOLVED = "procurement.match_exception_resolved"
 
     # Payments
     PAYMENT_INTENT_CREATED = "payment.intent_created"
