@@ -1,0 +1,25 @@
+{
+  "schema_version": "1.0",
+  "qualification_id": "BANK.PUR.008.QUALIFICATION.1",
+  "milestone_id": "BANK.PUR.008",
+  "state": "QUALIFIED_AWAITING_OWNER_ACCEPTANCE",
+  "implementation_sha": "e9483c9",
+  "repair_sha": "a6af6ed6a9fbee0f12c13e3489012787275bd09d",
+  "qualification_base_sha": "aa28572ac5e3339937e81264420720dbea1ebd77",
+  "repository_ref": "origin/customer-management-v1",
+  "migration_revision": "b9s1o3q5t720",
+  "qualification_evidence": [
+    "database rejects UPDATE and DELETE of accepted replenishment decision evidence while preserving INSERT and existing rows",
+    "exact approval and rejection replay is idempotent while contradictory replay fails closed",
+    "stale recommendation snapshots and stale optimistic-concurrency versions fail atomically",
+    "Company and Branch scope binds recommendation, Vendor, Inventory item, and Purchase Order authority",
+    "approval and Purchase Order linkage create no Inventory movement, AP liability, or Accounting journal",
+    "authorization remains explicit and lifecycle audit and Business Events remain safe and attributable",
+    "fresh upgrade, repair downgrade and re-upgrade, current=head, one head, and zero Alembic drift are qualified"
+  ],
+  "successor_gate": {
+    "milestone_id": "BANK.PUR.009",
+    "state": "BLOCKED_PENDING_BANK_PUR_008_OWNER_ACCEPTANCE"
+  },
+  "qualification_fingerprint": "6877c9af1896931abd9472815357df4966f6ff52c6120057830c96074cfe4af4"
+}
