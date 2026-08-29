@@ -1,0 +1,22 @@
+{
+  "schema_version": "1.0",
+  "acceptance_id": "BANK.BEA.007A.ACCEPTANCE.1",
+  "milestone_id": "BANK.BEA.007A",
+  "parent_bank_milestone_id": "BANK.BEA.007",
+  "state": "COMPLETE_ACCEPTED",
+  "implementation_sha": "f6a1e45acf4600b90d260be5eec030fb85c91ede",
+  "repository_ref": "origin/customer-management-v1",
+  "catalog_digest": "61e84d240ca0fea6e456bd1afe28113e8f37a9ee1e8ae5f7811f77cd6999ce3c",
+  "accepted_on": "2026-08-28",
+  "acceptance_evidence": [
+    "owner accepted the 12-definition native financial and Accounting control catalog",
+    "deterministic identities and read-only API accepted",
+    "Finance, QBO, HCP, Economics, notification, remediation, Preview, and Production exclusions retained"
+  ],
+  "successor_gates": {
+    "BANK.BEA.007B": "BLOCKED_FINANCE_POLICY",
+    "BANK.BEA.007C": "BLOCKED_SOURCE_ACCEPTANCE",
+    "BANK.BEA.008": "BLOCKED_PARENT_INCOMPLETE"
+  },
+  "acceptance_fingerprint": "451d8b3c5cbc41a36b0b2d3febd00b799ccc2410f2ce67269b4759aef6ebbbe1"
+}
