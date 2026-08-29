@@ -78,6 +78,13 @@
       "evidence_reference": "owner-accepted evidence-bound signal evaluation implementation e82e19bdc012d60f663fed012bc5797175abde98, independently qualified by a4bbc539db61742f88b63bf8be036468aed3f5e8 with qualification fingerprint aa5ccdb46dea1dcc1f65cd15f0840e2d2444eaafbcdfd8afd0882d941abeae4b and accepted registry digest 8d321e381f77466b3d8ae67424f2674fb8e0cfd95e0a99bdb07692091f6c6824"
     },
     {
+      "bank_milestone_id": "BANK.BEA.003",
+      "canonical_milestone_id": "BANK.BEA.003",
+      "evidence_kind": "AUTHORITATIVE_INTEGRATION_ACCEPTANCE",
+      "authoritative_commit_sha": "cce44ec4227418b7543d05b977b81c9656e21f25",
+      "evidence_reference": "owner-accepted signal confidence and freshness semantics implementation cce44ec4227418b7543d05b977b81c9656e21f25, independently qualified by fb404672a7daba404b9dcecb97c3ee96905f6f41 and reconciled by 126f5c8c84800c2c658b007a92a873e53891cd3c through PR #12, with semantics digest 8996c04bb8d79b2a1100f2adbe2f6cb86fea936b1b4afd2990871173d09ccc6c and final qualification fingerprint 8b6dc2604653dbda37aa5a8c07398410c85ee4eb586fa7577cfef3a3807f6a9f"
+    },
+    {
       "bank_milestone_id": "BANK.PLAT.002",
       "canonical_milestone_id": "BANK.PLAT.002",
       "evidence_kind": "AUTHORITATIVE_INTEGRATION_ACCEPTANCE",
@@ -155,5 +162,5 @@
   ],
   "gate_resolutions": [],
   "active_ownership": [],
-  "fingerprint": "c85d170b9354da9332d62e59d461bc3fe9588924177d455efc1138df64a87ad8"
+  "fingerprint": "cc47a9f41711edb80d3e83f92527c7ef790a3a5299d76ddcf254b2e1e989f3d9"
 }
