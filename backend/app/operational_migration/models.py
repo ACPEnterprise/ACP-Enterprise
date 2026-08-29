@@ -292,7 +292,9 @@ class HcpMigrationPlanOutcome(Base):
             "native_identity_sha256",
             name="uq_hcp_plan_outcome_native",
         ),
-        UniqueConstraint("company_id", "outcome_digest", name="uq_hcp_plan_outcome_replay"),
+        UniqueConstraint(
+            "company_id", "outcome_digest", name="uq_hcp_plan_outcome_replay"
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(
@@ -494,7 +496,13 @@ class HcpMigrationChildRepair(Base):
             ondelete="RESTRICT",
         ),
         UniqueConstraint(
-            "master_run_id", "domain", "repair_digest", name="uq_hcp_child_repair_replay"
+            "master_run_id",
+            "domain",
+            "repair_digest",
+            name="uq_hcp_child_repair_replay",
+        ),
+        UniqueConstraint(
+            "id", "company_id", "branch_id", name="uq_hcp_child_repair_scope"
         ),
     )
 
@@ -502,7 +510,9 @@ class HcpMigrationChildRepair(Base):
     company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     master_run_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
-    original_child_run_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    original_child_run_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), nullable=False
+    )
     repair_child_run_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("operational_migration_runs.id", ondelete="RESTRICT"),
@@ -518,6 +528,135 @@ class HcpMigrationChildRepair(Base):
         DateTime(timezone=True), nullable=False, default=utc_now
     )
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class HcpAppointmentSequencePlan(Base):
+    """Append-only authority superseding Appointment projection semantics."""
+
+    __tablename__ = "hcp_appointment_sequence_plans"
+    __table_args__ = (
+        CheckConstraint(
+            "generation >= 1", name="ck_hcp_appointment_sequence_plan_generation"
+        ),
+        CheckConstraint(
+            "status IN ('qualified','applied','superseded')",
+            name="ck_hcp_appointment_sequence_plan_status",
+        ),
+        ForeignKeyConstraint(
+            ["master_run_id", "company_id", "branch_id"],
+            [
+                "hcp_migration_master_runs.id",
+                "hcp_migration_master_runs.company_id",
+                "hcp_migration_master_runs.branch_id",
+            ],
+            name="fk_hcp_appointment_sequence_plan_master_scope",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["repair_id", "company_id", "branch_id"],
+            [
+                "hcp_migration_child_repairs.id",
+                "hcp_migration_child_repairs.company_id",
+                "hcp_migration_child_repairs.branch_id",
+            ],
+            name="fk_hcp_appointment_sequence_plan_repair_scope",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "master_run_id",
+            "plan_digest",
+            name="uq_hcp_appointment_sequence_plan_digest",
+        ),
+        UniqueConstraint(
+            "id",
+            "company_id",
+            "branch_id",
+            name="uq_hcp_appointment_sequence_plan_scope",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True)
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    master_run_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    repair_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    generation: Mapped[int] = mapped_column(Integer, nullable=False)
+    original_plan_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    superseded_repair_plan_digest: Mapped[str] = mapped_column(
+        String(64), nullable=False
+    )
+    sequencing_contract_version: Mapped[str] = mapped_column(
+        String(100), nullable=False
+    )
+    sequencing_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    checkpoint_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    plan_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
+class HcpAppointmentSequenceCorrection(Base):
+    """Immutable before/after evidence for a target visit-order reprojection."""
+
+    __tablename__ = "hcp_appointment_sequence_corrections"
+    __table_args__ = (
+        CheckConstraint(
+            "prior_sequence >= 1", name="ck_hcp_appointment_correction_prior"
+        ),
+        CheckConstraint(
+            "corrected_sequence >= 1", name="ck_hcp_appointment_correction_corrected"
+        ),
+        CheckConstraint(
+            "status IN ('qualified','applied')",
+            name="ck_hcp_appointment_correction_status",
+        ),
+        ForeignKeyConstraint(
+            ["sequence_plan_id", "company_id", "branch_id"],
+            [
+                "hcp_appointment_sequence_plans.id",
+                "hcp_appointment_sequence_plans.company_id",
+                "hcp_appointment_sequence_plans.branch_id",
+            ],
+            name="fk_hcp_appointment_correction_plan_scope",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "sequence_plan_id",
+            "appointment_link_id",
+            name="uq_hcp_appointment_correction_link",
+        ),
+        UniqueConstraint(
+            "sequence_plan_id",
+            "correction_digest",
+            name="uq_hcp_appointment_correction_digest",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True)
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    sequence_plan_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    appointment_link_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("job_appointment_links.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    job_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    appointment_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    failed_child_run_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), nullable=False
+    )
+    prior_sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    corrected_sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    source_identity_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    correction_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+    applied_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class OperationalMigrationProgress(Base):

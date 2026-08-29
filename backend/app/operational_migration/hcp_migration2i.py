@@ -197,14 +197,25 @@ def requalify_operational_commands(
         "job_outcomes": job_outcomes,
         "appointment_outcomes": appointment_outcomes,
     }
+    operational_digest = canonical_sha256(payload)
+    execution_appointments = tuple(
+        replace(
+            item,
+            external_metadata={
+                **(item.external_metadata or {}),
+                "repair_contract": REPAIR_VERSION,
+            },
+        )
+        for item in admitted_appointments
+    )
     return OperationalEligibility(
         tuple(admitted),
-        tuple(admitted_appointments),
+        execution_appointments,
         dict(sorted(exceptions.items())),
         dict(sorted(appointment_exceptions.items())),
         tuple(sorted(job_outcomes)),
         tuple(sorted(appointment_outcomes)),
-        canonical_sha256(payload),
+        operational_digest,
     )
 
 

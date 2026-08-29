@@ -58,6 +58,14 @@ from app.operational_migration.hcp_migration2i import (
     requalify_financial_commands,
     requalify_operational_commands,
 )
+from app.operational_migration.hcp_migration2k1 import (
+    AppointmentCorrectionCheckpoint,
+    AppointmentSequencePlan,
+    RetainedAppointmentProjection,
+    SupersedingAppointmentRepairPlan,
+    build_appointment_sequence_plan,
+    qualify_retained_checkpoint,
+)
 from app.operational_migration.hcp_owner_disposition import NonProductionTarget
 from app.operational_migration.hcp_rehearsal_authority import (
     ACTOR_ID,
@@ -1182,6 +1190,35 @@ class HcpMigration2ExecutionPlanBuilder:
             original_persisted_counts=original.completion.persisted_counts,
             original_exception_counts=original.completion.exception_counts,
         )
+
+    def build_appointment_correction_plan(
+        self,
+        *,
+        master_id: UUID,
+        repair_id: UUID,
+        repair: ChildRepairPlan,
+        retained: Sequence[RetainedAppointmentProjection],
+        accepted_job_count: int,
+    ) -> tuple[
+        AppointmentSequencePlan,
+        AppointmentCorrectionCheckpoint,
+        SupersedingAppointmentRepairPlan,
+    ]:
+        """Build the sanctioned generation-2 checkpoint without mutating targets."""
+        sequence = build_appointment_sequence_plan(repair.operational.appointments)
+        checkpoint = qualify_retained_checkpoint(
+            plan=sequence,
+            retained=retained,
+            accepted_job_count=accepted_job_count,
+        )
+        superseding = SupersedingAppointmentRepairPlan.build(
+            master_id=master_id,
+            repair_id=repair_id,
+            original_repair_plan_digest=repair.repair_plan_digest,
+            sequence_plan=sequence,
+            checkpoint=checkpoint,
+        )
+        return sequence, checkpoint, superseding
 
 
 class HcpMigration2Application:

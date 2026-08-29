@@ -695,12 +695,22 @@ class OperationalMigrationService:
                         service_location_id=appointment.service_location_id,
                         status=status,
                     )
+                    migration_metadata = record.external_metadata or {}
+                    visit_sequence = migration_metadata.get("visit_sequence")
+                    if migration_metadata.get("repair_contract") and not isinstance(
+                        visit_sequence, int
+                    ):
+                        raise MigrationRecordError(
+                            "Appointment visit sequence is absent from the repair plan."
+                        )
                     await self._jobs.stage_migrated_appointment_link(
                         session,
                         context=context,
                         job=job,
                         appointment=reference,
-                        visit_sequence=1,
+                        visit_sequence=(
+                            visit_sequence if isinstance(visit_sequence, int) else 1
+                        ),
                     )
                     if persist_identity:
                         assert job_identity is not None
