@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import axios from "axios";
 import { useAuth, useHasPermission } from "../auth";
 import { useBranchPurchasingPolicies, usePurchasing, usePurchasingMutations } from "../hooks/usePurchasing";
+import { useInventory } from "../hooks/useInventory";
 import {
   Alert,
   Badge,
@@ -61,6 +62,7 @@ export function PurchasingRoute() {
   const canCancelOrder = useHasPermission("COMPANY_PURCHASING_CANCEL");
   const [search, setSearch] = useState("");
   const purchasing = usePurchasing(search || undefined, canRead);
+  const inventory = useInventory(undefined, canReceive);
   const branchPolicies = useBranchPurchasingPolicies(canRead);
   const mutations = usePurchasingMutations();
   const [vendor, setVendor] = useState({
@@ -97,6 +99,7 @@ export function PurchasingRoute() {
     discrepancy_category: "",
     observed_condition: "",
     effective_date: "",
+    receiving_location_id: "",
   });
   const [purchaseReturn, setPurchaseReturn] = useState({
     po_id: "",
@@ -661,6 +664,7 @@ export function PurchasingRoute() {
                               discrepancy_category: "",
                               observed_condition: "",
                               effective_date: "",
+                              receiving_location_id: "",
                             })
                           }
                         >
@@ -752,7 +756,7 @@ export function PurchasingRoute() {
                     .filter((receiptLine) => Number(receiptLine.accepted_quantity) > 0)
                     .map((receiptLine) => (
                       <div key={receiptLine.id} className="mt-2 rounded border border-stroke p-3 text-sm">
-                        Accepted receipt {receiptItem.receiving_event_identity}: {receiptLine.accepted_quantity}
+                        Accepted receipt {receiptItem.receiving_event_identity}: {receiptLine.accepted_quantity} · Inventory {receiptItem.inventory_application_state}
                         {canCreateReturn && (
                           <Button className="ml-2" onClick={() => setPurchaseReturn({
                             po_id: po.id,
@@ -875,8 +879,9 @@ export function PurchasingRoute() {
           <CardHeader>
             <CardTitle>Record receiving event</CardTitle>
             <CardDescription>
-              Accepted quantity updates Purchasing evidence only. Inventory
-              location, AP, and Accounting effects remain separately controlled.
+              Accepted quantity posts to the selected native Inventory location.
+              PO cost is retained as unposted evidence; AP and Accounting remain
+              separately controlled.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -896,6 +901,7 @@ export function PurchasingRoute() {
                       receiving_event_identity: crypto.randomUUID(),
                       received_at: new Date().toISOString(),
                       effective_date: receipt.effective_date,
+                      receiving_location_id: receipt.receiving_location_id,
                       idempotency_key: crypto.randomUUID(),
                       lines: [
                         {
@@ -925,6 +931,32 @@ export function PurchasingRoute() {
                   ?.lines.map((item) => (
                     <option key={item.id} value={item.id}>
                       {item.description} ({item.outstanding_quantity} remaining)
+                    </option>
+                  ))}
+              </Select>
+              <Select
+                aria-label="Receiving Inventory location"
+                required
+                value={receipt.receiving_location_id}
+                onChange={(event) =>
+                  setReceipt({
+                    ...receipt,
+                    receiving_location_id: event.target.value,
+                  })
+                }
+              >
+                <option value="">Select receiving location</option>
+                {inventory.data?.locations
+                  .filter(
+                    (location) =>
+                      location.branch_id ===
+                        purchasing.data?.purchase_orders.find(
+                          (item) => item.id === receipt.po_id,
+                        )?.branch_id && location.status === "active",
+                  )
+                  .map((location) => (
+                    <option key={location.id} value={location.id}>
+                      {location.code} · {location.name}
                     </option>
                   ))}
               </Select>
@@ -994,6 +1026,12 @@ export function PurchasingRoute() {
               <Button type="submit" loading={mutations.recordReceipt.isPending}>
                 Record receipt
               </Button>
+              {mutations.recordReceipt.error && (
+                <Alert variant="danger">
+                  The receipt was not applied. Refresh PO and Inventory evidence,
+                  verify item/location mapping, and try again.
+                </Alert>
+              )}
             </form>
           </CardContent>
         </Card>

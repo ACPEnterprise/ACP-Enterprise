@@ -142,6 +142,8 @@ class EventType(str, Enum):
     INVENTORY_TRANSFER_POSTED = "inventory.transfer_posted"
     INVENTORY_RESERVATION_CREATED = "inventory.reservation_created"
     INVENTORY_RESERVATION_RELEASED = "inventory.reservation_released"
+    INVENTORY_PURCHASE_RECEIPT_POSTED = "inventory.purchase_receipt.posted"
+    INVENTORY_PURCHASE_RETURN_POSTED = "inventory.purchase_return.posted"
 
     # Purchasing
     PURCHASING_VENDOR_CREATED = "purchasing.vendor_created"

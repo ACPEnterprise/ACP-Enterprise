@@ -14,6 +14,9 @@ vi.mock("../hooks/usePurchasing", () => ({
   useBranchPurchasingPolicies: vi.fn(),
   usePurchasingMutations: vi.fn(),
 }));
+vi.mock("../hooks/useInventory", () => ({
+  useInventory: () => ({ isPending: false, isError: false, data: { locations: [] } }),
+}));
 const mutation = { mutateAsync: vi.fn(), isPending: false, isError: false };
 const replenishmentMutation = { ...mutation, data: undefined as never, reset: vi.fn() };
 const decisionMutation = { ...mutation, error: null as unknown, isSuccess: false, reset: vi.fn() };

@@ -288,8 +288,22 @@ class PurchaseOrderReceipt(Base):
             name="fk_purchasing_receipt_po",
             ondelete="RESTRICT",
         ),
+        ForeignKeyConstraint(
+            ["company_id", "branch_id", "receiving_location_id"],
+            [
+                "inventory_stock_locations.company_id",
+                "inventory_stock_locations.branch_id",
+                "inventory_stock_locations.id",
+            ],
+            name="fk_purchasing_receipt_inventory_location",
+            ondelete="RESTRICT",
+        ),
         UniqueConstraint(
             "company_id", "receiving_event_identity", name="uq_purchasing_receipt_event"
+        ),
+        CheckConstraint(
+            "inventory_application_state IN ('pending','applied','not_applicable')",
+            name="ck_purchasing_receipt_inventory_application_state",
         ),
         UniqueConstraint("company_id", "id", name="uq_purchasing_receipt_company"),
         CheckConstraint(
@@ -313,6 +327,10 @@ class PurchaseOrderReceipt(Base):
         PGUUID(as_uuid=True), nullable=False
     )
     vendor_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    receiving_location_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    inventory_application_state: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="pending"
+    )
     receiving_event_identity: Mapped[str] = mapped_column(String(128), nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False)
     receiver_user_id: Mapped[UUID] = mapped_column(
@@ -341,6 +359,12 @@ class PurchaseOrderReceiptLine(Base):
                 "purchasing_purchase_order_receipts.id",
             ],
             name="fk_purchasing_receipt_line_receipt",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "inventory_movement_id"],
+            ["inventory_stock_movements.company_id", "inventory_stock_movements.id"],
+            name="fk_purchasing_receipt_line_inventory_movement",
             ondelete="RESTRICT",
         ),
         ForeignKeyConstraint(
@@ -389,6 +413,9 @@ class PurchaseOrderReceiptLine(Base):
     unit_snapshot: Mapped[str] = mapped_column(String(40), nullable=False)
     discrepancy_category: Mapped[str | None] = mapped_column(String(40))
     observed_condition: Mapped[str | None] = mapped_column(Text)
+    inventory_movement_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    unit_cost_snapshot: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
+    currency_snapshot: Mapped[str | None] = mapped_column(String(3))
 
 
 class PurchaseOrderDiscrepancy(Base):
@@ -475,6 +502,12 @@ class PurchaseReturn(Base):
                 "purchasing_purchase_order_receipts.id",
             ],
             name="fk_purchase_return_receipt",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "inventory_movement_id"],
+            ["inventory_stock_movements.company_id", "inventory_stock_movements.id"],
+            name="fk_purchase_return_inventory_movement",
             ondelete="RESTRICT",
         ),
         ForeignKeyConstraint(
@@ -571,6 +604,7 @@ class PurchaseReturn(Base):
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     canceled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     source_reference: Mapped[str | None] = mapped_column(String(240))
+    inventory_movement_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
 
 

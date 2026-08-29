@@ -83,6 +83,9 @@ export interface PurchaseOrderReceiptLine {
   cumulative_accepted_quantity: string;
   outstanding_quantity: string;
   discrepancy_category: string | null;
+  inventory_movement_id: string | null;
+  unit_cost_snapshot: string | null;
+  currency_snapshot: string | null;
 }
 export interface PurchaseOrderReceipt {
   id: string;
@@ -90,6 +93,8 @@ export interface PurchaseOrderReceipt {
   status: string;
   received_at: string;
   effective_date: string;
+  receiving_location_id: string | null;
+  inventory_application_state: "pending" | "applied" | "not_applicable";
   lines: readonly PurchaseOrderReceiptLine[];
 }
 export interface PurchaseOrderDiscrepancy {
@@ -116,6 +121,7 @@ export interface PurchaseReturn {
   vendor_authorization_reference: string | null;
   vendor_instructions: string | null;
   version: number;
+  inventory_movement_id: string | null;
 }
 export interface PurchaseOrder {
   id: string;
@@ -288,6 +294,7 @@ export interface RecordPurchaseOrderReceipt {
   received_at: string;
   effective_date: string;
   source_reference?: string | null;
+  receiving_location_id?: string | null;
   idempotency_key: string;
   lines: readonly {
     purchase_order_line_id: string;

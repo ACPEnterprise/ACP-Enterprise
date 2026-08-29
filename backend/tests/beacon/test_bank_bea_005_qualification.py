@@ -51,3 +51,15 @@ def test_qualification_preserves_non_autonomous_successor_gate() -> None:
         "milestone_id": "BANK.BEA.006",
         "state": "BLOCKED_PENDING_BANK_BEA_005_OWNER_ACCEPTANCE",
     }
+
+
+def test_qualification_binds_operator_surface_without_new_authority() -> None:
+    payload = evidence()
+    assert payload["operator_surface"] == {
+        "projection": "/api/v1/beacon/operational-signals/workflow",
+        "history": "/api/v1/beacon/workflow-history",
+        "actions": ["acknowledge", "assign", "claim", "release", "transfer"],
+        "permission_gated": True,
+        "backend_authoritative": True,
+        "autonomous_action": False,
+    }

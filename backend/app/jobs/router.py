@@ -1,7 +1,8 @@
-from typing import Annotated, Awaitable, Callable
+from collections.abc import Awaitable, Callable
+from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
 from pydantic import AwareDatetime
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -53,10 +54,11 @@ from app.jobs.schemas import (
 )
 from app.jobs.service import job_service
 from app.jobs.types import JobPriority, JobStatus
+from app.platform.idempotency.errors import reliability_http_error
+from app.platform.idempotency.reliability import MutationReliabilityError
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import JobPermission
 from app.platform.permissions.dependencies import require_permission
-
 
 router = APIRouter(prefix="/api/v1/jobs", tags=["Jobs"])
 DatabaseSession = Annotated[AsyncSession, Depends(get_database_session)]
@@ -205,12 +207,29 @@ async def get_job(
     summary="Create a Job",
 )
 async def create_job(
-    data: JobCreateRequest, context: JobsManageContext, session: DatabaseSession
+    data: JobCreateRequest,
+    context: JobsManageContext,
+    session: DatabaseSession,
+    response: Response,
+    idempotency_key: Annotated[
+        str | None, Header(alias="Idempotency-Key", min_length=1, max_length=255)
+    ] = None,
 ) -> JobMutationResponse:
     try:
-        job = await job_service.create_job(
-            session, context=context, command=CreateJob(**data.model_dump())
+        if idempotency_key is None:
+            job = await job_service.create_job(
+                session, context=context, command=CreateJob(**data.model_dump())
+            )
+            return _mutation_response(job)
+        job, disposition = await job_service.create_job_idempotent(
+            session,
+            context=context,
+            command=CreateJob(**data.model_dump()),
+            idempotency_key=idempotency_key,
         )
+        response.headers["Idempotency-Status"] = disposition.value
+    except MutationReliabilityError as error:
+        raise reliability_http_error(error) from error
     except JobError as error:
         raise translate_job_error(error) from error
     return _mutation_response(job)

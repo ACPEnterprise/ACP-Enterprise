@@ -7,7 +7,7 @@ from app.platform.permissions.catalog import permission_catalog
 
 PLATFORM_CONTRACT_VERSION = "1"
 AUTHORIZATION_PROJECTION_VERSION = "1"
-SHARED_API_CONTRACT_VERSION = "2"
+SHARED_API_CONTRACT_VERSION = "3"
 
 
 class PlatformContractDriftError(RuntimeError):

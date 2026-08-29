@@ -19,6 +19,41 @@ export type BeaconPriorityBand =
   | "important"
   | "monitor";
 export type BeaconLifecycleAction = "acknowledge" | "review" | "snooze";
+export type BeaconWorkflowAction =
+  | "acknowledge"
+  | "claim"
+  | "assign"
+  | "transfer"
+  | "release";
+
+export interface BeaconWorkflowState {
+  company_id: string;
+  branch_id: string | null;
+  condition_key: string;
+  signal_id: string;
+  definition_id: string;
+  definition_version: number;
+  evidence_digest: string;
+  workflow_version: number;
+  acknowledged: boolean;
+  acknowledged_by_user_id: string | null;
+  acknowledged_at: string | null;
+  owner_user_id: string | null;
+  owned_since: string | null;
+  last_action: BeaconWorkflowAction | null;
+  last_actor_user_id: string | null;
+  updated_at: string | null;
+}
+
+export interface BeaconWorkflowEvent {
+  id: string;
+  state: BeaconWorkflowState;
+  action: BeaconWorkflowAction;
+  actor_user_id: string;
+  previous_owner_user_id: string | null;
+  request_id: string;
+  occurred_at: string;
+}
 
 export interface BeaconLifecycleEvent {
   id: string;
@@ -90,6 +125,7 @@ export interface BeaconSignal {
   created_at: string;
   expires_at: string;
   expiration_policy: "replace_on_next_evaluation";
+  workflow?: BeaconWorkflowState | null;
   escalation: {
     state: "normal" | "escalated";
     eligibility:
@@ -111,7 +147,39 @@ export interface BeaconSignalPage {
 }
 
 export async function getBeaconSignals(): Promise<BeaconSignalPage> {
-  return (await apiClient.get<BeaconSignalPage>("/api/v1/beacon/signals")).data;
+  const [page, workflow] = await Promise.all([
+    apiClient.get<BeaconSignalPage>("/api/v1/beacon/signals"),
+    apiClient.get<{
+      ranking_version: string;
+      ranking_digest: string;
+      items: Array<{
+        signal: BeaconSignal;
+        ranking: {
+          position: number;
+          priority_band: BeaconPriorityBand;
+          ranking_reason: string;
+        };
+        workflow: BeaconWorkflowState | null;
+        escalation: BeaconSignal["escalation"];
+      }>;
+    }>("/api/v1/beacon/operational-signals/workflow", {
+      params: { view: "all" },
+    }),
+  ]);
+  return {
+    ...page.data,
+    items: workflow.data.items.map((item) => ({
+      ...item.signal,
+      priority: {
+        ...item.signal.priority,
+        band: item.ranking.priority_band,
+        rank: item.ranking.position,
+        explanation: item.ranking.ranking_reason,
+      },
+      workflow: item.workflow,
+      escalation: item.escalation,
+    })),
+  };
 }
 
 export async function recordBeaconLifecycleAction(
@@ -138,6 +206,40 @@ export async function getBeaconLifecycleHistory(
   return (
     await apiClient.get<{ items: BeaconLifecycleEvent[] }>(
       "/api/v1/beacon/lifecycle-events",
+      { params: { condition_key: conditionKey } },
+    )
+  ).data.items;
+}
+
+export async function recordBeaconWorkflowAction(
+  signal: Pick<BeaconSignal, "id" | "evidence_digest">,
+  action: BeaconWorkflowAction,
+  expectedVersion?: number,
+  ownerUserId?: string,
+): Promise<BeaconWorkflowEvent> {
+  return (
+    await apiClient.post<BeaconWorkflowEvent>(
+      `/api/v1/beacon/signals/${signal.id}/${action}`,
+      {
+        evidence_digest: signal.evidence_digest,
+        request_id: crypto.randomUUID(),
+        ...(action !== "acknowledge"
+          ? { expected_version: expectedVersion ?? 0 }
+          : {}),
+        ...(action === "assign" || action === "transfer"
+          ? { owner_user_id: ownerUserId }
+          : {}),
+      },
+    )
+  ).data;
+}
+
+export async function getBeaconWorkflowHistory(
+  conditionKey: string,
+): Promise<BeaconWorkflowEvent[]> {
+  return (
+    await apiClient.get<{ items: BeaconWorkflowEvent[] }>(
+      "/api/v1/beacon/workflow-history",
       { params: { condition_key: conditionKey } },
     )
   ).data.items;
