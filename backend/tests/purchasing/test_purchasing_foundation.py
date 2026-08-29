@@ -7,6 +7,7 @@ import httpx
 import pytest
 import pytest_asyncio
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.accounting.models import Journal
@@ -40,6 +41,7 @@ from app.purchasing.models import (
     PurchaseOrderIssuanceEvidence,
     PurchaseOrderRevision,
     PurchaseReturn,
+    ReplenishmentDecisionEvidence,
 )
 from app.purchasing.schemas import (
     CreatePurchaseReturnCommand,
@@ -279,6 +281,217 @@ async def test_replenishment_approval_is_stale_safe_idempotent_and_links_one_po(
                     update={"idempotency_key": f"stale-{uuid4()}"}
                 ),
             )
+
+
+async def replenishment_concurrency_case(purchasing_fixture):
+    factory, company, _, branch, _, preparer, approver = purchasing_fixture
+    service = PurchasingService()
+    vendors = []
+    for suffix in ("A", "B"):
+        async with factory() as session:
+            vendors.append(
+                await service.create_vendor(
+                    session,
+                    context=preparer,
+                    payload=VendorCreate(
+                        code=f"RC{suffix}{uuid4().hex[:5]}",
+                        display_name=f"Race Vendor {suffix}",
+                        idempotency_key=f"race-vendor-{suffix}-{uuid4()}",
+                    ),
+                )
+            )
+    async with factory() as session, session.begin():
+        item = InventoryItem(
+            company_id=company.id,
+            code=f"RC-{uuid4().hex[:8].upper()}",
+            name="Replenishment race item",
+            stocking_unit="each",
+            status="active",
+            created_by_user_id=preparer.user.id,
+            updated_by_user_id=preparer.user.id,
+        )
+        location = StockLocation(
+            company_id=company.id,
+            branch_id=branch.id,
+            code=f"RC{uuid4().hex[:7].upper()}",
+            name="Replenishment race shelf",
+            location_type="warehouse",
+            status="active",
+            created_by_user_id=preparer.user.id,
+            updated_by_user_id=preparer.user.id,
+        )
+        session.add_all([item, location])
+        await session.flush()
+        session.add(
+            InventoryQuantity(
+                company_id=company.id,
+                branch_id=branch.id,
+                item_id=item.id,
+                location_id=location.id,
+                on_hand=Decimal(0),
+                reserved=Decimal(0),
+            )
+        )
+    request = ReplenishmentWorkbenchRequest(
+        as_of=datetime(2026, 8, 29, 12, tzinfo=timezone.utc),
+        targets=(
+            ReplenishmentTarget(
+                branch_id=branch.id,
+                inventory_item_id=item.id,
+                target_available_quantity=Decimal(5),
+            ),
+        ),
+    )
+    async with factory() as session:
+        recommendation = (
+            await service.replenishment_workbench(
+                session, context=approver, payload=request
+            )
+        ).recommendations[0]
+
+    def command(
+        suffix: str,
+        *,
+        decision: str = "approved",
+        vendor_index: int = 0,
+        quantity: Decimal = Decimal(5),
+        unit_cost: Decimal = Decimal(1),
+    ) -> ReplenishmentDecisionCommand:
+        approved = decision == "approved"
+        return ReplenishmentDecisionCommand(
+            branch_id=branch.id,
+            inventory_item_id=item.id,
+            recommendation_as_of=request.as_of,
+            target_available_quantity=Decimal(5),
+            recommendation_digest=recommendation.evidence_digest,
+            decision=decision,
+            reason="Concurrent independent qualification",
+            approved_quantity=quantity if approved else None,
+            vendor_id=vendors[vendor_index].id if approved else None,
+            po_number=f"RACE-{suffix}-{uuid4().hex[:8]}" if approved else None,
+            currency="USD" if approved else None,
+            unit_cost=unit_cost if approved else None,
+            idempotency_key=f"race-{suffix}-{uuid4()}",
+        )
+
+    async def decide(payload: ReplenishmentDecisionCommand):
+        async with factory() as session:
+            return await service.decide_replenishment(
+                session, context=approver, payload=payload
+            )
+
+    return factory, service, recommendation, command, decide
+
+
+@pytest.mark.asyncio
+async def test_concurrent_equivalent_replenishment_approvals_recover_one_authority(
+    purchasing_fixture,
+) -> None:
+    factory, _, recommendation, command, decide = await replenishment_concurrency_case(
+        purchasing_fixture
+    )
+    first_command = command("A")
+    second_command = command("B")
+    first, second = await asyncio.gather(decide(first_command), decide(second_command))
+    assert first.id == second.id
+    assert first.purchase_order_id == second.purchase_order_id
+    assert (await decide(second_command)).id == first.id
+    async with factory() as session:
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(ReplenishmentDecisionEvidence)
+                .where(
+                    ReplenishmentDecisionEvidence.recommendation_digest
+                    == recommendation.evidence_digest
+                )
+            )
+            == 1
+        )
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(PurchaseOrder)
+                .where(PurchaseOrder.id == first.purchase_order_id)
+            )
+            == 1
+        )
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(BusinessEvent)
+                .where(BusinessEvent.entity_id == first.id)
+            )
+            == 2
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("change", "value"),
+    (("decision", "rejected"), ("vendor_index", 1), ("quantity", Decimal(4)), ("unit_cost", Decimal(2))),
+)
+async def test_concurrent_contradictory_replenishment_disposition_is_conflict(
+    purchasing_fixture,
+    change,
+    value,
+) -> None:
+    factory, _, recommendation, command, decide = await replenishment_concurrency_case(
+        purchasing_fixture
+    )
+    first_command = command("A")
+    second_command = command("B", **{change: value})
+    results = await asyncio.gather(
+        decide(first_command), decide(second_command), return_exceptions=True
+    )
+    winners = [result for result in results if not isinstance(result, BaseException)]
+    conflicts = [result for result in results if isinstance(result, PurchasingConflict)]
+    assert len(winners) == 1
+    assert len(conflicts) == 1
+    async with factory() as session:
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(ReplenishmentDecisionEvidence)
+                .where(
+                    ReplenishmentDecisionEvidence.recommendation_digest
+                    == recommendation.evidence_digest
+                )
+            )
+            == 1
+        )
+        decisions = (
+            await session.scalars(
+                select(ReplenishmentDecisionEvidence).where(
+                    ReplenishmentDecisionEvidence.recommendation_digest
+                    == recommendation.evidence_digest
+                )
+            )
+        ).all()
+        event_count = await session.scalar(
+            select(func.count())
+            .select_from(BusinessEvent)
+            .where(BusinessEvent.entity_id == decisions[0].id)
+        )
+        assert event_count == (2 if decisions[0].decision == "approved" else 1)
+
+
+@pytest.mark.asyncio
+async def test_unrelated_replenishment_integrity_error_is_not_misclassified(
+    monkeypatch,
+) -> None:
+    service = PurchasingService()
+    unrelated = IntegrityError("statement", {}, Exception("unrelated integrity"))
+
+    async def fail(*args, **kwargs):
+        raise unrelated
+
+    monkeypatch.setattr(service, "_decide_replenishment_once", fail)
+    with pytest.raises(IntegrityError) as raised:
+        await service.decide_replenishment(
+            object(), context=object(), payload=object()
+        )
+    assert raised.value is unrelated
 
 
 @pytest_asyncio.fixture
