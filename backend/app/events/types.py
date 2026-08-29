@@ -44,6 +44,13 @@ class EventType(str, Enum):
     PAYROLL_TAX_RESULT_REVIEW_REJECTED = "payroll.tax_result_review_rejected"
     PAYROLL_TAX_RESULT_SUPERSEDED = "payroll.tax_result_superseded"
     PAYROLL_TAX_RESULT_VOIDED = "payroll.tax_result_voided"
+    PAYROLL_RUN_ASSEMBLED = "payroll.run_assembled"
+    PAYROLL_RUN_REVIEW_INITIATED = "payroll.run_review_initiated"
+    PAYROLL_RUN_REVIEW_ACCEPTED = "payroll.run_review_accepted"
+    PAYROLL_RUN_REVIEW_REJECTED = "payroll.run_review_rejected"
+    PAYROLL_RUN_APPROVED = "payroll.run_approved"
+    PAYROLL_RUN_SUPERSEDED = "payroll.run_superseded"
+    PAYROLL_RUN_VOIDED = "payroll.run_voided"
 
     # Accounts Payable
     ACCOUNTS_PAYABLE_VENDOR_CREATED = "accounts_payable.vendor_created"

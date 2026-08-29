@@ -543,3 +543,142 @@ class PayrollTaxDeductionReviewRecord(Base):
     result_digest: Mapped[str] = mapped_column(String(64), nullable=False)
     review_digest: Mapped[str] = mapped_column(String(64), nullable=False)
     reviewed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class PayrollRunRecord(Base):
+    __tablename__ = "payroll_runs"
+    __table_args__ = (
+        CheckConstraint(
+            "lifecycle IN ('assembled','under_review','reviewed','approved','rejected','superseded','voided')",
+            name="ck_payroll_run_lifecycle",
+        ),
+        CheckConstraint(
+            "review_state IN ('not_started','under_review','accepted','rejected')",
+            name="ck_payroll_run_review_state",
+        ),
+        UniqueConstraint("company_id", "id", name="uq_payroll_run_company_id"),
+        UniqueConstraint("company_id", "run_identity", name="uq_payroll_run_identity"),
+        UniqueConstraint("company_id", "run_digest", name="uq_payroll_run_digest"),
+        UniqueConstraint("supersedes_run_id", name="uq_payroll_run_successor"),
+        Index(
+            "uq_payroll_run_active_period",
+            "company_id",
+            "pay_period_id",
+            unique=True,
+            postgresql_where=text(
+                "lifecycle IN ('assembled','under_review','reviewed','approved')"
+            ),
+        ),
+    )
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("companies.id", ondelete="RESTRICT"), nullable=False
+    )
+    pay_period_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("timekeeping_pay_periods.id", ondelete="RESTRICT"), nullable=False
+    )
+    schedule_definition_id: Mapped[str] = mapped_column(String(120), nullable=False)
+    schedule_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    assembly_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    population_identity: Mapped[str] = mapped_column(String(120), nullable=False)
+    population_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    run_identity: Mapped[str] = mapped_column(String(96), nullable=False)
+    run_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    aggregate_gross: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
+    aggregate_employee_taxes: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
+    aggregate_employee_deductions: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
+    aggregate_net_pay: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
+    aggregate_employer_contributions: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
+    assembled_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    assembled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    lifecycle: Mapped[str] = mapped_column(String(24), nullable=False)
+    review_state: Mapped[str] = mapped_column(String(24), nullable=False)
+    supersedes_run_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("payroll_runs.id", ondelete="RESTRICT")
+    )
+    consumed_by_payment_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
+class PayrollRunMemberRecord(Base):
+    __tablename__ = "payroll_run_members"
+    __table_args__ = (
+        CheckConstraint(
+            "disposition IN ('ready','blocked','excluded','not_applicable')",
+            name="ck_payroll_run_member_disposition",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "run_id"],
+            ["payroll_runs.company_id", "payroll_runs.id"],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "employee_id"],
+            ["employees.company_id", "employees.id"],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "gross_result_id"],
+            ["payroll_gross_calculation_results.company_id", "payroll_gross_calculation_results.id"],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "tax_result_id"],
+            ["payroll_tax_deduction_results.company_id", "payroll_tax_deduction_results.id"],
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("run_id", "employee_id", name="uq_payroll_run_member_employee"),
+    )
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    run_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    employee_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    disposition: Mapped[str] = mapped_column(String(24), nullable=False)
+    gross_result_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    gross_result_digest: Mapped[str | None] = mapped_column(String(64))
+    tax_result_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    tax_result_digest: Mapped[str | None] = mapped_column(String(64))
+    blocker_evidence_digest: Mapped[str | None] = mapped_column(String(64))
+    disposition_authority_digest: Mapped[str | None] = mapped_column(String(64))
+    membership_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+
+
+class PayrollRunReviewRecord(Base):
+    __tablename__ = "payroll_run_reviews"
+    __table_args__ = (
+        CheckConstraint(
+            "decision IN ('initiated','accepted','rejected','approved')",
+            name="ck_payroll_run_review_decision",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "run_id"],
+            ["payroll_runs.company_id", "payroll_runs.id"],
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("run_id", "review_sequence", name="uq_payroll_run_review_sequence"),
+        UniqueConstraint("review_digest", name="uq_payroll_run_review_digest"),
+    )
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    run_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    review_sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    actor_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    decision: Mapped[str] = mapped_column(String(20), nullable=False)
+    reason_code: Mapped[str] = mapped_column(String(80), nullable=False)
+    safe_note: Mapped[str | None] = mapped_column(Text)
+    run_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    review_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    reviewed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
