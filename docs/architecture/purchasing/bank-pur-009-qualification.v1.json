@@ -1,0 +1,25 @@
+{
+  "schema_version": "1.0",
+  "qualification_id": "BANK.PUR.009.QUALIFICATION.1",
+  "milestone_id": "BANK.PUR.009",
+  "state": "QUALIFIED_AWAITING_OWNER_ACCEPTANCE",
+  "implementation_sha": "559536c7bec0b6ffa18de3f2bdf72e3c7f35a3d5",
+  "integration_sha": "f65548968f94e9f5e57610c9aae2863d4d4446cd",
+  "qualification_base_sha": "8aab5bfccc09b21eb8209860a75f2e85db1e740e",
+  "repository_ref": "origin/customer-management-v1",
+  "migration_revision": "d1v3x5z7b942",
+  "qualification_evidence": [
+    "branch and Inventory-item relationships fail closed outside authorized Company and Branch scope",
+    "exact replay is idempotent, contradictory replay fails closed, and concurrent stale updates cannot both apply",
+    "each accepted policy change appends immutable database-enforced revision evidence with actor, provenance, reason, version, and canonical digest",
+    "policy configuration creates no Inventory movement, AP liability, payment, Accounting journal, or Economics policy",
+    "explicit Purchasing read/manage authorization and operator permission gating remain decisive",
+    "API and frontend expose loading, empty, validation, conflict, forbidden, retry, and reconciliation behavior without internal leakage",
+    "fresh upgrade, relevant downgrade and re-upgrade, current=head, one head, and zero Alembic drift are qualified"
+  ],
+  "successor_gate": {
+    "milestone_id": "BANK.PUR.010",
+    "state": "BLOCKED_PENDING_BANK_PUR_009_OWNER_ACCEPTANCE"
+  },
+  "qualification_fingerprint": "af6a01e0abfa39c37419bbad70a6995d7f253c7e879f82705aaffc05208d35f5"
+}
