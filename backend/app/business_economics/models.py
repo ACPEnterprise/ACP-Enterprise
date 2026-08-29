@@ -360,3 +360,38 @@ class PolicyGapClosureRecord(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
     )
+
+
+class EconomicsProfitabilityResultRecord(Base):
+    """Immutable admitted profitability result and explanation lineage."""
+
+    __tablename__ = "economics_profitability_results"
+    __table_args__ = (
+        CheckConstraint("lifecycle IN ('admitted','superseded','voided')", name="ck_eco_profitability_result_lifecycle"),
+        UniqueConstraint("company_id", "result_identity", name="uq_eco_profitability_result_identity"),
+        Index("ix_eco_profitability_result_subject", "company_id", "subject_id", "period_start", "period_end"),
+    )
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("companies.id", ondelete="RESTRICT"), nullable=False)
+    branch_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    subject_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    subject_kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    scope: Mapped[str] = mapped_column(String(32), nullable=False)
+    basis: Mapped[str] = mapped_column(String(32), nullable=False)
+    period_start: Mapped[date] = mapped_column(Date, nullable=False)
+    period_end: Mapped[date] = mapped_column(Date, nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    admission_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    admission_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    package_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    package_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    computation_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    result_identity: Mapped[str] = mapped_column(String(128), nullable=False)
+    result_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    metrics: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    acquisition_digests: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    allocation_digests: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    explanation_ids: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    lifecycle: Mapped[str] = mapped_column(String(16), nullable=False)
+    created_by_user_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)

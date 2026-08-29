@@ -6,6 +6,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -14,6 +15,7 @@ from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.dependencies import require_permission
 
 from .contracts import PayrollAuthorizationError, PayrollConflictError
+from .models import PayrollFilingPackageRecord, PayrollReportingSnapshotRecord
 from .paystatement import PayrollPayStatementService, PayStatementView
 from .paystatement_experience import (
     PayrollPayStatementExperienceService,
@@ -34,6 +36,10 @@ Manage = Annotated[
     AuthorizationContext,
     Depends(require_permission(PayrollPermission.STATEMENT_MANAGE)),
 ]
+ReportingRead = Annotated[
+    AuthorizationContext,
+    Depends(require_permission(PayrollPermission.REPORTING_READ)),
+]
 
 
 class StatementMetadata(BaseModel):
@@ -46,6 +52,30 @@ class StatementMetadata(BaseModel):
     lifecycle: str
     digest: str
     corrected: bool
+
+
+class PayrollReportingMetadata(BaseModel):
+    id: UUID
+    employee_id: UUID | None
+    period_identity: str
+    period_kind: str
+    period_start: str
+    period_end: str
+    currency: str | None
+    state: str
+    totals: dict[str, object] | None
+    blockers: list[str]
+    report_digest: str
+
+
+class PayrollFilingPackageMetadata(BaseModel):
+    id: UUID
+    reporting_snapshot_id: UUID
+    jurisdiction_reference: str
+    package_type: str
+    schema_version: str
+    state: str
+    package_digest: str
 
 
 def _metadata(value: PayStatementView) -> StatementMetadata:
@@ -72,10 +102,99 @@ def _experience() -> PayrollPayStatementExperienceService:
     return PayrollPayStatementExperienceService(ProtectedStatementStorage(Path(root)))
 
 
+def _report_metadata(value: PayrollReportingSnapshotRecord) -> PayrollReportingMetadata:
+    return PayrollReportingMetadata(
+        id=value.id,
+        employee_id=value.employee_id,
+        period_identity=value.period_identity,
+        period_kind=value.period_kind,
+        period_start=value.period_start.isoformat(),
+        period_end=value.period_end.isoformat(),
+        currency=value.currency,
+        state=value.state,
+        totals=value.totals,
+        blockers=value.blockers,
+        report_digest=value.report_digest,
+    )
+
+
 def _error(error: Exception) -> HTTPException:
     if isinstance(error, PayrollAuthorizationError):
         return HTTPException(status.HTTP_403_FORBIDDEN, "Pay statement access denied.")
     return HTTPException(status.HTTP_409_CONFLICT, str(error))
+
+
+@router.get("/reporting", response_model=list[PayrollReportingMetadata])
+async def list_payroll_reporting(
+    context: ReportingRead, session: Session
+) -> list[PayrollReportingMetadata]:
+    values = (
+        await session.scalars(
+            select(PayrollReportingSnapshotRecord)
+            .where(PayrollReportingSnapshotRecord.company_id == context.company.id)
+            .order_by(
+                PayrollReportingSnapshotRecord.period_end.desc(),
+                PayrollReportingSnapshotRecord.created_at.desc(),
+            )
+        )
+    ).all()
+    return [_report_metadata(value) for value in values]
+
+
+@router.get(
+    "/reporting/{report_id}", response_model=PayrollReportingMetadata
+)
+async def payroll_reporting_detail(
+    report_id: UUID, context: ReportingRead, session: Session
+) -> PayrollReportingMetadata:
+    value = await session.scalar(
+        select(PayrollReportingSnapshotRecord).where(
+            PayrollReportingSnapshotRecord.id == report_id,
+            PayrollReportingSnapshotRecord.company_id == context.company.id,
+        )
+    )
+    if value is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Payroll report not found.")
+    return _report_metadata(value)
+
+
+@router.get(
+    "/reporting/{report_id}/filing-packages",
+    response_model=list[PayrollFilingPackageMetadata],
+)
+async def payroll_filing_packages(
+    report_id: UUID, context: ReportingRead, session: Session
+) -> list[PayrollFilingPackageMetadata]:
+    report = await session.scalar(
+        select(PayrollReportingSnapshotRecord.id).where(
+            PayrollReportingSnapshotRecord.id == report_id,
+            PayrollReportingSnapshotRecord.company_id == context.company.id,
+        )
+    )
+    if report is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Payroll report not found.")
+    values = (
+        await session.scalars(
+            select(PayrollFilingPackageRecord)
+            .where(
+                PayrollFilingPackageRecord.reporting_snapshot_id == report_id,
+                PayrollFilingPackageRecord.company_id == context.company.id,
+            )
+            .order_by(PayrollFilingPackageRecord.created_at.desc())
+        )
+    ).all()
+    return [
+        PayrollFilingPackageMetadata(
+            id=value.id,
+            reporting_snapshot_id=value.reporting_snapshot_id,
+            jurisdiction_reference=value.jurisdiction_reference,
+            package_type=value.package_type,
+            schema_version=value.schema_version,
+            state=value.state,
+            package_digest=value.package_digest,
+        )
+        for value in values
+    ]
 
 
 @router.get("/me/pay-statements", response_model=list[StatementMetadata])
