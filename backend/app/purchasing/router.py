@@ -16,6 +16,7 @@ from .errors import (
     PurchasingValidation,
 )
 from .schemas import (
+    CreatePurchaseReturnCommand,
     DiscrepancyItem,
     PurchaseOrderCreate,
     PurchaseOrderItem,
@@ -23,6 +24,8 @@ from .schemas import (
     PurchaseOrderLineUpdate,
     PurchaseOrderLineWrite,
     PurchaseOrderUpdate,
+    PurchaseReturnItem,
+    PurchaseReturnTransitionCommand,
     PurchasingWorkspace,
     ReceiptItem,
     ReceiptLineItem,
@@ -55,6 +58,22 @@ ReceiveContext = Annotated[
 ResolveContext = Annotated[
     AuthorizationContext,
     Depends(require_permission(PurchasingPermission.RESOLVE_DISCREPANCY)),
+]
+ReturnCreateContext = Annotated[
+    AuthorizationContext,
+    Depends(require_permission(PurchasingPermission.RETURN_CREATE)),
+]
+ReturnAuthorizeContext = Annotated[
+    AuthorizationContext,
+    Depends(require_permission(PurchasingPermission.RETURN_AUTHORIZE)),
+]
+ReturnMoveContext = Annotated[
+    AuthorizationContext,
+    Depends(require_permission(PurchasingPermission.RETURN_MOVE)),
+]
+ReturnCloseContext = Annotated[
+    AuthorizationContext,
+    Depends(require_permission(PurchasingPermission.RETURN_CLOSE)),
 ]
 
 
@@ -294,6 +313,176 @@ async def resolve_discrepancy(
         )
     except PurchasingError as error:
         raise http_error(error) from error
+
+
+@router.post(
+    "/purchase-orders/{po_id}/returns",
+    response_model=PurchaseReturnItem,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_purchase_return(
+    po_id: UUID,
+    payload: CreatePurchaseReturnCommand,
+    context: ReturnCreateContext,
+    session: DatabaseSession,
+) -> PurchaseReturnItem:
+    try:
+        return PurchaseReturnItem.model_validate(
+            await purchasing_service.create_purchase_return(
+                session, context=context, po_id=po_id, payload=payload
+            )
+        )
+    except PurchasingError as error:
+        raise http_error(error) from error
+
+
+async def _return_transition(
+    po_id: UUID,
+    return_id: UUID,
+    action: str,
+    payload: PurchaseReturnTransitionCommand,
+    context: AuthorizationContext,
+    session: AsyncSession,
+) -> PurchaseReturnItem:
+    try:
+        return PurchaseReturnItem.model_validate(
+            await purchasing_service.transition_purchase_return(
+                session,
+                context=context,
+                po_id=po_id,
+                return_id=return_id,
+                action=action,
+                payload=payload,
+            )
+        )
+    except PurchasingError as error:
+        raise http_error(error) from error
+
+
+@router.post(
+    "/purchase-orders/{po_id}/returns/{return_id}/request-authorization",
+    response_model=PurchaseReturnItem,
+)
+async def request_return_authorization(
+    po_id: UUID,
+    return_id: UUID,
+    payload: PurchaseReturnTransitionCommand,
+    context: ReturnCreateContext,
+    session: DatabaseSession,
+) -> PurchaseReturnItem:
+    return await _return_transition(
+        po_id, return_id, "request_authorization", payload, context, session
+    )
+
+
+@router.post(
+    "/purchase-orders/{po_id}/returns/{return_id}/authorize",
+    response_model=PurchaseReturnItem,
+)
+async def authorize_return(
+    po_id: UUID,
+    return_id: UUID,
+    payload: PurchaseReturnTransitionCommand,
+    context: ReturnAuthorizeContext,
+    session: DatabaseSession,
+) -> PurchaseReturnItem:
+    return await _return_transition(
+        po_id, return_id, "authorize", payload, context, session
+    )
+
+
+@router.post(
+    "/purchase-orders/{po_id}/returns/{return_id}/deny",
+    response_model=PurchaseReturnItem,
+)
+async def deny_return(
+    po_id: UUID,
+    return_id: UUID,
+    payload: PurchaseReturnTransitionCommand,
+    context: ReturnAuthorizeContext,
+    session: DatabaseSession,
+) -> PurchaseReturnItem:
+    return await _return_transition(po_id, return_id, "deny", payload, context, session)
+
+
+@router.post(
+    "/purchase-orders/{po_id}/returns/{return_id}/ready",
+    response_model=PurchaseReturnItem,
+)
+async def ready_return(
+    po_id: UUID,
+    return_id: UUID,
+    payload: PurchaseReturnTransitionCommand,
+    context: ReturnMoveContext,
+    session: DatabaseSession,
+) -> PurchaseReturnItem:
+    return await _return_transition(
+        po_id, return_id, "mark_ready", payload, context, session
+    )
+
+
+@router.post(
+    "/purchase-orders/{po_id}/returns/{return_id}/returned",
+    response_model=PurchaseReturnItem,
+)
+async def returned_return(
+    po_id: UUID,
+    return_id: UUID,
+    payload: PurchaseReturnTransitionCommand,
+    context: ReturnMoveContext,
+    session: DatabaseSession,
+) -> PurchaseReturnItem:
+    return await _return_transition(
+        po_id, return_id, "mark_returned", payload, context, session
+    )
+
+
+@router.post(
+    "/purchase-orders/{po_id}/returns/{return_id}/vendor-received",
+    response_model=PurchaseReturnItem,
+)
+async def vendor_received_return(
+    po_id: UUID,
+    return_id: UUID,
+    payload: PurchaseReturnTransitionCommand,
+    context: ReturnMoveContext,
+    session: DatabaseSession,
+) -> PurchaseReturnItem:
+    return await _return_transition(
+        po_id, return_id, "vendor_received", payload, context, session
+    )
+
+
+@router.post(
+    "/purchase-orders/{po_id}/returns/{return_id}/close",
+    response_model=PurchaseReturnItem,
+)
+async def close_return(
+    po_id: UUID,
+    return_id: UUID,
+    payload: PurchaseReturnTransitionCommand,
+    context: ReturnCloseContext,
+    session: DatabaseSession,
+) -> PurchaseReturnItem:
+    return await _return_transition(
+        po_id, return_id, "close", payload, context, session
+    )
+
+
+@router.post(
+    "/purchase-orders/{po_id}/returns/{return_id}/cancel",
+    response_model=PurchaseReturnItem,
+)
+async def cancel_return(
+    po_id: UUID,
+    return_id: UUID,
+    payload: PurchaseReturnTransitionCommand,
+    context: ReturnCloseContext,
+    session: DatabaseSession,
+) -> PurchaseReturnItem:
+    return await _return_transition(
+        po_id, return_id, "cancel", payload, context, session
+    )
 
 
 async def _transition(

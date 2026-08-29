@@ -461,3 +461,112 @@ class PurchaseOrderDiscrepancy(Base):
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     resolution_note: Mapped[str | None] = mapped_column(Text)
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+
+
+class PurchaseReturn(Base):
+    __tablename__ = "purchasing_purchase_returns"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "receipt_id"],
+            [
+                "purchasing_purchase_order_receipts.company_id",
+                "purchasing_purchase_order_receipts.id",
+            ],
+            name="fk_purchase_return_receipt",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "receipt_line_id"],
+            [
+                "purchasing_purchase_order_receipt_lines.company_id",
+                "purchasing_purchase_order_receipt_lines.id",
+            ],
+            name="fk_purchase_return_receipt_line",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "purchase_order_id"],
+            ["purchasing_purchase_orders.company_id", "purchasing_purchase_orders.id"],
+            name="fk_purchase_return_po",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "purchase_order_line_id"],
+            [
+                "purchasing_purchase_order_lines.company_id",
+                "purchasing_purchase_order_lines.id",
+            ],
+            name="fk_purchase_return_po_line",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint("quantity > 0", name="ck_purchase_return_quantity"),
+        CheckConstraint(
+            "reason IN ('damaged_after_receipt','defective','wrong_item','excess_not_needed','vendor_requested','other')",
+            name="ck_purchase_return_reason",
+        ),
+        CheckConstraint(
+            "status IN ('requested','authorized','denied','return_ready','returned','received_by_vendor','closed','canceled')",
+            name="ck_purchase_return_status",
+        ),
+        CheckConstraint(
+            "authorization_status IN ('not_requested','requested','received','denied','not_required')",
+            name="ck_purchase_return_authorization",
+        ),
+        CheckConstraint("version >= 1", name="ck_purchase_return_version"),
+        UniqueConstraint(
+            "company_id", "return_identity", name="uq_purchase_return_identity"
+        ),
+        UniqueConstraint("company_id", "id", name="uq_purchase_return_company"),
+        Index("ix_purchase_return_po", "company_id", "purchase_order_id", "status"),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    purchase_order_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), nullable=False
+    )
+    vendor_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    receipt_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    receipt_line_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    purchase_order_line_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), nullable=False
+    )
+    return_identity: Mapped[str] = mapped_column(String(128), nullable=False)
+    item_identity_snapshot: Mapped[str] = mapped_column(String(200), nullable=False)
+    accepted_quantity_snapshot: Mapped[Decimal] = mapped_column(
+        Numeric(18, 6), nullable=False
+    )
+    quantity: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False)
+    reason: Mapped[str] = mapped_column(String(40), nullable=False)
+    reason_note: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="requested")
+    authorization_status: Mapped[str] = mapped_column(String(32), nullable=False)
+    vendor_authorization_reference: Mapped[str | None] = mapped_column(String(200))
+    vendor_instructions: Mapped[str | None] = mapped_column(Text)
+    requested_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    requested_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    effective_date: Mapped[date] = mapped_column(Date, nullable=False)
+    updated_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    authorization_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    returned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    vendor_received_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    canceled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    source_reference: Mapped[str | None] = mapped_column(String(240))
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)

@@ -23,10 +23,12 @@ from .models import (
     PurchaseOrderLine,
     PurchaseOrderReceipt,
     PurchaseOrderReceiptLine,
+    PurchaseReturn,
     PurchasingCommandReceipt,
 )
 from .repository import PurchasingRepository, purchasing_repository
 from .schemas import (
+    CreatePurchaseReturnCommand,
     DiscrepancyItem,
     PurchaseOrderCreate,
     PurchaseOrderItem,
@@ -34,6 +36,8 @@ from .schemas import (
     PurchaseOrderLineUpdate,
     PurchaseOrderLineWrite,
     PurchaseOrderUpdate,
+    PurchaseReturnItem,
+    PurchaseReturnTransitionCommand,
     PurchasingWorkspace,
     ReceiptItem,
     ReceiptLineItem,
@@ -883,6 +887,282 @@ class PurchasingService:
             )
         return record
 
+    async def create_purchase_return(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        po_id: UUID,
+        payload: CreatePurchaseReturnCommand,
+    ) -> PurchaseReturn:
+        data = {"po_id": str(po_id), **payload.model_dump(mode="json")}
+        reasons = {
+            "damaged_after_receipt",
+            "defective",
+            "wrong_item",
+            "excess_not_needed",
+            "vendor_requested",
+            "other",
+        }
+        async with session.begin():
+            replay = await self._replay(
+                session,
+                context,
+                "po.return.create",
+                payload.idempotency_key,
+                data,
+                "purchase_return",
+            )
+            if replay:
+                record = await self.repository.purchase_return(
+                    session, context.company.id, replay
+                )
+                if record is None:
+                    raise PurchasingConflict("Purchase Return replay target is missing")
+                return record
+            order = await self._order(session, context, po_id, lock=True)
+            replay = await self._replay(
+                session,
+                context,
+                "po.return.create",
+                payload.idempotency_key,
+                data,
+                "purchase_return",
+            )
+            if replay:
+                record = await self.repository.purchase_return(
+                    session, context.company.id, replay
+                )
+                if record is None:
+                    raise PurchasingConflict("Purchase Return replay target is missing")
+                return record
+            if order.version != payload.expected_po_version:
+                raise PurchasingConflict("Purchase Order version is stale")
+            if payload.reason not in reasons:
+                raise PurchasingValidation("Unsupported Purchase Return reason")
+            if payload.reason == "other" and not (payload.reason_note or "").strip():
+                raise PurchasingValidation("Other return reason requires description")
+            receipt = await self.repository.receiving_event(
+                session, context.company.id, payload.receipt_id
+            )
+            receipt_line = await session.get(
+                PurchaseOrderReceiptLine, payload.receipt_line_id
+            )
+            if receipt is None or receipt.purchase_order_id != order.id:
+                raise PurchasingValidation(
+                    "Return receipt does not belong to this Purchase Order"
+                )
+            if (
+                receipt_line is None
+                or receipt_line.company_id != context.company.id
+                or receipt_line.receipt_id != receipt.id
+            ):
+                raise PurchasingValidation("Return receipt line is invalid")
+            committed = await self.repository.committed_return_quantity(
+                session, context.company.id, receipt_line.id
+            )
+            if payload.quantity > receipt_line.accepted_quantity - committed:
+                raise PurchasingValidation(
+                    "Return quantity exceeds remaining accepted receipt quantity"
+                )
+            po_line = await self.repository.line(
+                session,
+                context.company.id,
+                order.id,
+                receipt_line.purchase_order_line_id,
+            )
+            if po_line is None:
+                raise PurchasingConflict("Authoritative Purchase Order line is missing")
+            timestamp = now()
+            record = PurchaseReturn(
+                company_id=order.company_id,
+                branch_id=order.branch_id,
+                purchase_order_id=order.id,
+                vendor_id=order.vendor_id,
+                receipt_id=receipt.id,
+                receipt_line_id=receipt_line.id,
+                purchase_order_line_id=po_line.id,
+                return_identity=payload.return_identity.strip(),
+                item_identity_snapshot=str(po_line.inventory_item_id)
+                if po_line.inventory_item_id
+                else po_line.description,
+                accepted_quantity_snapshot=receipt_line.accepted_quantity,
+                quantity=payload.quantity,
+                reason=payload.reason,
+                reason_note=payload.reason_note,
+                authorization_status="not_requested"
+                if payload.authorization_required
+                else "not_required",
+                requested_by_user_id=context.user.id,
+                requested_at=timestamp,
+                effective_date=payload.effective_date,
+                updated_by_user_id=context.user.id,
+                updated_at=timestamp,
+                source_reference=payload.source_reference,
+            )
+            session.add(record)
+            await session.flush()
+            order.version += 1
+            order.updated_at = timestamp
+            self._receipt(
+                session,
+                context,
+                "po.return.create",
+                payload.idempotency_key,
+                data,
+                "purchase_return",
+                record.id,
+            )
+            self._event(
+                session,
+                context,
+                EventType.PURCHASING_PURCHASE_RETURN_CREATED,
+                "purchase_return",
+                record.id,
+                order.branch_id,
+                {
+                    "purchase_order_id": str(order.id),
+                    "purchase_return_id": str(record.id),
+                    "receipt_id": str(receipt.id),
+                    "receipt_line_id": str(receipt_line.id),
+                    "quantity": str(record.quantity),
+                    "status": record.status,
+                },
+            )
+        return record
+
+    async def transition_purchase_return(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        po_id: UUID,
+        return_id: UUID,
+        action: str,
+        payload: PurchaseReturnTransitionCommand,
+    ) -> PurchaseReturn:
+        data = {
+            "po_id": str(po_id),
+            "return_id": str(return_id),
+            "action": action,
+            **payload.model_dump(mode="json"),
+        }
+        operation = f"po.return.{action}"
+        async with session.begin():
+            replay = await self._replay(
+                session,
+                context,
+                operation,
+                payload.idempotency_key,
+                data,
+                "purchase_return",
+            )
+            if replay:
+                record = await self.repository.purchase_return(
+                    session, context.company.id, replay
+                )
+                if record is None:
+                    raise PurchasingConflict("Purchase Return replay target is missing")
+                return record
+            order = await self._order(session, context, po_id, lock=True)
+            if order.version != payload.expected_po_version:
+                raise PurchasingConflict("Purchase Order version is stale")
+            record = await self.repository.purchase_return(
+                session, context.company.id, return_id, lock=True
+            )
+            if record is None or record.purchase_order_id != order.id:
+                raise PurchasingNotFound("Purchase Return was not found")
+            if record.version != payload.expected_return_version:
+                raise PurchasingConflict("Purchase Return version is stale")
+            event_type: EventType
+            if (
+                action == "request_authorization"
+                and record.status == "requested"
+                and record.authorization_status == "not_requested"
+            ):
+                record.authorization_status = "requested"
+                event_type = (
+                    EventType.PURCHASING_PURCHASE_RETURN_AUTHORIZATION_REQUESTED
+                )
+            elif action == "authorize" and record.authorization_status == "requested":
+                authorization_reference = (
+                    payload.vendor_authorization_reference or ""
+                ).strip()
+                if not authorization_reference:
+                    raise PurchasingValidation(
+                        "Vendor authorization reference is required"
+                    )
+                record.status, record.authorization_status = "authorized", "received"
+                record.vendor_authorization_reference = authorization_reference
+                record.authorization_at = payload.occurred_at
+                event_type = EventType.PURCHASING_PURCHASE_RETURN_AUTHORIZED
+            elif action == "deny" and record.authorization_status == "requested":
+                record.status, record.authorization_status = "denied", "denied"
+                record.authorization_at = payload.occurred_at
+                event_type = EventType.PURCHASING_PURCHASE_RETURN_DENIED
+            elif (
+                action == "mark_ready"
+                and record.status in {"requested", "authorized"}
+                and record.authorization_status in {"received", "not_required"}
+            ):
+                record.status = "return_ready"
+                event_type = EventType.PURCHASING_PURCHASE_RETURN_READY
+            elif action == "mark_returned" and record.status == "return_ready":
+                record.status, record.returned_at = "returned", payload.occurred_at
+                event_type = EventType.PURCHASING_PURCHASE_RETURN_RETURNED
+            elif action == "vendor_received" and record.status == "returned":
+                record.status, record.vendor_received_at = (
+                    "received_by_vendor",
+                    payload.occurred_at,
+                )
+                event_type = EventType.PURCHASING_PURCHASE_RETURN_VENDOR_RECEIVED
+            elif action == "close" and record.status in {
+                "returned",
+                "received_by_vendor",
+            }:
+                record.status, record.closed_at = "closed", payload.occurred_at
+                event_type = EventType.PURCHASING_PURCHASE_RETURN_CLOSED
+            elif action == "cancel" and record.status in {
+                "requested",
+                "authorized",
+                "denied",
+                "return_ready",
+            }:
+                record.status, record.canceled_at = "canceled", payload.occurred_at
+                event_type = EventType.PURCHASING_PURCHASE_RETURN_CANCELED
+            else:
+                raise PurchasingValidation("Purchase Return transition is not allowed")
+            record.vendor_instructions = payload.note
+            record.updated_by_user_id, record.updated_at = context.user.id, now()
+            record.version += 1
+            order.version += 1
+            order.updated_at = record.updated_at
+            self._receipt(
+                session,
+                context,
+                operation,
+                payload.idempotency_key,
+                data,
+                "purchase_return",
+                record.id,
+            )
+            self._event(
+                session,
+                context,
+                event_type,
+                "purchase_return",
+                record.id,
+                order.branch_id,
+                {
+                    "purchase_order_id": str(order.id),
+                    "purchase_return_id": str(record.id),
+                    "status": record.status,
+                    "authorization_status": record.authorization_status,
+                    "version": record.version,
+                },
+            )
+        return record
+
     async def _order(
         self,
         session: AsyncSession,
@@ -910,6 +1190,9 @@ class PurchasingService:
         discrepancies = await self.repository.discrepancies(
             session, order.company_id, order.id
         )
+        purchase_returns = await self.repository.purchase_returns(
+            session, order.company_id, order.id
+        )
         totals = await self.repository.accepted_totals(
             session, order.company_id, order.id
         )
@@ -924,6 +1207,20 @@ class PurchasingService:
                             for item in await self.repository.receipt_lines(
                                 session, order.company_id, receipt.id
                             )
+                        )
+                    }
+                )
+            )
+        return_items = []
+        for item in purchase_returns:
+            committed = await self.repository.committed_return_quantity(
+                session, order.company_id, item.receipt_line_id
+            )
+            return_items.append(
+                PurchaseReturnItem.model_validate(item).model_copy(
+                    update={
+                        "remaining_returnable_quantity": max(
+                            item.accepted_quantity_snapshot - committed, Decimal(0)
                         )
                     }
                 )
@@ -950,6 +1247,7 @@ class PurchasingService:
                 "discrepancies": tuple(
                     DiscrepancyItem.model_validate(item) for item in discrepancies
                 ),
+                "returns": tuple(return_items),
             }
         )
 

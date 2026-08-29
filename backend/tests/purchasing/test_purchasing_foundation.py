@@ -28,10 +28,13 @@ from app.purchasing.errors import (
 from app.purchasing.models import (
     PurchaseOrderDiscrepancy,
     PurchaseOrderIssuanceEvidence,
+    PurchaseReturn,
 )
 from app.purchasing.schemas import (
+    CreatePurchaseReturnCommand,
     PurchaseOrderCreate,
     PurchaseOrderLineWrite,
+    PurchaseReturnTransitionCommand,
     ReceiptLineCommand,
     RecordReceiptCommand,
     ResolveDiscrepancyCommand,
@@ -646,6 +649,279 @@ async def test_discrepancy_is_durable_resolvable_and_has_no_financial_or_stock_e
             "purchasing.purchase_order.discrepancy_opened",
             "purchasing.purchase_order.discrepancy_resolved",
         }
+
+
+def return_command(
+    version: int,
+    receipt_id,
+    receipt_line_id,
+    quantity: str,
+    key: str,
+    *,
+    authorization_required: bool = True,
+) -> CreatePurchaseReturnCommand:
+    return CreatePurchaseReturnCommand(
+        expected_po_version=version,
+        return_identity=f"return-{key}",
+        receipt_id=receipt_id,
+        receipt_line_id=receipt_line_id,
+        quantity=Decimal(quantity),
+        reason="defective",
+        authorization_required=authorization_required,
+        effective_date=datetime.now(timezone.utc).date(),
+        idempotency_key=key,
+    )
+
+
+def return_transition(
+    po_version: int, return_version: int, key: str, *, reference: str | None = None
+) -> PurchaseReturnTransitionCommand:
+    return PurchaseReturnTransitionCommand(
+        expected_po_version=po_version,
+        expected_return_version=return_version,
+        vendor_authorization_reference=reference,
+        occurred_at=datetime.now(timezone.utc),
+        idempotency_key=key,
+    )
+
+
+@pytest.mark.asyncio
+async def test_purchase_return_quantity_replay_and_non_financial_boundary(
+    purchasing_fixture,
+) -> None:
+    factory, _, _, branch, _, preparer, approver = purchasing_fixture
+    service = PurchasingService()
+    po_id, line_id, version = await issued_order(
+        factory, branch, preparer, approver, quantity="5"
+    )
+    async with factory() as session:
+        receipt_record = await service.record_receipt(
+            session,
+            context=approver,
+            po_id=po_id,
+            payload=receipt(
+                version,
+                line_id,
+                "3",
+                "return-source",
+                rejected="2",
+                category="damaged_item",
+            ),
+        )
+        item = await service.get_order(session, context=approver, po_id=po_id)
+        receipt_line_id = (
+            await service.repository.receipt_lines(
+                session, item.company_id, receipt_record.id
+            )
+        )[0].id
+        before = tuple(
+            [
+                await session.scalar(select(func.count()).select_from(model))
+                for model in (StockMovement, VendorBill, Journal)
+            ]
+        )
+        po_version, receipt_id = item.version, receipt_record.id
+        await session.rollback()
+        payload = return_command(
+            po_version,
+            receipt_id,
+            receipt_line_id,
+            "2",
+            "return-create",
+        )
+        created = await service.create_purchase_return(
+            session, context=approver, po_id=po_id, payload=payload
+        )
+        replay = await service.create_purchase_return(
+            session, context=approver, po_id=po_id, payload=payload
+        )
+        assert replay.id == created.id
+        with pytest.raises(PurchasingConflict):
+            await service.create_purchase_return(
+                session,
+                context=approver,
+                po_id=po_id,
+                payload=payload.model_copy(update={"quantity": Decimal(1)}),
+            )
+        current = await service.get_order(session, context=approver, po_id=po_id)
+        assert current.returns[0].remaining_returnable_quantity == Decimal(1)
+        current_version = current.version
+        await session.rollback()
+        with pytest.raises(PurchasingValidation):
+            await service.create_purchase_return(
+                session,
+                context=approver,
+                po_id=po_id,
+                payload=return_command(
+                    current_version,
+                    receipt_id,
+                    receipt_line_id,
+                    "2",
+                    "return-over",
+                ),
+            )
+        after = tuple(
+            [
+                await session.scalar(select(func.count()).select_from(model))
+                for model in (StockMovement, VendorBill, Journal)
+            ]
+        )
+        assert after == before
+
+
+@pytest.mark.asyncio
+async def test_purchase_return_authorization_lifecycle_cancel_and_events(
+    purchasing_fixture,
+) -> None:
+    factory, _, _, branch, _, preparer, approver = purchasing_fixture
+    service = PurchasingService()
+    po_id, line_id, version = await issued_order(
+        factory, branch, preparer, approver, quantity="2"
+    )
+    async with factory() as session:
+        receipt_record = await service.record_receipt(
+            session,
+            context=approver,
+            po_id=po_id,
+            payload=receipt(version, line_id, "2", "return-lifecycle-source"),
+        )
+        order = await service.get_order(session, context=approver, po_id=po_id)
+        receipt_line_id = (
+            await service.repository.receipt_lines(
+                session, order.company_id, receipt_record.id
+            )
+        )[0].id
+        po_version, receipt_id = order.version, receipt_record.id
+        await session.rollback()
+        record = await service.create_purchase_return(
+            session,
+            context=approver,
+            po_id=po_id,
+            payload=return_command(
+                po_version,
+                receipt_id,
+                receipt_line_id,
+                "1",
+                "return-lifecycle",
+            ),
+        )
+        po_version += 1
+        record = await service.transition_purchase_return(
+            session,
+            context=approver,
+            po_id=po_id,
+            return_id=record.id,
+            action="request_authorization",
+            payload=return_transition(
+                po_version, record.version, "return-auth-request"
+            ),
+        )
+        po_version += 1
+        return_id, return_version = record.id, record.version
+        with pytest.raises(PurchasingValidation):
+            await service.transition_purchase_return(
+                session,
+                context=approver,
+                po_id=po_id,
+                return_id=return_id,
+                action="authorize",
+                payload=return_transition(
+                    po_version, return_version, "return-auth-missing"
+                ),
+            )
+        record = await service.transition_purchase_return(
+            session,
+            context=approver,
+            po_id=po_id,
+            return_id=return_id,
+            action="authorize",
+            payload=return_transition(
+                po_version, return_version, "return-authorize", reference="RMA-42"
+            ),
+        )
+        po_version += 1
+        for action in ("mark_ready", "mark_returned", "vendor_received", "close"):
+            record = await service.transition_purchase_return(
+                session,
+                context=approver,
+                po_id=po_id,
+                return_id=record.id,
+                action=action,
+                payload=return_transition(
+                    po_version, record.version, f"return-{action}"
+                ),
+            )
+            po_version += 1
+        assert (
+            record.status == "closed"
+            and record.vendor_authorization_reference == "RMA-42"
+        )
+        events = set(
+            (
+                await session.scalars(
+                    select(BusinessEvent.event_type).where(
+                        BusinessEvent.entity_id == record.id
+                    )
+                )
+            ).all()
+        )
+        assert {
+            "purchasing.purchase_return.created",
+            "purchasing.purchase_return.authorized",
+            "purchasing.purchase_return.returned",
+            "purchasing.purchase_return.closed",
+        }.issubset(events)
+
+
+@pytest.mark.asyncio
+async def test_concurrent_purchase_returns_cannot_exceed_accepted_quantity(
+    purchasing_fixture,
+) -> None:
+    factory, _, _, branch, _, preparer, approver = purchasing_fixture
+    service = PurchasingService()
+    po_id, line_id, version = await issued_order(
+        factory, branch, preparer, approver, quantity="1"
+    )
+    async with factory() as session:
+        receipt_record = await service.record_receipt(
+            session,
+            context=approver,
+            po_id=po_id,
+            payload=receipt(version, line_id, "1", "return-race-source"),
+        )
+        order = await service.get_order(session, context=approver, po_id=po_id)
+        receipt_line_id = (
+            await service.repository.receipt_lines(
+                session, order.company_id, receipt_record.id
+            )
+        )[0].id
+        receipt_id, po_version = (
+            receipt_record.id,
+            order.version,
+        )
+
+    async def attempt(key: str):
+        async with factory() as session:
+            return await service.create_purchase_return(
+                session,
+                context=approver,
+                po_id=po_id,
+                payload=return_command(
+                    po_version, receipt_id, receipt_line_id, "1", key
+                ),
+            )
+
+    results = await asyncio.gather(
+        attempt("return-race-a"), attempt("return-race-b"), return_exceptions=True
+    )
+    assert sum(isinstance(result, PurchaseReturn) for result in results) == 1
+    assert (
+        sum(
+            isinstance(result, (PurchasingConflict, PurchasingValidation))
+            for result in results
+        )
+        == 1
+    )
 
 
 @pytest.mark.asyncio

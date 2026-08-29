@@ -23,6 +23,10 @@ export function PurchasingRoute() {
   const canIssue = useHasPermission("COMPANY_PURCHASING_ISSUE");
   const canReceive = useHasPermission("COMPANY_PURCHASING_RECEIVE");
   const canResolve = useHasPermission("COMPANY_PURCHASING_RESOLVE_DISCREPANCY");
+  const canCreateReturn = useHasPermission("COMPANY_PURCHASING_RETURN_CREATE");
+  const canAuthorizeReturn = useHasPermission("COMPANY_PURCHASING_RETURN_AUTHORIZE");
+  const canMoveReturn = useHasPermission("COMPANY_PURCHASING_RETURN_MOVE");
+  const canCloseReturn = useHasPermission("COMPANY_PURCHASING_RETURN_CLOSE");
   const [search, setSearch] = useState("");
   const purchasing = usePurchasing(search || undefined, canRead);
   const mutations = usePurchasingMutations();
@@ -61,6 +65,17 @@ export function PurchasingRoute() {
     observed_condition: "",
     effective_date: "",
   });
+  const [purchaseReturn, setPurchaseReturn] = useState({
+    po_id: "",
+    receipt_id: "",
+    receipt_line_id: "",
+    quantity: "1",
+    reason: "defective",
+    reason_note: "",
+    effective_date: "",
+    authorization_required: true,
+  });
+  const [rma, setRma] = useState("");
   if (!activeCompany)
     return (
       <Alert variant="danger">
@@ -662,11 +677,94 @@ export function PurchasingRoute() {
                       )}
                     </div>
                   ))}
+                {po.receipts.flatMap((receiptItem) =>
+                  receiptItem.lines
+                    .filter((receiptLine) => Number(receiptLine.accepted_quantity) > 0)
+                    .map((receiptLine) => (
+                      <div key={receiptLine.id} className="mt-2 rounded border border-stroke p-3 text-sm">
+                        Accepted receipt {receiptItem.receiving_event_identity}: {receiptLine.accepted_quantity}
+                        {canCreateReturn && (
+                          <Button className="ml-2" onClick={() => setPurchaseReturn({
+                            po_id: po.id,
+                            receipt_id: receiptItem.id,
+                            receipt_line_id: receiptLine.id,
+                            quantity: "1",
+                            reason: "defective",
+                            reason_note: "",
+                            effective_date: "",
+                            authorization_required: true,
+                          })}>Create return</Button>
+                        )}
+                      </div>
+                    )),
+                )}
+                {(po.returns ?? []).map((item) => {
+                  const transition = (action: "request-authorization" | "authorize" | "deny" | "ready" | "returned" | "vendor-received" | "close" | "cancel") =>
+                    mutations.transitionReturn.mutateAsync({
+                      id: po.id,
+                      returnId: item.id,
+                      action,
+                      input: {
+                        expected_po_version: po.version,
+                        expected_return_version: item.version,
+                        vendor_authorization_reference: action === "authorize" ? rma : null,
+                        occurred_at: new Date().toISOString(),
+                        idempotency_key: crypto.randomUUID(),
+                      },
+                    });
+                  return (
+                    <div key={item.id} className="mt-2 rounded border border-stroke p-3 text-sm">
+                      <strong>{item.item_identity_snapshot}</strong> · return {item.quantity} · remaining {item.remaining_returnable_quantity}
+                      <div>{item.reason} · {item.status} · authorization {item.authorization_status}{item.vendor_authorization_reference ? ` · RMA ${item.vendor_authorization_reference}` : ""}</div>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {canCreateReturn && item.authorization_status === "not_requested" && <Button onClick={() => void transition("request-authorization")}>Request authorization</Button>}
+                        {canAuthorizeReturn && item.authorization_status === "requested" && <><Input aria-label="Vendor authorization reference" value={rma} onChange={(event) => setRma(event.target.value)} /><Button disabled={!rma.trim()} onClick={() => void transition("authorize")}>Record authorization</Button><Button onClick={() => void transition("deny")}>Record denial</Button></>}
+                        {canMoveReturn && ["requested", "authorized"].includes(item.status) && ["received", "not_required"].includes(item.authorization_status) && <Button onClick={() => void transition("ready")}>Mark ready</Button>}
+                        {canMoveReturn && item.status === "return_ready" && <Button onClick={() => void transition("returned")}>Record physical return</Button>}
+                        {canMoveReturn && item.status === "returned" && <Button onClick={() => void transition("vendor-received")}>Record vendor receipt</Button>}
+                        {canCloseReturn && ["returned", "received_by_vendor"].includes(item.status) && <Button onClick={() => void transition("close")}>Close</Button>}
+                        {canCloseReturn && ["requested", "authorized", "denied", "return_ready"].includes(item.status) && <Button onClick={() => void transition("cancel")}>Cancel</Button>}
+                      </div>
+                    </div>
+                  );
+                })}
               </li>
             ))}
           </ul>
         </CardContent>
       </Card>
+      {canCreateReturn && purchaseReturn.po_id && (
+        <Card>
+          <CardHeader><CardTitle>Create Purchase Return</CardTitle><CardDescription>Operational evidence only. No Inventory, Vendor Credit, AP, Accounting, Job-cost, or Economics effect is created.</CardDescription></CardHeader>
+          <CardContent>
+            <form className="grid gap-3 sm:grid-cols-2" onSubmit={(event) => {
+              event.preventDefault();
+              const po = purchasing.data?.purchase_orders.find((item) => item.id === purchaseReturn.po_id);
+              if (!po) return;
+              void mutations.createReturn.mutateAsync({ id: po.id, input: {
+                expected_po_version: po.version,
+                return_identity: crypto.randomUUID(),
+                receipt_id: purchaseReturn.receipt_id,
+                receipt_line_id: purchaseReturn.receipt_line_id,
+                quantity: purchaseReturn.quantity,
+                reason: purchaseReturn.reason,
+                reason_note: purchaseReturn.reason_note || null,
+                authorization_required: purchaseReturn.authorization_required,
+                effective_date: purchaseReturn.effective_date || new Date().toISOString().slice(0, 10),
+                idempotency_key: crypto.randomUUID(),
+              }}).then(() => setPurchaseReturn({...purchaseReturn, po_id: ""}));
+            }}>
+              <Input aria-label="Return quantity" required type="number" min="0.000001" step="0.000001" value={purchaseReturn.quantity} onChange={(event) => setPurchaseReturn({...purchaseReturn, quantity: event.target.value})} />
+              <Select aria-label="Return reason" value={purchaseReturn.reason} onChange={(event) => setPurchaseReturn({...purchaseReturn, reason: event.target.value})}>
+                <option value="damaged_after_receipt">Damaged after receipt</option><option value="defective">Defective</option><option value="wrong_item">Wrong item</option><option value="excess_not_needed">Excess / not needed</option><option value="vendor_requested">Vendor requested</option><option value="other">Other</option>
+              </Select>
+              <Input aria-label="Return reason detail" value={purchaseReturn.reason_note} onChange={(event) => setPurchaseReturn({...purchaseReturn, reason_note: event.target.value})} />
+              <Input aria-label="Return effective date" type="date" value={purchaseReturn.effective_date} onChange={(event) => setPurchaseReturn({...purchaseReturn, effective_date: event.target.value})} />
+              <Button type="submit" loading={mutations.createReturn.isPending}>Create return request</Button>
+            </form>
+          </CardContent>
+        </Card>
+      )}
       {canReceive && receipt.po_id && (
         <Card>
           <CardHeader>

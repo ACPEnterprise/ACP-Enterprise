@@ -46,6 +46,23 @@ export interface PurchaseOrderDiscrepancy {
   observed_condition: string;
   version: number;
 }
+export interface PurchaseReturn {
+  id: string;
+  receipt_id: string;
+  receipt_line_id: string;
+  return_identity: string;
+  item_identity_snapshot: string;
+  accepted_quantity_snapshot: string;
+  quantity: string;
+  remaining_returnable_quantity: string;
+  reason: string;
+  reason_note: string | null;
+  status: string;
+  authorization_status: string;
+  vendor_authorization_reference: string | null;
+  vendor_instructions: string | null;
+  version: number;
+}
 export interface PurchaseOrder {
   id: string;
   branch_id: string;
@@ -60,6 +77,7 @@ export interface PurchaseOrder {
   receiving_status: string;
   receipts: readonly PurchaseOrderReceipt[];
   discrepancies: readonly PurchaseOrderDiscrepancy[];
+  returns: readonly PurchaseReturn[];
 }
 export interface PurchasingWorkspace {
   vendors: readonly OperationalVendor[];
@@ -132,5 +150,26 @@ export interface ResolvePurchaseOrderDiscrepancy {
   expected_discrepancy_version: number;
   resolution: "resolved_accepted" | "resolved_rejected";
   note: string;
+  idempotency_key: string;
+}
+export interface CreatePurchaseReturn {
+  expected_po_version: number;
+  return_identity: string;
+  receipt_id: string;
+  receipt_line_id: string;
+  quantity: string;
+  reason: string;
+  reason_note?: string | null;
+  authorization_required: boolean;
+  effective_date: string;
+  source_reference?: string | null;
+  idempotency_key: string;
+}
+export interface TransitionPurchaseReturn {
+  expected_po_version: number;
+  expected_return_version: number;
+  vendor_authorization_reference?: string | null;
+  note?: string | null;
+  occurred_at: string;
   idempotency_key: string;
 }

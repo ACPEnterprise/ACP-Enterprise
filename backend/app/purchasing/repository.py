@@ -12,6 +12,7 @@ from .models import (
     PurchaseOrderLine,
     PurchaseOrderReceipt,
     PurchaseOrderReceiptLine,
+    PurchaseReturn,
     PurchasingCommandReceipt,
 )
 
@@ -238,6 +239,47 @@ class PurchasingRepository:
             PurchaseOrderDiscrepancy.id == discrepancy_id,
         )
         return await session.scalar(query.with_for_update() if lock else query)
+
+    async def purchase_returns(
+        self, session: AsyncSession, company_id: UUID, po_id: UUID
+    ) -> tuple[PurchaseReturn, ...]:
+        return tuple(
+            (
+                await session.scalars(
+                    select(PurchaseReturn)
+                    .where(
+                        PurchaseReturn.company_id == company_id,
+                        PurchaseReturn.purchase_order_id == po_id,
+                    )
+                    .order_by(PurchaseReturn.requested_at, PurchaseReturn.id)
+                )
+            ).all()
+        )
+
+    async def purchase_return(
+        self,
+        session: AsyncSession,
+        company_id: UUID,
+        return_id: UUID,
+        *,
+        lock: bool = False,
+    ) -> PurchaseReturn | None:
+        query = select(PurchaseReturn).where(
+            PurchaseReturn.company_id == company_id, PurchaseReturn.id == return_id
+        )
+        return await session.scalar(query.with_for_update() if lock else query)
+
+    async def committed_return_quantity(
+        self, session: AsyncSession, company_id: UUID, receipt_line_id: UUID
+    ) -> Decimal:
+        value = await session.scalar(
+            select(func.coalesce(func.sum(PurchaseReturn.quantity), 0)).where(
+                PurchaseReturn.company_id == company_id,
+                PurchaseReturn.receipt_line_id == receipt_line_id,
+                PurchaseReturn.status != "canceled",
+            )
+        )
+        return Decimal(value or 0)
 
 
 purchasing_repository = PurchasingRepository()

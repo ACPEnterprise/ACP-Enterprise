@@ -15,6 +15,9 @@ import type {
   ResolvePurchaseOrderDiscrepancy,
   PurchaseOrderReceipt,
   PurchaseOrderDiscrepancy,
+  PurchaseReturn,
+  CreatePurchaseReturn,
+  TransitionPurchaseReturn,
 } from "../types/purchasing";
 
 const root = "/api/v1/purchasing";
@@ -91,6 +94,36 @@ export const resolvePurchaseOrderDiscrepancy = async (
   (
     await apiClient.post<PurchaseOrderDiscrepancy>(
       `${root}/purchase-orders/${id}/discrepancies/${discrepancyId}/resolve`,
+      input,
+    )
+  ).data;
+export const createPurchaseReturn = async (
+  id: string,
+  input: CreatePurchaseReturn,
+): Promise<PurchaseReturn> =>
+  (
+    await apiClient.post<PurchaseReturn>(
+      `${root}/purchase-orders/${id}/returns`,
+      input,
+    )
+  ).data;
+export const transitionPurchaseReturn = async (
+  id: string,
+  returnId: string,
+  action:
+    | "request-authorization"
+    | "authorize"
+    | "deny"
+    | "ready"
+    | "returned"
+    | "vendor-received"
+    | "close"
+    | "cancel",
+  input: TransitionPurchaseReturn,
+): Promise<PurchaseReturn> =>
+  (
+    await apiClient.post<PurchaseReturn>(
+      `${root}/purchase-orders/${id}/returns/${returnId}/${action}`,
       input,
     )
   ).data;

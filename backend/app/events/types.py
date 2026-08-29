@@ -78,6 +78,19 @@ class EventType(str, Enum):
     PURCHASING_PURCHASE_ORDER_DISCREPANCY_RESOLVED = (
         "purchasing.purchase_order.discrepancy_resolved"
     )
+    PURCHASING_PURCHASE_RETURN_CREATED = "purchasing.purchase_return.created"
+    PURCHASING_PURCHASE_RETURN_AUTHORIZATION_REQUESTED = (
+        "purchasing.purchase_return.authorization_requested"
+    )
+    PURCHASING_PURCHASE_RETURN_AUTHORIZED = "purchasing.purchase_return.authorized"
+    PURCHASING_PURCHASE_RETURN_DENIED = "purchasing.purchase_return.denied"
+    PURCHASING_PURCHASE_RETURN_READY = "purchasing.purchase_return.return_ready"
+    PURCHASING_PURCHASE_RETURN_RETURNED = "purchasing.purchase_return.returned"
+    PURCHASING_PURCHASE_RETURN_VENDOR_RECEIVED = (
+        "purchasing.purchase_return.vendor_received"
+    )
+    PURCHASING_PURCHASE_RETURN_CLOSED = "purchasing.purchase_return.closed"
+    PURCHASING_PURCHASE_RETURN_CANCELED = "purchasing.purchase_return.canceled"
 
     # Operations
     OPERATIONS_SERVICE_REQUEST_ACCEPTED = "operations.service_request.accepted"

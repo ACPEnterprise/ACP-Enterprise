@@ -83,8 +83,25 @@ class PurchasingPermission:
     ISSUE = "COMPANY_PURCHASING_ISSUE"
     RECEIVE = "COMPANY_PURCHASING_RECEIVE"
     RESOLVE_DISCREPANCY = "COMPANY_PURCHASING_RESOLVE_DISCREPANCY"
+    RETURN_CREATE = "COMPANY_PURCHASING_RETURN_CREATE"
+    RETURN_AUTHORIZE = "COMPANY_PURCHASING_RETURN_AUTHORIZE"
+    RETURN_MOVE = "COMPANY_PURCHASING_RETURN_MOVE"
+    RETURN_CLOSE = "COMPANY_PURCHASING_RETURN_CLOSE"
 
-    ALL = frozenset({READ, MANAGE, APPROVE, ISSUE, RECEIVE, RESOLVE_DISCREPANCY})
+    ALL = frozenset(
+        {
+            READ,
+            MANAGE,
+            APPROVE,
+            ISSUE,
+            RECEIVE,
+            RESOLVE_DISCREPANCY,
+            RETURN_CREATE,
+            RETURN_AUTHORIZE,
+            RETURN_MOVE,
+            RETURN_CLOSE,
+        }
+    )
 
 
 class AccountingPermission:
@@ -163,7 +180,9 @@ class PaymentPermission:
     RECONCILE = "COMPANY_PAYMENT_RECONCILE"
     FINANCE_APPROVE = "COMPANY_PAYMENT_FINANCE_APPROVE"
 
-    ALL = frozenset({READ, COLLECT, APPLY, REFUND, DEPOSIT_MANAGE, RECONCILE, FINANCE_APPROVE})
+    ALL = frozenset(
+        {READ, COLLECT, APPLY, REFUND, DEPOSIT_MANAGE, RECONCILE, FINANCE_APPROVE}
+    )
 
 
 class AccountsPayablePermission:
@@ -176,7 +195,18 @@ class AccountsPayablePermission:
     RECONCILE = "COMPANY_ACCOUNTS_PAYABLE_RECONCILE"
     REPORT_READ = "COMPANY_ACCOUNTS_PAYABLE_REPORT_READ"
 
-    ALL = frozenset({READ, VENDOR_MANAGE, BILL_PREPARE, BILL_APPROVE, CREDIT_MANAGE, DISBURSEMENT_RECORD, RECONCILE, REPORT_READ})
+    ALL = frozenset(
+        {
+            READ,
+            VENDOR_MANAGE,
+            BILL_PREPARE,
+            BILL_APPROVE,
+            CREDIT_MANAGE,
+            DISBURSEMENT_RECORD,
+            RECONCILE,
+            REPORT_READ,
+        }
+    )
 
 
 class EngineeringCommandPermission:

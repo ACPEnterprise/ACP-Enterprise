@@ -176,6 +176,57 @@ class DiscrepancyItem(PurchasingSchema):
     version: int
 
 
+class CreatePurchaseReturnCommand(Command):
+    expected_po_version: int = Field(ge=1)
+    return_identity: str = Field(min_length=1, max_length=128)
+    receipt_id: UUID
+    receipt_line_id: UUID
+    quantity: Decimal = Field(gt=0, max_digits=18, decimal_places=6)
+    reason: str
+    reason_note: str | None = Field(default=None, max_length=1000)
+    authorization_required: bool
+    effective_date: date
+    source_reference: str | None = Field(default=None, max_length=240)
+
+
+class PurchaseReturnTransitionCommand(Command):
+    expected_po_version: int = Field(ge=1)
+    expected_return_version: int = Field(ge=1)
+    vendor_authorization_reference: str | None = Field(default=None, max_length=200)
+    note: str | None = Field(default=None, max_length=1000)
+    occurred_at: datetime
+
+
+class PurchaseReturnItem(PurchasingSchema):
+    id: UUID
+    purchase_order_id: UUID
+    vendor_id: UUID
+    receipt_id: UUID
+    receipt_line_id: UUID
+    purchase_order_line_id: UUID
+    return_identity: str
+    item_identity_snapshot: str
+    accepted_quantity_snapshot: Decimal
+    quantity: Decimal
+    remaining_returnable_quantity: Decimal = Decimal(0)
+    reason: str
+    reason_note: str | None
+    status: str
+    authorization_status: str
+    vendor_authorization_reference: str | None
+    vendor_instructions: str | None
+    requested_by_user_id: UUID
+    requested_at: datetime
+    effective_date: date
+    authorization_at: datetime | None
+    returned_at: datetime | None
+    vendor_received_at: datetime | None
+    closed_at: datetime | None
+    canceled_at: datetime | None
+    source_reference: str | None
+    version: int
+
+
 class PurchaseOrderItem(PurchasingSchema):
     id: UUID
     company_id: UUID
@@ -198,6 +249,7 @@ class PurchaseOrderItem(PurchasingSchema):
     receiving_status: str = "not_received"
     receipts: tuple[ReceiptItem, ...] = ()
     discrepancies: tuple[DiscrepancyItem, ...] = ()
+    returns: tuple[PurchaseReturnItem, ...] = ()
 
 
 class PurchasingWorkspace(PurchasingSchema):
