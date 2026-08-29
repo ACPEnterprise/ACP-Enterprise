@@ -784,3 +784,137 @@ class ReplenishmentDecisionEvidence(Base):
     decided_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
     )
+
+
+class BranchPurchasingPolicy(Base):
+    """Current branch/item replenishment target with immutable revision evidence."""
+
+    __tablename__ = "purchasing_branch_policies"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "branch_id"],
+            ["branches.company_id", "branches.id"],
+            name="fk_purchasing_branch_policy_branch",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "inventory_item_id"],
+            ["inventory_items.company_id", "inventory_items.id"],
+            name="fk_purchasing_branch_policy_item",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "target_available_quantity >= 0",
+            name="ck_purchasing_branch_policy_target",
+        ),
+        CheckConstraint(
+            "status IN ('active','inactive')",
+            name="ck_purchasing_branch_policy_status",
+        ),
+        CheckConstraint("version >= 1", name="ck_purchasing_branch_policy_version"),
+        UniqueConstraint(
+            "company_id",
+            "branch_id",
+            "inventory_item_id",
+            name="uq_purchasing_branch_policy_item",
+        ),
+        UniqueConstraint(
+            "company_id", "id", name="uq_purchasing_branch_policy_company"
+        ),
+        Index(
+            "ix_purchasing_branch_policy_scope",
+            "company_id",
+            "branch_id",
+            "status",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    inventory_item_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), nullable=False
+    )
+    target_available_quantity: Mapped[Decimal] = mapped_column(
+        Numeric(18, 6), nullable=False
+    )
+    status: Mapped[str] = mapped_column(String(20), nullable=False)
+    provenance_reference: Mapped[str] = mapped_column(String(240), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    created_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    updated_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
+class BranchPurchasingPolicyRevision(Base):
+    __tablename__ = "purchasing_branch_policy_revisions"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "policy_id"],
+            ["purchasing_branch_policies.company_id", "purchasing_branch_policies.id"],
+            name="fk_purchasing_branch_policy_revision_policy",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "target_available_quantity >= 0",
+            name="ck_purchasing_branch_policy_revision_target",
+        ),
+        CheckConstraint(
+            "status IN ('active','inactive')",
+            name="ck_purchasing_branch_policy_revision_status",
+        ),
+        CheckConstraint(
+            "length(evidence_digest) = 64 AND length(payload_digest) = 64",
+            name="ck_purchasing_branch_policy_revision_digests",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "policy_id",
+            "version",
+            name="uq_purchasing_branch_policy_revision_version",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "idempotency_key",
+            name="uq_purchasing_branch_policy_revision_key",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    policy_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    target_available_quantity: Mapped[Decimal] = mapped_column(
+        Numeric(18, 6), nullable=False
+    )
+    status: Mapped[str] = mapped_column(String(20), nullable=False)
+    provenance_reference: Mapped[str] = mapped_column(String(240), nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    payload_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    actor_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )

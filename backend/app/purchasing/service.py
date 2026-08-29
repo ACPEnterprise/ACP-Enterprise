@@ -5,7 +5,7 @@ from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,6 +17,8 @@ from app.platform.permissions.authorization import AuthorizationContext
 
 from .errors import PurchasingConflict, PurchasingNotFound, PurchasingValidation
 from .models import (
+    BranchPurchasingPolicy,
+    BranchPurchasingPolicyRevision,
     OperationalVendor,
     PurchaseOrder,
     PurchaseOrderChangeOrder,
@@ -33,6 +35,9 @@ from .models import (
 )
 from .repository import PurchasingRepository, purchasing_repository
 from .schemas import (
+    BranchPurchasingPolicyItem,
+    BranchPurchasingPolicyRevisionItem,
+    BranchPurchasingPolicyWrite,
     CreatePurchaseReturnCommand,
     DecidePurchaseOrderChangeCommand,
     DiscrepancyItem,
@@ -112,6 +117,172 @@ class PurchasingService:
     ) -> PurchaseOrderItem:
         order = await self._order(session, context, po_id)
         return await self._item(session, order)
+
+    async def branch_policies(
+        self, session: AsyncSession, *, context: AuthorizationContext
+    ) -> tuple[BranchPurchasingPolicyItem, ...]:
+        policies = await self.repository.branch_policies(
+            session, context.company.id, tuple(context.authorized_branch_ids)
+        )
+        return tuple(
+            [await self._branch_policy_item(session, item) for item in policies]
+        )
+
+    async def configure_branch_policy(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        payload: BranchPurchasingPolicyWrite,
+    ) -> BranchPurchasingPolicyItem:
+        self.branch(context, payload.branch_id)
+        data = payload.model_dump(mode="json", exclude={"idempotency_key"})
+        payload_digest = digest(data)
+        async with session.begin():
+            if session.get_bind().dialect.name == "postgresql":
+                lock_identities = sorted(
+                    (
+                        f"branch-policy:{context.company.id}:{payload.branch_id}:{payload.inventory_item_id}",
+                        f"purchasing-command:{context.company.id}:{payload.idempotency_key}",
+                    )
+                )
+                for identity in lock_identities:
+                    await session.execute(
+                        text(
+                            "SELECT pg_advisory_xact_lock(hashtextextended(:identity, 0))"
+                        ),
+                        {"identity": identity},
+                    )
+            replay = await self.repository.receipt(
+                session, context.company.id, payload.idempotency_key
+            )
+            if replay is not None:
+                if (
+                    replay.operation != "configure_branch_policy"
+                    or replay.result_type != "branch_purchasing_policy"
+                    or replay.payload_digest != payload_digest
+                ):
+                    raise PurchasingConflict(
+                        "Idempotency key was already used with different policy evidence"
+                    )
+                policy = await session.get(BranchPurchasingPolicy, replay.result_id)
+                if policy is None or policy.company_id != context.company.id:
+                    raise PurchasingConflict("Policy replay evidence is unavailable")
+                return await self._branch_policy_item(session, policy)
+
+            await self._inventory_item(
+                session, context.company.id, payload.inventory_item_id
+            )
+            policy = await self.repository.branch_policy(
+                session,
+                context.company.id,
+                payload.branch_id,
+                payload.inventory_item_id,
+                lock=True,
+            )
+            now = datetime.now(timezone.utc)
+            if policy is None:
+                if payload.expected_version is not None:
+                    raise PurchasingConflict("Branch policy does not yet exist")
+                policy = BranchPurchasingPolicy(
+                    company_id=context.company.id,
+                    branch_id=payload.branch_id,
+                    inventory_item_id=payload.inventory_item_id,
+                    target_available_quantity=payload.target_available_quantity,
+                    status=payload.status,
+                    provenance_reference=payload.provenance_reference,
+                    version=1,
+                    created_by_user_id=context.user.id,
+                    updated_by_user_id=context.user.id,
+                    created_at=now,
+                    updated_at=now,
+                )
+                session.add(policy)
+                await session.flush()
+            else:
+                if (
+                    payload.expected_version is None
+                    or policy.version != payload.expected_version
+                ):
+                    raise PurchasingConflict(
+                        "Branch purchasing policy version is stale"
+                    )
+                policy.target_available_quantity = payload.target_available_quantity
+                policy.status = payload.status
+                policy.provenance_reference = payload.provenance_reference
+                policy.version += 1
+                policy.updated_by_user_id = context.user.id
+                policy.updated_at = now
+
+            evidence = {
+                "schema_version": 1,
+                "company_id": str(context.company.id),
+                "branch_id": str(payload.branch_id),
+                "policy_id": str(policy.id),
+                "inventory_item_id": str(payload.inventory_item_id),
+                "target_available_quantity": str(payload.target_available_quantity),
+                "status": payload.status,
+                "provenance_reference": payload.provenance_reference,
+                "version": policy.version,
+                "reason": payload.reason,
+                "actor_user_id": str(context.user.id),
+                "occurred_at": now.isoformat(),
+            }
+            revision = BranchPurchasingPolicyRevision(
+                company_id=context.company.id,
+                policy_id=policy.id,
+                version=policy.version,
+                target_available_quantity=payload.target_available_quantity,
+                status=payload.status,
+                provenance_reference=payload.provenance_reference,
+                reason=payload.reason,
+                idempotency_key=payload.idempotency_key,
+                payload_digest=payload_digest,
+                evidence_digest=digest(evidence),
+                actor_user_id=context.user.id,
+                occurred_at=now,
+            )
+            session.add(revision)
+            self._receipt(
+                session,
+                context,
+                "configure_branch_policy",
+                payload.idempotency_key,
+                data,
+                "branch_purchasing_policy",
+                policy.id,
+            )
+            self._event(
+                session,
+                context,
+                EventType.PURCHASING_BRANCH_POLICY_CONFIGURED,
+                "branch_purchasing_policy",
+                policy.id,
+                policy.branch_id,
+                {
+                    "policy_id": str(policy.id),
+                    "inventory_item_id": str(policy.inventory_item_id),
+                    "version": policy.version,
+                    "status": policy.status,
+                    "evidence_digest": revision.evidence_digest,
+                },
+            )
+        return await self._branch_policy_item(session, policy)
+
+    async def _branch_policy_item(
+        self, session: AsyncSession, policy: BranchPurchasingPolicy
+    ) -> BranchPurchasingPolicyItem:
+        revisions = await self.repository.branch_policy_revisions(
+            session, policy.company_id, policy.id
+        )
+        return BranchPurchasingPolicyItem.model_validate(policy).model_copy(
+            update={
+                "revisions": tuple(
+                    BranchPurchasingPolicyRevisionItem.model_validate(item)
+                    for item in revisions
+                )
+            }
+        )
 
     async def replenishment_workbench(
         self,

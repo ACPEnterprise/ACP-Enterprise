@@ -17,6 +17,8 @@ from .errors import (
     PurchasingValidation,
 )
 from .schemas import (
+    BranchPurchasingPolicyItem,
+    BranchPurchasingPolicyWrite,
     CreatePurchaseReturnCommand,
     DecidePurchaseOrderChangeCommand,
     DiscrepancyItem,
@@ -110,6 +112,27 @@ def http_error(error: PurchasingError) -> HTTPException:
     if isinstance(error, PurchasingValidation):
         return HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(error))
     return HTTPException(status.HTTP_400_BAD_REQUEST, "Purchasing operation failed")
+
+
+@router.get("/branch-policies", response_model=tuple[BranchPurchasingPolicyItem, ...])
+async def branch_policies(
+    context: ReadContext, session: DatabaseSession
+) -> tuple[BranchPurchasingPolicyItem, ...]:
+    return await purchasing_service.branch_policies(session, context=context)
+
+
+@router.put("/branch-policies", response_model=BranchPurchasingPolicyItem)
+async def configure_branch_policy(
+    payload: BranchPurchasingPolicyWrite,
+    context: ManageContext,
+    session: DatabaseSession,
+) -> BranchPurchasingPolicyItem:
+    try:
+        return await purchasing_service.configure_branch_policy(
+            session, context=context, payload=payload
+        )
+    except PurchasingError as error:
+        raise http_error(error) from error
 
 
 @router.get("", response_model=PurchasingWorkspace)
