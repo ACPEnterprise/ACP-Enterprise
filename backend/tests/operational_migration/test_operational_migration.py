@@ -18,6 +18,13 @@ from sqlalchemy.ext.asyncio import (
 from app.core.config import settings
 from app.customer_migration.children import HousecallProCustomerChildrenMigration
 from app.customer_migration.housecall_pro import HousecallProCustomerMigration
+from app.customer_migration.models import (
+    CustomerMigrationRun,
+    CustomerSourceIdentity,
+    ServiceLocationSourceIdentity,
+)
+from app.customers.schemas import CustomerCreate, ServiceLocationCreate
+from app.customers.service import CustomerService
 from app.events.models import BusinessEvent
 from app.financials.models import (
     Estimate,
@@ -179,6 +186,114 @@ async def seed_migrated_customer(
     )
     assert customer_report.accepted == 1
     assert location_report.accepted == 1
+
+
+async def seed_primary_location_without_source_identity(
+    factory: async_sessionmaker[AsyncSession],
+    *,
+    context: AuthorizationContext,
+) -> None:
+    assert context.active_branch is not None
+    async with factory() as session, session.begin():
+        run = CustomerMigrationRun(
+            company_id=context.company.id,
+            branch_id=context.active_branch.id,
+            initiated_by_user_id=context.user.id,
+            source_system="housecall_pro",
+            source_sha256="0" * 64,
+            mode="import",
+            status="completed",
+            source_count=1,
+            accepted_count=1,
+        )
+        session.add(run)
+        await session.flush()
+        customer = await CustomerService().stage_migrated_customer(
+            session,
+            context=context,
+            customer_data=CustomerCreate(
+                customer_type="residential",
+                display_name="Primary Adapter Customer",
+                status="active",
+            ),
+            contact_data=None,
+            service_location_data=ServiceLocationCreate(
+                nickname="Primary",
+                address="10 Adapter Way",
+                city="Testville",
+                state="FL",
+                postal_code="33755",
+            ),
+            billing_address_data=None,
+        )
+        session.add(
+            CustomerSourceIdentity(
+                company_id=context.company.id,
+                branch_id=context.active_branch.id,
+                customer_id=customer.id,
+                source_system="housecall_pro",
+                source_customer_id="adapter-customer-1",
+                first_run_id=run.id,
+            )
+        )
+
+
+@pytest.mark.asyncio
+async def test_operational_import_repairs_single_primary_location_identity(
+    migration_database: tuple[AsyncEngine, async_sessionmaker[AsyncSession]],
+) -> None:
+    _, factory = migration_database
+    context = await seed_context(factory)
+    await seed_primary_location_without_source_identity(factory, context=context)
+    record = JobMigrationRecord(
+        source_id="adapter-job-1",
+        source_customer_id="adapter-customer-1",
+        source_service_location_id=("adapter-customer-1::service-location::1"),
+        status="draft",
+    )
+
+    validation = await OperationalMigrationService().run(
+        factory,
+        context=context,
+        source_system="housecall_pro",
+        jobs=[record],
+        appointments=[],
+        dry_run=True,
+    )
+    assert validation.accepted == 1
+    async with factory() as session:
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(ServiceLocationSourceIdentity)
+                .where(
+                    ServiceLocationSourceIdentity.source_location_id
+                    == "adapter-customer-1::service-location::1"
+                )
+            )
+            == 0
+        )
+
+    imported = await OperationalMigrationService().run(
+        factory,
+        context=context,
+        source_system="housecall_pro",
+        jobs=[record],
+        appointments=[],
+        dry_run=False,
+    )
+    assert imported.accepted == 1
+    async with factory() as session:
+        identity = await session.scalar(
+            select(ServiceLocationSourceIdentity).where(
+                ServiceLocationSourceIdentity.source_location_id
+                == "adapter-customer-1::service-location::1"
+            )
+        )
+        assert identity is not None
+        assert identity.source_location_id == (
+            "adapter-customer-1::service-location::1"
+        )
 
 
 def records() -> tuple[list[JobMigrationRecord], list[AppointmentMigrationRecord]]:

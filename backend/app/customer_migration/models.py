@@ -103,6 +103,13 @@ class CustomerSourceIdentity(Base):
             "customer_id",
             name="uq_customer_source_identities_parent_scope",
         ),
+        UniqueConstraint(
+            "id",
+            "company_id",
+            "branch_id",
+            "customer_id",
+            name="uq_customer_source_identities_branch_scope",
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(
@@ -133,6 +140,369 @@ class CustomerSourceIdentity(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
     )
+
+
+class CustomerIdentityConsolidationEvidence(Base):
+    """Append-only consolidation result for one provider-native Customer identity."""
+
+    __tablename__ = "customer_identity_consolidation_evidence"
+    __table_args__ = (
+        CheckConstraint(
+            "observation_count >= 1", name="ck_customer_identity_consolidation_count"
+        ),
+        CheckConstraint(
+            "outcome IN ('resolved','unresolved','missing_source_identifier',"
+            "'duplicate_source_evidence','conflicting_source_evidence','ambiguous_target',"
+            "'existing_binding_conflict','company_branch_scope_conflict',"
+            "'multiple_native_identities_one_customer')",
+            name="ck_customer_identity_consolidation_outcome",
+        ),
+        CheckConstraint(
+            "(outcome = 'resolved') = (customer_source_identity_id IS NOT NULL)",
+            name="ck_customer_identity_consolidation_resolved_target",
+        ),
+        CheckConstraint(
+            "(customer_source_identity_id IS NULL) = (customer_id IS NULL)",
+            name="ck_customer_identity_consolidation_target_pair",
+        ),
+        ForeignKeyConstraint(
+            ["customer_source_identity_id", "company_id", "branch_id", "customer_id"],
+            [
+                "customer_source_identities.id",
+                "customer_source_identities.company_id",
+                "customer_source_identities.branch_id",
+                "customer_source_identities.customer_id",
+            ],
+            name="fk_customer_identity_consolidation_target_scope",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "branch_id"],
+            ["branches.company_id", "branches.id"],
+            name="fk_customer_identity_consolidation_branch_company",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "branch_id",
+            "source_system",
+            "source_identity_key",
+            "evidence_digest",
+            name="uq_customer_identity_consolidation_replay",
+        ),
+        Index(
+            "ix_customer_identity_consolidation_review",
+            "company_id",
+            "branch_id",
+            "outcome",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    customer_source_identity_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True)
+    )
+    customer_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    evaluated_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    source_system: Mapped[str] = mapped_column(String(50), nullable=False)
+    source_entity_type: Mapped[str] = mapped_column(
+        String(30), nullable=False, default="customer"
+    )
+    source_identity_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_customer_id_sha256: Mapped[str | None] = mapped_column(String(64))
+    consolidation_contract_version: Mapped[str] = mapped_column(
+        String(100), nullable=False
+    )
+    outcome: Mapped[str] = mapped_column(String(60), nullable=False)
+    observation_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    input_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
+class CustomerMigrationCutoverReadinessEvidence(Base):
+    """Immutable deterministic cutover-readiness snapshot; never a cutover command."""
+
+    __tablename__ = "customer_migration_cutover_readiness_evidence"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('ready_for_owner_review','not_ready')",
+            name="ck_customer_cutover_readiness_status",
+        ),
+        CheckConstraint(
+            "confidence_basis_points BETWEEN 0 AND 10000 AND "
+            "completeness_basis_points BETWEEN 0 AND 10000",
+            name="ck_customer_cutover_readiness_scores",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "branch_id"],
+            ["branches.company_id", "branches.id"],
+            name="fk_customer_cutover_readiness_branch_company",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "branch_id",
+            "readiness_key",
+            name="uq_customer_cutover_readiness_key",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "branch_id",
+            "evidence_digest",
+            name="uq_customer_cutover_readiness_replay",
+        ),
+        UniqueConstraint(
+            "id",
+            "company_id",
+            "branch_id",
+            name="uq_customer_cutover_readiness_scope",
+        ),
+        Index(
+            "ix_customer_cutover_readiness_latest",
+            "company_id",
+            "branch_id",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True)
+    company_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    evaluated_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    readiness_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    contract_version: Mapped[str] = mapped_column(String(100), nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False)
+    ready: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    completed_prerequisites: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    missing_prerequisites: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    blocking_conditions: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    owner_disposition_counts: Mapped[dict[str, int]] = mapped_column(
+        JSONB, nullable=False
+    )
+    reconciliation_counts: Mapped[dict[str, int]] = mapped_column(JSONB, nullable=False)
+    confidence_basis_points: Mapped[int] = mapped_column(Integer, nullable=False)
+    completeness_basis_points: Mapped[int] = mapped_column(Integer, nullable=False)
+    evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
+class CustomerMigrationCutoverPlanEvidence(Base):
+    """Immutable deterministic plan evidence with no execution behavior."""
+
+    __tablename__ = "customer_migration_cutover_plan_evidence"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('ready_for_owner_approval','blocked')",
+            name="ck_customer_cutover_plan_status",
+        ),
+        ForeignKeyConstraint(
+            ["readiness_evidence_id", "company_id", "branch_id"],
+            [
+                "customer_migration_cutover_readiness_evidence.id",
+                "customer_migration_cutover_readiness_evidence.company_id",
+                "customer_migration_cutover_readiness_evidence.branch_id",
+            ],
+            name="fk_customer_cutover_plan_readiness_scope",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "branch_id"],
+            ["branches.company_id", "branches.id"],
+            name="fk_customer_cutover_plan_branch_company",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "branch_id",
+            "plan_key",
+            name="uq_customer_cutover_plan_key",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "branch_id",
+            "evidence_digest",
+            name="uq_customer_cutover_plan_replay",
+        ),
+        UniqueConstraint(
+            "id",
+            "company_id",
+            "branch_id",
+            name="uq_customer_cutover_plan_scope",
+        ),
+        Index(
+            "ix_customer_cutover_plan_latest", "company_id", "branch_id", "created_at"
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True)
+    company_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    readiness_evidence_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), nullable=False
+    )
+    planned_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    plan_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    contract_version: Mapped[str] = mapped_column(String(100), nullable=False)
+    plan_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False)
+    plan_metadata: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    ordered_steps: Mapped[list[dict[str, object]]] = mapped_column(
+        JSONB, nullable=False
+    )
+    dependency_graph: Mapped[list[dict[str, object]]] = mapped_column(
+        JSONB, nullable=False
+    )
+    preconditions: Mapped[list[dict[str, object]]] = mapped_column(
+        JSONB, nullable=False
+    )
+    rollback_prerequisites: Mapped[list[dict[str, object]]] = mapped_column(
+        JSONB, nullable=False
+    )
+    owner_checkpoints: Mapped[list[dict[str, object]]] = mapped_column(
+        JSONB, nullable=False
+    )
+    blocking_conditions: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    required_approvals: Mapped[list[dict[str, object]]] = mapped_column(
+        JSONB, nullable=False
+    )
+    recovery_instructions: Mapped[list[dict[str, object]]] = mapped_column(
+        JSONB, nullable=False
+    )
+    evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
+class CustomerMigrationCutoverRehearsalEvidence(Base):
+    __tablename__ = "customer_migration_cutover_rehearsal_evidence"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('simulated_success','blocked','interrupted')",
+            name="ck_customer_cutover_rehearsal_status",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "branch_id"],
+            ["branches.company_id", "branches.id"],
+            name="fk_customer_cutover_rehearsal_branch_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["plan_id", "company_id", "branch_id"],
+            [
+                "customer_migration_cutover_plan_evidence.id",
+                "customer_migration_cutover_plan_evidence.company_id",
+                "customer_migration_cutover_plan_evidence.branch_id",
+            ],
+            name="fk_customer_cutover_rehearsal_plan_scope",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "id", "company_id", "branch_id", name="uq_customer_cutover_rehearsal_scope"
+        ),
+        UniqueConstraint(
+            "company_id",
+            "branch_id",
+            "plan_id",
+            "evidence_digest",
+            name="uq_customer_cutover_rehearsal_replay",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True)
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    plan_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    created_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    contract_version: Mapped[str] = mapped_column(String(100), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(30), nullable=False)
+    evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+
+
+class CustomerMigrationCutoverRehearsalStepEvidence(Base):
+    __tablename__ = "customer_migration_cutover_rehearsal_step_evidence"
+    __table_args__ = (
+        CheckConstraint(
+            "ordinal >= 0", name="ck_customer_cutover_rehearsal_step_ordinal"
+        ),
+        CheckConstraint(
+            "outcome IN ('eligible','simulated_success','blocked','skipped')",
+            name="ck_customer_cutover_rehearsal_step_outcome",
+        ),
+        ForeignKeyConstraint(
+            ["rehearsal_id", "company_id", "branch_id"],
+            [
+                "customer_migration_cutover_rehearsal_evidence.id",
+                "customer_migration_cutover_rehearsal_evidence.company_id",
+                "customer_migration_cutover_rehearsal_evidence.branch_id",
+            ],
+            name="fk_customer_cutover_rehearsal_step_scope",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "rehearsal_id", "ordinal", name="uq_customer_cutover_rehearsal_step_order"
+        ),
+        UniqueConstraint(
+            "rehearsal_id",
+            "step_id",
+            name="uq_customer_cutover_rehearsal_step_identity",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    rehearsal_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    step_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    step_code: Mapped[str] = mapped_column(String(100), nullable=False)
+    ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
+    outcome: Mapped[str] = mapped_column(String(30), nullable=False)
+    failure_code: Mapped[str | None] = mapped_column(String(100))
+    recovery_instruction_code: Mapped[str | None] = mapped_column(String(100))
+    evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
 
 
 class CustomerMigrationException(Base):
@@ -301,6 +671,181 @@ class ServiceLocationSourceIdentity(Base):
         ForeignKey("customer_migration_runs.id", ondelete="RESTRICT"),
         nullable=False,
     )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
+class ServiceLocationIdentityEvidence(Base):
+    """Append-only, migration-owned evidence for a provider-native location ID."""
+
+    __tablename__ = "service_location_identity_evidence"
+    __table_args__ = (
+        CheckConstraint(
+            "source_entity_type = 'service_location'",
+            name="ck_location_identity_evidence_entity_type",
+        ),
+        CheckConstraint("evidence_version >= 1", name="ck_location_identity_version"),
+        CheckConstraint(
+            "readiness IN ('ready', 'reconciliation_required', 'exception')",
+            name="ck_location_identity_evidence_readiness",
+        ),
+        ForeignKeyConstraint(
+            ["customer_source_identity_id", "company_id"],
+            ["customer_source_identities.id", "customer_source_identities.company_id"],
+            name="fk_location_identity_evidence_customer_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "branch_id"],
+            ["branches.company_id", "branches.id"],
+            name="fk_location_identity_evidence_branch_company",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "source_system",
+            "source_entity_type",
+            "observation_sha256",
+            "evidence_version",
+            name="uq_location_identity_evidence_observation_version",
+        ),
+        UniqueConstraint(
+            "id", "company_id", name="uq_location_identity_evidence_scope"
+        ),
+        UniqueConstraint(
+            "id",
+            "company_id",
+            "branch_id",
+            name="uq_location_identity_evidence_branch_scope",
+        ),
+        Index(
+            "ix_location_identity_evidence_review",
+            "company_id",
+            "readiness",
+            "classification",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    customer_source_identity_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True)
+    )
+    prior_evidence_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("service_location_identity_evidence.id", ondelete="RESTRICT"),
+    )
+    recorded_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    source_system: Mapped[str] = mapped_column(String(50), nullable=False)
+    source_entity_type: Mapped[str] = mapped_column(
+        String(30), nullable=False, default="service_location"
+    )
+    observation_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_location_id_sha256: Mapped[str | None] = mapped_column(String(64))
+    source_customer_id_sha256: Mapped[str | None] = mapped_column(String(64))
+    source_artifact_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_record_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    address_evidence_sha256: Mapped[str | None] = mapped_column(String(64))
+    classification: Mapped[str] = mapped_column(String(80), nullable=False)
+    readiness: Mapped[str] = mapped_column(String(30), nullable=False)
+    evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    evidence_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
+class ServiceLocationReconciliationEvidence(Base):
+    """Append-only result of matching native evidence to an Enterprise location."""
+
+    __tablename__ = "service_location_reconciliation_evidence"
+    __table_args__ = (
+        CheckConstraint(
+            "candidate_count >= 0", name="ck_location_reconciliation_candidate_count"
+        ),
+        CheckConstraint(
+            "outcome IN ('matched','no_match','identity_not_ready','duplicate_native_identity',"
+            "'ambiguous_address','address_review_required','parent_mismatch',"
+            "'existing_binding_conflict','company_branch_scope_conflict')",
+            name="ck_location_reconciliation_outcome",
+        ),
+        CheckConstraint(
+            "(outcome = 'matched') = (service_location_id IS NOT NULL)",
+            name="ck_location_reconciliation_matched_target",
+        ),
+        CheckConstraint(
+            "(service_location_id IS NULL) = (customer_id IS NULL)",
+            name="ck_location_reconciliation_target_pair",
+        ),
+        ForeignKeyConstraint(
+            ["identity_evidence_id", "company_id", "branch_id"],
+            [
+                "service_location_identity_evidence.id",
+                "service_location_identity_evidence.company_id",
+                "service_location_identity_evidence.branch_id",
+            ],
+            name="fk_location_reconciliation_identity_scope",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "branch_id"],
+            ["branches.company_id", "branches.id"],
+            name="fk_location_reconciliation_branch_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["service_location_id", "customer_id"],
+            ["service_locations.id", "service_locations.customer_id"],
+            name="fk_location_reconciliation_target_customer",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "identity_evidence_id",
+            "evidence_digest",
+            name="uq_location_reconciliation_replay",
+        ),
+        Index(
+            "ix_location_reconciliation_review", "company_id", "branch_id", "outcome"
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    identity_evidence_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), nullable=False
+    )
+    service_location_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    customer_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    evaluated_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    matching_contract_version: Mapped[str] = mapped_column(String(100), nullable=False)
+    outcome: Mapped[str] = mapped_column(String(50), nullable=False)
+    candidate_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    input_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
     )
