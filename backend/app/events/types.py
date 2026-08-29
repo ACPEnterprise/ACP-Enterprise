@@ -68,6 +68,7 @@ class EventType(str, Enum):
     PAYROLL_ACCOUNTING_MAPPING_CREATED = "payroll.accounting_mapping_created"
     PAYROLL_ACCOUNTING_MAPPING_APPROVED = "payroll.accounting_mapping_approved"
     PAYROLL_ACCOUNTING_FACT_PREPARED = "payroll.accounting_fact_prepared"
+    PAYROLL_ACCOUNTING_FACT_POSTED = "payroll.accounting_fact_posted"
     PAYROLL_ADJUSTMENT_CREATED = "payroll.adjustment_created"
     PAYROLL_ADJUSTMENT_REVIEWED = "payroll.adjustment_reviewed"
     PAYROLL_ADJUSTMENT_APPROVED = "payroll.adjustment_approved"
