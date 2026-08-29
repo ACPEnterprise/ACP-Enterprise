@@ -20,6 +20,7 @@ from app.events.types import EventType
 from app.platform.permissions.authorization import AuthorizationContext
 from app.purchasing.models import (
     PurchaseOrder,
+    PurchaseOrderDiscrepancy,
     PurchaseOrderLine,
     PurchaseOrderReceipt,
     PurchaseOrderReceiptLine,
@@ -38,6 +39,8 @@ from .schemas import (
     MatchItem,
     MatchLineItem,
     ResolveMatchExceptionCommand,
+    VendorPerformanceItem,
+    VendorPerformanceReport,
 )
 
 
@@ -551,6 +554,246 @@ class ProcurementMatchingService:
         if row is None or not context.can_access_branch(row.branch_id):
             raise ProcurementMatchingNotFound("Procurement match was not found")
         return await self._item(session, row)
+
+    async def vendor_performance(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        evaluated_at: datetime,
+        branch_id: UUID | None,
+    ) -> VendorPerformanceReport:
+        if evaluated_at.tzinfo is None:
+            raise ProcurementMatchingValidation(
+                "Evaluation time must include timezone authority"
+            )
+        if branch_id is not None and not context.can_access_branch(branch_id):
+            raise ProcurementMatchingNotFound(
+                "Branch performance evidence was not found"
+            )
+        allowed_branches = (
+            (branch_id,)
+            if branch_id is not None
+            else tuple(context.authorized_branch_ids)
+        )
+        orders = tuple(
+            (
+                await session.scalars(
+                    select(PurchaseOrder)
+                    .where(
+                        PurchaseOrder.company_id == context.company.id,
+                        PurchaseOrder.branch_id.in_(allowed_branches),
+                        PurchaseOrder.status.in_(("issued", "closed", "cancelled")),
+                        PurchaseOrder.created_at <= evaluated_at,
+                    )
+                    .order_by(PurchaseOrder.vendor_id, PurchaseOrder.id)
+                )
+            ).all()
+        )
+        order_ids = tuple(row.id for row in orders)
+        if not order_ids:
+            return VendorPerformanceReport(
+                definition_version=1,
+                company_id=context.company.id,
+                branch_id=branch_id,
+                evaluated_at=evaluated_at,
+                items=(),
+                evidence_digest=digest({"definition_version": 1, "orders": []}),
+            )
+        lines = tuple(
+            (
+                await session.scalars(
+                    select(PurchaseOrderLine).where(
+                        PurchaseOrderLine.company_id == context.company.id,
+                        PurchaseOrderLine.purchase_order_id.in_(order_ids),
+                    )
+                )
+            ).all()
+        )
+        receipts = tuple(
+            (
+                await session.scalars(
+                    select(PurchaseOrderReceipt).where(
+                        PurchaseOrderReceipt.company_id == context.company.id,
+                        PurchaseOrderReceipt.purchase_order_id.in_(order_ids),
+                        PurchaseOrderReceipt.received_at <= evaluated_at,
+                    )
+                )
+            ).all()
+        )
+        receipt_ids = tuple(row.id for row in receipts)
+        receipt_lines = (
+            tuple(
+                (
+                    await session.scalars(
+                        select(PurchaseOrderReceiptLine).where(
+                            PurchaseOrderReceiptLine.company_id == context.company.id,
+                            PurchaseOrderReceiptLine.receipt_id.in_(receipt_ids),
+                        )
+                    )
+                ).all()
+            )
+            if receipt_ids
+            else ()
+        )
+        returns = tuple(
+            (
+                await session.scalars(
+                    select(PurchaseReturn).where(
+                        PurchaseReturn.company_id == context.company.id,
+                        PurchaseReturn.purchase_order_id.in_(order_ids),
+                        PurchaseReturn.status.in_(
+                            ("returned", "received_by_vendor", "closed")
+                        ),
+                    )
+                )
+            ).all()
+        )
+        discrepancies = tuple(
+            (
+                await session.scalars(
+                    select(PurchaseOrderDiscrepancy).where(
+                        PurchaseOrderDiscrepancy.company_id == context.company.id,
+                        PurchaseOrderDiscrepancy.purchase_order_id.in_(order_ids),
+                        PurchaseOrderDiscrepancy.opened_at <= evaluated_at,
+                    )
+                )
+            ).all()
+        )
+        matches = tuple(
+            (
+                await session.scalars(
+                    select(ProcurementMatch).where(
+                        ProcurementMatch.company_id == context.company.id,
+                        ProcurementMatch.purchase_order_id.in_(order_ids),
+                        ProcurementMatch.evaluated_at <= evaluated_at,
+                    )
+                )
+            ).all()
+        )
+        match_ids = tuple(row.id for row in matches)
+        match_lines = (
+            tuple(
+                (
+                    await session.scalars(
+                        select(ProcurementMatchLine).where(
+                            ProcurementMatchLine.company_id == context.company.id,
+                            ProcurementMatchLine.match_id.in_(match_ids),
+                        )
+                    )
+                ).all()
+            )
+            if match_ids
+            else ()
+        )
+        report_items: list[VendorPerformanceItem] = []
+        for vendor_id in sorted({row.vendor_id for row in orders}, key=str):
+            vendor_orders = tuple(row for row in orders if row.vendor_id == vendor_id)
+            vendor_order_ids = {row.id for row in vendor_orders}
+            vendor_lines = tuple(
+                row for row in lines if row.purchase_order_id in vendor_order_ids
+            )
+            line_ids = {row.id for row in vendor_lines}
+            vendor_receipts = tuple(
+                row for row in receipts if row.purchase_order_id in vendor_order_ids
+            )
+            vendor_receipt_ids = {row.id for row in vendor_receipts}
+            vendor_receipt_lines = tuple(
+                row for row in receipt_lines if row.receipt_id in vendor_receipt_ids
+            )
+            vendor_returns = tuple(
+                row for row in returns if row.purchase_order_id in vendor_order_ids
+            )
+            ordered = sum((row.quantity for row in vendor_lines), Decimal(0))
+            accepted = sum(
+                (row.accepted_quantity for row in vendor_receipt_lines), Decimal(0)
+            )
+            returned = sum((row.quantity for row in vendor_returns), Decimal(0))
+            net = accepted - returned
+            lead_times = [
+                (
+                    min(
+                        receipt.received_at
+                        for receipt in vendor_receipts
+                        if receipt.purchase_order_id == order.id
+                    )
+                    - order.issued_at
+                ).total_seconds()
+                / 86400
+                for order in vendor_orders
+                if order.issued_at is not None
+                and any(
+                    receipt.purchase_order_id == order.id for receipt in vendor_receipts
+                )
+            ]
+            evidence = {
+                "definition_version": 1,
+                "vendor_id": str(vendor_id),
+                "order_ids": sorted(str(row.id) for row in vendor_orders),
+                "line_ids": sorted(str(row.id) for row in vendor_lines),
+                "receipt_digests": sorted(
+                    row.payload_digest for row in vendor_receipts
+                ),
+                "return_ids": sorted(str(row.id) for row in vendor_returns),
+                "match_digests": sorted(
+                    row.evidence_digest
+                    for row in matches
+                    if row.purchase_order_id in vendor_order_ids
+                ),
+            }
+            report_items.append(
+                VendorPerformanceItem(
+                    vendor_id=vendor_id,
+                    purchase_order_count=len(vendor_orders),
+                    ordered_quantity=ordered,
+                    accepted_received_quantity=accepted,
+                    returned_quantity=returned,
+                    net_accepted_quantity=net,
+                    fulfillment_ratio=(net / ordered).quantize(Decimal("0.0001"))
+                    if ordered
+                    else None,
+                    return_ratio=(returned / accepted).quantize(Decimal("0.0001"))
+                    if accepted
+                    else None,
+                    completed_lead_time_samples=len(lead_times),
+                    average_lead_time_days=(
+                        Decimal(str(sum(lead_times) / len(lead_times))).quantize(
+                            Decimal("0.01")
+                        )
+                        if lead_times
+                        else None
+                    ),
+                    discrepancy_count=sum(
+                        1
+                        for row in discrepancies
+                        if row.purchase_order_id in vendor_order_ids
+                    ),
+                    price_variance_line_count=sum(
+                        1
+                        for row in match_lines
+                        if row.purchase_order_line_id in line_ids
+                        and row.price_variance != 0
+                    ),
+                    evidence_digest=digest(evidence),
+                )
+            )
+        report_evidence = {
+            "definition_version": 1,
+            "company_id": str(context.company.id),
+            "branch_id": str(branch_id) if branch_id else None,
+            "evaluated_at": evaluated_at.isoformat(),
+            "items": [
+                (str(row.vendor_id), row.evidence_digest) for row in report_items
+            ],
+        }
+        return VendorPerformanceReport(
+            definition_version=1,
+            company_id=context.company.id,
+            branch_id=branch_id,
+            evaluated_at=evaluated_at,
+            items=tuple(report_items),
+            evidence_digest=digest(report_evidence),
+        )
 
     @staticmethod
     async def _has_return_credit(

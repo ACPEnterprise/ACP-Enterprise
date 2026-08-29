@@ -179,6 +179,8 @@ async def seed_evidence(
             status="issued",
             currency="USD",
             prepared_by_user_id=actor.user.id,
+            issued_by_user_id=actor.user.id,
+            issued_at=datetime(2026, 8, 28, tzinfo=timezone.utc),
         )
         session.add_all([account, order])
         await session.flush()
@@ -485,3 +487,56 @@ async def test_concurrent_equivalent_evaluation_creates_one_authority(matching_f
                     idempotency_key=f"contradictory-{uuid4()}",
                 ),
             )
+
+
+@pytest.mark.asyncio
+async def test_vendor_performance_is_deterministic_evidence_not_a_vendor_score(
+    matching_fixture,
+):
+    factory, company, branch, evaluator, _ = matching_fixture
+    order, bill = await seed_evidence(
+        factory,
+        company,
+        branch,
+        evaluator,
+        received=Decimal(4),
+        billed=Decimal(4),
+        billed_net=Decimal(40),
+    )
+    service = ProcurementMatchingService()
+    async with factory() as session:
+        await service.evaluate(
+            session,
+            context=evaluator,
+            payload=EvaluateMatchCommand(
+                purchase_order_id=order.id,
+                vendor_bill_id=bill.id,
+                expected_purchase_order_version=order.version,
+                expected_bill_version=bill.version,
+                idempotency_key=f"performance-{uuid4()}",
+            ),
+        )
+        evaluated_at = datetime(2026, 8, 30, tzinfo=timezone.utc)
+        first = await service.vendor_performance(
+            session,
+            context=evaluator,
+            evaluated_at=evaluated_at,
+            branch_id=branch.id,
+        )
+        replay = await service.vendor_performance(
+            session,
+            context=evaluator,
+            evaluated_at=evaluated_at,
+            branch_id=branch.id,
+        )
+        assert first == replay
+        assert first.evidence_digest == replay.evidence_digest
+        assert len(first.items) == 1
+        item = first.items[0]
+        assert item.ordered_quantity == Decimal(10)
+        assert item.accepted_received_quantity == Decimal(4)
+        assert item.net_accepted_quantity == Decimal(4)
+        assert item.fulfillment_ratio == Decimal("0.4000")
+        assert item.completed_lead_time_samples == 1
+        assert item.average_lead_time_days == Decimal("1.00")
+        assert not hasattr(item, "score")

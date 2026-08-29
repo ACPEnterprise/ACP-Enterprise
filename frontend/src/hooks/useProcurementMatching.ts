@@ -4,6 +4,8 @@ import * as api from "../api/procurementMatching";
 export const procurementMatchKeys = {
   all: ["procurement-matching"] as const,
   detail: (id: string) => ["procurement-matching", id] as const,
+  vendorPerformance: (evaluatedAt: string, branchId?: string) =>
+    ["procurement-matching", "vendor-performance", evaluatedAt, branchId] as const,
 };
 
 export const useProcurementMatch = (matchId: string) =>
@@ -28,3 +30,14 @@ export function useProcurementMatchMutations() {
     }),
   };
 }
+
+export const useVendorPerformance = (
+  evaluatedAt: string,
+  branchId: string | undefined,
+  enabled: boolean,
+) =>
+  useQuery({
+    queryKey: procurementMatchKeys.vendorPerformance(evaluatedAt, branchId),
+    queryFn: () => api.getVendorPerformance(evaluatedAt, branchId),
+    enabled: enabled && Boolean(evaluatedAt),
+  });

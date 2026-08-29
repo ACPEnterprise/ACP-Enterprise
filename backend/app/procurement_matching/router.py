@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Annotated
 from uuid import UUID
 
@@ -6,7 +7,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_database_session
 from app.platform.permissions.authorization import AuthorizationContext
-from app.platform.permissions.codes import AccountsPayablePermission
+from app.platform.permissions.codes import (
+    AccountsPayablePermission,
+    PurchasingPermission,
+)
 from app.platform.permissions.dependencies import require_permission
 
 from .errors import (
@@ -14,7 +18,12 @@ from .errors import (
     ProcurementMatchingError,
     ProcurementMatchingNotFound,
 )
-from .schemas import EvaluateMatchCommand, MatchItem, ResolveMatchExceptionCommand
+from .schemas import (
+    EvaluateMatchCommand,
+    MatchItem,
+    ResolveMatchExceptionCommand,
+    VendorPerformanceReport,
+)
 from .service import procurement_matching_service
 
 router = APIRouter(prefix="/api/v1/procurement-matching", tags=["Procurement Matching"])
@@ -25,6 +34,9 @@ Read = Annotated[
 Review = Annotated[
     AuthorizationContext,
     Depends(require_permission(AccountsPayablePermission.MATCH_REVIEW)),
+]
+PurchasingRead = Annotated[
+    AuthorizationContext, Depends(require_permission(PurchasingPermission.READ))
 ]
 
 
@@ -75,6 +87,24 @@ async def resolve_match_exception(
             match_id=match_id,
             exception_id=exception_id,
             payload=payload,
+        )
+    except ProcurementMatchingError as error:
+        raise http_error(error) from error
+
+
+@router.get("/vendor-performance", response_model=VendorPerformanceReport)
+async def vendor_performance(
+    evaluated_at: datetime,
+    context: PurchasingRead,
+    session: Session,
+    branch_id: UUID | None = None,
+) -> VendorPerformanceReport:
+    try:
+        return await procurement_matching_service.vendor_performance(
+            session,
+            context=context,
+            evaluated_at=evaluated_at,
+            branch_id=branch_id,
         )
     except ProcurementMatchingError as error:
         raise http_error(error) from error

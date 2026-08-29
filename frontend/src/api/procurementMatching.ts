@@ -3,6 +3,7 @@ import type {
   EvaluateProcurementMatchInput,
   ProcurementMatch,
   ResolveProcurementMatchInput,
+  VendorPerformanceReport,
 } from "../types/procurementMatching";
 
 const root = "/api/v1/procurement-matching";
@@ -25,4 +26,14 @@ export const resolveProcurementMatch = async ({
       `${root}/matches/${matchId}/exceptions/${exceptionId}/resolve`,
       input,
     )
+  ).data;
+
+export const getVendorPerformance = async (
+  evaluatedAt: string,
+  branchId?: string,
+): Promise<VendorPerformanceReport> =>
+  (
+    await apiClient.get<VendorPerformanceReport>(`${root}/vendor-performance`, {
+      params: { evaluated_at: evaluatedAt, branch_id: branchId || undefined },
+    })
   ).data;

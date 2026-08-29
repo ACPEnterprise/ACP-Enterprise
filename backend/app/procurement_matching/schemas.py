@@ -75,3 +75,28 @@ class ResolveMatchExceptionCommand(MatchSchema):
     )
     note: str = Field(min_length=1, max_length=1000)
     idempotency_key: str = Field(min_length=1, max_length=128)
+
+
+class VendorPerformanceItem(MatchSchema):
+    vendor_id: UUID
+    purchase_order_count: int
+    ordered_quantity: Decimal
+    accepted_received_quantity: Decimal
+    returned_quantity: Decimal
+    net_accepted_quantity: Decimal
+    fulfillment_ratio: Decimal | None
+    return_ratio: Decimal | None
+    completed_lead_time_samples: int
+    average_lead_time_days: Decimal | None
+    discrepancy_count: int
+    price_variance_line_count: int
+    evidence_digest: str
+
+
+class VendorPerformanceReport(MatchSchema):
+    definition_version: int
+    company_id: UUID
+    branch_id: UUID | None
+    evaluated_at: datetime
+    items: tuple[VendorPerformanceItem, ...]
+    evidence_digest: str
