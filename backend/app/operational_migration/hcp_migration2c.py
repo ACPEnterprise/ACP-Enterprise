@@ -889,6 +889,7 @@ class HcpMigration2Orchestrator:
             )
             original_id = repair.original_child_run_id
             master_id = repair.master_run_id
+            repair_generation = repair.repair_generation
             repair.status = "running"
         report = await self._financials.run(
             factory,
@@ -900,7 +901,7 @@ class HcpMigration2Orchestrator:
             dry_run=False,
             master_run_id=master_id,
             repair_of_run_id=original_id,
-            repair_generation=1,
+            repair_generation=repair_generation,
         )
         async with factory() as session, session.begin():
             repair = await session.get(HcpMigrationChildRepair, repair_id)

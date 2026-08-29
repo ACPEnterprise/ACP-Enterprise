@@ -68,6 +68,11 @@ from app.operational_migration.hcp_migration2k1 import (
     build_appointment_sequence_plan,
     qualify_retained_checkpoint,
 )
+from app.operational_migration.hcp_migration2l import (
+    FinancialSupersedingPlan,
+    build_financial_superseding_plan,
+    superseding_completion_counts,
+)
 from app.operational_migration.hcp_owner_disposition import NonProductionTarget
 from app.operational_migration.hcp_rehearsal_authority import (
     ACTOR_ID,
@@ -91,8 +96,10 @@ from app.operational_migration.models import (
     HcpMigrationHold,
     HcpMigrationMasterRun,
     HcpMigrationPlanOutcome,
+    InvoiceSourceIdentity,
     JobSourceIdentity,
     OperationalMigrationRun,
+    PaymentSourceIdentity,
 )
 from app.operational_migration.transformation import (
     ParsedSourceExport,
@@ -154,6 +161,22 @@ class HcpMigration2SupersedingRepairAuthority:
             financial_child_run_id=self.original_financial_child_run_id,
             history_child_run_id=self.history_child_run_id,
         )
+
+
+@dataclass(frozen=True)
+class HcpMigration2FinancialSupersedingAuthority:
+    operational_authority: HcpMigration2SupersedingRepairAuthority
+    financial_repair_id: UUID
+    nonconforming_financial_child_run_id: UUID
+    successor_plan_id: UUID
+    successor_plan_digest: str
+    empty_invoice_identity_digest: str
+    invoice_evidence_count: int
+    repair_generation: int = 2
+
+    @property
+    def master_run_id(self) -> UUID:
+        return self.operational_authority.master_run_id
 
 
 @dataclass(frozen=True)
@@ -1303,6 +1326,7 @@ class HcpMigration2Application:
         repair_authority: (
             HcpMigration2RepairAuthority
             | HcpMigration2SupersedingRepairAuthority
+            | HcpMigration2FinancialSupersedingAuthority
             | None
         ),
     ) -> RehearsalAdmissionState:
@@ -2527,6 +2551,416 @@ class HcpMigration2Application:
             "reconciliation_digest": master.reconciliation_digest,
         }
 
+    async def _prepare_financial_supersession(
+        self,
+        factory: async_sessionmaker[AsyncSession],
+        *,
+        context: AuthorizationContext,
+        target: NonProductionTarget,
+        authority: HcpMigration2FinancialSupersedingAuthority,
+    ) -> tuple[
+        HcpMigration2ExecutionPlan,
+        ChildRepairPlan,
+        ChildRepairPlan,
+        FinancialSupersedingPlan,
+        HcpMigrationMasterRun,
+        OperationalMigrationRun,
+        OperationalMigrationRun,
+        HcpMigrationChildRepair,
+        SupersedingAppointmentRepairPlan,
+    ]:
+        operational_authority = authority.operational_authority
+        (
+            plan,
+            repair,
+            master,
+            _customer,
+            original_operational,
+            original_financial,
+            _history,
+        ) = await self._prepare_repair(
+            factory,
+            context=context,
+            target=target,
+            authority=operational_authority.generation1_authority(),
+        )
+        appointment_superseding = SupersedingAppointmentRepairPlan(
+            id=operational_authority.superseding_plan_id,
+            generation=operational_authority.repair_generation,
+            original_repair_plan_digest=operational_authority.generation1_repair_plan_digest,
+            sequencing_contract_version=operational_authority.sequencing_contract_version,
+            sequencing_digest=operational_authority.sequence_digest,
+            checkpoint_digest=operational_authority.checkpoint_digest,
+            digest=operational_authority.superseding_plan_digest,
+        )
+        superseding = build_financial_superseding_plan(
+            master_id=master.id,
+            original_repair_id=authority.financial_repair_id,
+            nonconforming_child_id=authority.nonconforming_financial_child_run_id,
+            repair=repair,
+        )
+        adjusted = superseding_completion_counts(repair, superseding)
+        empty_invoice_ids = sorted(
+            item.source_id for item in repair.financial.invoices if not item.line_items
+        )
+        async with factory() as session:
+            financial_repair = await session.get(
+                HcpMigrationChildRepair, authority.financial_repair_id
+            )
+            nonconforming_child = await session.get(
+                OperationalMigrationRun,
+                authority.nonconforming_financial_child_run_id,
+            )
+            operational_repair = await session.scalar(
+                select(HcpMigrationChildRepair).where(
+                    HcpMigrationChildRepair.master_run_id == master.id,
+                    HcpMigrationChildRepair.domain == "operational",
+                    HcpMigrationChildRepair.repair_generation == 2,
+                )
+            )
+            operational_admission = await session.scalar(
+                select(HcpMigrationChildAdmission).where(
+                    HcpMigrationChildAdmission.master_run_id == master.id,
+                    HcpMigrationChildAdmission.domain == "operational",
+                    HcpMigrationChildAdmission.conformance == "PLAN_CONFORMING",
+                    HcpMigrationChildAdmission.plan_digest
+                    == operational_authority.superseding_plan_digest,
+                )
+            )
+            sequence_row = await session.get(
+                HcpAppointmentSequencePlan,
+                operational_authority.superseding_plan_id,
+            )
+            correction_count = int(
+                await session.scalar(
+                    select(func.count())
+                    .select_from(HcpAppointmentSequenceCorrection)
+                    .where(
+                        HcpAppointmentSequenceCorrection.sequence_plan_id
+                        == operational_authority.superseding_plan_id
+                    )
+                )
+                or 0
+            )
+            invoice_ids = tuple(
+                (
+                    await session.scalars(
+                        select(InvoiceSourceIdentity.source_invoice_id)
+                        .join(
+                            OperationalMigrationRun,
+                            OperationalMigrationRun.id
+                            == InvoiceSourceIdentity.first_run_id,
+                        )
+                        .where(
+                            InvoiceSourceIdentity.company_id
+                            == authority.operational_authority.company_id,
+                            InvoiceSourceIdentity.branch_id
+                            == authority.operational_authority.branch_id,
+                            InvoiceSourceIdentity.source_system
+                            == "housecall_pro_source4",
+                            OperationalMigrationRun.master_run_id == master.id,
+                        )
+                    )
+                ).all()
+            )
+            payment_ids = tuple(
+                (
+                    await session.scalars(
+                        select(PaymentSourceIdentity.source_payment_id)
+                        .join(
+                            OperationalMigrationRun,
+                            OperationalMigrationRun.id
+                            == PaymentSourceIdentity.first_run_id,
+                        )
+                        .where(
+                            PaymentSourceIdentity.company_id
+                            == authority.operational_authority.company_id,
+                            PaymentSourceIdentity.branch_id
+                            == authority.operational_authority.branch_id,
+                            PaymentSourceIdentity.source_system
+                            == "housecall_pro_source4",
+                            OperationalMigrationRun.master_run_id == master.id,
+                        )
+                    )
+                ).all()
+            )
+            competing = await session.scalar(
+                select(HcpMigrationChildRepair).where(
+                    HcpMigrationChildRepair.master_run_id == master.id,
+                    HcpMigrationChildRepair.domain == "financial",
+                    HcpMigrationChildRepair.repair_generation
+                    == authority.repair_generation,
+                )
+            )
+        expected_financial_source = (
+            len(repair.financial.estimates)
+            + len(repair.financial.invoices)
+            + len(repair.financial.payments)
+        )
+        expected_financial_accepted = (
+            len(repair.financial.estimates)
+            + len(superseding.retained_invoice_identity_digests)
+            + len(superseding.retained_payment_identity_digests)
+        )
+        if (
+            authority.repair_generation != 2
+            or superseding.id != authority.successor_plan_id
+            or superseding.digest != authority.successor_plan_digest
+            or canonical_sha256(empty_invoice_ids)
+            != authority.empty_invoice_identity_digest
+            or financial_repair is None
+            or financial_repair.master_run_id != master.id
+            or financial_repair.domain != "financial"
+            or financial_repair.repair_generation != 1
+            or financial_repair.original_child_run_id != original_financial.id
+            or financial_repair.repair_plan_digest != repair.repair_plan_digest
+            or financial_repair.repair_child_run_id
+            != authority.nonconforming_financial_child_run_id
+            or nonconforming_child is None
+            or nonconforming_child.status != "completed"
+            or nonconforming_child.master_run_id != master.id
+            or nonconforming_child.master_domain != "financial"
+            or nonconforming_child.source_count != expected_financial_source
+            or nonconforming_child.accepted_count != expected_financial_accepted
+            or nonconforming_child.rejected_count
+            != len(superseding.invoice_evidence) + len(superseding.payment_evidence)
+            or nonconforming_child.duplicate_count != 0
+            or nonconforming_child.unresolved_count != 0
+            or operational_repair is None
+            or operational_repair.status != "completed"
+            or operational_repair.repair_child_run_id is None
+            or operational_admission is None
+            or operational_admission.child_run_id
+            != operational_repair.repair_child_run_id
+            or sequence_row is None
+            or sequence_row.status != "applied"
+            or sequence_row.plan_digest != operational_authority.superseding_plan_digest
+            or sequence_row.sequencing_digest != operational_authority.sequence_digest
+            or sequence_row.checkpoint_digest != operational_authority.checkpoint_digest
+            or correction_count != 6
+            or {canonical_sha256(item) for item in invoice_ids}
+            != set(superseding.retained_invoice_identity_digests)
+            or {canonical_sha256(item) for item in payment_ids}
+            != set(superseding.retained_payment_identity_digests)
+            or len(superseding.invoice_evidence) != authority.invoice_evidence_count
+            or len(invoice_ids) != len(set(invoice_ids))
+            or len(payment_ids) != len(set(payment_ids))
+            or (
+                competing is not None
+                and (
+                    competing.parent_repair_id != authority.financial_repair_id
+                    or competing.failed_child_run_id
+                    != authority.nonconforming_financial_child_run_id
+                    or competing.repair_plan_digest != superseding.digest
+                )
+            )
+        ):
+            raise SafeEvidenceError(
+                "financial_superseding_authority_conflict", superseding.digest
+            )
+        return (
+            plan,
+            repair,
+            adjusted,
+            superseding,
+            master,
+            original_operational,
+            original_financial,
+            operational_repair,
+            appointment_superseding,
+        )
+
+    async def execute_financial_superseding_repair(
+        self,
+        factory: async_sessionmaker[AsyncSession],
+        *,
+        context: AuthorizationContext,
+        target: NonProductionTarget,
+        authority: HcpMigration2FinancialSupersedingAuthority,
+    ) -> dict[str, object]:
+        """Close Financial evidence through one retained-identity-only repair."""
+        (
+            plan,
+            _repair,
+            adjusted,
+            superseding,
+            master,
+            original_operational,
+            original_financial,
+            operational_repair,
+            appointment_superseding,
+        ) = await self._prepare_financial_supersession(
+            factory, context=context, target=target, authority=authority
+        )
+        async with factory() as session, session.begin():
+            financial_repair = await self.runner.orchestrator.qualify_child_repair(
+                session,
+                context=context,
+                master_run_id=master.id,
+                original_child_run_id=authority.nonconforming_financial_child_run_id,
+                domain="financial",
+                original_plan_digest=authority.operational_authority.generation1_repair_plan_digest,
+                repair_plan_digest=superseding.digest,
+                immutable_input_digest=master.input_digest,
+                reason_code="line_item_empty_invoice_evidence_supersession",
+                repair_generation=2,
+                parent_repair_id=authority.financial_repair_id,
+                failed_child_run_id=authority.nonconforming_financial_child_run_id,
+            )
+        report = await self.runner.orchestrator.run_financial_repair(
+            factory,
+            context=context,
+            repair_id=financial_repair.id,
+            estimates=(),
+            invoices=(),
+            payments=(),
+        )
+        zero = ChildOutcomeCounts(0, 0, 0, 0, 0)
+        requirements = replace(
+            plan.completion,
+            transformed_counts=adjusted.persisted_counts,
+            persisted_counts=adjusted.persisted_counts,
+            exception_counts=adjusted.exception_counts,
+        )
+        requirements.validate_reconciliation(plan.master.source_counts)
+        async with factory() as session, session.begin():
+            admission = await self.runner.orchestrator.admit_child_outcome(
+                session,
+                context=context,
+                master_run_id=master.id,
+                child_run_id=report.run_id,
+                domain="financial",
+                plan_digest=superseding.digest,
+                execution_status="completed",
+                expected=zero,
+                actual=zero,
+                reason_code="retained_financial_evidence_supersession",
+            )
+            if admission.conformance != "PLAN_CONFORMING":
+                raise SafeEvidenceError(
+                    "financial_superseding_child_nonconforming", superseding.digest
+                )
+            for hold in plan.holds:
+                await self.runner.orchestrator.persist_held_subject(
+                    session, context=context, master_run_id=master.id, command=hold
+                )
+            for outcome in (*plan.plan_outcomes, *adjusted.additional_plan_outcomes):
+                await self.runner.orchestrator.persist_plan_outcome(
+                    session,
+                    context=context,
+                    master_run_id=master.id,
+                    command=outcome,
+                )
+            assert operational_repair.repair_child_run_id is not None
+            requalified_authority = self._requalified_completion_authority(
+                plan=plan,
+                repair=adjusted,
+                requirements=requirements,
+                original_operational_run_id=original_operational.id,
+                original_financial_run_id=original_financial.id,
+                repaired_operational_run_id=operational_repair.repair_child_run_id,
+                repaired_financial_run_id=report.run_id,
+                superseding=appointment_superseding,
+                generation1_repair_id=authority.operational_authority.generation1_repair_id,
+                failed_operational_child_run_id=authority.operational_authority.failed_operational_child_run_id,
+            )
+            requalified_authority.update(
+                {
+                    "contract": "hcp-migration-2l-financial-completion/v1",
+                    "financial_nonconforming_repair_id": str(
+                        authority.financial_repair_id
+                    ),
+                    "financial_nonconforming_child_run_id": str(
+                        authority.nonconforming_financial_child_run_id
+                    ),
+                    "financial_successor_plan_id": str(superseding.id),
+                    "financial_successor_plan_digest": superseding.digest,
+                    "financial_evidence_outcomes": len(superseding.outcomes),
+                }
+            )
+            completed = await self.runner.orchestrator.complete(
+                session,
+                context=context,
+                master_run_id=master.id,
+                expected_input_digest=master.input_digest,
+                requirements=requirements,
+                requalified_authority=requalified_authority,
+            )
+        return {
+            "state": "FINANCIAL_SUPERSESSION_COMPLETED",
+            "master_run_id": str(completed.id),
+            "master_status": completed.status,
+            "financial_successor_plan_id": str(superseding.id),
+            "financial_successor_plan_digest": superseding.digest,
+            "financial_repair_run_id": str(report.run_id),
+            "reconciliation_digest": completed.reconciliation_digest,
+        }
+
+    async def replay_completed_financial_superseding(
+        self,
+        factory: async_sessionmaker[AsyncSession],
+        *,
+        context: AuthorizationContext,
+        target: NonProductionTarget,
+        authority: HcpMigration2FinancialSupersedingAuthority,
+    ) -> dict[str, object]:
+        base = await self.replay_completed_superseding(
+            factory,
+            context=context,
+            target=target,
+            authority=authority.operational_authority,
+        )
+        async with factory() as session:
+            repair = await session.scalar(
+                select(HcpMigrationChildRepair).where(
+                    HcpMigrationChildRepair.master_run_id == authority.master_run_id,
+                    HcpMigrationChildRepair.domain == "financial",
+                    HcpMigrationChildRepair.repair_generation == 2,
+                )
+            )
+            admission = await session.scalar(
+                select(HcpMigrationChildAdmission).where(
+                    HcpMigrationChildAdmission.master_run_id == authority.master_run_id,
+                    HcpMigrationChildAdmission.domain == "financial",
+                    HcpMigrationChildAdmission.conformance == "PLAN_CONFORMING",
+                )
+            )
+            outcome_count = int(
+                await session.scalar(
+                    select(func.count())
+                    .select_from(HcpMigrationPlanOutcome)
+                    .where(
+                        HcpMigrationPlanOutcome.master_run_id
+                        == authority.master_run_id,
+                        HcpMigrationPlanOutcome.reason_code
+                        == "invoice_line_items_absent_source_evidence_only",
+                    )
+                )
+                or 0
+            )
+        if (
+            repair is None
+            or repair.parent_repair_id != authority.financial_repair_id
+            or repair.failed_child_run_id
+            != authority.nonconforming_financial_child_run_id
+            or repair.repair_plan_digest != authority.successor_plan_digest
+            or repair.status != "completed"
+            or admission is None
+            or admission.child_run_id != repair.repair_child_run_id
+            or admission.plan_digest != authority.successor_plan_digest
+            or outcome_count != authority.invoice_evidence_count
+        ):
+            raise SafeEvidenceError(
+                "completed_financial_superseding_replay_conflict",
+                authority.successor_plan_digest,
+            )
+        return {
+            **base,
+            "state": "COMPLETED_FINANCIAL_SUPERSESSION_REPLAY_VERIFIED",
+            "financial_successor_plan_id": str(authority.successor_plan_id),
+            "financial_successor_plan_digest": authority.successor_plan_digest,
+        }
+
     async def replay_completed_superseding(
         self,
         factory: async_sessionmaker[AsyncSession],
@@ -2650,6 +3084,7 @@ class HcpMigration2Application:
         repair_authority: (
             HcpMigration2RepairAuthority
             | HcpMigration2SupersedingRepairAuthority
+            | HcpMigration2FinancialSupersedingAuthority
             | None
         ) = None,
     ) -> dict[str, object]:
@@ -2665,6 +3100,13 @@ class HcpMigration2Application:
                 raise SafeEvidenceError(
                     "completed_master_repair_authority_required",
                     masters[0].input_digest,
+                )
+            if isinstance(repair_authority, HcpMigration2FinancialSupersedingAuthority):
+                return await self.replay_completed_financial_superseding(
+                    factory,
+                    context=context,
+                    target=target,
+                    authority=repair_authority,
                 )
             if isinstance(repair_authority, HcpMigration2SupersedingRepairAuthority):
                 return await self.replay_completed_superseding(
@@ -2684,6 +3126,13 @@ class HcpMigration2Application:
             == RehearsalAdmissionState.MATCHING_INCOMPLETE_MASTER_WITH_ACCEPTED_REPAIR_PLAN
         ):
             assert repair_authority is not None
+            if isinstance(repair_authority, HcpMigration2FinancialSupersedingAuthority):
+                return await self.execute_financial_superseding_repair(
+                    factory,
+                    context=context,
+                    target=target,
+                    authority=repair_authority,
+                )
             if isinstance(repair_authority, HcpMigration2SupersedingRepairAuthority):
                 return await self.execute_superseding_repair(
                     factory,
@@ -2701,11 +3150,17 @@ class HcpMigration2Application:
             raise SafeEvidenceError(
                 "repair_application_state_invalid",
                 (
-                    repair_authority.superseding_plan_digest
+                    repair_authority.successor_plan_digest
                     if isinstance(
-                        repair_authority, HcpMigration2SupersedingRepairAuthority
+                        repair_authority, HcpMigration2FinancialSupersedingAuthority
                     )
-                    else repair_authority.repair_plan_digest
+                    else (
+                        repair_authority.superseding_plan_digest
+                        if isinstance(
+                            repair_authority, HcpMigration2SupersedingRepairAuthority
+                        )
+                        else repair_authority.repair_plan_digest
+                    )
                 ),
             )
         plan, summary = await self.prepare(factory, context=context, target=target)
