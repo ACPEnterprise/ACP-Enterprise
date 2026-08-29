@@ -16,6 +16,7 @@ from app.core.config import settings
 from app.customers.router import router as customers_router
 from app.database.session import AsyncSessionFactory, engine
 from app.dispatch.router import router as dispatch_router
+from app.employee_operations.router import router as employee_operations_router
 from app.engineering_capacity.router import router as engineering_capacity_router
 from app.engineering_control.mobile.router import router as mobile_engineering_router
 from app.engineering_control.repository_authorization.router import (
@@ -166,6 +167,7 @@ app.include_router(inventory_router)
 app.include_router(purchasing_router)
 app.include_router(operations_router)
 app.include_router(dispatch_router)
+app.include_router(employee_operations_router)
 app.include_router(field_service_router)
 app.include_router(price_book_router)
 app.include_router(estimates_router)
