@@ -9,9 +9,14 @@ from datetime import datetime
 from enum import StrEnum
 from uuid import UUID
 
-from app.beacon.catalog import OPERATIONAL_SIGNAL_CATALOG, OperationalSignalFamily
+from app.beacon.catalog import (
+    BEACON_SIGNAL_CATALOG,
+    OPERATIONAL_SIGNAL_CATALOG,
+    OperationalSignalCatalog,
+    OperationalSignalFamily,
+)
 from app.beacon.evidence_evaluation import (
-    EVIDENCE_EVALUATION_REGISTRY,
+    BEACON_EVIDENCE_EVALUATION_REGISTRY,
     EvaluationReadiness,
 )
 from app.beacon.records import BeaconSignal, BeaconWorkflowState
@@ -110,20 +115,19 @@ class EscalationRegistry:
     def __init__(
         self,
         registrations: tuple[EscalationRegistration, ...],
+        *,
+        catalog: OperationalSignalCatalog = OPERATIONAL_SIGNAL_CATALOG,
     ) -> None:
         self.registrations = registrations
-        catalog_ids = {
-            item.definition_id for item in OPERATIONAL_SIGNAL_CATALOG.definitions
-        }
+        self.catalog = catalog
+        catalog_ids = {item.definition_id for item in catalog.definitions}
         registered_ids = {item.definition_id for item in registrations}
         if registered_ids != catalog_ids or len(registered_ids) != len(registrations):
             raise ValueError(
                 "Escalation registry must cover each catalog definition once."
             )
         for registration in registrations:
-            definition = OPERATIONAL_SIGNAL_CATALOG.definition(
-                registration.definition_id
-            )
+            definition = catalog.definition(registration.definition_id)
             if registration.definition_version != definition.version:
                 raise ValueError(
                     "Escalation registration version must match the catalog."
@@ -152,8 +156,8 @@ class EscalationRegistry:
 
 
 def _registration(definition_id: str) -> EscalationRegistration:
-    definition = OPERATIONAL_SIGNAL_CATALOG.definition(definition_id)
-    evaluation = EVIDENCE_EVALUATION_REGISTRY.registration(definition_id)
+    definition = BEACON_SIGNAL_CATALOG.definition(definition_id)
+    evaluation = BEACON_EVIDENCE_EVALUATION_REGISTRY.registration(definition_id)
     if evaluation.readiness is EvaluationReadiness.EVALUABLE:
         eligibility = EscalationEligibility.POLICY_MISSING
         blocker = (
@@ -176,11 +180,13 @@ def _registration(definition_id: str) -> EscalationRegistration:
     )
 
 
-ESCALATION_REGISTRY = EscalationRegistry(
-    tuple(
-        _registration(item.definition_id)
-        for item in OPERATIONAL_SIGNAL_CATALOG.definitions
-    )
+_ALL_ESCALATION_REGISTRATIONS = tuple(
+    _registration(item.definition_id) for item in BEACON_SIGNAL_CATALOG.definitions
+)
+ESCALATION_REGISTRY = EscalationRegistry(_ALL_ESCALATION_REGISTRATIONS[:21])
+BEACON_ESCALATION_REGISTRY = EscalationRegistry(
+    _ALL_ESCALATION_REGISTRATIONS,
+    catalog=BEACON_SIGNAL_CATALOG,
 )
 
 
@@ -196,7 +202,7 @@ class EscalationService:
         quality = signal.evidence_quality
         if quality is None or not quality.conclusion_admissible:
             raise ValueError("Only an admitted operational signal may be projected.")
-        registration = ESCALATION_REGISTRY.registration(quality.definition_id)
+        registration = BEACON_ESCALATION_REGISTRY.registration(quality.definition_id)
         return EscalationProjection(
             signal_id=signal.id,
             condition_key=signal.condition_key,

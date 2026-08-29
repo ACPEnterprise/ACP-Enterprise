@@ -7,6 +7,7 @@ from app.beacon.catalog import (
     OperationalConflictPolicy,
     OperationalSignalAdmission,
     OperationalSignalFamily,
+    SignalClassification,
 )
 from app.beacon.contracts import (
     BeaconCategory,
@@ -319,6 +320,7 @@ class OperationalSignalDefinitionResponse(BaseModel):
     conflict_policy: OperationalConflictPolicy
     admission: OperationalSignalAdmission
     evaluator_rule_code: str | None
+    signal_classification: SignalClassification
     scope: str
 
 

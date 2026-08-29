@@ -29,6 +29,10 @@ class BeaconSignalSource(StrEnum):
     SCHEDULING = "scheduling"
     JOBS = "jobs"
     INVOICES = "invoices"
+    PAYMENTS = "payments"
+    ACCOUNTS_PAYABLE = "accounts_payable"
+    ACCOUNTING = "accounting"
+    FINANCIAL_REPORTING = "financial_reporting"
 
 
 class BeaconPriorityBand(StrEnum):

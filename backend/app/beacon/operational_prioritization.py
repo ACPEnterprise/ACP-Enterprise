@@ -9,7 +9,7 @@ from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
-from app.beacon.catalog import OPERATIONAL_SIGNAL_CATALOG
+from app.beacon.catalog import BEACON_SIGNAL_CATALOG
 from app.beacon.contracts import BeaconPriorityBand, BeaconSeverity
 from app.beacon.records import BeaconSignal
 
@@ -123,7 +123,7 @@ class OperationalSignalPrioritizer:
         )
 
     def _sort_key(self, signal: BeaconSignal) -> tuple[int, int, Decimal, str]:
-        definition = OPERATIONAL_SIGNAL_CATALOG.definition(
+        definition = BEACON_SIGNAL_CATALOG.definition(
             signal.evidence_quality.definition_id  # type: ignore[union-attr]
         )
         urgency = self._urgency(signal)
@@ -153,7 +153,7 @@ class OperationalSignalPrioritizer:
     ) -> OperationalRanking:
         quality = signal.evidence_quality
         assert quality is not None
-        definition = OPERATIONAL_SIGNAL_CATALOG.definition(quality.definition_id)
+        definition = BEACON_SIGNAL_CATALOG.definition(quality.definition_id)
         policy = URGENCY_POLICIES.get(quality.definition_id)
         urgency = self._urgency(signal) if policy else None
         urgency_reason = (
@@ -197,7 +197,7 @@ class OperationalSignalPrioritizer:
                     "definition_id": item.evidence_quality.definition_id,
                     "definition_version": item.evidence_quality.definition_version,
                     "severity": item.severity.value,
-                    "priority_band": OPERATIONAL_SIGNAL_CATALOG.definition(
+                    "priority_band": BEACON_SIGNAL_CATALOG.definition(
                         item.evidence_quality.definition_id
                     ).base_priority.value,
                     "urgency": str(self._urgency(item)),

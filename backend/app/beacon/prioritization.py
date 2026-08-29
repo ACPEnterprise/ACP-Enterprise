@@ -95,7 +95,12 @@ class BeaconPrioritizer:
             BeaconSignalSource.SCHEDULING: "overdue_appointment_count",
             BeaconSignalSource.JOBS: "paused_job_count",
             BeaconSignalSource.INVOICES: "past_due_invoice_count",
-        }[signal.source]
+        }.get(signal.source)
+        if fact_name is None:
+            return cls._not_applicable(
+                "affected_records",
+                "No approved affected-record ranking exists for this signal.",
+            )
         fact = cls._fact(signal, fact_name)
         if fact is None:
             return cls._not_applicable(
@@ -118,11 +123,17 @@ class BeaconPrioritizer:
 
     @classmethod
     def _condition_age_factor(cls, signal: BeaconSignal) -> BeaconRankingFactor:
-        fact_name, divisor, unit = {
+        policy = {
             BeaconSignalSource.SCHEDULING: ("oldest_overdue_hours", 4, "hours"),
             BeaconSignalSource.JOBS: ("oldest_pause_hours", 4, "hours"),
             BeaconSignalSource.INVOICES: ("oldest_days_past_due", 1, "days"),
-        }[signal.source]
+        }.get(signal.source)
+        if policy is None:
+            return cls._not_applicable(
+                "condition_age",
+                "No approved age or urgency ranking exists for this signal.",
+            )
+        fact_name, divisor, unit = policy
         fact = cls._fact(signal, fact_name)
         if fact is None:
             return cls._not_applicable(

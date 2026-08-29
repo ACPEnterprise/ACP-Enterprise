@@ -5,7 +5,10 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.beacon.catalog import OPERATIONAL_SIGNAL_CATALOG
+from app.beacon.catalog import (
+    NATIVE_FINANCIAL_SIGNAL_CATALOG,
+    OPERATIONAL_SIGNAL_CATALOG,
+)
 from app.beacon.contracts import BeaconLifecycleAction, BeaconWorkflowAction
 from app.beacon.errors import (
     BeaconSignalNotFoundError,
@@ -74,6 +77,34 @@ async def operational_signal_catalog(
     context: BeaconReader,
 ) -> OperationalSignalCatalogResponse:
     catalog = OPERATIONAL_SIGNAL_CATALOG
+    return OperationalSignalCatalogResponse(
+        catalog_id=catalog.catalog_id,
+        version=catalog.version,
+        catalog_digest=catalog.catalog_digest,
+        company_id=context.company.id,
+        active_branch_id=context.active_branch.id if context.active_branch else None,
+        definitions=tuple(
+            OperationalSignalDefinitionResponse.model_validate(
+                {
+                    **definition.payload(),
+                    "definition_digest": definition.definition_digest,
+                }
+            )
+            for definition in catalog.definitions
+        ),
+    )
+
+
+@router.get(
+    "/financial-control-catalog",
+    response_model=OperationalSignalCatalogResponse,
+    summary="List native financial workflow and Accounting control signals",
+)
+async def financial_control_signal_catalog(
+    context: BeaconReader,
+) -> OperationalSignalCatalogResponse:
+    """Expose 007A definitions without mixing legacy financial-exposure ranking."""
+    catalog = NATIVE_FINANCIAL_SIGNAL_CATALOG
     return OperationalSignalCatalogResponse(
         catalog_id=catalog.catalog_id,
         version=catalog.version,

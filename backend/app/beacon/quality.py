@@ -8,10 +8,16 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 
-from app.beacon.catalog import OPERATIONAL_SIGNAL_CATALOG
+from app.beacon.catalog import (
+    BEACON_SIGNAL_CATALOG,
+    OPERATIONAL_SIGNAL_CATALOG,
+    OperationalSignalCatalog,
+)
 from app.beacon.evidence_evaluation import (
+    BEACON_EVIDENCE_EVALUATION_REGISTRY,
     EVIDENCE_EVALUATION_REGISTRY,
     EvaluationReadiness,
+    EvidenceEvaluationRegistry,
 )
 
 
@@ -27,6 +33,13 @@ class EvidenceFreshnessState(StrEnum):
     CURRENT = "current"
     STALE = "stale"
     UNKNOWN = "unknown"
+    NOT_APPLICABLE = "not_applicable"
+
+
+class EvidenceTemporalBasis(StrEnum):
+    SNAPSHOT = "snapshot"
+    DURABLE_EVENT = "durable_event"
+    DETERMINISTIC_AS_OF = "deterministic_as_of"
 
 
 class EvidenceCompletenessState(StrEnum):
@@ -71,6 +84,7 @@ class EvidenceQualityInput:
     limitations: tuple[str, ...] = ()
     conflict_identities: tuple[str, ...] = ()
     evidence_digest: str = ""
+    temporal_basis: EvidenceTemporalBasis = EvidenceTemporalBasis.SNAPSHOT
 
 
 @dataclass(frozen=True)
@@ -110,13 +124,21 @@ class DefinitionQualitySemantics:
 
 
 class EvidenceQualityService:
-    def __init__(self, policies: tuple[EvidenceFreshnessPolicy, ...]) -> None:
+    def __init__(
+        self,
+        policies: tuple[EvidenceFreshnessPolicy, ...],
+        *,
+        catalog: OperationalSignalCatalog = OPERATIONAL_SIGNAL_CATALOG,
+        registry: EvidenceEvaluationRegistry = EVIDENCE_EVALUATION_REGISTRY,
+    ) -> None:
         self.policies = policies
+        self.catalog = catalog
+        self.registry = registry
         ids = [policy.definition_id for policy in policies]
         if len(ids) != len(set(ids)):
             raise ValueError("A definition may have only one active freshness policy.")
         for policy in policies:
-            OPERATIONAL_SIGNAL_CATALOG.definition(policy.definition_id)
+            self.catalog.definition(policy.definition_id)
             if policy.version < 1 or policy.maximum_as_of_lag_seconds <= 0:
                 raise ValueError(
                     "Freshness policies require positive versions and lag."
@@ -124,12 +146,20 @@ class EvidenceQualityService:
 
     def semantics(self) -> tuple[DefinitionQualitySemantics, ...]:
         policies = {policy.definition_id: policy for policy in self.policies}
+        event_bound = {
+            definition.definition_id
+            for definition in self.catalog.definitions
+            if definition.definition_id.startswith(("financial.", "accounting."))
+        }
         return tuple(
             DefinitionQualitySemantics(
                 definition_id=registration.definition_id,
                 readiness=registration.readiness,
                 confidence_semantics_available=True,
-                freshness_semantics_available=registration.definition_id in policies,
+                freshness_semantics_available=(
+                    registration.definition_id in policies
+                    or registration.definition_id in event_bound
+                ),
                 freshness_policy_id=(
                     policies[registration.definition_id].policy_id
                     if registration.definition_id in policies
@@ -143,6 +173,8 @@ class EvidenceQualityService:
                 policy_source=(
                     policies[registration.definition_id].policy_source
                     if registration.definition_id in policies
+                    else "BANK.BEA.007A durable-event/deterministic-as-of contract"
+                    if registration.definition_id in event_bound
                     else None
                 ),
                 blocker=(
@@ -150,15 +182,17 @@ class EvidenceQualityService:
                     if registration.blocker
                     else None
                     if registration.definition_id in policies
+                    else None
+                    if registration.definition_id in event_bound
                     else "No approved definition-bound freshness policy exists."
                 ),
             )
-            for registration in EVIDENCE_EVALUATION_REGISTRY.registrations
+            for registration in self.registry.registrations
         )
 
     def evaluate(self, value: EvidenceQualityInput) -> EvidenceQualityEnvelope:
-        definition = OPERATIONAL_SIGNAL_CATALOG.definition(value.definition_id)
-        registration = EVIDENCE_EVALUATION_REGISTRY.registration(value.definition_id)
+        definition = self.catalog.definition(value.definition_id)
+        registration = self.registry.registration(value.definition_id)
         policy = next(
             (
                 item
@@ -188,7 +222,11 @@ class EvidenceQualityService:
                     EvidenceReconciliationState.RECONCILED,
                     EvidenceReconciliationState.LIMITED,
                 }
-                and freshness is EvidenceFreshnessState.CURRENT
+                and freshness
+                in {
+                    EvidenceFreshnessState.CURRENT,
+                    EvidenceFreshnessState.NOT_APPLICABLE,
+                }
             )
             if registration.readiness is not EvaluationReadiness.EVALUABLE:
                 limitations.append(
@@ -217,6 +255,7 @@ class EvidenceQualityService:
             "completeness": value.completeness.value,
             "reconciliation": value.reconciliation.value,
             "freshness": freshness.value,
+            "temporal_basis": value.temporal_basis.value,
             "confidence": confidence.value,
             "policy_id": policy.policy_id if policy else None,
             "policy_version": policy.version if policy else None,
@@ -256,6 +295,11 @@ class EvidenceQualityService:
         value: EvidenceQualityInput,
         policy: EvidenceFreshnessPolicy | None,
     ) -> EvidenceFreshnessState:
+        if value.temporal_basis in {
+            EvidenceTemporalBasis.DURABLE_EVENT,
+            EvidenceTemporalBasis.DETERMINISTIC_AS_OF,
+        }:
+            return EvidenceFreshnessState.NOT_APPLICABLE
         if policy is None or value.observed_as_of is None:
             return EvidenceFreshnessState.UNKNOWN
         if value.observed_as_of.tzinfo is None or value.evaluated_at.tzinfo is None:
@@ -274,6 +318,15 @@ class EvidenceQualityService:
     ) -> EvidenceConfidenceState:
         if freshness is EvidenceFreshnessState.UNKNOWN:
             return EvidenceConfidenceState.UNKNOWN
+        if freshness is EvidenceFreshnessState.NOT_APPLICABLE:
+            if value.completeness is EvidenceCompletenessState.PARTIAL:
+                return EvidenceConfidenceState.LOW
+            if (
+                value.reconciliation is EvidenceReconciliationState.LIMITED
+                or value.limitations
+            ):
+                return EvidenceConfidenceState.MODERATE
+            return EvidenceConfidenceState.HIGH
         if freshness is EvidenceFreshnessState.STALE:
             return EvidenceConfidenceState.LOW
         if value.completeness is EvidenceCompletenessState.UNKNOWN or (
@@ -301,29 +354,35 @@ class EvidenceQualityService:
         )
 
 
-EVIDENCE_QUALITY_SERVICE = EvidenceQualityService(
-    policies=(
-        EvidenceFreshnessPolicy(
-            policy_id="beacon.snapshot-recency.scheduling-overdue.v1",
-            version=1,
-            definition_id="operational.scheduling.appointment_overdue",
-            maximum_as_of_lag_seconds=900,
-            stale_behavior=StaleEvidenceBehavior.BLOCK_EVALUATION,
-            policy_source="BANK.BEA.001 definition v1 ttl_seconds=900",
-        ),
-        EvidenceFreshnessPolicy(
-            policy_id="beacon.snapshot-recency.paused-jobs.v1",
-            version=1,
-            definition_id="operational.job.intermediate_state_stalled",
-            maximum_as_of_lag_seconds=900,
-            stale_behavior=StaleEvidenceBehavior.BLOCK_EVALUATION,
-            policy_source="BANK.BEA.001 definition v1 ttl_seconds=900",
-        ),
-    )
+_QUALITY_POLICIES = (
+    EvidenceFreshnessPolicy(
+        policy_id="beacon.snapshot-recency.scheduling-overdue.v1",
+        version=1,
+        definition_id="operational.scheduling.appointment_overdue",
+        maximum_as_of_lag_seconds=900,
+        stale_behavior=StaleEvidenceBehavior.BLOCK_EVALUATION,
+        policy_source="BANK.BEA.001 definition v1 ttl_seconds=900",
+    ),
+    EvidenceFreshnessPolicy(
+        policy_id="beacon.snapshot-recency.paused-jobs.v1",
+        version=1,
+        definition_id="operational.job.intermediate_state_stalled",
+        maximum_as_of_lag_seconds=900,
+        stale_behavior=StaleEvidenceBehavior.BLOCK_EVALUATION,
+        policy_source="BANK.BEA.001 definition v1 ttl_seconds=900",
+    ),
+)
+
+EVIDENCE_QUALITY_SERVICE = EvidenceQualityService(policies=_QUALITY_POLICIES)
+BEACON_EVIDENCE_QUALITY_SERVICE = EvidenceQualityService(
+    policies=_QUALITY_POLICIES,
+    catalog=BEACON_SIGNAL_CATALOG,
+    registry=BEACON_EVIDENCE_EVALUATION_REGISTRY,
 )
 
 
 __all__ = [
+    "BEACON_EVIDENCE_QUALITY_SERVICE",
     "EVIDENCE_QUALITY_SERVICE",
     "DefinitionQualitySemantics",
     "EvidenceCompletenessState",
@@ -334,5 +393,6 @@ __all__ = [
     "EvidenceQualityInput",
     "EvidenceQualityService",
     "EvidenceReconciliationState",
+    "EvidenceTemporalBasis",
     "StaleEvidenceBehavior",
 ]
