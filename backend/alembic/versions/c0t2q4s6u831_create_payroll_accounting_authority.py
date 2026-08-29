@@ -1,7 +1,7 @@
 """create Payroll Accounting policy and mapping authority
 
-Revision ID: b9s1o3q5t720
-Revises: a8r0n2p4s619
+Revision ID: c0t2q4s6u831
+Revises: b9s1o3q5t720
 """
 from collections.abc import Sequence
 
@@ -10,8 +10,8 @@ from sqlalchemy.dialects import postgresql
 
 from alembic import op
 
-revision: str = "b9s1o3q5t720"
-down_revision: str | Sequence[str] | None = "a8r0n2p4s619"
+revision: str = "c0t2q4s6u831"
+down_revision: str | Sequence[str] | None = "b9s1o3q5t720"
 branch_labels = None
 depends_on = None
 
