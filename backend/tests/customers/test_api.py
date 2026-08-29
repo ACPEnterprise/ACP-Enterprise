@@ -6,15 +6,6 @@ from uuid import UUID, uuid4
 import httpx
 import pytest
 import pytest_asyncio
-from fastapi import FastAPI
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import (
-    AsyncEngine,
-    AsyncSession,
-    async_sessionmaker,
-    create_async_engine,
-)
-
 from app.core.config import settings
 from app.customers.models import Customer, CustomerContact
 from app.customers.router import router as customer_router
@@ -29,6 +20,14 @@ from app.platform.permissions.codes import CustomerPermission
 from app.platform.permissions.dependencies import get_authorization_context
 from app.platform.permissions.models import Permission
 from app.platform.users.models import User, UserCredential
+from fastapi import FastAPI
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 
 @dataclass(frozen=True)
@@ -166,6 +165,67 @@ def build_app(
     app.dependency_overrides[get_database_session] = database_override
     app.dependency_overrides[get_authorization_context] = context_override
     return app
+
+
+@pytest.mark.asyncio
+async def test_customer_create_replay_conflict_and_company_scope(
+    customer_database: tuple[AsyncEngine, async_sessionmaker[AsyncSession]],
+) -> None:
+    _, factory = customer_database
+    fixture = await seed_customer_fixture(factory, "CUSTIDEM")
+    payload = {
+        "customer_type": "residential",
+        "display_name": "Reliable Customer",
+        "preferred_contact_method": "phone",
+    }
+
+    async def create(
+        context: AuthorizationContext, body: dict[str, object]
+    ) -> httpx.Response:
+        app = build_app(factory, context)
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            return await client.post(
+                "/api/v1/customers",
+                json=body,
+                headers={"Idempotency-Key": "customer-network-retry"},
+            )
+
+    first, concurrent_replay = await asyncio.gather(
+        create(fixture.context, payload), create(fixture.context, payload)
+    )
+    assert {first.status_code, concurrent_replay.status_code} == {201}
+    assert first.json()["id"] == concurrent_replay.json()["id"]
+    assert {first.headers["Idempotency-Status"], concurrent_replay.headers["Idempotency-Status"]} == {
+        "executed",
+        "replayed",
+    }
+
+    contradiction = await create(
+        fixture.context, {**payload, "display_name": "Contradictory Customer"}
+    )
+    assert contradiction.status_code == 409
+    assert contradiction.json()["detail"]["code"] == "idempotency_conflict"
+    assert "constraint" not in contradiction.text.lower()
+
+    unauthorized_replay = await create(fixture.restricted_context, payload)
+    assert unauthorized_replay.status_code == 403
+    assert unauthorized_replay.json()["detail"] == "Permission denied."
+
+    other_company = await create(fixture.other_context, payload)
+    assert other_company.status_code == 201
+    assert other_company.json()["id"] != first.json()["id"]
+
+    async with factory() as session:
+        events = (
+            await session.scalars(
+                select(BusinessEvent).where(
+                    BusinessEvent.entity_id == UUID(first.json()["id"])
+                )
+            )
+        ).all()
+        assert len(events) == 1
 
 
 @pytest.mark.asyncio

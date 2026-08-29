@@ -1,7 +1,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.customers.detail import customer_detail_service
@@ -40,6 +40,8 @@ from app.customers.service import customer_service
 from app.customers.timeline import customer_timeline_service
 from app.customers.update import customer_update_service
 from app.database.session import get_database_session
+from app.platform.idempotency.errors import reliability_http_error
+from app.platform.idempotency.reliability import MutationReliabilityError
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import CustomerPermission
 from app.platform.permissions.dependencies import require_permission
@@ -98,8 +100,26 @@ async def create_customer(
     data: CustomerCreate,
     context: CustomerManageContext,
     session: DatabaseSession,
+    response: Response,
+    idempotency_key: Annotated[
+        str | None, Header(alias="Idempotency-Key", min_length=1, max_length=255)
+    ] = None,
 ) -> CustomerDetail:
-    record = await customer_service.create_customer(session, context=context, data=data)
+    if idempotency_key is None:
+        record = await customer_service.create_customer(
+            session, context=context, data=data
+        )
+        return CustomerDetail.model_validate(record)
+    try:
+        record, disposition = await customer_service.create_customer_idempotent(
+            session,
+            context=context,
+            data=data,
+            idempotency_key=idempotency_key,
+        )
+    except MutationReliabilityError as error:
+        raise reliability_http_error(error) from error
+    response.headers["Idempotency-Status"] = disposition.value
     return CustomerDetail.model_validate(record)
 
 

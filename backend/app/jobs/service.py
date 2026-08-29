@@ -1,5 +1,6 @@
 import re
 from collections.abc import Callable, Sequence
+from dataclasses import asdict
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
@@ -47,6 +48,16 @@ from app.jobs.guards import (
 from app.jobs.models import Job, JobAppointmentLink
 from app.jobs.repository import JobRepository, job_repository
 from app.jobs.types import JobPriority, JobStatus
+from app.platform.idempotency.contracts import (
+    IdempotencyIdentity,
+    canonical_request_digest,
+)
+from app.platform.idempotency.reliability import (
+    AuthoritativeOutcome,
+    MutationDisposition,
+    RetentionClass,
+    mutation_reliability_service,
+)
 from app.platform.permissions.authorization import AuthorizationContext
 from app.scheduling.reference import (
     SchedulingReferenceService,
@@ -94,30 +105,94 @@ class JobService:
         metadata = self._validate_creation_metadata(command)
         occurred_at, correlation_id = self._operation_identity()
         async with session.begin():
-            await self._require_customer_reference(
+            job = await self._stage_create_job(
                 session,
                 context=context,
-                customer_id=command.customer_id,
-                service_location_id=command.service_location_id,
-            )
-            job = await self._create(
-                session,
-                context=context,
-                branch_id=command.branch_id,
-                customer_id=command.customer_id,
-                service_location_id=command.service_location_id,
+                command=command,
                 metadata=metadata,
                 occurred_at=occurred_at,
+                correlation_id=correlation_id,
             )
-            self._stage_event(
+        return job
+
+    async def create_job_idempotent(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        command: CreateJob,
+        idempotency_key: str,
+    ) -> tuple[Job, MutationDisposition]:
+        self._require_branch(context, command.branch_id)
+        metadata = self._validate_creation_metadata(command)
+
+        async def mutate() -> AuthoritativeOutcome[Job]:
+            occurred_at, correlation_id = self._operation_identity()
+            job = await self._stage_create_job(
                 session,
                 context=context,
-                job=job,
-                event_type=EventType.JOB_CREATED,
+                command=command,
+                metadata=metadata,
                 occurred_at=occurred_at,
                 correlation_id=correlation_id,
-                payload=self._created_payload(job),
             )
+            return AuthoritativeOutcome(job, "job", job.id, 201)
+
+        async def recover(result_id: UUID) -> Job | None:
+            return await self._repository.get_job(
+                session, company_id=context.company.id, job_id=result_id
+            )
+
+        result = await mutation_reliability_service.execute(
+            session,
+            identity=IdempotencyIdentity(
+                company_id=context.company.id,
+                branch_id=command.branch_id,
+                operation="jobs.create",
+                idempotency_key=idempotency_key,
+            ),
+            actor_user_id=context.user.id,
+            request_digest=canonical_request_digest(asdict(command)),
+            retention_class=RetentionClass.OPERATIONAL,
+            mutate=mutate,
+            recover=recover,
+        )
+        return result.value, result.disposition
+
+    async def _stage_create_job(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        command: CreateJob,
+        metadata: dict[str, object],
+        occurred_at: datetime,
+        correlation_id: UUID,
+    ) -> Job:
+        await self._require_customer_reference(
+            session,
+            context=context,
+            customer_id=command.customer_id,
+            service_location_id=command.service_location_id,
+        )
+        job = await self._create(
+            session,
+            context=context,
+            branch_id=command.branch_id,
+            customer_id=command.customer_id,
+            service_location_id=command.service_location_id,
+            metadata=metadata,
+            occurred_at=occurred_at,
+        )
+        self._stage_event(
+            session,
+            context=context,
+            job=job,
+            event_type=EventType.JOB_CREATED,
+            occurred_at=occurred_at,
+            correlation_id=correlation_id,
+            payload=self._created_payload(job),
+        )
         return job
 
     async def stage_estimate_conversion_job(

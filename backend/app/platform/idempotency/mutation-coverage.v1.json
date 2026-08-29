@@ -583,11 +583,11 @@
     {
       "classification": "EXPLICIT_EXEMPTION",
       "domain": "customers",
-      "mechanism": "legacy compatibility boundary; no shared durable receipt asserted",
+      "mechanism": "optional Platform transactional receipt; headerless legacy compatibility remains",
       "method": "POST",
       "operation_id": "create_customer_api_v1_customers_post",
       "path": "/api/v1/customers",
-      "reason": "Existing public mutation lacks a proven cross-network replay receipt; PLAT.008 documents rather than breaking or redesigning this domain.",
+      "reason": "Idempotency-Key requests are replay-safe; omission remains an explicit compatibility exemption pending a versioned client transition.",
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     },
     {
@@ -1436,11 +1436,11 @@
     {
       "classification": "EXPLICIT_EXEMPTION",
       "domain": "jobs",
-      "mechanism": "legacy compatibility boundary; no shared durable receipt asserted",
+      "mechanism": "optional Platform transactional receipt; headerless legacy compatibility remains",
       "method": "POST",
       "operation_id": "create_job_api_v1_jobs_post",
       "path": "/api/v1/jobs",
-      "reason": "Existing public mutation lacks a proven cross-network replay receipt; PLAT.008 documents rather than breaking or redesigning this domain.",
+      "reason": "Idempotency-Key requests are replay-safe; omission remains an explicit compatibility exemption pending a versioned client transition.",
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     },
     {
@@ -1661,6 +1661,16 @@
       "operation_id": "inactivate_api_v1_price_book_versions__version_id__inactivate_post",
       "path": "/api/v1/price-book/versions/{version_id}/inactivate",
       "reason": "The accepted resource/state contract converges or rejects stale state without a second logical effect.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "purchasing",
+      "mechanism": "Company-scoped Purchasing command receipt, request digest, advisory lock, and expected version",
+      "method": "PUT",
+      "operation_id": "configure_branch_policy_api_v1_purchasing_branch_policies_put",
+      "path": "/api/v1/purchasing/branch-policies",
+      "reason": "Current authoritative Purchasing contract proves exact replay, contradictory reuse rejection, optimistic concurrency, and tenant isolation.",
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     },
     {
@@ -2333,6 +2343,6 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "8119a646beeb19e3754a4b4cc798eca4faeeb9c21b3e88788e9f31efb3c3774a",
+  "fingerprint": "332a6edbc0f97d9d37e0031b76fc058e52b2e91c2fdd1fc4af00c1277a9c9f8a",
   "schema_version": "1"
 }

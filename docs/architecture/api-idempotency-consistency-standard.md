@@ -7,14 +7,14 @@ does not introduce a shared mutation service or replace stronger aggregate,
 append-only, provider, Accounting, Payments, AP, Purchasing, worker-transport,
 or notification-outbox identities.
 
-The versioned mutation coverage registry inventories all 232 current HTTP
+The versioned mutation coverage registry inventories all 233 current HTTP
 operations expressed with `POST`, `PUT`, `PATCH`, or `DELETE`. Its fingerprint
 is part of `PlatformContractManifest`; adding or changing a mutating route
 without reconciling the registry fails the Platform meta-test.
 
 | Classification | Current count | Meaning |
 |---|---:|---|
-| `IDEMPOTENCY_REQUIRED` | 91 | Existing domain request identity and durable receipt/replay contract |
+| `IDEMPOTENCY_REQUIRED` | 92 | Existing domain request identity and durable receipt/replay contract |
 | `NATURALLY_IDEMPOTENT` | 58 | Resource target state or optimistic aggregate version is stronger than a separate key |
 | `IMMUTABLE_APPEND_ONLY` | 4 | Accepted deterministic evidence/receipt identity owns replay, with concrete test evidence recorded in the registry |
 | `NON_MUTATING_READ_ONLY` | 5 | Query or qualification operation expressed as POST |
@@ -96,4 +96,11 @@ identity. Possession of a key does not bypass current
 `PurchasingPermission.APPROVE` authorization.
 
 The qualified coverage fingerprint is
-`8119a646beeb19e3754a4b4cc798eca4faeeb9c21b3e88788e9f31efb3c3774a`.
+`332a6edbc0f97d9d37e0031b76fc058e52b2e91c2fdd1fc4af00c1277a9c9f8a`.
+
+PLATFORM.RELIABILITY.IDEMPOTENCY.1 adds an optional transactional receipt path
+for Customer and Job creation. Headerless calls remain explicit compatibility
+exemptions; calls carrying `Idempotency-Key` receive durable replay, conflict,
+tenant-isolation and single-authority concurrency guarantees. The registry also
+tracks the authoritative Purchasing branch-policy command added after the
+original PLAT.008 snapshot.
