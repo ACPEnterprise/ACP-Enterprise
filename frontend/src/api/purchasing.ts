@@ -18,6 +18,9 @@ import type {
   PurchaseReturn,
   CreatePurchaseReturn,
   TransitionPurchaseReturn,
+  PurchaseOrderChange,
+  RequestPurchaseOrderChange,
+  DecidePurchaseOrderChange,
 } from "../types/purchasing";
 
 const root = "/api/v1/purchasing";
@@ -124,6 +127,28 @@ export const transitionPurchaseReturn = async (
   (
     await apiClient.post<PurchaseReturn>(
       `${root}/purchase-orders/${id}/returns/${returnId}/${action}`,
+      input,
+    )
+  ).data;
+export const requestPurchaseOrderChange = async (
+  id: string,
+  input: RequestPurchaseOrderChange,
+): Promise<PurchaseOrderChange> =>
+  (
+    await apiClient.post<PurchaseOrderChange>(
+      `${root}/purchase-orders/${id}/changes`,
+      input,
+    )
+  ).data;
+export const decidePurchaseOrderChange = async (
+  id: string,
+  changeId: string,
+  action: "approve" | "reject",
+  input: DecidePurchaseOrderChange,
+): Promise<PurchaseOrderChange> =>
+  (
+    await apiClient.post<PurchaseOrderChange>(
+      `${root}/purchase-orders/${id}/changes/${changeId}/${action}`,
       input,
     )
   ).data;

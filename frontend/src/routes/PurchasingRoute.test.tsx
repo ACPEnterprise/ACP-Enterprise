@@ -38,11 +38,15 @@ describe("PurchasingRoute", () => {
             status: "submitted",
             currency: "USD",
             version: 3,
+            effective_revision: 1,
             lines: [],
             issuance_digest: null,
             receiving_status: "not_received",
             receipts: [],
             discrepancies: [],
+            returns: [],
+            change_orders: [],
+            revisions: [],
           },
         ],
       },
@@ -57,6 +61,10 @@ describe("PurchasingRoute", () => {
       transition: mutation,
       recordReceipt: mutation,
       resolveDiscrepancy: mutation,
+      createReturn: mutation,
+      transitionReturn: mutation,
+      requestChange: mutation,
+      decideChange: mutation,
     } as never);
   });
   it("fails closed without read permission", () => {

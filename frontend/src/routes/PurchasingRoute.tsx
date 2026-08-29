@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import axios from "axios";
 import { useAuth, useHasPermission } from "../auth";
 import { usePurchasing, usePurchasingMutations } from "../hooks/usePurchasing";
 import {
@@ -14,6 +15,16 @@ import {
   Select,
   Spinner,
 } from "../ui";
+import { PurchaseOrderChangeControls } from "../components/PurchaseOrderChangeControls";
+
+function changeErrorMessage(error: unknown): string | null {
+  if (!error) return null;
+  if (!axios.isAxiosError(error)) return "The change request failed. Authoritative PO state was refreshed.";
+  if (error.response?.status === 409) return "This PO changed while you were reviewing it. Authoritative state was refreshed; review the current revision before trying again.";
+  if (error.response?.status === 403) return "You are not authorized to perform this change-order action.";
+  if (error.response?.status === 422) return "The change conflicts with authoritative receiving or PO rules. Review the current values and reason.";
+  return "The change-order service could not complete the request. No change was assumed effective.";
+}
 
 export function PurchasingRoute() {
   const { activeCompany } = useAuth();
@@ -27,6 +38,8 @@ export function PurchasingRoute() {
   const canAuthorizeReturn = useHasPermission("COMPANY_PURCHASING_RETURN_AUTHORIZE");
   const canMoveReturn = useHasPermission("COMPANY_PURCHASING_RETURN_MOVE");
   const canCloseReturn = useHasPermission("COMPANY_PURCHASING_RETURN_CLOSE");
+  const canRequestChange = useHasPermission("COMPANY_PURCHASING_CHANGE_REQUEST");
+  const canApproveChange = useHasPermission("COMPANY_PURCHASING_CHANGE_APPROVE");
   const [search, setSearch] = useState("");
   const purchasing = usePurchasing(search || undefined, canRead);
   const mutations = usePurchasingMutations();
@@ -209,6 +222,9 @@ export function PurchasingRoute() {
     mutations.transition.isError ||
     mutations.recordReceipt.isError ||
     mutations.resolveDiscrepancy.isError;
+  const changeError = changeErrorMessage(
+    mutations.requestChange.error ?? mutations.decideChange.error,
+  );
   return (
     <div className="mx-auto max-w-6xl space-y-6 pb-12">
       <header>
@@ -728,6 +744,25 @@ export function PurchasingRoute() {
                     </div>
                   );
                 })}
+                <PurchaseOrderChangeControls
+                  po={po}
+                  canRequest={canRequestChange}
+                  canApprove={canApproveChange}
+                  requestPending={mutations.requestChange.isPending}
+                  decisionPending={mutations.decideChange.isPending}
+                  errorMessage={changeError}
+                  onRequest={(input) =>
+                    mutations.requestChange.mutateAsync({ id: po.id, input })
+                  }
+                  onDecision={(changeId, action, input) =>
+                    mutations.decideChange.mutateAsync({
+                      id: po.id,
+                      changeId,
+                      action,
+                      input,
+                    })
+                  }
+                />
               </li>
             ))}
           </ul>
