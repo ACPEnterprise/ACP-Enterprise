@@ -16,7 +16,14 @@ version; history is never overwritten.
 Commands are serialized by a PostgreSQL transaction advisory lock scoped to
 Company and condition. Optimistic `expected_version` prevents stale ownership
 changes, while unique request identities make safe replay deterministic. The
-permissions are intentionally separate: `COMPANY_BEACON_REVIEW` acknowledges,
+durable request event is checked before current source re-evaluation, so an
+exact accepted replay remains stable even if the source condition later clears
+or changes. The replay identity binds the requested action, evidence digest,
+target owner where applicable, and expected predecessor version; contradictory
+reuse fails closed. Assignment applies only to an unowned signal, while an
+already-owned signal requires an explicit transfer.
+
+The permissions are intentionally separate: `COMPANY_BEACON_REVIEW` acknowledges,
 `COMPANY_BEACON_OWN` self-claims or releases the caller's ownership, and
 `COMPANY_BEACON_ASSIGN` assigns, transfers, or administratively releases.
 
