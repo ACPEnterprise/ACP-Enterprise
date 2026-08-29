@@ -1,0 +1,43 @@
+{
+  "schema_version": "1.0",
+  "qualification_id": "BANK.BEA.002.QUALIFICATION.1",
+  "milestone_id": "BANK.BEA.002",
+  "state": "QUALIFIED_AWAITING_OWNER_ACCEPTANCE",
+  "implementation_sha": "e82e19bdc012d60f663fed012bc5797175abde98",
+  "qualification_base_sha": "33f7b584ec3d70fefbcc2d9ce06945b9e95e8af3",
+  "repository_ref": "origin/customer-management-v1",
+  "catalog_id": "BANK.BEA.001",
+  "catalog_digest": "fb4e23b03e53d39b89dee5d6a421f3f7d17caa1e0068465b343e8abd6dfb12d9",
+  "registry_digest": "8d321e381f77466b3d8ae67424f2674fb8e0cfd95e0a99bdb07692091f6c6824",
+  "definition_count": 21,
+  "readiness_counts": {
+    "evaluable": 2,
+    "partially_evaluable": 16,
+    "not_evaluable": 3,
+    "conflicting": 0
+  },
+  "qualification_evidence": [
+    "implementation is present in authoritative ancestry and its five-file boundary remains authoritative",
+    "every BANK.BEA.001 definition has exactly one deterministic readiness registration",
+    "only two definitions with accepted adapters and evaluators are admitted",
+    "missing fact, policy, identity, time, and reconciliation contracts remain explicit blockers",
+    "conflicting accepted evidence is represented fail closed",
+    "identical source snapshots produce identical signal identities and cleared facts produce no residual signal",
+    "readiness API is Company and active-Branch scoped and exposes no raw source facts",
+    "QBO, HCP, Economics, autonomous mutation, AI, Preview, and Production authority remain excluded"
+  ],
+  "excluded_authority": [
+    "owner acceptance",
+    "activation of blocked definitions",
+    "source-domain mutation",
+    "economics or financial materiality policy",
+    "QBO or HCP source promotion",
+    "AI or autonomous action",
+    "Preview or Production"
+  ],
+  "successor_gate": {
+    "milestone_id": "BANK.BEA.003",
+    "state": "BLOCKED_PENDING_BANK_BEA_002_OWNER_ACCEPTANCE"
+  },
+  "qualification_fingerprint": "aa5ccdb46dea1dcc1f65cd15f0840e2d2444eaafbcdfd8afd0882d941abeae4b"
+}
