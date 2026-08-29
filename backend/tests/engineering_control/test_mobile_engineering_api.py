@@ -7,6 +7,11 @@ from uuid import uuid4
 import httpx
 import pytest
 import pytest_asyncio
+from fastapi import FastAPI
+from fastapi.dependencies.models import Dependant
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
 from app.core.config import settings
 from app.database.session import get_database_session, get_security_database_session
 from app.engineering_capacity.service import EngineeringCapacityService
@@ -35,11 +40,6 @@ from app.platform.permissions.codes import (
 )
 from app.platform.permissions.dependencies import get_authorization_context
 from app.worker_control.models import EngineeringWorker
-from fastapi import FastAPI
-from fastapi.dependencies.models import Dependant
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-
 from tests.engineering_control.review.test_engineering_review import completed_command
 from tests.engineering_control.test_engineering_command_service import (
     ServiceFixture,
@@ -1411,9 +1411,34 @@ def test_healthy_capacity_projects_authorized_automatic_dispatch() -> None:
         "Healthy assigned capacity is available.",
         False,
     )
-    assert attention == "running"
+    assert attention == "awaiting_dispatch"
     assert reason == "Authorized — awaiting automatic worker dispatch."
     assert actions == ()
+
+
+def test_disconnected_acknowledged_execution_projects_awaiting_dispatch() -> None:
+    now = datetime.now(timezone.utc)
+    pipeline = MobileEngineeringControlService._pipeline_status(
+        command=SimpleNamespace(approval_state="approved"),
+        status=SimpleNamespace(
+            monitoring_state="disconnected",
+            review_state=None,
+            repository_operation_status=None,
+            lease=SimpleNamespace(status=None, expires_at=None),
+        ),
+        desired_state="active",
+        runtime=SimpleNamespace(
+            runtime_state="acknowledged",
+            acknowledgement_expires_at=now + timedelta(minutes=5),
+        ),
+        now=now,
+    )
+
+    assert pipeline == "awaiting_dispatch"
+    assert (
+        MobileEngineeringControlService._authoritative_state(pipeline, None)
+        == "authorized_awaiting_dispatch"
+    )
 
 
 def test_code_milestone_without_repository_readiness_is_not_owner_startable() -> None:
@@ -1431,6 +1456,33 @@ def test_code_milestone_without_repository_readiness_is_not_owner_startable() ->
         reason == "Preparing execution environment for the current repository release."
     )
     assert actions == ()
+
+
+def test_read_only_proof_uses_same_repository_gate_as_start() -> None:
+    item = SimpleNamespace(
+        reconciliation_state="current",
+        status="ready",
+        readiness_state="ready",
+        requested_code_changes=False,
+        starting_commit_evidence={"proof_role": "backend_validation"},
+        owning_branch="customer-management-v1",
+    )
+
+    attention, reason, actions = _attention(
+        item, None, None, repository_start_eligible=False
+    )
+    assert attention == "waiting_on_dependency"
+    assert reason == (
+        "Preparing execution environment for the current repository release."
+    )
+    assert actions == ()
+
+    attention, reason, actions = _attention(
+        item, None, None, repository_start_eligible=True
+    )
+    assert attention == "owner_action_required"
+    assert reason == "This milestone is ready to start."
+    assert "start" in actions
 
 
 def test_historical_execution_definition_is_not_owner_startable() -> None:

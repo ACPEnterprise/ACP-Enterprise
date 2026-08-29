@@ -12,6 +12,7 @@ from sqlalchemy import (
     ForeignKeyConstraint,
     Index,
     Integer,
+    LargeBinary,
     Numeric,
     String,
     Text,
@@ -179,6 +180,134 @@ class EmployeeCompensationAuthorityVersion(Base):
         PGUUID(as_uuid=True),
         ForeignKey("users.id", ondelete="RESTRICT"),
         nullable=False,
+    )
+    approved_by_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT")
+    )
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    retired_by_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT")
+    )
+    retired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    audit_reason: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
+class PayrollProtectedInputEnvelope(Base):
+    """Encrypted sensitive Payroll input; plaintext never enters durable metadata."""
+
+    __tablename__ = "payroll_protected_input_envelopes"
+    __table_args__ = (
+        UniqueConstraint("company_id", "id", name="uq_payroll_protected_company_id"),
+    )
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    key_id: Mapped[str] = mapped_column(String(80), nullable=False)
+    nonce: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    ciphertext: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    content_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
+class PayrollInputAuthorityVersion(Base):
+    """Company/Employee tax, deduction, or employer-contribution authority."""
+
+    __tablename__ = "payroll_input_authority_versions"
+    __table_args__ = (
+        CheckConstraint(
+            "authority_domain IN ('tax','deduction','employer_contribution')",
+            name="ck_payroll_input_domain",
+        ),
+        CheckConstraint(
+            "lifecycle IN ('draft','approved','superseded','retired')",
+            name="ck_payroll_input_lifecycle",
+        ),
+        CheckConstraint(
+            "applicability IN ('required','not_applicable')",
+            name="ck_payroll_input_applicability",
+        ),
+        CheckConstraint(
+            "effective_end IS NULL OR effective_end > effective_start",
+            name="ck_payroll_input_interval",
+        ),
+        CheckConstraint(
+            "(lifecycle = 'draft' AND approved_by_user_id IS NULL "
+            "AND approved_at IS NULL) OR (lifecycle <> 'draft' "
+            "AND approved_by_user_id IS NOT NULL AND approved_at IS NOT NULL)",
+            name="ck_payroll_input_approval",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "employee_id"],
+            ["employees.company_id", "employees.id"],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "protected_envelope_id"],
+            [
+                "payroll_protected_input_envelopes.company_id",
+                "payroll_protected_input_envelopes.id",
+            ],
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "employee_id",
+            "authority_domain",
+            "authority_key",
+            "authority_version",
+            name="uq_payroll_input_authority_version",
+        ),
+        UniqueConstraint("company_id", "id", name="uq_payroll_input_company_id"),
+        Index(
+            "ix_payroll_input_resolution",
+            "company_id",
+            "employee_id",
+            "authority_domain",
+            "authority_key",
+            "lifecycle",
+            "effective_start",
+            "effective_end",
+        ),
+    )
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    employee_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    authority_domain: Mapped[str] = mapped_column(String(32), nullable=False)
+    authority_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    authority_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    definition_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    applicability: Mapped[str] = mapped_column(String(24), nullable=False)
+    effective_start: Mapped[date] = mapped_column(Date, nullable=False)
+    effective_end: Mapped[date | None] = mapped_column(Date)
+    lifecycle: Mapped[str] = mapped_column(String(20), nullable=False)
+    jurisdiction_reference: Mapped[str | None] = mapped_column(String(160))
+    calculation_basis: Mapped[str | None] = mapped_column(String(80))
+    priority: Mapped[int | None] = mapped_column(Integer)
+    public_parameters: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    authority_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    protected_envelope_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    supersedes_authority_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("payroll_input_authority_versions.id", ondelete="RESTRICT"),
+    )
+    drafted_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
     )
     approved_by_user_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT")

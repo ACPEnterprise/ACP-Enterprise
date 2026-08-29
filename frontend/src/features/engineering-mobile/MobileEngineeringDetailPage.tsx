@@ -31,6 +31,7 @@ import { useEngineeringRealtime } from "./realtime";
 const pipeline = [
   "queued",
   "acknowledged",
+  "awaiting_dispatch",
   "running",
   "paused",
   "waiting_for_owner",

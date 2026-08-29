@@ -15,10 +15,15 @@ from app.engineering_control.commands import (
     ApproveEngineeringCommand,
     CancelEngineeringCommand,
 )
-from app.engineering_control.errors import EngineeringControlError
+from app.engineering_control.errors import (
+    EngineeringControlError,
+    ProviderRepositoryReadinessNotCurrentError,
+)
 from app.engineering_control.http_errors import engineering_http_error
 from app.engineering_control.repository_readiness import (
     active_readiness_target_eligible,
+    repository_preparation_required,
+    repository_readiness_service,
 )
 from app.engineering_control.review.models import EngineeringExecutionReview
 from app.engineering_control.revision_evidence import (
@@ -138,6 +143,7 @@ def _attention(
     historical_diagnostics_incomplete: bool = False,
     adopted_result_review: bool = False,
     historical_execution_authority_over: bool = False,
+    repository_start_eligible: bool | None = None,
 ) -> tuple[str, str, tuple[str, ...]]:
     if capacity_state == "reconciliation":
         return (
@@ -194,29 +200,19 @@ def _attention(
             "Execution failed without publication and requires owner review.",
             ("cancel",),
         )
-    if item.status == "ready" and item.requested_code_changes:
-        from app.engineering_control.repository_readiness import readiness_is_current
-
-        authoritative_head = str(
-            item.starting_commit_evidence.get("authoritative_head", "")
+    if (
+        item.status == "ready"
+        and repository_preparation_required(
+            requested_code_changes=item.requested_code_changes,
+            evidence=getattr(item, "starting_commit_evidence", {}),
         )
-        readiness = item.starting_commit_evidence.get("provider_repository_readiness")
-        repository_key = (
-            str(readiness.get("repository_key", ""))
-            if isinstance(readiness, dict)
-            else ""
+        and repository_start_eligible is not True
+    ):
+        return (
+            "waiting_on_dependency",
+            "Preparing execution environment for the current repository release.",
+            (),
         )
-        if not readiness_is_current(
-            item.starting_commit_evidence,
-            repository_key=repository_key,
-            branch=item.owning_branch,
-            candidate_head=authoritative_head,
-        ):
-            return (
-                "waiting_on_dependency",
-                "Preparing execution environment for the current repository release.",
-                (),
-            )
     if adoption is not None:
         if adoption.status == "waiting_review":
             return (
@@ -272,7 +268,7 @@ def _attention(
             runtime is None or runtime.runtime_state in {"queued", "acknowledged"}
         ):
             return (
-                "running",
+                "awaiting_dispatch",
                 "Authorized — awaiting automatic worker dispatch.",
                 (),
             )
@@ -498,6 +494,30 @@ async def list_roadmaps(context: ReadContext, session: DatabaseSession) -> Roadm
     capacity_states.update(
         {item.command_id: "allocated" for item in capacity.active_allocations}
     )
+    roadmap_by_id = {item.id: item for item in roadmaps}
+    readiness_now = datetime.now(timezone.utc)
+    repository_start_eligibility: dict[UUID, bool] = {}
+    for item in milestone_items:
+        if not repository_preparation_required(
+            requested_code_changes=item.requested_code_changes,
+            evidence=item.starting_commit_evidence,
+        ):
+            continue
+        roadmap = roadmap_by_id.get(item.roadmap_id)
+        repository_start_eligibility[item.id] = bool(
+            roadmap is not None
+            and await repository_readiness_service.start_admission_is_current(
+                session,
+                company_id=context.company.id,
+                milestone_id=item.id,
+                repository_key=roadmap.repository_key,
+                branch=roadmap.expected_branch,
+                authoritative_head=roadmap.expected_head,
+                requested_code_changes=item.requested_code_changes,
+                evidence=item.starting_commit_evidence,
+                now=readiness_now,
+            )
+        )
     milestone_items = tuple(
         item.model_copy(
             update={
@@ -544,6 +564,7 @@ async def list_roadmaps(context: ReadContext, session: DatabaseSession) -> Roadm
                         execution_evidence=executions[item.command_id].evidence_summary,
                     )
                 ),
+                repository_start_eligibility.get(item.id),
             ),
         )
     )
@@ -604,6 +625,9 @@ async def list_roadmaps(context: ReadContext, session: DatabaseSession) -> Roadm
     )
     completed = tuple(item for item in milestones if item.status == "completed")
     blocked = tuple(item for item in milestones if item.status == "blocked")
+    awaiting_dispatch_items = tuple(
+        item for item in milestone_items if item.attention_class == "awaiting_dispatch"
+    )
     running_items = tuple(
         item for item in milestone_items if item.attention_class == "running"
     )
@@ -635,6 +659,7 @@ async def list_roadmaps(context: ReadContext, session: DatabaseSession) -> Roadm
         milestones=milestone_items,
         waiting_for_me=actionable,
         owner_attention=actionable,
+        awaiting_dispatch_milestones=awaiting_dispatch_items,
         running_milestones=running_items,
         dependency_waiting_milestones=dependency_items,
         capacity_waiting_milestones=capacity_items,
@@ -681,6 +706,14 @@ async def act_on_milestone(
             )
     except LookupError as error:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(error)) from error
+    except ProviderRepositoryReadinessNotCurrentError as error:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail={
+                "code": "provider_repository_readiness_not_current",
+                "message": str(error),
+            },
+        ) from error
     except ValueError as error:
         raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
     except EngineeringControlError as error:

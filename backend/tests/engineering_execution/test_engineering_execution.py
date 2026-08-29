@@ -260,6 +260,44 @@ async def test_approved_command_persists_disconnected_execution_and_evidence(
 
 
 @pytest.mark.asyncio
+async def test_pre_execution_terminal_rejection_preserves_null_started_at(
+    execution_database: ServiceFixture,
+) -> None:
+    fixture = execution_database
+    command = await approved_command(fixture)
+    async with fixture.factory() as session:
+        requested = await EngineeringExecutionService().request_execution(
+            session,
+            context=execution_context(fixture.context),
+            command_id=command.id,
+        )
+
+    finished_at = utc_now() + timedelta(seconds=1)
+    async with fixture.factory() as session, session.begin():
+        execution = await session.get(EngineeringExecution, requested.execution_id)
+        assert execution is not None
+        execution.state = "failed"
+        execution.status = "failed"
+        execution.failure_classification = "controlled_execution_failed"
+        execution.finished_at = finished_at
+        execution.evidence_summary = {
+            "terminal_rejection": True,
+            "rejection_stage": "automatic_offer_admission",
+            "rejection_reason": "provider_repository_readiness_not_current",
+            "repository_mutated": False,
+        }
+        execution.updated_at = finished_at
+
+    async with fixture.factory() as session:
+        persisted = await session.get(EngineeringExecution, requested.execution_id)
+        assert persisted is not None
+        assert persisted.state == "failed"
+        assert persisted.started_at is None
+        assert persisted.finished_at == finished_at
+        assert persisted.evidence_summary["terminal_rejection"] is True
+
+
+@pytest.mark.asyncio
 async def test_request_is_idempotent_and_company_scoped(
     execution_database: ServiceFixture,
 ) -> None:

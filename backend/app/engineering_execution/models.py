@@ -11,7 +11,8 @@ from sqlalchemy import (
     String,
     UniqueConstraint,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID as PGUUID
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -61,9 +62,11 @@ class EngineeringExecution(Base):
             name="ck_engineering_executions_updated_at",
         ),
         CheckConstraint(
-            "started_at IS NULL AND finished_at IS NULL "
-            "OR started_at IS NOT NULL AND "
-            "(finished_at IS NULL OR finished_at >= started_at)",
+            "(started_at IS NULL AND "
+            "(finished_at IS NULL OR "
+            "(state IN ('failed','cancelled') AND finished_at >= requested_at))) "
+            "OR (started_at IS NOT NULL AND started_at >= requested_at AND "
+            "(finished_at IS NULL OR finished_at >= started_at))",
             name="ck_engineering_executions_timestamps",
         ),
         CheckConstraint(

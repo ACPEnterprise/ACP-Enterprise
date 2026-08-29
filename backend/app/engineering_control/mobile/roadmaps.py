@@ -27,6 +27,9 @@ from app.engineering_control.commands import (
     ApproveEngineeringCommand,
     CreateEngineeringCommand,
 )
+from app.engineering_control.errors import (
+    ProviderRepositoryReadinessNotCurrentError,
+)
 from app.engineering_control.post_adoption_convergence import (
     AdoptedOwnerReviewFacts,
     evaluate_adopted_owner_review,
@@ -499,24 +502,28 @@ class RoadmapService:
                 candidate_head=candidate_head,
                 authoritative_head=expected_head,
             )
-            if requested_code_changes or "proof_role" in starting_commit_evidence:
-                from app.engineering_control.repository_readiness import (
-                    repository_readiness_service,
-                )
+            from app.engineering_control.repository_readiness import (
+                repository_preparation_required,
+                repository_readiness_service,
+            )
 
-                if not await repository_readiness_service.is_current_for_milestone(
-                    db,
-                    company_id=context.company.id,
-                    milestone_id=milestone_id,
-                    repository_key=repository_key,
-                    branch=expected_branch,
-                    candidate_head=expected_head,
-                    evidence=starting_commit_evidence,
-                    now=now,
-                ):
-                    raise ValueError(
-                        "The assigned provider repository is not prepared for the current execution base."
-                    )
+            if repository_preparation_required(
+                requested_code_changes=requested_code_changes,
+                evidence=starting_commit_evidence,
+            ) and not await repository_readiness_service.start_admission_is_current(
+                db,
+                company_id=context.company.id,
+                milestone_id=milestone_id,
+                repository_key=repository_key,
+                branch=expected_branch,
+                authoritative_head=expected_head,
+                requested_code_changes=requested_code_changes,
+                evidence=starting_commit_evidence,
+                now=now,
+            ):
+                raise ProviderRepositoryReadinessNotCurrentError(
+                    "The assigned provider repository is not prepared for the current execution base."
+                )
             await db.rollback()
             return await self._start_command(
                 db,
@@ -608,24 +615,28 @@ class RoadmapService:
             candidate_head=candidate_head,
             authoritative_head=expected_head,
         )
-        if requested_code_changes or "proof_role" in starting_commit_evidence:
-            from app.engineering_control.repository_readiness import (
-                repository_readiness_service,
-            )
+        from app.engineering_control.repository_readiness import (
+            repository_preparation_required,
+            repository_readiness_service,
+        )
 
-            if not await repository_readiness_service.is_current_for_milestone(
-                db,
-                company_id=context.company.id,
-                milestone_id=milestone_id,
-                repository_key=repository_key,
-                branch=expected_branch,
-                candidate_head=expected_head,
-                evidence=starting_commit_evidence,
-                now=now,
-            ):
-                raise ValueError(
-                    "The assigned provider repository is not prepared for the current execution base."
-                )
+        if repository_preparation_required(
+            requested_code_changes=requested_code_changes,
+            evidence=starting_commit_evidence,
+        ) and not await repository_readiness_service.start_admission_is_current(
+            db,
+            company_id=context.company.id,
+            milestone_id=milestone_id,
+            repository_key=repository_key,
+            branch=expected_branch,
+            authoritative_head=expected_head,
+            requested_code_changes=requested_code_changes,
+            evidence=starting_commit_evidence,
+            now=now,
+        ):
+            raise ProviderRepositoryReadinessNotCurrentError(
+                "The assigned provider repository is not prepared for the current execution base."
+            )
         await db.rollback()
         command = await self.commands.create_command(
             db,

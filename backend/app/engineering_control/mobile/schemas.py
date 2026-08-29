@@ -306,7 +306,7 @@ class MilestoneItem(MobileEngineeringSchema):
     externally_adoptable: bool = False
     attention_class: str = Field(
         default="informational",
-        pattern=r"^(owner_action_required|running|waiting_on_dependency|waiting_on_capacity|waiting_on_external|informational)$",
+        pattern=r"^(owner_action_required|awaiting_dispatch|running|waiting_on_dependency|waiting_on_capacity|waiting_on_external|informational)$",
     )
     attention_reason: str = "No owner action is required."
     available_owner_actions: tuple[str, ...] = ()
@@ -389,6 +389,7 @@ class RoadmapPage(MobileEngineeringSchema):
     milestones: tuple[MilestoneItem, ...]
     waiting_for_me: tuple[MilestoneItem, ...]
     owner_attention: tuple[MilestoneItem, ...]
+    awaiting_dispatch_milestones: tuple[MilestoneItem, ...]
     running_milestones: tuple[MilestoneItem, ...]
     dependency_waiting_milestones: tuple[MilestoneItem, ...]
     capacity_waiting_milestones: tuple[MilestoneItem, ...]

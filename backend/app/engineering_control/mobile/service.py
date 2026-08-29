@@ -688,6 +688,8 @@ class MobileEngineeringControlService:
             return "reconciliation_required"
         if pipeline == "waiting_for_owner":
             return "waiting_for_owner_review"
+        if pipeline == "awaiting_dispatch":
+            return "authorized_awaiting_dispatch"
         if pipeline in {"acknowledged", "running", "validating", "deploying_preview"}:
             return "executing_milestone" if milestone else "active_command"
         if pipeline == "queued":
@@ -737,6 +739,12 @@ class MobileEngineeringControlService:
                 and runtime.runtime_state not in {"completed", "failed", "cancelled"}
             ):
                 return "recovering"
+            if (
+                status.monitoring_state == "disconnected"
+                and runtime.runtime_state in {"queued", "acknowledged"}
+                and status.lease.status != "active"
+            ):
+                return "awaiting_dispatch"
             return runtime.runtime_state
         if desired_state == "cancelled" or status.monitoring_state == "cancelled":
             return "cancelled"
