@@ -70,20 +70,26 @@ def test_current_projection_reconciles_completion_and_releases_successor() -> No
     assert milestones["BANK.PLAT.003"].completion_commit_sha == (
         "e7002e9c15745e8236cca7af8265a432243e4b74"
     )
+    assert milestones["BANK.PLAT.004"].current_state == "COMPLETE"
+    assert milestones["BANK.PLAT.004"].canonical_milestone_id == "BANK.PLAT.004"
+    assert milestones["BANK.PLAT.004"].completion_commit_sha == (
+        "6f051c8b549298790f51795b42c1644c0f4f131f"
+    )
     assert milestones["BANK.PUR.002"].current_state == "COMPLETE"
     assert milestones["BANK.PUR.002"].canonical_milestone_id == "PUR.2"
     assert milestones["BANK.PUR.002"].completion_commit_sha == (
         "04d74278b914b73ca96838128980218fced32546"
     )
     assert milestones["BANK.PUR.003"].current_state == "EXECUTABLE"
-    assert milestones["BANK.PLAT.004"].current_state == "EXECUTABLE"
+    assert milestones["BANK.PLAT.005"].current_state == "EXECUTABLE"
     assert "BANK.PUR.001" not in projection.executable_milestone_ids
     assert "BANK.PLAT.001" not in projection.executable_milestone_ids
     assert "BANK.PUR.002" not in projection.executable_milestone_ids
     assert "BANK.PUR.003" in projection.executable_milestone_ids
     assert "BANK.PLAT.002" not in projection.executable_milestone_ids
     assert "BANK.PLAT.003" not in projection.executable_milestone_ids
-    assert "BANK.PLAT.004" in projection.executable_milestone_ids
+    assert "BANK.PLAT.004" not in projection.executable_milestone_ids
+    assert "BANK.PLAT.005" in projection.executable_milestone_ids
     assert "BANK.BEA.001" in projection.executable_milestone_ids
 
     accounting = milestones["BANK.ACC.001"]
@@ -119,9 +125,12 @@ def test_platform_002_acceptance_changes_only_itself_and_direct_successor() -> N
     raw["completion_evidence"] = [
         item
         for item in raw["completion_evidence"]  # type: ignore[union-attr]
-        if item["bank_milestone_id"] not in {"BANK.PLAT.002", "BANK.PLAT.003"}
+        if item["bank_milestone_id"]
+        not in {"BANK.PLAT.002", "BANK.PLAT.003", "BANK.PLAT.004"}
     ]
-    prior = _by_id(evaluate_readiness(bank, ingest_authority_snapshot(_resign(raw), bank)))
+    prior = _by_id(
+        evaluate_readiness(bank, ingest_authority_snapshot(_resign(raw), bank))
+    )
 
     changed = {
         milestone_id
@@ -129,7 +138,12 @@ def test_platform_002_acceptance_changes_only_itself_and_direct_successor() -> N
         if current[milestone_id].current_state != prior[milestone_id].current_state
     }
 
-    assert changed == {"BANK.PLAT.002", "BANK.PLAT.003", "BANK.PLAT.004"}
+    assert changed == {
+        "BANK.PLAT.002",
+        "BANK.PLAT.003",
+        "BANK.PLAT.004",
+        "BANK.PLAT.005",
+    }
 
 
 def test_platform_003_acceptance_changes_only_itself_and_direct_successor() -> None:
@@ -141,11 +155,18 @@ def test_platform_003_acceptance_changes_only_itself_and_direct_successor() -> N
     plat_003 = next(
         item for item in evidence if item["bank_milestone_id"] == "BANK.PLAT.003"
     )
-    assert "3892678346c7054803e7f16362d1d7663218f3ff30a3fe6d6860555e4042caef" in plat_003["evidence_reference"]
+    assert (
+        "3892678346c7054803e7f16362d1d7663218f3ff30a3fe6d6860555e4042caef"
+        in plat_003["evidence_reference"]
+    )
     raw["completion_evidence"] = [
-        item for item in evidence if item["bank_milestone_id"] != "BANK.PLAT.003"
+        item
+        for item in evidence
+        if item["bank_milestone_id"] not in {"BANK.PLAT.003", "BANK.PLAT.004"}
     ]
-    prior = _by_id(evaluate_readiness(bank, ingest_authority_snapshot(_resign(raw), bank)))
+    prior = _by_id(
+        evaluate_readiness(bank, ingest_authority_snapshot(_resign(raw), bank))
+    )
 
     changed = {
         milestone_id
@@ -153,7 +174,39 @@ def test_platform_003_acceptance_changes_only_itself_and_direct_successor() -> N
         if current[milestone_id].current_state != prior[milestone_id].current_state
     }
 
-    assert changed == {"BANK.PLAT.003", "BANK.PLAT.004"}
+    assert changed == {"BANK.PLAT.003", "BANK.PLAT.004", "BANK.PLAT.005"}
+
+
+def test_platform_004_acceptance_changes_only_itself_and_direct_successor() -> None:
+    bank = load_milestone_bank()
+    current = _by_id(load_current_readiness_projection())
+    raw = _authority_raw()
+    evidence = raw["completion_evidence"]
+    assert isinstance(evidence, list)
+    plat_004 = next(
+        item for item in evidence if item["bank_milestone_id"] == "BANK.PLAT.004"
+    )
+    assert plat_004["authoritative_commit_sha"] == (
+        "6f051c8b549298790f51795b42c1644c0f4f131f"
+    )
+    assert (
+        "49e35f171ac657be66727fa24f5311806fb27203dff8e4709181f62e12b85b43"
+        in plat_004["evidence_reference"]
+    )
+    raw["completion_evidence"] = [
+        item for item in evidence if item["bank_milestone_id"] != "BANK.PLAT.004"
+    ]
+    prior = _by_id(
+        evaluate_readiness(bank, ingest_authority_snapshot(_resign(raw), bank))
+    )
+
+    changed = {
+        milestone_id
+        for milestone_id in current
+        if current[milestone_id].current_state != prior[milestone_id].current_state
+    }
+
+    assert changed == {"BANK.PLAT.004", "BANK.PLAT.005"}
 
 
 def test_pur_002_acceptance_changes_only_itself_and_direct_successor() -> None:
@@ -165,7 +218,9 @@ def test_pur_002_acceptance_changes_only_itself_and_direct_successor() -> None:
         for item in raw["completion_evidence"]  # type: ignore[union-attr]
         if item["bank_milestone_id"] != "BANK.PUR.002"
     ]
-    prior = _by_id(evaluate_readiness(bank, ingest_authority_snapshot(_resign(raw), bank)))
+    prior = _by_id(
+        evaluate_readiness(bank, ingest_authority_snapshot(_resign(raw), bank))
+    )
 
     changed = {
         milestone_id

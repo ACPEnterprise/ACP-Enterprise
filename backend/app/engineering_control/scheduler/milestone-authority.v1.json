@@ -3,7 +3,7 @@
   "authority_id": "BANK.DF.002.AUTHORITY",
   "bank_id": "BANK.2",
   "bank_fingerprint": "f0af5713c967b92588ed1a82d36f5adc864fc4b235064dad0c5f5d11b158d4b3",
-  "authoritative_repository_sha": "e7002e9c15745e8236cca7af8265a432243e4b74",
+  "authoritative_repository_sha": "6f051c8b549298790f51795b42c1644c0f4f131f",
   "repository_ref": "origin/customer-management-v1",
   "completion_inventory_scope": "ALL_BANK_MILESTONES",
   "completion_evidence": [
@@ -43,6 +43,13 @@
       "evidence_reference": "owner-accepted Company and Branch isolation property suite; 21-domain coverage fingerprint 3892678346c7054803e7f16362d1d7663218f3ff30a3fe6d6860555e4042caef"
     },
     {
+      "bank_milestone_id": "BANK.PLAT.004",
+      "canonical_milestone_id": "BANK.PLAT.004",
+      "evidence_kind": "AUTHORITATIVE_INTEGRATION_ACCEPTANCE",
+      "authoritative_commit_sha": "6f051c8b549298790f51795b42c1644c0f4f131f",
+      "evidence_reference": "owner-accepted immutable audit completeness verification; 21-domain coverage fingerprint 49e35f171ac657be66727fa24f5311806fb27203dff8e4709181f62e12b85b43"
+    },
+    {
       "bank_milestone_id": "BANK.DF.001",
       "canonical_milestone_id": "BANK.DF.001",
       "evidence_kind": "AUTHORITATIVE_INTEGRATION_ACCEPTANCE",
@@ -78,5 +85,5 @@
   ],
   "gate_resolutions": [],
   "active_ownership": [],
-  "fingerprint": "a04be31ad7dbfd4875a5bdb3dc2d19695cdf2a70c39485d164ec39c27671bca7"
+  "fingerprint": "84e30e93384340ef9769a83ee57c0a591b8bb7cf5a5e2fa41b8d4e9ce25186f9"
 }
