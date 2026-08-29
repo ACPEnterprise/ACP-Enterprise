@@ -483,8 +483,17 @@ class SandboxFixtureService:
         if not isinstance(record, dict):
             raise SandboxFixtureError("fixture_change_subject_missing")
         current = await self._get_entity("Customer", str(record["native_id"]))
-        before = _digest(current)
         marker = f"{FIXTURE_TAG}:CONTROLLED-CHANGE-V1"
+        existing_path = self.fixture_root / "controlled-change.json"
+        if current.get("Notes") == marker and existing_path.exists():
+            existing = _read_json(existing_path)
+            if existing.get("after_sha256") != _digest(current):
+                raise SandboxFixtureError("fixture_change_evidence_conflict")
+            return {
+                "state": "ALREADY_CURRENT",
+                "change_digest": str(existing["change_digest"]),
+            }
+        before = _digest(current)
         if current.get("Notes") != marker:
             updated = await self._post(
                 "Customer",

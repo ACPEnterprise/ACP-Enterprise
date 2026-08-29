@@ -55,6 +55,9 @@ async def acquire_and_reconcile(
         raise SandboxFixtureError("history_fixture_authority_ambiguous")
     fixture_manifest = _read_json(fixture_roots[0])
     expected_manifest = _read_json(fixture_roots[0].with_name("expected-ledger.json"))
+    fixture_objects = fixture_manifest.get("objects")
+    if not isinstance(fixture_objects, list):
+        raise SandboxFixtureError("history_fixture_manifest_invalid")
     repository = Path(configuration.qbo_repository_root).resolve()
     evidence = ProtectedFilesystemEvidenceStore(
         root=root / "representative-history-evidence", repository_root=repository
@@ -119,7 +122,7 @@ async def acquire_and_reconcile(
         (family, native_id): envelopes[(family, native_id)]
         for family, native_id in (
             (str(item["family"]), str(item["native_id"]))
-            for item in fixture_manifest.get("objects", [])
+            for item in fixture_objects
             if isinstance(item, Mapping)
         )
     }
