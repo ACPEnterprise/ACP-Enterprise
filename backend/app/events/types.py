@@ -51,6 +51,13 @@ class EventType(str, Enum):
     PAYROLL_RUN_APPROVED = "payroll.run_approved"
     PAYROLL_RUN_SUPERSEDED = "payroll.run_superseded"
     PAYROLL_RUN_VOIDED = "payroll.run_voided"
+    PAYROLL_PAYMENT_DESTINATION_CREATED = "payroll.payment_destination_created"
+    PAYROLL_PAYMENT_DESTINATION_APPROVED = "payroll.payment_destination_approved"
+    PAYROLL_PAYMENT_DESTINATION_REVOKED = "payroll.payment_destination_revoked"
+    PAYROLL_PAYMENT_RELEASE_ASSEMBLED = "payroll.payment_release_assembled"
+    PAYROLL_PAYMENT_RELEASE_REVIEWED = "payroll.payment_release_reviewed"
+    PAYROLL_PAYMENT_RELEASE_APPROVED = "payroll.payment_release_approved"
+    PAYROLL_PAYMENT_RELEASE_SUPERSEDED = "payroll.payment_release_superseded"
 
     # Accounts Payable
     ACCOUNTS_PAYABLE_VENDOR_CREATED = "accounts_payable.vendor_created"
