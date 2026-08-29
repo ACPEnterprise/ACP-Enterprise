@@ -5,7 +5,8 @@ from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.events.schemas import BusinessEventCreate
@@ -248,6 +249,33 @@ class PurchasingService:
         context: AuthorizationContext,
         payload: ReplenishmentDecisionCommand,
     ) -> ReplenishmentDecisionItem:
+        try:
+            return await self._decide_replenishment_once(
+                session, context=context, payload=payload
+            )
+        except IntegrityError as error:
+            if self._replenishment_constraint(error) not in {
+                "uq_purchasing_replenishment_key",
+                "uq_purchasing_replenishment_recommendation",
+            }:
+                raise
+            await session.rollback()
+            recovered = await self._recover_replenishment_decision(
+                session, context=context, payload=payload
+            )
+            if recovered is None:
+                raise PurchasingConflict(
+                    "Replenishment disposition changed concurrently"
+                ) from error
+            return recovered
+
+    async def _decide_replenishment_once(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        payload: ReplenishmentDecisionCommand,
+    ) -> ReplenishmentDecisionItem:
         self.branch(context, payload.branch_id)
         data = payload.model_dump(mode="json")
         payload_digest = digest(data)
@@ -265,6 +293,15 @@ class PurchasingService:
                         "Replenishment decision idempotency identity conflicts"
                     )
                 return ReplenishmentDecisionItem.model_validate(replay)
+            await session.execute(
+                select(
+                    func.pg_advisory_xact_lock(
+                        self._replenishment_lock_id(
+                            context.company.id, payload.recommendation_digest
+                        )
+                    )
+                )
+            )
             workbench = await self.replenishment_workbench(
                 session,
                 context=context,
@@ -282,6 +319,11 @@ class PurchasingService:
             recommendation = workbench.recommendations[0]
             if recommendation.evidence_digest != payload.recommendation_digest:
                 raise PurchasingConflict("STALE_REPLENISHMENT_RECOMMENDATION")
+            concurrent = await self._recover_replenishment_decision(
+                session, context=context, payload=payload
+            )
+            if concurrent is not None:
+                return concurrent
             vendor = None
             order = None
             approved_quantity = payload.approved_quantity
@@ -401,6 +443,69 @@ class PurchasingService:
                     {"decision_id": str(record.id), "purchase_order_id": str(order.id)},
                 )
             return ReplenishmentDecisionItem.model_validate(record)
+
+    async def _recover_replenishment_decision(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        payload: ReplenishmentDecisionCommand,
+    ) -> ReplenishmentDecisionItem | None:
+        existing = await session.scalar(
+            select(ReplenishmentDecisionEvidence).where(
+                ReplenishmentDecisionEvidence.company_id == context.company.id,
+                ReplenishmentDecisionEvidence.recommendation_digest
+                == payload.recommendation_digest,
+            )
+        )
+        if existing is None:
+            return None
+        equivalent = (
+            existing.branch_id == payload.branch_id
+            and existing.inventory_item_id == payload.inventory_item_id
+            and existing.decision == payload.decision
+            and existing.reason == payload.reason
+            and existing.approved_quantity == payload.approved_quantity
+            and existing.vendor_id == payload.vendor_id
+        )
+        if equivalent and payload.decision == "approved":
+            order = await session.scalar(
+                select(PurchaseOrder).where(
+                    PurchaseOrder.company_id == context.company.id,
+                    PurchaseOrder.id == existing.purchase_order_id,
+                )
+            )
+            line = await session.scalar(
+                select(PurchaseOrderLine).where(
+                    PurchaseOrderLine.company_id == context.company.id,
+                    PurchaseOrderLine.purchase_order_id == existing.purchase_order_id,
+                    PurchaseOrderLine.line_number == 1,
+                )
+            )
+            equivalent = (
+                order is not None
+                and line is not None
+                and order.currency == payload.currency
+                and line.quantity == payload.approved_quantity
+                and line.unit_cost == payload.unit_cost
+            )
+        if not equivalent:
+            raise PurchasingConflict(
+                "Replenishment recommendation already has a conflicting disposition"
+            )
+        return ReplenishmentDecisionItem.model_validate(existing)
+
+    @staticmethod
+    def _replenishment_lock_id(company_id: UUID, recommendation_digest: str) -> int:
+        authority = hashlib.sha256(
+            f"{company_id}:{recommendation_digest}".encode()
+        ).digest()
+        return int.from_bytes(authority[:8], byteorder="big", signed=True)
+
+    @staticmethod
+    def _replenishment_constraint(error: IntegrityError) -> str | None:
+        cause = getattr(error.orig, "__cause__", None)
+        return getattr(cause, "constraint_name", None)
 
     async def vendor_performance_evidence(
         self,
