@@ -53,6 +53,10 @@ export function PurchaseOrderDispositionControls({
     (total, line) => total + Number(line.outstanding_quantity),
     0,
   );
+  const previouslyCanceled = po.lines.reduce(
+    (total, line) => total + (line.is_cancelled ? Number(line.quantity) - Number(line.cumulative_accepted_quantity) : 0),
+    0,
+  );
   const returned = po.returns
     .filter((item) => item.status !== "canceled")
     .reduce((total, item) => total + Number(item.quantity), 0);
@@ -103,6 +107,7 @@ export function PurchaseOrderDispositionControls({
         <div>Accepted received <strong>{received}</strong></div>
         <div>Returned/committed <strong>{returned}</strong></div>
         <div>Outstanding <strong>{outstanding}</strong></div>
+        <div>Previously canceled <strong>{previouslyCanceled}</strong></div>
       </div>
       {blockers.length > 0 ? (
         <Alert variant="warning">Disposition is blocked by authoritative Purchasing evidence: {blockers.join(", ")}.</Alert>
@@ -111,7 +116,7 @@ export function PurchaseOrderDispositionControls({
       )}
       {errorMessage && <Alert variant="danger">{errorMessage}</Alert>}
       <div className="mt-2 flex flex-wrap gap-2">
-        {canClose && po.status === "issued" && (
+        {canClose && po.status === "issued" && previouslyCanceled === 0 && (
           <Button onClick={() => setAction("complete")}>Record fully satisfied completion</Button>
         )}
         {canCancel && ["draft", "submitted", "approved", "issued"].includes(po.status) && (

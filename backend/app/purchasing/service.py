@@ -1677,13 +1677,15 @@ class PurchasingService:
             quantity_evidence: list[dict[str, object]] = []
             total_accepted = Decimal(0)
             total_outstanding = Decimal(0)
+            total_previously_canceled = Decimal(0)
             for line in lines:
                 received = accepted.get(line.id, Decimal(0))
-                outstanding = (
-                    Decimal(0) if line.is_cancelled else line.quantity - received
-                )
+                unfulfilled = max(line.quantity - received, Decimal(0))
+                previously_canceled = unfulfilled if line.is_cancelled else Decimal(0)
+                outstanding = Decimal(0) if line.is_cancelled else unfulfilled
                 total_accepted += received
                 total_outstanding += outstanding
+                total_previously_canceled += previously_canceled
                 quantity_evidence.append(
                     {
                         "purchase_order_line_id": str(line.id),
@@ -1692,7 +1694,7 @@ class PurchasingService:
                         "accepted_received_quantity": str(received),
                         "previously_canceled": line.is_cancelled,
                         "prior_outstanding_quantity": str(max(outstanding, Decimal(0))),
-                        "canceled_remainder_quantity": "0",
+                        "canceled_remainder_quantity": str(previously_canceled),
                     }
                 )
             timestamp = now()
@@ -1701,7 +1703,7 @@ class PurchasingService:
                     raise PurchasingValidation(
                         "Only an issued Purchase Order may be completed"
                     )
-                if total_outstanding != 0:
+                if total_outstanding != 0 or total_previously_canceled != 0:
                     raise PurchasingValidation(
                         "Purchase Order is not fully satisfied by authoritative receiving facts"
                     )
@@ -1713,7 +1715,11 @@ class PurchasingService:
                     raise PurchasingValidation(
                         "Purchase Order cannot be canceled from current state"
                     )
-                if order.status == "issued" and total_outstanding == 0:
+                if (
+                    order.status == "issued"
+                    and total_outstanding == 0
+                    and total_previously_canceled == 0
+                ):
                     raise PurchasingValidation(
                         "A fully received Purchase Order cannot be canceled"
                     )
@@ -1721,10 +1727,16 @@ class PurchasingService:
                     disposition = "canceled_before_receipt"
                 else:
                     disposition = "remainder_canceled"
-                    for line_evidence in quantity_evidence:
-                        line_evidence["canceled_remainder_quantity"] = line_evidence[
-                            "prior_outstanding_quantity"
-                        ]
+                for line_evidence in quantity_evidence:
+                    prior_canceled = Decimal(
+                        str(line_evidence["canceled_remainder_quantity"])
+                    )
+                    open_remainder = Decimal(
+                        str(line_evidence["prior_outstanding_quantity"])
+                    )
+                    line_evidence["canceled_remainder_quantity"] = str(
+                        prior_canceled + open_remainder
+                    )
                 terminal_status = "cancelled"
                 event_type = (
                     EventType.PURCHASING_PURCHASE_ORDER_REMAINDER_CANCELED
@@ -2215,10 +2227,11 @@ class PurchasingService:
                             "cumulative_accepted_quantity": totals.get(
                                 line.id, Decimal(0)
                             ),
-                            "outstanding_quantity": line.quantity
-                            - totals.get(line.id, Decimal(0))
-                            if disposition is None
-                            else Decimal(0),
+                            "outstanding_quantity": (
+                                Decimal(0)
+                                if disposition is not None or line.is_cancelled
+                                else line.quantity - totals.get(line.id, Decimal(0))
+                            ),
                         }
                     )
                     for line in lines

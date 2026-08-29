@@ -952,6 +952,286 @@ async def test_unsatisfied_completion_fails_and_partial_remainder_cancel_is_expl
 
 
 @pytest.mark.asyncio
+async def test_prior_change_order_line_cancellation_is_quantified_at_disposition(
+    purchasing_fixture,
+) -> None:
+    factory, _, _, branch, _, preparer, approver = purchasing_fixture
+    service = PurchasingService()
+    po_id, line_id, version = await issued_order(factory, branch, preparer, approver)
+    async with factory() as session:
+        requested = await service.request_change(
+            session,
+            context=preparer,
+            po_id=po_id,
+            payload=RequestPurchaseOrderChangeCommand(
+                expected_po_version=version,
+                base_revision=1,
+                change_identity="CO-CANCEL-PRIOR",
+                reason="Vendor cannot supply this line",
+                idempotency_key="request-cancel-prior",
+                changes=(
+                    PurchaseOrderChangeOperation(
+                        operation="cancel_line", line_id=line_id
+                    ),
+                ),
+            ),
+        )
+    async with factory() as session:
+        await service.decide_change(
+            session,
+            context=approver,
+            po_id=po_id,
+            change_id=requested.id,
+            action="approve",
+            payload=DecidePurchaseOrderChangeCommand(
+                expected_po_version=version,
+                expected_base_revision=1,
+                idempotency_key="approve-cancel-prior",
+            ),
+        )
+        order = await service.get_order(session, context=approver, po_id=po_id)
+        assert order.lines[0].is_cancelled is True
+        assert order.lines[0].outstanding_quantity == Decimal(0)
+    completion = disposition(
+        order.version,
+        order.effective_revision,
+        "complete-canceled-line",
+        "Incorrect satisfaction attempt",
+    )
+    async with factory() as session:
+        with pytest.raises(PurchasingValidation, match="not fully satisfied"):
+            await service.terminal_disposition(
+                session,
+                context=approver,
+                po_id=po_id,
+                action="complete",
+                payload=completion,
+            )
+    cancellation = disposition(
+        order.version,
+        order.effective_revision,
+        "terminal-canceled-line",
+        "Preserve prior line cancellation",
+    )
+    async with factory() as session:
+        result = await service.terminal_disposition(
+            session,
+            context=approver,
+            po_id=po_id,
+            action="cancel",
+            payload=cancellation,
+        )
+        replay = await service.terminal_disposition(
+            session,
+            context=approver,
+            po_id=po_id,
+            action="cancel",
+            payload=cancellation,
+        )
+        line_evidence = result.quantity_evidence[0]
+        assert replay.id == result.id
+        assert result.disposition == "canceled_before_receipt"
+        assert Decimal(str(line_evidence["effective_ordered_quantity"])) == 10
+        assert Decimal(str(line_evidence["accepted_received_quantity"])) == 0
+        assert Decimal(str(line_evidence["canceled_remainder_quantity"])) == 10
+        assert Decimal(str(line_evidence["accepted_received_quantity"])) + Decimal(
+            str(line_evidence["canceled_remainder_quantity"])
+        ) == Decimal(str(line_evidence["effective_ordered_quantity"]))
+        event_count = await session.scalar(
+            select(func.count())
+            .select_from(BusinessEvent)
+            .where(
+                BusinessEvent.entity_id == po_id,
+                BusinessEvent.event_type == "purchasing.purchase_order_cancelled",
+            )
+        )
+        assert event_count == 1
+
+
+@pytest.mark.asyncio
+async def test_mixed_line_terminal_evidence_reconciles_every_effective_quantity(
+    purchasing_fixture,
+) -> None:
+    factory, _, _, branch, _, preparer, approver = purchasing_fixture
+    service = PurchasingService()
+    po_id, first_line_id, version = await issued_order(
+        factory, branch, preparer, approver
+    )
+    async with factory() as session:
+        await service.record_receipt(
+            session,
+            context=approver,
+            po_id=po_id,
+            payload=receipt(version, first_line_id, "10", "mixed-full-receipt"),
+        )
+    async with factory() as session:
+        order = await service.get_order(session, context=preparer, po_id=po_id)
+        add_version = order.version
+        add_revision = order.effective_revision
+    async with factory() as session:
+        added = await service.request_change(
+            session,
+            context=preparer,
+            po_id=po_id,
+            payload=RequestPurchaseOrderChangeCommand(
+                expected_po_version=add_version,
+                base_revision=add_revision,
+                change_identity="CO-MIXED-ADD",
+                reason="Add remaining vendor obligations",
+                idempotency_key="request-mixed-add",
+                changes=(
+                    PurchaseOrderChangeOperation(
+                        operation="add_line",
+                        description="Partial line",
+                        quantity=Decimal(6),
+                        unit="each",
+                        unit_cost=Decimal(2),
+                    ),
+                    PurchaseOrderChangeOperation(
+                        operation="add_line",
+                        description="Canceled line",
+                        quantity=Decimal(8),
+                        unit="each",
+                        unit_cost=Decimal(3),
+                    ),
+                ),
+            ),
+        )
+    async with factory() as session:
+        await service.decide_change(
+            session,
+            context=approver,
+            po_id=po_id,
+            change_id=added.id,
+            action="approve",
+            payload=DecidePurchaseOrderChangeCommand(
+                expected_po_version=add_version,
+                expected_base_revision=add_revision,
+                idempotency_key="approve-mixed-add",
+            ),
+        )
+    async with factory() as session:
+        order = await service.get_order(session, context=preparer, po_id=po_id)
+        partial_line = next(line for line in order.lines if line.quantity == 6)
+        canceled_line = next(line for line in order.lines if line.quantity == 8)
+        cancel_version = order.version
+        cancel_revision = order.effective_revision
+    async with factory() as session:
+        canceled = await service.request_change(
+            session,
+            context=preparer,
+            po_id=po_id,
+            payload=RequestPurchaseOrderChangeCommand(
+                expected_po_version=cancel_version,
+                base_revision=cancel_revision,
+                change_identity="CO-MIXED-CANCEL",
+                reason="Vendor cannot supply final line",
+                idempotency_key="request-mixed-cancel",
+                changes=(
+                    PurchaseOrderChangeOperation(
+                        operation="cancel_line", line_id=canceled_line.id
+                    ),
+                ),
+            ),
+        )
+    async with factory() as session:
+        await service.decide_change(
+            session,
+            context=approver,
+            po_id=po_id,
+            change_id=canceled.id,
+            action="approve",
+            payload=DecidePurchaseOrderChangeCommand(
+                expected_po_version=cancel_version,
+                expected_base_revision=cancel_revision,
+                idempotency_key="approve-mixed-cancel",
+            ),
+        )
+    async with factory() as session:
+        order = await service.get_order(session, context=approver, po_id=po_id)
+        receipt_version = order.version
+    async with factory() as session:
+        await service.record_receipt(
+            session,
+            context=approver,
+            po_id=po_id,
+            payload=receipt(
+                receipt_version, partial_line.id, "2", "mixed-partial-receipt"
+            ),
+        )
+    async with factory() as session:
+        order = await service.get_order(session, context=approver, po_id=po_id)
+        terminal_version = order.version
+        terminal_revision = order.effective_revision
+        before = tuple(
+            [
+                await session.scalar(select(func.count()).select_from(model))
+                for model in (
+                    InventoryItem,
+                    StockMovement,
+                    MaterialIssue,
+                    AccountingVendor,
+                    VendorBill,
+                    Journal,
+                    PaymentIntent,
+                    Refund,
+                    CompanyFinancePolicyVersion,
+                )
+            ]
+        )
+    async with factory() as session:
+        result = await service.terminal_disposition(
+            session,
+            context=approver,
+            po_id=po_id,
+            action="cancel",
+            payload=disposition(
+                terminal_version,
+                terminal_revision,
+                "mixed-terminal-cancel",
+                "Close mixed vendor obligations",
+            ),
+        )
+        assert result.disposition == "remainder_canceled"
+        outcomes = {
+            int(item["line_number"]): (
+                Decimal(str(item["effective_ordered_quantity"])),
+                Decimal(str(item["accepted_received_quantity"])),
+                Decimal(str(item["canceled_remainder_quantity"])),
+            )
+            for item in result.quantity_evidence
+        }
+        assert sorted(outcomes.values()) == sorted(
+            [
+                (Decimal(10), Decimal(10), Decimal(0)),
+                (Decimal(6), Decimal(2), Decimal(4)),
+                (Decimal(8), Decimal(0), Decimal(8)),
+            ]
+        )
+        assert all(
+            ordered == accepted + canceled
+            for ordered, accepted, canceled in outcomes.values()
+        )
+        after = tuple(
+            [
+                await session.scalar(select(func.count()).select_from(model))
+                for model in (
+                    InventoryItem,
+                    StockMovement,
+                    MaterialIssue,
+                    AccountingVendor,
+                    VendorBill,
+                    Journal,
+                    PaymentIntent,
+                    Refund,
+                    CompanyFinancePolicyVersion,
+                )
+            ]
+        )
+        assert after == before
+
+
+@pytest.mark.asyncio
 async def test_disposition_blocks_open_discrepancy_and_stale_or_racing_action(
     purchasing_fixture,
 ) -> None:

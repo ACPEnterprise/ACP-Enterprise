@@ -36,4 +36,19 @@ describe("PurchaseOrderDispositionControls", () => {
     expect(screen.getByText("remainder_canceled")).toBeVisible();
     expect(screen.getByText(/Vendor cannot fulfill remainder/)).toBeVisible();
   });
+
+  it("does not present a canceled line as eligible for fully satisfied completion", () => {
+    const canceled = {
+      ...po,
+      lines: [{
+        ...po.lines[0],
+        is_cancelled: true,
+        cumulative_accepted_quantity: "0",
+        outstanding_quantity: "0",
+      }],
+    };
+    render(<PurchaseOrderDispositionControls po={canceled} canClose canCancel pending={false} errorMessage={null} onDisposition={vi.fn()} />);
+    expect(screen.getByText(/Previously canceled/).parentElement).toHaveTextContent("10");
+    expect(screen.queryByRole("button", { name: /Record fully satisfied/ })).not.toBeInTheDocument();
+  });
 });
