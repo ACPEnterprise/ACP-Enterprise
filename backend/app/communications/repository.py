@@ -68,10 +68,11 @@ class CommunicationRepository:
 
     @staticmethod
     async def by_identity(
-        session: AsyncSession, *, request_identity: str
+        session: AsyncSession, *, company_id: UUID, request_identity: str
     ) -> NotificationOutbox | None:
         return await session.scalar(
             select(NotificationOutbox).where(
+                NotificationOutbox.company_id == company_id,
                 NotificationOutbox.idempotency_key == request_identity
             )
         )
@@ -86,11 +87,11 @@ class CommunicationRepository:
     ) -> list[NotificationOutbox]:
         statement: Select[tuple[NotificationOutbox]] = select(NotificationOutbox).where(
             NotificationOutbox.notification_type.like("communications.%"),
-            NotificationOutbox.payload["company_id"].astext == str(company_id),
+            NotificationOutbox.company_id == company_id,
         )
         if branch_id is not None:
             statement = statement.where(
-                NotificationOutbox.payload["branch_id"].astext == str(branch_id)
+                NotificationOutbox.branch_id == branch_id
             )
         statement = statement.order_by(
             NotificationOutbox.created_at.desc(), NotificationOutbox.id.desc()

@@ -111,6 +111,19 @@ class NotificationOutbox(Base):
             unique=True,
             postgresql_where=text("claim_token IS NOT NULL"),
         ),
+        Index(
+            "uq_notification_outbox_company_idempotency_key",
+            "company_id",
+            "idempotency_key",
+            unique=True,
+            postgresql_where=text("company_id IS NOT NULL"),
+        ),
+        Index(
+            "uq_notification_outbox_unscoped_idempotency_key",
+            "idempotency_key",
+            unique=True,
+            postgresql_where=text("company_id IS NULL"),
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(
@@ -125,9 +138,7 @@ class NotificationOutbox(Base):
     correlation_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), nullable=False, default=uuid4
     )
-    idempotency_key: Mapped[str] = mapped_column(
-        String(200), nullable=False, unique=True
-    )
+    idempotency_key: Mapped[str] = mapped_column(String(200), nullable=False)
     intent_digest: Mapped[str | None] = mapped_column(String(64))
     company_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), index=True)
     branch_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), index=True)

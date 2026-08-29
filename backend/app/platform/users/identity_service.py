@@ -1,6 +1,6 @@
+import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-import re
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -171,6 +171,8 @@ class IdentityAdministrationService:
                     idempotency_key=f"identity.email_change:{change.id}",
                     scheduled_at=now,
                     now=now,
+                    company_id=context.company.id,
+                    actor_user_id=context.user.id,
                 )
                 self._stage_events(
                     session,

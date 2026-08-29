@@ -200,6 +200,8 @@ class CommunicationService:
             "requested_by": str(context.user.id),
         }
         source_correlation_id = source.correlation_id
+        source_event_id = source.id
+        source_event_type = source.event_type
         now = datetime.now(timezone.utc)
         # Scope/evidence reads start an implicit transaction. End that read-only
         # transaction before the atomic outbox enqueue boundary.
@@ -215,6 +217,13 @@ class CommunicationService:
                 idempotency_key=request_identity,
                 scheduled_at=request.scheduled_at,
                 now=now,
+                company_id=context.company.id,
+                branch_id=request.branch_id,
+                channel=request.channel.value,
+                recipient_reference=str(request.contact_id),
+                source_event_id=source_event_id,
+                source_action=source_event_type,
+                actor_user_id=context.user.id,
             )
             if not created and record.payload.get("request_digest") != request_digest:
                 raise CommunicationConflictError(

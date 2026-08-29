@@ -1,7 +1,7 @@
 import asyncio
 from collections.abc import AsyncIterator
 from datetime import datetime, timedelta, timezone
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 import pytest_asyncio
@@ -52,6 +52,7 @@ async def enqueue_fixture(
     *,
     key: str | None = None,
     scheduled_at: datetime | None = None,
+    company_id: UUID | None = None,
 ) -> NotificationOutbox:
     now = utc_now()
     async with factory() as session, session.begin():
@@ -65,6 +66,7 @@ async def enqueue_fixture(
             idempotency_key=key or f"test:{uuid4()}",
             scheduled_at=scheduled_at or now,
             now=now,
+            company_id=company_id or uuid4(),
         )
         assert created
         return record
@@ -80,6 +82,7 @@ async def test_enqueue_is_hash_free_structured_and_idempotent(
     recipient = f"recipient-{uuid4().hex}@example.com"
     payload: dict[str, object] = {"change_id": str(uuid4())}
     correlation_id = uuid4()
+    company_id = uuid4()
     async with factory() as session, session.begin():
         first, first_created = await NotificationOutboxRepository.enqueue(
             session,
@@ -91,6 +94,7 @@ async def test_enqueue_is_hash_free_structured_and_idempotent(
             idempotency_key=key,
             scheduled_at=now,
             now=now,
+            company_id=company_id,
         )
         repeated, repeated_created = await NotificationOutboxRepository.enqueue(
             session,
@@ -102,6 +106,7 @@ async def test_enqueue_is_hash_free_structured_and_idempotent(
             idempotency_key=key,
             scheduled_at=now,
             now=now,
+            company_id=company_id,
         )
 
     assert first_created
@@ -315,6 +320,7 @@ async def test_contradictory_intent_replay_fails_closed(
     now = utc_now()
     key = f"intent:{uuid4()}"
     correlation_id = uuid4()
+    company_id = uuid4()
     async with factory() as session, session.begin():
         await NotificationOutboxRepository.enqueue(
             session,
@@ -326,6 +332,7 @@ async def test_contradictory_intent_replay_fails_closed(
             idempotency_key=key,
             scheduled_at=now,
             now=now,
+            company_id=company_id,
         )
         with pytest.raises(ValueError, match="contradictory intent"):
             await NotificationOutboxRepository.enqueue(
@@ -338,6 +345,7 @@ async def test_contradictory_intent_replay_fails_closed(
                 idempotency_key=key,
                 scheduled_at=now,
                 now=now,
+                company_id=company_id,
             )
 
 
@@ -473,7 +481,8 @@ async def test_authorized_suppression_is_terminal_and_auditable(
     outbox_database: tuple[AsyncEngine, async_sessionmaker[AsyncSession]],
 ) -> None:
     _, factory = outbox_database
-    record = await enqueue_fixture(factory)
+    company_id = uuid4()
+    record = await enqueue_fixture(factory, company_id=company_id)
     now = utc_now()
     actor = uuid4()
     reason_digest = "a" * 64
@@ -481,6 +490,7 @@ async def test_authorized_suppression_is_terminal_and_auditable(
         assert not await NotificationOutboxRepository.suppress_or_cancel(
             session,
             notification_id=record.id,
+            company_id=company_id,
             target="suppressed",
             actor_user_id=actor,
             reason_digest=reason_digest,
@@ -490,6 +500,7 @@ async def test_authorized_suppression_is_terminal_and_auditable(
         assert await NotificationOutboxRepository.suppress_or_cancel(
             session,
             notification_id=record.id,
+            company_id=company_id,
             target="suppressed",
             actor_user_id=actor,
             reason_digest=reason_digest,
@@ -510,3 +521,156 @@ async def test_authorized_suppression_is_terminal_and_auditable(
         assert evidence.outcome == "suppressed"
         assert evidence.actor_user_id == actor
         assert evidence.reason_digest == reason_digest
+
+
+@pytest.mark.asyncio
+async def test_same_key_is_isolated_by_company_and_replays_per_tenant(
+    outbox_database: tuple[AsyncEngine, async_sessionmaker[AsyncSession]],
+) -> None:
+    _, factory = outbox_database
+    now = utc_now()
+    company_a, company_b = uuid4(), uuid4()
+    key = f"shared-provider-identity:{uuid4()}"
+
+    async with factory() as session, session.begin():
+        first_a, created_a = await NotificationOutboxRepository.enqueue(
+            session,
+            notification_type="customer.notice",
+            template_identifier="notice-v1",
+            recipient="tenant-a@example.invalid",
+            payload={"safe_subject_id": "a"},
+            correlation_id=uuid4(),
+            idempotency_key=key,
+            scheduled_at=now,
+            now=now,
+            company_id=company_a,
+        )
+        first_b, created_b = await NotificationOutboxRepository.enqueue(
+            session,
+            notification_type="customer.notice",
+            template_identifier="notice-v1",
+            recipient="tenant-b@example.invalid",
+            payload={"safe_subject_id": "b"},
+            correlation_id=uuid4(),
+            idempotency_key=key,
+            scheduled_at=now,
+            now=now,
+            company_id=company_b,
+        )
+        replay_a, replay_created_a = await NotificationOutboxRepository.enqueue(
+            session,
+            notification_type=first_a.notification_type,
+            template_identifier=first_a.template_identifier,
+            recipient=first_a.recipient,
+            payload=first_a.payload,
+            correlation_id=first_a.correlation_id,
+            idempotency_key=key,
+            scheduled_at=first_a.scheduled_at,
+            now=now,
+            company_id=company_a,
+        )
+        replay_b, replay_created_b = await NotificationOutboxRepository.enqueue(
+            session,
+            notification_type=first_b.notification_type,
+            template_identifier=first_b.template_identifier,
+            recipient=first_b.recipient,
+            payload=first_b.payload,
+            correlation_id=first_b.correlation_id,
+            idempotency_key=key,
+            scheduled_at=first_b.scheduled_at,
+            now=now,
+            company_id=company_b,
+        )
+
+    assert created_a and created_b
+    assert first_a.id != first_b.id
+    assert not replay_created_a and replay_a.id == first_a.id
+    assert not replay_created_b and replay_b.id == first_b.id
+
+
+@pytest.mark.asyncio
+async def test_cross_company_mutation_is_rejected_for_shared_key(
+    outbox_database: tuple[AsyncEngine, async_sessionmaker[AsyncSession]],
+) -> None:
+    _, factory = outbox_database
+    company_a, company_b = uuid4(), uuid4()
+    record = await enqueue_fixture(
+        factory, key=f"shared:{uuid4()}", company_id=company_a
+    )
+    now = utc_now()
+    async with factory() as session, session.begin():
+        assert not await NotificationOutboxRepository.suppress_or_cancel(
+            session,
+            notification_id=record.id,
+            company_id=company_b,
+            target="suppressed",
+            actor_user_id=uuid4(),
+            reason_digest="b" * 64,
+            authorized=True,
+            now=now,
+        )
+    async with factory() as session:
+        unchanged = await session.get(NotificationOutbox, record.id)
+        assert unchanged is not None and unchanged.status == "pending"
+
+
+@pytest.mark.asyncio
+async def test_concurrent_same_key_creation_is_independent_across_companies(
+    outbox_database: tuple[AsyncEngine, async_sessionmaker[AsyncSession]],
+) -> None:
+    _, factory = outbox_database
+    now = utc_now()
+    key = f"concurrent-shared:{uuid4()}"
+
+    async def create(company_id: UUID) -> NotificationOutbox:
+        async with factory() as session, session.begin():
+            record, created = await NotificationOutboxRepository.enqueue(
+                session,
+                notification_type="customer.notice",
+                template_identifier="notice-v1",
+                recipient=f"tenant-{company_id}@example.invalid",
+                payload={"safe_company_id": str(company_id)},
+                correlation_id=uuid4(),
+                idempotency_key=key,
+                scheduled_at=now,
+                now=now,
+                company_id=company_id,
+            )
+            assert created
+            return record
+
+    company_a, company_b = uuid4(), uuid4()
+    first, second = await asyncio.gather(create(company_a), create(company_b))
+    assert first.id != second.id
+    assert {first.company_id, second.company_id} == {company_a, company_b}
+
+
+@pytest.mark.asyncio
+async def test_concurrent_same_company_replay_creates_one_intent(
+    outbox_database: tuple[AsyncEngine, async_sessionmaker[AsyncSession]],
+) -> None:
+    _, factory = outbox_database
+    now = utc_now()
+    company_id = uuid4()
+    key = f"concurrent-same-tenant:{uuid4()}"
+    correlation_id = uuid4()
+    payload: dict[str, object] = {"safe_subject_id": str(uuid4())}
+
+    async def create() -> tuple[NotificationOutbox, bool]:
+        async with factory() as session, session.begin():
+            return await NotificationOutboxRepository.enqueue(
+                session,
+                notification_type="customer.notice",
+                template_identifier="notice-v1",
+                recipient="same-tenant@example.invalid",
+                payload=payload,
+                correlation_id=correlation_id,
+                idempotency_key=key,
+                scheduled_at=now,
+                now=now,
+                company_id=company_id,
+            )
+
+    first, second = await asyncio.gather(create(), create())
+    assert first[0].id == second[0].id
+    assert sorted((first[1], second[1])) == [False, True]

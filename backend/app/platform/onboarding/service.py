@@ -378,6 +378,8 @@ class IdentityOnboardingService:
                     )
                     await self._enqueue_delivery(
                         session,
+                        company_id=context.company.id,
+                        branch_id=branch.id,
                         invitation_id=invitation.id,
                         recipient=user.normalized_email,
                         request_key=f"identity-onboarding:{invitation.id}",
@@ -683,6 +685,8 @@ class IdentityOnboardingService:
                 raise OnboardingConflictError("Onboarding User was not found.")
             await self._enqueue_delivery(
                 session,
+                company_id=context.company.id,
+                branch_id=record.branch_id,
                 invitation_id=replacement.id,
                 recipient=user.normalized_email,
                 request_key=f"identity-onboarding:{replacement.id}",
@@ -761,6 +765,8 @@ class IdentityOnboardingService:
     async def _enqueue_delivery(
         session: AsyncSession,
         *,
+        company_id: UUID,
+        branch_id: UUID | None,
         invitation_id: UUID,
         recipient: str,
         request_key: str,
@@ -776,6 +782,8 @@ class IdentityOnboardingService:
             idempotency_key=request_key,
             scheduled_at=now,
             now=now,
+            company_id=company_id,
+            branch_id=branch_id,
         )
 
     @staticmethod

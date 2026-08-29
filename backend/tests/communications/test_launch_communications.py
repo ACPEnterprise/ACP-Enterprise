@@ -140,6 +140,8 @@ async def test_request_is_structured_consent_checked_and_idempotent(
     assert captured[0]["idempotency_key"] == captured[1]["idempotency_key"]
     assert captured[0]["notification_type"] == "communications.appointment_confirmation"
     assert captured[0]["template_identifier"] == "appointment-confirmation-v1"
+    assert captured[0]["company_id"] == ctx.company.id
+    assert captured[0]["branch_id"] == spec.branch_id
     assert captured[0]["payload"]["consent_event_id"]
     assert "message" not in captured[0]["payload"]
     assert "provider" not in captured[0]["payload"]

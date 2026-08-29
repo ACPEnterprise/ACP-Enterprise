@@ -91,15 +91,21 @@ class NotificationOutboxRepository:
                 created_at=now,
                 updated_at=now,
             )
-            .on_conflict_do_nothing(index_elements=["idempotency_key"])
+            .on_conflict_do_nothing()
             .returning(NotificationOutbox)
         )
         record = (await session.scalars(statement)).one_or_none()
         if record is not None:
             return record, True
+        tenant_scope = (
+            NotificationOutbox.company_id.is_(None)
+            if company_id is None
+            else NotificationOutbox.company_id == company_id
+        )
         existing = await session.scalar(
             select(NotificationOutbox).where(
-                NotificationOutbox.idempotency_key == idempotency_key
+                tenant_scope,
+                NotificationOutbox.idempotency_key == idempotency_key,
             )
         )
         if existing is None:
@@ -490,6 +496,7 @@ class NotificationOutboxRepository:
         session: AsyncSession,
         *,
         notification_id: UUID,
+        company_id: UUID,
         target: str,
         actor_user_id: UUID,
         reason_digest: str,
@@ -504,6 +511,7 @@ class NotificationOutboxRepository:
             select(NotificationOutbox)
             .where(
                 NotificationOutbox.id == notification_id,
+                NotificationOutbox.company_id == company_id,
                 NotificationOutbox.status.in_(("pending", "retry_scheduled")),
             )
             .with_for_update()
