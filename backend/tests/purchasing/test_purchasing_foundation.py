@@ -6,10 +6,6 @@ from uuid import uuid4
 import httpx
 import pytest
 import pytest_asyncio
-from sqlalchemy import func, select
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from app.accounting.models import Journal
 from app.accounts_payable.models import AccountingVendor, VendorBill
 from app.business_economics.models import CompanyFinancePolicyVersion
@@ -63,6 +59,9 @@ from app.purchasing.schemas import (
     VendorUpdate,
 )
 from app.purchasing.service import PurchasingService
+from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 
 @pytest.mark.asyncio
