@@ -87,6 +87,15 @@ export const technicianHandle = {
   },
 } as const satisfies ShellRouteHandle;
 
+export const workdayHandle = {
+  workspace: {
+    pageTitle: "My time clock",
+    breadcrumbs: [{ label: "My time clock" }],
+    helpTopic: "workday-time",
+    aiContext: "workday-time",
+  },
+} as const satisfies ShellRouteHandle;
+
 export const inventoryHandle = {
   workspace: {
     pageTitle: "Inventory",

@@ -24,6 +24,7 @@ import {
   priceBookHandle,
   schedulingHandle,
   technicianHandle,
+  workdayHandle,
 } from "./routeMetadata";
 import { RouteErrorBoundary } from "./RouteErrorBoundary";
 
@@ -92,6 +93,13 @@ export const appRoutes: RouteObject[] = [
                 }),
               },
             ],
+          },
+          {
+            path: "workday",
+            handle: workdayHandle,
+            lazy: async () => ({
+              Component: (await import("../routes/WorkdayRoute")).WorkdayRoute,
+            }),
           },
           {
             path: "dispatch",

@@ -3,6 +3,7 @@ import {
   Boxes,
   BriefcaseBusiness,
   CalendarDays,
+  Clock3,
   ClipboardList,
   FileChartColumn,
   FileText,
@@ -44,6 +45,14 @@ export const navigationCatalog = [
     path: "/customers",
     icon: Users,
     availability: "available",
+  },
+  {
+    id: "workday",
+    label: "My time clock",
+    path: "/workday",
+    icon: Clock3,
+    availability: "available",
+    requiredPermission: "COMPANY_TIMEKEEPING_OWN_READ",
   },
   {
     id: "technician",
@@ -213,6 +222,7 @@ export const navigationGroups = [
     items: [
       item("customers"),
       item("technician"),
+      item("workday"),
       item("scheduling"),
       item("jobs"),
       item("dispatch"),
