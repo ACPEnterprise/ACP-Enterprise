@@ -120,7 +120,7 @@ def test_coverage_ledger_is_complete_and_fingerprinted() -> None:
         "Inventory", "Purchasing", "Price Book", "Estimates", "Invoices/AR",
         "Payments", "Accounts Payable", "Accounting", "Business Events",
         "Beacon", "Business Economics Policy", "Platform Authorization Objects",
-        "Workday Time", "Operational Projections",
+        "Workday Time", "Payroll Policy Authority", "Operational Projections",
     }
 
 

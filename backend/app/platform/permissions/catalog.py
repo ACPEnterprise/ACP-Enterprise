@@ -2,6 +2,7 @@ import re
 from dataclasses import dataclass
 from enum import StrEnum
 
+from app.payroll.permissions import PayrollPermission
 from app.platform.permissions.codes import (
     AccountingPermission,
     AccountsPayablePermission,
@@ -163,6 +164,18 @@ TIMEKEEPING_DEFINITIONS = tuple(
         scope=PermissionScope.COMPANY,
     )
     for code in sorted(TimekeepingPermission.ALL)
+)
+
+PAYROLL_DEFINITIONS = tuple(
+    PermissionDefinition(
+        code=code,
+        name=code.replace("_", " ").title(),
+        resource="payroll_authority",
+        action=code.removeprefix("COMPANY_PAYROLL_").lower(),
+        scope=PermissionScope.COMPANY,
+        reserved=True,
+    )
+    for code in sorted(PayrollPermission.ALL)
 )
 
 SCHEDULING_DEFINITIONS = tuple(
@@ -384,6 +397,7 @@ permission_catalog = PermissionCatalog(
     + ANALYTICS_DEFINITIONS
     + BEACON_DEFINITIONS
     + TIMEKEEPING_DEFINITIONS
+    + PAYROLL_DEFINITIONS
     + SCHEDULING_DEFINITIONS
     + JOB_DEFINITIONS
     + DISPATCH_DEFINITIONS

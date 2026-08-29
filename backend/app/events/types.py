@@ -16,6 +16,15 @@ class EventType(str, Enum):
     WORKDAY_TIME_APPROVED = "timekeeping.time_approved"
     WORKDAY_TIME_CORRECTED = "timekeeping.time_corrected"
     WORKDAY_TIME_SUPERSEDED = "timekeeping.time_superseded"
+    PAYROLL_POLICY_DRAFTED = "payroll.policy_drafted"
+    PAYROLL_POLICY_APPROVED = "payroll.policy_approved"
+    PAYROLL_POLICY_SUPERSEDED = "payroll.policy_superseded"
+    PAYROLL_POLICY_RETIRED = "payroll.policy_retired"
+    PAYROLL_COMPENSATION_DRAFTED = "payroll.compensation_drafted"
+    PAYROLL_COMPENSATION_APPROVED = "payroll.compensation_approved"
+    PAYROLL_COMPENSATION_SUPERSEDED = "payroll.compensation_superseded"
+    PAYROLL_COMPENSATION_RETIRED = "payroll.compensation_retired"
+    PAYROLL_ADMISSION_EVALUATED = "payroll.admission_evaluated"
 
     # Accounts Payable
     ACCOUNTS_PAYABLE_VENDOR_CREATED = "accounts_payable.vendor_created"

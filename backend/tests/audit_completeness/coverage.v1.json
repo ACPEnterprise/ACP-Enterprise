@@ -7,6 +7,7 @@
     {"domain":"dispatch","class":"B","scope":"company_branch","evidence":"backend/tests/dispatch/test_dispatch_service.py"},
     {"domain":"workforce_employees","class":"C","scope":"company_branch","evidence":"backend/tests/workforce/test_workforce_capability_persistence.py"},
     {"domain":"workday_time","class":"C","scope":"company_branch","evidence":"backend/tests/timekeeping/test_workday_authority.py"},
+    {"domain":"payroll_policy_authority","class":"C","scope":"company","evidence":"backend/tests/payroll/test_policy_authority.py"},
     {"domain":"inventory","class":"A","scope":"company_branch","evidence":"backend/tests/inventory/test_inventory_adjustments.py"},
     {"domain":"purchasing","class":"A","scope":"company_branch","evidence":"backend/tests/purchasing/test_purchasing_foundation.py"},
     {"domain":"price_book","class":"C","scope":"company","evidence":"backend/tests/price_book/test_price_book_service.py"},

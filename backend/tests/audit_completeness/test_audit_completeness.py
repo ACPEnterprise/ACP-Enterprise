@@ -24,6 +24,7 @@ EXPECTED_DOMAINS = {
     "dispatch",
     "workforce_employees",
     "workday_time",
+    "payroll_policy_authority",
     "inventory",
     "purchasing",
     "price_book",
@@ -43,7 +44,7 @@ EXPECTED_DOMAINS = {
     "engineering_control_worker_factory",
 }
 EXPECTED_COVERAGE_FINGERPRINT = (
-    "49e35f171ac657be66727fa24f5311806fb27203dff8e4709181f62e12b85b43"
+    "a27c44266dd048c379a530af61c84be2f1a1ec40c6f8d59413f293de3d4f6608"
 )
 
 
