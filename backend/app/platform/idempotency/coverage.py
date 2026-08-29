@@ -29,6 +29,7 @@ class MutationCoverage:
     mechanism: str
     tenant_scope: str
     reason: str
+    replay_evidence: tuple[str, ...] = ()
 
     @property
     def identity(self) -> tuple[str, str]:
@@ -47,6 +48,17 @@ class MutationCoverageRegistry:
             raise ValueError("duplicate method/path in idempotency coverage")
         if len(operations) != len(set(operations)):
             raise ValueError("duplicate operation ID in idempotency coverage")
+        unsupported = [
+            entry.identity
+            for entry in self.entries
+            if entry.classification is MutationClassification.APPEND_ONLY
+            and not entry.replay_evidence
+        ]
+        if unsupported:
+            raise ValueError(
+                "append-only replay-safe classification requires concrete replay "
+                f"evidence: {unsupported}"
+            )
         if self.fingerprint != _fingerprint(self.entries):
             raise ValueError("idempotency coverage fingerprint does not match")
 
@@ -64,6 +76,7 @@ def _fingerprint(entries: tuple[MutationCoverage, ...]) -> str:
             "operation_id": entry.operation_id,
             "path": entry.path,
             "reason": entry.reason,
+            "replay_evidence": list(entry.replay_evidence),
             "tenant_scope": entry.tenant_scope,
         }
         for entry in sorted(entries, key=lambda item: item.identity)
@@ -87,6 +100,7 @@ def load_mutation_coverage() -> MutationCoverageRegistry:
             mechanism=item["mechanism"],
             tenant_scope=item["tenant_scope"],
             reason=item["reason"],
+            replay_evidence=tuple(item.get("replay_evidence", ())),
         )
         for item in raw["entries"]
     )

@@ -1,12 +1,12 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 from uuid import uuid4
 
 import pytest
-
 from app.main import app
 from app.platform.contracts.manifest import platform_contract_manifest
 from app.platform.idempotency.contracts import (
@@ -19,6 +19,7 @@ from app.platform.idempotency.contracts import (
 )
 from app.platform.idempotency.coverage import (
     MutationClassification,
+    MutationCoverageRegistry,
     mutation_coverage_registry,
 )
 
@@ -84,7 +85,7 @@ def test_every_mutating_operation_has_exactly_one_current_classification() -> No
     operations = _mutation_operations()
     coverage = mutation_coverage_registry.by_identity()
     assert operations.keys() == coverage.keys()
-    assert len(operations) == len(coverage) == 231
+    assert len(operations) == len(coverage) == 232
     for identity, operation in operations.items():
         assert operation["operationId"] == coverage[identity].operation_id
 
@@ -98,7 +99,7 @@ def test_required_operations_expose_an_accepted_request_identity() -> None:
         for entry in mutation_coverage_registry.entries
         if entry.classification is MutationClassification.REQUIRED
     )
-    assert len(required) == 90
+    assert len(required) == 91
     for entry in required:
         operation = operations[entry.identity]
         schema = (
@@ -128,6 +129,62 @@ def test_required_domains_have_replay_and_conflict_evidence() -> None:
     for evidence_path in DOMAIN_REPLAY_EVIDENCE.values():
         evidence = Path(evidence_path).read_text(encoding="utf-8").lower()
         assert "idempot" in evidence or "replay" in evidence
+
+
+def test_append_only_classification_requires_concrete_replay_evidence() -> None:
+    append_only = tuple(
+        entry
+        for entry in mutation_coverage_registry.entries
+        if entry.classification is MutationClassification.APPEND_ONLY
+    )
+    assert len(append_only) == 4
+    assert all(entry.replay_evidence for entry in append_only)
+    for entry in append_only:
+        for evidence_path in entry.replay_evidence:
+            evidence = Path(evidence_path).read_text(encoding="utf-8").lower()
+            assert "replay" in evidence or "duplicate" in evidence
+
+    unsupported = replace(append_only[0], replay_evidence=())
+    entries = tuple(
+        unsupported if entry.identity == unsupported.identity else entry
+        for entry in mutation_coverage_registry.entries
+    )
+    with pytest.raises(ValueError, match="requires concrete replay evidence"):
+        MutationCoverageRegistry(entries=entries, fingerprint="invalid")
+
+
+def test_unproven_append_only_operations_are_explicit_exemptions() -> None:
+    coverage = mutation_coverage_registry.by_identity()
+    unproven = {
+        ("POST", "/api/v1/customers/{customer_id}/consents"),
+        ("POST", "/api/v1/customers/{customer_id}/notes"),
+        ("POST", "/api/v1/events"),
+    }
+    assert all(
+        coverage[identity].classification is MutationClassification.EXEMPT
+        and not coverage[identity].replay_evidence
+        for identity in unproven
+    )
+
+
+def test_replenishment_decision_has_concrete_company_scoped_replay_evidence() -> None:
+    identity = ("POST", "/api/v1/purchasing/replenishment/decisions")
+    entry = mutation_coverage_registry.by_identity()[identity]
+    assert entry.classification is MutationClassification.REQUIRED
+    assert entry.tenant_scope == "COMPANY_WITH_BRANCH_CONTEXT"
+
+    evidence = Path("tests/purchasing/test_purchasing_foundation.py").read_text(
+        encoding="utf-8"
+    )
+    runtime = Path("app/purchasing/service.py").read_text(encoding="utf-8")
+    model = Path("app/purchasing/models.py").read_text(encoding="utf-8")
+    router = Path("app/purchasing/router.py").read_text(encoding="utf-8")
+    assert "test_replenishment_approval_is_stale_safe_idempotent" in evidence
+    assert "Replenishment decision idempotency identity conflicts" in runtime
+    assert "STALE_REPLENISHMENT_RECOMMENDATION" in runtime
+    assert '"company_id", "idempotency_key"' in model
+    assert '"company_id",\n            "recommendation_digest"' in model
+    assert "context: ApproveContext" in router
 
 
 def test_coverage_is_tenant_explicit_and_bound_into_platform_contract() -> None:
