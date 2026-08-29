@@ -487,7 +487,8 @@ class SandboxFixtureService:
         existing_path = self.fixture_root / "controlled-change.json"
         if current.get("Notes") == marker and existing_path.exists():
             existing = _read_json(existing_path)
-            if existing.get("after_sha256") != _digest(current):
+            native_id_hash = hashlib.sha256(str(current["Id"]).encode()).hexdigest()
+            if existing.get("native_id_hash") != native_id_hash:
                 raise SandboxFixtureError("fixture_change_evidence_conflict")
             return {
                 "state": "ALREADY_CURRENT",
