@@ -69,7 +69,9 @@ class Settings(BaseSettings):
     email_verification_lifetime_seconds: int = 86400
     identity_onboarding_invitation_lifetime_seconds: int = 86400
     identity_onboarding_delivery_keys: dict[str, str] = Field(default_factory=dict)
+    identity_onboarding_delivery_key_file: str | None = None
     identity_onboarding_active_delivery_kid: str | None = None
+    identity_onboarding_delivery_provider: str | None = None
     credential_lockout_threshold: int = 5
     credential_lockout_duration_seconds: int = 900
 

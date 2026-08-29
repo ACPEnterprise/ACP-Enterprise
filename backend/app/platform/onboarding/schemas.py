@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
 
 
 class OnboardingInitiateRequest(BaseModel):
@@ -15,7 +15,7 @@ class OnboardingInitiateRequest(BaseModel):
     employee_number_prefix: str = Field(min_length=1, max_length=20)
     employee_number_width: int = Field(ge=1, le=20)
     role_ids: tuple[UUID, ...] = ()
-    login_email: str | None = Field(default=None, max_length=320)
+    login_email: SecretStr | None = None
     existing_user_id: UUID | None = None
 
     @model_validator(mode="after")

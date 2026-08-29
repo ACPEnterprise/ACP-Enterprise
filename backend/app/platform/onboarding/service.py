@@ -2,8 +2,10 @@ import base64
 import hashlib
 import json
 import os
-from dataclasses import dataclass
+import stat
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from uuid import UUID, uuid4
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
@@ -58,15 +60,21 @@ class OnboardingCommand:
     employee_number_prefix: str
     employee_number_width: int
     role_ids: tuple[UUID, ...] = ()
-    login_email: str | None = None
+    login_email: str | None = field(default=None, repr=False)
     existing_user_id: UUID | None = None
 
 
 @dataclass(frozen=True)
 class ProtectedInvitationDelivery:
     invitation_id: UUID
-    recipient: str
-    secret: str
+    recipient: str = field(repr=False)
+    secret: str = field(repr=False)
+
+
+@dataclass(frozen=True)
+class DeliveryRuntimeReadiness:
+    envelope_runtime: str
+    external_provider: str
 
 
 def _digest(value: dict[str, object]) -> str:
@@ -93,8 +101,9 @@ class IdentityOnboardingService:
 
     def _delivery_cipher(self) -> tuple[str, AESGCM]:
         key_id = self.configuration.identity_onboarding_active_delivery_kid
+        keyring = self._delivery_keyring()
         encoded = (
-            self.configuration.identity_onboarding_delivery_keys.get(key_id)
+            keyring.get(key_id)
             if key_id
             else None
         )
@@ -109,6 +118,49 @@ class IdentityOnboardingService:
             raise OnboardingConflictError(
                 "Protected invitation delivery is not configured."
             ) from error
+
+    def _delivery_keyring(self) -> dict[str, str]:
+        if self.configuration.identity_onboarding_delivery_keys:
+            return self.configuration.identity_onboarding_delivery_keys
+        configured_path = self.configuration.identity_onboarding_delivery_key_file
+        if not configured_path:
+            return {}
+        path = Path(configured_path)
+        try:
+            metadata = path.stat()
+            parent_metadata = path.parent.stat()
+            if (
+                not stat.S_ISREG(metadata.st_mode)
+                or stat.S_IMODE(metadata.st_mode) & 0o077
+                or stat.S_IMODE(parent_metadata.st_mode) & 0o077
+                or metadata.st_uid != os.geteuid()
+            ):
+                raise OnboardingConflictError(
+                    "Protected invitation delivery is not configured."
+                )
+            raw = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(raw, dict) or not all(
+                isinstance(key, str) and isinstance(value, str)
+                for key, value in raw.items()
+            ):
+                raise ValueError("invalid protected keyring")
+            return raw
+        except (OSError, ValueError, json.JSONDecodeError) as error:
+            raise OnboardingConflictError(
+                "Protected invitation delivery is not configured."
+            ) from error
+
+    def delivery_runtime_readiness(self) -> DeliveryRuntimeReadiness:
+        self._delivery_cipher()
+        provider = self.configuration.identity_onboarding_delivery_provider
+        return DeliveryRuntimeReadiness(
+            envelope_runtime="delivery_runtime_ready",
+            external_provider=(
+                "configured"
+                if provider and provider != "protected-envelope-qualification"
+                else "external_delivery_provider_configuration_required"
+            ),
+        )
 
     async def initiate(
         self,

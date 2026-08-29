@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import json
+import os
 from collections.abc import AsyncIterator
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
@@ -21,6 +22,7 @@ from app.platform.company.membership_models import Membership
 from app.platform.company.models import Company
 from app.platform.employees.models import Employee
 from app.platform.notifications.models import NotificationOutbox
+from app.platform.onboarding.delivery import ProtectedEnvelopeQualificationDelivery
 from app.platform.onboarding.models import (
     IdentityOnboardingInvitation,
     ProtectedInvitationDeliveryEnvelope,
@@ -441,3 +443,77 @@ async def test_expired_and_cross_company_scope_fail_closed(
                     context, request_key="cross", email=f"cross-{uuid4()}@example.test"
                 ),
             )
+
+
+def test_protected_key_file_permissions_and_delivery_readiness(tmp_path) -> None:
+    key = base64.urlsafe_b64encode(b"q" * 32).decode()
+    keyring = tmp_path / "identity-delivery-keyring.json"
+    keyring.write_text(json.dumps({"file-v1": key}), encoding="utf-8")
+    os.chmod(keyring, 0o600)
+    configured = Settings(
+        environment="test",
+        database_url=settings.database_url,
+        identity_onboarding_delivery_key_file=str(keyring),
+        identity_onboarding_active_delivery_kid="file-v1",
+    )
+    readiness = IdentityOnboardingService(configured).delivery_runtime_readiness()
+    assert readiness.envelope_runtime == "delivery_runtime_ready"
+    assert (
+        readiness.external_provider
+        == "external_delivery_provider_configuration_required"
+    )
+    os.chmod(keyring, 0o644)
+    with pytest.raises(OnboardingConflictError, match="not configured"):
+        IdentityOnboardingService(configured).delivery_runtime_readiness()
+
+
+def test_delivery_readiness_fails_closed_without_key_material() -> None:
+    configured = Settings(
+        environment="test",
+        database_url=settings.database_url,
+        identity_onboarding_delivery_keys={},
+        identity_onboarding_delivery_key_file=None,
+        identity_onboarding_active_delivery_kid="missing-v1",
+    )
+    with pytest.raises(OnboardingConflictError, match="not configured"):
+        IdentityOnboardingService(configured).delivery_runtime_readiness()
+
+
+@pytest.mark.asyncio
+async def test_nonproduction_delivery_qualification_sends_nothing_and_is_safe(
+    onboarding_db: tuple[
+        async_sessionmaker[AsyncSession], Context, IdentityOnboardingService
+    ],
+) -> None:
+    factory, context, service = onboarding_db
+    async with factory() as session:
+        record = await service.initiate(
+            session,
+            context=context,
+            command=command(
+                context,
+                request_key="delivery-qualification",
+                email=f"qualification-{uuid4()}@example.test",
+            ),
+        )
+        invitation = await session.scalar(
+            select(IdentityOnboardingInvitation).where(
+                IdentityOnboardingInvitation.onboarding_request_id == record.id
+            )
+        )
+        assert invitation is not None
+        invitation_id = invitation.id
+        await session.rollback()
+        result = await ProtectedEnvelopeQualificationDelivery(service).qualify(
+            session, invitation_id=invitation_id
+        )
+        assert result.status == "qualified_without_external_delivery"
+        assert not hasattr(result, "secret")
+        envelope = await session.scalar(
+            select(ProtectedInvitationDeliveryEnvelope).where(
+                ProtectedInvitationDeliveryEnvelope.invitation_id == invitation_id
+            )
+        )
+        assert envelope is not None
+        assert envelope.status == "delivered"
+        assert envelope.ciphertext == b"" and envelope.nonce == b""

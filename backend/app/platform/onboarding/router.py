@@ -58,7 +58,9 @@ async def initiate(
                 employee_number_prefix=data.employee_number_prefix,
                 employee_number_width=data.employee_number_width,
                 role_ids=data.role_ids,
-                login_email=data.login_email,
+                login_email=(
+                    data.login_email.get_secret_value() if data.login_email else None
+                ),
                 existing_user_id=data.existing_user_id,
             ),
         )
