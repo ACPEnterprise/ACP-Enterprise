@@ -263,6 +263,59 @@ class HcpMigrationHold(Base):
     )
 
 
+class HcpMigrationPlanOutcome(Base):
+    """Non-operational evidence for a builder-classified source outcome."""
+
+    __tablename__ = "hcp_migration_plan_outcomes"
+    __table_args__ = (
+        CheckConstraint(
+            "outcome IN ('EXPLICIT_EXCEPTION','REJECTED','INTENTIONALLY_NON_APPLICABLE')",
+            name="ck_hcp_plan_outcome_class",
+        ),
+        CheckConstraint(
+            "operational_effects_enabled = false AND financial_truth_accepted = false",
+            name="ck_hcp_plan_outcome_no_effects",
+        ),
+        ForeignKeyConstraint(
+            ["master_run_id", "company_id", "branch_id"],
+            [
+                "hcp_migration_master_runs.id",
+                "hcp_migration_master_runs.company_id",
+                "hcp_migration_master_runs.branch_id",
+            ],
+            name="fk_hcp_plan_outcome_master_scope",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "master_run_id",
+            "entity_kind",
+            "native_identity_sha256",
+            name="uq_hcp_plan_outcome_native",
+        ),
+        UniqueConstraint("company_id", "outcome_digest", name="uq_hcp_plan_outcome_replay"),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    master_run_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    entity_kind: Mapped[str] = mapped_column(String(40), nullable=False)
+    native_identity_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    outcome: Mapped[str] = mapped_column(String(40), nullable=False)
+    reason_code: Mapped[str] = mapped_column(String(100), nullable=False)
+    package_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    transformation_version: Mapped[str] = mapped_column(String(100), nullable=False)
+    outcome_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    operational_effects_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    financial_truth_accepted: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    recorded_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
 class OperationalMigrationRun(Base):
     __tablename__ = "operational_migration_runs"
     __table_args__ = (

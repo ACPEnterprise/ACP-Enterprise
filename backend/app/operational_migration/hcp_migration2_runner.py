@@ -6,6 +6,7 @@ import csv
 import hashlib
 import json
 import stat
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -38,6 +39,7 @@ from app.operational_migration.hcp_migration2a import UnlinkedEstimateEvidenceCo
 from app.operational_migration.hcp_migration2b import (
     HoldCommand,
     MasterRunCommand,
+    PlanOutcomeCommand,
 )
 from app.operational_migration.hcp_migration2c import (
     CompletionRequirements,
@@ -348,8 +350,91 @@ class HcpMigration2ExecutionPlan:
     payments: tuple[PaymentMigrationRecord, ...]
     notes: tuple[HistoryMigrationRecord, ...]
     holds: tuple[HoldCommand, ...]
+    plan_outcomes: tuple[PlanOutcomeCommand, ...]
     completion: CompletionRequirements
     verified_owner_receipts: dict[str, str]
+    plan_id: UUID
+    plan_digest: str
+    builder_version: str
+
+    def validate(self) -> None:
+        if len(self.plan_digest) != 64 or not self.builder_version:
+            raise SafeEvidenceError("execution_plan_identity_invalid", "0" * 64)
+        if self.plan_id.int == 0:
+            raise SafeEvidenceError("execution_plan_identity_invalid", self.plan_digest)
+        required = {
+            "customer",
+            "contact",
+            "service_location",
+            "employee",
+            "job",
+            "appointment",
+            "estimate",
+            "invoice",
+            "payment",
+            "note",
+            "hold",
+            "unlinked_estimate",
+        }
+        if not required.issubset(self.master.source_counts):
+            raise SafeEvidenceError("execution_plan_domain_incomplete", self.plan_digest)
+        if len({item.native_employee_id for item in self.employees}) != len(
+            self.employees
+        ):
+            raise SafeEvidenceError("execution_plan_employee_duplicate", self.plan_digest)
+        for values in (
+            self.jobs,
+            self.appointments,
+            self.estimates,
+            self.invoices,
+            self.payments,
+            self.notes,
+        ):
+            identities = [item.source_id for item in values]
+            if len(identities) != len(set(identities)):
+                raise SafeEvidenceError("execution_plan_native_identity_duplicate", self.plan_digest)
+        unlinked_identities = [
+            item.native_estimate_id for item in self.unlinked_estimates
+        ]
+        if len(unlinked_identities) != len(set(unlinked_identities)):
+            raise SafeEvidenceError(
+                "execution_plan_native_identity_duplicate", self.plan_digest
+            )
+        actual_outcomes = Counter(
+            (item.outcome, item.entity_kind) for item in self.plan_outcomes
+        )
+        expected_outcomes = Counter(
+            {
+                **{
+                    ("EXPLICIT_EXCEPTION", key): value
+                    for key, value in self.completion.exception_counts.items()
+                    if key != "service_location" and value
+                },
+                **{
+                    ("REJECTED", key): value
+                    for key, value in self.completion.rejection_counts.items()
+                    if value
+                },
+                **{
+                    ("INTENTIONALLY_NON_APPLICABLE", key): value
+                    for key, value in self.completion.non_applicable_counts.items()
+                    if key != "employee" and value
+                },
+            }
+        )
+        if actual_outcomes != expected_outcomes:
+            raise SafeEvidenceError(
+                "execution_plan_outcome_accounting_incomplete", self.plan_digest
+            )
+        financial_metadata = [
+            item.external_metadata for item in self.invoices
+        ] + [item.external_metadata for item in self.payments]
+        if any(
+            metadata and metadata.get("accepted_accounting_truth") is not False
+            for metadata in financial_metadata
+        ):
+            raise SafeEvidenceError("execution_plan_financial_authority_invalid", self.plan_digest)
+        self.completion.validate_reconciliation(self.master.source_counts)
 
 
 class HcpMigration2Runner:
@@ -386,6 +471,7 @@ class HcpMigration2Runner:
         target: NonProductionTarget,
         plan: HcpMigration2ExecutionPlan,
     ) -> dict[str, object]:
+        plan.validate()
         if plan.master.owner_receipts != plan.verified_owner_receipts:
             raise SafeEvidenceError(
                 "master_owner_receipt_binding_mismatch",
@@ -480,6 +566,13 @@ class HcpMigration2Runner:
                     context=context,
                     master_run_id=master_id,
                     command=hold_command,
+                )
+            for outcome_command in plan.plan_outcomes:
+                await self.orchestrator.persist_plan_outcome(
+                    session,
+                    context=context,
+                    master_run_id=master_id,
+                    command=outcome_command,
                 )
             completed = await self.orchestrator.complete(
                 session,

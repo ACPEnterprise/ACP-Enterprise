@@ -56,7 +56,7 @@ def master_command(**overrides: object) -> MasterRunCommand:
         "owner_receipts": {
             f"receipt-{index}": str(index) * 64 for index in range(1, 6)
         },
-        "schema_head": "e2f4a6b8c091",
+        "schema_head": "f3a5c7e9b102",
         "implementation_version": "hcp-migration-2b/v1",
         "supported_entities": ("customer", "job"),
         "baseline_counts": {"customers": 0},

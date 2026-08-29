@@ -53,7 +53,7 @@ def master_command() -> MasterRunCommand:
             "customer_parent_closure_digest": "7" * 64,
         },
         owner_receipts={f"receipt-{index}": str(index) * 64 for index in range(1, 6)},
-        schema_head="e2f4a6b8c091",
+        schema_head="f3a5c7e9b102",
         implementation_version=ORCHESTRATOR_VERSION,
         supported_entities=(
             "customer",
@@ -75,7 +75,7 @@ def master_command() -> MasterRunCommand:
 def test_current_master_command_is_deterministic_and_schema_bound() -> None:
     command = master_command()
     command.validate()
-    assert command.schema_head == "e2f4a6b8c091"
+    assert command.schema_head == "f3a5c7e9b102"
     assert command.implementation_version == ORCHESTRATOR_VERSION
 
 

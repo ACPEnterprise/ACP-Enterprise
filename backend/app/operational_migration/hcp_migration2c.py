@@ -52,11 +52,13 @@ from app.operational_migration.hcp_migration2b import (
     HoldCommand,
     MasterRunCommand,
     MasterRunOutcome,
+    PlanOutcomeCommand,
     attest_master_run_outcome,
     canonical_sha256,
     persist_customer_lineage,
     persist_employee_crosswalk,
     persist_hold,
+    persist_plan_outcome,
     prepare_master_run,
 )
 from app.operational_migration.hcp_owner_disposition import NonProductionTarget
@@ -70,6 +72,7 @@ from app.operational_migration.models import (
     HcpEmployeeSourceCrosswalk,
     HcpMigrationHold,
     HcpMigrationMasterRun,
+    HcpMigrationPlanOutcome,
     OperationalMigrationRun,
     UnlinkedEstimateEvidence,
 )
@@ -250,6 +253,16 @@ class HcpMigration2Orchestrator:
         if credential_count:
             raise ValueError("rehearsal actor must remain credential-less")
         return target_digest
+
+    async def qualify_target(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        target: NonProductionTarget,
+    ) -> str:
+        """Verify the sanctioned target without creating a master or child run."""
+        return await self._authorize(session, context=context, target=target)
 
     async def start_or_resume(
         self,
@@ -939,6 +952,23 @@ class HcpMigration2Orchestrator:
         )
         return created
 
+    async def persist_plan_outcome(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        master_run_id: UUID,
+        command: PlanOutcomeCommand,
+    ) -> bool:
+        await self._active_master(session, context=context, master_run_id=master_run_id)
+        _, created = await persist_plan_outcome(
+            session,
+            context=context,
+            master_run_id=master_run_id,
+            command=command,
+        )
+        return created
+
     async def persist_unlinked_estimate(
         self,
         session: AsyncSession,
@@ -1102,6 +1132,42 @@ class HcpMigration2Orchestrator:
         for hold in hold_rows:
             holds_by_code[hold.hold_code] = holds_by_code.get(hold.hold_code, 0) + 1
             hold_counts[hold.entity_kind] = hold_counts.get(hold.entity_kind, 0) + 1
+        plan_outcomes = tuple(
+            (
+                await session.scalars(
+                    select(HcpMigrationPlanOutcome).where(
+                        HcpMigrationPlanOutcome.master_run_id == master_run_id
+                    )
+                )
+            ).all()
+        )
+        actual_plan_outcomes: dict[str, dict[str, int]] = {
+            "EXPLICIT_EXCEPTION": {},
+            "REJECTED": {},
+            "INTENTIONALLY_NON_APPLICABLE": {},
+        }
+        for item in plan_outcomes:
+            counts = actual_plan_outcomes[item.outcome]
+            counts[item.entity_kind] = counts.get(item.entity_kind, 0) + 1
+        expected_plan_outcomes = {
+            "EXPLICIT_EXCEPTION": {
+                key: value
+                for key, value in requirements.exception_counts.items()
+                if key != "service_location" and value
+            },
+            "REJECTED": {
+                key: value
+                for key, value in requirements.rejection_counts.items()
+                if value
+            },
+            "INTENTIONALLY_NON_APPLICABLE": {
+                key: value
+                for key, value in requirements.non_applicable_counts.items()
+                if key != "employee" and value
+            },
+        }
+        if actual_plan_outcomes != expected_plan_outcomes:
+            raise ValueError("durable plan-outcome reconciliation is incomplete")
         if (
             lineage_count != requirements.customer_lineage
             or lineage_count != customer_run.accepted_count
@@ -1129,6 +1195,10 @@ class HcpMigration2Orchestrator:
             "exception": history.unresolved_count,
             "rejected": history.rejected_count,
         }
+        planned_note_exceptions = actual_plan_outcomes[
+            "EXPLICIT_EXCEPTION"
+        ].get("note", 0)
+        actual_note_outcomes["exception"] += planned_note_exceptions
         if actual_note_outcomes != requirements.note_outcomes:
             raise ValueError("Note/history reconciliation is incomplete")
         if holds_by_code != requirements.holds_by_code:

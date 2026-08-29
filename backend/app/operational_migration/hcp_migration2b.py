@@ -20,6 +20,7 @@ from app.operational_migration.models import (
     HcpEmployeeSourceCrosswalk,
     HcpMigrationHold,
     HcpMigrationMasterRun,
+    HcpMigrationPlanOutcome,
 )
 from app.platform.employees.models import Employee
 from app.platform.permissions.authorization import AuthorizationContext
@@ -32,6 +33,7 @@ MASTER_CONTRACT = "hcp-migration-master-run/v1"
 CUSTOMER_LINEAGE_CONTRACT = "hcp-source4-customer-lineage/v1"
 EMPLOYEE_CROSSWALK_CONTRACT = "hcp-employee-crosswalk/v1"
 HOLD_CONTRACT = "hcp-migration-hold/v1"
+PLAN_OUTCOME_CONTRACT = "hcp-migration-plan-outcome/v1"
 
 
 @dataclass(frozen=True)
@@ -166,7 +168,7 @@ class MasterRunCommand:
             raise ValueError("all five owner receipts are required")
         for value in self.owner_receipts.values():
             _digest(str(value), "owner_receipt")
-        if self.schema_head != "e2f4a6b8c091":
+        if self.schema_head != "f3a5c7e9b102":
             raise ValueError("unexpected rehearsal schema head")
         if not self.supported_entities or len(self.supported_entities) != len(
             set(self.supported_entities)
@@ -557,6 +559,77 @@ async def persist_hold(
         state=command.state,
         hold_digest=command.hold_digest,
         evidence_version=command.evidence_version,
+        operational_effects_enabled=False,
+        financial_truth_accepted=False,
+    )
+    session.add(row)
+    await session.flush()
+    return row, True
+
+
+@dataclass(frozen=True)
+class PlanOutcomeCommand:
+    entity_kind: str
+    native_identity_sha256: str
+    outcome: str
+    reason_code: str
+    evidence_digest: str
+    transformation_version: str
+    package_digest: str = SOURCE4_PACKAGE_DIGEST
+
+    @property
+    def outcome_digest(self) -> str:
+        return canonical_sha256(
+            {"contract": PLAN_OUTCOME_CONTRACT, **asdict(self)}
+        )
+
+    def validate(self) -> None:
+        if self.outcome not in {
+            "EXPLICIT_EXCEPTION",
+            "REJECTED",
+            "INTENTIONALLY_NON_APPLICABLE",
+        }:
+            raise ValueError("unsupported plan outcome")
+        if not self.entity_kind or not self.reason_code or not self.transformation_version:
+            raise ValueError("plan outcome classification is incomplete")
+        for field, value in (
+            ("native_identity_sha256", self.native_identity_sha256),
+            ("evidence_digest", self.evidence_digest),
+            ("package_digest", self.package_digest),
+        ):
+            _digest(value, field)
+
+
+async def persist_plan_outcome(
+    session: AsyncSession,
+    *,
+    context: AuthorizationContext,
+    master_run_id: UUID,
+    command: PlanOutcomeCommand,
+) -> tuple[HcpMigrationPlanOutcome, bool]:
+    _authorized(context)
+    command.validate()
+    existing = await session.scalar(
+        select(HcpMigrationPlanOutcome).where(
+            HcpMigrationPlanOutcome.company_id == context.company.id,
+            HcpMigrationPlanOutcome.outcome_digest == command.outcome_digest,
+        )
+    )
+    if existing is not None:
+        return existing, False
+    assert context.active_branch is not None
+    row = HcpMigrationPlanOutcome(
+        company_id=context.company.id,
+        branch_id=context.active_branch.id,
+        master_run_id=master_run_id,
+        entity_kind=command.entity_kind,
+        native_identity_sha256=command.native_identity_sha256,
+        outcome=command.outcome,
+        reason_code=command.reason_code,
+        package_digest=command.package_digest,
+        evidence_digest=command.evidence_digest,
+        transformation_version=command.transformation_version,
+        outcome_digest=command.outcome_digest,
         operational_effects_enabled=False,
         financial_truth_accepted=False,
     )
