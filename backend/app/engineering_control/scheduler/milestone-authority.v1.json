@@ -36,6 +36,13 @@
       "evidence_reference": "owner-accepted Purchase Return and vendor authorization workflow implementation, returnable-quantity accounting, migration, UI/API, authorization, Business Events, audit, idempotency, concurrency, and fail-closed downstream boundary evidence"
     },
     {
+      "bank_milestone_id": "BANK.PUR.004",
+      "canonical_milestone_id": "BANK.PUR.004",
+      "evidence_kind": "AUTHORITATIVE_INTEGRATION_ACCEPTANCE",
+      "authoritative_commit_sha": "eb8c047eb3cb3d44fc183a9ba7239cd8292d806a",
+      "evidence_reference": "owner-accepted end-to-end Purchase Order change-order controls: backend implementation f94a95816904d0f84ba9e35da81cad24bafe9814 plus descendant operator-workflow completion eb8c047eb3cb3d44fc183a9ba7239cd8292d806a; immutable revisions, fail-closed stale-base and receiving invariants, distinct request/approval permissions, and no inferred Inventory, AP, Accounting, Job-cost, or Economics effects"
+    },
+    {
       "bank_milestone_id": "BANK.PLAT.002",
       "canonical_milestone_id": "BANK.PLAT.002",
       "evidence_kind": "AUTHORITATIVE_INTEGRATION_ACCEPTANCE",
@@ -99,5 +106,5 @@
   ],
   "gate_resolutions": [],
   "active_ownership": [],
-  "fingerprint": "be73db6a90a5bd9e4d95e67d7547952caa73ceddc6cb7ec1e3192f23f872594c"
+  "fingerprint": "b1e2ad447c33f50b76f3ca42b14d02748f48fa63fb0136692abb056fcdd43e4d"
 }
