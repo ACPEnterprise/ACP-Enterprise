@@ -21,6 +21,8 @@ from app.timekeeping.models import PayrollTimeInputRecord
 
 from .calculation import GrossPayCalculationResult
 from .contracts import (
+    PayrollAdmissionResult,
+    PayrollAdmissionState,
     PayrollAuthorizationError,
     PayrollConflictError,
     canonical_digest,
@@ -340,7 +342,7 @@ class PayrollGrossResultService:
         *,
         context: AuthorizationContext,
         pay_period_id: UUID,
-        blocked: tuple[PayPeriodCalculationStatus, ...] = (),
+        blocked_admissions: tuple[PayrollAdmissionResult, ...] = (),
     ) -> tuple[PayPeriodCalculationStatus, ...]:
         self._require(context, PayrollPermission.CALCULATION_READ)
         values = await session.scalars(
@@ -364,6 +366,25 @@ class PayrollGrossResultService:
             )
             for item in values.all()
         )
+        blocked: list[PayPeriodCalculationStatus] = []
+        for admission in blocked_admissions:
+            admission.verify()
+            if (
+                admission.company_id != context.company.id
+                or admission.pay_period_id != pay_period_id
+                or admission.employee_id is None
+                or admission.state is PayrollAdmissionState.READY_FOR_CALCULATION
+            ):
+                raise PayrollConflictError("blocked Payroll admission scope is invalid")
+            blocked.append(
+                PayPeriodCalculationStatus(
+                    admission.employee_id,
+                    None,
+                    None,
+                    admission.state.value,
+                    admission.admission_digest,
+                )
+            )
         return tuple(sorted((*persisted, *blocked), key=lambda item: str(item.employee_id)))
 
     async def history(
