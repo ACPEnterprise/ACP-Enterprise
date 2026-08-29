@@ -25,6 +25,12 @@ class EventType(str, Enum):
     PAYROLL_COMPENSATION_SUPERSEDED = "payroll.compensation_superseded"
     PAYROLL_COMPENSATION_RETIRED = "payroll.compensation_retired"
     PAYROLL_ADMISSION_EVALUATED = "payroll.admission_evaluated"
+    PAYROLL_GROSS_CALCULATION_PERSISTED = "payroll.gross_calculation_persisted"
+    PAYROLL_GROSS_REVIEW_INITIATED = "payroll.gross_review_initiated"
+    PAYROLL_GROSS_REVIEW_ACCEPTED = "payroll.gross_review_accepted"
+    PAYROLL_GROSS_REVIEW_REJECTED = "payroll.gross_review_rejected"
+    PAYROLL_GROSS_CALCULATION_SUPERSEDED = "payroll.gross_calculation_superseded"
+    PAYROLL_GROSS_CALCULATION_VOIDED = "payroll.gross_calculation_voided"
 
     # Accounts Payable
     ACCOUNTS_PAYABLE_VENDOR_CREATED = "accounts_payable.vendor_created"
