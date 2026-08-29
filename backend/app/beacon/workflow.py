@@ -57,34 +57,19 @@ class BeaconWorkflowService:
     ) -> BeaconWorkflowEvent:
         occurred_at = now or datetime.now(timezone.utc)
         self._authorize(context, command)
+        self._validate_command(command)
         async with session.begin():
+            replay = await self._replay(session, context, command)
+            if replay is not None:
+                return replay
             signal = await self._current_signal(session, context, command, occurred_at)
             await session.execute(
                 text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"),
                 {"key": f"{context.company.id}:{signal.condition_key}"},
             )
-            replay = await session.scalar(
-                select(BeaconSignalReviewEventModel).where(
-                    BeaconSignalReviewEventModel.company_id == context.company.id,
-                    BeaconSignalReviewEventModel.workflow_request_id
-                    == command.request_id,
-                )
-            )
+            replay = await self._replay(session, context, command)
             if replay is not None:
-                if (
-                    replay.signal_id != signal.id
-                    or replay.action != command.action.value
-                    or replay.evidence_digest != command.evidence_digest
-                    or (
-                        command.action
-                        in (BeaconWorkflowAction.ASSIGN, BeaconWorkflowAction.TRANSFER)
-                        and replay.owner_user_id != command.owner_user_id
-                    )
-                ):
-                    raise BeaconWorkflowConflictError(
-                        "Workflow request identity was reused for another command."
-                    )
-                return _event(replay)
+                return replay
             current = await self._latest(
                 session,
                 company_id=context.company.id,
@@ -244,13 +229,12 @@ class BeaconWorkflowService:
                     "An explicit owner User is required."
                 )
             await self._validate_owner(session, context, command.owner_user_id)
+            if action is BeaconWorkflowAction.ASSIGN and owner is not None:
+                raise BeaconWorkflowConflictError(
+                    "An owned signal must use an explicit transfer."
+                )
             if action is BeaconWorkflowAction.TRANSFER and owner is None:
                 raise BeaconWorkflowConflictError("An unowned signal cannot transfer.")
-            action = (
-                BeaconWorkflowAction.ASSIGN
-                if owner is None
-                else BeaconWorkflowAction.TRANSFER
-            )
             if owner == command.owner_user_id:
                 raise BeaconWorkflowConflictError("Signal already has that owner.")
             owner = command.owner_user_id
@@ -305,6 +289,57 @@ class BeaconWorkflowService:
             .limit(1)
         )
         return await session.scalar(statement.with_for_update() if lock else statement)
+
+    async def _replay(self, session, context, command):
+        replay = await session.scalar(
+            select(BeaconSignalReviewEventModel).where(
+                BeaconSignalReviewEventModel.company_id == context.company.id,
+                BeaconSignalReviewEventModel.workflow_request_id == command.request_id,
+            )
+        )
+        if replay is None:
+            return None
+        self._assert_branch(context, replay.branch_id)
+        if replay.workflow_version is None:
+            raise BeaconWorkflowConflictError(
+                "Workflow request identity has invalid durable evidence."
+            )
+        expected_version = (
+            None
+            if command.action is BeaconWorkflowAction.ACKNOWLEDGE
+            else replay.workflow_version - 1
+        )
+        if (
+            replay.signal_id != command.signal_id
+            or replay.action != command.action.value
+            or replay.evidence_digest != command.evidence_digest
+            or command.expected_version != expected_version
+            or (
+                command.action
+                in (BeaconWorkflowAction.ASSIGN, BeaconWorkflowAction.TRANSFER)
+                and replay.owner_user_id != command.owner_user_id
+            )
+        ):
+            raise BeaconWorkflowConflictError(
+                "Workflow request identity was reused for another command."
+            )
+        return _event(replay)
+
+    @staticmethod
+    def _validate_command(command):
+        if command.action is BeaconWorkflowAction.ACKNOWLEDGE and (
+            command.expected_version is not None or command.owner_user_id is not None
+        ):
+            raise BeaconWorkflowConflictError(
+                "Acknowledgement does not accept ownership or version fields."
+            )
+        if command.action in (
+            BeaconWorkflowAction.CLAIM,
+            BeaconWorkflowAction.RELEASE,
+        ) and command.owner_user_id is not None:
+            raise BeaconWorkflowConflictError(
+                "Claim and release do not accept an explicit owner."
+            )
 
     @staticmethod
     async def _validate_owner(session, context, user_id):

@@ -1,6 +1,7 @@
 from dataclasses import replace
 from datetime import datetime, timezone
 from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
 from uuid import UUID, uuid4
 
 import pytest
@@ -179,3 +180,134 @@ def test_priority_and_signal_identity_are_not_workflow_inputs() -> None:
     assert workflow.evidence_digest == source.evidence_digest
     assert not hasattr(workflow, "severity")
     assert not hasattr(workflow, "priority")
+
+
+@pytest.mark.asyncio
+async def test_exact_replay_uses_durable_event_without_re_evaluating_signal() -> None:
+    service = BeaconWorkflowService()
+    request_id = uuid4()
+    source = signal()
+    replay = SimpleNamespace(
+        id=uuid4(),
+        company_id=COMPANY_ID,
+        branch_id=BRANCH_ID,
+        condition_key=source.condition_key,
+        signal_id=source.id,
+        definition_id=source.evidence_quality.definition_id,
+        definition_version=source.evidence_quality.definition_version,
+        evidence_digest=source.evidence_digest,
+        workflow_version=1,
+        acknowledged_at=NOW,
+        acknowledged_by_user_id=USER_A,
+        owner_user_id=None,
+        owned_since=None,
+        action=BeaconWorkflowAction.ACKNOWLEDGE.value,
+        actor_user_id=USER_A,
+        previous_owner_user_id=None,
+        workflow_request_id=request_id,
+        action_at=NOW,
+    )
+
+    class Transaction:
+        async def __aenter__(self):
+            return None
+
+        async def __aexit__(self, *_args):
+            return None
+
+    session = SimpleNamespace(
+        begin=MagicMock(return_value=Transaction()),
+        scalar=AsyncMock(return_value=replay),
+    )
+    service._current_signal = AsyncMock(  # type: ignore[method-assign]
+        side_effect=AssertionError("source evidence must not be re-evaluated")
+    )
+    result = await service.mutate(
+        session,
+        context=Context(permissions=(BeaconPermission.REVIEW,)),
+        command=BeaconWorkflowCommand(
+            signal_id=source.id,
+            evidence_digest=source.evidence_digest,
+            request_id=request_id,
+            action=BeaconWorkflowAction.ACKNOWLEDGE,
+        ),
+        now=NOW,
+    )
+
+    assert result.request_id == request_id
+    service._current_signal.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_contradictory_replay_version_fails_closed() -> None:
+    service = BeaconWorkflowService()
+    source = signal()
+    replay = SimpleNamespace(
+        company_id=COMPANY_ID,
+        branch_id=BRANCH_ID,
+        signal_id=source.id,
+        evidence_digest=source.evidence_digest,
+        action=BeaconWorkflowAction.CLAIM.value,
+        workflow_version=2,
+        owner_user_id=USER_A,
+    )
+    session = SimpleNamespace(scalar=AsyncMock(return_value=replay))
+    changed = BeaconWorkflowCommand(
+        signal_id=source.id,
+        evidence_digest=source.evidence_digest,
+        request_id=uuid4(),
+        action=BeaconWorkflowAction.CLAIM,
+        expected_version=0,
+    )
+
+    with pytest.raises(BeaconWorkflowConflictError, match="reused"):
+        await service._replay(
+            session,
+            Context(permissions=(BeaconPermission.OWN,)),
+            changed,
+        )
+
+
+@pytest.mark.asyncio
+async def test_assign_requires_unowned_state_and_transfer_requires_owned_state() -> None:
+    service = BeaconWorkflowService()
+
+    async def accept_owner(*_args):
+        return None
+
+    service._validate_owner = accept_owner  # type: ignore[method-assign]
+    context = Context(permissions=(BeaconPermission.ASSIGN,))
+    with pytest.raises(BeaconWorkflowConflictError, match="explicit transfer"):
+        await service._resulting_state(
+            object(),
+            context=context,
+            command=command(BeaconWorkflowAction.ASSIGN, owner=USER_B, version=1),
+            state=state(owner=USER_A, version=1),
+            signal=signal(),
+            occurred_at=NOW,
+        )
+
+
+def test_irrelevant_command_fields_fail_closed() -> None:
+    source = signal()
+    with pytest.raises(BeaconWorkflowConflictError, match="Acknowledgement"):
+        BeaconWorkflowService._validate_command(
+            BeaconWorkflowCommand(
+                signal_id=source.id,
+                evidence_digest=source.evidence_digest,
+                request_id=uuid4(),
+                action=BeaconWorkflowAction.ACKNOWLEDGE,
+                expected_version=0,
+            )
+        )
+    with pytest.raises(BeaconWorkflowConflictError, match="explicit owner"):
+        BeaconWorkflowService._validate_command(
+            BeaconWorkflowCommand(
+                signal_id=source.id,
+                evidence_digest=source.evidence_digest,
+                request_id=uuid4(),
+                action=BeaconWorkflowAction.CLAIM,
+                expected_version=0,
+                owner_user_id=USER_B,
+            )
+        )
