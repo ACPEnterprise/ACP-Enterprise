@@ -40,6 +40,8 @@ class EntityKind(str, Enum):
     SALES_RECEIPT = "sales_receipt"
     ESTIMATE = "estimate"
     PURCHASE_ORDER = "purchase_order"
+    TERM = "term"
+    PAYMENT_METHOD = "payment_method"
 
 
 @dataclass(frozen=True)
