@@ -1,0 +1,66 @@
+export type ProcurementMatchLine = {
+  id: string;
+  purchase_order_line_id: string;
+  receipt_line_id: string | null;
+  bill_line_id: string;
+  ordered_quantity: string;
+  received_quantity: string;
+  returned_quantity: string;
+  net_accepted_quantity: string;
+  billed_quantity: string;
+  po_unit_cost: string;
+  billed_unit_cost: string;
+  quantity_variance: string;
+  price_variance: string;
+  state: string;
+  evidence_digest: string;
+};
+
+export type ProcurementMatchException = {
+  id: string;
+  match_line_id: string | null;
+  category: string;
+  status: string;
+  expected_evidence: string;
+  actual_evidence: string;
+  resolution: string | null;
+  resolution_note: string | null;
+  version: number;
+};
+
+export type ProcurementMatch = {
+  id: string;
+  company_id: string;
+  branch_id: string;
+  purchase_order_id: string;
+  vendor_bill_id: string;
+  state: string;
+  admission_state: string;
+  policy_reference: string | null;
+  purchase_order_version: number;
+  bill_version: number;
+  evidence_digest: string;
+  evaluated_by_user_id: string;
+  evaluated_at: string;
+  version: number;
+  lines: ProcurementMatchLine[];
+  exceptions: ProcurementMatchException[];
+};
+
+export type EvaluateProcurementMatchInput = {
+  purchase_order_id: string;
+  vendor_bill_id: string;
+  expected_purchase_order_version: number;
+  expected_bill_version: number;
+  idempotency_key: string;
+};
+
+export type ResolveProcurementMatchInput = {
+  matchId: string;
+  exceptionId: string;
+  expected_match_version: number;
+  expected_exception_version: number;
+  resolution: string;
+  note: string;
+  idempotency_key: string;
+};

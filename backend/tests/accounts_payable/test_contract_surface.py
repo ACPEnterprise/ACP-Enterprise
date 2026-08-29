@@ -20,6 +20,7 @@ def test_permission_and_event_contract_is_exact() -> None:
         "COMPANY_ACCOUNTS_PAYABLE_BILL_PREPARE", "COMPANY_ACCOUNTS_PAYABLE_BILL_APPROVE",
         "COMPANY_ACCOUNTS_PAYABLE_CREDIT_MANAGE", "COMPANY_ACCOUNTS_PAYABLE_DISBURSEMENT_RECORD",
         "COMPANY_ACCOUNTS_PAYABLE_RECONCILE", "COMPANY_ACCOUNTS_PAYABLE_REPORT_READ",
+        "COMPANY_ACCOUNTS_PAYABLE_MATCH_REVIEW",
     }
     required = {
         "accounts_payable.vendor_created", "accounts_payable.vendor_mapped",

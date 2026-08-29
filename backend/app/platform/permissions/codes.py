@@ -214,6 +214,7 @@ class AccountsPayablePermission:
     DISBURSEMENT_RECORD = "COMPANY_ACCOUNTS_PAYABLE_DISBURSEMENT_RECORD"
     RECONCILE = "COMPANY_ACCOUNTS_PAYABLE_RECONCILE"
     REPORT_READ = "COMPANY_ACCOUNTS_PAYABLE_REPORT_READ"
+    MATCH_REVIEW = "COMPANY_ACCOUNTS_PAYABLE_MATCH_REVIEW"
 
     ALL = frozenset(
         {
@@ -225,6 +226,7 @@ class AccountsPayablePermission:
             DISBURSEMENT_RECORD,
             RECONCILE,
             REPORT_READ,
+            MATCH_REVIEW,
         }
     )
 
