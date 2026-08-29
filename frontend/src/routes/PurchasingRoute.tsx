@@ -16,6 +16,7 @@ import {
   Spinner,
 } from "../ui";
 import { PurchaseOrderChangeControls } from "../components/PurchaseOrderChangeControls";
+import { PurchaseOrderDispositionControls } from "../components/PurchaseOrderDispositionControls";
 
 function changeErrorMessage(error: unknown): string | null {
   if (!error) return null;
@@ -40,6 +41,8 @@ export function PurchasingRoute() {
   const canCloseReturn = useHasPermission("COMPANY_PURCHASING_RETURN_CLOSE");
   const canRequestChange = useHasPermission("COMPANY_PURCHASING_CHANGE_REQUEST");
   const canApproveChange = useHasPermission("COMPANY_PURCHASING_CHANGE_APPROVE");
+  const canCloseOrder = useHasPermission("COMPANY_PURCHASING_CLOSE");
+  const canCancelOrder = useHasPermission("COMPANY_PURCHASING_CANCEL");
   const [search, setSearch] = useState("");
   const purchasing = usePurchasing(search || undefined, canRead);
   const mutations = usePurchasingMutations();
@@ -221,7 +224,8 @@ export function PurchasingRoute() {
     mutations.updateLine.isError ||
     mutations.transition.isError ||
     mutations.recordReceipt.isError ||
-    mutations.resolveDiscrepancy.isError;
+    mutations.resolveDiscrepancy.isError ||
+    mutations.dispositionOrder.isError;
   const changeError = changeErrorMessage(
     mutations.requestChange.error ?? mutations.decideChange.error,
   );
@@ -577,19 +581,6 @@ export function PurchasingRoute() {
                         Issue
                       </Button>
                     )}
-                    {canIssue &&
-                      ["draft", "submitted", "approved", "issued"].includes(
-                        po.status,
-                      ) && (
-                        <Button onClick={() => void transition(po, "cancel")}>
-                          Cancel
-                        </Button>
-                      )}
-                    {canIssue && po.status === "issued" && (
-                      <Button onClick={() => void transition(po, "close")}>
-                        Close without receipt
-                      </Button>
-                    )}
                     {canReceive &&
                       po.status === "issued" &&
                       po.lines.length > 0 && (
@@ -758,6 +749,22 @@ export function PurchasingRoute() {
                     mutations.decideChange.mutateAsync({
                       id: po.id,
                       changeId,
+                      action,
+                      input,
+                    })
+                  }
+                />
+                <PurchaseOrderDispositionControls
+                  po={po}
+                  canClose={canCloseOrder}
+                  canCancel={canCancelOrder}
+                  pending={mutations.dispositionOrder.isPending}
+                  errorMessage={changeErrorMessage(
+                    mutations.dispositionOrder.error,
+                  )}
+                  onDisposition={(action, input) =>
+                    mutations.dispositionOrder.mutateAsync({
+                      id: po.id,
                       action,
                       input,
                     })

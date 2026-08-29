@@ -14,6 +14,7 @@ import {
   transitionPurchaseReturn,
   requestPurchaseOrderChange,
   decidePurchaseOrderChange,
+  dispositionPurchaseOrder,
 } from "../api/purchasing";
 import type {
   PurchaseOrderLineCreate,
@@ -27,6 +28,7 @@ import type {
   TransitionPurchaseReturn,
   RequestPurchaseOrderChange,
   DecidePurchaseOrderChange,
+  PurchaseOrderDispositionCommand,
 } from "../types/purchasing";
 
 const keys = {
@@ -153,6 +155,12 @@ export function usePurchasingMutations() {
     decideChange: useMutation({
       mutationFn: ({ id, changeId, action, input }: { id: string; changeId: string; action: "approve" | "reject"; input: DecidePurchaseOrderChange }) =>
         decidePurchaseOrderChange(id, changeId, action, input),
+      onSuccess: refresh,
+      onError: refresh,
+    }),
+    dispositionOrder: useMutation({
+      mutationFn: ({ id, action, input }: { id: string; action: "complete" | "cancel"; input: PurchaseOrderDispositionCommand }) =>
+        dispositionPurchaseOrder(id, action, input),
       onSuccess: refresh,
       onError: refresh,
     }),

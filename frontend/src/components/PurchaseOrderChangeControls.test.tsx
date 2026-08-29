@@ -12,6 +12,7 @@ const po: PurchaseOrder = {
   receipts: [], discrepancies: [], returns: [],
   change_orders: [{ id: "change-1", change_identity: "CO-1", base_revision: 2, proposed_changes: [{ operation: "set_quantity", line_id: "line-1", quantity: "12" }], reason: "Vendor confirmed quantity", status: "requested", requested_by_user_id: "user-1", requested_at: "2026-08-28T12:00:00Z", decided_by_user_id: null, decided_at: null, effective_revision: null, evidence_digest: "evidence", downstream_reconciliation_required: false }],
   revisions: [{ id: "revision-1", revision_number: 1, predecessor_revision: null, change_order_id: null, effective_snapshot: { lines: [{ quantity: "10" }], expected_date: null }, evidence_digest: "original", effective_by_user_id: "user-1", effective_at: "2026-08-27T12:00:00Z" }],
+  disposition: null,
 };
 
 describe("PurchaseOrderChangeControls", () => {

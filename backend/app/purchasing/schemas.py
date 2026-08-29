@@ -254,6 +254,7 @@ class PurchaseOrderItem(PurchasingSchema):
     returns: tuple[PurchaseReturnItem, ...] = ()
     change_orders: tuple["PurchaseOrderChangeItem", ...] = ()
     revisions: tuple["PurchaseOrderRevisionItem", ...] = ()
+    disposition: "PurchaseOrderDispositionItem | None" = None
 
 
 class PurchaseOrderChangeOperation(PurchasingSchema):
@@ -312,6 +313,26 @@ class PurchaseOrderRevisionItem(PurchasingSchema):
     evidence_digest: str
     effective_by_user_id: UUID
     effective_at: datetime
+
+
+class PurchaseOrderDispositionCommand(Command):
+    expected_po_version: int = Field(ge=1)
+    expected_effective_revision: int = Field(ge=1)
+    reason: str = Field(min_length=1, max_length=1000)
+    confirm_terminal_action: bool
+
+
+class PurchaseOrderDispositionItem(PurchasingSchema):
+    id: UUID
+    purchase_order_version: int
+    effective_revision: int
+    prior_status: str
+    disposition: str
+    reason: str
+    quantity_evidence: list[dict[str, object]]
+    evidence_digest: str
+    actor_user_id: UUID
+    occurred_at: datetime
 
 
 class PurchasingWorkspace(PurchasingSchema):

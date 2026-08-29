@@ -29,6 +29,7 @@ from app.purchasing.errors import (
 )
 from app.purchasing.models import (
     PurchaseOrderDiscrepancy,
+    PurchaseOrderDispositionEvidence,
     PurchaseOrderIssuanceEvidence,
     PurchaseOrderRevision,
     PurchaseReturn,
@@ -38,6 +39,7 @@ from app.purchasing.schemas import (
     DecidePurchaseOrderChangeCommand,
     PurchaseOrderChangeOperation,
     PurchaseOrderCreate,
+    PurchaseOrderDispositionCommand,
     PurchaseOrderLineWrite,
     PurchaseReturnTransitionCommand,
     ReceiptLineCommand,
@@ -315,7 +317,7 @@ async def test_po_lifecycle_sod_immutable_issuance_and_nonmutation(
 
 
 @pytest.mark.asyncio
-async def test_branch_isolation_cancel_and_manual_nonreceipt_close(
+async def test_branch_isolation_and_explicit_nonreceipt_cancellation(
     purchasing_fixture,
 ) -> None:
     factory, _, _, branch, other_branch, preparer, approver = purchasing_fixture
@@ -351,16 +353,20 @@ async def test_branch_isolation_cancel_and_manual_nonreceipt_close(
                 idempotency_key="po-cancel",
             ),
         )
-        cancelled = await service.transition(
+        cancellation = await service.terminal_disposition(
             session,
             context=approver,
             po_id=cancelled.id,
-            target="cancel",
-            payload=command(
-                cancelled.version, "po-cancel-action", "No longer required"
+            action="cancel",
+            payload=PurchaseOrderDispositionCommand(
+                expected_po_version=cancelled.version,
+                expected_effective_revision=cancelled.effective_revision,
+                reason="No longer required",
+                confirm_terminal_action=True,
+                idempotency_key="po-cancel-action",
             ),
         )
-        assert cancelled.status == "cancelled"
+        assert cancellation.disposition == "canceled_before_receipt"
         order = await service.create_order(
             session,
             context=preparer,
@@ -406,18 +412,20 @@ async def test_branch_isolation_cancel_and_manual_nonreceipt_close(
             target="issue",
             payload=command(order.version, "po-close-issue"),
         )
-        order = await service.transition(
+        cancellation = await service.terminal_disposition(
             session,
             context=approver,
             po_id=order.id,
-            target="close",
-            payload=command(
-                order.version, "po-close-action", "Owner-authorized non-receipt closure"
+            action="cancel",
+            payload=PurchaseOrderDispositionCommand(
+                expected_po_version=order.version,
+                expected_effective_revision=order.effective_revision,
+                reason="Owner-authorized non-receipt cancellation",
+                confirm_terminal_action=True,
+                idempotency_key="po-close-action",
             ),
         )
-        assert order.status == "closed" and "non-receipt" in (
-            order.lifecycle_reason or ""
-        )
+        assert cancellation.disposition == "canceled_before_receipt"
 
 
 @pytest.mark.asyncio
@@ -816,6 +824,166 @@ def receipt(
             ),
         ),
     )
+
+
+def disposition(
+    version: int, revision: int, key: str, reason: str
+) -> PurchaseOrderDispositionCommand:
+    return PurchaseOrderDispositionCommand(
+        expected_po_version=version,
+        expected_effective_revision=revision,
+        reason=reason,
+        confirm_terminal_action=True,
+        idempotency_key=key,
+    )
+
+
+@pytest.mark.asyncio
+async def test_fully_satisfied_disposition_is_evidenced_and_idempotent(
+    purchasing_fixture,
+) -> None:
+    factory, _, _, branch, _, preparer, approver = purchasing_fixture
+    service = PurchasingService()
+    po_id, line_id, version = await issued_order(factory, branch, preparer, approver)
+    async with factory() as session:
+        await service.record_receipt(
+            session,
+            context=approver,
+            po_id=po_id,
+            payload=receipt(version, line_id, "10", "complete-receipt"),
+        )
+    async with factory() as session:
+        item = await service.get_order(session, context=approver, po_id=po_id)
+        payload = disposition(
+            item.version,
+            item.effective_revision,
+            "complete-po",
+            "All effective quantities received",
+        )
+    async with factory() as session:
+        completed = await service.terminal_disposition(
+            session, context=approver, po_id=po_id, action="complete", payload=payload
+        )
+        replay = await service.terminal_disposition(
+            session, context=approver, po_id=po_id, action="complete", payload=payload
+        )
+        assert replay.id == completed.id
+        assert completed.disposition == "fully_satisfied"
+        assert len(completed.evidence_digest) == 64
+    async with factory() as session:
+        item = await service.get_order(session, context=approver, po_id=po_id)
+        assert item.status == "closed" and item.disposition is not None
+        assert item.lines[0].outstanding_quantity == Decimal(0)
+    async with factory() as session:
+        with pytest.raises(PurchasingConflict):
+            await service.terminal_disposition(
+                session,
+                context=approver,
+                po_id=po_id,
+                action="complete",
+                payload=payload.model_copy(update={"reason": "contradiction"}),
+            )
+
+
+@pytest.mark.asyncio
+async def test_unsatisfied_completion_fails_and_partial_remainder_cancel_is_explicit(
+    purchasing_fixture,
+) -> None:
+    factory, _, _, branch, _, preparer, approver = purchasing_fixture
+    service = PurchasingService()
+    po_id, line_id, version = await issued_order(factory, branch, preparer, approver)
+    async with factory() as session:
+        with pytest.raises(PurchasingValidation):
+            await service.terminal_disposition(
+                session,
+                context=approver,
+                po_id=po_id,
+                action="complete",
+                payload=disposition(
+                    version, 1, "not-complete", "Incorrect completion attempt"
+                ),
+            )
+    async with factory() as session:
+        await service.record_receipt(
+            session,
+            context=approver,
+            po_id=po_id,
+            payload=receipt(version, line_id, "4", "partial-before-cancel"),
+        )
+    async with factory() as session:
+        item = await service.get_order(session, context=approver, po_id=po_id)
+    async with factory() as session:
+        canceled = await service.terminal_disposition(
+            session,
+            context=approver,
+            po_id=po_id,
+            action="cancel",
+            payload=disposition(
+                item.version, 1, "cancel-remainder", "Vendor cannot fulfill remainder"
+            ),
+        )
+        assert canceled.disposition == "remainder_canceled"
+        assert canceled.quantity_evidence[0]["accepted_received_quantity"] == "4.000000"
+        assert Decimal(
+            str(canceled.quantity_evidence[0]["canceled_remainder_quantity"])
+        ) == Decimal(6)
+    async with factory() as session:
+        item = await service.get_order(session, context=approver, po_id=po_id)
+        assert item.lines[0].quantity == Decimal(10)
+        assert item.lines[0].cumulative_accepted_quantity == Decimal(4)
+        assert item.lines[0].outstanding_quantity == Decimal(0)
+
+
+@pytest.mark.asyncio
+async def test_disposition_blocks_open_discrepancy_and_stale_or_racing_action(
+    purchasing_fixture,
+) -> None:
+    factory, _, _, branch, _, preparer, approver = purchasing_fixture
+    service = PurchasingService()
+    po_id, line_id, version = await issued_order(factory, branch, preparer, approver)
+    async with factory() as session:
+        await service.record_receipt(
+            session,
+            context=approver,
+            po_id=po_id,
+            payload=receipt(
+                version,
+                line_id,
+                "2",
+                "disputed-receipt",
+                rejected="1",
+                category="damaged_item",
+            ),
+        )
+    async with factory() as session:
+        item = await service.get_order(session, context=approver, po_id=po_id)
+    async with factory() as session:
+        with pytest.raises(PurchasingValidation, match="discrepancies"):
+            await service.terminal_disposition(
+                session,
+                context=approver,
+                po_id=po_id,
+                action="cancel",
+                payload=disposition(
+                    item.version, 1, "blocked-discrepancy", "Cannot fulfill remainder"
+                ),
+            )
+    async with factory() as session:
+        with pytest.raises(PurchasingConflict, match="stale"):
+            await service.terminal_disposition(
+                session,
+                context=approver,
+                po_id=po_id,
+                action="cancel",
+                payload=disposition(version, 1, "stale-cancel", "Stale cancellation"),
+            )
+    async with factory() as session:
+        evidence_count = await session.scalar(
+            select(func.count())
+            .select_from(PurchaseOrderDispositionEvidence)
+            .where(PurchaseOrderDispositionEvidence.purchase_order_id == po_id)
+        )
+        assert evidence_count == 0
 
 
 @pytest.mark.asyncio

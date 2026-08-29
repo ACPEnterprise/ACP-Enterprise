@@ -20,6 +20,7 @@ from .models import (
     PurchaseOrder,
     PurchaseOrderChangeOrder,
     PurchaseOrderDiscrepancy,
+    PurchaseOrderDispositionEvidence,
     PurchaseOrderIssuanceEvidence,
     PurchaseOrderLine,
     PurchaseOrderReceipt,
@@ -35,6 +36,8 @@ from .schemas import (
     DiscrepancyItem,
     PurchaseOrderChangeItem,
     PurchaseOrderCreate,
+    PurchaseOrderDispositionCommand,
+    PurchaseOrderDispositionItem,
     PurchaseOrderItem,
     PurchaseOrderLineItem,
     PurchaseOrderLineUpdate,
@@ -553,29 +556,13 @@ class PurchasingService:
                     timestamp,
                 )
             elif target == "cancel":
-                if order.status not in {"draft", "submitted", "approved", "issued"}:
-                    raise PurchasingValidation(
-                        "Purchase Order cannot be cancelled from current state"
-                    )
-                if not payload.reason:
-                    raise PurchasingValidation("Cancellation reason is required")
-                order.status, order.lifecycle_reason = (
-                    "cancelled",
-                    payload.reason.strip(),
+                raise PurchasingValidation(
+                    "Use the explicit Purchase Order cancellation disposition"
                 )
             elif target == "close":
-                if order.status != "issued":
-                    raise PurchasingValidation(
-                        "Only an issued PO may be manually closed in PUR.1"
-                    )
-                if not payload.reason:
-                    raise PurchasingValidation("Non-receipt closure reason is required")
-                (
-                    order.status,
-                    order.closed_by_user_id,
-                    order.closed_at,
-                    order.lifecycle_reason,
-                ) = "closed", context.user.id, timestamp, payload.reason.strip()
+                raise PurchasingValidation(
+                    "Use the explicit Purchase Order completion disposition"
+                )
             else:
                 raise PurchasingValidation("Unsupported Purchase Order transition")
             order.version += 1
@@ -1169,6 +1156,205 @@ class PurchasingService:
             )
         return record
 
+    async def terminal_disposition(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        po_id: UUID,
+        action: str,
+        payload: PurchaseOrderDispositionCommand,
+    ) -> PurchaseOrderDispositionEvidence:
+        data = {
+            "po_id": str(po_id),
+            "action": action,
+            **payload.model_dump(mode="json"),
+        }
+        operation = f"po.disposition.{action}"
+        async with session.begin():
+            replay = await self._replay(
+                session,
+                context,
+                operation,
+                payload.idempotency_key,
+                data,
+                "purchase_order_disposition",
+            )
+            if replay:
+                record = await self.repository.disposition(
+                    session, context.company.id, po_id
+                )
+                if record is None or record.id != replay:
+                    raise PurchasingConflict("Disposition replay target is missing")
+                return record
+            if not payload.confirm_terminal_action:
+                raise PurchasingValidation(
+                    "Explicit terminal-action confirmation is required"
+                )
+            order = await self._order(session, context, po_id, lock=True)
+            if order.version != payload.expected_po_version:
+                raise PurchasingConflict("Purchase Order version is stale")
+            if order.effective_revision != payload.expected_effective_revision:
+                raise PurchasingConflict("Purchase Order effective revision is stale")
+            if order.status in {"closed", "cancelled"}:
+                raise PurchasingConflict(
+                    "Purchase Order already has a terminal disposition"
+                )
+            if await self.repository.disposition(session, order.company_id, order.id):
+                raise PurchasingConflict(
+                    "Purchase Order disposition evidence already exists"
+                )
+            changes = await self.repository.change_orders(
+                session, order.company_id, order.id
+            )
+            if any(item.status == "requested" for item in changes):
+                raise PurchasingValidation(
+                    "Pending Purchase Order changes block disposition"
+                )
+            discrepancies = await self.repository.discrepancies(
+                session, order.company_id, order.id
+            )
+            if any(item.status == "open" for item in discrepancies):
+                raise PurchasingValidation(
+                    "Unresolved receiving discrepancies block disposition"
+                )
+            returns = await self.repository.purchase_returns(
+                session, order.company_id, order.id
+            )
+            active_return_states = {
+                "requested",
+                "authorized",
+                "return_ready",
+                "returned",
+                "received_by_vendor",
+            }
+            if any(item.status in active_return_states for item in returns):
+                raise PurchasingValidation("Active Purchase Returns block disposition")
+            lines = await self.repository.lines(session, order.company_id, order.id)
+            accepted = await self.repository.accepted_totals(
+                session, order.company_id, order.id
+            )
+            quantity_evidence: list[dict[str, object]] = []
+            total_accepted = Decimal(0)
+            total_outstanding = Decimal(0)
+            for line in lines:
+                received = accepted.get(line.id, Decimal(0))
+                outstanding = (
+                    Decimal(0) if line.is_cancelled else line.quantity - received
+                )
+                total_accepted += received
+                total_outstanding += outstanding
+                quantity_evidence.append(
+                    {
+                        "purchase_order_line_id": str(line.id),
+                        "line_number": line.line_number,
+                        "effective_ordered_quantity": str(line.quantity),
+                        "accepted_received_quantity": str(received),
+                        "previously_canceled": line.is_cancelled,
+                        "prior_outstanding_quantity": str(max(outstanding, Decimal(0))),
+                        "canceled_remainder_quantity": "0",
+                    }
+                )
+            timestamp = now()
+            if action == "complete":
+                if order.status != "issued":
+                    raise PurchasingValidation(
+                        "Only an issued Purchase Order may be completed"
+                    )
+                if total_outstanding != 0:
+                    raise PurchasingValidation(
+                        "Purchase Order is not fully satisfied by authoritative receiving facts"
+                    )
+                disposition = "fully_satisfied"
+                terminal_status = "closed"
+                event_type = EventType.PURCHASING_PURCHASE_ORDER_COMPLETED
+            elif action == "cancel":
+                if order.status not in {"draft", "submitted", "approved", "issued"}:
+                    raise PurchasingValidation(
+                        "Purchase Order cannot be canceled from current state"
+                    )
+                if order.status == "issued" and total_outstanding == 0:
+                    raise PurchasingValidation(
+                        "A fully received Purchase Order cannot be canceled"
+                    )
+                if total_accepted == 0:
+                    disposition = "canceled_before_receipt"
+                else:
+                    disposition = "remainder_canceled"
+                    for line_evidence in quantity_evidence:
+                        line_evidence["canceled_remainder_quantity"] = line_evidence[
+                            "prior_outstanding_quantity"
+                        ]
+                terminal_status = "cancelled"
+                event_type = (
+                    EventType.PURCHASING_PURCHASE_ORDER_REMAINDER_CANCELED
+                    if disposition == "remainder_canceled"
+                    else EventType.PURCHASING_PURCHASE_ORDER_CANCELLED
+                )
+            else:
+                raise PurchasingValidation("Unsupported terminal disposition")
+            evidence_payload = {
+                "schema_version": 1,
+                "company_id": str(order.company_id),
+                "branch_id": str(order.branch_id),
+                "purchase_order_id": str(order.id),
+                "purchase_order_version": order.version,
+                "effective_revision": order.effective_revision,
+                "prior_status": order.status,
+                "disposition": disposition,
+                "reason": payload.reason.strip(),
+                "quantity_evidence": quantity_evidence,
+                "actor_user_id": str(context.user.id),
+                "occurred_at": timestamp.isoformat(),
+            }
+            record = PurchaseOrderDispositionEvidence(
+                company_id=order.company_id,
+                branch_id=order.branch_id,
+                purchase_order_id=order.id,
+                purchase_order_version=order.version,
+                effective_revision=order.effective_revision,
+                prior_status=order.status,
+                disposition=disposition,
+                reason=payload.reason.strip(),
+                quantity_evidence=quantity_evidence,
+                evidence_digest=digest(evidence_payload),
+                actor_user_id=context.user.id,
+                occurred_at=timestamp,
+            )
+            session.add(record)
+            await session.flush()
+            order.status = terminal_status
+            order.closed_by_user_id = context.user.id
+            order.closed_at = timestamp
+            order.lifecycle_reason = payload.reason.strip()
+            order.version += 1
+            order.updated_at = timestamp
+            self._receipt(
+                session,
+                context,
+                operation,
+                payload.idempotency_key,
+                data,
+                "purchase_order_disposition",
+                record.id,
+            )
+            self._event(
+                session,
+                context,
+                event_type,
+                "purchase_order",
+                order.id,
+                order.branch_id,
+                {
+                    "purchase_order_id": str(order.id),
+                    "purchase_order_version": order.version,
+                    "effective_revision": order.effective_revision,
+                    "disposition": disposition,
+                    "evidence_digest": record.evidence_digest,
+                },
+            )
+        return record
+
     async def request_change(
         self,
         session: AsyncSession,
@@ -1546,6 +1732,9 @@ class PurchasingService:
             session, order.company_id, order.id
         )
         revisions = await self.repository.revisions(session, order.company_id, order.id)
+        disposition = await self.repository.disposition(
+            session, order.company_id, order.id
+        )
         totals = await self.repository.accepted_totals(
             session, order.company_id, order.id
         )
@@ -1587,7 +1776,9 @@ class PurchasingService:
                                 line.id, Decimal(0)
                             ),
                             "outstanding_quantity": line.quantity
-                            - totals.get(line.id, Decimal(0)),
+                            - totals.get(line.id, Decimal(0))
+                            if disposition is None
+                            else Decimal(0),
                         }
                     )
                     for line in lines
@@ -1608,6 +1799,9 @@ class PurchasingService:
                 "revisions": tuple(
                     PurchaseOrderRevisionItem.model_validate(item) for item in revisions
                 ),
+                "disposition": PurchaseOrderDispositionItem.model_validate(disposition)
+                if disposition
+                else None,
             }
         )
 

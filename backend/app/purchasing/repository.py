@@ -9,6 +9,7 @@ from .models import (
     PurchaseOrder,
     PurchaseOrderChangeOrder,
     PurchaseOrderDiscrepancy,
+    PurchaseOrderDispositionEvidence,
     PurchaseOrderIssuanceEvidence,
     PurchaseOrderLine,
     PurchaseOrderReceipt,
@@ -330,6 +331,16 @@ class PurchasingRepository:
                     .order_by(PurchaseOrderRevision.revision_number)
                 )
             ).all()
+        )
+
+    async def disposition(
+        self, session: AsyncSession, company_id: UUID, po_id: UUID
+    ) -> PurchaseOrderDispositionEvidence | None:
+        return await session.scalar(
+            select(PurchaseOrderDispositionEvidence).where(
+                PurchaseOrderDispositionEvidence.company_id == company_id,
+                PurchaseOrderDispositionEvidence.purchase_order_id == po_id,
+            )
         )
 
 

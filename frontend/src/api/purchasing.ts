@@ -21,6 +21,8 @@ import type {
   PurchaseOrderChange,
   RequestPurchaseOrderChange,
   DecidePurchaseOrderChange,
+  PurchaseOrderDisposition,
+  PurchaseOrderDispositionCommand,
 } from "../types/purchasing";
 
 const root = "/api/v1/purchasing";
@@ -149,6 +151,17 @@ export const decidePurchaseOrderChange = async (
   (
     await apiClient.post<PurchaseOrderChange>(
       `${root}/purchase-orders/${id}/changes/${changeId}/${action}`,
+      input,
+    )
+  ).data;
+export const dispositionPurchaseOrder = async (
+  id: string,
+  action: "complete" | "cancel",
+  input: PurchaseOrderDispositionCommand,
+): Promise<PurchaseOrderDisposition> =>
+  (
+    await apiClient.post<PurchaseOrderDisposition>(
+      `${root}/purchase-orders/${id}/dispositions/${action}`,
       input,
     )
   ).data;

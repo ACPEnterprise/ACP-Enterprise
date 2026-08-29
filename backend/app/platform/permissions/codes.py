@@ -91,6 +91,8 @@ class PurchasingPermission:
     RETURN_CLOSE = "COMPANY_PURCHASING_RETURN_CLOSE"
     CHANGE_REQUEST = "COMPANY_PURCHASING_CHANGE_REQUEST"
     CHANGE_APPROVE = "COMPANY_PURCHASING_CHANGE_APPROVE"
+    CLOSE = "COMPANY_PURCHASING_CLOSE"
+    CANCEL = "COMPANY_PURCHASING_CANCEL"
 
     ALL = frozenset(
         {
@@ -106,6 +108,8 @@ class PurchasingPermission:
             RETURN_CLOSE,
             CHANGE_REQUEST,
             CHANGE_APPROVE,
+            CLOSE,
+            CANCEL,
         }
     )
 

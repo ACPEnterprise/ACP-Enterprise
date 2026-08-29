@@ -21,6 +21,8 @@ from .schemas import (
     DiscrepancyItem,
     PurchaseOrderChangeItem,
     PurchaseOrderCreate,
+    PurchaseOrderDispositionCommand,
+    PurchaseOrderDispositionItem,
     PurchaseOrderItem,
     PurchaseOrderLineItem,
     PurchaseOrderLineUpdate,
@@ -85,6 +87,12 @@ ChangeRequestContext = Annotated[
 ChangeApproveContext = Annotated[
     AuthorizationContext,
     Depends(require_permission(PurchasingPermission.CHANGE_APPROVE)),
+]
+CloseContext = Annotated[
+    AuthorizationContext, Depends(require_permission(PurchasingPermission.CLOSE))
+]
+CancelContext = Annotated[
+    AuthorizationContext, Depends(require_permission(PurchasingPermission.CANCEL))
 ]
 
 
@@ -272,6 +280,53 @@ async def close(
     session: DatabaseSession,
 ) -> PurchaseOrderItem:
     return await _transition(po_id, "close", payload, context, session)
+
+
+async def _terminal_disposition(
+    po_id: UUID,
+    action: str,
+    payload: PurchaseOrderDispositionCommand,
+    context: AuthorizationContext,
+    session: AsyncSession,
+) -> PurchaseOrderDispositionItem:
+    try:
+        return PurchaseOrderDispositionItem.model_validate(
+            await purchasing_service.terminal_disposition(
+                session,
+                context=context,
+                po_id=po_id,
+                action=action,
+                payload=payload,
+            )
+        )
+    except PurchasingError as error:
+        raise http_error(error) from error
+
+
+@router.post(
+    "/purchase-orders/{po_id}/dispositions/complete",
+    response_model=PurchaseOrderDispositionItem,
+)
+async def complete_purchase_order(
+    po_id: UUID,
+    payload: PurchaseOrderDispositionCommand,
+    context: CloseContext,
+    session: DatabaseSession,
+) -> PurchaseOrderDispositionItem:
+    return await _terminal_disposition(po_id, "complete", payload, context, session)
+
+
+@router.post(
+    "/purchase-orders/{po_id}/dispositions/cancel",
+    response_model=PurchaseOrderDispositionItem,
+)
+async def cancel_purchase_order_disposition(
+    po_id: UUID,
+    payload: PurchaseOrderDispositionCommand,
+    context: CancelContext,
+    session: DatabaseSession,
+) -> PurchaseOrderDispositionItem:
+    return await _terminal_disposition(po_id, "cancel", payload, context, session)
 
 
 @router.post(

@@ -47,6 +47,7 @@ describe("PurchasingRoute", () => {
             returns: [],
             change_orders: [],
             revisions: [],
+            disposition: null,
           },
         ],
       },
@@ -65,6 +66,7 @@ describe("PurchasingRoute", () => {
       transitionReturn: mutation,
       requestChange: mutation,
       decideChange: mutation,
+      dispositionOrder: mutation,
     } as never);
   });
   it("fails closed without read permission", () => {

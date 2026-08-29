@@ -117,6 +117,10 @@ class EventType(str, Enum):
         "purchasing.purchase_order.change_rejected"
     )
     PURCHASING_PURCHASE_ORDER_REVISED = "purchasing.purchase_order.revised"
+    PURCHASING_PURCHASE_ORDER_COMPLETED = "purchasing.purchase_order.completed"
+    PURCHASING_PURCHASE_ORDER_REMAINDER_CANCELED = (
+        "purchasing.purchase_order.remainder_canceled"
+    )
 
     # Operations
     OPERATIONS_SERVICE_REQUEST_ACCEPTED = "operations.service_request.accepted"

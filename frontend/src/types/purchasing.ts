@@ -63,6 +63,18 @@ export interface PurchaseOrderRevision {
   effective_by_user_id: string;
   effective_at: string;
 }
+export interface PurchaseOrderDisposition {
+  id: string;
+  purchase_order_version: number;
+  effective_revision: number;
+  prior_status: string;
+  disposition: "fully_satisfied" | "canceled_before_receipt" | "remainder_canceled";
+  reason: string;
+  quantity_evidence: readonly Record<string, unknown>[];
+  evidence_digest: string;
+  actor_user_id: string;
+  occurred_at: string;
+}
 export interface PurchaseOrderReceiptLine {
   id: string;
   purchase_order_line_id: string;
@@ -123,6 +135,7 @@ export interface PurchaseOrder {
   returns: readonly PurchaseReturn[];
   change_orders: readonly PurchaseOrderChange[];
   revisions: readonly PurchaseOrderRevision[];
+  disposition: PurchaseOrderDisposition | null;
 }
 export interface RequestPurchaseOrderChange {
   expected_po_version: number;
@@ -136,6 +149,13 @@ export interface DecidePurchaseOrderChange {
   expected_po_version: number;
   expected_base_revision: number;
   reason?: string | null;
+  idempotency_key: string;
+}
+export interface PurchaseOrderDispositionCommand {
+  expected_po_version: number;
+  expected_effective_revision: number;
+  reason: string;
+  confirm_terminal_action: boolean;
   idempotency_key: string;
 }
 export interface PurchasingWorkspace {
