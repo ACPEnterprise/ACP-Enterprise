@@ -151,11 +151,16 @@ def test_current_projection_reconciles_completion_and_releases_successor() -> No
     assert milestones["BANK.BEA.003"].completion_commit_sha == (
         "cce44ec4227418b7543d05b977b81c9656e21f25"
     )
-    assert milestones["BANK.BEA.004"].current_state == "EXECUTABLE"
+    assert milestones["BANK.BEA.004"].current_state == "COMPLETE"
+    assert milestones["BANK.BEA.004"].completion_commit_sha == (
+        "2a6a83c9a6a7e20ab9ce5af7964ed27ae28e27d0"
+    )
+    assert milestones["BANK.BEA.005"].current_state == "EXECUTABLE"
     assert "BANK.BEA.001" not in projection.executable_milestone_ids
     assert "BANK.BEA.002" not in projection.executable_milestone_ids
     assert "BANK.BEA.003" not in projection.executable_milestone_ids
-    assert "BANK.BEA.004" in projection.executable_milestone_ids
+    assert "BANK.BEA.004" not in projection.executable_milestone_ids
+    assert "BANK.BEA.005" in projection.executable_milestone_ids
 
     accounting = milestones["BANK.ACC.001"]
     assert accounting.current_state == "COMPLETE"
@@ -181,6 +186,37 @@ def test_unresolved_predecessor_blocks_successor() -> None:
     milestone = _by_id(evaluate_readiness(bank, authority))["BANK.PLAT.001"]
     assert milestone.current_state == "BLOCKED_DEPENDENCY"
     assert milestone.blocked_reasons == ("dependency_not_complete:BANK.PUR.001",)
+
+
+def test_beacon_004_acceptance_releases_only_direct_successor() -> None:
+    bank = load_milestone_bank()
+    current = _by_id(load_current_readiness_projection())
+    raw = _authority_raw()
+    evidence = raw["completion_evidence"]
+    assert isinstance(evidence, list)
+    bea_004 = next(
+        item for item in evidence if item["bank_milestone_id"] == "BANK.BEA.004"
+    )
+    assert bea_004["authoritative_commit_sha"] == (
+        "2a6a83c9a6a7e20ab9ce5af7964ed27ae28e27d0"
+    )
+    assert (
+        "ccebae77da16c3f1044a03af88c8a734a6cc7662e95406132a9b405eaaf362b1"
+        in bea_004["evidence_reference"]
+    )
+    raw["completion_evidence"] = [
+        item for item in evidence if item["bank_milestone_id"] != "BANK.BEA.004"
+    ]
+    prior = _by_id(
+        evaluate_readiness(bank, ingest_authority_snapshot(_resign(raw), bank))
+    )
+
+    changed = {
+        milestone_id
+        for milestone_id in current
+        if current[milestone_id].current_state != prior[milestone_id].current_state
+    }
+    assert changed == {"BANK.BEA.004", "BANK.BEA.005"}
 
 
 def test_platform_002_acceptance_changes_only_itself_and_direct_successor() -> None:
