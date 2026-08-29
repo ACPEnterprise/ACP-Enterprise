@@ -12,11 +12,14 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from app.core.config import settings
 from app.events.models import BusinessEvent
-from app.payroll.contracts import PayrollAuthorizationError, PayrollConflictError
+from app.payroll.contracts import (
+    PayrollAuthorizationError,
+    PayrollConflictError,
+    evaluate_payroll_admission,
+)
 from app.payroll.finalization import (
     GrossResultLifecycle,
     GrossReviewDecision,
-    PayPeriodCalculationStatus,
     PayrollGrossResultService,
 )
 from app.payroll.models import (
@@ -448,19 +451,35 @@ async def test_permissions_company_isolation_and_blocked_period_status(
             session, context=read, candidate=value
         )
         blocked_employee = uuid4()
+        blocked_snapshot = time_input(
+            values["company_id"], blocked_employee, 600  # type: ignore[arg-type]
+        )
+        blocked_snapshot = seal_payroll_time_input(
+            company_id=blocked_snapshot.company_id,
+            employee_id=blocked_employee,
+            pay_period_id=persisted.pay_period_id,
+            period_start=blocked_snapshot.period_start,
+            period_end=blocked_snapshot.period_end,
+            approved_entries=blocked_snapshot.approved_entries,
+        )
+        blocked_admission = evaluate_payroll_admission(
+            company_id=values["company_id"],  # type: ignore[arg-type]
+            identity_resolved=True,
+            policy=values["policy"],  # type: ignore[arg-type]
+            compensation=None,
+            time_input=blocked_snapshot,
+            pay_period_schedule_definition_id=(
+                values["policy"].definition.schedule_definition_id  # type: ignore[union-attr]
+            ),
+            pay_period_schedule_version=(
+                values["policy"].definition.schedule_version  # type: ignore[union-attr]
+            ),
+        )
         statuses = await service.period_results(
             session,
             context=read,
             pay_period_id=persisted.pay_period_id,
-            blocked=(
-                PayPeriodCalculationStatus(
-                    blocked_employee,
-                    None,
-                    None,
-                    "blocked_compensation",
-                    None,
-                ),
-            ),
+            blocked_admissions=(blocked_admission,),
         )
         assert {item.employee_id for item in statuses} == {
             values["employee_id"],
