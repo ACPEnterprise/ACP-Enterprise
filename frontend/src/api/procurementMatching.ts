@@ -2,13 +2,25 @@ import { apiClient } from "./client";
 import type {
   EvaluateProcurementMatchInput,
   ProcurementMatch,
+  ProcurementMatchCandidate,
   ResolveProcurementMatchInput,
   VendorPerformanceReport,
 } from "../types/procurementMatching";
 
 const root = "/api/v1/procurement-matching";
 
-export const getProcurementMatch = async (matchId: string): Promise<ProcurementMatch> =>
+export const getProcurementMatchCandidates = async (): Promise<
+  readonly ProcurementMatchCandidate[]
+> =>
+  (
+    await apiClient.get<readonly ProcurementMatchCandidate[]>(
+      `${root}/candidates`,
+    )
+  ).data;
+
+export const getProcurementMatch = async (
+  matchId: string,
+): Promise<ProcurementMatch> =>
   (await apiClient.get<ProcurementMatch>(`${root}/matches/${matchId}`)).data;
 
 export const evaluateProcurementMatch = async (

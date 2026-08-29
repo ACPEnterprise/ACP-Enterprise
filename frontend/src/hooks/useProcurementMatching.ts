@@ -4,9 +4,21 @@ import * as api from "../api/procurementMatching";
 export const procurementMatchKeys = {
   all: ["procurement-matching"] as const,
   detail: (id: string) => ["procurement-matching", id] as const,
+  candidates: ["procurement-matching", "candidates"] as const,
   vendorPerformance: (evaluatedAt: string, branchId?: string) =>
-    ["procurement-matching", "vendor-performance", evaluatedAt, branchId] as const,
+    [
+      "procurement-matching",
+      "vendor-performance",
+      evaluatedAt,
+      branchId,
+    ] as const,
 };
+
+export const useProcurementMatchCandidates = () =>
+  useQuery({
+    queryKey: procurementMatchKeys.candidates,
+    queryFn: api.getProcurementMatchCandidates,
+  });
 
 export const useProcurementMatch = (matchId: string) =>
   useQuery({
@@ -21,12 +33,21 @@ export function useProcurementMatchMutations() {
     evaluate: useMutation({
       mutationFn: api.evaluateProcurementMatch,
       onSuccess: (result) =>
-        client.setQueryData(procurementMatchKeys.detail(result.id), result),
+        Promise.all([
+          client.setQueryData(procurementMatchKeys.detail(result.id), result),
+          client.invalidateQueries({
+            queryKey: procurementMatchKeys.candidates,
+          }),
+        ]),
     }),
     resolve: useMutation({
       mutationFn: api.resolveProcurementMatch,
-      onSuccess: (result) =>
-        client.setQueryData(procurementMatchKeys.detail(result.id), result),
+      onSuccess: (result) => {
+        client.setQueryData(procurementMatchKeys.detail(result.id), result);
+        return client.invalidateQueries({
+          queryKey: procurementMatchKeys.candidates,
+        });
+      },
     }),
   };
 }

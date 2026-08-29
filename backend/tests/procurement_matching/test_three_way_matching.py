@@ -362,6 +362,12 @@ async def test_exact_match_is_idempotent_current_and_has_zero_downstream_effects
     )
     service = ProcurementMatchingService()
     async with factory() as session:
+        candidates = await service.candidates(session, context=evaluator)
+    candidate = next(row for row in candidates if row.vendor_bill_id == bill.id)
+    assert candidate.purchase_order_id == order.id
+    assert candidate.linkage_state == "ready"
+    assert candidate.active_match_id is None
+    async with factory() as session:
         before = tuple(
             [
                 await session.scalar(select(func.count()).select_from(model))
@@ -445,6 +451,10 @@ async def test_return_and_vendor_credit_create_append_only_match_revisions(
         current_bill = await session.get(VendorBill, bill.id)
         assert stale is not None and current_bill is not None
         assert not await is_current_eligible_match(session, stale, current_bill)
+        candidates = await service.candidates(session, context=evaluator)
+        candidate = next(row for row in candidates if row.vendor_bill_id == bill.id)
+        assert candidate.linkage_state == "stale_match"
+        assert not candidate.active_match_current
 
     pending = await evaluate(f"return-{uuid4()}")
     assert pending.state == "return_pending_credit"

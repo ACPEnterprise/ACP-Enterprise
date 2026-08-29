@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import axios from "axios";
 import {
   useProcurementMatch,
+  useProcurementMatchCandidates,
   useProcurementMatchMutations,
 } from "../../hooks/useProcurementMatching";
 import {
@@ -13,6 +14,7 @@ import {
   CardHeader,
   CardTitle,
   Input,
+  Select,
 } from "../../ui";
 
 type Props = { canReview: boolean };
@@ -43,12 +45,26 @@ export function ProcurementMatchWorkbench({ canReview }: Props) {
     {},
   );
   const query = useProcurementMatch(matchId);
+  const candidates = useProcurementMatchCandidates();
   const mutations = useProcurementMatchMutations();
   const match = query.data ?? mutations.evaluate.data ?? mutations.resolve.data;
   const error = safeError(
     mutations.evaluate.error ?? mutations.resolve.error ?? query.error,
   );
   const busy = mutations.evaluate.isPending || mutations.resolve.isPending;
+  const selectCandidate = (vendorBillId: string) => {
+    const candidate = candidates.data?.find(
+      (row) => row.vendor_bill_id === vendorBillId,
+    );
+    if (!candidate) return;
+    setForm({
+      purchase_order_id: candidate.purchase_order_id ?? "",
+      vendor_bill_id: candidate.vendor_bill_id,
+      po_version: String(candidate.purchase_order_version ?? 1),
+      bill_version: String(candidate.vendor_bill_version),
+    });
+    setMatchId(candidate.active_match_id ?? "");
+  };
   const evaluate = async (event: FormEvent) => {
     event.preventDefault();
     const result = await mutations.evaluate.mutateAsync({
@@ -70,6 +86,29 @@ export function ProcurementMatchWorkbench({ canReview }: Props) {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        {candidates.isError ? (
+          <Alert variant="danger">
+            The PO-backed Vendor Bill queue could not be loaded.
+          </Alert>
+        ) : (
+          <Select
+            aria-label="PO-backed Vendor Bill candidate"
+            defaultValue=""
+            onChange={(event) => selectCandidate(event.target.value)}
+          >
+            <option value="">Select PO-backed Vendor Bill evidence</option>
+            {candidates.data?.map((candidate) => (
+              <option
+                key={candidate.vendor_bill_id}
+                value={candidate.vendor_bill_id}
+              >
+                {candidate.vendor_bill_number} ·{" "}
+                {candidate.purchase_order_number ?? "unresolved PO"} ·{" "}
+                {candidate.linkage_state.replaceAll("_", " ")}
+              </option>
+            ))}
+          </Select>
+        )}
         {canReview ? (
           <form
             className="grid gap-3 md:grid-cols-2"

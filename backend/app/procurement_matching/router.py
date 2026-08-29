@@ -20,6 +20,7 @@ from .errors import (
 )
 from .schemas import (
     EvaluateMatchCommand,
+    MatchCandidateItem,
     MatchItem,
     ResolveMatchExceptionCommand,
     VendorPerformanceReport,
@@ -46,6 +47,15 @@ def http_error(error: ProcurementMatchingError) -> HTTPException:
     if isinstance(error, ProcurementMatchingConflict):
         return HTTPException(status.HTTP_409_CONFLICT, str(error))
     return HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(error))
+
+
+@router.get("/candidates", response_model=tuple[MatchCandidateItem, ...])
+async def match_candidates(
+    context: Read, session: Session
+) -> tuple[MatchCandidateItem, ...]:
+    return await procurement_matching_service.candidates(
+        session, context=context
+    )
 
 
 @router.post("/matches", response_model=MatchItem, status_code=status.HTTP_201_CREATED)
