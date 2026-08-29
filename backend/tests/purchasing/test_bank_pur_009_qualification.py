@@ -5,9 +5,6 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import delete, select, update
-from sqlalchemy.exc import DBAPIError
-
 from app.inventory.models import InventoryItem
 from app.purchasing.errors import PurchasingNotFound, PurchasingValidation
 from app.purchasing.models import (
@@ -16,6 +13,8 @@ from app.purchasing.models import (
 )
 from app.purchasing.schemas import BranchPurchasingPolicyWrite
 from app.purchasing.service import PurchasingService
+from sqlalchemy import delete, select, update
+from sqlalchemy.exc import DBAPIError
 
 pytest_plugins = ("tests.purchasing.test_purchasing_foundation",)
 
