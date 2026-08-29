@@ -95,14 +95,20 @@ def test_current_projection_reconciles_completion_and_releases_successor() -> No
     assert milestones["BANK.PUR.004"].completion_commit_sha == (
         "a95cf5ea85c3c0e26f87babf76d00a4e90a0ffd5"
     )
-    assert milestones["BANK.PUR.005"].current_state == "EXECUTABLE"
+    assert milestones["BANK.PUR.005"].current_state == "COMPLETE"
+    assert milestones["BANK.PUR.005"].canonical_milestone_id == "BANK.PUR.005"
+    assert milestones["BANK.PUR.005"].completion_commit_sha == (
+        "43e95bc6e394d2deb2e73aaea9155fc4596a035f"
+    )
+    assert milestones["BANK.PUR.006"].current_state == "EXECUTABLE"
     assert milestones["BANK.PLAT.006"].current_state == "EXECUTABLE"
     assert "BANK.PUR.001" not in projection.executable_milestone_ids
     assert "BANK.PLAT.001" not in projection.executable_milestone_ids
     assert "BANK.PUR.002" not in projection.executable_milestone_ids
     assert "BANK.PUR.003" not in projection.executable_milestone_ids
     assert "BANK.PUR.004" not in projection.executable_milestone_ids
-    assert "BANK.PUR.005" in projection.executable_milestone_ids
+    assert "BANK.PUR.005" not in projection.executable_milestone_ids
+    assert "BANK.PUR.006" in projection.executable_milestone_ids
     assert "BANK.PLAT.002" not in projection.executable_milestone_ids
     assert "BANK.PLAT.003" not in projection.executable_milestone_ids
     assert "BANK.PLAT.004" not in projection.executable_milestone_ids
@@ -350,7 +356,37 @@ def test_pur_004_end_to_end_acceptance_changes_only_itself_and_successor() -> No
         if current[milestone_id].current_state != prior[milestone_id].current_state
     }
 
-    assert changed == {"BANK.PUR.004", "BANK.PUR.005"}
+    # PUR.5 has independently accepted evidence, so removing PUR.4 changes
+    # only PUR.4 rather than invalidating completed downstream history.
+    assert changed == {"BANK.PUR.004"}
+
+
+def test_pur_005_acceptance_changes_only_itself_and_direct_successor() -> None:
+    bank = load_milestone_bank()
+    current = _by_id(load_current_readiness_projection())
+    raw = _authority_raw()
+    evidence = raw["completion_evidence"]
+    assert isinstance(evidence, list)
+    pur_005 = next(
+        item for item in evidence if item["bank_milestone_id"] == "BANK.PUR.005"
+    )
+    assert pur_005["authoritative_commit_sha"] == (
+        "43e95bc6e394d2deb2e73aaea9155fc4596a035f"
+    )
+    raw["completion_evidence"] = [
+        item for item in evidence if item["bank_milestone_id"] != "BANK.PUR.005"
+    ]
+    prior = _by_id(
+        evaluate_readiness(bank, ingest_authority_snapshot(_resign(raw), bank))
+    )
+
+    changed = {
+        milestone_id
+        for milestone_id in current
+        if current[milestone_id].current_state != prior[milestone_id].current_state
+    }
+
+    assert changed == {"BANK.PUR.005", "BANK.PUR.006"}
 
 
 @pytest.mark.parametrize(
@@ -405,8 +441,8 @@ def test_active_collision_domain_blocks_other_work() -> None:
     authority = ingest_authority_snapshot(_resign(raw), bank)
     milestone = _by_id(evaluate_readiness(bank, authority))["BANK.PLAT.001"]
     assert milestone.current_state == "COMPLETE"
-    purchasing = _by_id(evaluate_readiness(bank, authority))["BANK.PUR.005"]
-    assert purchasing.current_state in {"BLOCKED_DEPENDENCY", "BLOCKED_COLLISION"}
+    purchasing = _by_id(evaluate_readiness(bank, authority))["BANK.PUR.006"]
+    assert purchasing.current_state == "ACTIVE_OWNED"
 
 
 def test_collision_blocks_dependency_ready_candidate() -> None:

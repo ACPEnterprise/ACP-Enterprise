@@ -43,6 +43,13 @@
       "evidence_reference": "owner-accepted repaired Purchase Order change-order authority: implementation f94a95816904d0f84ba9e35da81cad24bafe9814 and UI eb8c047eb3cb3d44fc183a9ba7239cd8292d806a, repaired by a95cf5ea85c3c0e26f87babf76d00a4e90a0ffd5 with fail-closed post-receipt price control, zero-side-effect qualification, and drift-free corrective migration p7g9c1e3h608; earlier acceptance at 6ced94045c9f71fca35836aa3f4884b3f97de1bb is preserved as superseded evidence"
     },
     {
+      "bank_milestone_id": "BANK.PUR.005",
+      "canonical_milestone_id": "BANK.PUR.005",
+      "evidence_kind": "AUTHORITATIVE_INTEGRATION_ACCEPTANCE",
+      "authoritative_commit_sha": "43e95bc6e394d2deb2e73aaea9155fc4596a035f",
+      "evidence_reference": "owner-accepted Purchase Order close and cancellation evidence implementation, immutable terminal-disposition evidence, explicit fully-satisfied and cancellation semantics, fail-closed discrepancy/return/change-order gates, idempotency, concurrency, authorization, Business Events, operator workflow, and no inferred Inventory, AP, Accounting, Job-cost, or Economics effects"
+    },
+    {
       "bank_milestone_id": "BANK.PLAT.002",
       "canonical_milestone_id": "BANK.PLAT.002",
       "evidence_kind": "AUTHORITATIVE_INTEGRATION_ACCEPTANCE",
@@ -106,5 +113,5 @@
   ],
   "gate_resolutions": [],
   "active_ownership": [],
-  "fingerprint": "4232c697ca94a5e8639847234fa3f44b8d8e5994b7d783faa1a8997abf27f49f"
+  "fingerprint": "aa04e2b347a70d46a00f13a6b71ac97fcda47bf6878fdc86ed8c5c507f54df0c"
 }
