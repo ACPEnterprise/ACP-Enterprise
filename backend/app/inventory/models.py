@@ -253,7 +253,7 @@ class StockMovement(Base):
             ondelete="RESTRICT",
         ),
         CheckConstraint(
-            "movement_type IN ('opening','increase','decrease','transfer','adjustment_in','adjustment_out','material_issue','material_issue_reversal')",
+            "movement_type IN ('opening','increase','decrease','transfer','adjustment_in','adjustment_out','material_issue','material_issue_reversal','purchase_receipt','purchase_return')",
             name="ck_inventory_movements_type",
         ),
         CheckConstraint("quantity > 0", name="ck_inventory_movements_quantity"),
@@ -269,7 +269,7 @@ class StockMovement(Base):
             name="ck_inventory_movements_provenance",
         ),
         CheckConstraint(
-            "(movement_type = 'transfer' AND source_location_id IS NOT NULL AND destination_location_id IS NOT NULL AND source_location_id <> destination_location_id) OR (movement_type IN ('opening','increase','adjustment_in','material_issue_reversal') AND source_location_id IS NULL AND destination_location_id IS NOT NULL) OR (movement_type IN ('decrease','adjustment_out','material_issue') AND source_location_id IS NOT NULL AND destination_location_id IS NULL)",
+            "(movement_type = 'transfer' AND source_location_id IS NOT NULL AND destination_location_id IS NOT NULL AND source_location_id <> destination_location_id) OR (movement_type IN ('opening','increase','adjustment_in','material_issue_reversal','purchase_receipt') AND source_location_id IS NULL AND destination_location_id IS NOT NULL) OR (movement_type IN ('decrease','adjustment_out','material_issue','purchase_return') AND source_location_id IS NOT NULL AND destination_location_id IS NULL)",
             name="ck_inventory_movements_locations",
         ),
         UniqueConstraint("company_id", "id", name="uq_inventory_movements_company_id"),
