@@ -4,15 +4,15 @@ from uuid import UUID, uuid4
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from app.core.config import settings
 from app.engineering_capacity.models import (
     EngineeringCapacityMachine,
     EngineeringWorkerCapacity,
 )
-from app.engineering_control.mobile.control import WorkstreamControlRepository
+from app.engineering_control.mobile.control import (
+    EngineeringWorkstreamControl,
+    WorkstreamControlRepository,
+)
 from app.engineering_control.mobile.notifications import (
     MissionNotificationService,
     notification_kind,
@@ -27,6 +27,7 @@ from app.engineering_control.mobile.roadmaps import (
     EngineeringMilestone,
     EngineeringRoadmap,
 )
+from app.engineering_control.models import EngineeringCommand
 from app.engineering_control.scheduler.models import (
     EngineeringCapacityBinding,
     EngineeringPermanentCapacity,
@@ -37,6 +38,9 @@ from app.engineering_control.workstream_runtime import (
     WorkstreamRuntimeError,
     WorkstreamRuntimeService,
 )
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
 from tests.engineering_control.test_engineering_command_service import (
     seed_service_fixture,
 )
@@ -229,6 +233,13 @@ async def test_worker_acknowledgement_is_idempotent_versioned_and_recoverable(
             )
 
     async with worker_database.factory() as session:
+        same_session_expired = await service.pending(
+            session,
+            context=worker_context,
+            session_id=session_id,
+            now=heartbeat_at + timedelta(minutes=6),
+        )
+        assert same_session_expired == ()
         recovery = await service.pending(
             session, context=worker_context, now=heartbeat_at + timedelta(minutes=6)
         )
@@ -308,6 +319,68 @@ async def test_worker_acknowledgement_is_idempotent_versioned_and_recoverable(
     )
     assert recovery_payload["runtime_state"] == "recovering"
     assert recovery_payload["notifications"] == ()
+
+
+@pytest.mark.asyncio
+async def test_terminal_historical_controls_cannot_starve_current_start(
+    worker_database_fixture,
+) -> None:
+    fixture = worker_database_fixture
+    _, _, worker_context, _ = await register_available_worker(
+        fixture, name="fair-dispatch-worker"
+    )
+    now = worker_context.authenticated_at + timedelta(seconds=2)
+    historical_controls = []
+    for index in range(12):
+        command = await approved_command(fixture)
+        async with fixture.factory() as session, session.begin():
+            stored_command = await session.get(EngineeringCommand, command.id)
+            assert stored_command is not None
+            stored_command.approval_state = "expired"
+            historical_controls.append(
+                await WorkstreamControlRepository.set_state(
+                    session,
+                    company_id=worker_context.company_id,
+                    command_id=command.id,
+                    actor_user_id=fixture.context.user.id,
+                    desired_state="active",
+                    requested_action="start",
+                    reason="historical_start",
+                    occurred_at=now - timedelta(days=1, seconds=index),
+                )
+            )
+
+    current = await approved_command(fixture)
+    async with fixture.factory() as session, session.begin():
+        current_control = await WorkstreamControlRepository.set_state(
+            session,
+            company_id=worker_context.company_id,
+            command_id=current.id,
+            actor_user_id=fixture.context.user.id,
+            desired_state="active",
+            requested_action="start",
+            reason="current_start",
+            occurred_at=now,
+        )
+
+    service = WorkstreamRuntimeService()
+    current_session = uuid4()
+    async with fixture.factory() as session:
+        pending = await service.pending(
+            session,
+            context=worker_context,
+            session_id=current_session,
+            now=now + timedelta(seconds=20),
+        )
+        persisted_historical = await session.scalar(
+            select(func.count(EngineeringWorkstreamControl.id)).where(
+                EngineeringWorkstreamControl.id.in_(
+                    [control.id for control in historical_controls]
+                )
+            )
+        )
+        assert tuple(item.id for item in pending) == (current_control.id,)
+        assert persisted_historical == 12
 
 
 @pytest.mark.asyncio

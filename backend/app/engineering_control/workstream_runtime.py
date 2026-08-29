@@ -334,12 +334,81 @@ class WorkstreamRuntimeService:
     ) -> tuple[EngineeringWorkstreamControl, ...]:
         from app.engineering_capacity.models import EngineeringWorkerCapacity
         from app.engineering_control.mobile.roadmaps import EngineeringMilestone
+        from app.engineering_control.models import EngineeringCommand
         from app.engineering_control.scheduler.models import (
             EngineeringCapacityBinding,
             EngineeringPermanentCapacity,
         )
+        from app.engineering_execution.models import EngineeringExecution
 
         checked = now or datetime.now(timezone.utc)
+        command_is_actionable = (
+            select(EngineeringCommand.id)
+            .where(
+                EngineeringCommand.company_id
+                == EngineeringWorkstreamControl.company_id,
+                EngineeringCommand.id == EngineeringWorkstreamControl.command_id,
+                EngineeringCommand.approval_state == "approved",
+                EngineeringCommand.expires_at > checked,
+                EngineeringCommand.canceled_at.is_(None),
+            )
+            .correlate(EngineeringWorkstreamControl)
+            .exists()
+        )
+        has_execution = (
+            select(EngineeringExecution.id)
+            .where(
+                EngineeringExecution.company_id
+                == EngineeringWorkstreamControl.company_id,
+                EngineeringExecution.command_id
+                == EngineeringWorkstreamControl.command_id,
+            )
+            .correlate(EngineeringWorkstreamControl)
+            .exists()
+        )
+        has_actionable_execution = (
+            select(EngineeringExecution.id)
+            .where(
+                EngineeringExecution.company_id
+                == EngineeringWorkstreamControl.company_id,
+                EngineeringExecution.command_id
+                == EngineeringWorkstreamControl.command_id,
+                EngineeringExecution.state.in_(
+                    ("execution_not_connected", "queued", "starting", "running")
+                ),
+                EngineeringExecution.finished_at.is_(None),
+            )
+            .correlate(EngineeringWorkstreamControl)
+            .exists()
+        )
+        has_milestone = (
+            select(EngineeringMilestone.id)
+            .where(
+                EngineeringMilestone.company_id
+                == EngineeringWorkstreamControl.company_id,
+                EngineeringMilestone.command_id
+                == EngineeringWorkstreamControl.command_id,
+            )
+            .correlate(EngineeringWorkstreamControl)
+            .exists()
+        )
+        has_actionable_milestone = (
+            select(EngineeringMilestone.id)
+            .where(
+                EngineeringMilestone.company_id
+                == EngineeringWorkstreamControl.company_id,
+                EngineeringMilestone.command_id
+                == EngineeringWorkstreamControl.command_id,
+                EngineeringMilestone.status == "running",
+                or_(
+                    EngineeringMilestone.reconciliation_state.is_(None),
+                    EngineeringMilestone.reconciliation_state
+                    != "reconciliation_required",
+                ),
+            )
+            .correlate(EngineeringWorkstreamControl)
+            .exists()
+        )
         has_permanent_assignment = (
             select(EngineeringMilestone.id)
             .where(
@@ -401,6 +470,15 @@ class WorkstreamRuntimeService:
             )
             .where(
                 EngineeringWorkstreamControl.company_id == context.company_id,
+                command_is_actionable,
+                or_(~has_execution, has_actionable_execution),
+                or_(~has_milestone, has_actionable_milestone),
+                or_(
+                    EngineeringWorkstreamRuntime.id.is_(None),
+                    EngineeringWorkstreamRuntime.runtime_state.not_in(
+                        ("completed", "failed", "cancelled")
+                    ),
+                ),
                 or_(
                     EngineeringWorkstreamControl.requested_action != "start",
                     ~has_permanent_assignment,
@@ -410,15 +488,39 @@ class WorkstreamRuntimeService:
                     EngineeringWorkstreamRuntime.id.is_(None),
                     EngineeringWorkstreamRuntime.acknowledged_control_version
                     < EngineeringWorkstreamControl.version,
-                    EngineeringWorkstreamRuntime.acknowledgement_expires_at <= checked,
                     *(
-                        (EngineeringWorkstreamRuntime.worker_session_id != session_id,)
+                        (
+                            EngineeringWorkstreamRuntime.worker_session_id
+                            != session_id,
+                        )
                         if session_id is not None
-                        else ()
+                        else (
+                            EngineeringWorkstreamRuntime.acknowledgement_expires_at
+                            <= checked,
+                        )
                     ),
                 ),
             )
             .order_by(
+                case(
+                    (EngineeringWorkstreamRuntime.id.is_(None), 0),
+                    (
+                        EngineeringWorkstreamRuntime.acknowledged_control_version
+                        < EngineeringWorkstreamControl.version,
+                        1,
+                    ),
+                    (
+                        EngineeringWorkstreamRuntime.worker_session_id != session_id,
+                        2,
+                    )
+                    if session_id is not None
+                    else (
+                        EngineeringWorkstreamRuntime.acknowledgement_expires_at
+                        <= checked,
+                        3,
+                    ),
+                    else_=4,
+                ),
                 EngineeringWorkstreamControl.updated_at, EngineeringWorkstreamControl.id
             )
             .limit(10)
