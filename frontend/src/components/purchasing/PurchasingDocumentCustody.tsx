@@ -16,16 +16,25 @@ interface Props {
 
 export function PurchasingDocumentCustody({ canManage, documents, register, pending, failed }: Props) {
   const [form, setForm] = useState({ branch_id: "", entity_type: "purchase_order" as const, entity_id: "", document_type: "purchase_order", filename: "", media_type: "application/pdf", content_digest: "", storage_reference: "", source_reference: "" });
+  const [submissionFailed, setSubmissionFailed] = useState(false);
+  const submitCurrent = async () => {
+    setSubmissionFailed(false);
+    try {
+      await register({ ...form, idempotency_key: crypto.randomUUID() });
+      setForm({ ...form, filename: "", content_digest: "", storage_reference: "", source_reference: "" });
+    } catch {
+      setSubmissionFailed(true);
+    }
+  };
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    await register({ ...form, idempotency_key: crypto.randomUUID() });
-    setForm({ ...form, filename: "", content_digest: "", storage_reference: "", source_reference: "" });
+    await submitCurrent();
   };
   return <Card>
     <CardHeader><CardTitle>Purchasing document custody</CardTitle><CardDescription>Append-only metadata binds approved documents to Purchasing evidence. Files remain in the authorized document provider; no Vendor transmission occurs here.</CardDescription></CardHeader>
     <CardContent className="space-y-4">
       {!canManage && <Alert>Read-only access: document evidence is visible, but registration controls require Purchasing management authority.</Alert>}
-      {failed && <Alert variant="danger">Document evidence was not registered. No custody authority was assumed.</Alert>}
+      {(failed || submissionFailed) && <Alert variant="danger" announcement="assertive" action={<Button type="button" onClick={() => void submitCurrent()} loading={pending}>Retry registration</Button>}>Document evidence was not registered. No custody authority was assumed. Review the retained evidence and retry.</Alert>}
       {canManage && <form className="grid gap-2 md:grid-cols-3" onSubmit={(event) => void submit(event)}>
         <Input aria-label="Document branch ID" required value={form.branch_id} onChange={(event) => setForm({ ...form, branch_id: event.target.value })} />
         <Select aria-label="Document entity type" value={form.entity_type} onChange={(event) => setForm({ ...form, entity_type: event.target.value as typeof form.entity_type })}><option value="purchase_order">Purchase Order</option><option value="requisition">Requisition</option><option value="receipt">Receipt</option><option value="discrepancy">Discrepancy</option><option value="purchase_return">Purchase return</option></Select>
