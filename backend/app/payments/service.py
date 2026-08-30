@@ -270,18 +270,31 @@ class PaymentService:
 
     async def record_dispute(self, session: AsyncSession, spec: RecordDispute) -> PaymentReceipt:
         amount = spec.amount.quantize(CENT)
+        provider_dispute_id = spec.provider_dispute_id.strip()
+        request_digest = _digest(
+            {
+                "receipt_id": spec.receipt_id,
+                "amount": amount,
+                "provider_dispute_id": provider_dispute_id,
+                "evidence_digest": spec.evidence_digest,
+            }
+        )
         async with session.begin():
             receipt = await self._receipt(session, spec.company_id, spec.branch_id, spec.receipt_id, True)
             prior = await session.scalar(select(ReceiptEvent).where(ReceiptEvent.company_id == spec.company_id, ReceiptEvent.receipt_id == receipt.id, ReceiptEvent.idempotency_key == spec.idempotency_key))
             if prior:
+                if prior.request_digest != request_digest:
+                    raise PaymentConflict(
+                        "Idempotency key conflicts with the original dispute."
+                    )
                 return receipt
-            if receipt.version != spec.expected_version or amount <= 0 or amount > receipt.available_amount or len(spec.evidence_digest) != 64:
+            if receipt.version != spec.expected_version or amount <= 0 or amount > receipt.available_amount or not provider_dispute_id or len(spec.evidence_digest) != 64:
                 raise PaymentConflict("Dispute is stale or exceeds receipt availability.")
             receipt.available_amount -= amount
             receipt.disputed_amount += amount
             receipt.status = "disputed"
             receipt.version += 1
-            session.add(ReceiptEvent(company_id=spec.company_id, receipt_id=receipt.id, event_type="dispute_recorded", amount=amount, idempotency_key=spec.idempotency_key, evidence_digest=spec.evidence_digest))
+            session.add(ReceiptEvent(company_id=spec.company_id, receipt_id=receipt.id, event_type="dispute_recorded", amount=amount, provider_reference=provider_dispute_id, idempotency_key=spec.idempotency_key, evidence_digest=spec.evidence_digest, request_digest=request_digest))
             self._event(session, receipt, EventType.PAYMENT_DISPUTE_RECORDED, spec.actor_user_id)
             return receipt
 

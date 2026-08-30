@@ -19,6 +19,7 @@ from app.payments.contracts import (
     CreateIntent,
     PostingReceiptFact,
     ProviderRequest,
+    RecordDispute,
     RequestRefund,
 )
 from app.payments.errors import PaymentConflict, PaymentNotFound, PaymentValidation
@@ -450,3 +451,68 @@ async def test_payment_posting_receipt_replay_binds_complete_authority(
         async with factory() as session:
             with pytest.raises(PaymentConflict, match="conflicts with replay"):
                 await service.record_posting_receipt(session, contradiction)
+
+
+@pytest.mark.asyncio
+async def test_dispute_replay_binds_amount_provider_and_evidence(payment_fixture) -> None:
+    factory, company, branch, actor, customer = payment_fixture
+    service = PaymentService(CountingFakeProvider(), "synthetic-merchant")
+    async with factory() as session:
+        intent = await service.collect(
+            session,
+            CreateIntent(
+                company_id=company.id,
+                branch_id=branch.id,
+                customer_id=customer.id,
+                amount=Decimal("90.00"),
+                currency="USD",
+                opaque_payment_method="opaque_captured_test",
+                idempotency_key=f"dispute-source-{uuid4()}",
+                actor_user_id=actor.id,
+            ),
+        )
+    async with factory() as session:
+        receipt = await session.scalar(
+            select(PaymentReceipt).where(PaymentReceipt.intent_id == intent.id)
+        )
+        assert receipt is not None
+
+    command = RecordDispute(
+        company_id=company.id,
+        branch_id=branch.id,
+        receipt_id=receipt.id,
+        amount=Decimal("20.00"),
+        provider_dispute_id="provider-dispute-1001",
+        evidence_digest="a" * 64,
+        idempotency_key=f"dispute-{uuid4()}",
+        actor_user_id=actor.id,
+        expected_version=receipt.version,
+    )
+    async with factory() as session:
+        first = await service.record_dispute(session, command)
+    async with factory() as session:
+        replay = await service.record_dispute(session, command)
+    assert replay.id == first.id
+    assert replay.disputed_amount == Decimal("20.00")
+    assert replay.available_amount == Decimal("70.00")
+
+    contradictions = (
+        replace(command, amount=Decimal("21.00")),
+        replace(command, provider_dispute_id="provider-dispute-1002"),
+        replace(command, evidence_digest="b" * 64),
+    )
+    for contradiction in contradictions:
+        async with factory() as session:
+            with pytest.raises(PaymentConflict, match="original dispute"):
+                await service.record_dispute(session, contradiction)
+
+    async with factory() as session:
+        event = await session.scalar(
+            select(ReceiptEvent).where(
+                ReceiptEvent.receipt_id == receipt.id,
+                ReceiptEvent.idempotency_key == command.idempotency_key,
+            )
+        )
+        assert event is not None
+        assert event.provider_reference == command.provider_dispute_id
+        assert event.request_digest is not None and len(event.request_digest) == 64
