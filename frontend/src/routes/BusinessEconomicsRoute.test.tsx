@@ -5,11 +5,15 @@ import { BusinessEconomicsRoute } from "./BusinessEconomicsRoute";
 
 let allowed = false;
 let workspaceEnabled: boolean | undefined;
+let detailEnabled: boolean | undefined;
 let workspaceMode: "success" | "error" | "pending" = "success";
 const refetch = vi.fn();
 vi.mock("../auth", () => ({ useHasPermission: () => allowed }));
 vi.mock("../hooks/useBusinessEconomics", () => ({
-  useEconomicsResult: () => ({ isPending: false, isError: false, data: null }),
+  useEconomicsResult: (_id: string | null, enabled: boolean) => {
+    detailEnabled = enabled;
+    return { isPending: false, isError: false, data: null };
+  },
   useEconomicsWorkspace: (_start: string, _end: string, enabled: boolean) => {
     workspaceEnabled = enabled;
     if (workspaceMode === "pending") return { isPending: true, isError: false, data: null, refetch };
@@ -26,8 +30,8 @@ vi.mock("../hooks/useBusinessEconomics", () => ({
 }));
 
 describe("BusinessEconomicsRoute", () => {
-  beforeEach(() => { allowed = false; workspaceMode = "success"; workspaceEnabled = undefined; refetch.mockReset(); });
-  it("fails closed without Economics read authority or issuing the query", () => { render(<BusinessEconomicsRoute/>); expect(screen.getByText(/not authorized/i)).toBeVisible(); expect(workspaceEnabled).toBe(false); });
+  beforeEach(() => { allowed = false; workspaceMode = "success"; workspaceEnabled = undefined; detailEnabled = undefined; refetch.mockReset(); });
+  it("fails closed without Economics read authority or issuing the query", () => { render(<BusinessEconomicsRoute/>); expect(screen.getByText(/not authorized/i)).toBeVisible(); expect(workspaceEnabled).toBe(false); expect(detailEnabled).toBe(false); });
   it("shows truthful partial and no-policy states", () => { allowed = true; render(<BusinessEconomicsRoute/>); expect(screen.getByText(/Evidence partial/i)).toBeVisible(); expect(screen.getAllByText(/fully allocated profitability is unavailable/i).length).toBeGreaterThan(0); expect(screen.getByText("$1,000.00")).toBeVisible(); });
   it("offers a safe retry when Economics is temporarily unavailable", async () => { allowed = true; workspaceMode = "error"; render(<BusinessEconomicsRoute/>); expect(screen.getByText(/no value was inferred/i)).toBeVisible(); await userEvent.click(screen.getByRole("button", { name: /retry economics/i })); expect(refetch).toHaveBeenCalledOnce(); });
 });

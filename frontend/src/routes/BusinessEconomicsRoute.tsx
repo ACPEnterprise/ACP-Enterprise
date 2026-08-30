@@ -22,7 +22,7 @@ export function BusinessEconomicsRoute() {
   const canRead = useHasPermission("COMPANY_ECONOMICS_MEASUREMENT_READ");
   const [start, setStart] = useState(monthStart); const [end, setEnd] = useState(today);
   const [scope, setScope] = useState({ start: monthStart, end: today }); const [selected, setSelected] = useState<string | null>(null);
-  const workspace = useEconomicsWorkspace(scope.start, scope.end, canRead); const detail = useEconomicsResult(selected);
+  const workspace = useEconomicsWorkspace(scope.start, scope.end, canRead); const detail = useEconomicsResult(selected, canRead);
   const sortedLosses = useMemo(() => workspace.data?.jobs.filter((job) => job.contribution_minor != null && job.contribution_minor < 0) ?? [], [workspace.data]);
   if (!canRead) return <Alert variant="danger">You are not authorized to view Business Economics.</Alert>;
   if (workspace.isPending) return <Spinner label="Loading Business Economics" />;
