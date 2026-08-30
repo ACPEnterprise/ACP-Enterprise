@@ -82,6 +82,7 @@ class LiaResponse(LiaSchema):
 class LiaReadiness(LiaSchema):
     state: str
     provider_state: str
+    policy_state: str
     deterministic_capabilities: tuple[str, ...]
     generative_capabilities: tuple[str, ...]
     policy_version: str
@@ -90,7 +91,9 @@ class LiaReadiness(LiaSchema):
 
 class LiaFeedback(LiaSchema):
     request_id: UUID
-    rating: str = Field(pattern="^(HELPFUL|NOT_HELPFUL|INCOMPLETE|STALE|CONFUSING|HUMAN_REVIEW)$")
+    rating: str = Field(
+        pattern="^(HELPFUL|NOT_HELPFUL|INCOMPLETE|STALE|CONFUSING|HUMAN_REVIEW)$"
+    )
     reason_code: str | None = Field(default=None, max_length=64, pattern="^[A-Z0-9_]+$")
 
 
