@@ -2,7 +2,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router";
 
-import { useAuth } from "../auth";
+import { useAuth, useHasPermission } from "../auth";
 import { dayRange, localDateValue } from "../components/dispatch/dispatchPresentation";
 import { getOperatorApiError } from "../api/errors";
 import { useAppointments } from "../hooks/useScheduling";
@@ -26,6 +26,7 @@ const displayTime = (value: string | null) =>
 
 export function SchedulingRoute() {
   const { activeCompany } = useAuth();
+  const canRead = useHasPermission("COMPANY_SCHEDULING_READ");
   const [date, setDate] = useState(() => localDateValue(new Date()));
   const [branchId, setBranchId] = useState("");
   const [status, setStatus] = useState<AppointmentStatus | "">("");
@@ -38,11 +39,14 @@ export function SchedulingRoute() {
     status: status ? [status] : undefined,
     page,
     pageSize,
-  }, Boolean(activeCompany));
+  }, Boolean(activeCompany) && canRead);
   const totalPages = Math.max(1, Math.ceil((query.data?.total_count ?? 0) / pageSize));
 
   if (!activeCompany) {
     return <Alert variant="danger" title="Company scope unavailable">Select an accessible Company before opening Scheduling.</Alert>;
+  }
+  if (!canRead) {
+    return <Alert variant="danger">You are not authorized to view Scheduling.</Alert>;
   }
 
   return <div className="min-w-0 space-y-6">

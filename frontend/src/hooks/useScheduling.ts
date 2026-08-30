@@ -11,11 +11,11 @@ export const appointmentKeys = {
   list: (query: AppointmentListParams) => ["appointments", "list", query] as const,
 };
 
-export function useAppointment(appointmentId: string | undefined) {
+export function useAppointment(appointmentId: string | undefined, enabled = true) {
   return useQuery({
     queryKey: appointmentKeys.detail(appointmentId ?? ""),
     queryFn: () => getAppointment(appointmentId as string),
-    enabled: Boolean(appointmentId),
+    enabled: enabled && Boolean(appointmentId),
     retry: shouldRetryApiQuery,
   });
 }

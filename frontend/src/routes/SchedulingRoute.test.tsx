@@ -6,7 +6,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useAppointments } from "../hooks/useScheduling";
 import { SchedulingRoute } from "./SchedulingRoute";
 
-vi.mock("../auth", () => ({ useAuth: () => ({ activeCompany: { branches: [{ id: "branch-1", name: "Main Branch" }] } }) }));
+let permissions = new Set(["COMPANY_SCHEDULING_READ"]);
+vi.mock("../auth", () => ({ useAuth: () => ({ activeCompany: { branches: [{ id: "branch-1", name: "Main Branch" }] } }), useHasPermission: (code: string) => permissions.has(code) }));
 vi.mock("../hooks/useScheduling");
 
 const appointment = {
@@ -16,7 +17,15 @@ const appointment = {
 };
 
 describe("SchedulingRoute", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => { permissions = new Set(["COMPANY_SCHEDULING_READ"]); vi.clearAllMocks(); });
+
+  it("disables the schedule query without read authority", () => {
+    permissions = new Set();
+    vi.mocked(useAppointments).mockReturnValue({ isLoading: false } as never);
+    render(<MemoryRouter><SchedulingRoute /></MemoryRouter>);
+    expect(screen.getByText(/not authorized to view Scheduling/i)).toBeVisible();
+    expect(useAppointments).toHaveBeenCalledWith(expect.any(Object), false);
+  });
 
   it("shows authoritative appointments and links to detail", () => {
     vi.mocked(useAppointments).mockReturnValue({ isLoading: false, isError: false, data: { items: [appointment], total_count: 1, page: 1, page_size: 50 } } as never);

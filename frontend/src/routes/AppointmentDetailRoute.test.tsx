@@ -9,7 +9,8 @@ import { useAppointment } from "../hooks/useScheduling";
 import type { AppointmentDetail } from "../types/scheduling";
 import { AppointmentDetailRoute } from "./AppointmentDetailRoute";
 
-vi.mock("../auth", () => ({ useAuth: () => ({ activeCompany: { branches: [{ id: "branch-1", name: "Main Branch", code: "MAIN" }] } }) }));
+let permissions = new Set(["COMPANY_SCHEDULING_READ", "COMPANY_JOB_READ", "COMPANY_JOB_MANAGE", "COMPANY_CUSTOMER_READ"]);
+vi.mock("../auth", () => ({ useAuth: () => ({ activeCompany: { branches: [{ id: "branch-1", name: "Main Branch", code: "MAIN" }] } }), useHasPermission: (code: string) => permissions.has(code) }));
 vi.mock("../hooks/useCustomers");
 vi.mock("../hooks/useJobs");
 vi.mock("../hooks/useScheduling");
@@ -22,6 +23,7 @@ function renderRoute() {
 
 describe("AppointmentDetailRoute", () => {
   beforeEach(() => {
+    permissions = new Set(["COMPANY_SCHEDULING_READ", "COMPANY_JOB_READ", "COMPANY_JOB_MANAGE", "COMPANY_CUSTOMER_READ"]);
     vi.clearAllMocks();
     vi.mocked(useAppointment).mockReturnValue({ isLoading: false, isError: false, data: appointment } as never);
     vi.mocked(useCreateJobFromAppointment).mockReturnValue({ mutate: vi.fn(), isPending: false, error: null } as never);
@@ -46,5 +48,23 @@ describe("AppointmentDetailRoute", () => {
     renderRoute();
     expect(screen.getByRole("heading", { name: "APT-000001" })).toBeInTheDocument();
     expect(screen.getByText("Related Job information is unavailable with your current access.")).toBeInTheDocument();
+  });
+  it("does not request an Appointment without scheduling read authority", () => {
+    permissions = new Set();
+    vi.mocked(useJobForAppointment).mockReturnValue({ isLoading: false } as never);
+    renderRoute();
+    expect(screen.getByText(/not authorized to view this Appointment/i)).toBeVisible();
+    expect(useAppointment).toHaveBeenCalledWith("appointment-1", false);
+    expect(useJobForAppointment).toHaveBeenCalledWith("appointment-1", false);
+  });
+  it("does not compose Customer or Job authority into scheduling read", () => {
+    permissions = new Set(["COMPANY_SCHEDULING_READ"]);
+    vi.mocked(useJobForAppointment).mockReturnValue({ isLoading: false, isError: false } as never);
+    renderRoute();
+    expect(screen.getByRole("heading", { name: "APT-000001" })).toBeVisible();
+    expect(useJobForAppointment).toHaveBeenCalledWith("appointment-1", false);
+    expect(useCustomerDetail).toHaveBeenCalledWith("customer-1", false);
+    expect(screen.getByText("Job details require Job read authority.")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Create Job" })).not.toBeInTheDocument();
   });
 });
