@@ -19,6 +19,7 @@ def authorization_context(*permissions: str):
         user=SimpleNamespace(id=uuid4()),
         company=SimpleNamespace(id=company_id),
         active_branch=SimpleNamespace(id=branch_id),
+        authorized_branch_ids=frozenset({branch_id}),
         authorization_version=3,
         permission_codes=frozenset(permissions),
         has_permission=lambda permission: permission in permissions,
