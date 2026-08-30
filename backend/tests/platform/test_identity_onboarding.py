@@ -3,6 +3,7 @@ import base64
 import json
 import os
 from collections.abc import AsyncIterator
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from uuid import UUID, uuid4
@@ -26,6 +27,7 @@ from app.platform.notifications.models import NotificationOutbox
 from app.platform.onboarding.delivery import ProtectedEnvelopeQualificationDelivery
 from app.platform.onboarding.models import (
     IdentityOnboardingInvitation,
+    IdentityOnboardingRequest,
     ProtectedInvitationDeliveryEnvelope,
 )
 from app.platform.onboarding.router import _safe_error
@@ -445,6 +447,44 @@ async def test_owner_claim_requires_permission_scope_and_non_production(
             await production.claim_protected_delivery_for_owner(
                 session, context=context, request_id=request_id
             )
+
+
+@pytest.mark.asyncio
+async def test_initiate_rejects_valid_but_unauthorized_company_branch(
+    onboarding_db: tuple[
+        async_sessionmaker[AsyncSession], Context, IdentityOnboardingService
+    ],
+) -> None:
+    factory, context, service = onboarding_db
+    foreign_branch = Branch(
+        id=uuid4(),
+        company_id=context.company.id,
+        name="Restricted",
+        code=f"R{uuid4().hex[:7].upper()}",
+        status="active",
+        timezone="America/New_York",
+        is_primary=False,
+    )
+    async with factory() as session:
+        session.add(foreign_branch)
+        await session.commit()
+        request_key = f"foreign-branch-{uuid4()}"
+        attempted = replace(
+            command(
+                context,
+                request_key=request_key,
+                email=f"foreign-branch-{uuid4()}@example.test",
+            ),
+            branch_id=foreign_branch.id,
+        )
+        with pytest.raises(OnboardingConflictError, match="Branch"):
+            await service.initiate(session, context=context, command=attempted)
+        assert await session.scalar(
+            select(IdentityOnboardingRequest.id).where(
+                IdentityOnboardingRequest.company_id == context.company.id,
+                IdentityOnboardingRequest.request_key == request_key,
+            )
+        ) is None
 
 
 @pytest.mark.asyncio

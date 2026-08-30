@@ -182,6 +182,8 @@ class IdentityOnboardingService:
             raise OnboardingConflictError(
                 "Exactly one login identity source is required."
             )
+        if not context.can_access_branch(command.branch_id):
+            raise OnboardingConflictError("Active Company Branch was not found.")
         email = normalize_email(command.login_email) if command.login_email else None
         facts: dict[str, object] = {
             "version": 1,
