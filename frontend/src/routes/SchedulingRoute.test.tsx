@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useAppointments } from "../hooks/useScheduling";
 import { SchedulingRoute } from "./SchedulingRoute";
 
-vi.mock("../auth", () => ({ useAuth: () => ({ activeCompany: { branches: [{ id: "branch-1", name: "Main Branch" }] } }) }));
+vi.mock("../auth", () => ({ useAuth: () => ({ activeCompany: { branches: [{ id: "branch-1", name: "Main Branch" }] } }), useHasPermission: () => false }));
 vi.mock("../hooks/useScheduling");
 
 const appointment = {

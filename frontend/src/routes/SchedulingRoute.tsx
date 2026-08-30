@@ -2,7 +2,8 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router";
 
-import { useAuth } from "../auth";
+import { useAuth, useHasPermission } from "../auth";
+import { CreateAppointmentPanel } from "../components/appointments/CreateAppointmentPanel";
 import { dayRange, localDateValue } from "../components/dispatch/dispatchPresentation";
 import { getOperatorApiError } from "../api/errors";
 import { useAppointments } from "../hooks/useScheduling";
@@ -26,6 +27,8 @@ const displayTime = (value: string | null) =>
 
 export function SchedulingRoute() {
   const { activeCompany } = useAuth();
+  const canManage = useHasPermission("COMPANY_SCHEDULING_MANAGE");
+  const [creating, setCreating] = useState(false);
   const [date, setDate] = useState(() => localDateValue(new Date()));
   const [branchId, setBranchId] = useState("");
   const [status, setStatus] = useState<AppointmentStatus | "">("");
@@ -49,11 +52,12 @@ export function SchedulingRoute() {
   }
 
   return <div className="min-w-0 space-y-6">
-    <header>
+    <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div>
       <p className="text-sm font-medium text-action-primary">Operations</p>
       <h2 className="mt-1 text-2xl font-bold sm:text-3xl">Scheduling</h2>
       <p className="mt-2 text-content-muted">Review the authoritative daily appointment schedule and open work details.</p>
-    </header>
+    </div>{canManage && <Button onClick={() => setCreating(true)}>Create Appointment</Button>}</header>
+    {creating && <CreateAppointmentPanel onClose={() => setCreating(false)} />}
     <Card className="grid gap-3 p-ui-4 md:grid-cols-4">
       <label><span className="mb-1 block text-sm font-medium">Service date</span><Input aria-label="Service date" type="date" value={date} onChange={(event) => { setDate(event.target.value); setPage(1); }} /></label>
       <label><span className="mb-1 block text-sm font-medium">Branch</span><Select aria-label="Branch" value={branchId} onChange={(event) => { setBranchId(event.target.value); setPage(1); }}><option value="">All accessible Branches</option>{activeCompany.branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</Select></label>
