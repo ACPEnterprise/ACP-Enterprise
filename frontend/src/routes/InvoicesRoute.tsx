@@ -26,6 +26,8 @@ export function InvoicesRoute() {
     due: "",
     terms: "Net 30",
   });
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("open");
   if (!canRead)
     return (
       <Alert variant="danger">You are not authorized to view Invoices.</Alert>
@@ -41,6 +43,12 @@ export function InvoicesRoute() {
       idempotency_key: crypto.randomUUID(),
     });
   };
+  const rows = (invoices.data ?? []).filter((invoice) => {
+    const matchesQuery = !query || invoice.invoice_number.toLowerCase().includes(query.toLowerCase()) || invoice.customer_id?.includes(query);
+    const matchesStatus = statusFilter === "all" || (statusFilter === "open" ? Number(invoice.open_amount) > 0 && !["voided", "cancelled"].includes(invoice.status) : invoice.status === statusFilter);
+    return matchesQuery && matchesStatus;
+  });
+  const openTotal = rows.reduce((sum, invoice) => sum + Number(invoice.open_amount), 0);
   return (
     <div className="mx-auto max-w-5xl space-y-6 pb-12">
       <header>
@@ -62,10 +70,15 @@ export function InvoicesRoute() {
         <Card>
           <CardHeader>
             <CardTitle>Open items</CardTitle>
+            <CardDescription>{rows.length} invoices · {openTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} open across the filtered set. Invoice value is not recognized revenue.</CardDescription>
           </CardHeader>
           <CardContent>
+            <div className="mb-4 grid gap-3 sm:grid-cols-2">
+              <Input aria-label="Search invoices" placeholder="Invoice number or customer ID" value={query} onChange={(event) => setQuery(event.target.value)} />
+              <label className="grid gap-1 text-sm"><span>Status</span><select aria-label="Invoice status" className="rounded-lg border border-stroke bg-surface px-3 py-2" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="open">Open balance</option><option value="all">All</option><option value="draft">Draft</option><option value="issued">Issued</option><option value="partially_paid">Partially paid</option><option value="paid">Paid</option><option value="adjusted">Adjusted</option><option value="voided">Voided</option></select></label>
+            </div>
             <ul className="space-y-2">
-              {invoices.data?.map((invoice) => (
+              {rows.map((invoice) => (
                 <li key={invoice.id}>
                   <Link
                     className="flex justify-between rounded-lg border border-stroke p-3"
@@ -79,6 +92,7 @@ export function InvoicesRoute() {
                   </Link>
                 </li>
               ))}
+              {rows.length === 0 && <li className="text-sm text-content-muted">No invoices match these filters.</li>}
             </ul>
           </CardContent>
         </Card>
