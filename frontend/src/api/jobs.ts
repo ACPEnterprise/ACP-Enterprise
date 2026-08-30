@@ -9,6 +9,7 @@ export async function listJobs(query: JobListParams): Promise<PaginatedJobs> {
     job_type: query.jobType, branch_id: query.branchId, page: query.page, page_size: query.pageSize,
     sort_field: query.sortField, sort_direction: query.sortDirection,
     appointment_id: query.appointmentId,
+    customer_id: query.customerId,
   } });
   return response.data;
 }

@@ -6,8 +6,8 @@ export const invoiceKeys = {
   detail: (id: string) => ["invoices", id] as const,
 };
 
-export function useInvoices() {
-  return useQuery({ queryKey: invoiceKeys.all, queryFn: api.listInvoices });
+export function useInvoices(enabled = true) {
+  return useQuery({ queryKey: invoiceKeys.all, queryFn: api.listInvoices, enabled });
 }
 
 export function useInvoice(id: string) {
