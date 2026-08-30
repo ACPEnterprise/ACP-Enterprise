@@ -4,10 +4,9 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from app.core.config import settings
 from app.customers import models as customer_models  # noqa: F401
+from app.employee_operations.permissions import EmployeeOperationsPermission
 from app.payroll.permissions import PayrollPermission
 from app.platform.audit.access_service import AuditAccessService
 from app.platform.audit.models import AuditRecord
@@ -26,10 +25,26 @@ from app.platform.permissions.authorization import (
 )
 from app.platform.permissions.catalog import permission_catalog
 from app.platform.permissions.codes import (
+    AccountingPermission,
+    AdministrationPermission,
+    BeaconPermission,
+    CommunicationsPermission,
+    CustomerPermission,
+    DispatchPermission,
     EconomicsPolicyPermission,
+    EstimatePermission,
+    InventoryPermission,
+    InvoicePermission,
+    JobPermission,
     LaunchPlatformPermission,
+    MigrationPermission,
+    PaymentPermission,
+    PurchasingPermission,
+    SchedulingPermission,
 )
 from app.scheduling import models as scheduling_models  # noqa: F401
+from app.timekeeping.permissions import TimekeepingPermission
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 
 @pytest_asyncio.fixture
@@ -83,6 +98,76 @@ def test_launch_role_matrix_uses_only_canonical_least_privilege_permissions() ->
     assert EconomicsPolicyPermission.MEASUREMENT_READ in administrator
     assert EconomicsPolicyPermission.MEASUREMENT_EXECUTE not in administrator
     assert PayrollPermission.REPORTING_MANAGE not in administrator
+
+
+def test_service_csr_is_branch_scoped_and_contains_only_approved_authority() -> None:
+    role = next(
+        value for value in LAUNCH_ROLE_MATRIX if value.code is LaunchRoleCode.SERVICE_CSR
+    )
+    assert role.branch_access_required is True
+    assert role.permission_codes == frozenset(
+        {
+            CustomerPermission.READ,
+            CustomerPermission.MANAGE,
+            EstimatePermission.READ,
+            EstimatePermission.MANAGE,
+            SchedulingPermission.READ,
+            JobPermission.READ,
+            DispatchPermission.READ,
+            InvoicePermission.READ,
+            PaymentPermission.READ,
+            CommunicationsPermission.READ,
+        }
+    )
+    prohibited = (
+        AdministrationPermission.ALL
+        | AccountingPermission.ALL
+        | PurchasingPermission.ALL
+        | InventoryPermission.ALL
+        | MigrationPermission.ALL
+        | BeaconPermission.ALL
+        | frozenset(
+            {
+                InvoicePermission.MANAGE,
+                InvoicePermission.ISSUE,
+                InvoicePermission.ADJUST,
+                InvoicePermission.APPLY_PAYMENT,
+                PaymentPermission.COLLECT,
+                PaymentPermission.APPLY,
+                PaymentPermission.REFUND,
+                PaymentPermission.RECONCILE,
+                PaymentPermission.FINANCE_APPROVE,
+            }
+        )
+    )
+    assert role.permission_codes.isdisjoint(prohibited)
+    assert role.permission_codes.isdisjoint(PayrollPermission.ALL)
+
+
+def test_own_data_role_has_no_broad_tenant_or_administrative_authority() -> None:
+    role = next(
+        value
+        for value in LAUNCH_ROLE_MATRIX
+        if value.code is LaunchRoleCode.OWN_DATA_ROLE
+    )
+    assert role.branch_access_required is True
+    assert role.permission_codes == frozenset(
+        {
+            EmployeeOperationsPermission.OWN_DAY_READ,
+            TimekeepingPermission.OWN_PUNCH,
+            TimekeepingPermission.OWN_READ,
+            PayrollPermission.STATEMENT_OWN_READ,
+        }
+    )
+    assert role.permission_codes.isdisjoint(CustomerPermission.ALL)
+    assert role.permission_codes.isdisjoint(AdministrationPermission.ALL)
+    assert role.permission_codes.isdisjoint(AccountingPermission.ALL)
+    assert role.permission_codes.isdisjoint(PurchasingPermission.ALL)
+    assert role.permission_codes.isdisjoint(MigrationPermission.ALL)
+    assert role.permission_codes.isdisjoint(BeaconPermission.ALL)
+    assert role.permission_codes.isdisjoint(
+        frozenset(PayrollPermission.ALL) - {PayrollPermission.STATEMENT_OWN_READ}
+    )
 
 
 def test_audit_permission_fails_closed_without_explicit_grant() -> None:
