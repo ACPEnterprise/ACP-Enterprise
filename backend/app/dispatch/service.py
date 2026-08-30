@@ -1,3 +1,5 @@
+import hashlib
+import json
 from datetime import datetime, timezone
 from uuid import UUID
 
@@ -150,6 +152,13 @@ class DispatchService:
         idempotency_key: str,
         expected_version: int | None = None,
     ) -> AssignmentItem:
+        request_digest = self._command_digest(
+            "assign",
+            appointment_id=appointment_id,
+            employee_id=employee_id,
+            reason=reason,
+            expected_version=expected_version,
+        )
         async with session.begin():
             appointment = await self._appointment(
                 session, context, appointment_id, lock=True
@@ -164,6 +173,7 @@ class DispatchService:
                     idempotency_key,
                     appointment.id,
                     ("created",),
+                    request_digest,
                 )
                 and existing
             ):
@@ -240,6 +250,7 @@ class DispatchService:
                 context.user.id,
                 reason,
                 idempotency_key,
+                request_digest,
             )
             self._event(
                 session,
@@ -261,6 +272,13 @@ class DispatchService:
         idempotency_key: str,
         expected_version: int,
     ) -> AssignmentItem:
+        request_digest = self._command_digest(
+            "replace",
+            appointment_id=appointment_id,
+            employee_id=employee_id,
+            reason=reason,
+            expected_version=expected_version,
+        )
         async with session.begin():
             appointment = await self._appointment(
                 session, context, appointment_id, lock=True
@@ -274,6 +292,7 @@ class DispatchService:
                 idempotency_key,
                 appointment.id,
                 ("replaced",),
+                request_digest,
             ):
                 return await self._item(
                     session, assignment, appointment.appointment_number
@@ -300,6 +319,7 @@ class DispatchService:
                 context.user.id,
                 reason,
                 idempotency_key,
+                request_digest,
             )
             self._event(
                 session,
@@ -321,6 +341,12 @@ class DispatchService:
         idempotency_key: str,
         expected_version: int,
     ) -> AssignmentItem:
+        request_digest = self._command_digest(
+            "release",
+            appointment_id=appointment_id,
+            reason=reason,
+            expected_version=expected_version,
+        )
         async with session.begin():
             appointment = await self._appointment(
                 session, context, appointment_id, lock=True
@@ -335,6 +361,7 @@ class DispatchService:
                     idempotency_key,
                     appointment.id,
                     ("released",),
+                    request_digest,
                 )
                 or assignment.status == "released"
             ):
@@ -356,6 +383,7 @@ class DispatchService:
                 context.user.id,
                 reason,
                 idempotency_key,
+                request_digest,
             )
             self._event(
                 session,
@@ -378,6 +406,13 @@ class DispatchService:
         expected_version: int,
         remove: bool = False,
     ) -> AssignmentItem:
+        request_digest = self._command_digest(
+            "crew.remove" if remove else "crew.add",
+            appointment_id=appointment_id,
+            employee_id=employee_id,
+            reason=reason,
+            expected_version=expected_version,
+        )
         async with session.begin():
             appointment = await self._appointment(
                 session, context, appointment_id, lock=True
@@ -392,6 +427,7 @@ class DispatchService:
                 idempotency_key,
                 appointment.id,
                 (kind,),
+                request_digest,
             ):
                 return await self._item(
                     session, assignment, appointment.appointment_number
@@ -449,6 +485,7 @@ class DispatchService:
                 context.user.id,
                 reason,
                 idempotency_key,
+                request_digest,
             )
             self._event(
                 session,
@@ -471,6 +508,13 @@ class DispatchService:
         expected_version: int,
         resolution: str | None = None,
     ) -> AssignmentItem:
+        request_digest = self._command_digest(
+            "reconcile",
+            appointment_id=appointment_id,
+            reason=reason,
+            expected_version=expected_version,
+            resolution=resolution,
+        )
         async with session.begin():
             appointment = await self._appointment(
                 session, context, appointment_id, lock=True
@@ -487,6 +531,7 @@ class DispatchService:
                 idempotency_key,
                 appointment.id,
                 (expected_kind,),
+                request_digest,
             ):
                 return await self._item(
                     session, assignment, appointment.appointment_number
@@ -521,6 +566,7 @@ class DispatchService:
                 context.user.id,
                 reason,
                 idempotency_key,
+                request_digest,
             )
             self._event(
                 session, assignment, event, context.user.id, {"resolution": resolution}
@@ -539,6 +585,13 @@ class DispatchService:
         idempotency_key: str,
         expected_version: int,
     ) -> AssignmentItem:
+        request_digest = self._command_digest(
+            "exception",
+            appointment_id=appointment_id,
+            exception_code=exception_code,
+            reason=reason,
+            expected_version=expected_version,
+        )
         async with session.begin():
             appointment = await self._appointment(
                 session, context, appointment_id, lock=True
@@ -552,6 +605,7 @@ class DispatchService:
                 idempotency_key,
                 appointment.id,
                 (f"exception_reported:{exception_code}",),
+                request_digest,
             ):
                 return await self._item(
                     session, assignment, appointment.appointment_number
@@ -574,6 +628,7 @@ class DispatchService:
                 context.user.id,
                 reason,
                 idempotency_key,
+                request_digest,
             )
             self._event(
                 session,
@@ -595,6 +650,12 @@ class DispatchService:
         expected_version: int,
         idempotency_key: str,
     ) -> AssignmentItem:
+        request_digest = self._command_digest(
+            "arrival",
+            appointment_id=appointment_id,
+            state=state,
+            expected_version=expected_version,
+        )
         async with session.begin():
             appointment = await self._appointment(
                 session, context, appointment_id, lock=True
@@ -608,6 +669,7 @@ class DispatchService:
                 idempotency_key,
                 appointment.id,
                 (f"technician_{state}",),
+                request_digest,
             ):
                 return await self._item(
                     session, assignment, appointment.appointment_number
@@ -648,6 +710,7 @@ class DispatchService:
                 context.user.id,
                 state.replace("_", " "),
                 idempotency_key,
+                request_digest,
             )
             self._event(
                 session,
@@ -744,6 +807,7 @@ class DispatchService:
         key,
         appointment_id,
         expected_event_types,
+        request_digest,
     ):
         record = (
             await session.execute(
@@ -769,6 +833,7 @@ class DispatchService:
         if (
             recorded_appointment_id != appointment_id
             or history.event_type not in expected_event_types
+            or history.request_digest != request_digest
         ):
             raise DispatchConflict("Idempotency key conflicts with prior evidence.")
         return True
@@ -790,7 +855,9 @@ class DispatchService:
         )
 
     @staticmethod
-    def _history(session, item, kind, prior, new, actor, reason, key):
+    def _history(
+        session, item, kind, prior, new, actor, reason, key, request_digest
+    ):
         session.add(
             DispatchAssignmentHistory(
                 company_id=item.company_id,
@@ -802,9 +869,21 @@ class DispatchService:
                 actor_user_id=actor,
                 reason=reason,
                 evidence_reference=key,
+                request_digest=request_digest,
                 version=item.version,
             )
         )
+
+    @staticmethod
+    def _command_digest(operation: str, **fields: object) -> str:
+        payload = {"operation": operation, **fields}
+        encoded = json.dumps(
+            payload,
+            sort_keys=True,
+            separators=(",", ":"),
+            default=str,
+        ).encode()
+        return hashlib.sha256(encoded).hexdigest()
 
     @staticmethod
     def _event(session, item, event, actor, extra=None):

@@ -10,6 +10,8 @@ from app.platform.permissions.codes import (
     EngineeringRepositoryOperationPermission,
 )
 from app.platform.permissions.dependencies import require_permission
+from app.platform.reliability.correlation import current_correlation_id
+from app.platform.reliability.failures import ClientRecovery, FailureCode, SafeFailure
 
 from .contracts import RepositoryOperationState
 from .errors import (
@@ -62,16 +64,36 @@ def _error(error: RepositoryOperationError) -> HTTPException:
         error,
         (RepositoryOperationNotFoundError, RepositoryOperationPermissionError),
     ):
-        return HTTPException(status.HTTP_404_NOT_FOUND, "Operation not found.")
-    if isinstance(
-        error,
-        (
-            RepositoryOperationConflictError,
-            RepositoryOperationReconciliationRequiredError,
-        ),
-    ):
-        return HTTPException(status.HTTP_409_CONFLICT, str(error))
-    return HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(error))
+        failure = SafeFailure(
+            FailureCode.NOT_FOUND,
+            "Repository operation was not found.",
+            ClientRecovery.TERMINAL_FAILURE,
+            current_correlation_id(),
+        )
+        return HTTPException(status.HTTP_404_NOT_FOUND, failure.detail())
+    if isinstance(error, RepositoryOperationReconciliationRequiredError):
+        failure = SafeFailure(
+            FailureCode.RECONCILIATION_REQUIRED,
+            "Repository operation requires reconciliation.",
+            ClientRecovery.RECONCILIATION_REQUIRED,
+            current_correlation_id(),
+        )
+        return HTTPException(status.HTTP_409_CONFLICT, failure.detail())
+    if isinstance(error, RepositoryOperationConflictError):
+        failure = SafeFailure(
+            FailureCode.RESOURCE_STATE_CONFLICT,
+            "Repository operation conflicts with current authority.",
+            ClientRecovery.RETRY_AFTER_REFRESH,
+            current_correlation_id(),
+        )
+        return HTTPException(status.HTTP_409_CONFLICT, failure.detail())
+    failure = SafeFailure(
+        FailureCode.VALIDATION,
+        "Repository operation request requires correction.",
+        ClientRecovery.USER_CORRECTION_REQUIRED,
+        current_correlation_id(),
+    )
+    return HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, failure.detail())
 
 
 def _summary(record) -> RepositoryOperationSummary:

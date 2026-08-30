@@ -50,7 +50,8 @@ class EstimateService:
     async def convert_to_job(
         self, session: AsyncSession, *, spec: ConvertEstimateToJobSpec
     ) -> EstimateConversionRecord:
-        if not spec.idempotency_key.strip():
+        idempotency_key = spec.idempotency_key.strip()
+        if not idempotency_key:
             raise EstimateValidationError("Conversion idempotency key is required.")
         now = datetime.now(timezone.utc)
         async with session.begin():
@@ -65,7 +66,7 @@ class EstimateService:
                 session, company_id=spec.company_id, estimate_id=spec.estimate_id
             )
             if existing is not None:
-                if existing.idempotency_key != spec.idempotency_key:
+                if existing.idempotency_key != idempotency_key:
                     raise EstimateConflictError(
                         "Estimate has already been converted to a Job."
                     )
@@ -136,7 +137,7 @@ class EstimateService:
                 estimate_version=estimate.version,
                 snapshot_lineage=lineage,
                 snapshot_lineage_digest=lineage_digest,
-                idempotency_key=spec.idempotency_key.strip(),
+                idempotency_key=idempotency_key,
                 converted_by_user_id=spec.actor_user_id,
                 converted_at=now,
             )

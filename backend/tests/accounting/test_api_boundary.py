@@ -1,4 +1,48 @@
-from app.accounting.router import router
+import pytest
+
+from app.accounting.errors import (
+    AccountingConflict,
+    AccountingNotFound,
+    AccountingPermissionDenied,
+    AccountingValidation,
+)
+from app.accounting.router import router, translate
+
+
+@pytest.mark.parametrize(
+    ("error", "status_code", "code", "recovery"),
+    [
+        (AccountingNotFound("protected id"), 404, "not_found", "TERMINAL_FAILURE"),
+        (
+            AccountingConflict("constraint or SQL detail"),
+            409,
+            "resource_state_conflict",
+            "RETRY_AFTER_REFRESH",
+        ),
+        (
+            AccountingPermissionDenied("protected authority detail"),
+            403,
+            "forbidden",
+            "OWNER_ADMIN_ACTION_REQUIRED",
+        ),
+        (
+            AccountingValidation("protected payload"),
+            422,
+            "validation",
+            "USER_CORRECTION_REQUIRED",
+        ),
+    ],
+)
+def test_accounting_failures_use_safe_non_reflective_recovery_contract(
+    error, status_code: int, code: str, recovery: str
+) -> None:
+    translated = translate(error)
+    assert translated.status_code == status_code
+    assert translated.detail["code"] == code
+    assert translated.detail["recovery"] == recovery
+    assert translated.detail["correlation_id"] is None
+    assert "sql" not in translated.detail["message"].lower()
+    assert "payload" not in translated.detail["message"].lower()
 
 
 def test_accounting_api_is_company_authenticated_and_bounded() -> None:

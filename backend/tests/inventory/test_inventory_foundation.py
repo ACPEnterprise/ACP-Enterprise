@@ -1,3 +1,4 @@
+import asyncio
 from dataclasses import replace
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -16,9 +17,16 @@ from app.inventory.contracts import (
     CreateReservation,
     CreateStockLocation,
     PostStockMovement,
+    RecordCycleCount,
+    StartCycleCount,
 )
 from app.inventory.errors import InventoryConflict, InventoryNotFound
-from app.inventory.models import InventoryItem, StockMovement
+from app.inventory.models import (
+    CycleCountEntry,
+    CycleCountSession,
+    InventoryItem,
+    StockMovement,
+)
 from app.inventory.repository import InventoryRepository
 from app.platform.branch.models import Branch
 from app.platform.company import membership_models  # noqa: F401
@@ -177,6 +185,133 @@ async def test_movement_history_drives_quantity_and_is_idempotent(
             )
             == 1
         )
+
+
+@pytest.mark.asyncio
+async def test_concurrent_exact_movement_replay_has_one_authoritative_winner(
+    inventory_fixture,
+) -> None:
+    factory, company, branch, _, actor = inventory_fixture
+    repository, item, warehouse, _ = await seed_foundation(
+        factory, company, branch, actor
+    )
+    spec = replace(
+        opening_spec(company, branch, actor, item, warehouse),
+        idempotency_key=f"  concurrent-opening-{uuid4()}  ",
+    )
+
+    async def post():
+        async with factory() as session, session.begin():
+            return await repository.post_movement(session, spec=spec)
+
+    first, replay = await asyncio.gather(post(), post())
+    assert first.id == replay.id
+    async with factory() as session:
+        movement_count = await session.scalar(
+            select(func.count())
+            .select_from(StockMovement)
+            .where(
+                StockMovement.company_id == company.id,
+                StockMovement.idempotency_key == spec.idempotency_key.strip(),
+            )
+        )
+        quantity = await repository.get_quantity(
+            session,
+            company_id=company.id,
+            branch_id=branch.id,
+            item_id=item.id,
+            location_id=warehouse.id,
+        )
+    assert movement_count == 1
+    assert quantity is not None and quantity.on_hand == Decimal("20.5")
+
+
+@pytest.mark.asyncio
+async def test_concurrent_exact_reservation_replay_has_one_authoritative_winner(
+    inventory_fixture,
+) -> None:
+    factory, company, branch, _, actor = inventory_fixture
+    repository, item, warehouse, _ = await seed_foundation(
+        factory, company, branch, actor
+    )
+    spec = CreateReservation(
+        company_id=company.id,
+        branch_id=branch.id,
+        item_id=item.id,
+        location_id=warehouse.id,
+        quantity=Decimal(6),
+        demand_type="manual_demand",
+        demand_id=uuid4(),
+        actor_user_id=actor.id,
+        idempotency_key=f"  concurrent-reservation-{uuid4()}  ",
+    )
+
+    async def reserve():
+        async with factory() as session, session.begin():
+            return await repository.create_reservation(session, spec=spec)
+
+    first, replay = await asyncio.gather(reserve(), reserve())
+    assert first.id == replay.id
+    async with factory() as session:
+        reservations = await repository.list_reservations(
+            session,
+            company_id=company.id,
+            branch_ids=(branch.id,),
+        )
+    assert [item.id for item in reservations].count(first.id) == 1
+
+
+@pytest.mark.asyncio
+async def test_concurrent_cycle_count_replays_have_one_authoritative_winner(
+    inventory_fixture,
+) -> None:
+    factory, company, branch, _, actor = inventory_fixture
+    repository, item, warehouse, _ = await seed_foundation(
+        factory, company, branch, actor
+    )
+    start = StartCycleCount(
+        company_id=company.id,
+        branch_id=branch.id,
+        location_id=warehouse.id,
+        name="Concurrent count",
+        actor_user_id=actor.id,
+        idempotency_key=f"  concurrent-cycle-{uuid4()}  ",
+    )
+
+    async def start_count():
+        async with factory() as session, session.begin():
+            return await repository.start_cycle_count(session, spec=start)
+
+    first, replay = await asyncio.gather(start_count(), start_count())
+    assert first.id == replay.id
+    entry = RecordCycleCount(
+        company_id=company.id,
+        session_id=first.id,
+        item_id=item.id,
+        counted_quantity=Decimal("4.5"),
+        counted_at=datetime.now(timezone.utc),
+        actor_user_id=actor.id,
+        idempotency_key=f"  concurrent-cycle-entry-{uuid4()}  ",
+    )
+
+    async def record_count():
+        async with factory() as session, session.begin():
+            return await repository.record_cycle_count(session, spec=entry)
+
+    first_entry, replay_entry = await asyncio.gather(record_count(), record_count())
+    assert first_entry.id == replay_entry.id
+    async with factory() as session:
+        session_count = await session.scalar(
+            select(func.count())
+            .select_from(CycleCountSession)
+            .where(CycleCountSession.id == first.id)
+        )
+        entry_count = await session.scalar(
+            select(func.count())
+            .select_from(CycleCountEntry)
+            .where(CycleCountEntry.id == first_entry.id)
+        )
+    assert session_count == entry_count == 1
 
 
 @pytest.mark.asyncio

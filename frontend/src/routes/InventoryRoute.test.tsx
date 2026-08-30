@@ -36,10 +36,23 @@ const mutateAsync = {
   completeCount: vi.fn(),
 };
 
-const mutation = (fn: ReturnType<typeof vi.fn>) => ({
+const mutation = (fn: ReturnType<typeof vi.fn>, error: unknown = null) => ({
   mutateAsync: fn,
   isPending: false,
-  isError: false,
+  isError: Boolean(error),
+  error,
+});
+
+const inventoryMutations = (locationError: unknown = null) => ({
+  createLocation: mutation(mutateAsync.createLocation, locationError),
+  transfer: mutation(mutateAsync.transfer),
+  createReservation: mutation(mutateAsync.createReservation),
+  allocate: mutation(mutateAsync.allocate),
+  release: mutation(mutateAsync.release),
+  adjust: mutation(mutateAsync.adjust),
+  startCount: mutation(mutateAsync.startCount),
+  recordCount: mutation(mutateAsync.recordCount),
+  completeCount: mutation(mutateAsync.completeCount),
 });
 
 describe("InventoryRoute", () => {
@@ -84,17 +97,9 @@ describe("InventoryRoute", () => {
         },
       ],
     } as never);
-    vi.mocked(useInventoryMutations).mockReturnValue({
-      createLocation: mutation(mutateAsync.createLocation),
-      transfer: mutation(mutateAsync.transfer),
-      createReservation: mutation(mutateAsync.createReservation),
-      allocate: mutation(mutateAsync.allocate),
-      release: mutation(mutateAsync.release),
-      adjust: mutation(mutateAsync.adjust),
-      startCount: mutation(mutateAsync.startCount),
-      recordCount: mutation(mutateAsync.recordCount),
-      completeCount: mutation(mutateAsync.completeCount),
-    } as never);
+    vi.mocked(useInventoryMutations).mockReturnValue(
+      inventoryMutations() as never,
+    );
   });
 
   it("keeps count evidence visible but mutation controls permission-gated", () => {
@@ -194,5 +199,45 @@ describe("InventoryRoute", () => {
         quantity: null,
       }),
     });
+  });
+
+  it("uses structured recovery without reflecting backend details", () => {
+    vi.mocked(useInventoryMutations).mockReturnValue(
+      inventoryMutations({
+        isAxiosError: true,
+        response: {
+          data: {
+            detail: {
+              recovery: "RECONCILIATION_REQUIRED",
+              message: "sql-provider-secret-canary",
+            },
+          },
+        },
+      }) as never,
+    );
+    render(<InventoryRoute />);
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      /requires reconciliation/i,
+    );
+    expect(screen.queryByText(/sql-provider-secret-canary/)).not.toBeInTheDocument();
+  });
+
+  it("retains location evidence when a mutation rejects", async () => {
+    permissions.add("COMPANY_INVENTORY_MANAGE");
+    mutateAsync.createLocation.mockRejectedValueOnce(new Error("unavailable"));
+    render(<InventoryRoute />);
+    fireEvent.change(screen.getByLabelText("Inventory Branch"), {
+      target: { value: "branch-1" },
+    });
+    fireEvent.change(screen.getByLabelText("Location code"), {
+      target: { value: "VAN-1" },
+    });
+    fireEvent.change(screen.getByLabelText("Location name"), {
+      target: { value: "Service van 1" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Create location" }));
+    await waitFor(() => expect(mutateAsync.createLocation).toHaveBeenCalled());
+    expect(screen.getByLabelText("Location code")).toHaveValue("VAN-1");
+    expect(screen.getByLabelText("Location name")).toHaveValue("Service van 1");
   });
 });

@@ -16,8 +16,10 @@ from sqlalchemy.ext.asyncio import (
 
 from app.core.config import Settings, settings
 from app.core.database import Base
+from app.customers import models as customer_models  # noqa: F401
+from app.inventory import models as inventory_models  # noqa: F401
 from app.platform.audit import models as audit_models  # noqa: F401
-from app.platform.auth import models as auth_models  # noqa: F401
+from app.platform.auth import models as auth_models
 from app.platform.auth.access_tokens import AccessTokenService
 from app.platform.auth.passwords import PasswordService
 from app.platform.auth.services import AuthenticatedContext, AuthenticationService
@@ -43,6 +45,7 @@ from app.platform.permissions.models import (
     RolePermission,
 )
 from app.platform.users.models import User, UserCredential
+from app.scheduling import models as scheduling_models  # noqa: F401
 
 
 @dataclass(frozen=True)
@@ -236,9 +239,7 @@ async def test_catalog_sync_adds_only_missing_permissions_idempotently(
                 RolePermission.permission_id == scheduling_permission.id
             )
         )
-        assert assignment is not None
-        await session.delete(assignment)
-        await session.flush()
+        assert assignment is None
         await session.delete(scheduling_permission)
         noncanonical = Permission(
             code="COMPANY_LOCAL_EXTENSION",

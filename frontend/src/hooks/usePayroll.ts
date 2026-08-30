@@ -6,11 +6,11 @@ import {
   listPayrollReports,
 } from "../api/payroll";
 
-export const usePayrollOperationsSummary = () =>
-  useQuery({ queryKey: ["payroll", "operations"], queryFn: getPayrollOperationsSummary });
+export const usePayrollOperationsSummary = (enabled = true) =>
+  useQuery({ queryKey: ["payroll", "operations"], queryFn: getPayrollOperationsSummary, enabled });
 
-export const usePayrollReports = () =>
-  useQuery({ queryKey: ["payroll", "reporting"], queryFn: listPayrollReports });
+export const usePayrollReports = (enabled = true) =>
+  useQuery({ queryKey: ["payroll", "reporting"], queryFn: listPayrollReports, enabled });
 
-export const useComplianceSchemas = () =>
-  useQuery({ queryKey: ["payroll", "compliance-schemas"], queryFn: listComplianceSchemas });
+export const useComplianceSchemas = (enabled = true) =>
+  useQuery({ queryKey: ["payroll", "compliance-schemas"], queryFn: listComplianceSchemas, enabled });

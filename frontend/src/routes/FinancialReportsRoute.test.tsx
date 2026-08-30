@@ -1,12 +1,13 @@
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { useFinancialReport } from "../hooks/useFinancialReporting";
 import { FinancialReportsRoute } from "./FinancialReportsRoute";
 
 let allowed = false;
 vi.mock("../auth", () => ({ useHasPermission: () => allowed }));
 vi.mock("../hooks/useFinancialReporting", () => ({
-  useFinancialReport: () => ({
+  useFinancialReport: vi.fn(() => ({
     isPending: false,
     isError: false,
     data: {
@@ -15,7 +16,7 @@ vi.mock("../hooks/useFinancialReporting", () => ({
       quality: { integrity: "passed", completeness: "complete", freshness: "current", reconciliation: "reconciled", review: "unreviewed" },
       rows: [], total_beginning_balance: "0", total_debits: "0", total_credits: "0", total_ending_balance: "0",
     },
-  }),
+  })),
 }));
 
 describe("FinancialReportsRoute", () => {
@@ -24,11 +25,13 @@ describe("FinancialReportsRoute", () => {
   it("fails closed without report-read permission", () => {
     render(<FinancialReportsRoute />);
     expect(screen.getByText(/not authorized to read financial statements/i)).toBeVisible();
+    expect(useFinancialReport).toHaveBeenCalledWith(expect.any(Object), false);
   });
 
   it("shows scope, cutoff, and independent quality states", () => {
     allowed = true;
     render(<FinancialReportsRoute />);
+    expect(useFinancialReport).toHaveBeenCalledWith(expect.any(Object), true);
     expect(screen.getByText(/Company · USD · accrual · cutoff/)).toBeVisible();
     expect(screen.getByText("Integrity: passed")).toBeVisible();
     expect(screen.getByText("Reconciliation: reconciled")).toBeVisible();

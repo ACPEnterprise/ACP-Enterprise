@@ -54,7 +54,12 @@ from app.beacon.workflow import BeaconWorkflowCommand, beacon_workflow_service
 from app.database.session import get_database_session
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import AnalyticsPermission, BeaconPermission
-from app.platform.permissions.dependencies import require_permission
+from app.platform.permissions.dependencies import (
+    require_any_permission,
+    require_permission,
+)
+from app.platform.reliability.correlation import current_correlation_id
+from app.platform.reliability.failures import ClientRecovery, FailureCode, SafeFailure
 
 router = APIRouter(prefix="/api/v1/beacon", tags=["Beacon"])
 DatabaseSession = Annotated[AsyncSession, Depends(get_database_session)]
@@ -65,6 +70,18 @@ BeaconReader = Annotated[
 BeaconReviewer = Annotated[
     AuthorizationContext,
     Depends(require_permission(BeaconPermission.REVIEW)),
+]
+BeaconOwner = Annotated[
+    AuthorizationContext,
+    Depends(require_permission(BeaconPermission.OWN)),
+]
+BeaconAssigner = Annotated[
+    AuthorizationContext,
+    Depends(require_permission(BeaconPermission.ASSIGN)),
+]
+BeaconOwnerOrAssigner = Annotated[
+    AuthorizationContext,
+    Depends(require_any_permission(BeaconPermission.OWN, BeaconPermission.ASSIGN)),
 ]
 
 
@@ -321,10 +338,28 @@ async def list_operational_workflow_signals(
 
 def _lifecycle_http_error(error: Exception) -> HTTPException:
     if isinstance(error, BeaconSignalNotFoundError):
-        return HTTPException(status.HTTP_404_NOT_FOUND, str(error))
-    if isinstance(error, BeaconSignalStaleError):
-        return HTTPException(status.HTTP_409_CONFLICT, str(error))
-    return HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(error))
+        failure = SafeFailure(
+            FailureCode.NOT_FOUND,
+            "Beacon signal was not found.",
+            ClientRecovery.TERMINAL_FAILURE,
+            current_correlation_id(),
+        )
+        return HTTPException(status.HTTP_404_NOT_FOUND, failure.detail())
+    if isinstance(error, (BeaconSignalStaleError, BeaconWorkflowConflictError)):
+        failure = SafeFailure(
+            FailureCode.RESOURCE_STATE_CONFLICT,
+            "Beacon operation conflicts with current authority.",
+            ClientRecovery.RETRY_AFTER_REFRESH,
+            current_correlation_id(),
+        )
+        return HTTPException(status.HTTP_409_CONFLICT, failure.detail())
+    failure = SafeFailure(
+        FailureCode.VALIDATION,
+        "Beacon request requires correction.",
+        ClientRecovery.USER_CORRECTION_REQUIRED,
+        current_correlation_id(),
+    )
+    return HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, failure.detail())
 
 
 async def _record_action(
@@ -398,10 +433,8 @@ async def _workflow_mutation(signal_id, data, action, context, session):
         )
     except (BeaconSignalNotFoundError, BeaconSignalStaleError) as error:
         raise _lifecycle_http_error(error) from error
-    except BeaconWorkflowConflictError as error:
-        raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
-    except BeaconWorkflowOwnerInvalidError as error:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(error)) from error
+    except (BeaconWorkflowConflictError, BeaconWorkflowOwnerInvalidError) as error:
+        raise _lifecycle_http_error(error) from error
     return BeaconWorkflowEventResponse.model_validate(event)
 
 
@@ -409,7 +442,7 @@ async def _workflow_mutation(signal_id, data, action, context, session):
 async def claim_signal(
     signal_id: UUID,
     data: BeaconWorkflowCommandRequest,
-    context: BeaconReader,
+    context: BeaconOwner,
     session: DatabaseSession,
 ):
     return await _workflow_mutation(
@@ -421,7 +454,7 @@ async def claim_signal(
 async def assign_signal(
     signal_id: UUID,
     data: BeaconWorkflowCommandRequest,
-    context: BeaconReader,
+    context: BeaconAssigner,
     session: DatabaseSession,
 ):
     return await _workflow_mutation(
@@ -435,7 +468,7 @@ async def assign_signal(
 async def transfer_signal(
     signal_id: UUID,
     data: BeaconWorkflowCommandRequest,
-    context: BeaconReader,
+    context: BeaconAssigner,
     session: DatabaseSession,
 ):
     return await _workflow_mutation(
@@ -447,7 +480,7 @@ async def transfer_signal(
 async def release_signal(
     signal_id: UUID,
     data: BeaconWorkflowCommandRequest,
-    context: BeaconReader,
+    context: BeaconOwnerOrAssigner,
     session: DatabaseSession,
 ):
     return await _workflow_mutation(

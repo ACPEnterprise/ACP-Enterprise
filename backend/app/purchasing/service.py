@@ -17,6 +17,7 @@ from app.inventory.contracts import PostStockMovement
 from app.inventory.errors import InventoryConflict, InventoryError, InventoryNotFound
 from app.inventory.models import InventoryItem, InventoryQuantity, StockMovement
 from app.inventory.repository import InventoryRepository
+from app.jobs.models import Job
 from app.platform.permissions.authorization import AuthorizationContext
 
 from .errors import PurchasingConflict, PurchasingNotFound, PurchasingValidation
@@ -219,6 +220,59 @@ class PurchasingService:
                 raise PurchasingNotFound(
                     "Scoped Purchasing document entity was not found"
                 )
+            if session.get_bind().dialect.name == "postgresql":
+                await session.execute(
+                    text(
+                        "SELECT pg_advisory_xact_lock(hashtextextended(:identity, 0))"
+                    ),
+                    {
+                        "identity": (
+                            "purchasing-document-content:"
+                            f"{context.company.id}:{payload.entity_type}:"
+                            f"{payload.entity_id}:{payload.content_digest}"
+                        )
+                    },
+                )
+            existing_content = await session.scalar(
+                select(PurchasingDocumentEvidence).where(
+                    PurchasingDocumentEvidence.company_id == context.company.id,
+                    PurchasingDocumentEvidence.entity_type == payload.entity_type,
+                    PurchasingDocumentEvidence.entity_id == payload.entity_id,
+                    PurchasingDocumentEvidence.content_digest
+                    == payload.content_digest,
+                )
+            )
+            if existing_content is not None:
+                existing_metadata = (
+                    existing_content.branch_id,
+                    existing_content.document_type,
+                    existing_content.filename,
+                    existing_content.media_type,
+                    existing_content.storage_reference,
+                    existing_content.source_reference,
+                )
+                requested_metadata = (
+                    payload.branch_id,
+                    payload.document_type.strip(),
+                    payload.filename.strip(),
+                    payload.media_type.strip().lower(),
+                    payload.storage_reference.strip(),
+                    payload.source_reference.strip(),
+                )
+                if existing_metadata != requested_metadata:
+                    raise PurchasingConflict(
+                        "Document content identity conflicts with prior custody evidence"
+                    )
+                self._receipt(
+                    session,
+                    context,
+                    "purchasing.document.register",
+                    payload.idempotency_key,
+                    data,
+                    "purchasing_document",
+                    existing_content.id,
+                )
+                return PurchasingDocumentItem.model_validate(existing_content)
             evidence = {
                 "schema_version": 1,
                 "company_id": str(context.company.id),
@@ -321,15 +375,52 @@ class PurchasingService:
             )
             if replay is not None:
                 existing = await session.get(PurchaseRequisition, replay)
-                if existing is None or existing.company_id != context.company.id:
-                    raise PurchasingConflict(
-                        "Requisition replay evidence is unavailable"
-                    )
+                if (
+                    existing is None
+                    or existing.company_id != context.company.id
+                    or not context.can_access_branch(existing.branch_id)
+                ):
+                    raise PurchasingNotFound("Purchase requisition was not found")
                 return PurchaseRequisitionItem.model_validate(existing)
+            if session.get_bind().dialect.name == "postgresql":
+                await session.execute(
+                    text(
+                        "SELECT pg_advisory_xact_lock(hashtextextended(:identity, 0))"
+                    ),
+                    {
+                        "identity": (
+                            f"purchasing-requisition-number:{context.company.id}:"
+                            f"{payload.request_number.strip()}"
+                        )
+                    },
+                )
+            existing_number = await session.scalar(
+                select(PurchaseRequisition.id).where(
+                    PurchaseRequisition.company_id == context.company.id,
+                    PurchaseRequisition.request_number
+                    == payload.request_number.strip(),
+                )
+            )
+            if existing_number is not None:
+                raise PurchasingConflict(
+                    "Purchase requisition number is already authoritative"
+                )
             if payload.inventory_item_id is not None:
                 await self._inventory_item(
                     session, context.company.id, payload.inventory_item_id
                 )
+            if payload.job_id is not None:
+                job_id = await session.scalar(
+                    select(Job.id).where(
+                        Job.company_id == context.company.id,
+                        Job.branch_id == payload.branch_id,
+                        Job.id == payload.job_id,
+                    )
+                )
+                if job_id is None:
+                    raise PurchasingNotFound(
+                        "Requisition Job provenance was not found"
+                    )
             if payload.suggested_vendor_id is not None:
                 vendor = await self.repository.vendor(
                     session, context.company.id, payload.suggested_vendor_id
@@ -407,10 +498,12 @@ class PurchasingService:
             )
             if replay is not None:
                 existing = await session.get(PurchaseRequisition, replay)
-                if existing is None or existing.company_id != context.company.id:
-                    raise PurchasingConflict(
-                        "Requisition replay evidence is unavailable"
-                    )
+                if (
+                    existing is None
+                    or existing.company_id != context.company.id
+                    or not context.can_access_branch(existing.branch_id)
+                ):
+                    raise PurchasingNotFound("Purchase requisition was not found")
                 return PurchaseRequisitionItem.model_validate(existing)
             item = await session.scalar(
                 select(PurchaseRequisition)
@@ -459,11 +552,33 @@ class PurchasingService:
                 )
                 if vendor is None or vendor.status != "active":
                     raise PurchasingNotFound("Active Vendor was not found")
+                if session.get_bind().dialect.name == "postgresql":
+                    await session.execute(
+                        text(
+                            "SELECT pg_advisory_xact_lock(hashtextextended(:identity, 0))"
+                        ),
+                        {
+                            "identity": (
+                                f"purchasing-po-number:{context.company.id}:"
+                                f"{payload.po_number.strip()}"
+                            )
+                        },
+                    )
+                existing_order = await session.scalar(
+                    select(PurchaseOrder.id).where(
+                        PurchaseOrder.company_id == context.company.id,
+                        PurchaseOrder.po_number == payload.po_number.strip(),
+                    )
+                )
+                if existing_order is not None:
+                    raise PurchasingConflict(
+                        "Purchase Order number is already authoritative"
+                    )
                 order = PurchaseOrder(
                     company_id=context.company.id,
                     branch_id=item.branch_id,
                     vendor_id=vendor.id,
-                    po_number=payload.po_number,
+                    po_number=payload.po_number.strip(),
                     status="draft",
                     currency=payload.currency,
                     expected_date=item.need_by,
@@ -557,6 +672,18 @@ class PurchasingService:
                         "Supply Chain policy replay evidence is unavailable"
                     )
                 return SupplyChainPolicyItem.model_validate(existing)
+            if session.get_bind().dialect.name == "postgresql":
+                await session.execute(
+                    text(
+                        "SELECT pg_advisory_xact_lock(hashtextextended(:identity, 0))"
+                    ),
+                    {
+                        "identity": (
+                            f"supply-chain-policy:{context.company.id}:"
+                            f"{payload.branch_id}:{payload.policy_type}"
+                        )
+                    },
+                )
             policy = await session.scalar(
                 select(SupplyChainPolicy)
                 .where(
@@ -3713,6 +3840,22 @@ class PurchasingService:
         data: dict[str, Any],
         result_type: str,
     ) -> UUID | None:
+        purchase_order_id = data.get("po_id")
+        if purchase_order_id is not None:
+            await self._order(
+                session,
+                context,
+                UUID(str(purchase_order_id)),
+            )
+        if session.get_bind().dialect.name == "postgresql":
+            await session.execute(
+                text("SELECT pg_advisory_xact_lock(hashtextextended(:identity, 0))"),
+                {
+                    "identity": (
+                        f"purchasing-command:{context.company.id}:{key}"
+                    )
+                },
+            )
         receipt = await self.repository.receipt(session, context.company.id, key)
         if receipt is None:
             return None

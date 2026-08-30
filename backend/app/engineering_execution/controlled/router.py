@@ -11,6 +11,8 @@ from app.platform.permissions.codes import (
     EngineeringExecutionPermission,
 )
 from app.platform.permissions.dependencies import require_permission
+from app.platform.reliability.correlation import current_correlation_id
+from app.platform.reliability.failures import ClientRecovery, FailureCode, SafeFailure
 
 from .errors import ControlledExecutionError
 from .schemas import (
@@ -56,12 +58,15 @@ async def adopt_expired_result(
             **data.model_dump(),
         )
     except ControlledExecutionError as error:
+        failure = SafeFailure(
+            FailureCode.RESOURCE_STATE_CONFLICT,
+            "Controlled result adoption conflicts with current authority.",
+            ClientRecovery.RETRY_AFTER_REFRESH,
+            current_correlation_id(),
+        )
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail={
-                "code": "controlled_result_adoption_rejected",
-                "message": str(error),
-            },
+            detail=failure.detail(),
         ) from error
     return AdoptControlledResultResponse(
         result_id=result.id,

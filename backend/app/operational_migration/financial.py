@@ -469,10 +469,18 @@ class FinancialMigrationService:
                                 )
                             ],
                         )
-        except ParentResolutionError as error:
-            disposition, reason, detail = "unresolved", "missing_parent", str(error)
-        except (FinancialValidationError, MigrationRecordError) as error:
-            disposition, reason, detail = "rejected", "validation_failed", str(error)
+        except ParentResolutionError:
+            disposition, reason, detail = (
+                "unresolved",
+                "missing_parent",
+                "Required parent authority could not be resolved.",
+            )
+        except (FinancialValidationError, MigrationRecordError):
+            disposition, reason, detail = (
+                "rejected",
+                "validation_failed",
+                "Financial migration record failed validation.",
+            )
         self._result(
             run_id,
             "estimate",
@@ -584,10 +592,18 @@ class FinancialMigrationService:
                                 )
                             ],
                         )
-        except ParentResolutionError as error:
-            disposition, reason, detail = "unresolved", "missing_parent", str(error)
-        except (FinancialValidationError, MigrationRecordError) as error:
-            disposition, reason, detail = "rejected", "validation_failed", str(error)
+        except ParentResolutionError:
+            disposition, reason, detail = (
+                "unresolved",
+                "missing_parent",
+                "Required parent authority could not be resolved.",
+            )
+        except (FinancialValidationError, MigrationRecordError):
+            disposition, reason, detail = (
+                "rejected",
+                "validation_failed",
+                "Financial migration record failed validation.",
+            )
         self._result(
             run_id,
             "invoice",
@@ -692,10 +708,18 @@ class FinancialMigrationService:
                                 first_run_id=run_id,
                             ),
                         )
-        except ParentResolutionError as error:
-            disposition, reason, detail = "unresolved", "missing_parent", str(error)
-        except (FinancialValidationError, MigrationRecordError) as error:
-            disposition, reason, detail = "rejected", "validation_failed", str(error)
+        except ParentResolutionError:
+            disposition, reason, detail = (
+                "unresolved",
+                "missing_parent",
+                "Required parent authority could not be resolved.",
+            )
+        except (FinancialValidationError, MigrationRecordError):
+            disposition, reason, detail = (
+                "rejected",
+                "validation_failed",
+                "Financial migration record failed validation.",
+            )
         self._result(
             run_id,
             "payment",

@@ -27,6 +27,8 @@ from app.dispatch.service import dispatch_service
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import DispatchPermission, JobPermission
 from app.platform.permissions.dependencies import require_permission
+from app.platform.reliability.correlation import current_correlation_id
+from app.platform.reliability.failures import ClientRecovery, FailureCode, SafeFailure
 
 router = APIRouter(prefix="/api/v1/dispatch", tags=["Dispatch"])
 DatabaseSession = Annotated[AsyncSession, Depends(get_database_session)]
@@ -43,13 +45,39 @@ ExecuteContext = Annotated[
 
 def dispatch_http(error: DispatchError) -> HTTPException:
     if isinstance(error, DispatchNotFound):
-        return HTTPException(status.HTTP_404_NOT_FOUND, str(error))
+        failure = SafeFailure(
+            FailureCode.NOT_FOUND,
+            "Dispatch resource was not found.",
+            ClientRecovery.TERMINAL_FAILURE,
+            current_correlation_id(),
+        )
+        return HTTPException(status.HTTP_404_NOT_FOUND, failure.detail())
     if isinstance(error, DispatchConflict):
-        return HTTPException(status.HTTP_409_CONFLICT, str(error))
+        failure = SafeFailure(
+            FailureCode.RESOURCE_STATE_CONFLICT,
+            "Dispatch operation conflicts with the current state.",
+            ClientRecovery.RETRY_AFTER_REFRESH,
+            current_correlation_id(),
+        )
+        return HTTPException(status.HTTP_409_CONFLICT, failure.detail())
     if isinstance(error, DispatchValidation):
-        return HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(error))
+        failure = SafeFailure(
+            FailureCode.VALIDATION,
+            "Dispatch request violates domain validation rules.",
+            ClientRecovery.USER_CORRECTION_REQUIRED,
+            current_correlation_id(),
+        )
+        return HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, failure.detail()
+        )
+    failure = SafeFailure(
+        FailureCode.INTERNAL_FAILURE,
+        "Dispatch operation could not be completed.",
+        ClientRecovery.TERMINAL_FAILURE,
+        current_correlation_id(),
+    )
     return HTTPException(
-        status.HTTP_400_BAD_REQUEST, "Dispatch operation could not be completed."
+        status.HTTP_400_BAD_REQUEST, failure.detail()
     )
 
 

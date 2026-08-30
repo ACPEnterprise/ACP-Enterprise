@@ -1,12 +1,10 @@
 import hashlib
 import json
 from datetime import datetime, timedelta, timezone
+from unittest.mock import AsyncMock
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from app.core.config import settings
 from app.engineering_control.mobile.external_adoption import (
     ExternalAdoptionError,
@@ -20,11 +18,15 @@ from app.engineering_control.mobile.roadmaps import (
 )
 from app.engineering_control.mobile.schemas import ExternalEvidenceCreate
 from app.engineering_control.models import EngineeringCommand
+from app.engineering_control.repository_readiness import repository_readiness_service
 from app.engineering_control.workstream_runtime import EngineeringWorkstreamRuntime
 from app.platform.permissions.codes import (
     EngineeringCommandPermission,
     EngineeringExecutionPermission,
 )
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
 from tests.engineering_control.test_engineering_command_service import (
     ServiceFixture,
     context_with_permissions,
@@ -107,6 +109,7 @@ async def seed_adoptable(factory) -> tuple[ServiceFixture, EngineeringMilestone]
             permanent_capacity_identity="OM1",
             readiness_state="ready",
             reconciliation_state="current",
+            starting_commit_evidence={"authoritative_head": "a" * 40},
             created_at=now,
             updated_at=now,
         )
@@ -176,7 +179,13 @@ def evidence_payload(
 @pytest.mark.asyncio
 async def test_external_adoption_completion_review_and_promotion(
     database_factory,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setattr(
+        repository_readiness_service,
+        "start_admission_is_current",
+        AsyncMock(return_value=True),
+    )
     fixture, milestone = await seed_adoptable(database_factory)
     service = ExternalAdoptionService()
     async with database_factory() as session:
