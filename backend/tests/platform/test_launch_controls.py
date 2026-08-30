@@ -108,6 +108,8 @@ def test_audit_permission_fails_closed_without_explicit_grant() -> None:
         "session cookie",
         "private_key_pem",
         "nested_token_hash",
+        "social-security-number",
+        "taxpayer_identification_number",
         "worker_credential_id",
     ],
 )
