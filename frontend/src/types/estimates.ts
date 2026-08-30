@@ -37,6 +37,7 @@ export interface Estimate {
   id: string;
   branch_id: string;
   customer_id: string;
+  service_location_id?: string | null;
   estimate_number: string;
   status: string;
   acceptance_status: string;
