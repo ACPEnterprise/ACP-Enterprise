@@ -15,8 +15,11 @@ from app.inventory.models import InventoryItem
 from app.invoicing.models import Invoice
 from app.jobs.models import Job
 from app.payments.models import PaymentReceipt
+from app.payroll.permissions import PayrollPermission
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import (
+    AdministrationPermission,
+    AnalyticsPermission,
     CustomerPermission,
     EconomicsPolicyPermission,
     EstimatePermission,
@@ -117,4 +120,12 @@ def permitted_domain_names(context: AuthorizationContext) -> set[str]:
     domains = {adapter.domain for adapter in ADAPTERS if context.has_permission(adapter.permission)}
     if context.has_permission(EconomicsPolicyPermission.MEASUREMENT_READ):
         domains.add("business-economics")
+    if context.has_permission(AnalyticsPermission.READ):
+        domains.add("beacon")
+    if context.has_permission(AdministrationPermission.COMPANY_ADMINISTER):
+        domains.add("migration")
+    if context.has_permission(PayrollPermission.REPORTING_READ) or context.has_permission(
+        PayrollPermission.STATEMENT_OWN_READ
+    ):
+        domains.add("payroll")
     return domains

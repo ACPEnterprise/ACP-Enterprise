@@ -39,7 +39,21 @@ DOMAIN_KEYWORDS = {
     "payments": ("payment", "settlement", "cash"),
     "purchasing": ("purchasing", "purchase order", "vendor"),
     "inventory": ("inventory", "stock", "material"),
+    "business-economics": ("profit", "margin", "economics", "labor cost", "material cost"),
+    "beacon": ("beacon", "signal"),
+    "migration": ("migration", "cutover"),
+    "payroll": ("payroll", "pay statement", "pay statement", "remittance"),
+    "luminary": ("luminary", "finding"),
 }
+
+ENTERPRISE_SUMMARY_PHRASES = (
+    "how are we doing",
+    "what needs my attention",
+    "what changed",
+    "what don't you know",
+    "what information is incomplete",
+    "owner briefing",
+)
 
 ROUTES = {
     "customers": "/customers",
@@ -100,6 +114,15 @@ class LiaService:
         requested_domains = self._classify_domains(question, request)
         allowed = permitted_domain_names(context)
         selected = requested_domains & allowed if requested_domains else allowed
+        if "luminary" in requested_domains:
+            return self._response(
+                context=context,
+                request_id=request_id,
+                conversation_id=conversation_id,
+                classification=TruthClassification.EXTERNAL_GATE,
+                answer="No authoritative Luminary finding adapter is available yet. I won’t invent a higher-order finding.",
+                limitations=("LUMINARY_ADAPTER_NOT_AVAILABLE",),
+            )
         if requested_domains and not selected:
             return self._response(
                 context=context,
@@ -164,6 +187,8 @@ class LiaService:
         if request.context and request.context.domain:
             return {request.context.domain}
         normalized = question.casefold()
+        if any(phrase in normalized for phrase in ENTERPRISE_SUMMARY_PHRASES):
+            return set()
         return {
             domain
             for domain, keywords in DOMAIN_KEYWORDS.items()
