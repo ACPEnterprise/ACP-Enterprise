@@ -21,6 +21,13 @@ type Props = { canReview: boolean };
 
 const safeError = (error: unknown) => {
   if (axios.isAxiosError(error)) {
+    const recovery = (error.response?.data as {
+      detail?: { recovery?: string };
+    })?.detail?.recovery;
+    if (recovery === "RECONCILIATION_REQUIRED")
+      return "Matching authority is uncertain and requires reconciliation. Do not retry this operation blindly.";
+    if (recovery === "TEMPORARILY_UNAVAILABLE")
+      return "Matching is temporarily unavailable. Your inputs were retained; retry when service is restored.";
     if (error.response?.status === 409)
       return "Matching evidence changed or conflicts with existing authority. Refresh before continuing.";
     if (error.response?.status === 403)
@@ -67,14 +74,38 @@ export function ProcurementMatchWorkbench({ canReview }: Props) {
   };
   const evaluate = async (event: FormEvent) => {
     event.preventDefault();
-    const result = await mutations.evaluate.mutateAsync({
-      purchase_order_id: form.purchase_order_id,
-      vendor_bill_id: form.vendor_bill_id,
-      expected_purchase_order_version: Number(form.po_version),
-      expected_bill_version: Number(form.bill_version),
-      idempotency_key: crypto.randomUUID(),
-    });
-    setMatchId(result.id);
+    try {
+      const result = await mutations.evaluate.mutateAsync({
+        purchase_order_id: form.purchase_order_id,
+        vendor_bill_id: form.vendor_bill_id,
+        expected_purchase_order_version: Number(form.po_version),
+        expected_bill_version: Number(form.bill_version),
+        idempotency_key: crypto.randomUUID(),
+      });
+      setMatchId(result.id);
+    } catch {
+      // The mutation exposes a governed, non-reflective recovery message below.
+    }
+  };
+  const resolve = async (
+    exceptionId: string,
+    expectedExceptionVersion: number,
+    resolution: "accept_variance" | "hold_bill",
+  ) => {
+    if (!match) return;
+    try {
+      await mutations.resolve.mutateAsync({
+        matchId: match.id,
+        exceptionId,
+        expected_match_version: match.version,
+        expected_exception_version: expectedExceptionVersion,
+        resolution,
+        note: resolutionNote[exceptionId],
+        idempotency_key: crypto.randomUUID(),
+      });
+    } catch {
+      // Preserve the note and evidence while the governed error is displayed.
+    }
   };
   return (
     <Card>
@@ -174,7 +205,11 @@ export function ProcurementMatchWorkbench({ canReview }: Props) {
             onChange={(event) => setMatchId(event.target.value)}
           />
         </div>
-        {error && <Alert variant="danger">{error}</Alert>}
+        {error && (
+          <Alert variant="danger" role="alert" aria-live="assertive">
+            {error}
+          </Alert>
+        )}
         {match && (
           <div className="space-y-3" aria-live="polite">
             <p className="font-semibold">
@@ -241,15 +276,7 @@ export function ProcurementMatchWorkbench({ canReview }: Props) {
                       <Button
                         disabled={busy || !resolutionNote[item.id]?.trim()}
                         onClick={() =>
-                          void mutations.resolve.mutateAsync({
-                            matchId: match.id,
-                            exceptionId: item.id,
-                            expected_match_version: match.version,
-                            expected_exception_version: item.version,
-                            resolution: "accept_variance",
-                            note: resolutionNote[item.id],
-                            idempotency_key: crypto.randomUUID(),
-                          })
+                          void resolve(item.id, item.version, "accept_variance")
                         }
                       >
                         Accept variance
@@ -258,15 +285,7 @@ export function ProcurementMatchWorkbench({ canReview }: Props) {
                         variant="secondary"
                         disabled={busy || !resolutionNote[item.id]?.trim()}
                         onClick={() =>
-                          void mutations.resolve.mutateAsync({
-                            matchId: match.id,
-                            exceptionId: item.id,
-                            expected_match_version: match.version,
-                            expected_exception_version: item.version,
-                            resolution: "hold_bill",
-                            note: resolutionNote[item.id],
-                            idempotency_key: crypto.randomUUID(),
-                          })
+                          void resolve(item.id, item.version, "hold_bill")
                         }
                       >
                         Hold bill
