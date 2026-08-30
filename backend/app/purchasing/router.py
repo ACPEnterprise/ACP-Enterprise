@@ -197,7 +197,7 @@ async def decide_requisition(
     session: DatabaseSession,
 ) -> PurchaseRequisitionItem:
     if action not in {"approve", "reject", "convert", "cancel"}:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Unsupported requisition action")
+        raise http_error(PurchasingNotFound("Unsupported requisition action"))
     try:
         return await purchasing_service.transition_requisition(
             session,
