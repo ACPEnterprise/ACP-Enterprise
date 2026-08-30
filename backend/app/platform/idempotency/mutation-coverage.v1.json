@@ -1,6 +1,43 @@
 {
   "entries": [
     {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "service_agreements",
+      "mechanism": "Company-scoped immutable agreement evidence and canonical request digest",
+      "method": "POST",
+      "operation_id": "create_plan_api_v1_service_agreements_plans_post",
+      "path": "/api/v1/service-agreements/plans",
+      "reason": "Versioned plan identity prevents silent commercial policy replacement.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT", "domain": "service_agreements", "mechanism": "plan row lock and convergent activation", "method": "POST", "operation_id": "activate_plan_api_v1_service_agreements_plans__plan_id__activate_post", "path": "/api/v1/service-agreements/plans/{plan_id}/activate", "reason": "Activation converges and supersedes prior active versions.", "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED", "domain": "service_agreements", "mechanism": "Company-scoped enrollment command identity", "method": "POST", "operation_id": "enroll_api_v1_service_agreements_post", "path": "/api/v1/service-agreements", "reason": "Exact enrollment replay returns one Agreement.", "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED", "domain": "service_agreements", "mechanism": "immutable lifecycle evidence", "method": "POST", "operation_id": "activate_api_v1_service_agreements__agreement_id__activate_post", "path": "/api/v1/service-agreements/{agreement_id}/activate", "reason": "Lifecycle replay is evidence-bound.", "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED", "domain": "service_agreements", "mechanism": "immutable lifecycle evidence", "method": "POST", "operation_id": "cancel_api_v1_service_agreements__agreement_id__cancel_post", "path": "/api/v1/service-agreements/{agreement_id}/cancel", "reason": "Cancellation replay is evidence-bound.", "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED", "domain": "service_agreements", "mechanism": "immutable lifecycle evidence", "method": "POST", "operation_id": "renewal_review_api_v1_service_agreements__agreement_id__renewal_review_post", "path": "/api/v1/service-agreements/{agreement_id}/renewal-review", "reason": "Renewal review replay is evidence-bound.", "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT", "domain": "service_agreements", "mechanism": "locked Agreement and entitlement sequence uniqueness", "method": "POST", "operation_id": "generate_api_v1_service_agreements__agreement_id__entitlements_post", "path": "/api/v1/service-agreements/{agreement_id}/entitlements", "reason": "Generation converges on deterministic entitlement sequences.", "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED", "domain": "service_agreements", "mechanism": "immutable entitlement lifecycle evidence", "method": "POST", "operation_id": "mutate_entitlement_api_v1_service_agreements_entitlements__entitlement_id___action__post", "path": "/api/v1/service-agreements/entitlements/{entitlement_id}/{action}", "reason": "Handoff and consumption replay cannot duplicate authority.", "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED", "domain": "service_agreements", "mechanism": "Company and billing-period uniqueness", "method": "POST", "operation_id": "billing_api_v1_service_agreements__agreement_id__billing_occurrences_post", "path": "/api/v1/service-agreements/{agreement_id}/billing-occurrences", "reason": "Billing readiness never duplicates an occurrence.", "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED", "domain": "service_agreements", "mechanism": "successor enrollment identity and predecessor row lock", "method": "POST", "operation_id": "renew_api_v1_service_agreements__agreement_id__renew_post", "path": "/api/v1/service-agreements/{agreement_id}/renew", "reason": "Renewal creates exactly one successor Agreement.", "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
       "classification": "NATURALLY_IDEMPOTENT",
       "domain": "payroll",
       "mechanism": "deterministic Company/schema digest and durable uniqueness",
@@ -2559,6 +2596,6 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "fe16f7c22b0099b11cb2b1a394a1cd8030e19995a4bd2deddce61e3140543626",
+  "fingerprint": "18fc139bee8ecffc1dc3e480e969451f732c703bca3154b15f01f3e26a7b901b",
   "schema_version": "1"
 }

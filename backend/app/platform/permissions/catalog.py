@@ -29,6 +29,7 @@ from app.platform.permissions.codes import (
     PriceBookPermission,
     PurchasingPermission,
     SchedulingPermission,
+    ServiceAgreementPermission,
     WorkerControlPermission,
     WorkerIdentityPermission,
 )
@@ -338,6 +339,17 @@ INVOICE_DEFINITIONS = tuple(
     for code in sorted(InvoicePermission.ALL)
 )
 
+SERVICE_AGREEMENT_DEFINITIONS = tuple(
+    PermissionDefinition(
+        code=code,
+        name=code.replace("_", " ").title(),
+        resource="service_agreement",
+        action=code.removeprefix("COMPANY_SERVICE_AGREEMENT_").lower(),
+        scope=PermissionScope.COMPANY,
+    )
+    for code in sorted(ServiceAgreementPermission.ALL)
+)
+
 PAYMENT_DEFINITIONS = tuple(
     PermissionDefinition(
         code=code,
@@ -449,6 +461,7 @@ permission_catalog = PermissionCatalog(
     + COMMUNICATIONS_DEFINITIONS
     + ESTIMATE_DEFINITIONS
     + INVOICE_DEFINITIONS
+    + SERVICE_AGREEMENT_DEFINITIONS
     + PAYMENT_DEFINITIONS
     + ACCOUNTS_PAYABLE_DEFINITIONS
     + ENGINEERING_COMMAND_DEFINITIONS
