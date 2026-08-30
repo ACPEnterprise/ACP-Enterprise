@@ -258,6 +258,7 @@ class CommunicationService:
         *,
         context: AuthorizationContext,
         branch_id: UUID | None,
+        customer_id: UUID | None,
         limit: int,
     ) -> tuple[CommunicationEvidence, ...]:
         if branch_id is not None:
@@ -266,6 +267,7 @@ class CommunicationService:
             session,
             company_id=context.company.id,
             branch_id=branch_id,
+            customer_id=customer_id,
             limit=limit,
         )
         return tuple(self._evidence(record) for record in records)

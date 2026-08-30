@@ -7,6 +7,7 @@ import type { CustomerDetail } from "../../types/customers";
 import { CustomerDetailView } from "./CustomerDetailView";
 
 vi.mock("../../hooks/useCustomers");
+vi.mock("../../auth", () => ({ useHasPermission: () => false }));
 vi.mock("./CustomerOperationsPanel", () => ({
   CustomerOperationsPanel: () => <div>Customer operational workspace</div>,
 }));

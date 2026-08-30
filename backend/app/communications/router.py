@@ -64,6 +64,7 @@ async def history(
     context: ReadContext,
     session: DatabaseSession,
     branch_id: UUID | None = None,
+    customer_id: UUID | None = None,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
 ) -> CommunicationPage:
     try:
@@ -71,6 +72,7 @@ async def history(
             session,
             context=context,
             branch_id=branch_id,
+            customer_id=customer_id,
             limit=limit,
         )
         return CommunicationPage(

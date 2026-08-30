@@ -6,7 +6,6 @@ from uuid import UUID, uuid4
 
 import httpx
 import pytest
-
 from app.communications.contracts import CommunicationRequest
 from app.communications.errors import (
     CommunicationAuthorizationError,
@@ -242,6 +241,26 @@ async def test_unsupported_source_event_type_fails_closed() -> None:
         await CommunicationService(repository).request(
             FakeSession(), context=ctx, request=spec
         )
+
+
+@pytest.mark.asyncio
+async def test_history_preserves_company_branch_and_customer_scope() -> None:
+    ctx = context()
+    spec = request()
+    repository = repository_for(ctx, spec)
+    await CommunicationService(repository).list(
+        FakeSession(),
+        context=ctx,
+        branch_id=spec.branch_id,
+        customer_id=spec.customer_id,
+        limit=25,
+    )
+    assert repository.list_scoped.await_args.kwargs == {
+        "company_id": ctx.company.id,
+        "branch_id": spec.branch_id,
+        "customer_id": spec.customer_id,
+        "limit": 25,
+    }
 
 
 @pytest.mark.asyncio

@@ -31,6 +31,15 @@ policy, public Customer portal access, and real communication delivery remain
 outside this boundary. A possible duplicate is review evidence only. Production
 policy values remain unconfigured until separately authorized.
 
+## Communications composition
+
+Customer 360 may read the provider-neutral Communications history through an
+explicit `customer_id` filter. The repository applies Company scope first and
+then the Customer evidence filter; Branch remains an optional authorization
+scope. The UI exposes delivery state, safe recipient evidence, retry count, and
+terminal-review state. It provides no send, retry, cancel, provider, or template
+mutation controls.
+
 ## Qualification
 
 Frontend tests cover archive confirmation, restore, safe timeline rendering,
