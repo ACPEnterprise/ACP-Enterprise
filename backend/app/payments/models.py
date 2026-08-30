@@ -30,6 +30,18 @@ class PaymentIntent(Base):
     __tablename__ = "payment_intents"
     __table_args__ = (
         ForeignKeyConstraint(["company_id", "branch_id"], ["branches.company_id", "branches.id"], ondelete="RESTRICT"),
+        ForeignKeyConstraint(
+            ["company_id", "customer_id"],
+            ["customers.company_id", "customers.id"],
+            name="fk_payment_intents_customer_scope",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "branch_id", "invoice_id", "customer_id"],
+            ["invoices.company_id", "invoices.branch_id", "invoices.id", "invoices.customer_id"],
+            name="fk_payment_intents_invoice_scope",
+            ondelete="RESTRICT",
+        ),
         CheckConstraint(
             "amount > 0 AND currency ~ '^[A-Z]{3}$'",
             name="payment_intents_check",
@@ -46,7 +58,7 @@ class PaymentIntent(Base):
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
     company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("companies.id", ondelete="RESTRICT"), nullable=False)
     branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
-    customer_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("customers.id", ondelete="RESTRICT"), nullable=False)
+    customer_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     invoice_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
     amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
     currency: Mapped[str] = mapped_column(String(3), nullable=False)

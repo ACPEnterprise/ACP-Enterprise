@@ -6,6 +6,7 @@ from uuid import uuid4
 import pytest
 import pytest_asyncio
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.core.config import settings
@@ -203,6 +204,80 @@ async def test_concurrent_collection_and_refund_replay_have_one_economic_authori
                 session,
                 replace(collect, amount=Decimal("126.25")),
             )
+
+
+@pytest.mark.asyncio
+async def test_collection_rejects_foreign_company_customer_before_provider_call(
+    payment_fixture,
+) -> None:
+    factory, company, branch, actor, _ = payment_fixture
+    async with factory() as session, session.begin():
+        foreign_company = Company(
+            name="Foreign Payment Company",
+            code=f"FP{uuid4().hex[:8].upper()}",
+            status="active",
+            timezone="America/New_York",
+        )
+        foreign_customer = Customer(
+            company=foreign_company,
+            customer_number=f"CUS-{uuid4().int % 1000000:06d}",
+            status="active",
+            customer_type="residential",
+            display_name="Foreign Payment Customer",
+            preferred_contact_method="email",
+            normalized_name=f"foreign payment customer {uuid4().hex}",
+        )
+        session.add_all([foreign_company, foreign_customer])
+        await session.flush()
+
+    provider = CountingFakeProvider()
+    service = PaymentService(provider, "synthetic-merchant")
+    command = CreateIntent(
+        company_id=company.id,
+        branch_id=branch.id,
+        customer_id=foreign_customer.id,
+        amount=Decimal("19.99"),
+        currency="USD",
+        opaque_payment_method="opaque_captured_test",
+        idempotency_key=f"foreign-customer-{uuid4()}",
+        actor_user_id=actor.id,
+    )
+    async with factory() as session:
+        with pytest.raises(PaymentNotFound, match="Customer was not found"):
+            await service.collect(session, command)
+
+    assert provider.collect_calls == 0
+    async with factory() as session:
+        assert (
+            await session.scalar(
+                select(func.count(PaymentIntent.id)).where(
+                    PaymentIntent.company_id == company.id,
+                    PaymentIntent.idempotency_key == command.idempotency_key,
+                )
+            )
+            == 0
+        )
+
+    async with factory() as session:
+        with pytest.raises(IntegrityError):
+            async with session.begin():
+                session.add(
+                    PaymentIntent(
+                        company_id=company.id,
+                        branch_id=branch.id,
+                        customer_id=foreign_customer.id,
+                        amount=Decimal("19.99"),
+                        currency="USD",
+                        provider="synthetic",
+                        merchant_account="synthetic-merchant",
+                        opaque_payment_method="opaque_corruption_canary",
+                        idempotency_key=f"corrupt-{uuid4()}",
+                        request_digest="1" * 64,
+                        provider_idempotency_key=f"pay_{uuid4().hex}",
+                        created_by_user_id=actor.id,
+                    )
+                )
+                await session.flush()
 
 
 @pytest.mark.asyncio

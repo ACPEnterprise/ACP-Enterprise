@@ -9,11 +9,13 @@ from uuid import UUID, uuid4
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.customers.models import Customer
 from app.events.schemas import BusinessEventCreate
 from app.events.service import BusinessEventService
 from app.events.types import EventType
 from app.invoicing.contracts import PaymentApplication, PaymentReceiptFact
 from app.invoicing.errors import InvoiceError
+from app.invoicing.models import Invoice
 from app.invoicing.service import invoice_service
 from app.payments.contracts import (
     ApplyReceipt,
@@ -69,6 +71,25 @@ class PaymentService:
                 return existing
             if amount <= 0 or len(spec.currency) != 3 or not spec.opaque_payment_method.startswith("opaque_"):
                 raise PaymentValidation("Positive amount, ISO currency, and provider-safe opaque identity are required.")
+            customer = await session.scalar(
+                select(Customer.id).where(
+                    Customer.company_id == spec.company_id,
+                    Customer.id == spec.customer_id,
+                )
+            )
+            if customer is None:
+                raise PaymentNotFound("Payment Customer was not found.")
+            if spec.invoice_id is not None:
+                invoice = await session.scalar(
+                    select(Invoice.id).where(
+                        Invoice.company_id == spec.company_id,
+                        Invoice.branch_id == spec.branch_id,
+                        Invoice.customer_id == spec.customer_id,
+                        Invoice.id == spec.invoice_id,
+                    )
+                )
+                if invoice is None:
+                    raise PaymentNotFound("Payment Invoice was not found.")
             intent = PaymentIntent(company_id=spec.company_id, branch_id=spec.branch_id, customer_id=spec.customer_id, invoice_id=spec.invoice_id, amount=amount, currency=spec.currency.upper(), provider=self.provider.name, merchant_account=self.merchant_account, opaque_payment_method=spec.opaque_payment_method, idempotency_key=spec.idempotency_key, request_digest=request_digest, provider_idempotency_key=f"pay_{uuid4().hex}", created_by_user_id=spec.actor_user_id)
             session.add(intent)
             await session.flush()
