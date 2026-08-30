@@ -23,11 +23,62 @@ from app.estimates.models import (
     EstimateNumberSequence,
     EstimateRevision,
 )
+from app.estimates.schemas import EstimateSummary
 from app.price_book.models import PriceBookCommercialSnapshot
 
 
 class EstimateRepository:
     """Company-scoped Estimate persistence; Price Book snapshots remain authoritative."""
+
+    @staticmethod
+    async def list_summaries(
+        session: AsyncSession,
+        *,
+        company_id: UUID,
+        branch_ids: frozenset[UUID],
+        customer_id: UUID | None = None,
+        status: str | None = None,
+        limit: int = 100,
+    ) -> tuple[EstimateSummary, ...]:
+        statement = (
+            select(Estimate, EstimateRevision)
+            .join(
+                EstimateRevision,
+                (EstimateRevision.company_id == Estimate.company_id)
+                & (EstimateRevision.id == Estimate.current_revision_id),
+            )
+            .where(
+                Estimate.company_id == company_id,
+                Estimate.branch_id.in_(branch_ids),
+            )
+        )
+        if customer_id is not None:
+            statement = statement.where(Estimate.customer_id == customer_id)
+        if status is not None:
+            statement = statement.where(Estimate.status == status)
+        rows = (
+            await session.execute(
+                statement.order_by(Estimate.updated_at.desc(), Estimate.id).limit(limit)
+            )
+        ).all()
+        return tuple(
+            EstimateSummary(
+                id=estimate.id,
+                branch_id=estimate.branch_id,
+                customer_id=estimate.customer_id,
+                service_location_id=estimate.service_location_id,
+                estimate_number=estimate.estimate_number,
+                status=estimate.status,
+                acceptance_status=estimate.acceptance_status,
+                version=estimate.version,
+                proposal_title=revision.proposal_title,
+                currency=revision.currency,
+                total_amount=revision.total_amount,
+                expires_at=revision.expires_at,
+                updated_at=estimate.updated_at,
+            )
+            for estimate, revision in rows
+        )
 
     @staticmethod
     async def next_estimate_number(session: AsyncSession, *, company_id: UUID) -> str:

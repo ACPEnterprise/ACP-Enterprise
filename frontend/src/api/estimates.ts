@@ -1,10 +1,14 @@
 import { apiClient } from "./client";
-import type { Estimate, EstimateProposalInput } from "../types/estimates";
+import type { Estimate, EstimateList, EstimateProposalInput } from "../types/estimates";
 
 const root = "/api/v1/estimates";
 
 export async function getEstimate(id: string): Promise<Estimate> {
   return (await apiClient.get<Estimate>(`${root}/${id}`)).data;
+}
+
+export async function listEstimates(status?: string): Promise<EstimateList> {
+  return (await apiClient.get<EstimateList>(root, { params: status ? { status } : undefined })).data;
 }
 
 export async function createEstimate(input: EstimateProposalInput): Promise<Estimate> {

@@ -3,8 +3,13 @@ import * as api from "../api/estimates";
 
 export const estimateKeys = {
   all: ["estimates"] as const,
+  list: (status?: string) => ["estimates", "list", status ?? "all"] as const,
   detail: (id: string) => ["estimates", id] as const,
 };
+
+export function useEstimates(status?: string) {
+  return useQuery({ queryKey: estimateKeys.list(status), queryFn: () => api.listEstimates(status) });
+}
 
 export function useEstimate(id: string, enabled = true) {
   return useQuery({ queryKey: estimateKeys.detail(id), queryFn: () => api.getEstimate(id), enabled });

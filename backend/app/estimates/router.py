@@ -2,7 +2,7 @@ from collections.abc import Awaitable, Callable
 from typing import Annotated
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_database_session
@@ -22,6 +22,7 @@ from app.estimates.errors import (
 from app.estimates.schemas import (
     DecisionInput,
     EstimateItem,
+    EstimateList,
     ProposalInput,
     RevisionInput,
     TaxPolicyInput,
@@ -68,6 +69,25 @@ def _lines(payload: ProposalInput) -> tuple[EstimateLineSpec, ...]:
         )
         for line in payload.lines
     )
+
+
+@router.get("", response_model=EstimateList)
+async def list_estimates(
+    context: ReadContext,
+    session: DatabaseSession,
+    customer_id: UUID | None = None,
+    status_filter: str | None = Query(default=None, alias="status"),
+    limit: int = Query(default=100, ge=1, le=250),
+) -> EstimateList:
+    items = await estimate_service.repository.list_summaries(
+        session,
+        company_id=context.company.id,
+        branch_ids=frozenset(branch.id for branch in context.authorized_branches),
+        customer_id=customer_id,
+        status=status_filter,
+        limit=limit,
+    )
+    return EstimateList(items=items, total=len(items))
 
 
 @router.get("/{estimate_id}", response_model=EstimateItem)
