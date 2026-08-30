@@ -92,10 +92,14 @@ may see broader authorized sources, but never secrets or implicit Production act
 ## Current source readiness
 
 - Beacon: ready through `BEACON.INTELLIGENCE.v1`.
-- Jobs, Scheduling, and Invoice status: bounded read contracts ready.
+- Customers are partial pending their owning-domain minimum-necessary projection;
+  Jobs, Scheduling, Estimates, Invoices, Payments, Purchasing, and Inventory expose
+  permission-gated aggregate status only.
 - Economics: ready through the bounded immutable `economics.owner-intelligence.v1`
-  context packet; LIA does not recalculate profitability or expose Payroll detail.
-- Customer operational context: partial pending a minimum-necessary domain projection.
+  context packet with a 20-result maximum; LIA does not recalculate profitability or
+  expose Payroll detail.
+- Luminary briefing, HCP Migration authority, and Payroll reporting metadata have
+  explicit permission, sensitivity, scope, freshness, provenance, and result bounds.
 - Payroll own statement: ready through server-resolved Membership → Employee identity,
   own-record enforcement, and a one-result metadata bound.
 - System readiness: partial; only explicit bounded registries may participate.

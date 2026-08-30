@@ -98,6 +98,32 @@ ADAPTERS = (
     ),
 )
 
+RUNTIME_SOURCE_BINDINGS = {
+    "customers": ("CUSTOMER_OPERATIONAL", CustomerPermission.READ),
+    "jobs": ("JOB_OPERATIONAL", JobPermission.READ),
+    "scheduling": ("SCHEDULE_CONTEXT", SchedulingPermission.READ),
+    "estimates": ("ESTIMATE_STATUS", EstimatePermission.READ),
+    "invoicing": ("INVOICE_STATUS", InvoicePermission.READ),
+    "payments": ("PAYMENT_STATUS", PaymentPermission.READ),
+    "purchasing": ("PURCHASING_STATUS", PurchasingPermission.READ),
+    "inventory": ("INVENTORY_STATUS", InventoryPermission.READ),
+    "business-economics": (
+        "ECONOMICS_INTELLIGENCE",
+        EconomicsPolicyPermission.MEASUREMENT_READ,
+    ),
+    "beacon": ("BEACON_INTELLIGENCE", AnalyticsPermission.READ),
+    "migration": (
+        "MIGRATION_AUTHORITY",
+        AdministrationPermission.COMPANY_ADMINISTER,
+    ),
+    "payroll-reporting": ("PAYROLL_REPORTING", PayrollPermission.REPORTING_READ),
+    "payroll-own": (
+        "PAYROLL_OWN_STATEMENT",
+        PayrollPermission.STATEMENT_OWN_READ,
+    ),
+    "luminary": ("LUMINARY_BRIEFING", LuminaryPermission.READ),
+}
+
 
 class GovernedRetrievalService:
     async def retrieve(
@@ -243,7 +269,7 @@ class GovernedRetrievalService:
                 EconomicsProfitabilityResultRecord.period_end.desc(),
                 EconomicsProfitabilityResultRecord.created_at.desc(),
             )
-            .limit(100)
+            .limit(20)
         )
         branch_ids = (
             frozenset({context.active_branch.id})

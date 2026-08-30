@@ -14,7 +14,8 @@ from app.lia.contracts import (
     LiaRequest,
     TruthClassification,
 )
-from app.lia.retrieval import GovernedRetrievalService
+from app.lia.foundation import SOURCE_REGISTRY
+from app.lia.retrieval import RUNTIME_SOURCE_BINDINGS, GovernedRetrievalService
 from app.lia.service import LiaService
 from app.platform.permissions.codes import LuminaryPermission
 
@@ -408,3 +409,33 @@ async def test_beacon_context_entity_excludes_unrelated_authorized_signals(
 
     assert evidence[0].count == 1
     assert evidence[0].state == "active=1, snoozed=0"
+
+
+def test_every_runtime_adapter_has_matching_explicit_source_authority() -> None:
+    registry = {item.source_id: item for item in SOURCE_REGISTRY}
+    assert len(registry) == len(SOURCE_REGISTRY)
+
+    for source_id, permission in RUNTIME_SOURCE_BINDINGS.values():
+        assert source_id in registry
+        assert registry[source_id].required_permission == permission
+
+
+@pytest.mark.asyncio
+async def test_economics_retrieval_enforces_registered_result_budget() -> None:
+    session = SimpleNamespace(
+        scalars=AsyncMock(return_value=SimpleNamespace(all=lambda: ()))
+    )
+
+    await GovernedRetrievalService()._economics(
+        session,
+        authorization_context("COMPANY_ECONOMICS_MEASUREMENT_READ"),
+        datetime.now(timezone.utc),
+        None,
+    )
+
+    statement = session.scalars.await_args.args[0]
+    registered = next(
+        item for item in SOURCE_REGISTRY if item.source_id == "ECONOMICS_INTELLIGENCE"
+    )
+    assert registered.max_results == 20
+    assert 20 in statement.compile().params.values()

@@ -11,14 +11,14 @@
   "autonomous_mutation_enabled": false,
   "production_touched": false,
   "fingerprint_algorithm": "sha256(sorted path=sha256(file) lines with LF)",
-  "qualification_fingerprint": "8aad8cf644a4d2ea9192f83d7ef99cc4e61f762d803f7d1438c845422dcb40f9",
+  "qualification_fingerprint": "4432898ca3df2ab8af03c933907f808c74f7b437e959788e83b1636f7540bd4a",
   "inputs": {
     "backend/app/lia/adapters.py": "df1e439f5b9b0b578e68543d7bbb044d2f48a59f138394046820ec5546a5f25e",
     "backend/app/lia/evaluation.py": "f06adc789b3cd610a9a26195b04e52d8fbbf1c576bd13b77f0c3b90252d18a41",
-    "backend/app/lia/foundation.py": "a2ae0365b0aa89cce7462a0bcd3b69dc3f88c673bdbccb8920fe8132057fb687",
+    "backend/app/lia/foundation.py": "d6f031fbffa915cf0af4db17d72d1976e7c07599cf87f75b1260d81bbf8c2eff",
     "backend/app/lia/safety.py": "9b41b550577a964409023926f76c786b567d91ad88b6db7be2f1e701b03fbdd0",
     "backend/tests/lia/test_foundation_safety.py": "e6ad6d8b30637639959c49296cd474a344bd778dbc6a374ab6a96e398ab1978b",
-    "docs/architecture/lia/foundation-readiness-v1.md": "51d396864eebecbb938e2ed4f77ffc34fed28c0acc131f41045ad15194bb3472",
+    "docs/architecture/lia/foundation-readiness-v1.md": "8590d2bd1067566c175627ec3ffe97f210f9e800ced52c78543324af36aa21e6",
     "docs/architecture/lia/golden-evaluation-cases.v1.json": "2fbfce5c695e7158f3f4b27f8d0fad6da8f87cb5e1ceb96a65c3127784debe3b",
     "docs/architecture/lia/preview-acceptance-plan-v1.md": "b25e3947f5ccd25e1ec227f053e349dfedc982c8248d19555af7927eb6066b30",
     "docs/architecture/lia/threat-model-v1.md": "30fc4db4a40f838bac8173c5af9ef39ee4692ecb93dff55fe9cc0398855a6b0d"
