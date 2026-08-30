@@ -31,6 +31,12 @@ vi.mock("../hooks/useProcurementMatching", () => ({
     isError: false,
     data: { items: [] },
   }),
+  useProcurementMatch: () => ({ data: undefined, error: null }),
+  useProcurementMatchCandidates: () => ({ data: [], isError: false }),
+  useProcurementMatchMutations: () => ({
+    evaluate: { ...mutation, data: undefined, error: null },
+    resolve: { ...mutation, data: undefined, error: null },
+  }),
 }));
 const mutation = { mutateAsync: vi.fn(), isPending: false, isError: false };
 const replenishmentMutation = {
@@ -108,6 +114,10 @@ describe("PurchasingRoute", () => {
       replenishmentWorkbench: replenishmentMutation,
       decideReplenishment: decisionMutation,
       configureBranchPolicy: mutation,
+      createRequisition: mutation,
+      transitionRequisition: mutation,
+      configureSupplyChainPolicy: mutation,
+      registerDocument: mutation,
     } as never);
   });
   it("keeps recommendations read-only without approval authority", () => {

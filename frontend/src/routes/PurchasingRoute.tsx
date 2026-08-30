@@ -3,6 +3,7 @@ import axios from "axios";
 import { useAuth, useHasPermission } from "../auth";
 import { useBranchPurchasingPolicies, usePurchasing, usePurchasingMutations } from "../hooks/usePurchasing";
 import { useInventory } from "../hooks/useInventory";
+import { getPurchaseOrderArtifact } from "../api/purchasing";
 import {
   Alert,
   Badge,
@@ -21,6 +22,11 @@ import { PurchaseOrderDispositionControls } from "../components/PurchaseOrderDis
 import { ReplenishmentWorkbench } from "../components/purchasing/ReplenishmentWorkbench";
 import { BranchPurchasingPolicyWorkbench } from "../components/purchasing/BranchPurchasingPolicyWorkbench";
 import { VendorPerformanceEvidence } from "../components/purchasing/VendorPerformanceEvidence";
+import { SupplyChainApprovalCenter } from "../components/purchasing/SupplyChainApprovalCenter";
+import { SupplyChainReadiness } from "../components/purchasing/SupplyChainReadiness";
+import { ProcurementMatchWorkbench } from "../components/purchasing/ProcurementMatchWorkbench";
+import { SupplyChainOperationsDashboard } from "../components/purchasing/SupplyChainOperationsDashboard";
+import { PurchasingDocumentCustody } from "../components/purchasing/PurchasingDocumentCustody";
 
 function changeErrorMessage(error: unknown): string | null {
   if (!error) return null;
@@ -61,6 +67,7 @@ export function PurchasingRoute() {
   const canApproveChange = useHasPermission("COMPANY_PURCHASING_CHANGE_APPROVE");
   const canCloseOrder = useHasPermission("COMPANY_PURCHASING_CLOSE");
   const canCancelOrder = useHasPermission("COMPANY_PURCHASING_CANCEL");
+  const canReviewMatches = useHasPermission("COMPANY_ACCOUNTS_PAYABLE_MATCH_REVIEW");
   const [search, setSearch] = useState("");
   const purchasing = usePurchasing(search || undefined, canRead);
   const inventory = useInventory(undefined, canReceive);
@@ -236,6 +243,12 @@ export function PurchasingRoute() {
         idempotency_key: crypto.randomUUID(),
       },
     });
+  const openArtifact = async (poId: string) => {
+    const artifact = await getPurchaseOrderArtifact(poId);
+    const url = URL.createObjectURL(new Blob([artifact.content], { type: artifact.media_type }));
+    window.open(url, "_blank", "noopener,noreferrer");
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  };
   const failed =
     mutations.createVendor.isError ||
     mutations.updateVendor.isError ||
@@ -268,6 +281,33 @@ export function PurchasingRoute() {
           retrying.
         </Alert>
       )}
+      <SupplyChainApprovalCenter
+        branches={activeCompany.branches}
+        vendors={purchasing.data?.vendors ?? []}
+        requisitions={purchasing.data?.requisitions ?? []}
+        canManage={canManage}
+        canApprove={canApprove}
+      />
+      <SupplyChainOperationsDashboard
+        orders={purchasing.data?.purchase_orders ?? []}
+        requisitions={purchasing.data?.requisitions ?? []}
+        policies={purchasing.data?.policies ?? []}
+      />
+      <SupplyChainReadiness
+        policies={purchasing.data?.policies ?? []}
+        branches={activeCompany.branches}
+        canManage={canManage}
+        pending={Boolean(mutations.configureSupplyChainPolicy?.isPending)}
+        onSave={(input) => mutations.configureSupplyChainPolicy.mutateAsync(input)}
+      />
+      <ProcurementMatchWorkbench canReview={canReviewMatches} />
+      <PurchasingDocumentCustody
+        canManage={canManage}
+        documents={purchasing.data?.documents ?? []}
+        register={(input) => mutations.registerDocument.mutateAsync(input)}
+        pending={mutations.registerDocument.isPending}
+        failed={mutations.registerDocument.isError}
+      />
       <ReplenishmentWorkbench
         canApprove={canApprove}
         pending={mutations.replenishmentWorkbench.isPending}
@@ -617,6 +657,11 @@ export function PurchasingRoute() {
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
+                    {po.issuance_digest && (
+                      <Button variant="secondary" onClick={() => void openArtifact(po.id)}>
+                        Print issued PO
+                      </Button>
+                    )}
                     {canManage && po.status === "draft" && (
                       <Button
                         onClick={() =>
