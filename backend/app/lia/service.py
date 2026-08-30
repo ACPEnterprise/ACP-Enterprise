@@ -31,6 +31,14 @@ POLICY_VERSION = "lia-governed-assistant/v1"
 PROPOSAL_NAMESPACE = UUID("e6f922d4-73fa-4df8-b324-3548bd85ff4d")
 
 DOMAIN_KEYWORDS = {
+    "luminary": (
+        "luminary",
+        "briefing",
+        "profit",
+        "margin",
+        "how are we doing",
+        "what changed",
+    ),
     "customers": ("customer",),
     "jobs": ("job", "work"),
     "scheduling": ("schedule", "appointment", "today", "dispatch"),
@@ -42,6 +50,7 @@ DOMAIN_KEYWORDS = {
 }
 
 ROUTES = {
+    "luminary": "/luminary",
     "customers": "/customers",
     "jobs": "/jobs",
     "scheduling": "/scheduling",
@@ -74,7 +83,9 @@ class LiaService:
                 conversation_id=conversation_id,
                 classification=TruthClassification.UNAUTHORIZED,
                 answer="I can’t provide protected credentials, private instructions, or information outside your authorized scope.",
-                limitations=("The request crossed ACP’s protected-information boundary.",),
+                limitations=(
+                    "The request crossed ACP’s protected-information boundary.",
+                ),
             )
         if matches_any(question, FABRICATION_PATTERNS):
             return self._response(
@@ -122,19 +133,27 @@ class LiaService:
                 conversation_id=conversation_id,
                 classification=TruthClassification.UNAVAILABLE,
                 answer="No authorized authoritative evidence is available for this question.",
-                limitations=("AI_PROVIDER_NOT_CONFIGURED", "No eligible source adapter returned evidence."),
+                limitations=(
+                    "AI_PROVIDER_NOT_CONFIGURED",
+                    "No eligible source adapter returned evidence.",
+                ),
             )
 
         lines = [f"{item.label}: {item.count} ({item.state})." for item in evidence]
         answer = "Here is the current authorized ACP evidence: " + " ".join(lines)
-        if any(word in question.casefold() for word in ("why", "profit", "margin", "economics")):
+        if any(
+            word in question.casefold()
+            for word in ("why", "profit", "margin", "economics")
+        ):
             answer += " A causal explanation requires an admitted Business Economics result; these operational counts alone do not establish cause or profitability."
         limitations = (
             "This deterministic response summarizes current ACP records; no external AI provider was invoked.",
             "Counts are not a substitute for domain approval, settlement, posting, or payroll authority.",
         )
         navigation = tuple(
-            NavigationSuggestion(label=f"Open {item.label}", internal_path=ROUTES[item.domain])
+            NavigationSuggestion(
+                label=f"Open {item.label}", internal_path=ROUTES[item.domain]
+            )
             for item in evidence
             if item.domain in ROUTES
         )
@@ -195,7 +214,9 @@ class LiaService:
         proposals=(),
     ) -> LiaResponse:
         canonical = [item.evidence_digest for item in evidence]
-        digest = hashlib.sha256(json.dumps(canonical, sort_keys=True).encode()).hexdigest()
+        digest = hashlib.sha256(
+            json.dumps(canonical, sort_keys=True).encode()
+        ).hexdigest()
         return LiaResponse(
             request_id=request_id,
             conversation_id=conversation_id,
@@ -205,7 +226,9 @@ class LiaService:
             limitations=limitations,
             navigation=navigation,
             proposals=proposals,
-            completeness="COMPLETE_FOR_AUTHORIZED_ADAPTERS" if evidence else "NO_EVIDENCE_USED",
+            completeness="COMPLETE_FOR_AUTHORIZED_ADAPTERS"
+            if evidence
+            else "NO_EVIDENCE_USED",
             freshness="CURRENT_QUERY" if evidence else "NOT_APPLICABLE",
             provider="deterministic-acp",
             provider_version="v1",
