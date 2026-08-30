@@ -33,7 +33,7 @@ PROPOSAL_NAMESPACE = UUID("e6f922d4-73fa-4df8-b324-3548bd85ff4d")
 DOMAIN_KEYWORDS = {
     "customers": ("customer",),
     "jobs": ("job", "work"),
-    "scheduling": ("schedule", "appointment", "today", "dispatch"),
+    "scheduling": ("schedule", "appointment", "dispatch"),
     "estimates": ("estimate", "proposal"),
     "invoicing": ("invoice", "outstanding", "revenue"),
     "payments": ("payment", "settlement", "cash"),

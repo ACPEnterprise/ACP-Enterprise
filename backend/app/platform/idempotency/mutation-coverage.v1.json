@@ -1634,6 +1634,26 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     },
     {
+      "classification": "EXPLICIT_EXEMPTION",
+      "domain": "lia",
+      "mechanism": "non-authoritative response generation with no durable business mutation",
+      "method": "POST",
+      "operation_id": "ask_api_v1_lia_ask_post",
+      "path": "/api/v1/lia/ask",
+      "reason": "LIA re-resolves current authorization and generates a fresh non-authoritative response; it does not persist transcript or mutate business truth.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "EXPLICIT_EXEMPTION",
+      "domain": "lia",
+      "mechanism": "ephemeral non-authoritative telemetry with no durable receipt",
+      "method": "POST",
+      "operation_id": "feedback_api_v1_lia_feedback_post",
+      "path": "/api/v1/lia/feedback",
+      "reason": "Feedback is explicitly ephemeral until retention policy authority exists and cannot rewrite authoritative facts.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
       "classification": "IDEMPOTENCY_REQUIRED",
       "domain": "operations",
       "mechanism": "domain durable command/receipt identity and request digest",
@@ -2516,6 +2536,6 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "d57ed8afd5a3af7975b537b3c8760e6ebba6bb65f95be9aafedfd59bf3f81823",
+  "fingerprint": "7100d2ae5276cc5fcf4524903b6400c895ff06025c353853a4a25c933c6140c3",
   "schema_version": "1"
 }
