@@ -20,4 +20,3 @@ async def test_profitability_persistence_requires_narrow_execution_permission() 
         await EconomicsProfitabilityPersistenceService().persist(
             Mock(), context=context, request=Mock(), result=Mock()
         )
-
