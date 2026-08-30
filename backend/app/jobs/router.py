@@ -136,8 +136,8 @@ def _range(
     if start is None and end is None:
         return None
     if start is None or end is None:
-        raise HTTPException(
-            status_code=422, detail="Both date-range boundaries are required."
+        raise translate_job_error(
+            JobQueryValidationError("Both date-range boundaries are required.")
         )
     return JobDateRange(start_at=start, end_at=end)
 
