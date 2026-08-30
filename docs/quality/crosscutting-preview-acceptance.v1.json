@@ -1,0 +1,75 @@
+{
+  "contract_version": "OM2B.CROSSCUTTING.PREVIEW.ACCEPTANCE.v1",
+  "authority_sha": "be7f6796c1ca74a6252f2aa5658ee70f1806f079",
+  "execution_environment": "PREVIEW_ONLY",
+  "status": "PENDING_INTEGRATION",
+  "required_bindings": [
+    "git_sha",
+    "alembic_head",
+    "frontend_build_identity",
+    "fixture_digest",
+    "permission_catalog_fingerprint",
+    "executed_at",
+    "actual_result",
+    "classification",
+    "evidence_reference"
+  ],
+  "classifications": ["PASS", "FAIL", "BLOCKED"],
+  "surfaces": [
+    {
+      "id": "SERVICE_CSR",
+      "prerequisite": "canonical SERVICE_CSR role installed",
+      "checks": [
+        "branch-scoped Customer read and manage",
+        "Estimate read and manage",
+        "Scheduling, Job, Dispatch, Invoice, Payment status, and Communications read",
+        "direct API denial for Invoice issue/adjust/apply, Payment collect/refund/reconcile, Payroll, Accounting, Purchasing mutation, Inventory mutation, Administration, Migration, and Beacon ownership"
+      ]
+    },
+    {
+      "id": "OWN_DATA_ROLE",
+      "prerequisite": "Membership linked to one synthetic Employee",
+      "checks": [
+        "GET /api/v1/employee-operations/me/day resolves Employee server-side",
+        "POST /api/v1/timekeeping/me/punches and Timekeeping own reads",
+        "GET /api/v1/payroll/me/pay-statements and own artifact access",
+        "another Employee, Branch, Payroll administration, and Administration are denied"
+      ]
+    },
+    {
+      "id": "CRM_CONSOLIDATION",
+      "status": "BLOCKED_IMPLEMENTATION",
+      "checks": ["provenance", "reversible survivor relationship", "historical references unchanged", "idempotent replay", "concurrent conflict", "tenant isolation"]
+    },
+    {
+      "id": "WORKFORCE_ADMINISTRATION",
+      "status": "BLOCKED_IMPLEMENTATION",
+      "checks": ["versioned catalog", "append-only evidence", "verification separation", "effective dating", "readiness", "Payroll fields absent"]
+    },
+    {
+      "id": "NOTIFICATION_CENTER",
+      "status": "BLOCKED_IMPLEMENTATION",
+      "checks": ["recipient isolation", "read", "reversible archive", "deep-link reauthorization", "safe summary", "outbox payload absent"]
+    },
+    {
+      "id": "DOCUMENT_CENTER",
+      "status": "BLOCKED_IMPLEMENTATION",
+      "checks": ["federated permission filtering", "own Pay Statement", "hidden metadata and counts", "retrieval reauthorization"]
+    },
+    {
+      "id": "ENTERPRISE_SEARCH",
+      "status": "BLOCKED_IMPLEMENTATION",
+      "checks": ["Company and Branch scope", "domain permission", "bounded cursor", "no hidden counts", "navigation reauthorization"]
+    },
+    {
+      "id": "ACTION_CENTER",
+      "status": "BLOCKED_IMPLEMENTATION",
+      "checks": ["domain-owned source", "permission filtering", "safe reason", "deep link", "no universal mutation"]
+    },
+    {
+      "id": "OWNER_PERMISSION_INSPECTION",
+      "status": "PENDING_INTEGRATION",
+      "checks": ["Membership", "Employee binding", "Branch grants", "role", "effective permissions", "mobile readiness", "inspection grants no mutation"]
+    }
+  ]
+}
