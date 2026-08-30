@@ -1,17 +1,20 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_database_session
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import AdministrationPermission
 from app.platform.permissions.dependencies import require_permission
+from app.platform.reliability.correlation import current_correlation_id
+from app.platform.reliability.failures import ClientRecovery, FailureCode, SafeFailure
 
 from .schemas import (
     OnboardingActivateRequest,
     OnboardingInitiateRequest,
+    OnboardingOwnerClaimView,
     OnboardingView,
 )
 from .service import (
@@ -31,13 +34,20 @@ OnboardingAdmin = Annotated[
 
 def _safe_error(error: Exception) -> HTTPException:
     if isinstance(error, OnboardingAuthorizationError):
-        return HTTPException(
-            status.HTTP_403_FORBIDDEN, "Onboarding authority is required."
+        failure = SafeFailure(
+            FailureCode.FORBIDDEN,
+            "Onboarding authority is required.",
+            ClientRecovery.OWNER_ADMIN_ACTION_REQUIRED,
+            current_correlation_id(),
         )
-    return HTTPException(
-        status.HTTP_409_CONFLICT,
+        return HTTPException(status.HTTP_403_FORBIDDEN, failure.detail())
+    failure = SafeFailure(
+        FailureCode.RESOURCE_STATE_CONFLICT,
         "Onboarding operation conflicts with current authority.",
+        ClientRecovery.RETRY_AFTER_REFRESH,
+        current_correlation_id(),
     )
+    return HTTPException(status.HTTP_409_CONFLICT, failure.detail())
 
 
 @router.post("", response_model=OnboardingView, status_code=status.HTTP_201_CREATED)
@@ -104,6 +114,32 @@ async def reissue(
     except (OnboardingAuthorizationError, OnboardingConflictError) as error:
         raise _safe_error(error) from error
     return OnboardingView.model_validate(record)
+
+
+@router.post(
+    "/{request_id}/owner-claim",
+    response_model=OnboardingOwnerClaimView,
+    response_model_exclude_none=True,
+)
+async def owner_claim(
+    request_id: UUID,
+    context: OnboardingAdmin,
+    session: Session,
+    response: Response,
+) -> OnboardingOwnerClaimView:
+    response.headers["Cache-Control"] = "no-store, private"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["Vary"] = "Authorization"
+    try:
+        delivery = await identity_onboarding_service.claim_protected_delivery_for_owner(
+            session,
+            context=context,
+            request_id=request_id,
+        )
+    except (OnboardingAuthorizationError, OnboardingConflictError) as error:
+        raise _safe_error(error) from error
+    return OnboardingOwnerClaimView(activation_token=delivery.secret)
 
 
 @router.get("/{request_id}", response_model=OnboardingView)

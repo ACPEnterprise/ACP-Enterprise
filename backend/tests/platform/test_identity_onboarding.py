@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from app.core.config import Settings, settings
 from app.payroll.contracts import PayrollAdmissionState, evaluate_payroll_admission
+from app.platform.audit.models import AuditRecord
 from app.platform.auth.models import EmailVerificationToken  # noqa: F401
 from app.platform.auth.passwords import PasswordService
 from app.platform.auth.services import CredentialService
@@ -27,6 +28,7 @@ from app.platform.onboarding.models import (
     IdentityOnboardingInvitation,
     ProtectedInvitationDeliveryEnvelope,
 )
+from app.platform.onboarding.router import _safe_error
 from app.platform.onboarding.service import (
     IdentityOnboardingService,
     OnboardingAuthorizationError,
@@ -61,6 +63,37 @@ class Context:
 
     def has_permission(self, code: str) -> bool:
         return code in self.permission_codes
+
+    def can_access_branch(self, branch_id: UUID) -> bool:
+        return branch_id == self.active_branch.id
+
+
+@pytest.mark.parametrize(
+    ("error", "status_code", "code", "recovery"),
+    (
+        (
+            OnboardingAuthorizationError("protected authority detail"),
+            403,
+            "forbidden",
+            "OWNER_ADMIN_ACTION_REQUIRED",
+        ),
+        (
+            OnboardingConflictError("protected token/provider detail"),
+            409,
+            "resource_state_conflict",
+            "RETRY_AFTER_REFRESH",
+        ),
+    ),
+)
+def test_onboarding_errors_use_safe_recovery_contract(
+    error: Exception, status_code: int, code: str, recovery: str
+) -> None:
+    translated = _safe_error(error)
+    assert translated.status_code == status_code
+    assert translated.detail["code"] == code
+    assert translated.detail["recovery"] == recovery
+    assert translated.detail["correlation_id"] is None
+    assert str(error) not in str(translated.detail)
 
 
 @pytest_asyncio.fixture
@@ -216,6 +249,119 @@ async def test_invitation_activation_is_single_use_and_secret_safe(
             time_input=None,
         )
         assert admission.state is PayrollAdmissionState.BLOCKED_POLICY
+
+
+@pytest.mark.asyncio
+async def test_owner_claim_reuses_protected_boundary_and_is_single_use(
+    onboarding_db: tuple[
+        async_sessionmaker[AsyncSession], Context, IdentityOnboardingService
+    ],
+) -> None:
+    factory, context, service = onboarding_db
+    async with factory() as session:
+        record = await service.initiate(
+            session,
+            context=context,
+            command=command(context, email=f"owner-claim-{uuid4()}@example.test"),
+        )
+        request_id = record.id
+        delivery = await service.claim_protected_delivery_for_owner(
+            session,
+            context=context,
+            request_id=request_id,
+        )
+        envelope = await session.scalar(
+            select(ProtectedInvitationDeliveryEnvelope)
+            .join(IdentityOnboardingInvitation)
+            .where(
+                IdentityOnboardingInvitation.onboarding_request_id == request_id
+            )
+        )
+        assert envelope is not None and envelope.status == "claimed"
+        audit = await session.scalar(
+            select(AuditRecord).where(
+                AuditRecord.action == "identity.onboarding_owner_claimed",
+                AuditRecord.resource_id == request_id,
+            )
+        )
+        assert audit is not None
+        assert audit.actor_user_id == context.user.id
+        assert audit.company_id == context.company.id
+        assert audit.branch_id == context.active_branch.id
+        assert audit.details == {"invitation_id": str(delivery.invitation_id)}
+        assert delivery.secret not in str(audit.details)
+        await session.rollback()
+        with pytest.raises(OnboardingConflictError):
+            await service.claim_protected_delivery_for_owner(
+                session,
+                context=context,
+                request_id=request_id,
+            )
+        audits = (
+            await session.scalars(
+                select(AuditRecord).where(
+                    AuditRecord.action == "identity.onboarding_owner_claimed",
+                    AuditRecord.resource_id == request_id,
+                )
+            )
+        ).all()
+        assert len(audits) == 1
+        await session.rollback()
+        activated = await service.activate(
+            session,
+            token=delivery.secret,
+            password="A-secure-owner-claim-passphrase-42!",
+        )
+        assert activated.status == "activated"
+        await session.refresh(envelope)
+        assert envelope.status == "destroyed"
+        assert envelope.ciphertext == b""
+
+
+@pytest.mark.asyncio
+async def test_owner_claim_requires_permission_scope_and_non_production(
+    onboarding_db: tuple[
+        async_sessionmaker[AsyncSession], Context, IdentityOnboardingService
+    ],
+) -> None:
+    factory, context, service = onboarding_db
+    async with factory() as session:
+        record = await service.initiate(
+            session,
+            context=context,
+            command=command(context, email=f"owner-claim-guards-{uuid4()}@example.test"),
+        )
+        request_id = record.id
+        denied = Context(
+            context.company,
+            context.active_branch,
+            context.user,
+            context.membership,
+            False,
+        )
+        with pytest.raises(OnboardingAuthorizationError):
+            await service.claim_protected_delivery_for_owner(
+                session, context=denied, request_id=request_id
+            )
+
+        inaccessible = Context(
+            context.company,
+            Branch(id=uuid4(), company_id=context.company.id),
+            context.user,
+            context.membership,
+        )
+        with pytest.raises(OnboardingConflictError):
+            await service.claim_protected_delivery_for_owner(
+                session, context=inaccessible, request_id=request_id
+            )
+
+        production = IdentityOnboardingService(
+            service.configuration.model_copy(update={"environment": "production"})
+        )
+        with pytest.raises(OnboardingConflictError):
+            await production.claim_protected_delivery_for_owner(
+                session, context=context, request_id=request_id
+            )
 
 
 @pytest.mark.asyncio
