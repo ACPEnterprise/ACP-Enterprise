@@ -1,0 +1,56 @@
+{
+  "milestone": "LAPTOP1B.BUSINESS.ECONOMICS.OWNER.INTELLIGENCE.PORTFOLIO.1",
+  "qualification_version": "economics-owner-intelligence.v1",
+  "authority_base_sha": "be7f6796c1ca74a6252f2aa5658ee70f1806f079",
+  "immutability_repair_sha": "ef0fbba",
+  "migration_head": "h6f8j0l2n497",
+  "database_contract": {
+    "result_update": "REJECTED_SQLSTATE_55000",
+    "result_delete": "REJECTED_SQLSTATE_55000",
+    "successor_insert": "ACCEPTED",
+    "history": "APPEND_ONLY",
+    "current_resolution": "NO_ACCEPTED_SUCCESSOR",
+    "forking": "PROHIBITED",
+    "destructive_downgrade": "REFUSED_WHEN_HISTORY_EXISTS"
+  },
+  "owner_intelligence": {
+    "questions": 7,
+    "context_item_limit": 10,
+    "arbitrary_query": "PROHIBITED",
+    "mutation_authority": "NONE",
+    "evidence_references": "RESULT_PACKAGE_COMPUTATION_DIGEST_BOUND",
+    "quality_states": [
+      "KNOWN",
+      "INCOMPLETE",
+      "STALE",
+      "CONFLICTING",
+      "UNAVAILABLE"
+    ]
+  },
+  "authority_boundaries": {
+    "accounting": "SOURCE_ONLY_NO_POSTING",
+    "payroll": "ADMITTED_PROTECTED_AGGREGATE_ONLY",
+    "inventory": "SOURCE_ONLY_NO_QUANTITY_MUTATION",
+    "beacon": "CONSUMES_FINDINGS_NO_ECONOMICS_MUTATION",
+    "lia": "READ_ONLY_BOUNDED_CONTEXT_NO_GENERATIVE_AI"
+  },
+  "validation": {
+    "economics_tests": 156,
+    "platform_lia_beacon_isolation_audit_tests": 327,
+    "business_event_delivery_tests": 8,
+    "frontend_focused_tests": 3,
+    "ruff": "PASS",
+    "mypy": "PASS",
+    "frontend_lint": "PASS",
+    "frontend_build": "PASS",
+    "fresh_upgrade": "PASS",
+    "single_head": "PASS"
+  },
+  "classification": {
+    "business_economics_non_production": "PRODUCT_READY",
+    "lia": "ECONOMICS_LIA_READY_READ_ONLY",
+    "preview": "PENDING_CENTRALIZED_DEPLOYMENT",
+    "production": "UNTOUCHED"
+  },
+  "qualification_fingerprint": "8eb63d6b1a01e92f283932496e9313dfc79112f8b534e48788248b536d049b8c"
+}

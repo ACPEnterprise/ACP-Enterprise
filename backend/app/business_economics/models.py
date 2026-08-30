@@ -374,12 +374,32 @@ class EconomicsProfitabilityResultRecord(Base):
             name="fk_eco_profitability_result_company_branch",
             ondelete="RESTRICT",
         ),
-        CheckConstraint("lifecycle IN ('admitted','superseded','voided')", name="ck_eco_profitability_result_lifecycle"),
-        UniqueConstraint("company_id", "result_identity", name="uq_eco_profitability_result_identity"),
-        Index("ix_eco_profitability_result_subject", "company_id", "subject_id", "period_start", "period_end"),
+        CheckConstraint(
+            "lifecycle IN ('admitted','superseded','voided')",
+            name="ck_eco_profitability_result_lifecycle",
+        ),
+        UniqueConstraint(
+            "company_id", "result_identity", name="uq_eco_profitability_result_identity"
+        ),
+        UniqueConstraint(
+            "company_id", "id", name="uq_eco_profitability_result_company_id"
+        ),
+        Index(
+            "ix_eco_profitability_result_subject",
+            "company_id",
+            "subject_id",
+            "period_start",
+            "period_end",
+        ),
     )
-    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
-    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("companies.id", ondelete="RESTRICT"), nullable=False)
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
     branch_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
     subject_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     subject_kind: Mapped[str] = mapped_column(String(32), nullable=False)
@@ -403,5 +423,99 @@ class EconomicsProfitabilityResultRecord(Base):
     allocation_digests: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
     explanation_ids: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
     lifecycle: Mapped[str] = mapped_column(String(16), nullable=False)
-    created_by_user_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+    created_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
+class EconomicsProfitabilityResultSupersessionRecord(Base):
+    """Immutable edge between two immutable results in one economic lineage."""
+
+    __tablename__ = "economics_profitability_result_supersessions"
+    __table_args__ = (
+        CheckConstraint(
+            "predecessor_result_id <> successor_result_id",
+            name="ck_eco_profitability_supersession_distinct",
+        ),
+        CheckConstraint(
+            "reason IN ('source_correction','policy_recomputation',"
+            "'computation_version','attribution_correction')",
+            name="ck_eco_profitability_supersession_reason",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "predecessor_result_id"],
+            [
+                "economics_profitability_results.company_id",
+                "economics_profitability_results.id",
+            ],
+            name="fk_eco_profitability_supersession_predecessor",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "successor_result_id"],
+            [
+                "economics_profitability_results.company_id",
+                "economics_profitability_results.id",
+            ],
+            name="fk_eco_profitability_supersession_successor",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "predecessor_result_id", name="uq_eco_profitability_single_successor"
+        ),
+        UniqueConstraint(
+            "successor_result_id", name="uq_eco_profitability_single_predecessor"
+        ),
+        UniqueConstraint(
+            "company_id", "supersession_digest", name="uq_eco_supersession_digest"
+        ),
+        Index(
+            "ix_eco_profitability_supersession_lineage",
+            "company_id",
+            "subject_id",
+            "period_start",
+            "period_end",
+        ),
+    )
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    predecessor_result_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), nullable=False
+    )
+    successor_result_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), nullable=False
+    )
+    subject_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    subject_kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    scope: Mapped[str] = mapped_column(String(32), nullable=False)
+    basis: Mapped[str] = mapped_column(String(32), nullable=False)
+    period_start: Mapped[date] = mapped_column(Date, nullable=False)
+    period_end: Mapped[date] = mapped_column(Date, nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    predecessor_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    successor_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    predecessor_package_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    successor_package_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    predecessor_computation_digest: Mapped[str] = mapped_column(
+        String(64), nullable=False
+    )
+    successor_computation_digest: Mapped[str] = mapped_column(
+        String(64), nullable=False
+    )
+    reason: Mapped[str] = mapped_column(String(40), nullable=False)
+    supersession_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )

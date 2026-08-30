@@ -36,6 +36,12 @@ CANARIES = {
     "login_email": "protected-canary@example.invalid",
     "hourly_rate": "9876.54",
     "bank_account_number": "000111222333",
+    "account_number": "444455556666",
+    "aba_routing_number": "021000021",
+    "bank_routing_number": "011000015",
+    "iban": "GB82WEST12345698765432",
+    "swift_bic": "BOFAUS3NXXX",
+    "swift_code": "CHASUS33",
     "payment_token": "CANARY-PAYMENT-TOKEN-PLAT007",
     "raw_source_payload": {"provider_note": "CANARY-SOURCE-ROW-PLAT007"},
 }
@@ -177,6 +183,12 @@ def test_audit_preserves_accountability_but_rejects_sensitive_details() -> None:
         {"raw_source_payload": CANARIES["raw_source_payload"]},
         {"employee": {"social-security-number": "999-88-7777"}},
         {"vendor": {"taxpayer_identification_number": "12-3456789"}},
+        {"payment_destination": {"account-number": "444455556666"}},
+        {"payment_destination": {"aba.routing.number": "021000021"}},
+        {"payment_destination": {"bank routing number": "011000015"}},
+        {"payment_destination": {"iban": "GB82WEST12345698765432"}},
+        {"payment_destination": {"swift/bic": "BOFAUS3NXXX"}},
+        {"payment_destination": {"swift-code": "CHASUS33"}},
     ],
 )
 def test_business_event_rejects_secret_and_raw_source_metadata(
@@ -240,7 +252,7 @@ def test_connection_strings_bearer_tokens_and_private_keys_are_sanitized() -> No
 
 def test_catalog_fingerprint_and_validation_are_deterministic() -> None:
     assert catalog_fingerprint() == (
-        "f2244fb4204cec1c582146dcfdf63a13e07cd59ed961b2a83090ed3c7ea8ca84"
+        "bf261fe8ad8a819791a4a22fa122f7d0a6c148faf37111f51175faa4ddffb7af"
     )
     validate_no_sensitive_fields(
         {"company_id": str(uuid4()), "status": "accepted"},
