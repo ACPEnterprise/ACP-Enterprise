@@ -718,7 +718,11 @@ class IdentityOnboardingService:
                 )
                 .with_for_update()
             )
-            if record is None or record.status == "activated":
+            if (
+                record is None
+                or not context.can_access_branch(record.branch_id)
+                or record.status == "activated"
+            ):
                 raise OnboardingConflictError("Pending onboarding was not found.")
             invitation = await session.scalar(
                 select(IdentityOnboardingInvitation)
@@ -755,6 +759,8 @@ class IdentityOnboardingService:
                 .with_for_update()
             )
             if record is None:
+                raise OnboardingConflictError("Pending onboarding was not found.")
+            if not context.can_access_branch(record.branch_id):
                 raise OnboardingConflictError("Pending onboarding was not found.")
             prior = await session.scalar(
                 select(IdentityOnboardingInvitation)
@@ -828,7 +834,7 @@ class IdentityOnboardingService:
                 IdentityOnboardingRequest.company_id == context.company.id,
             )
         )
-        if record is None:
+        if record is None or not context.can_access_branch(record.branch_id):
             raise OnboardingConflictError("Onboarding was not found.")
         return record
 

@@ -354,6 +354,21 @@ async def test_owner_claim_requires_permission_scope_and_non_production(
             await service.claim_protected_delivery_for_owner(
                 session, context=inaccessible, request_id=request_id
             )
+        for operation in (service.get, service.revoke, service.reissue):
+            with pytest.raises(OnboardingConflictError):
+                await operation(
+                    session,
+                    context=inaccessible,
+                    request_id=request_id,
+                )
+            await session.rollback()
+        preserved = await service.get(
+            session,
+            context=context,
+            request_id=request_id,
+        )
+        assert preserved.status == "invited"
+        await session.rollback()
 
         production = IdentityOnboardingService(
             service.configuration.model_copy(update={"environment": "production"})
