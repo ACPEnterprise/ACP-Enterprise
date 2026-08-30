@@ -17,10 +17,11 @@ export const dispatchKeys = {
     ["dispatch", "board", start, end, branch] as const,
   eligible: (id: string) => ["dispatch", "eligible", id] as const,
 };
-export function useDispatchBoard(start: string, end: string, branch?: string) {
+export function useDispatchBoard(start: string, end: string, branch?: string, enabled = true) {
   return useQuery({
     queryKey: dispatchKeys.board(start, end, branch),
     queryFn: () => getDispatchBoard(start, end, branch),
+    enabled,
   });
 }
 export function useEligibleTechnicians(id?: string) {

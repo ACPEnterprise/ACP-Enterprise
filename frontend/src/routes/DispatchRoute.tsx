@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-import { useAuth } from "../auth";
+import { useAuth, useHasPermission } from "../auth";
 import {
   DispatchJobsQueue,
   DispatchWorkQueue,
@@ -21,6 +21,9 @@ import { Alert } from "../ui";
 
 export function DispatchRoute() {
   const { activeCompany } = useAuth();
+  const canRead = useHasPermission("COMPANY_DISPATCH_READ");
+  const canManage = useHasPermission("COMPANY_DISPATCH_MANAGE");
+  const canReadJobs = useHasPermission("COMPANY_JOB_READ");
   const [date, setDate] = useState(() => localDateValue(new Date()));
   const [branchId, setBranchId] = useState("");
   const [jobPage, setJobPage] = useState(1);
@@ -32,6 +35,7 @@ export function DispatchRoute() {
     range.startAt,
     range.endAt,
     branchId || undefined,
+    canRead,
   );
   const jobs = useJobs({
     branchId: branchId || undefined,
@@ -40,13 +44,15 @@ export function DispatchRoute() {
     pageSize: 20,
     sortField: "priority",
     sortDirection: "desc",
-  });
+  }, canRead && canReadJobs);
   if (!activeCompany)
     return (
       <Alert variant="danger" title="Company scope unavailable">
         Select an accessible Company before opening Dispatch.
       </Alert>
     );
+  if (!canRead)
+    return <Alert variant="danger">You are not authorized to view Dispatch.</Alert>;
   const changeDate = (value: string) => {
     setDate(value);
     setSelectedWork(null);
@@ -78,7 +84,7 @@ export function DispatchRoute() {
         jobTotal={jobs.data?.total_count ?? 0}
         visibleJobs={jobs.data?.items ?? []}
       />
-      {selectedWork && (
+      {selectedWork && canManage && (
         <DispatchAssignmentPanel
           item={selectedWork}
           onClose={() => setSelectedWork(null)}
@@ -92,9 +98,10 @@ export function DispatchRoute() {
             error={dispatch.error}
             onRetry={() => void dispatch.refetch()}
             onSelect={setSelectedWork}
+            canManage={canManage}
           />
         }
-        jobs={
+        jobs={canReadJobs ? (
           <DispatchJobsQueue
             jobs={jobs.data?.items}
             loading={jobs.isLoading}
@@ -104,7 +111,7 @@ export function DispatchRoute() {
             totalPages={jobs.data?.total_pages ?? 0}
             onPageChange={setJobPage}
           />
-        }
+        ) : <Alert>Operational Jobs require Job read authority.</Alert>}
       />
     </div>
   );
