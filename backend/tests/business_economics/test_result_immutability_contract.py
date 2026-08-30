@@ -5,7 +5,6 @@ from app.business_economics.models import (
     EconomicsProfitabilityResultSupersessionRecord,
 )
 
-
 MIGRATION = (
     Path(__file__).parents[2]
     / "alembic/versions/h6f8j0l2n497_immutable_economics_result_history.py"

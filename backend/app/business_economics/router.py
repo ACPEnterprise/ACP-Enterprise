@@ -12,6 +12,11 @@ from app.platform.permissions.dependencies import require_permission
 from app.platform.reliability.correlation import current_correlation_id
 from app.platform.reliability.failures import ClientRecovery, FailureCode, SafeFailure
 
+from .owner_intelligence import (
+    OwnerIntelligenceQuery,
+    OwnerIntelligenceService,
+    OwnerQuestion,
+)
 from .workspace import EconomicsWorkspaceService
 
 router = APIRouter(prefix="/api/v1/business-economics", tags=["Business Economics"])
@@ -61,3 +66,29 @@ async def economics_result(
             current_correlation_id(),
         )
         raise HTTPException(status.HTTP_404_NOT_FOUND, failure.detail()) from error
+
+
+@router.get("/owner-intelligence", response_model=dict[str, object])
+async def owner_intelligence(
+    session: Session,
+    context: Reader,
+    question: Annotated[OwnerQuestion, Query()],
+    start: Annotated[date, Query()],
+    end: Annotated[date, Query()],
+) -> dict[str, object]:
+    try:
+        return await OwnerIntelligenceService().answer(
+            session,
+            context=context,
+            query=OwnerIntelligenceQuery(question, start, end),
+        )
+    except ValueError as error:
+        failure = SafeFailure(
+            FailureCode.VALIDATION,
+            "Owner Intelligence request requires correction.",
+            ClientRecovery.USER_CORRECTION_REQUIRED,
+            current_correlation_id(),
+        )
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY, failure.detail()
+        ) from error

@@ -169,7 +169,9 @@ def upgrade() -> None:
 def downgrade() -> None:
     # Result rows are never removed. Downgrade removes only the repair contract.
     if op.get_bind().scalar(
-        sa.text("SELECT EXISTS (SELECT 1 FROM economics_profitability_result_supersessions)")
+        sa.text(
+            "SELECT EXISTS (SELECT 1 FROM economics_profitability_result_supersessions)"
+        )
     ):
         raise RuntimeError(
             "refusing destructive downgrade with accepted Economics supersession evidence"

@@ -2,6 +2,7 @@ from datetime import date, datetime, timezone
 from uuid import UUID, uuid4
 
 import pytest
+
 from app.business_economics.policy_authority import (
     POLICY_DEFINITION_VERSION,
     POLICY_FAMILY_REGISTRY,
