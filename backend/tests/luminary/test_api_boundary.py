@@ -3,13 +3,12 @@ from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
-from fastapi import HTTPException
-from sqlalchemy import ForeignKeyConstraint
-
 from app.luminary.models import LuminaryBriefingRecord, LuminaryFindingRecord
 from app.luminary.router import _luminary_http_error, require_luminary_analyst
 from app.luminary.service import LuminaryNotFoundError, LuminaryService
 from app.platform.reliability.correlation import request_correlation_id
+from fastapi import HTTPException
+from sqlalchemy import ForeignKeyConstraint
 
 
 @pytest.mark.parametrize(

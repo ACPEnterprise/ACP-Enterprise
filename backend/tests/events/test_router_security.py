@@ -5,9 +5,6 @@ from uuid import uuid4
 import httpx
 import pytest
 import pytest_asyncio
-from fastapi import FastAPI
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
-
 from app.core.config import settings
 from app.database.session import (
     get_database_session,
@@ -18,6 +15,8 @@ from app.events.router import router
 from app.events.service import BusinessEventService
 from app.platform.branch.models import Branch
 from app.platform.company.models import Company
+from fastapi import FastAPI
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 
 
 @pytest_asyncio.fixture

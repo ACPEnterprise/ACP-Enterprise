@@ -5,7 +5,6 @@ from unittest.mock import AsyncMock, MagicMock
 from uuid import UUID, uuid4
 
 import pytest
-
 from app.beacon.contracts import BeaconWorkflowAction
 from app.beacon.errors import BeaconWorkflowConflictError
 from app.beacon.evaluation import SignalEvaluationService
@@ -13,6 +12,7 @@ from app.beacon.records import BeaconWorkflowState
 from app.beacon.workflow import BeaconWorkflowCommand, BeaconWorkflowService
 from app.platform.permissions.authorization import PermissionDeniedError
 from app.platform.permissions.codes import AnalyticsPermission, BeaconPermission
+
 from tests.beacon.test_beacon import COMPANY_ID, snapshot
 
 NOW = datetime(2026, 7, 28, 16, 0, tzinfo=timezone.utc)
