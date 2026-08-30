@@ -22,7 +22,10 @@ from app.platform.permissions.authorization import (
     authorization_service,
 )
 from app.platform.permissions.catalog import permission_catalog
-from app.platform.permissions.codes import LaunchPlatformPermission
+from app.platform.permissions.codes import (
+    EconomicsPolicyPermission,
+    LaunchPlatformPermission,
+)
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 
@@ -74,6 +77,8 @@ def test_launch_role_matrix_uses_only_canonical_least_privilege_permissions() ->
     administrator = roles[LaunchRoleCode.COMPANY_ADMINISTRATOR].permission_codes
     assert administrator == COMPANY_ADMINISTRATOR_OWNER_READ_PERMISSIONS
     assert PayrollPermission.REPORTING_READ in administrator
+    assert EconomicsPolicyPermission.MEASUREMENT_READ in administrator
+    assert EconomicsPolicyPermission.MEASUREMENT_EXECUTE not in administrator
     assert PayrollPermission.REPORTING_MANAGE not in administrator
 
 
