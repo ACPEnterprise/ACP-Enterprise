@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from uuid import UUID
 
-from sqlalchemy import exists, select, text
+from sqlalchemy import exists, or_, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -45,6 +45,15 @@ def _digest(value: object) -> str:
 
 
 class EconomicsResultHistoryService:
+    @staticmethod
+    def _can_access_result(
+        context: AuthorizationContext,
+        result: EconomicsProfitabilityResultRecord,
+    ) -> bool:
+        if context.active_branch is not None:
+            return result.branch_id == context.active_branch.id
+        return result.branch_id is None or context.can_access_branch(result.branch_id)
+
     async def supersede(
         self,
         session: AsyncSession,
@@ -78,12 +87,12 @@ class EconomicsResultHistoryService:
         successor = by_id.get(successor_result_id)
         if predecessor is None or successor is None:
             raise EconomicsResultHistoryError("result lineage is not available")
-        if context.active_branch is not None and (
-            predecessor.branch_id != context.active_branch.id
-            or successor.branch_id != context.active_branch.id
-        ):
+        if not self._can_access_result(
+            context, predecessor
+        ) or not self._can_access_result(context, successor):
             raise EconomicsResultHistoryError("cross-Branch result supersession")
         lineage = (
+            predecessor.branch_id,
             predecessor.subject_id,
             predecessor.subject_kind,
             predecessor.scope,
@@ -93,6 +102,7 @@ class EconomicsResultHistoryService:
             predecessor.currency,
         )
         if lineage != (
+            successor.branch_id,
             successor.subject_id,
             successor.subject_kind,
             successor.scope,
@@ -186,6 +196,15 @@ class EconomicsResultHistoryService:
             query = query.where(
                 EconomicsProfitabilityResultRecord.branch_id == context.active_branch.id
             )
+        else:
+            query = query.where(
+                or_(
+                    EconomicsProfitabilityResultRecord.branch_id.is_(None),
+                    EconomicsProfitabilityResultRecord.branch_id.in_(
+                        context.authorized_branch_ids
+                    ),
+                )
+            )
         values = tuple((await session.scalars(query)).all())
         if len(values) != 1:
             raise EconomicsResultHistoryError(
@@ -208,11 +227,14 @@ class EconomicsResultHistoryService:
         )
         if seed is None:
             raise EconomicsResultHistoryError("profitability result not found")
-        if (
-            context.active_branch is not None
-            and seed.branch_id != context.active_branch.id
-        ):
+        if not self._can_access_result(context, seed):
             raise EconomicsResultHistoryError("profitability result not found")
+        branch_result_ids = select(EconomicsProfitabilityResultRecord.id).where(
+            EconomicsProfitabilityResultRecord.company_id == context.company.id,
+            EconomicsProfitabilityResultRecord.branch_id.is_not_distinct_from(
+                seed.branch_id
+            ),
+        )
         edges = tuple(
             (
                 await session.scalars(
@@ -234,6 +256,9 @@ class EconomicsResultHistoryService:
                         == seed.period_end,
                         EconomicsProfitabilityResultSupersessionRecord.currency
                         == seed.currency,
+                        EconomicsProfitabilityResultSupersessionRecord.predecessor_result_id.in_(
+                            branch_result_ids
+                        ),
                     )
                     .order_by(EconomicsProfitabilityResultSupersessionRecord.created_at)
                 )
@@ -246,7 +271,11 @@ class EconomicsResultHistoryService:
             (
                 await session.scalars(
                     select(EconomicsProfitabilityResultRecord)
-                    .where(EconomicsProfitabilityResultRecord.id.in_(ids))
+                    .where(
+                        EconomicsProfitabilityResultRecord.company_id
+                        == context.company.id,
+                        EconomicsProfitabilityResultRecord.id.in_(ids),
+                    )
                     .order_by(EconomicsProfitabilityResultRecord.created_at)
                 )
             ).all()
