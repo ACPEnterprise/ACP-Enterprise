@@ -19,6 +19,7 @@ def authorization_context(*permissions: str):
         user=SimpleNamespace(id=uuid4()),
         company=SimpleNamespace(id=company_id),
         active_branch=SimpleNamespace(id=branch_id),
+        authorized_branch_ids=frozenset({branch_id}),
         authorization_version=3,
         permission_codes=frozenset(permissions),
         has_permission=lambda permission: permission in permissions,
@@ -26,7 +27,7 @@ def authorization_context(*permissions: str):
 
 
 @pytest.mark.asyncio
-async def test_high_impact_action_is_proposed_not_executed() -> None:
+async def test_high_impact_action_requires_exact_evidence_before_proposal() -> None:
     service = LiaService()
     result = await service.ask(
         AsyncMock(),
@@ -34,7 +35,8 @@ async def test_high_impact_action_is_proposed_not_executed() -> None:
         request=LiaRequest(question="Approve this purchase order"),
     )
     assert result.classification is TruthClassification.POLICY_REQUIRED
-    assert result.proposals[0].state == "REVIEW_REQUIRED"
+    assert result.proposals == ()
+    assert any("LIA_PROPOSED_ACTION.v1" in item for item in result.limitations)
     assert result.evidence == ()
 
 
