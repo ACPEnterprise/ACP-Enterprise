@@ -20,3 +20,36 @@ async def test_profitability_persistence_requires_narrow_execution_permission() 
         await EconomicsProfitabilityPersistenceService().persist(
             Mock(), context=context, request=Mock(), result=Mock()
         )
+
+
+@pytest.mark.asyncio
+async def test_profitability_persistence_rejects_unauthorized_branch() -> None:
+    context = Mock()
+    context.has_permission.return_value = True
+    context.company.id = Mock(name="company_id")
+    context.authorized_branch_ids = frozenset()
+    request = Mock(company_id=context.company.id, branch_id=Mock(name="branch_id"))
+
+    with pytest.raises(
+        ProfitabilityPersistenceError, match="cross-Branch profitability result"
+    ):
+        await EconomicsProfitabilityPersistenceService().persist(
+            Mock(), context=context, request=request, result=Mock()
+        )
+
+
+@pytest.mark.asyncio
+async def test_profitability_persistence_rejects_inactive_authorized_branch() -> None:
+    context = Mock()
+    context.has_permission.return_value = True
+    context.company.id = Mock(name="company_id")
+    request = Mock(company_id=context.company.id, branch_id=Mock(name="branch_id"))
+    context.authorized_branch_ids = frozenset({request.branch_id})
+    context.active_branch.id = Mock(name="active_branch_id")
+
+    with pytest.raises(
+        ProfitabilityPersistenceError, match="inactive-Branch profitability result"
+    ):
+        await EconomicsProfitabilityPersistenceService().persist(
+            Mock(), context=context, request=request, result=Mock()
+        )
