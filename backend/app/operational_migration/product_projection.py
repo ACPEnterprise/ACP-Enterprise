@@ -88,6 +88,48 @@ def build_migration_product_projection(
         "HCP source freeze",
         "Final go/no-go",
     )
+    decision_packets = (
+        {
+            "decision_id": "HCP.FINAL.EMPLOYEE_CROSSWALK",
+            "question": "Do all final-delta technician identities retain an approved ACP Employee mapping?",
+            "current_evidence": "Seven sealed source identities; six accepted employee candidates carry 1,825 relevant historical assignments.",
+            "options": ("confirm_existing_mapping", "authorize_candidate", "hold_assignments"),
+            "recommended_default": None,
+            "risk": "An unresolved identity blocks affected assignments and open-work admission.",
+            "unlocks": "Employee and technician-bound final-delta reconciliation.",
+            "state": "owner_decision_required_at_final_delta",
+        },
+        {
+            "decision_id": "HCP.FINAL.BRANCH_CROSSWALK",
+            "question": "Does the sealed Plumbing/no-business-unit mapping remain valid for the final delta?",
+            "current_evidence": "The rehearsal bound the source Plumbing unit and missing-unit pattern to its approved isolated Branch; live target identity must be re-authorized.",
+            "options": ("confirm_target_branch", "hold_unmapped_open_work"),
+            "recommended_default": None,
+            "risk": "Inventing a Branch would cause cross-scope operational persistence.",
+            "unlocks": "Branch-scoped open Jobs, Appointments, Estimates, and assignments.",
+            "state": "owner_decision_required_at_final_delta",
+        },
+        {
+            "decision_id": "HCP.CANCELED_BALANCE_JOBS",
+            "question": "How should canceled Jobs with source-reported balances be treated after HCP/QBO reconciliation?",
+            "current_evidence": "296 source Jobs are preserved on HOLD with nonzero balance assertions.",
+            "options": ("retain_hold", "admit_after_accounting_reconciliation", "explicit_exception"),
+            "recommended_default": "retain_hold",
+            "risk": "Treating disputed balances as ACP economic truth may create false AR or work.",
+            "unlocks": "Final disposition of the Job and related financial evidence.",
+            "state": "owner_decision_required",
+        },
+        {
+            "decision_id": "HCP.UNLINKED_ESTIMATES",
+            "question": "How should Day-1 Estimate evidence without an authoritative Job relationship be carried?",
+            "current_evidence": "Twenty-four accepted unlinked Estimate evidence rows are preserved without a fabricated Job link.",
+            "options": ("retain_evidence_only", "link_with_authoritative_job_evidence", "explicit_exception"),
+            "recommended_default": "retain_evidence_only",
+            "risk": "A guessed Job link would corrupt operational and profitability lineage.",
+            "unlocks": "Final Estimate disposition without weakening the native Job relationship.",
+            "state": "mechanically_ready",
+        },
+    )
     hcp_exception_count = sum(item.exception for item in counts)
     return {
         "company_id": company_id,
@@ -99,6 +141,17 @@ def build_migration_product_projection(
         "reconciliation_digest": QBO_DIGEST,
         "stale": False,
         "safe_failure_code": None,
+        "go_no_go": {
+            "state": "external_auth_required",
+            "activation_eligible": False,
+            "blockers": (
+                "real_qbo_authorization_required",
+                "real_hcp_final_delta_required",
+                "source_freeze_evidence_required",
+                "opening_evidence_required",
+                "owner_policy_decisions_required",
+            ),
+        },
         "historical_window": {
             "starts_on": None,
             "ends_on": "2026-08-30",
@@ -157,6 +210,15 @@ def build_migration_product_projection(
             {"decision": decision, "state": "owner_decision_required"}
             for decision in decisions
         ),
+        "decision_packets": decision_packets,
+        "freeze_authority": {
+            "state": "external_authorization_required",
+            "required_authority": "owner_go_no_go_actor",
+            "sources": ("HCP", "QBO Production"),
+            "evidence": "immutable_source_timestamps_and_manifest_digests",
+            "late_change_behavior": "invalidate_delta_and_return_to_reconciliation",
+            "reopen_behavior": "new_freeze_generation_required",
+        },
         "run_history": (
             {
                 "run_id": HCP_MASTER_ID,

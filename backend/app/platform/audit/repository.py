@@ -1,4 +1,4 @@
-from sqlalchemy import Select, select
+from sqlalchemy import Select, and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.platform.audit.contracts import AuditQuery, AuditRecordView
@@ -18,6 +18,37 @@ class AuditReadRepository:
             statement = statement.where(
                 AuditRecord.branch_id.in_(query.authorized_branch_ids)
             )
+        if query.actor_user_id is not None:
+            statement = statement.where(
+                AuditRecord.actor_user_id == query.actor_user_id
+            )
+        if query.resource_type is not None:
+            statement = statement.where(
+                AuditRecord.resource_type == query.resource_type
+            )
+        if query.action is not None:
+            statement = statement.where(AuditRecord.action == query.action)
+        if query.outcome is not None:
+            statement = statement.where(AuditRecord.outcome == query.outcome)
+        if query.correlation_id is not None:
+            statement = statement.where(
+                AuditRecord.correlation_id == query.correlation_id
+            )
+        if query.occurred_before is not None:
+            if query.before_id is None:
+                statement = statement.where(
+                    AuditRecord.occurred_at < query.occurred_before
+                )
+            else:
+                statement = statement.where(
+                    or_(
+                        AuditRecord.occurred_at < query.occurred_before,
+                        and_(
+                            AuditRecord.occurred_at == query.occurred_before,
+                            AuditRecord.id < query.before_id,
+                        ),
+                    )
+                )
         records = await session.scalars(
             statement.order_by(
                 AuditRecord.occurred_at.desc(), AuditRecord.id.desc()

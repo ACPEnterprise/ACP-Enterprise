@@ -9,6 +9,10 @@ import {
   businessEconomicsHandle,
   luminaryHandle,
   administrationHandle,
+  auditHandle,
+  reportsHandle,
+  operatorGuideHandle,
+  ownerOperationsHandle,
   appointmentsHandle,
   commandCenterHandle,
   customerDetailHandle,
@@ -28,6 +32,7 @@ import {
   notFoundHandle,
   priceBookHandle,
   schedulingHandle,
+  serviceAgreementsHandle,
   technicianHandle,
   workdayHandle,
 } from "./routeMetadata";
@@ -87,6 +92,7 @@ export const appRoutes: RouteObject[] = [
                 .CustomerDetailRoute,
             }),
           },
+          { path: "service-agreements", handle: serviceAgreementsHandle, lazy: async () => ({ Component: (await import("../routes/ServiceAgreementsRoute")).ServiceAgreementsRoute }) },
           {
             path: "scheduling",
             handle: schedulingHandle,
@@ -250,6 +256,26 @@ export const appRoutes: RouteObject[] = [
                 await import("../features/engineering-mobile/MobileEngineeringDetailPage")
               ).MobileEngineeringDetailPage,
             }),
+          },
+          {
+            path: "owner-operations",
+            handle: ownerOperationsHandle,
+            lazy: async () => ({ Component: (await import("../routes/OwnerOperationsRoute")).OwnerOperationsRoute }),
+          },
+          {
+            path: "audit",
+            handle: auditHandle,
+            lazy: async () => ({ Component: (await import("../routes/AuditRoute")).AuditRoute }),
+          },
+          {
+            path: "reports",
+            handle: reportsHandle,
+            lazy: async () => ({ Component: (await import("../routes/ReportCenterRoute")).ReportCenterRoute }),
+          },
+          {
+            path: "operator-guide",
+            handle: operatorGuideHandle,
+            lazy: async () => ({ Component: (await import("../routes/OperatorGuideRoute")).OperatorGuideRoute }),
           },
           {
             path: "administration",

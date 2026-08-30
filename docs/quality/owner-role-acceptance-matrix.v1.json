@@ -1,0 +1,27 @@
+{
+  "version": "OWNER_ROLE_ACCEPTANCE_MATRIX.v1",
+  "synthetic_only": true,
+  "personas": [
+    { "persona": "TECHNICIAN", "canonical_role": "TECHNICIAN", "state": "VISIBLE_AND_ALLOWED" },
+    { "persona": "DISPATCHER", "canonical_role": "DISPATCHER", "state": "VISIBLE_AND_ALLOWED" },
+    { "persona": "CSR", "canonical_role": null, "state": "CONFIGURATION_BLOCKED" },
+    { "persona": "MANAGER", "canonical_role": "OFFICE_MANAGER", "state": "VISIBLE_AND_ALLOWED" },
+    { "persona": "ADMIN", "canonical_role": "COMPANY_ADMINISTRATOR", "state": "VISIBLE_AND_ALLOWED" },
+    { "persona": "RESTRICTED_EMPLOYEE", "canonical_role": null, "state": "CONFIGURATION_BLOCKED" }
+  ],
+  "required_negative_boundaries": [
+    "TECHNICIAN_NO_ADMIN",
+    "CSR_NO_PAYROLL",
+    "DISPATCHER_NO_ACCOUNTING_POST",
+    "EMPLOYEE_OWN_DATA_ONLY",
+    "BRANCH_SCOPE_ENFORCED",
+    "INSPECTION_DOES_NOT_GRANT_MUTATION"
+  ],
+  "integrated_qualification": [
+    "MEMBERSHIP_STATUS_CHANGE",
+    "ROLE_GRANT_AND_REMOVAL",
+    "BRANCH_GRANT_AND_REMOVAL",
+    "SESSION_AUTHORIZATION_VERSION_REFRESH",
+    "MOBILE_OWN_DATA_ISOLATION"
+  ]
+}

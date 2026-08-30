@@ -80,3 +80,15 @@ def test_owner_decisions_history_and_opening_gate_remain_visible() -> None:
     assert result["run_history"][0]["exceptions"] == sum(
         item["exception"] for item in result["counts"]
     )
+
+
+def test_cutover_packets_preserve_known_hcp_contradictions() -> None:
+    result = projection()
+    packets = {item["decision_id"]: item for item in result["decision_packets"]}
+    assert packets["HCP.CANCELED_BALANCE_JOBS"]["recommended_default"] == "retain_hold"
+    assert "296" in packets["HCP.CANCELED_BALANCE_JOBS"]["current_evidence"]
+    assert packets["HCP.UNLINKED_ESTIMATES"]["recommended_default"] == "retain_evidence_only"
+    assert "fabricated Job link" in packets["HCP.UNLINKED_ESTIMATES"]["current_evidence"]
+    assert result["go_no_go"]["state"] == "external_auth_required"
+    assert not result["go_no_go"]["activation_eligible"]
+    assert result["freeze_authority"]["late_change_behavior"] == "invalidate_delta_and_return_to_reconciliation"

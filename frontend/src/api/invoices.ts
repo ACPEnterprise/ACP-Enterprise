@@ -27,3 +27,20 @@ export async function issueInvoice(
 ): Promise<Invoice> {
   return (await apiClient.post<Invoice>(`${root}/${id}/issue`, input)).data;
 }
+
+export interface InvoiceAmountMutationInput extends InvoiceMutationInput {
+  amount: string;
+  reason_code: string;
+}
+
+export async function creditInvoice(id: string, input: InvoiceAmountMutationInput): Promise<Invoice> {
+  return (await apiClient.post<Invoice>(`${root}/${id}/credits`, input)).data;
+}
+
+export async function writeOffInvoice(id: string, input: InvoiceAmountMutationInput): Promise<Invoice> {
+  return (await apiClient.post<Invoice>(`${root}/${id}/write-offs`, input)).data;
+}
+
+export async function voidInvoice(id: string, input: InvoiceMutationInput): Promise<Invoice> {
+  return (await apiClient.post<Invoice>(`${root}/${id}/void`, input)).data;
+}

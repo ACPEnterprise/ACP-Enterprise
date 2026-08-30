@@ -7,6 +7,7 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
+
 from app.main import app
 from app.platform.contracts.manifest import platform_contract_manifest
 from app.platform.idempotency.contracts import (
@@ -47,6 +48,7 @@ DOMAIN_REPLAY_EVIDENCE = {
     "price_book": "tests/price_book/test_price_book_service.py",
     "purchasing": "tests/purchasing/test_purchasing_foundation.py",
     "scheduling": "tests/scheduling/test_scheduling_api.py",
+    "service_agreements": "tests/service_agreements/test_service_agreements.py",
     "technician": "tests/field_service/test_contract_surface.py",
     "timekeeping": "tests/timekeeping/test_workday_authority.py",
     "worker_transport": "tests/worker_control/transport/test_worker_transport.py",
@@ -85,7 +87,7 @@ def test_every_mutating_operation_has_exactly_one_current_classification() -> No
     operations = _mutation_operations()
     coverage = mutation_coverage_registry.by_identity()
     assert operations.keys() == coverage.keys()
-    assert len(operations) == len(coverage) == 253
+    assert len(operations) == len(coverage) == 263
     for identity, operation in operations.items():
         assert operation["operationId"] == coverage[identity].operation_id
 
@@ -99,7 +101,7 @@ def test_required_operations_expose_an_accepted_request_identity() -> None:
         for entry in mutation_coverage_registry.entries
         if entry.classification is MutationClassification.REQUIRED
     )
-    assert len(required) == 102
+    assert len(required) == 110
     for entry in required:
         operation = operations[entry.identity]
         schema = (

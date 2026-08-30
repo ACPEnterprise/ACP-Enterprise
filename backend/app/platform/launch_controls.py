@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from enum import StrEnum
 
+from app.employee_operations.permissions import EmployeeOperationsPermission
 from app.payroll.permissions import PayrollPermission
 from app.platform.permissions.catalog import PermissionCatalog
 from app.platform.permissions.codes import (
@@ -23,6 +24,7 @@ from app.platform.permissions.codes import (
     PurchasingPermission,
     SchedulingPermission,
 )
+from app.timekeeping.permissions import TimekeepingPermission
 
 COMPANY_ADMINISTRATOR_OWNER_READ_PERMISSIONS = frozenset(
     {
@@ -63,6 +65,8 @@ class LaunchRoleCode(StrEnum):
     TECHNICIAN = "TECHNICIAN"
     AUDITOR = "AUDITOR"
     SUPPORT = "SUPPORT"
+    SERVICE_CSR = "SERVICE_CSR"
+    OWN_DATA_ROLE = "OWN_DATA_ROLE"
 
 
 @dataclass(frozen=True, slots=True)
@@ -149,6 +153,42 @@ LAUNCH_ROLE_MATRIX = (
         purpose="No standing tenant access; use owner-mediated evidence only.",
         permission_codes=frozenset(),
         branch_access_required=False,
+    ),
+    LaunchRoleDefinition(
+        code=LaunchRoleCode.SERVICE_CSR,
+        purpose=(
+            "Serve Customers and inspect branch-scoped operational and commercial "
+            "status without financial execution or administrative authority."
+        ),
+        permission_codes=frozenset(
+            {
+                CustomerPermission.READ,
+                CustomerPermission.MANAGE,
+                EstimatePermission.READ,
+                EstimatePermission.MANAGE,
+                SchedulingPermission.READ,
+                JobPermission.READ,
+                DispatchPermission.READ,
+                InvoicePermission.READ,
+                PaymentPermission.READ,
+                CommunicationsPermission.READ,
+            }
+        ),
+    ),
+    LaunchRoleDefinition(
+        code=LaunchRoleCode.OWN_DATA_ROLE,
+        purpose=(
+            "Access only the authenticated Employee's own operational day, "
+            "Timekeeping, and Pay Statement evidence."
+        ),
+        permission_codes=frozenset(
+            {
+                EmployeeOperationsPermission.OWN_DAY_READ,
+                TimekeepingPermission.OWN_PUNCH,
+                TimekeepingPermission.OWN_READ,
+                PayrollPermission.STATEMENT_OWN_READ,
+            }
+        ),
     ),
 )
 

@@ -146,6 +146,11 @@ describe("AdministrationRoute", () => {
       reconciliation_digest: "b".repeat(64),
       stale: false,
       safe_failure_code: null,
+      go_no_go: {
+        state: "external_auth_required",
+        activation_eligible: false,
+        blockers: [],
+      },
       historical_window: {
         starts_on: null,
         ends_on: "2026-08-30",
@@ -157,6 +162,15 @@ describe("AdministrationRoute", () => {
       timeline: [],
       authority_states: [],
       owner_decisions: [],
+      decision_packets: [],
+      freeze_authority: {
+        state: "external_authorization_required",
+        required_authority: "owner_go_no_go_actor",
+        sources: [],
+        evidence: "immutable_source_timestamps_and_manifest_digests",
+        late_change_behavior: "invalidate_delta_and_return_to_reconciliation",
+        reopen_behavior: "new_freeze_generation_required",
+      },
       run_history: [],
       recovery_state: "completed_runs_replay_safe",
     });

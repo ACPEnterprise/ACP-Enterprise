@@ -23,7 +23,10 @@ import {
   MapPinned,
   LayoutDashboard,
   Settings,
+  BookOpen,
+  ScrollText,
   Users,
+  BadgeCheck,
 } from "lucide-react";
 
 import type { NavigationGroup, NavigationItem } from "./types";
@@ -57,6 +60,7 @@ export const navigationCatalog = [
     icon: Users,
     availability: "available",
   },
+  { id: "service-agreements", label: "Service Agreements", path: "/service-agreements", icon: BadgeCheck, availability: "available", requiredPermission: "COMPANY_SERVICE_AGREEMENT_READ" },
   {
     id: "workday",
     label: "My time clock",
@@ -206,6 +210,36 @@ export const navigationCatalog = [
     availability: "coming-soon",
   },
   {
+    id: "owner-operations",
+    label: "Owner Operations",
+    path: "/owner-operations",
+    icon: ShieldCheck,
+    availability: "available",
+    requiredPermission: "COMPANY_ADMINISTER",
+  },
+  {
+    id: "audit",
+    label: "Audit history",
+    path: "/audit",
+    icon: ScrollText,
+    availability: "available",
+    requiredPermission: "COMPANY_AUDIT_READ",
+  },
+  {
+    id: "reports",
+    label: "Report Center",
+    path: "/reports",
+    icon: FileChartColumn,
+    availability: "available",
+  },
+  {
+    id: "operator-guide",
+    label: "Operator guide",
+    path: "/operator-guide",
+    icon: BookOpen,
+    availability: "available",
+  },
+  {
     id: "administration",
     label: "Administration",
     path: "/administration",
@@ -264,6 +298,7 @@ export const navigationGroups = [
     label: "Operations",
     items: [
       item("customers"),
+      item("service-agreements"),
       item("technician"),
       item("workday"),
       item("scheduling"),
@@ -298,7 +333,11 @@ export const navigationGroups = [
     label: "Management",
     items: [
       item("mission-control"),
+      item("owner-operations"),
       item("employees"),
+      item("reports"),
+      item("audit"),
+      item("operator-guide"),
       item("administration"),
       item("settings"),
     ],

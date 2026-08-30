@@ -36,6 +36,8 @@ export const customersHandle = {
   },
 } as const satisfies ShellRouteHandle;
 
+export const serviceAgreementsHandle = { workspace: { pageTitle: "Service Agreements", breadcrumbs: [{ label: "Service Agreements" }], helpTopic: "service-agreements", aiContext: "service-agreements" } } as const satisfies ShellRouteHandle;
+
 export const customerDetailHandle = {
   workspace: {
     pageTitle: "Customer",
@@ -199,6 +201,22 @@ export const administrationHandle = {
     helpTopic: "role-administration",
     aiContext: "role-administration",
   },
+} as const satisfies ShellRouteHandle;
+
+export const auditHandle = {
+  workspace: { pageTitle: "Audit history", breadcrumbs: [{ label: "Audit history" }], helpTopic: "audit-history" },
+} as const satisfies ShellRouteHandle;
+
+export const reportsHandle = {
+  workspace: { pageTitle: "Report Center", breadcrumbs: [{ label: "Report Center" }], helpTopic: "report-center" },
+} as const satisfies ShellRouteHandle;
+
+export const operatorGuideHandle = {
+  workspace: { pageTitle: "Operator guide", breadcrumbs: [{ label: "Operator guide" }], helpTopic: "operator-guide" },
+} as const satisfies ShellRouteHandle;
+
+export const ownerOperationsHandle = {
+  workspace: { pageTitle: "Owner Operations", breadcrumbs: [{ label: "Owner Operations" }], helpTopic: "owner-operations" },
 } as const satisfies ShellRouteHandle;
 
 export const notFoundHandle = {
