@@ -5,7 +5,8 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import func, select
+from sqlalchemy import CheckConstraint, func, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.accounting.models import Account, ChartVersion, Journal
@@ -35,6 +36,7 @@ from app.procurement_matching.errors import (
 from app.procurement_matching.models import (
     ProcurementMatch,
     ProcurementMatchException,
+    ProcurementMatchLine,
 )
 from app.procurement_matching.schemas import (
     EvaluateMatchCommand,
@@ -52,6 +54,52 @@ from app.purchasing.models import (
     PurchaseOrderReceiptLine,
     PurchaseReturn,
 )
+
+
+def test_match_line_database_constraints_protect_derived_quantity_truth() -> None:
+    checks = {
+        constraint.name: str(constraint.sqltext)
+        for constraint in ProcurementMatchLine.__table__.constraints
+        if isinstance(constraint, CheckConstraint)
+    }
+
+    assert "returned_quantity <= received_quantity" in checks[
+        "ck_procurement_match_line_quantities"
+    ]
+    assert checks["ck_procurement_match_line_net_accepted"] == (
+        "net_accepted_quantity = received_quantity - returned_quantity"
+    )
+    assert "billed_net_amount >= 0" in checks[
+        "ck_procurement_match_line_amounts"
+    ]
+
+
+@pytest.mark.asyncio
+async def test_database_rejects_corrupted_match_net_quantity(matching_fixture) -> None:
+    factory, company, branch, evaluator, _ = matching_fixture
+    order, bill = await seed_evidence(factory, company, branch, evaluator)
+    service = ProcurementMatchingService()
+    async with factory() as session:
+        match = await service.evaluate(
+            session,
+            context=evaluator,
+            payload=EvaluateMatchCommand(
+                purchase_order_id=order.id,
+                vendor_bill_id=bill.id,
+                expected_purchase_order_version=order.version,
+                expected_bill_version=bill.version,
+                idempotency_key=f"constraint-{uuid4()}",
+            ),
+        )
+
+    async with factory() as session:
+        with pytest.raises(IntegrityError):
+            await session.execute(
+                update(ProcurementMatchLine)
+                .where(ProcurementMatchLine.id == match.lines[0].id)
+                .values(net_accepted_quantity=Decimal(-1))
+            )
+            await session.flush()
 
 
 @pytest_asyncio.fixture
