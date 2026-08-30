@@ -41,11 +41,16 @@ class EstimateRepository:
         limit: int = 100,
     ) -> tuple[EstimateSummary, ...]:
         statement = (
-            select(Estimate, EstimateRevision)
+            select(Estimate, EstimateRevision, EstimateJobConversion.job_id)
             .join(
                 EstimateRevision,
                 (EstimateRevision.company_id == Estimate.company_id)
                 & (EstimateRevision.id == Estimate.current_revision_id),
+            )
+            .outerjoin(
+                EstimateJobConversion,
+                (EstimateJobConversion.company_id == Estimate.company_id)
+                & (EstimateJobConversion.estimate_id == Estimate.id),
             )
             .where(
                 Estimate.company_id == company_id,
@@ -76,8 +81,9 @@ class EstimateRepository:
                 total_amount=revision.total_amount,
                 expires_at=revision.expires_at,
                 updated_at=estimate.updated_at,
+                converted_job_id=job_id,
             )
-            for estimate, revision in rows
+            for estimate, revision, job_id in rows
         )
 
     @staticmethod

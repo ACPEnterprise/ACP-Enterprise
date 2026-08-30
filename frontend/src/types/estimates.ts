@@ -84,6 +84,7 @@ export interface EstimateSummary {
   total_amount: string;
   expires_at: string | null;
   updated_at: string;
+  converted_job_id: string | null;
 }
 
 export interface EstimateList {

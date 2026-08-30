@@ -124,6 +124,7 @@ class EstimateSummary(EstimateSchema):
     total_amount: Decimal
     expires_at: datetime | None
     updated_at: datetime
+    converted_job_id: UUID | None = None
 
 
 class EstimateList(EstimateSchema):

@@ -10,7 +10,7 @@ vi.mock("../hooks/useJobs", () => ({ useJobs: () => ({ isPending: false, isError
   { id: "job-ready", job_number: "J-1", customer_display_name: "Ready Customer", status: "ready", appointment_count: 0 },
   { id: "job-complete", job_number: "J-2", customer_display_name: "Done Customer", status: "completed", appointment_count: 1 },
 ] } }) }));
-vi.mock("../hooks/useEstimates", () => ({ useEstimates: () => ({ isPending: false, data: { items: [{ id: "est-1", status: "sent" }] } }) }));
+vi.mock("../hooks/useEstimates", () => ({ useEstimates: () => ({ isPending: false, data: { items: [{ id: "est-1", status: "sent", converted_job_id: null }, { id: "est-2", status: "approved", converted_job_id: null }] } }) }));
 vi.mock("../hooks/useInvoices", () => ({ useInvoices: () => ({ isPending: false, data: [{ id: "inv-1", job_id: "another-job", status: "issued", open_amount: "50.00", accounting_status: "pending" }] }) }));
 vi.mock("../hooks/usePayments", () => ({ usePayments: () => ({ isPending: false, data: [{ id: "pay-1" }] }) }));
 
@@ -21,6 +21,7 @@ describe("RevenueCycleRoute", () => {
     render(<MemoryRouter><RevenueCycleRoute /></MemoryRouter>);
     expect(screen.getByRole("heading", { name: "Revenue cycle" })).toBeVisible();
     expect(screen.getByText("Completed not invoiced").nextElementSibling).toHaveTextContent("1");
+    expect(screen.getByText("Accepted not converted").nextElementSibling).toHaveTextContent("1");
     expect(screen.getByText("J-2")).toBeVisible();
     expect(screen.getByText(/Amounts never influence queue priority/)).toBeVisible();
   });
