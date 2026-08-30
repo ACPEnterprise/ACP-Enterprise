@@ -3,7 +3,7 @@ from dataclasses import replace
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from types import SimpleNamespace
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 import pytest_asyncio
@@ -335,8 +335,6 @@ async def test_ambiguous_provider_outcome_is_reconciled_without_blind_retry(
             )
             == 1
         )
-
-
 @pytest.mark.asyncio
 async def test_concurrent_identical_application_changes_receipt_once(
     payment_fixture, monkeypatch
@@ -654,3 +652,65 @@ async def test_webhook_contradiction_persists_one_reconciliation_exception(
             )
             == 1
         )
+
+
+@pytest.mark.asyncio
+async def test_receipt_listing_is_stably_bounded_and_service_enforced(
+    payment_fixture,
+) -> None:
+    factory, company, branch, actor, customer = payment_fixture
+    service = PaymentService(CountingFakeProvider(), "synthetic-merchant")
+    receipt_ids: set[UUID] = set()
+    for position in range(3):
+        async with factory() as session:
+            intent = await service.collect(
+                session,
+                CreateIntent(
+                    company_id=company.id,
+                    branch_id=branch.id,
+                    customer_id=customer.id,
+                    amount=Decimal("10.00") + position,
+                    currency="USD",
+                    opaque_payment_method="opaque_captured_test",
+                    idempotency_key=f"list-receipt-{uuid4()}",
+                    actor_user_id=actor.id,
+                ),
+            )
+        async with factory() as session:
+            receipt_id = await session.scalar(
+                select(PaymentReceipt.id).where(PaymentReceipt.intent_id == intent.id)
+            )
+            assert receipt_id is not None
+            receipt_ids.add(receipt_id)
+
+    async with factory() as session:
+        first_page = await service.list_receipts(
+            session,
+            company.id,
+            frozenset({branch.id}),
+            limit=2,
+            offset=0,
+        )
+        second_page = await service.list_receipts(
+            session,
+            company.id,
+            frozenset({branch.id}),
+            limit=2,
+            offset=2,
+        )
+    assert len(first_page) == 2
+    assert {row.id for row in first_page}.isdisjoint(
+        {row.id for row in second_page}
+    )
+    assert receipt_ids.issubset(
+        {row.id for row in first_page} | {row.id for row in second_page}
+    )
+
+    async with factory() as session:
+        with pytest.raises(PaymentValidation, match="page is invalid"):
+            await service.list_receipts(
+                session,
+                company.id,
+                frozenset({branch.id}),
+                limit=201,
+            )

@@ -1,7 +1,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_database_session
@@ -75,8 +75,19 @@ async def collect_payment(payload: CollectInput, context: Collect, session: Sess
 
 
 @router.get("/receipts", response_model=list[ReceiptItem])
-async def list_receipts(context: Read, session: Session) -> list[ReceiptItem]:
-    rows = await payment_service.list_receipts(session, context.company.id, context.authorized_branch_ids)
+async def list_receipts(
+    context: Read,
+    session: Session,
+    limit: Annotated[int, Query(ge=1, le=200)] = 100,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> list[ReceiptItem]:
+    rows = await payment_service.list_receipts(
+        session,
+        context.company.id,
+        context.authorized_branch_ids,
+        limit=limit,
+        offset=offset,
+    )
     return [ReceiptItem.model_validate(row) for row in rows]
 
 

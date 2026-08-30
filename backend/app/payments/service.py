@@ -355,8 +355,33 @@ class PaymentService:
             await session.flush()
             return row
 
-    async def list_receipts(self, session: AsyncSession, company_id: UUID, branches: frozenset[UUID]) -> tuple[PaymentReceipt, ...]:
-        return tuple((await session.scalars(select(PaymentReceipt).where(PaymentReceipt.company_id == company_id, PaymentReceipt.branch_id.in_(branches)).order_by(PaymentReceipt.captured_at.desc()))).all())
+    async def list_receipts(
+        self,
+        session: AsyncSession,
+        company_id: UUID,
+        branches: frozenset[UUID],
+        *,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> tuple[PaymentReceipt, ...]:
+        if not 1 <= limit <= 200 or offset < 0:
+            raise PaymentValidation("Payment receipt page is invalid.")
+        return tuple(
+            (
+                await session.scalars(
+                    select(PaymentReceipt)
+                    .where(
+                        PaymentReceipt.company_id == company_id,
+                        PaymentReceipt.branch_id.in_(branches),
+                    )
+                    .order_by(
+                        PaymentReceipt.captured_at.desc(), PaymentReceipt.id.desc()
+                    )
+                    .limit(limit)
+                    .offset(offset)
+                )
+            ).all()
+        )
 
     async def get_receipt(self, session: AsyncSession, company_id: UUID, receipt_id: UUID) -> PaymentReceipt | None:
         return await session.scalar(select(PaymentReceipt).where(PaymentReceipt.company_id == company_id, PaymentReceipt.id == receipt_id))
