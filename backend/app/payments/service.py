@@ -201,6 +201,8 @@ class PaymentService:
         return refund
 
     async def record_webhook(self, session: AsyncSession, company_id: UUID, provider: str, evidence: VerifiedWebhook) -> WebhookReceipt:
+        conflict = False
+        result: WebhookReceipt | None = None
         async with session.begin():
             await self._lock_command(
                 session,
@@ -210,14 +212,33 @@ class PaymentService:
             )
             prior = await session.scalar(select(WebhookReceipt).where(WebhookReceipt.company_id == company_id, WebhookReceipt.provider == provider, WebhookReceipt.merchant_account == evidence.merchant_account, WebhookReceipt.provider_event_id == evidence.provider_event_id))
             if prior:
-                if prior.evidence_digest != evidence.evidence_digest:
-                    self._exception_raw(session, company_id, "webhook", prior.id, "contradictory_provider_event", evidence.evidence_digest)
-                    raise PaymentConflict("Provider event identity conflicts with prior evidence.")
-                return prior
-            row = WebhookReceipt(company_id=company_id, provider=provider, merchant_account=evidence.merchant_account, provider_event_id=evidence.provider_event_id, event_type=evidence.event_type, evidence_digest=evidence.evidence_digest, secret_version=evidence.secret_version, allowed_evidence=evidence.allowed_evidence)
-            session.add(row)
-            await session.flush()
-            return row
+                conflict = any(
+                    (
+                        prior.event_type != evidence.event_type,
+                        prior.evidence_digest != evidence.evidence_digest,
+                        prior.secret_version != evidence.secret_version,
+                        prior.allowed_evidence != evidence.allowed_evidence,
+                    )
+                )
+                if conflict:
+                    existing_exception = await session.scalar(
+                        select(ReconciliationException).where(
+                            ReconciliationException.company_id == company_id,
+                            ReconciliationException.idempotency_key
+                            == f"webhook:{prior.id}:contradictory_provider_event",
+                        )
+                    )
+                    if existing_exception is None:
+                        self._exception_raw(session, company_id, "webhook", prior.id, "contradictory_provider_event", evidence.evidence_digest)
+                result = prior
+            else:
+                result = WebhookReceipt(company_id=company_id, provider=provider, merchant_account=evidence.merchant_account, provider_event_id=evidence.provider_event_id, event_type=evidence.event_type, evidence_digest=evidence.evidence_digest, secret_version=evidence.secret_version, allowed_evidence=evidence.allowed_evidence)
+                session.add(result)
+                await session.flush()
+        if conflict:
+            raise PaymentConflict("Provider event identity conflicts with prior evidence.")
+        assert result is not None
+        return result
 
     async def create_deposit(self, session: AsyncSession, spec: CreateDeposit) -> Deposit:
         digest = _digest({"receipt_ids": sorted(str(value) for value in spec.receipt_ids), "currency": spec.currency, "destination_reference": spec.destination_reference})
@@ -368,7 +389,7 @@ class PaymentService:
 
     @staticmethod
     def _exception_raw(session: AsyncSession, company_id: UUID, entity_type: str, entity_id: UUID, reason: str, digest: str, branch_id: UUID | None = None, actor: UUID | None = None) -> None:
-        row = ReconciliationException(company_id=company_id, branch_id=branch_id, entity_type=entity_type, entity_id=entity_id, reason_code=reason, idempotency_key=f"{entity_type}:{entity_id}:{reason}", evidence_digest=digest, opened_by_user_id=actor)
+        row = ReconciliationException(id=uuid4(), company_id=company_id, branch_id=branch_id, entity_type=entity_type, entity_id=entity_id, reason_code=reason, idempotency_key=f"{entity_type}:{entity_id}:{reason}", evidence_digest=digest, opened_by_user_id=actor)
         session.add(row)
         BusinessEventService.stage(session, BusinessEventCreate(event_type=EventType.PAYMENT_RECONCILIATION_EXCEPTION_OPENED, entity_type="payment_reconciliation_exception", entity_id=row.id, company_id=company_id, branch_id=branch_id, user_id=actor, payload={"schema_version": "1.0", "reason_code": reason, "evidence_digest": digest}))
 

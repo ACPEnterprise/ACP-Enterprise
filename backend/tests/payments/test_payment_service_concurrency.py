@@ -22,6 +22,7 @@ from app.payments.contracts import (
     RecordDispute,
     RecordSettlement,
     RequestRefund,
+    VerifiedWebhook,
 )
 from app.payments.errors import PaymentConflict, PaymentNotFound, PaymentValidation
 from app.payments.models import (
@@ -581,3 +582,75 @@ async def test_settlement_replay_binds_complete_economic_evidence(
         async with factory() as session:
             with pytest.raises(PaymentConflict, match="conflicts with replay"):
                 await service.record_settlement(session, contradiction)
+
+
+@pytest.mark.asyncio
+async def test_webhook_contradiction_persists_one_reconciliation_exception(
+    payment_fixture,
+) -> None:
+    factory, company, _, _, _ = payment_fixture
+    service = PaymentService(CountingFakeProvider(), "synthetic-merchant")
+    evidence = VerifiedWebhook(
+        provider_event_id=f"event-{uuid4()}",
+        merchant_account="synthetic-merchant",
+        event_type="payment.captured",
+        occurred_at=datetime(2026, 8, 30, 18, 0, tzinfo=timezone.utc),
+        allowed_evidence={"amount": "25.00", "currency": "USD"},
+        evidence_digest="f" * 64,
+        secret_version="v1",
+    )
+    async with factory() as session:
+        first = await service.record_webhook(
+            session, company.id, "deterministic_fake", evidence
+        )
+    async with factory() as session:
+        replay = await service.record_webhook(
+            session, company.id, "deterministic_fake", evidence
+        )
+    assert replay.id == first.id
+
+    contradiction = replace(
+        evidence,
+        event_type="payment.refunded",
+        allowed_evidence={"amount": "26.00", "currency": "USD"},
+        evidence_digest="0" * 64,
+        secret_version="v2",
+    )
+    for _ in range(2):
+        async with factory() as session:
+            with pytest.raises(PaymentConflict, match="conflicts with prior evidence"):
+                await service.record_webhook(
+                    session, company.id, "deterministic_fake", contradiction
+                )
+
+    async with factory() as session:
+        exception = await session.scalar(
+            select(ReconciliationException).where(
+                ReconciliationException.entity_type == "webhook",
+                ReconciliationException.entity_id == first.id,
+                ReconciliationException.reason_code
+                == "contradictory_provider_event",
+            )
+        )
+        assert exception is not None
+        assert exception.evidence_digest == contradiction.evidence_digest
+        assert (
+            await session.scalar(
+                select(func.count(ReconciliationException.id)).where(
+                    ReconciliationException.entity_type == "webhook",
+                    ReconciliationException.entity_id == first.id,
+                    ReconciliationException.reason_code
+                    == "contradictory_provider_event",
+                )
+            )
+            == 1
+        )
+        assert (
+            await session.scalar(
+                select(func.count(BusinessEvent.id)).where(
+                    BusinessEvent.entity_type == "payment_reconciliation_exception",
+                    BusinessEvent.entity_id == exception.id,
+                )
+            )
+            == 1
+        )
