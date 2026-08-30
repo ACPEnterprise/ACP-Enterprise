@@ -8,7 +8,7 @@ from datetime import date, timedelta
 from typing import Any, cast
 from uuid import UUID
 
-from sqlalchemy import exists, select
+from sqlalchemy import exists, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.customers.models import Customer
@@ -53,7 +53,14 @@ class EconomicsWorkspaceService:
         job_ids = {
             item.subject_id for item in (*current, *prior) if item.scope == "job"
         }
-        identities = await self._job_identities(session, context.company.id, job_ids)
+        branch_ids = (
+            frozenset({context.active_branch.id})
+            if context.active_branch is not None
+            else context.authorized_branch_ids
+        )
+        identities = await self._job_identities(
+            session, context.company.id, branch_ids, job_ids
+        )
         gaps = (
             await session.scalars(
                 select(CompanyFinancePolicyGap).where(
@@ -116,17 +123,30 @@ class EconomicsWorkspaceService:
             query = query.where(
                 EconomicsProfitabilityResultRecord.branch_id == context.active_branch.id
             )
+        else:
+            query = query.where(
+                or_(
+                    EconomicsProfitabilityResultRecord.branch_id.is_(None),
+                    EconomicsProfitabilityResultRecord.branch_id.in_(
+                        context.authorized_branch_ids
+                    ),
+                )
+            )
         value = await session.scalar(query)
         if value is None:
             raise LookupError("profitability result not found")
         predecessor_edge = await session.scalar(
             select(EconomicsProfitabilityResultSupersessionRecord).where(
+                EconomicsProfitabilityResultSupersessionRecord.company_id
+                == context.company.id,
                 EconomicsProfitabilityResultSupersessionRecord.successor_result_id
                 == value.id
             )
         )
         successor_edge = await session.scalar(
             select(EconomicsProfitabilityResultSupersessionRecord).where(
+                EconomicsProfitabilityResultSupersessionRecord.company_id
+                == context.company.id,
                 EconomicsProfitabilityResultSupersessionRecord.predecessor_result_id
                 == value.id
             )
@@ -186,11 +206,23 @@ class EconomicsWorkspaceService:
             query = query.where(
                 EconomicsProfitabilityResultRecord.branch_id == context.active_branch.id
             )
+        else:
+            query = query.where(
+                or_(
+                    EconomicsProfitabilityResultRecord.branch_id.is_(None),
+                    EconomicsProfitabilityResultRecord.branch_id.in_(
+                        context.authorized_branch_ids
+                    ),
+                )
+            )
         return tuple((await session.scalars(query)).all())
 
     @staticmethod
     async def _job_identities(
-        session: AsyncSession, company_id: UUID, job_ids: set[UUID]
+        session: AsyncSession,
+        company_id: UUID,
+        branch_ids: frozenset[UUID],
+        job_ids: set[UUID],
     ) -> dict[UUID, JobIdentity]:
         if not job_ids:
             return {}
@@ -199,7 +231,11 @@ class EconomicsWorkspaceService:
                 select(Job, Customer, Branch)
                 .join(Customer, Customer.id == Job.customer_id)
                 .join(Branch, Branch.id == Job.branch_id)
-                .where(Job.company_id == company_id, Job.id.in_(job_ids))
+                .where(
+                    Job.company_id == company_id,
+                    Job.branch_id.in_(branch_ids),
+                    Job.id.in_(job_ids),
+                )
             )
         ).all()
         return {

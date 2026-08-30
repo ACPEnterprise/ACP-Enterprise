@@ -17,6 +17,7 @@ from .owner_intelligence import (
     OwnerIntelligenceService,
     OwnerQuestion,
 )
+from .source_completeness import source_completeness_matrix
 from .workspace import EconomicsWorkspaceService
 
 router = APIRouter(prefix="/api/v1/business-economics", tags=["Business Economics"])
@@ -42,6 +43,30 @@ async def economics_workspace(
         failure = SafeFailure(
             FailureCode.VALIDATION,
             "Business Economics request requires correction.",
+            ClientRecovery.USER_CORRECTION_REQUIRED,
+            current_correlation_id(),
+        )
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY, failure.detail()
+        ) from error
+
+
+@router.get("/source-completeness", response_model=dict[str, object])
+async def economics_source_completeness(
+    session: Session,
+    context: Reader,
+    start: Annotated[date, Query()],
+    end: Annotated[date, Query()],
+) -> dict[str, object]:
+    try:
+        workspace = await EconomicsWorkspaceService().overview(
+            session, context=context, period_start=start, period_end=end
+        )
+        return source_completeness_matrix(workspace)
+    except ValueError as error:
+        failure = SafeFailure(
+            FailureCode.VALIDATION,
+            "Business Economics source-completeness request requires correction.",
             ClientRecovery.USER_CORRECTION_REQUIRED,
             current_correlation_id(),
         )

@@ -1,5 +1,8 @@
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 from uuid import uuid4
+
+import pytest
 
 from app.business_economics.workspace import EconomicsWorkspaceService, JobIdentity
 
@@ -154,3 +157,26 @@ def test_owner_projection_rejects_result_job_branch_conflict() -> None:
     assert value["quality_state"] == "conflicting"
     assert value["totals"] is None
     assert "branch" in value["explanation"].lower()
+
+
+@pytest.mark.asyncio
+async def test_result_detail_without_active_branch_is_authorized_branch_scoped() -> None:
+    session = AsyncMock()
+    session.scalar.return_value = None
+    company_id = uuid4()
+    allowed_branch = uuid4()
+    context = SimpleNamespace(
+        company=SimpleNamespace(id=company_id),
+        active_branch=None,
+        authorized_branch_ids=frozenset({allowed_branch}),
+    )
+
+    with pytest.raises(LookupError, match="not found"):
+        await EconomicsWorkspaceService().detail(
+            session, context=context, result_id=uuid4()
+        )
+
+    statement = session.scalar.await_args.args[0]
+    rendered = str(statement)
+    assert "economics_profitability_results.company_id" in rendered
+    assert "economics_profitability_results.branch_id IN" in rendered
