@@ -1,5 +1,5 @@
 import asyncio
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from uuid import uuid4
 
@@ -44,6 +44,7 @@ from app.procurement_matching.schemas import (
 )
 from app.procurement_matching.service import (
     ProcurementMatchingService,
+    decimal_days,
     is_current_eligible_match,
 )
 from app.purchasing.models import (
@@ -804,3 +805,12 @@ async def test_vendor_performance_is_deterministic_evidence_not_a_vendor_score(
         assert item.completed_lead_time_samples == 1
         assert item.average_lead_time_days == Decimal("1.00")
         assert not hasattr(item, "score")
+
+
+def test_vendor_lead_time_uses_exact_decimal_duration_arithmetic() -> None:
+    duration = timedelta(days=2, seconds=3_661, microseconds=7)
+    expected = Decimal(2) + (
+        Decimal(3_661_000_007) / Decimal(86_400_000_000)
+    )
+
+    assert decimal_days(duration) == expected
