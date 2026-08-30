@@ -35,7 +35,7 @@ describe("PayrollRoute authorization", () => {
     vi.mocked(useComplianceSchemas).mockReturnValue(query([]) as never);
   });
 
-  it("disables every protected query without complete read authority", () => {
+  it("disables every protected query without reporting read authority", () => {
     render(<PayrollRoute />);
     expect(screen.getByText(/not authorized/i)).toBeVisible();
     expect(usePayrollOperationsSummary).toHaveBeenCalledWith(false);
@@ -43,11 +43,8 @@ describe("PayrollRoute authorization", () => {
     expect(useComplianceSchemas).toHaveBeenCalledWith(false);
   });
 
-  it("enables readiness only with reporting and run read authority", () => {
-    permissionState.values = new Set([
-      "COMPANY_PAYROLL_REPORTING_READ",
-      "COMPANY_PAYROLL_RUN_READ",
-    ]);
+  it("enables the safe reporting workspace with reporting read authority", () => {
+    permissionState.values = new Set(["COMPANY_PAYROLL_REPORTING_READ"]);
     vi.mocked(usePayrollOperationsSummary).mockReturnValue(
       query({
         blocker_count: 0,
