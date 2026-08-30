@@ -22,6 +22,7 @@ import {
   payrollHandle,
   revenueCycleHandle,
   jobsHandle,
+  liaHandle,
   missionControlHandle,
   notFoundHandle,
   priceBookHandle,
@@ -53,6 +54,11 @@ export const appRoutes: RouteObject[] = [
               Component: (await import("../routes/CommandCenterRoute"))
                 .CommandCenterRoute,
             }),
+          },
+          {
+            path: "lia",
+            handle: liaHandle,
+            lazy: async () => ({ Component: (await import("../routes/LiaRoute")).LiaRoute }),
           },
           {
             path: "mission-control",

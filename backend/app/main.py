@@ -45,6 +45,7 @@ from app.financial_reporting.router import router as financial_reporting_router
 from app.inventory.router import router as inventory_router
 from app.invoicing.router import router as invoicing_router
 from app.jobs.router import router as jobs_router
+from app.lia.router import router as lia_router
 from app.operational_migration.product_router import router as migration_product_router
 from app.operations.router import router as operations_router
 from app.payments.router import router as payments_router
@@ -174,6 +175,7 @@ app.include_router(identity_onboarding_router)
 app.include_router(scheduling_router)
 app.include_router(timekeeping_router)
 app.include_router(jobs_router)
+app.include_router(lia_router)
 app.include_router(inventory_router)
 app.include_router(purchasing_router)
 app.include_router(procurement_matching_router)

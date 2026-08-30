@@ -29,6 +29,13 @@ import type { NavigationGroup, NavigationItem } from "./types";
 
 export const navigationCatalog = [
   {
+    id: "lia",
+    label: "Ask LIA",
+    path: "/lia",
+    icon: Bot,
+    availability: "available",
+  },
+  {
     id: "command-center",
     label: "Command Center",
     path: "/",
@@ -269,6 +276,7 @@ export const navigationGroups = [
     id: "ai-workforce",
     label: "AI Workforce",
     items: [
+      item("lia"),
       item("engineering"),
       item("dispatch-ai"),
       item("customer-care-ai"),
