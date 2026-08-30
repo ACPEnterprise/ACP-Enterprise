@@ -5,7 +5,7 @@ from uuid import uuid4
 import httpx
 import jwt
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 from sqlalchemy import select, update
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
@@ -113,6 +113,14 @@ async def test_security_headers_and_trusted_proxy_validation() -> None:
     async def client_endpoint() -> dict[str, str]:
         return {"ok": "yes"}
 
+    @app.get("/api/protected")
+    async def protected_endpoint() -> dict[str, str]:
+        return {"classification": "protected"}
+
+    @app.get("/api/revalidated")
+    async def revalidated_endpoint() -> Response:
+        return Response(headers={"Cache-Control": "no-cache"})
+
     trusted_transport = httpx.ASGITransport(app=app, client=("10.0.0.8", 443))
     async with httpx.AsyncClient(
         transport=trusted_transport, base_url="https://test"
@@ -121,12 +129,17 @@ async def test_security_headers_and_trusted_proxy_validation() -> None:
             "/client",
             headers={"X-Forwarded-For": "203.0.113.8", "X-Forwarded-Proto": "https"},
         )
+        protected = await trusted_client.get("/api/protected")
+        revalidated = await trusted_client.get("/api/revalidated")
     assert response.status_code == 200
     assert response.headers["strict-transport-security"].startswith("max-age=")
     assert response.headers["x-content-type-options"] == "nosniff"
     assert response.headers["x-frame-options"] == "DENY"
     assert "content-security-policy" in response.headers
     assert "permissions-policy" in response.headers
+    assert "cache-control" not in response.headers
+    assert protected.headers["cache-control"] == "private, no-store"
+    assert revalidated.headers["cache-control"] == "no-cache"
 
     untrusted_transport = httpx.ASGITransport(app=app, client=("198.51.100.9", 80))
     async with httpx.AsyncClient(
