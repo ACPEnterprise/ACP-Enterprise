@@ -31,6 +31,9 @@ def _record(
     subject_id = uuid4()
     return SimpleNamespace(
         id=uuid4(),
+        result_digest="a" * 64,
+        package_digest="b" * 64,
+        computation_digest="c" * 64,
         subject_id=subject_id,
         scope="job",
         currency="USD",
