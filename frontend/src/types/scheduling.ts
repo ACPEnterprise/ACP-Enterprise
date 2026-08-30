@@ -39,3 +39,18 @@ export interface CalendarQueryResult {
   start_at: string;
   end_at: string;
 }
+
+export interface AppointmentCreateInput {
+  branch_id: string; customer_id: string; service_location_id: string;
+  arrival_window_start_at: string; arrival_window_end_at: string;
+  expected_duration_minutes: number; capacity_units: string; idempotency_key: string;
+}
+export interface AppointmentRescheduleInput {
+  expected_version: number; arrival_window_start_at: string; arrival_window_end_at: string;
+  expected_duration_minutes: number; capacity_units: string;
+  reason_code: "customer_request" | "technician_unavailable" | "weather" | "operational_conflict" | "scope_change";
+}
+export interface AppointmentCancelInput {
+  expected_version: number;
+  reason_code: "customer_request" | "duplicate" | "created_in_error" | "unable_to_service" | "weather";
+}

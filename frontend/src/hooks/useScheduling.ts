@@ -1,8 +1,8 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { shouldRetryApiQuery } from "../api/errors";
-import { getAppointment, listAppointments } from "../api/scheduling";
-import type { AppointmentListParams } from "../types/scheduling";
+import { cancelAppointment, createAppointment, getAppointment, listAppointments, rescheduleAppointment } from "../api/scheduling";
+import type { AppointmentDetail, AppointmentListParams } from "../types/scheduling";
 
 export const appointmentKeys = {
   all: ["appointments"] as const,
@@ -27,4 +27,17 @@ export function useAppointments(query: AppointmentListParams, enabled = true) {
     enabled,
     retry: shouldRetryApiQuery,
   });
+}
+
+export function useSchedulingMutations() {
+  const client = useQueryClient();
+  const update = (appointment: AppointmentDetail) => {
+    client.setQueryData(appointmentKeys.detail(appointment.id), appointment);
+    void client.invalidateQueries({ queryKey: appointmentKeys.lists() });
+  };
+  return {
+    create: useMutation({ mutationFn: createAppointment, onSuccess: update }),
+    reschedule: useMutation({ mutationFn: ({ id, input }: { id: string; input: Parameters<typeof rescheduleAppointment>[1] }) => rescheduleAppointment(id, input), onSuccess: update }),
+    cancel: useMutation({ mutationFn: ({ id, input }: { id: string; input: Parameters<typeof cancelAppointment>[1] }) => cancelAppointment(id, input), onSuccess: update }),
+  };
 }

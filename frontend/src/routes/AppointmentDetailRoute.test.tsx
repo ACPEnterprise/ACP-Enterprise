@@ -9,7 +9,7 @@ import { useAppointment } from "../hooks/useScheduling";
 import type { AppointmentDetail } from "../types/scheduling";
 import { AppointmentDetailRoute } from "./AppointmentDetailRoute";
 
-vi.mock("../auth", () => ({ useAuth: () => ({ activeCompany: { branches: [{ id: "branch-1", name: "Main Branch", code: "MAIN" }] } }) }));
+vi.mock("../auth", () => ({ useAuth: () => ({ activeCompany: { branches: [{ id: "branch-1", name: "Main Branch", code: "MAIN" }] } }), useHasPermission: () => false }));
 vi.mock("../hooks/useCustomers");
 vi.mock("../hooks/useJobs");
 vi.mock("../hooks/useScheduling");
