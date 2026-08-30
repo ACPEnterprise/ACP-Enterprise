@@ -113,10 +113,13 @@ class GovernedRetrievalService:
         evidence: list[EvidenceReference] = []
         for adapter in permitted:
             predicates = [adapter.model.company_id == context.company.id]
-            if context.active_branch is not None and hasattr(
-                adapter.model, "branch_id"
-            ):
-                predicates.append(adapter.model.branch_id == context.active_branch.id)
+            if hasattr(adapter.model, "branch_id"):
+                branch_ids = (
+                    frozenset({context.active_branch.id})
+                    if context.active_branch is not None
+                    else context.authorized_branch_ids
+                )
+                predicates.append(adapter.model.branch_id.in_(branch_ids))
             if entity_id is not None:
                 predicates.append(adapter.model.id == entity_id)
             rows = (
@@ -169,10 +172,12 @@ class GovernedRetrievalService:
                 )
                 .limit(1)
             )
-            if context.active_branch is not None:
-                query = query.where(
-                    LuminaryBriefingRecord.branch_id == context.active_branch.id
-                )
+            branch_ids = (
+                frozenset({context.active_branch.id})
+                if context.active_branch is not None
+                else context.authorized_branch_ids
+            )
+            query = query.where(LuminaryBriefingRecord.branch_id.in_(branch_ids))
             if entity_id is not None:
                 query = query.where(LuminaryBriefingRecord.id == entity_id)
             briefing = await session.scalar(query)

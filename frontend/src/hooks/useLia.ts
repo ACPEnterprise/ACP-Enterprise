@@ -6,6 +6,10 @@ export function useLiaReadiness() {
   return useQuery({ queryKey: ["lia", "readiness"], queryFn: liaApi.getLiaReadiness, retry: shouldRetryApiQuery });
 }
 
+export function useLiaFoundationReadiness() {
+  return useQuery({ queryKey: ["lia", "foundation-readiness"], queryFn: liaApi.getLiaFoundationReadiness, retry: shouldRetryApiQuery });
+}
+
 export function useOwnerBriefing(enabled = true) {
   return useQuery({ queryKey: ["lia", "briefing"], queryFn: liaApi.getOwnerBriefing, retry: shouldRetryApiQuery, enabled });
 }
