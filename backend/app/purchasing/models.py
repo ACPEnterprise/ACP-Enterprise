@@ -986,6 +986,12 @@ class PurchaseRequisition(Base):
             name="fk_purchasing_requisition_po",
             ondelete="RESTRICT",
         ),
+        ForeignKeyConstraint(
+            ["company_id", "branch_id", "job_id"],
+            ["jobs.company_id", "jobs.branch_id", "jobs.id"],
+            name="fk_purchasing_requisition_job",
+            ondelete="RESTRICT",
+        ),
         CheckConstraint("quantity > 0", name="ck_purchasing_requisition_quantity"),
         CheckConstraint(
             "status IN ('draft','submitted','approved','rejected','cancelled','converted')",

@@ -850,6 +850,18 @@ async def test_purchase_requisition_is_governed_idempotent_and_converts_to_draft
             reason="Synthetic demand evidence",
             idempotency_key="req-100",
         )
+        with pytest.raises(PurchasingNotFound):
+            await service.create_requisition(
+                session,
+                context=requester,
+                payload=payload.model_copy(
+                    update={
+                        "request_number": "REQ-INVALID-JOB",
+                        "job_id": uuid4(),
+                        "idempotency_key": f"req-invalid-job-{uuid4()}",
+                    }
+                ),
+            )
         request = await service.create_requisition(
             session, context=requester, payload=payload
         )
@@ -948,6 +960,9 @@ async def test_purchase_requisition_is_governed_idempotent_and_converts_to_draft
             await session.scalar(select(func.count()).select_from(PurchaseRequisition))
             >= 1
         )
+        assert "fk_purchasing_requisition_job" in {
+            constraint.name for constraint in PurchaseRequisition.__table__.constraints
+        }
 
 
 @pytest.mark.asyncio

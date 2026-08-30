@@ -17,6 +17,7 @@ from app.inventory.contracts import PostStockMovement
 from app.inventory.errors import InventoryConflict, InventoryError, InventoryNotFound
 from app.inventory.models import InventoryItem, InventoryQuantity, StockMovement
 from app.inventory.repository import InventoryRepository
+from app.jobs.models import Job
 from app.platform.permissions.authorization import AuthorizationContext
 
 from .errors import PurchasingConflict, PurchasingNotFound, PurchasingValidation
@@ -408,6 +409,18 @@ class PurchasingService:
                 await self._inventory_item(
                     session, context.company.id, payload.inventory_item_id
                 )
+            if payload.job_id is not None:
+                job_id = await session.scalar(
+                    select(Job.id).where(
+                        Job.company_id == context.company.id,
+                        Job.branch_id == payload.branch_id,
+                        Job.id == payload.job_id,
+                    )
+                )
+                if job_id is None:
+                    raise PurchasingNotFound(
+                        "Requisition Job provenance was not found"
+                    )
             if payload.suggested_vendor_id is not None:
                 vendor = await self.repository.vendor(
                     session, context.company.id, payload.suggested_vendor_id
