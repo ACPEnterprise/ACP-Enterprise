@@ -9,7 +9,7 @@ from app.beacon.escalation import escalation_service
 from app.beacon.evaluation import SignalEvaluationService
 from app.beacon.intelligence import build_intelligence_packet
 from app.beacon.operational_prioritization import operational_signal_prioritizer
-from app.lia.adapters import beacon_evidence
+from app.lia.adapters import beacon_evidence, economics_evidence
 from app.lia.evaluation import evaluate_case
 from app.lia.foundation import (
     TOOL_REGISTRY,
@@ -191,6 +191,46 @@ def test_beacon_adapter_preserves_quality_without_adding_authority() -> None:
     assert adapted.freshness == packet.freshness
     assert adapted.reconciliation == packet.reconciliation
     assert adapted.limitations == packet.limitations
+
+
+def test_economics_adapter_preserves_authoritative_quality_and_never_recalculates() -> (
+    None
+):
+    digest = "e" * 64
+    packet = {
+        "contract_version": "economics.owner-intelligence.v1",
+        "answer": {"kind": "jobs", "items": [{"contribution_minor": 1234}]},
+        "context_packet": {
+            "evidence_digest": digest,
+            "classification": "INCOMPLETE",
+            "completeness": "partial",
+            "freshness": "CURRENT_OR_EXPLICITLY_INCOMPLETE",
+            "limitations": ["economic_evidence_is_not_complete"],
+            "result_authority": "immutable_current_results_only",
+            "mutation_authority": "none",
+        },
+    }
+
+    adapted = economics_evidence(packet, observed_at=NOW)
+
+    assert adapted.version_or_digest == digest
+    assert adapted.state is EvidenceState.PARTIAL
+    assert adapted.completeness == "partial"
+    assert adapted.limitations == ("economic_evidence_is_not_complete",)
+    assert "1234" not in adapted.safe_summary
+
+
+def test_economics_adapter_rejects_unknown_contract_or_missing_digest() -> None:
+    with pytest.raises(ValueError, match="Unsupported"):
+        economics_evidence({}, observed_at=NOW)
+    with pytest.raises(ValueError, match="digest"):
+        economics_evidence(
+            {
+                "contract_version": "economics.owner-intelligence.v1",
+                "context_packet": {},
+            },
+            observed_at=NOW,
+        )
 
 
 @pytest.mark.parametrize(

@@ -17,7 +17,7 @@ Audit authority: `origin/customer-management-v1` at the start of
 | Migration readiness | AUTHORITATIVE | Stable composition seam; no cutover action is exposed |
 | Luminary product findings | AUTHORITATIVE | Accepted persisted briefing adapter is Company/Branch and permission scoped |
 | Beacon intelligence packet | AUTHORITATIVE_ON_QUALIFIED_INTEGRATION_BRANCH | `BEACON.INTELLIGENCE.v1` is adapted without changing Beacon quality or action authority |
-| Business Economics LIA evidence | PARTIAL | Stable interface exists; accepted Economics adapter remains an explicit source gate |
+| Business Economics LIA evidence | AUTHORITATIVE | `economics.owner-intelligence.v1` is adapted without recalculation or mutation authority |
 | Product LIA request/response/provenance contract | AUTHORITATIVE | `lia-governed-assistant/v1` remains the runtime foundation |
 | LIA safety/evidence/tool contracts | QUALIFIED_INTEGRATION_BRANCH | `LIA.FOUNDATION.v1` and `LIA.READ_ONLY.v1` add provider-neutral safety contracts |
 | Product model provider | BLOCKED_EXTERNAL | Provider-neutral protocol and explicit `AI_PROVIDER_NOT_CONFIGURED` gate |

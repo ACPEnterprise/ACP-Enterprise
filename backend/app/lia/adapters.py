@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Protocol
+from collections.abc import Mapping
+from datetime import datetime
+from typing import Any, Protocol
 
 from app.beacon.intelligence import BeaconIntelligencePacket
 
@@ -37,6 +39,53 @@ def beacon_evidence(packet: BeaconIntelligencePacket) -> EvidenceEnvelope:
         limitations=packet.limitations,
         safe_summary=packet.explanation,
         drillback_path=f"/command-center?signal={packet.signal_id}",
+    )
+
+
+def economics_evidence(
+    packet: Mapping[str, Any], *, observed_at: datetime
+) -> EvidenceEnvelope:
+    """Adapt the authoritative owner-intelligence context without recalculation."""
+    if packet.get("contract_version") != "economics.owner-intelligence.v1":
+        raise ValueError("Unsupported Economics intelligence contract.")
+    context = packet.get("context_packet")
+    if not isinstance(context, Mapping):
+        raise TypeError("Economics context packet is required.")
+    digest = context.get("evidence_digest")
+    if not isinstance(digest, str) or len(digest) != 64:
+        raise ValueError("Economics evidence digest is invalid.")
+    classification = str(context.get("classification", "UNAVAILABLE"))
+    state = {
+        "KNOWN": EvidenceState.KNOWN,
+        "INCOMPLETE": EvidenceState.PARTIAL,
+        "STALE": EvidenceState.STALE,
+        "CONFLICTING": EvidenceState.CONFLICTING,
+        "UNAVAILABLE": EvidenceState.UNAVAILABLE,
+    }.get(classification, EvidenceState.UNRESOLVED)
+    limitations = context.get("limitations", ())
+    if not isinstance(limitations, (list, tuple)) or not all(
+        isinstance(item, str) for item in limitations
+    ):
+        raise ValueError("Economics limitations are invalid.")
+    answer = packet.get("answer")
+    answer_kind = answer.get("kind") if isinstance(answer, Mapping) else None
+    return EvidenceEnvelope(
+        evidence_id=f"economics:{digest}",
+        source_id="ECONOMICS_INTELLIGENCE",
+        source_domain="Business Economics",
+        source_entity_type="owner_intelligence_result",
+        source_entity_id=None,
+        version_or_digest=digest,
+        effective_at=None,
+        observed_at=observed_at,
+        state=state,
+        freshness=str(context.get("freshness", "UNAVAILABLE")),
+        confidence=classification,
+        completeness=str(context.get("completeness", "unavailable")),
+        reconciliation=str(context.get("result_authority", "unavailable")),
+        limitations=tuple(limitations),
+        safe_summary=f"Authorized Economics evidence: {answer_kind or 'unavailable'}.",
+        drillback_path="/business-economics",
     )
 
 

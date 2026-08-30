@@ -91,7 +91,8 @@ may see broader authorized sources, but never secrets or implicit Production act
 
 - Beacon: ready through `BEACON.INTELLIGENCE.v1`.
 - Jobs, Scheduling, and Invoice status: bounded read contracts ready.
-- Economics: adapter interface ready; accepted Economics LIA evidence remains gated.
+- Economics: ready through the bounded immutable `economics.owner-intelligence.v1`
+  context packet; LIA does not recalculate profitability or expose Payroll detail.
 - Customer operational context: partial pending a minimum-necessary domain projection.
 - Payroll own statement: blocked pending server-resolved Employee identity adapter.
 - System readiness: partial; only explicit bounded registries may participate.

@@ -499,15 +499,14 @@ SOURCE_REGISTRY = (
     ),
     SourceSpec(
         source_id="ECONOMICS_INTELLIGENCE",
-        authority="BUSINESS_ECONOMICS_ADMITTED_RESULT",
+        authority="economics.owner-intelligence.v1",
         required_permission=EconomicsPolicyPermission.MEASUREMENT_READ,
         sensitivity=Sensitivity.FINANCIAL,
         branch_scoped=True,
         max_results=20,
         freshness_contract="ECONOMICS_MEASUREMENT_PACKAGE",
         provenance_contract="ECONOMICS_RESULT_LINEAGE",
-        readiness=SourceReadiness.PARTIAL,
-        blocker="Accepted Economics LIA adapter is not authoritative on the current base.",
+        readiness=SourceReadiness.READY,
     ),
     SourceSpec(
         source_id="CUSTOMER_OPERATIONAL",
