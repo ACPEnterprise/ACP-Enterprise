@@ -214,6 +214,7 @@ class EventType(str, Enum):
     PURCHASING_REQUISITION_REJECTED = "purchasing.requisition.rejected"
     PURCHASING_REQUISITION_CONVERTED = "purchasing.requisition.converted"
     SUPPLY_CHAIN_POLICY_CONFIGURED = "supply_chain.policy.configured"
+    PURCHASING_DOCUMENT_REGISTERED = "purchasing.document.registered"
 
     # Operations
     OPERATIONS_SERVICE_REQUEST_ACCEPTED = "operations.service_request.accepted"

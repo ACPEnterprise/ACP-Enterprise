@@ -38,6 +38,7 @@ from app.purchasing.models import (
     PurchaseOrderRevision,
     PurchaseRequisition,
     PurchaseReturn,
+    PurchasingDocumentEvidence,
     ReplenishmentDecisionEvidence,
     SupplyChainPolicy,
 )
@@ -51,6 +52,7 @@ from app.purchasing.schemas import (
     PurchaseRequisitionCreate,
     PurchaseRequisitionTransition,
     PurchaseReturnTransitionCommand,
+    PurchasingDocumentCreate,
     ReceiptLineCommand,
     RecordReceiptCommand,
     ReplenishmentDecisionCommand,
@@ -67,6 +69,89 @@ from app.purchasing.service import PurchasingService
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+
+@pytest.mark.asyncio
+async def test_purchasing_document_custody_is_scoped_append_only_and_idempotent(
+    purchasing_fixture,
+) -> None:
+    factory, company, _, branch, other_branch, preparer, _ = purchasing_fixture
+    service = PurchasingService()
+    async with factory() as session:
+        requisition = await service.create_requisition(
+            session,
+            context=preparer,
+            payload=PurchaseRequisitionCreate(
+                branch_id=branch.id,
+                request_number=f"DOC-{uuid4().hex[:8]}",
+                description="Synthetic document custody qualification",
+                quantity=Decimal(1),
+                unit="each",
+                source_type="manual",
+                source_reference="synthetic-qualification",
+                reason="Qualify append-only provider-neutral custody",
+                idempotency_key=f"req-{uuid4()}",
+            ),
+        )
+    command = PurchasingDocumentCreate(
+        branch_id=branch.id,
+        entity_type="requisition",
+        entity_id=requisition.id,
+        document_type="supporting_evidence",
+        filename="synthetic-evidence.pdf",
+        media_type="application/pdf",
+        content_digest="a" * 64,
+        storage_reference="synthetic://document/evidence",
+        source_reference="synthetic-qualification",
+        idempotency_key=f"document-{uuid4()}",
+    )
+    async with factory() as session:
+        created = await service.register_document(
+            session, context=preparer, payload=command
+        )
+    async with factory() as session:
+        replay = await service.register_document(
+            session, context=preparer, payload=command
+        )
+        assert replay.id == created.id
+        assert (
+                await session.scalar(
+                    select(func.count())
+                    .select_from(PurchasingDocumentEvidence)
+                    .where(PurchasingDocumentEvidence.company_id == company.id)
+                )
+            == 1
+        )
+        assert (
+                await session.scalar(
+                    select(func.count())
+                    .select_from(BusinessEvent)
+                    .where(
+                        BusinessEvent.company_id == company.id,
+                        BusinessEvent.entity_id == created.id,
+                    )
+                )
+            == 1
+        )
+    async with factory() as session:
+        with pytest.raises(PurchasingConflict):
+            await service.register_document(
+                session,
+                context=preparer,
+                payload=command.model_copy(update={"filename": "contradiction.pdf"}),
+            )
+    async with factory() as session:
+        with pytest.raises(PurchasingNotFound):
+            await service.register_document(
+                session,
+                context=preparer,
+                payload=command.model_copy(
+                    update={
+                        "branch_id": other_branch.id,
+                        "idempotency_key": f"document-{uuid4()}",
+                    }
+                ),
+            )
 
 
 @pytest.mark.asyncio

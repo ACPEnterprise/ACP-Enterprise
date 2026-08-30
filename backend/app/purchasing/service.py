@@ -36,6 +36,7 @@ from .models import (
     PurchaseRequisition,
     PurchaseReturn,
     PurchasingCommandReceipt,
+    PurchasingDocumentEvidence,
     ReplenishmentDecisionEvidence,
     SupplyChainPolicy,
 )
@@ -63,6 +64,8 @@ from .schemas import (
     PurchaseRequisitionTransition,
     PurchaseReturnItem,
     PurchaseReturnTransitionCommand,
+    PurchasingDocumentCreate,
+    PurchasingDocumentItem,
     PurchasingWorkspace,
     ReceiptItem,
     ReceiptLineItem,
@@ -154,6 +157,20 @@ class PurchasingService:
                 )
             ).all()
         )
+        documents = tuple(
+            (
+                await session.scalars(
+                    select(PurchasingDocumentEvidence)
+                    .where(
+                        PurchasingDocumentEvidence.company_id == context.company.id,
+                        PurchasingDocumentEvidence.branch_id.in_(
+                            tuple(context.authorized_branch_ids)
+                        ),
+                    )
+                    .order_by(PurchasingDocumentEvidence.created_at.desc())
+                )
+            ).all()
+        )
         return PurchasingWorkspace(
             vendors=tuple(VendorItem.model_validate(vendor) for vendor in vendors),
             purchase_orders=tuple(
@@ -165,7 +182,124 @@ class PurchasingService:
             policies=tuple(
                 SupplyChainPolicyItem.model_validate(item) for item in policies
             ),
+            documents=tuple(
+                PurchasingDocumentItem.model_validate(item) for item in documents
+            ),
         )
+
+    async def register_document(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        payload: PurchasingDocumentCreate,
+    ) -> PurchasingDocumentItem:
+        self.branch(context, payload.branch_id)
+        data = payload.model_dump(mode="json", exclude={"idempotency_key"})
+        async with session.begin():
+            replay = await self._replay(
+                session,
+                context,
+                "purchasing.document.register",
+                payload.idempotency_key,
+                data,
+                "purchasing_document",
+            )
+            if replay is not None:
+                existing = await session.get(PurchasingDocumentEvidence, replay)
+                if existing is None or existing.company_id != context.company.id:
+                    raise PurchasingConflict("Document replay evidence is unavailable")
+                return PurchasingDocumentItem.model_validate(existing)
+            branch_id = await self._document_entity_branch(
+                session, context.company.id, payload.entity_type, payload.entity_id
+            )
+            if branch_id != payload.branch_id or not context.can_access_branch(
+                branch_id
+            ):
+                raise PurchasingNotFound(
+                    "Scoped Purchasing document entity was not found"
+                )
+            evidence = {
+                "schema_version": 1,
+                "company_id": str(context.company.id),
+                **data,
+                "actor_user_id": str(context.user.id),
+            }
+            record = PurchasingDocumentEvidence(
+                company_id=context.company.id,
+                branch_id=payload.branch_id,
+                entity_type=payload.entity_type,
+                entity_id=payload.entity_id,
+                document_type=payload.document_type.strip(),
+                filename=payload.filename.strip(),
+                media_type=payload.media_type.strip().lower(),
+                content_digest=payload.content_digest,
+                storage_reference=payload.storage_reference.strip(),
+                source_reference=payload.source_reference.strip(),
+                status="active",
+                evidence_digest=digest(evidence),
+                idempotency_key=payload.idempotency_key,
+                actor_user_id=context.user.id,
+            )
+            session.add(record)
+            await session.flush()
+            self._receipt(
+                session,
+                context,
+                "purchasing.document.register",
+                payload.idempotency_key,
+                data,
+                "purchasing_document",
+                record.id,
+            )
+            self._event(
+                session,
+                context,
+                EventType.PURCHASING_DOCUMENT_REGISTERED,
+                "purchasing_document",
+                record.id,
+                record.branch_id,
+                {
+                    "document_id": str(record.id),
+                    "entity_type": record.entity_type,
+                    "entity_id": str(record.entity_id),
+                    "content_digest": record.content_digest,
+                    "evidence_digest": record.evidence_digest,
+                },
+            )
+        return PurchasingDocumentItem.model_validate(record)
+
+    @staticmethod
+    async def _document_entity_branch(
+        session: AsyncSession, company_id: UUID, entity_type: str, entity_id: UUID
+    ) -> UUID:
+        if entity_type == "purchase_order":
+            query = select(PurchaseOrder.branch_id).where(
+                PurchaseOrder.company_id == company_id, PurchaseOrder.id == entity_id
+            )
+        elif entity_type == "requisition":
+            query = select(PurchaseRequisition.branch_id).where(
+                PurchaseRequisition.company_id == company_id,
+                PurchaseRequisition.id == entity_id,
+            )
+        elif entity_type == "receipt":
+            query = select(PurchaseOrderReceipt.branch_id).where(
+                PurchaseOrderReceipt.company_id == company_id,
+                PurchaseOrderReceipt.id == entity_id,
+            )
+        elif entity_type == "discrepancy":
+            query = select(PurchaseOrderDiscrepancy.branch_id).where(
+                PurchaseOrderDiscrepancy.company_id == company_id,
+                PurchaseOrderDiscrepancy.id == entity_id,
+            )
+        else:
+            query = select(PurchaseReturn.branch_id).where(
+                PurchaseReturn.company_id == company_id, PurchaseReturn.id == entity_id
+            )
+        branch_id = await session.scalar(query)
+        if branch_id is None:
+            raise PurchasingNotFound("Purchasing document entity was not found")
+        return branch_id
 
     async def create_requisition(
         self,

@@ -26,6 +26,7 @@ import { SupplyChainApprovalCenter } from "../components/purchasing/SupplyChainA
 import { SupplyChainReadiness } from "../components/purchasing/SupplyChainReadiness";
 import { ProcurementMatchWorkbench } from "../components/purchasing/ProcurementMatchWorkbench";
 import { SupplyChainOperationsDashboard } from "../components/purchasing/SupplyChainOperationsDashboard";
+import { PurchasingDocumentCustody } from "../components/purchasing/PurchasingDocumentCustody";
 
 function changeErrorMessage(error: unknown): string | null {
   if (!error) return null;
@@ -300,6 +301,13 @@ export function PurchasingRoute() {
         onSave={(input) => mutations.configureSupplyChainPolicy.mutateAsync(input)}
       />
       <ProcurementMatchWorkbench canReview={canReviewMatches} />
+      <PurchasingDocumentCustody
+        canManage={canManage}
+        documents={purchasing.data?.documents ?? []}
+        register={(input) => mutations.registerDocument.mutateAsync(input)}
+        pending={mutations.registerDocument.isPending}
+        failed={mutations.registerDocument.isError}
+      />
       <ReplenishmentWorkbench
         canApprove={canApprove}
         pending={mutations.replenishmentWorkbench.isPending}

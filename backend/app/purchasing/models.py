@@ -1106,3 +1106,70 @@ class SupplyChainPolicy(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
     )
+
+
+class PurchasingDocumentEvidence(Base):
+    """Append-only provider-neutral document custody metadata."""
+
+    __tablename__ = "purchasing_document_evidence"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "branch_id"],
+            ["branches.company_id", "branches.id"],
+            name="fk_purchasing_document_branch",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "entity_type IN ('purchase_order','requisition','receipt','discrepancy','purchase_return')",
+            name="ck_purchasing_document_entity_type",
+        ),
+        CheckConstraint(
+            "length(content_digest) = 64", name="ck_purchasing_document_digest"
+        ),
+        CheckConstraint(
+            "status IN ('active','superseded')", name="ck_purchasing_document_status"
+        ),
+        UniqueConstraint(
+            "company_id", "idempotency_key", name="uq_purchasing_document_key"
+        ),
+        UniqueConstraint(
+            "company_id",
+            "entity_type",
+            "entity_id",
+            "content_digest",
+            name="uq_purchasing_document_content",
+        ),
+        UniqueConstraint("company_id", "id", name="uq_purchasing_document_company"),
+        Index(
+            "ix_purchasing_document_entity",
+            "company_id",
+            "entity_type",
+            "entity_id",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    entity_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    entity_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    document_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    filename: Mapped[str] = mapped_column(String(240), nullable=False)
+    media_type: Mapped[str] = mapped_column(String(120), nullable=False)
+    content_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    storage_reference: Mapped[str] = mapped_column(String(500), nullable=False)
+    source_reference: Mapped[str] = mapped_column(String(240), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
+    evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    actor_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )

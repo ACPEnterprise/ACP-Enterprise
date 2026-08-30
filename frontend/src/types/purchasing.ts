@@ -174,6 +174,19 @@ export interface PurchasingWorkspace {
   purchase_orders: readonly PurchaseOrder[];
   requisitions: readonly PurchaseRequisition[];
   policies: readonly SupplyChainPolicy[];
+  documents: readonly PurchasingDocument[];
+}
+export interface PurchasingDocument {
+  id: string; company_id: string; branch_id: string; entity_type: string;
+  entity_id: string; document_type: string; filename: string; media_type: string;
+  content_digest: string; storage_reference: string; source_reference: string;
+  status: string; evidence_digest: string; actor_user_id: string; created_at: string;
+}
+export interface PurchasingDocumentCreate {
+  branch_id: string; entity_type: "purchase_order" | "requisition" | "receipt" | "discrepancy" | "purchase_return";
+  entity_id: string; document_type: string; filename: string; media_type: string;
+  content_digest: string; storage_reference: string; source_reference: string;
+  idempotency_key: string;
 }
 export interface PurchaseRequisition {
   id: string; company_id: string; branch_id: string; request_number: string;

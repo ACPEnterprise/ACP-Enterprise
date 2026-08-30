@@ -35,6 +35,8 @@ import type {
   PurchaseRequisitionTransition,
   SupplyChainPolicy,
   SupplyChainPolicyWrite,
+  PurchasingDocument,
+  PurchasingDocumentCreate,
 } from "../types/purchasing";
 
 const root = "/api/v1/purchasing";
@@ -66,6 +68,8 @@ export const transitionPurchaseRequisition = async (
   (await apiClient.post<PurchaseRequisition>(`${root}/requisitions/${id}/${action}`, input)).data;
 export const configureSupplyChainPolicy = async (input: SupplyChainPolicyWrite): Promise<SupplyChainPolicy> =>
   (await apiClient.put<SupplyChainPolicy>(`${root}/supply-chain-policies`, input)).data;
+export const registerPurchasingDocument = async (input: PurchasingDocumentCreate): Promise<PurchasingDocument> =>
+  (await apiClient.post<PurchasingDocument>(`${root}/documents`, input)).data;
 export const createOperationalVendor = async (
   input: VendorCreate,
 ): Promise<OperationalVendor> =>

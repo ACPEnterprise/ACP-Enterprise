@@ -22,6 +22,7 @@ import {
   configureSupplyChainPolicy,
   createPurchaseRequisition,
   transitionPurchaseRequisition,
+  registerPurchasingDocument,
 } from "../api/purchasing";
 import type {
   PurchaseOrderLineCreate,
@@ -40,6 +41,7 @@ import type {
   PurchaseRequisitionCreate,
   PurchaseRequisitionTransition,
   SupplyChainPolicyWrite,
+  PurchasingDocumentCreate,
 } from "../types/purchasing";
 
 const keys = {
@@ -82,6 +84,10 @@ export function usePurchasingMutations() {
     }),
     configureSupplyChainPolicy: useMutation({
       mutationFn: (input: SupplyChainPolicyWrite) => configureSupplyChainPolicy(input),
+      onSuccess: refresh,
+    }),
+    registerDocument: useMutation({
+      mutationFn: (input: PurchasingDocumentCreate) => registerPurchasingDocument(input),
       onSuccess: refresh,
     }),
     createVendor: useMutation({

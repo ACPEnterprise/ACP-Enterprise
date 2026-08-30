@@ -37,6 +37,8 @@ from .schemas import (
     PurchaseRequisitionTransition,
     PurchaseReturnItem,
     PurchaseReturnTransitionCommand,
+    PurchasingDocumentCreate,
+    PurchasingDocumentItem,
     PurchasingWorkspace,
     ReceiptItem,
     ReceiptLineItem,
@@ -188,6 +190,22 @@ async def configure_supply_chain_policy(
 ) -> SupplyChainPolicyItem:
     try:
         return await purchasing_service.configure_supply_chain_policy(
+            session, context=context, payload=payload
+        )
+    except PurchasingError as error:
+        raise http_error(error) from error
+
+
+@router.post(
+    "/documents",
+    response_model=PurchasingDocumentItem,
+    status_code=status.HTTP_201_CREATED,
+)
+async def register_document(
+    payload: PurchasingDocumentCreate, context: ManageContext, session: DatabaseSession
+) -> PurchasingDocumentItem:
+    try:
+        return await purchasing_service.register_document(
             session, context=context, payload=payload
         )
     except PurchasingError as error:

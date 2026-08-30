@@ -288,6 +288,38 @@ class SupplyChainPolicyItem(PurchasingSchema):
     updated_at: datetime
 
 
+class PurchasingDocumentCreate(Command):
+    branch_id: UUID
+    entity_type: str = Field(
+        pattern=r"^(purchase_order|requisition|receipt|discrepancy|purchase_return)$"
+    )
+    entity_id: UUID
+    document_type: str = Field(min_length=1, max_length=80)
+    filename: str = Field(min_length=1, max_length=240)
+    media_type: str = Field(min_length=1, max_length=120)
+    content_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    storage_reference: str = Field(min_length=1, max_length=500)
+    source_reference: str = Field(min_length=1, max_length=240)
+
+
+class PurchasingDocumentItem(PurchasingSchema):
+    id: UUID
+    company_id: UUID
+    branch_id: UUID
+    entity_type: str
+    entity_id: UUID
+    document_type: str
+    filename: str
+    media_type: str
+    content_digest: str
+    storage_reference: str
+    source_reference: str
+    status: str
+    evidence_digest: str
+    actor_user_id: UUID
+    created_at: datetime
+
+
 class PurchaseOrderCreate(Command):
     branch_id: UUID
     vendor_id: UUID
@@ -628,3 +660,4 @@ class PurchasingWorkspace(PurchasingSchema):
     purchase_orders: tuple[PurchaseOrderItem, ...]
     requisitions: tuple[PurchaseRequisitionItem, ...] = ()
     policies: tuple[SupplyChainPolicyItem, ...] = ()
+    documents: tuple[PurchasingDocumentItem, ...] = ()
