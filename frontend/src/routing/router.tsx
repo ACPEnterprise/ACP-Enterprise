@@ -19,6 +19,7 @@ import {
   invoicesHandle,
   paymentsHandle,
   payrollHandle,
+  revenueCycleHandle,
   jobsHandle,
   missionControlHandle,
   notFoundHandle,
@@ -148,6 +149,14 @@ export const appRoutes: RouteObject[] = [
             path: "payroll",
             handle: payrollHandle,
             lazy: async () => ({ Component: (await import("../routes/PayrollRoute")).PayrollRoute }),
+          },
+          {
+            path: "revenue-cycle",
+            handle: revenueCycleHandle,
+            lazy: async () => ({
+              Component: (await import("../routes/RevenueCycleRoute"))
+                .RevenueCycleRoute,
+            }),
           },
           {
             path: "accounts-payable",
