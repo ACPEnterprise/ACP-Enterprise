@@ -5,7 +5,7 @@ import { Alert, Button, Card, CardContent, CardDescription, CardHeader, CardTitl
 import { ProcurementMatchWorkbench } from "../components/purchasing/ProcurementMatchWorkbench";
 const today = () => new Date().toISOString().slice(0, 10);
 export function AccountsPayableRoute() {
-  const canRead = useHasPermission("COMPANY_ACCOUNTS_PAYABLE_READ"); const canManageVendors = useHasPermission("COMPANY_ACCOUNTS_PAYABLE_VENDOR_MANAGE"); const canReviewMatches = useHasPermission("COMPANY_ACCOUNTS_PAYABLE_MATCH_REVIEW");
+  const canReadAP = useHasPermission("COMPANY_ACCOUNTS_PAYABLE_READ"); const canReadReports = useHasPermission("COMPANY_ACCOUNTS_PAYABLE_REPORT_READ"); const canRead = canReadAP || canReadReports; const canManageVendors = useHasPermission("COMPANY_ACCOUNTS_PAYABLE_VENDOR_MANAGE"); const canReviewMatches = useHasPermission("COMPANY_ACCOUNTS_PAYABLE_MATCH_REVIEW");
   const [asOf, setAsOf] = useState(today()); const [vendor, setVendor] = useState({ code: "", legal_name: "", display_name: "", provenance: "manual" });
   const aging = useAPAging(asOf); const mutations = useAPMutations();
   if (!canRead) return <Alert variant="danger">You are not authorized to view Accounts Payable.</Alert>;
