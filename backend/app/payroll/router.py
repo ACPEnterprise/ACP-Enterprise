@@ -401,13 +401,16 @@ async def payroll_filing_packages(
 
 @router.get("/me/pay-statements", response_model=list[StatementMetadata])
 async def list_own_pay_statements(
-    context: OwnRead, session: Session
+    context: OwnRead,
+    session: Session,
+    limit: Annotated[int, Query(ge=1, le=200)] = 100,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[StatementMetadata]:
     try:
         return [
             _metadata(value)
             for value in await PayrollPayStatementService().list_own(
-                session, context=context
+                session, context=context, limit=limit, offset=offset
             )
         ]
     except (PayrollAuthorizationError, PayrollConflictError) as error:
@@ -417,11 +420,12 @@ async def list_own_pay_statements(
 @router.get("/me/payroll-status", response_model=dict[str, object])
 async def own_payroll_status(context: OwnRead, session: Session) -> dict[str, object]:
     try:
-        values = await PayrollPayStatementService().list_own(session, context=context)
+        statement_count, current = await PayrollPayStatementService().own_summary(
+            session, context=context
+        )
     except (PayrollAuthorizationError, PayrollConflictError) as error:
         raise _error(error) from error
-    current = values[0] if values else None
-    return {"statement_count": len(values), "current_statement_id": current.id if current else None, "current_pay_period_id": current.pay_period_id if current else None, "payment_status": current.payment_status if current else "unavailable", "ytd_status": current.ytd_status if current else "unavailable", "has_correction": bool(current and current.version > 1)}
+    return {"statement_count": statement_count, "current_statement_id": current.id if current else None, "current_pay_period_id": current.pay_period_id if current else None, "payment_status": current.payment_status if current else "unavailable", "ytd_status": current.ytd_status if current else "unavailable", "has_correction": bool(current and current.version > 1)}
 
 
 @router.get("/me/pay-statements/{statement_id}", response_model=StatementMetadata)
