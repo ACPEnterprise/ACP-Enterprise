@@ -17,6 +17,7 @@ from app.service_agreements.schemas import (
     EntitlementOut,
     PlanCreate,
     PlanOut,
+    RenewalCreate,
     Transition,
     WorkspaceOut,
 )
@@ -203,6 +204,26 @@ async def billing(agreement_id: UUID, p: BillingCreate, c: Manage, s: Session):
                 agreement_id,
                 p.period_start,
                 p.period_end,
+                p.idempotency_key,
+            )
+        )
+    except AgreementError as e:
+        fail(e)
+
+
+@router.post("/{agreement_id}/renew", response_model=AgreementOut)
+async def renew(agreement_id: UUID, p: RenewalCreate, c: Manage, s: Session):
+    try:
+        return AgreementOut.model_validate(
+            await agreement_service.renew(
+                s,
+                c.company.id,
+                c.user.id,
+                agreement_id,
+                p.successor_plan_id,
+                p.start_date,
+                p.end_date,
+                p.expected_version,
                 p.idempotency_key,
             )
         )

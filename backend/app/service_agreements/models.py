@@ -43,6 +43,9 @@ class AgreementPlan(Base):
         UniqueConstraint(
             "company_id", "code", "version", name="uq_agreement_plans_code_version"
         ),
+        UniqueConstraint(
+            "company_id", "idempotency_key", name="uq_agreement_plans_idempotency"
+        ),
     )
     id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), primary_key=True, default=uuid4
@@ -74,6 +77,7 @@ class AgreementPlan(Base):
         JSON, nullable=False, default=dict
     )
     definition_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(160), nullable=False)
     created_by_user_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("users.id", ondelete="RESTRICT"),
@@ -127,6 +131,9 @@ class ServiceAgreement(Base):
         PGUUID(as_uuid=True),
         ForeignKey("service_agreement_plans.id", ondelete="RESTRICT"),
         nullable=False,
+    )
+    predecessor_agreement_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("service_agreements.id", ondelete="RESTRICT")
     )
     agreement_number: Mapped[str] = mapped_column(String(40), nullable=False)
     status: Mapped[str] = mapped_column(

@@ -118,6 +118,25 @@ class AgreementService:
     async def create_plan(
         self, s: AsyncSession, company: UUID, actor: UUID, p: PlanCreate
     ):
+        raw = p.model_dump()
+        replay = await s.scalar(
+            select(AgreementPlan).where(
+                AgreementPlan.company_id == company,
+                AgreementPlan.idempotency_key == p.idempotency_key,
+            )
+        )
+        if replay:
+            expected = digest(
+                {
+                    **{k: v for k, v in raw.items() if k != "idempotency_key"},
+                    "version": replay.version,
+                }
+            )
+            if replay.definition_digest != expected:
+                raise AgreementConflict(
+                    "Plan idempotency key conflicts with prior authority."
+                )
+            return replay
         version = (
             int(
                 (
@@ -132,12 +151,16 @@ class AgreementService:
             )
             + 1
         )
-        raw = p.model_dump()
         row = AgreementPlan(
             company_id=company,
             created_by_user_id=actor,
             version=version,
-            definition_digest=digest({**raw, "version": version}),
+            definition_digest=digest(
+                {
+                    **{k: v for k, v in raw.items() if k != "idempotency_key"},
+                    "version": version,
+                }
+            ),
             **raw,
         )
         s.add(row)
@@ -523,6 +546,148 @@ class AgreementService:
         await s.commit()
         await s.refresh(row)
         return row
+
+    async def renew(
+        self,
+        s: AsyncSession,
+        company: UUID,
+        actor: UUID,
+        agreement_id: UUID,
+        successor_plan_id: UUID,
+        start_date: date,
+        end_date: date,
+        expected: int,
+        key: str,
+    ):
+        predecessor = await s.scalar(
+            select(ServiceAgreement)
+            .where(
+                ServiceAgreement.company_id == company,
+                ServiceAgreement.id == agreement_id,
+            )
+            .with_for_update()
+        )
+        if (
+            not predecessor
+            or predecessor.status != "renewal_pending"
+            or predecessor.version != expected
+        ):
+            raise AgreementConflict(
+                "Agreement is not eligible for renewal or is stale."
+            )
+        replay = await s.scalar(
+            select(ServiceAgreement).where(
+                ServiceAgreement.company_id == company,
+                ServiceAgreement.idempotency_key == key,
+            )
+        )
+        if replay:
+            if (
+                replay.predecessor_agreement_id != agreement_id
+                or replay.plan_id != successor_plan_id
+            ):
+                raise AgreementConflict(
+                    "Renewal idempotency key conflicts with prior authority."
+                )
+            return replay
+        plan = await s.scalar(
+            select(AgreementPlan).where(
+                AgreementPlan.company_id == company,
+                AgreementPlan.id == successor_plan_id,
+                AgreementPlan.status == "active",
+            )
+        )
+        coverage = list(
+            (
+                await s.scalars(
+                    select(AgreementCoverage).where(
+                        AgreementCoverage.company_id == company,
+                        AgreementCoverage.agreement_id == agreement_id,
+                    )
+                )
+            ).all()
+        )
+        if not plan or not coverage or end_date < start_date:
+            raise AgreementError("Renewal evidence is invalid or incomplete.")
+        count = (
+            int(
+                (
+                    await s.scalar(
+                        select(func.count())
+                        .select_from(ServiceAgreement)
+                        .where(ServiceAgreement.company_id == company)
+                    )
+                )
+                or 0
+            )
+            + 1
+        )
+        snap = {
+            "plan_id": str(plan.id),
+            "code": plan.code,
+            "name": plan.name,
+            "version": plan.version,
+            "currency": plan.currency,
+            "price_amount": str(plan.price_amount)
+            if plan.price_amount is not None
+            else None,
+            "billing_cadence": plan.billing_cadence,
+            "included_visits": plan.included_visits,
+            "benefits": plan.benefits,
+            "definition_digest": plan.definition_digest,
+        }
+        successor = ServiceAgreement(
+            company_id=company,
+            branch_id=predecessor.branch_id,
+            customer_id=predecessor.customer_id,
+            plan_id=plan.id,
+            predecessor_agreement_id=predecessor.id,
+            agreement_number=f"AGR-{count:06d}",
+            status="pending_activation",
+            start_date=start_date,
+            end_date=end_date,
+            plan_snapshot=snap,
+            evidence_digest=digest(
+                {
+                    "predecessor": predecessor.evidence_digest,
+                    "plan": snap,
+                    "start": start_date,
+                    "end": end_date,
+                }
+            ),
+            idempotency_key=key,
+            created_by_user_id=actor,
+        )
+        s.add(successor)
+        await s.flush()
+        for old in coverage:
+            s.add(
+                AgreementCoverage(
+                    company_id=company,
+                    agreement_id=successor.id,
+                    service_location_id=old.service_location_id,
+                    effective_from=start_date,
+                    effective_to=end_date,
+                )
+            )
+        predecessor.status = "renewed"
+        predecessor.version += 1
+        predecessor.updated_at = datetime.now(timezone.utc)
+        await self._evidence(
+            s,
+            company,
+            f"{key}:predecessor",
+            "renew",
+            {"successor": successor.id, "plan": plan.id},
+            predecessor,
+            actor,
+            "renewal_pending",
+            "renewed",
+            payload={"successor_agreement_id": str(successor.id)},
+        )
+        await s.commit()
+        await s.refresh(successor)
+        return successor
 
     async def generate(self, s: AsyncSession, company: UUID, agreement_id: UUID):
         agreement = await s.scalar(

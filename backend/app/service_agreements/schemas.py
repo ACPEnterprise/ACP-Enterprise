@@ -10,6 +10,7 @@ class Schema(BaseModel):
 
 
 class PlanCreate(Schema):
+    idempotency_key: str = Field(min_length=1, max_length=160)
     branch_id: UUID | None = None
     code: str = Field(min_length=1, max_length=80)
     name: str = Field(min_length=1, max_length=160)
@@ -49,6 +50,7 @@ class AgreementOut(Schema):
     branch_id: UUID
     customer_id: UUID
     plan_id: UUID
+    predecessor_agreement_id: UUID | None
     agreement_number: str
     status: str
     start_date: date
@@ -94,6 +96,14 @@ class BillingOut(Schema):
     payment_state: str
     evidence_digest: str
     created_at: datetime
+
+
+class RenewalCreate(Schema):
+    successor_plan_id: UUID
+    start_date: date
+    end_date: date
+    expected_version: int = Field(ge=1)
+    idempotency_key: str = Field(min_length=1, max_length=160)
 
 
 class EntitlementOut(Schema):
