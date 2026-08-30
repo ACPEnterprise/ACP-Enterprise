@@ -91,7 +91,9 @@ class EventType(str, Enum):
     PAYROLL_REMITTANCE_POLICY_APPROVED = "payroll.remittance_policy_approved"
     PAYROLL_REMITTANCE_DESTINATION_CREATED = "payroll.remittance_destination_created"
     PAYROLL_REMITTANCE_DESTINATION_APPROVED = "payroll.remittance_destination_approved"
-    PAYROLL_REMITTANCE_OBLIGATION_IDENTIFIED = "payroll.remittance_obligation_identified"
+    PAYROLL_REMITTANCE_OBLIGATION_IDENTIFIED = (
+        "payroll.remittance_obligation_identified"
+    )
     PAYROLL_REMITTANCE_REVIEWED = "payroll.remittance_reviewed"
     PAYROLL_REMITTANCE_APPROVED = "payroll.remittance_approved"
     PAYROLL_REMITTANCE_INSTRUCTION_PREPARED = "payroll.remittance_instruction_prepared"
@@ -111,6 +113,8 @@ class EventType(str, Enum):
     ACCOUNTS_PAYABLE_RECONCILIATION_REQUIRED = (
         "accounts_payable.reconciliation_required"
     )
+    PROCUREMENT_MATCH_EVALUATED = "procurement.match_evaluated"
+    PROCUREMENT_MATCH_EXCEPTION_RESOLVED = "procurement.match_exception_resolved"
 
     # Payments
     PAYMENT_INTENT_CREATED = "payment.intent_created"
@@ -140,6 +144,10 @@ class EventType(str, Enum):
     # Inventory
     INVENTORY_LOCATION_CREATED = "inventory.location_created"
     INVENTORY_TRANSFER_POSTED = "inventory.transfer_posted"
+    INVENTORY_ADJUSTMENT_POSTED = "inventory.adjustment_posted"
+    INVENTORY_CYCLE_COUNT_STARTED = "inventory.cycle_count_started"
+    INVENTORY_CYCLE_COUNT_RECORDED = "inventory.cycle_count_recorded"
+    INVENTORY_CYCLE_COUNT_COMPLETED = "inventory.cycle_count_completed"
     INVENTORY_RESERVATION_CREATED = "inventory.reservation_created"
     INVENTORY_RESERVATION_RELEASED = "inventory.reservation_released"
     INVENTORY_PURCHASE_RECEIPT_POSTED = "inventory.purchase_receipt.posted"

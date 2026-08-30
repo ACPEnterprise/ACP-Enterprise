@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { useAuth, useHasPermission } from "../auth";
+import { InventoryCountAdjustmentWorkbench } from "../components/InventoryCountAdjustmentWorkbench";
 import { useInventory, useInventoryMutations } from "../hooks/useInventory";
 import {
   Alert,
@@ -21,6 +22,8 @@ export function InventoryRoute() {
   const canManage = useHasPermission("COMPANY_INVENTORY_MANAGE");
   const canMove = useHasPermission("COMPANY_INVENTORY_MOVE");
   const canReserve = useHasPermission("COMPANY_INVENTORY_RESERVE");
+  const canAdjust = useHasPermission("COMPANY_INVENTORY_ADJUST");
+  const canCount = useHasPermission("COMPANY_INVENTORY_COUNT");
   const [branch, setBranch] = useState("");
   const inventory = useInventory(branch || undefined, canRead);
   const mutations = useInventoryMutations();
@@ -494,6 +497,15 @@ export function InventoryRoute() {
               </ul>
             </CardContent>
           </Card>
+          {branch && (
+            <InventoryCountAdjustmentWorkbench
+              branchId={branch}
+              items={inventory.data?.items ?? []}
+              locations={inventory.data?.locations ?? []}
+              canAdjust={canAdjust}
+              canCount={canCount}
+            />
+          )}
         </>
       )}
     </div>

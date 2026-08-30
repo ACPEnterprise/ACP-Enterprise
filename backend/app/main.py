@@ -74,6 +74,7 @@ from app.platform.users.identity_router import (
     self_service_router as identity_self_service_router,
 )
 from app.price_book.router import router as price_book_router
+from app.procurement_matching.router import router as procurement_matching_router
 from app.purchasing.router import router as purchasing_router
 from app.qbo_source.router import router as qbo_source_router
 from app.qbo_source.runtime import (
@@ -173,6 +174,7 @@ app.include_router(timekeeping_router)
 app.include_router(jobs_router)
 app.include_router(inventory_router)
 app.include_router(purchasing_router)
+app.include_router(procurement_matching_router)
 app.include_router(operations_router)
 app.include_router(dispatch_router)
 app.include_router(employee_operations_router)

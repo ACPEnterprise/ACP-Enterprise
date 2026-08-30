@@ -1,6 +1,10 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useBranchPurchasingPolicies, usePurchasing, usePurchasingMutations } from "../hooks/usePurchasing";
+import {
+  useBranchPurchasingPolicies,
+  usePurchasing,
+  usePurchasingMutations,
+} from "../hooks/usePurchasing";
 import { PurchasingRoute } from "./PurchasingRoute";
 let permissions = new Set<string>();
 vi.mock("../auth", () => ({
@@ -15,11 +19,31 @@ vi.mock("../hooks/usePurchasing", () => ({
   usePurchasingMutations: vi.fn(),
 }));
 vi.mock("../hooks/useInventory", () => ({
-  useInventory: () => ({ isPending: false, isError: false, data: { locations: [] } }),
+  useInventory: () => ({
+    isPending: false,
+    isError: false,
+    data: { locations: [] },
+  }),
+}));
+vi.mock("../hooks/useProcurementMatching", () => ({
+  useVendorPerformance: () => ({
+    isPending: false,
+    isError: false,
+    data: { items: [] },
+  }),
 }));
 const mutation = { mutateAsync: vi.fn(), isPending: false, isError: false };
-const replenishmentMutation = { ...mutation, data: undefined as never, reset: vi.fn() };
-const decisionMutation = { ...mutation, error: null as unknown, isSuccess: false, reset: vi.fn() };
+const replenishmentMutation = {
+  ...mutation,
+  data: undefined as never,
+  reset: vi.fn(),
+};
+const decisionMutation = {
+  ...mutation,
+  error: null as unknown,
+  isSuccess: false,
+  reset: vi.fn(),
+};
 describe("PurchasingRoute", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -88,31 +112,95 @@ describe("PurchasingRoute", () => {
   });
   it("keeps recommendations read-only without approval authority", () => {
     replenishmentMutation.data = {
-      schema_version: 1, company_id: "company-1", as_of: "2026-08-29T12:00:00Z", evidence_digest: "report",
-      recommendations: [{ branch_id: "branch-1", inventory_item_id: "item-1", item_code: "FILTER", item_name: "Filter", stocking_unit: "each", target_available_quantity: "10", on_hand_quantity: "2", reserved_quantity: "0", available_quantity: "2", open_purchase_order_quantity: "3", recommended_order_quantity: "5", recommendation_state: "recommend_order", provenance: [], evidence_digest: "recommendation" }],
+      schema_version: 1,
+      company_id: "company-1",
+      as_of: "2026-08-29T12:00:00Z",
+      evidence_digest: "report",
+      recommendations: [
+        {
+          branch_id: "branch-1",
+          inventory_item_id: "item-1",
+          item_code: "FILTER",
+          item_name: "Filter",
+          stocking_unit: "each",
+          target_available_quantity: "10",
+          on_hand_quantity: "2",
+          reserved_quantity: "0",
+          available_quantity: "2",
+          open_purchase_order_quantity: "3",
+          recommended_order_quantity: "5",
+          recommendation_state: "recommend_order",
+          provenance: [],
+          evidence_digest: "recommendation",
+        },
+      ],
     } as never;
     render(<PurchasingRoute />);
     expect(screen.getByText("Recommended 5 each")).toBeVisible();
-    expect(screen.queryByRole("button", { name: /Approve and create draft PO/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Reject" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Approve and create draft PO/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Reject" }),
+    ).not.toBeInTheDocument();
   });
   it("surfaces stale decision failure and removes the stale actionable result", async () => {
     permissions.add("COMPANY_PURCHASING_APPROVE");
     replenishmentMutation.data = {
-      schema_version: 1, company_id: "company-1", as_of: "2026-08-29T12:00:00Z", evidence_digest: "report",
-      recommendations: [{ branch_id: "branch-1", inventory_item_id: "item-1", item_code: "FILTER", item_name: "Filter", stocking_unit: "each", target_available_quantity: "10", on_hand_quantity: "2", reserved_quantity: "0", available_quantity: "2", open_purchase_order_quantity: "3", recommended_order_quantity: "5", recommendation_state: "recommend_order", provenance: [], evidence_digest: "recommendation" }],
+      schema_version: 1,
+      company_id: "company-1",
+      as_of: "2026-08-29T12:00:00Z",
+      evidence_digest: "report",
+      recommendations: [
+        {
+          branch_id: "branch-1",
+          inventory_item_id: "item-1",
+          item_code: "FILTER",
+          item_name: "Filter",
+          stocking_unit: "each",
+          target_available_quantity: "10",
+          on_hand_quantity: "2",
+          reserved_quantity: "0",
+          available_quantity: "2",
+          open_purchase_order_quantity: "3",
+          recommended_order_quantity: "5",
+          recommendation_state: "recommend_order",
+          provenance: [],
+          evidence_digest: "recommendation",
+        },
+      ],
     } as never;
-    const staleError = { isAxiosError: true, response: { status: 409, data: { detail: "STALE_REPLENISHMENT_RECOMMENDATION" } } };
+    const staleError = {
+      isAxiosError: true,
+      response: {
+        status: 409,
+        data: { detail: "STALE_REPLENISHMENT_RECOMMENDATION" },
+      },
+    };
     decisionMutation.mutateAsync.mockRejectedValueOnce(staleError);
     decisionMutation.error = staleError;
     render(<PurchasingRoute />);
-    fireEvent.change(screen.getByLabelText("Replenishment Vendor ID"), { target: { value: "vendor-1" } });
-    fireEvent.change(screen.getByLabelText("Replenishment PO number"), { target: { value: "PO-1" } });
-    fireEvent.change(screen.getByLabelText("Approved quantity"), { target: { value: "5" } });
-    fireEvent.change(screen.getByLabelText("Approved unit cost"), { target: { value: "2" } });
-    fireEvent.change(screen.getByLabelText("Decision reason"), { target: { value: "Current evidence" } });
-    fireEvent.click(screen.getByRole("button", { name: /Approve and create draft PO/ }));
-    await waitFor(() => expect(replenishmentMutation.reset).toHaveBeenCalledOnce());
+    fireEvent.change(screen.getByLabelText("Replenishment Vendor ID"), {
+      target: { value: "vendor-1" },
+    });
+    fireEvent.change(screen.getByLabelText("Replenishment PO number"), {
+      target: { value: "PO-1" },
+    });
+    fireEvent.change(screen.getByLabelText("Approved quantity"), {
+      target: { value: "5" },
+    });
+    fireEvent.change(screen.getByLabelText("Approved unit cost"), {
+      target: { value: "2" },
+    });
+    fireEvent.change(screen.getByLabelText("Decision reason"), {
+      target: { value: "Current evidence" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: /Approve and create draft PO/ }),
+    );
+    await waitFor(() =>
+      expect(replenishmentMutation.reset).toHaveBeenCalledOnce(),
+    );
     expect(screen.getByText(/recommendation is stale/)).toBeVisible();
   });
   it("fails closed without read permission", () => {

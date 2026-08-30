@@ -406,6 +406,20 @@ class InventoryRepositoryContract(Protocol):
         self, session: AsyncSession, *, spec: StartCycleCount
     ) -> CycleCountSessionRecord: ...
 
+    async def list_cycle_counts(
+        self,
+        session: AsyncSession,
+        *,
+        company_id: UUID,
+        branch_ids: tuple[UUID, ...],
+    ) -> tuple[
+        tuple[CycleCountSessionRecord, tuple[CycleCountEntryRecord, ...]], ...
+    ]: ...
+
+    async def get_cycle_count(
+        self, session: AsyncSession, *, company_id: UUID, session_id: UUID
+    ) -> CycleCountSessionRecord | None: ...
+
     async def record_cycle_count(
         self, session: AsyncSession, *, spec: RecordCycleCount
     ) -> CycleCountEntryRecord: ...
@@ -417,6 +431,7 @@ class InventoryRepositoryContract(Protocol):
         company_id: UUID,
         session_id: UUID,
         actor_user_id: UUID,
+        expected_version: int | None = None,
     ) -> CycleCountSessionRecord: ...
 
     async def reconcile_projection(
