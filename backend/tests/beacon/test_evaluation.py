@@ -2,13 +2,13 @@ from dataclasses import FrozenInstanceError, replace
 from datetime import timedelta
 
 import pytest
-
 from app.beacon.contracts import BeaconSeverity
 from app.beacon.definitions import (
     BEACON_SIGNAL_DEFINITIONS,
     BeaconSignalDefinitionRegistry,
 )
 from app.beacon.evaluation import SignalEvaluationService
+
 from tests.beacon.test_beacon import NOW, snapshot
 
 
@@ -69,6 +69,21 @@ def test_definition_version_is_part_of_reproducible_signal_evidence() -> None:
     assert original_signal.evidence_digest != versioned_signal.evidence_digest
     assert original_signal.id != versioned_signal.id
     assert versioned_signal.definition_version == 2
+
+
+def test_authorization_scope_is_part_of_signal_and_condition_identity() -> None:
+    service = SignalEvaluationService()
+    source = snapshot()
+    branch_a = service.evaluate_signals(
+        replace(source, scope_identity="branch-scope-a")
+    )[0]
+    branch_b = service.evaluate_signals(
+        replace(source, scope_identity="branch-scope-b")
+    )[0]
+
+    assert branch_a.evidence_digest == branch_b.evidence_digest
+    assert branch_a.condition_key != branch_b.condition_key
+    assert branch_a.id != branch_b.id
 
 
 def test_definitions_own_escalation_and_expiration_without_module_callbacks() -> None:

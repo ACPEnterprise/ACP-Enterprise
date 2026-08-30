@@ -44,6 +44,19 @@ const signal: BeaconSignal = {
     level: "high",
     basis: "Authoritative Company-scoped records.",
   },
+  evidence_quality: {
+    definition_id: "revenue.past_due_invoices",
+    definition_version: 1,
+    source_authority: "authoritative_invoice_records",
+    completeness: "partial",
+    reconciliation: "limited",
+    freshness: "current",
+    confidence: "moderate",
+    limitations: ["Payment settlement is outside this signal."],
+    quality_digest: "b".repeat(64),
+    conclusion_admissible: true,
+    explanation: "Invoice evidence is current but intentionally bounded.",
+  },
   supporting_facts: [
     {
       name: "past_due_invoice_count",
@@ -104,6 +117,12 @@ describe("BeaconPanel", () => {
     expect(screen.getByText("Immediate priority")).toBeInTheDocument();
     expect(screen.getByText("Important severity")).toBeInTheDocument();
     expect(screen.getByText("First for owner attention")).toBeInTheDocument();
+    expect(screen.getByText("partial completeness")).toBeInTheDocument();
+    expect(screen.getByText(/intentionally bounded/)).toBeInTheDocument();
+    expect(screen.getByText("Open source workflow")).toHaveAttribute(
+      "href",
+      "/invoices/invoice-1",
+    );
     expect(
       screen.getByText(/measured ranking factors contribute 37 points/),
     ).toBeInTheDocument();

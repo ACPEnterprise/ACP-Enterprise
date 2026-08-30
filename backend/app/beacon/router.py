@@ -19,18 +19,21 @@ from app.beacon.errors import (
 )
 from app.beacon.escalation import ESCALATION_REGISTRY, escalation_service
 from app.beacon.evidence_evaluation import EVIDENCE_EVALUATION_REGISTRY
+from app.beacon.intelligence import build_intelligence_packet
 from app.beacon.lifecycle import (
     RecordBeaconLifecycleAction,
     beacon_lifecycle_service,
 )
 from app.beacon.quality import EVIDENCE_QUALITY_SERVICE
 from app.beacon.schemas import (
+    BeaconIntelligencePacketResponse,
     BeaconLifecycleCommandRequest,
     BeaconLifecycleEventResponse,
     BeaconLifecycleHistoryResponse,
     BeaconSignalPage,
     BeaconSignalResponse,
     BeaconSnoozeCommandRequest,
+    BeaconSystemReadinessResponse,
     BeaconWorkflowCommandRequest,
     BeaconWorkflowEventResponse,
     BeaconWorkflowHistoryResponse,
@@ -194,6 +197,50 @@ async def signal_quality_semantics(
 
 
 @router.get(
+    "/system-readiness",
+    response_model=BeaconSystemReadinessResponse,
+    summary="Read Beacon definition, source, and policy readiness",
+)
+async def beacon_system_readiness(
+    context: BeaconReader,
+) -> BeaconSystemReadinessResponse:
+    evaluations = EVIDENCE_EVALUATION_REGISTRY.registrations
+    escalations = ESCALATION_REGISTRY.registrations
+    blockers = tuple(
+        sorted(
+            {
+                *(item.blocker for item in evaluations if item.blocker),
+                *(item.blocker for item in escalations if item.blocker),
+            }
+        )
+    )
+    return BeaconSystemReadinessResponse(
+        catalog_id=OPERATIONAL_SIGNAL_CATALOG.catalog_id,
+        catalog_digest=OPERATIONAL_SIGNAL_CATALOG.catalog_digest,
+        company_id=context.company.id,
+        active_branch_id=context.active_branch.id if context.active_branch else None,
+        definitions_total=len(OPERATIONAL_SIGNAL_CATALOG.definitions),
+        evaluable=sum(item.readiness.value == "evaluable" for item in evaluations),
+        partially_evaluable=sum(
+            item.readiness.value == "partially_evaluable" for item in evaluations
+        ),
+        not_evaluable=sum(
+            item.readiness.value == "not_evaluable" for item in evaluations
+        ),
+        conflicting=sum(item.readiness.value == "conflicting" for item in evaluations),
+        escalation_ready=sum(
+            item.eligibility.value == "escalation_ready" for item in escalations
+        ),
+        escalation_policy_unconfigured=sum(
+            item.eligibility.value == "policy_missing" for item in escalations
+        ),
+        source_blockers=blockers,
+        production_policy_state="UNCONFIGURED",
+        autonomous_action=False,
+    )
+
+
+@router.get(
     "/escalation-readiness",
     response_model=EscalationRegistryResponse,
     summary="List deterministic escalation eligibility",
@@ -333,6 +380,46 @@ async def list_operational_workflow_signals(
         ranking_version=queue.ranking_version,
         ranking_digest=queue.ranking_digest,
         items=tuple(items),
+    )
+
+
+@router.get(
+    "/signals/{signal_id}/intelligence-packet",
+    response_model=BeaconIntelligencePacketResponse,
+    summary="Read a permission-bounded deterministic signal evidence packet",
+)
+async def signal_intelligence_packet(
+    signal_id: UUID,
+    session: DatabaseSession,
+    context: BeaconReader,
+) -> BeaconIntelligencePacketResponse:
+    queue = await beacon_query_service.get_operational_attention_queue(
+        session, context=context
+    )
+    item = next(
+        (candidate for candidate in queue.items if candidate.signal.id == signal_id),
+        None,
+    )
+    if item is None:
+        raise _lifecycle_http_error(
+            BeaconSignalNotFoundError("The authorized signal was not found.")
+        )
+    workflow = await beacon_workflow_service.current(
+        session, context=context, condition_key=item.signal.condition_key
+    )
+    escalation = escalation_service.project(
+        item.signal,
+        company_id=context.company.id,
+        branch_id=context.active_branch.id if context.active_branch else None,
+        workflow=workflow,
+    )
+    return BeaconIntelligencePacketResponse.model_validate(
+        build_intelligence_packet(
+            item,
+            context=context,
+            workflow=workflow,
+            escalation=escalation,
+        )
     )
 
 
