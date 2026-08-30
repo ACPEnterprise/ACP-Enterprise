@@ -5,15 +5,6 @@ from uuid import UUID, uuid4
 
 import pytest
 import pytest_asyncio
-from pydantic import ValidationError
-from sqlalchemy import func, select, text
-from sqlalchemy.ext.asyncio import (
-    AsyncEngine,
-    AsyncSession,
-    async_sessionmaker,
-    create_async_engine,
-)
-
 from app.core.config import Settings, settings
 from app.core.database import Base
 from app.customers import models as customer_models  # noqa: F401
@@ -33,7 +24,11 @@ from app.platform.bootstrap.service import BootstrapResult, BootstrapService
 from app.platform.branch.models import Branch
 from app.platform.company.membership_models import Membership
 from app.platform.company.models import Company
-from app.platform.launch_controls import COMPANY_ADMINISTRATOR_OWNER_READ_PERMISSIONS
+from app.platform.launch_controls import (
+    COMPANY_ADMINISTRATOR_OWNER_READ_PERMISSIONS,
+    LAUNCH_ROLE_MATRIX,
+    LaunchRoleCode,
+)
 from app.platform.permissions.authorization import AuthorizationService
 from app.platform.permissions.catalog import permission_catalog
 from app.platform.permissions.catalog_sync import PermissionCatalogSyncService
@@ -46,6 +41,14 @@ from app.platform.permissions.models import (
 )
 from app.platform.users.models import User, UserCredential
 from app.scheduling import models as scheduling_models  # noqa: F401
+from pydantic import ValidationError
+from sqlalchemy import func, select, text
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 
 @dataclass(frozen=True)
@@ -176,15 +179,17 @@ async def test_first_bootstrap_creates_complete_authorization_graph(
     assert membership.company_id == company.id
     assert membership.default_branch_id == branch.id
     assert membership.has_all_branch_access is True
-    assert [role.code for role in roles] == [
-        "COMPANY_ADMINISTRATOR",
-        "COMPANY_USER",
-    ]
+    assert [role.code for role in roles] == sorted(
+        [definition.code.value for definition in LAUNCH_ROLE_MATRIX]
+        + ["COMPANY_USER"]
+    )
     assert all(role.is_system for role in roles)
     assert permission_codes == {
         definition.code for definition in permission_catalog.definitions
     }
-    assert role_permission_count == len(COMPANY_ADMINISTRATOR_OWNER_READ_PERMISSIONS)
+    assert role_permission_count == sum(
+        len(definition.permission_codes) for definition in LAUNCH_ROLE_MATRIX
+    )
     assert membership_role_count == 1
 
     async with bootstrap_database.sessions() as session:
@@ -216,6 +221,36 @@ async def test_first_bootstrap_creates_complete_authorization_graph(
         ) == len(
             SchedulingPermission.ALL & COMPANY_ADMINISTRATOR_OWNER_READ_PERMISSIONS
         )
+
+
+@pytest.mark.asyncio
+async def test_bootstrap_provisions_approved_service_and_own_data_roles(
+    bootstrap_database: BootstrapDatabase,
+) -> None:
+    await run_bootstrap(
+        bootstrap_database,
+        service(bootstrap_settings(settings.database_url)),
+        configuration(suffix="ROLES"),
+    )
+    expected = {
+        definition.code.value: definition.permission_codes
+        for definition in LAUNCH_ROLE_MATRIX
+        if definition.code in {LaunchRoleCode.SERVICE_CSR, LaunchRoleCode.OWN_DATA_ROLE}
+    }
+    async with bootstrap_database.sessions() as session:
+        roles = (
+            await session.scalars(select(Role).where(Role.code.in_(expected)))
+        ).all()
+        for role in roles:
+            codes = set(
+                await session.scalars(
+                    select(Permission.code)
+                    .join(RolePermission, RolePermission.permission_id == Permission.id)
+                    .where(RolePermission.role_id == role.id)
+                )
+            )
+            assert codes == expected[role.code]
+        assert {role.code for role in roles} == set(expected)
 
 
 @pytest.mark.asyncio

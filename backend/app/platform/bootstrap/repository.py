@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.platform.branch.models import Branch
 from app.platform.company.membership_models import Membership
 from app.platform.company.models import Company
+from app.platform.launch_controls import LAUNCH_ROLE_MATRIX
 from app.platform.permissions.catalog import PermissionDefinition
 from app.platform.permissions.models import (
     MembershipRole,
@@ -16,7 +17,6 @@ from app.platform.permissions.models import (
     RolePermission,
 )
 from app.platform.users.models import User, UserCredential
-
 
 BOOTSTRAP_ADVISORY_LOCK_ID = 4_701_871_310_042_021
 
@@ -144,27 +144,28 @@ class BootstrapRepository:
         actor_user_id: UUID,
     ) -> dict[str, Role]:
         roles = {
-            "COMPANY_ADMINISTRATOR": Role(
+            role.code.value: Role(
                 company_id=company_id,
-                code="COMPANY_ADMINISTRATOR",
-                name="Company Administrator",
-                description="Full company administration and operational access.",
+                code=role.code.value,
+                name=role.code.value.replace("_", " ").title(),
+                description=role.purpose,
                 status="active",
                 is_system=True,
                 created_by_user_id=actor_user_id,
                 updated_by_user_id=actor_user_id,
-            ),
-            "COMPANY_USER": Role(
-                company_id=company_id,
-                code="COMPANY_USER",
-                name="Company User",
-                description="Baseline system role with no implicit capabilities.",
-                status="active",
-                is_system=True,
-                created_by_user_id=actor_user_id,
-                updated_by_user_id=actor_user_id,
-            ),
+            )
+            for role in LAUNCH_ROLE_MATRIX
         }
+        roles["COMPANY_USER"] = Role(
+            company_id=company_id,
+            code="COMPANY_USER",
+            name="Company User",
+            description="Baseline system role with no implicit capabilities.",
+            status="active",
+            is_system=True,
+            created_by_user_id=actor_user_id,
+            updated_by_user_id=actor_user_id,
+        )
         session.add_all(roles.values())
         return roles
 
