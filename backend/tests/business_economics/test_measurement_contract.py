@@ -2,6 +2,7 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 
 import pytest
+
 from app.business_economics.findings import FindingState, SubjectKind
 from app.business_economics.measurement_contract import (
     MeasurementComponent,

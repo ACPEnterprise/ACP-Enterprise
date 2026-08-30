@@ -3,12 +3,12 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
+
 from app.business_economics.profitability_computation import (
     ProfitabilityComputationError,
 )
 from app.business_economics.profitability_domain import EconomicCategory
 from app.business_economics.workspace import EconomicsWorkspaceService, JobIdentity
-
 from tests.business_economics.test_profitability_computation import (
     compute,
     inputs,
@@ -47,6 +47,9 @@ def _record(
     ]
     return SimpleNamespace(
         id=uuid4(),
+        result_digest="a" * 64,
+        package_digest="b" * 64,
+        computation_digest="c" * 64,
         subject_id=uuid4(),
         scope="job",
         currency="USD",

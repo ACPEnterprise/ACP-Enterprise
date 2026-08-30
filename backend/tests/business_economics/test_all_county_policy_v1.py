@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 import pytest
+
 from app.business_economics.company_policy_configurations.all_county_v1 import (
     CONFIGURATION_ID,
     DEFERRED_FAMILIES,

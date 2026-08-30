@@ -10,6 +10,20 @@ let workspaceMode: "success" | "error" | "pending" = "success";
 const refetch = vi.fn();
 vi.mock("../auth", () => ({ useHasPermission: () => allowed }));
 vi.mock("../hooks/useBusinessEconomics", () => ({
+  useOwnerIntelligence: () => ({
+    isPending: false,
+    isError: false,
+    data: {
+      answer: { kind: "period_comparison" },
+      context_packet: {
+        classification: "INCOMPLETE",
+        completeness: "partial",
+        limitations: ["economic_evidence_is_not_complete"],
+        source_references: [],
+        evidence_digest: "a".repeat(64),
+      },
+    },
+  }),
   useEconomicsResult: (_id: string | null, enabled: boolean) => {
     detailEnabled = enabled;
     return { isPending: false, isError: false, data: null };
