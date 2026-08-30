@@ -3,7 +3,7 @@ from decimal import Decimal
 from typing import Protocol
 from uuid import UUID, uuid4
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.accounting.errors import (
@@ -271,8 +271,19 @@ class AccountingService:
             raise AccountingValidation("Journal type is invalid") from error
         debits, credits = self.validate_lines(data.lines)
         async with session.begin():
+            await self._lock_identities(
+                session,
+                (
+                    f"accounting-command:{context.company.id}:{data.client_idempotency_key.strip()}",
+                    (
+                        f"accounting-source:{context.company.id}:"
+                        f"{data.source_system.strip()}:{data.source_type.strip()}:"
+                        f"{data.source_identity.strip()}:{data.posting_rule_version.strip()}"
+                    ),
+                ),
+            )
             existing = await self.repository.journal_by_client_key(
-                session, context.company.id, data.client_idempotency_key
+                session, context.company.id, data.client_idempotency_key.strip()
             )
             if existing is not None:
                 if existing.source_digest != data.source_digest:
@@ -542,11 +553,33 @@ class AccountingService:
         data: ReversalCreate,
     ) -> Journal:
         async with session.begin():
+            await self._lock_identities(
+                session,
+                (
+                    f"accounting-command:{context.company.id}:{data.client_idempotency_key.strip()}",
+                ),
+            )
             original = await self.repository.journal(
                 session, context.company.id, journal_id, lock=True
             )
             if original is None or original.status != "posted":
                 raise AccountingNotFound("Posted journal was not found")
+            replay = await self.repository.journal_by_client_key(
+                session, context.company.id, data.client_idempotency_key.strip()
+            )
+            if replay is not None:
+                if (
+                    replay.journal_type != "reversal"
+                    or replay.reversal_of_id != original.id
+                    or replay.period_id != data.period_id
+                    or replay.effective_date != data.effective_date
+                    or replay.source_digest != data.source_digest
+                    or replay.description != data.reason.strip()
+                ):
+                    raise AccountingConflict(
+                        "Idempotency key was reused with different reversal evidence"
+                    )
+                return replay
             existing = await session.scalar(
                 select(Journal.id).where(
                     Journal.company_id == context.company.id,
@@ -583,7 +616,7 @@ class AccountingService:
                 source_identity=str(original.id),
                 source_digest=data.source_digest,
                 posting_rule_version="core-reversal-v1",
-                client_idempotency_key=data.client_idempotency_key,
+                client_idempotency_key=data.client_idempotency_key.strip(),
                 prepared_by_user_id=context.user.id,
                 reversal_of_id=original.id,
                 version=1,
@@ -627,6 +660,20 @@ class AccountingService:
                 },
             )
         return reversal
+
+    @staticmethod
+    async def _lock_identities(
+        session: AsyncSession, identities: tuple[str, ...]
+    ) -> None:
+        if session.get_bind().dialect.name != "postgresql":
+            return
+        for identity in sorted(set(identities)):
+            await session.execute(
+                text(
+                    "SELECT pg_advisory_xact_lock(hashtextextended(:identity, 0))"
+                ),
+                {"identity": identity},
+            )
 
     async def begin_close(
         self,
