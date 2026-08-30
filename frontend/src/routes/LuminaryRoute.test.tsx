@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { AxiosError } from "axios";
+import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { LuminaryRoute } from "./LuminaryRoute";
@@ -13,12 +14,51 @@ const state = vi.hoisted(() => ({
 }));
 
 vi.mock("../auth", () => ({
-  useHasPermission: (permission: string) => permission.endsWith("_READ") ? state.canRead : state.canAnalyze,
+  useHasPermission: (permission: string) =>
+    permission.endsWith("_READ") ? state.canRead : state.canAnalyze,
 }));
 vi.mock("../hooks/useLuminary", () => ({
-  useLuminaryBriefing: () => ({ isPending: false, isError: Boolean(state.error), error: state.error, data: undefined, refetch: state.refetch }),
-  useAnalyzeLuminary: () => ({ mutate: state.analyze, isPending: false, isError: false }),
+  useLuminaryBriefing: () => ({
+    isPending: false,
+    isError: Boolean(state.error),
+    error: state.error,
+    data: undefined,
+    refetch: state.refetch,
+  }),
+  useLuminarySourceReadiness: () => ({
+    isPending: false,
+    data: {
+      profitability: {
+        sources: [
+          {
+            source: "revenue",
+            state: "AVAILABLE",
+            evidence_count: 2,
+            explanation: "Admitted evidence.",
+          },
+          {
+            source: "overhead_allocation",
+            state: "POLICY_REQUIRED",
+            evidence_count: 0,
+            explanation: "Owner policy required.",
+          },
+        ],
+      },
+    },
+  }),
+  useAnalyzeLuminary: () => ({
+    mutate: state.analyze,
+    isPending: false,
+    isError: false,
+  }),
 }));
+
+const renderRoute = () =>
+  render(
+    <MemoryRouter>
+      <LuminaryRoute />
+    </MemoryRouter>,
+  );
 
 describe("Luminary workspace recovery", () => {
   beforeEach(() => {
@@ -31,18 +71,38 @@ describe("Luminary workspace recovery", () => {
 
   it("retries a temporary briefing failure without offering analysis", () => {
     state.error = new AxiosError("unavailable");
-    render(<LuminaryRoute />);
+    renderRoute();
     expect(screen.getByText(/No briefing state was inferred/i)).toBeVisible();
-    expect(screen.queryByRole("button", { name: /Analyze accepted evidence/i })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /Analyze accepted evidence/i }),
+    ).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /Retry briefing/i }));
     expect(state.refetch).toHaveBeenCalledOnce();
   });
 
   it("offers analysis only for a concealed not-found briefing", () => {
-    state.error = new AxiosError("missing", undefined, undefined, undefined, { status: 404 } as never);
-    render(<LuminaryRoute />);
-    fireEvent.click(screen.getByRole("button", { name: /Analyze accepted evidence/i }));
+    state.error = new AxiosError("missing", undefined, undefined, undefined, {
+      status: 404,
+    } as never);
+    renderRoute();
+    fireEvent.click(
+      screen.getByRole("button", { name: /Analyze accepted evidence/i }),
+    );
     expect(state.analyze).toHaveBeenCalledOnce();
-    expect(screen.queryByRole("button", { name: /Retry briefing/i })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /Retry briefing/i }),
+    ).toBeNull();
+  });
+
+  it("renders the deterministic source matrix and LIA handoff", () => {
+    renderRoute();
+    expect(
+      screen.getByText("Can I trust the profitability answer?"),
+    ).toBeVisible();
+    expect(screen.getByText("AVAILABLE")).toBeVisible();
+    expect(screen.getByText("POLICY REQUIRED")).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Ask LIA about this evidence" }),
+    ).toBeVisible();
   });
 });

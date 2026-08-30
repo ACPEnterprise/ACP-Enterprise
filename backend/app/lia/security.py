@@ -11,9 +11,10 @@ HIGH_IMPACT_PATTERNS = (
 )
 
 EXFILTRATION_PATTERNS = (
-    r"\b(client secret|access token|refresh token|private key|system prompt)\b",
+    r"\b(client secret|access token|refresh token|api key|password|private key|system prompt|developer prompt)\b",
     r"\b(bank account|routing number|ssn|social security|tax election)\b",
     r"\b(everyone|all employees|another employee|other branch)\b.*\b(pay|payroll|email|customer|timecard)\b",
+    r"\b(other tenant|another tenant|cross[- ]tenant|other company|another company)\b",
 )
 
 INJECTION_PATTERNS = (
@@ -23,7 +24,7 @@ INJECTION_PATTERNS = (
 )
 
 FABRICATION_PATTERNS = (
-    r"\b(pretend|assume|make up|fabricate)\b.*\b(paid|profitable|cost|balance|ready|said)\b",
+    r"\b(pretend|assume|make up|fabricate)\b.*\b(paid|profitable|revenue|cost|balance|ready|said|settled|complete)\b",
 )
 
 

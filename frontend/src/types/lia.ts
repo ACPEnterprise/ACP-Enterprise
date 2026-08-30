@@ -1,6 +1,13 @@
 export type LiaClassification =
-  | "KNOWN" | "DERIVED" | "INCOMPLETE" | "STALE" | "CONFLICTING"
-  | "UNAVAILABLE" | "UNAUTHORIZED" | "POLICY_REQUIRED" | "EXTERNAL_GATE";
+  | "KNOWN"
+  | "DERIVED"
+  | "INCOMPLETE"
+  | "STALE"
+  | "CONFLICTING"
+  | "UNAVAILABLE"
+  | "UNAUTHORIZED"
+  | "POLICY_REQUIRED"
+  | "EXTERNAL_GATE";
 
 export interface LiaEvidence {
   domain: string;
@@ -36,6 +43,7 @@ export interface LiaResponse {
 export interface LiaReadiness {
   state: string;
   provider_state: string;
+  policy_state: string;
   deterministic_capabilities: string[];
   generative_capabilities: string[];
   policy_version: string;

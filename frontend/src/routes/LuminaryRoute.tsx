@@ -1,28 +1,294 @@
 import { useState } from "react";
 import { isAxiosError } from "axios";
+import { useNavigate } from "react-router";
 import { useHasPermission } from "../auth";
-import type { LuminaryFinding, LuminaryObservation } from "../api/luminary";
-import { useAnalyzeLuminary, useLuminaryBriefing } from "../hooks/useLuminary";
-import { Alert, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, Spinner } from "../ui";
+import type {
+  LuminaryFinding,
+  LuminaryObservation,
+  SourceCompletenessEntry,
+} from "../api/luminary";
+import {
+  useAnalyzeLuminary,
+  useLuminaryBriefing,
+  useLuminarySourceReadiness,
+} from "../hooks/useLuminary";
+import {
+  Alert,
+  Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  Input,
+  Spinner,
+} from "../ui";
 
 const today = new Date().toISOString().slice(0, 10);
 const monthStart = `${today.slice(0, 7)}-01`;
 const words = (value: string) => value.replaceAll("_", " ");
-const money = (item: LuminaryObservation) => item.value_minor == null || !item.currency ? "Unavailable" : new Intl.NumberFormat(undefined, { style: "currency", currency: item.currency }).format(item.value_minor / 100);
+const money = (item: LuminaryObservation) =>
+  item.value_minor == null || !item.currency
+    ? "Unavailable"
+    : new Intl.NumberFormat(undefined, {
+        style: "currency",
+        currency: item.currency,
+      }).format(item.value_minor / 100);
 
 function FindingCard({ finding }: { finding: LuminaryFinding }) {
-  const warning = ["insufficient_evidence", "conflicting_evidence", "policy_required"].includes(finding.finding_class);
-  return <Card className={warning ? "border-status-warning" : undefined}><CardHeader><div className="flex flex-wrap items-center justify-between gap-2"><span className="text-xs font-semibold uppercase tracking-wide text-content-muted">{words(finding.finding_class)}</span><span className="rounded-full bg-surface-muted px-2 py-1 text-xs">{finding.confidence_percent}% confidence · {words(finding.completeness)}</span></div><CardTitle>{finding.title}</CardTitle><CardDescription>{finding.summary}</CardDescription></CardHeader><CardContent className="space-y-4">{finding.observations.length ? <div className="grid gap-2 sm:grid-cols-2">{finding.observations.map((item) => <div className="rounded-lg bg-surface-muted p-3" key={item.metric}><p className="text-xs capitalize text-content-muted">{words(item.metric)}</p><p className="break-words text-lg font-semibold">{item.unit === "minor_currency" ? money(item) : String(item.value_minor ?? "Unavailable")}</p></div>)}</div> : null}<div><h3 className="text-sm font-semibold">Why this exists</h3><p className="text-sm text-content-muted">{finding.explanation}</p></div>{finding.limitations.length ? <div><h3 className="text-sm font-semibold">What remains uncertain</h3><ul className="list-disc space-y-1 pl-5 text-sm text-content-muted">{finding.limitations.map((item) => <li key={item}>{item}</li>)}</ul></div> : null}<div><h3 className="text-sm font-semibold">What to inspect next</h3><ul className="list-disc space-y-1 pl-5 text-sm text-content-muted">{finding.investigate_next.map((item) => <li key={item}>{item}</li>)}</ul></div><details className="text-xs text-content-muted"><summary className="cursor-pointer font-medium">Evidence provenance</summary><ul className="mt-2 space-y-1">{finding.evidence.map((item) => <li className="break-all" key={`${item.source_domain}:${item.record_id}`}>{item.source_domain} · {item.record_type} · {item.record_id} · {item.digest}</li>)}</ul></details></CardContent></Card>;
+  const warning = [
+    "insufficient_evidence",
+    "conflicting_evidence",
+    "policy_required",
+  ].includes(finding.finding_class);
+  return (
+    <Card className={warning ? "border-status-warning" : undefined}>
+      <CardHeader>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="text-xs font-semibold uppercase tracking-wide text-content-muted">
+            {words(finding.finding_class)}
+          </span>
+          <span className="rounded-full bg-surface-muted px-2 py-1 text-xs">
+            {finding.confidence_percent}% confidence ·{" "}
+            {words(finding.completeness)}
+          </span>
+        </div>
+        <CardTitle>{finding.title}</CardTitle>
+        <CardDescription>{finding.summary}</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {finding.observations.length ? (
+          <div className="grid gap-2 sm:grid-cols-2">
+            {finding.observations.map((item) => (
+              <div
+                className="rounded-lg bg-surface-muted p-3"
+                key={item.metric}
+              >
+                <p className="text-xs capitalize text-content-muted">
+                  {words(item.metric)}
+                </p>
+                <p className="break-words text-lg font-semibold">
+                  {item.unit === "minor_currency"
+                    ? money(item)
+                    : String(item.value_minor ?? "Unavailable")}
+                </p>
+              </div>
+            ))}
+          </div>
+        ) : null}
+        <div>
+          <h3 className="text-sm font-semibold">Why this exists</h3>
+          <p className="text-sm text-content-muted">{finding.explanation}</p>
+        </div>
+        {finding.limitations.length ? (
+          <div>
+            <h3 className="text-sm font-semibold">What remains uncertain</h3>
+            <ul className="list-disc space-y-1 pl-5 text-sm text-content-muted">
+              {finding.limitations.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+        <div>
+          <h3 className="text-sm font-semibold">What to inspect next</h3>
+          <ul className="list-disc space-y-1 pl-5 text-sm text-content-muted">
+            {finding.investigate_next.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        </div>
+        <details className="text-xs text-content-muted">
+          <summary className="cursor-pointer font-medium">
+            Evidence provenance
+          </summary>
+          <ul className="mt-2 space-y-1">
+            {finding.evidence.map((item) => (
+              <li
+                className="break-all"
+                key={`${item.source_domain}:${item.record_id}`}
+              >
+                {item.source_domain} · {item.record_type} · {item.record_id} ·{" "}
+                {item.digest}
+              </li>
+            ))}
+          </ul>
+        </details>
+      </CardContent>
+    </Card>
+  );
+}
+
+function SourceMatrix({ sources }: { sources: SourceCompletenessEntry[] }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Can I trust the profitability answer?</CardTitle>
+        <CardDescription>
+          Each source is classified from admitted evidence. Missing evidence is
+          never zero.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {sources.map((item) => (
+            <div
+              className="rounded-lg border border-stroke p-3"
+              key={item.source}
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="font-semibold capitalize">{words(item.source)}</p>
+                <span className="rounded-full bg-surface-muted px-2 py-1 text-xs font-semibold">
+                  {words(item.state)}
+                </span>
+              </div>
+              <p className="mt-2 text-sm text-content-muted">
+                {item.explanation}
+              </p>
+              <p className="mt-2 text-xs text-content-muted">
+                {item.evidence_count} admitted reference(s)
+              </p>
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
 }
 
 export function LuminaryRoute() {
+  const navigate = useNavigate();
   const canRead = useHasPermission("COMPANY_LUMINARY_READ");
   const canAnalyze = useHasPermission("COMPANY_LUMINARY_ANALYZE");
-  const [start, setStart] = useState(monthStart); const [end, setEnd] = useState(today);
+  const [start, setStart] = useState(monthStart);
+  const [end, setEnd] = useState(today);
   const [scope, setScope] = useState({ start: monthStart, end: today });
   const briefing = useLuminaryBriefing(scope.start, scope.end, canRead);
+  const readiness = useLuminarySourceReadiness(scope.start, scope.end, canRead);
   const analyze = useAnalyzeLuminary(scope.start, scope.end);
-  const briefingMissing = isAxiosError(briefing.error) && briefing.error.response?.status === 404;
-  if (!canRead) return <Alert variant="danger">You are not authorized to view Luminary intelligence.</Alert>;
-  return <div className="mx-auto max-w-6xl space-y-6 overflow-x-hidden pb-12"><header><p className="text-sm font-semibold text-action-primary">Owner advisory intelligence</p><h1 className="mt-1 text-2xl font-bold sm:text-3xl">Luminary</h1><p className="mt-2 max-w-3xl text-content-muted">What accepted business evidence means—facts, comparisons, associations, limitations, and the next evidence worth inspecting.</p></header><Card><CardContent className="pt-6"><form className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]" onSubmit={(event) => { event.preventDefault(); setScope({ start, end }); }}><Input aria-label="Start date" type="date" value={start} onChange={(event) => setStart(event.target.value)} /><Input aria-label="End date" type="date" value={end} onChange={(event) => setEnd(event.target.value)} /><Button type="submit">View briefing</Button></form></CardContent></Card>{briefing.isPending ? <Spinner label="Loading Luminary briefing" /> : briefing.isError && !briefingMissing ? <Alert variant="danger" title="Luminary is temporarily unavailable"><div className="space-y-3"><p>No briefing state was inferred. Retry the authorized read when the service recovers.</p><Button onClick={() => briefing.refetch()}>Retry briefing</Button></div></Alert> : briefingMissing || !briefing.data ? <Alert variant="warning" title="No accepted briefing for this period"><div className="space-y-3"><p>Luminary will not invent an interpretation. Analyze admitted Economics evidence for this scope.</p>{canAnalyze ? <Button disabled={analyze.isPending} onClick={() => analyze.mutate()}>{analyze.isPending ? "Analyzing…" : "Analyze accepted evidence"}</Button> : <p>An explicitly authorized analyst must create the briefing.</p>}{analyze.isError ? <p>Analysis could not be completed. Source evidence may be unavailable or conflicting.</p> : null}</div></Alert> : <><Alert variant={briefing.data.completeness === "complete" ? "success" : briefing.data.completeness === "conflicting" ? "danger" : "warning"} title={`Evidence ${words(briefing.data.completeness)}`}>{briefing.data.summary}</Alert><section aria-label="Owner briefing" className="grid gap-4 lg:grid-cols-2">{briefing.data.findings.map((finding) => <FindingCard finding={finding} key={finding.id} />)}</section><p className="break-all text-xs text-content-muted">Briefing {briefing.data.id} · digest {briefing.data.briefing_digest}</p></>}</div>;
+  const briefingMissing =
+    isAxiosError(briefing.error) && briefing.error.response?.status === 404;
+  if (!canRead)
+    return (
+      <Alert variant="danger">
+        You are not authorized to view Luminary intelligence.
+      </Alert>
+    );
+  return (
+    <div className="mx-auto max-w-6xl space-y-6 overflow-x-hidden pb-12">
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="text-sm font-semibold text-action-primary">
+            Owner advisory intelligence
+          </p>
+          <h1 className="mt-1 text-2xl font-bold sm:text-3xl">Luminary</h1>
+          <p className="mt-2 max-w-3xl text-content-muted">
+            What accepted business evidence means—facts, comparisons,
+            associations, limitations, and the next evidence worth inspecting.
+          </p>
+        </div>
+        <Button variant="secondary" onClick={() => navigate("/lia")}>
+          Ask LIA about this evidence
+        </Button>
+      </header>
+      <Card>
+        <CardContent className="pt-6">
+          <form
+            className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]"
+            onSubmit={(event) => {
+              event.preventDefault();
+              setScope({ start, end });
+            }}
+          >
+            <Input
+              aria-label="Start date"
+              type="date"
+              value={start}
+              onChange={(event) => setStart(event.target.value)}
+            />
+            <Input
+              aria-label="End date"
+              type="date"
+              value={end}
+              onChange={(event) => setEnd(event.target.value)}
+            />
+            <Button type="submit">View briefing</Button>
+          </form>
+        </CardContent>
+      </Card>
+      {readiness.isPending ? (
+        <Spinner label="Checking source completeness" />
+      ) : readiness.data ? (
+        <SourceMatrix sources={readiness.data.profitability.sources} />
+      ) : (
+        <Alert variant="warning">
+          Source completeness could not be verified. No readiness was inferred.
+        </Alert>
+      )}
+      {briefing.isPending ? (
+        <Spinner label="Loading Luminary briefing" />
+      ) : briefing.isError && !briefingMissing ? (
+        <Alert variant="danger" title="Luminary is temporarily unavailable">
+          <div className="space-y-3">
+            <p>
+              No briefing state was inferred. Retry the authorized read when the
+              service recovers.
+            </p>
+            <Button onClick={() => briefing.refetch()}>Retry briefing</Button>
+          </div>
+        </Alert>
+      ) : briefingMissing || !briefing.data ? (
+        <Alert variant="warning" title="No accepted briefing for this period">
+          <div className="space-y-3">
+            <p>
+              Luminary will not invent an interpretation. Analyze admitted
+              Economics evidence for this scope.
+            </p>
+            {canAnalyze ? (
+              <Button
+                disabled={analyze.isPending}
+                onClick={() => analyze.mutate()}
+              >
+                {analyze.isPending ? "Analyzing…" : "Analyze accepted evidence"}
+              </Button>
+            ) : (
+              <p>An explicitly authorized analyst must create the briefing.</p>
+            )}
+            {analyze.isError ? (
+              <p>
+                Analysis could not be completed. Source evidence may be
+                unavailable or conflicting.
+              </p>
+            ) : null}
+          </div>
+        </Alert>
+      ) : (
+        <>
+          <Alert
+            variant={
+              briefing.data.completeness === "complete"
+                ? "success"
+                : briefing.data.completeness === "conflicting"
+                  ? "danger"
+                  : "warning"
+            }
+            title={`Evidence ${words(briefing.data.completeness)}`}
+          >
+            {briefing.data.summary}
+          </Alert>
+          <section
+            aria-label="Owner briefing"
+            className="grid gap-4 lg:grid-cols-2"
+          >
+            {briefing.data.findings.map((finding) => (
+              <FindingCard finding={finding} key={finding.id} />
+            ))}
+          </section>
+          <p className="break-all text-xs text-content-muted">
+            Briefing {briefing.data.id} · digest {briefing.data.briefing_digest}
+          </p>
+        </>
+      )}
+    </div>
+  );
 }
