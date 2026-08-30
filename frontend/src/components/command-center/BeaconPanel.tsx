@@ -51,6 +51,13 @@ function factValue(fact: BeaconSupportingFact): string {
   return `${fact.value}${fact.unit ? ` ${fact.unit.replaceAll("_", " ")}` : ""}`;
 }
 
+function sourcePath(entityType: string, entityId: string): string | null {
+  if (entityType === "job") return `/jobs/${entityId}`;
+  if (entityType === "invoice") return `/invoices/${entityId}`;
+  if (entityType === "appointment") return `/appointments/${entityId}`;
+  return null;
+}
+
 function SignalRow({
   signal,
   canReview,
@@ -162,6 +169,32 @@ function SignalRow({
         <span className="font-semibold text-content">Why this priority:</span>{" "}
         {signal.priority.explanation}
       </p>
+      {signal.evidence_quality && (
+        <div className="mt-ui-3 rounded-md border border-stroke p-ui-3 text-body-s">
+          <h4 className="font-semibold text-content">Evidence readiness</h4>
+          <div className="mt-ui-2 flex flex-wrap gap-ui-2">
+            <Badge variant="neutral">
+              {signal.evidence_quality.completeness} completeness
+            </Badge>
+            <Badge variant="neutral">
+              {signal.evidence_quality.freshness} freshness
+            </Badge>
+            <Badge variant="neutral">
+              {signal.evidence_quality.reconciliation} reconciliation
+            </Badge>
+          </div>
+          <p className="mt-ui-2 text-content-secondary">
+            {signal.evidence_quality.explanation}
+          </p>
+          {signal.evidence_quality.limitations.length > 0 && (
+            <ul className="mt-ui-2 list-disc pl-ui-5 text-content-muted">
+              {signal.evidence_quality.limitations.map((limitation) => (
+                <li key={limitation}>{limitation}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
       {signal.escalation && (
         <p className="mt-ui-2 text-body-s text-content-muted">
           Escalation: {signal.escalation.reason}
@@ -179,6 +212,37 @@ function SignalRow({
           </div>
         ))}
       </dl>
+      <details className="mt-ui-3 text-body-s">
+        <summary className="cursor-pointer font-semibold text-content">
+          Evidence and source drillback
+        </summary>
+        <ul className="mt-ui-2 space-y-ui-2">
+          {signal.supporting_facts.flatMap((fact) =>
+            fact.evidence.map((evidence) => {
+              const path = sourcePath(evidence.entity_type, evidence.entity_id);
+              return (
+                <li
+                  className="rounded-md border border-stroke p-ui-2 text-content-secondary"
+                  key={`${fact.name}-${evidence.entity_type}-${evidence.entity_id}-${evidence.event_id ?? "record"}`}
+                >
+                  <span className="font-medium text-content">
+                    {evidence.entity_type}
+                  </span>{" "}
+                  · evidence {evidence.event_type ?? "authoritative record"}
+                  {evidence.occurred_at
+                    ? ` · ${new Date(evidence.occurred_at).toLocaleString()}`
+                    : ""}
+                  {path && (
+                    <a className="ml-ui-2 text-accent underline" href={path}>
+                      Open source workflow
+                    </a>
+                  )}
+                </li>
+              );
+            }),
+          )}
+        </ul>
+      </details>
       <p className="mt-ui-3 text-body-s text-content-secondary">
         <span className="font-semibold text-content">Recommended action:</span>{" "}
         {signal.recommended_action}
@@ -418,6 +482,20 @@ export function BeaconPanel({
   ) => void;
   readonly retry: () => void;
 }) {
+  const visibleSignals = signals ?? [];
+  const acknowledgedCount = visibleSignals.filter(
+    (signal) => signal.workflow?.acknowledged,
+  ).length;
+  const ownedCount = visibleSignals.filter(
+    (signal) => signal.workflow?.owner_user_id,
+  ).length;
+  const evidenceAttentionCount = visibleSignals.filter(
+    (signal) =>
+      signal.evidence_quality &&
+      (signal.evidence_quality.completeness !== "complete" ||
+        signal.evidence_quality.freshness === "stale" ||
+        signal.evidence_quality.reconciliation !== "reconciled"),
+  ).length;
   return (
     <CommandCenterPanel
       title="Beacon"
@@ -459,6 +537,34 @@ export function BeaconPanel({
           Beacon rejected the request because it was stale, conflicted, forbidden,
           or invalid. Refresh the authoritative queue before trying again.
         </Alert>
+      )}
+      {!loading && !error && visibleSignals.length > 0 && (
+        <dl className="mb-ui-4 grid gap-ui-2 text-body-s sm:grid-cols-4">
+          <div className="rounded-md border border-stroke p-ui-3">
+            <dt className="text-content-muted">Requires attention</dt>
+            <dd className="mt-ui-1 text-title-m font-semibold text-content">
+              {visibleSignals.length}
+            </dd>
+          </div>
+          <div className="rounded-md border border-stroke p-ui-3">
+            <dt className="text-content-muted">Acknowledged</dt>
+            <dd className="mt-ui-1 text-title-m font-semibold text-content">
+              {acknowledgedCount}
+            </dd>
+          </div>
+          <div className="rounded-md border border-stroke p-ui-3">
+            <dt className="text-content-muted">Owned</dt>
+            <dd className="mt-ui-1 text-title-m font-semibold text-content">
+              {ownedCount}
+            </dd>
+          </div>
+          <div className="rounded-md border border-stroke p-ui-3">
+            <dt className="text-content-muted">Evidence needs review</dt>
+            <dd className="mt-ui-1 text-title-m font-semibold text-content">
+              {evidenceAttentionCount}
+            </dd>
+          </div>
+        </dl>
       )}
       {!loading &&
         !error &&

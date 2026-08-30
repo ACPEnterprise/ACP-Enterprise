@@ -264,6 +264,76 @@ class OperationalWorkflowQueueResponse(BaseModel):
     items: tuple[OperationalWorkflowSignalResponse, ...]
 
 
+class BeaconActionContractResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    action: str
+    available: bool
+    required_permission: str
+    execution_authority: str
+
+
+class BeaconSourceReferenceResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    domain: str
+    entity_type: str
+    entity_id: UUID
+    evidence_event_id: UUID | None
+    observed_at: datetime | None
+
+
+class BeaconIntelligencePacketResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    contract_version: str
+    company_id: UUID
+    branch_id: UUID | None
+    signal_id: UUID
+    condition_key: UUID
+    definition_id: str
+    definition_version: int
+    evidence_digest: str
+    title: str
+    state: str
+    explanation: str
+    recommended_human_action: str
+    priority_position: int
+    priority_band: str
+    priority_reason: str
+    severity: str
+    confidence: str
+    completeness: str
+    freshness: str
+    reconciliation: str
+    limitations: tuple[str, ...]
+    owner_user_id: UUID | None
+    acknowledged: bool
+    escalation_state: str
+    escalation_reason: str
+    source_references: tuple[BeaconSourceReferenceResponse, ...]
+    actions: tuple[BeaconActionContractResponse, ...]
+    generated_at: datetime
+    packet_digest: str
+
+
+class BeaconSystemReadinessResponse(BaseModel):
+    catalog_id: str
+    catalog_digest: str
+    company_id: UUID
+    active_branch_id: UUID | None
+    definitions_total: int
+    evaluable: int
+    partially_evaluable: int
+    not_evaluable: int
+    conflicting: int
+    escalation_ready: int
+    escalation_policy_unconfigured: int
+    source_blockers: tuple[str, ...]
+    production_policy_state: str
+    autonomous_action: bool
+
+
 class EscalationRegistrationResponse(BaseModel):
     definition_id: str
     definition_version: int
