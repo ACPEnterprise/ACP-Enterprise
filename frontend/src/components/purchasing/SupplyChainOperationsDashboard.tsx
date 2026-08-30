@@ -1,0 +1,15 @@
+import type { PurchaseOrder, PurchaseRequisition, SupplyChainPolicy } from "../../types/purchasing";
+import { Alert, Badge, Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../ui";
+
+interface Props { orders: readonly PurchaseOrder[]; requisitions: readonly PurchaseRequisition[]; policies: readonly SupplyChainPolicy[]; }
+
+export function SupplyChainOperationsDashboard({ orders, requisitions, policies }: Props) {
+  const open = orders.filter((order) => !["closed", "cancelled"].includes(order.status));
+  const partial = orders.filter((order) => order.receiving_status === "partially_received");
+  const discrepancies = orders.flatMap((order) => order.discrepancies).filter((item) => item.status !== "resolved");
+  const returns = orders.flatMap((order) => order.returns).filter((item) => !["closed", "canceled", "denied"].includes(item.status));
+  const approvalBacklog = requisitions.filter((item) => item.status === "submitted");
+  const policyGates = ["matching_tolerance", "valuation", "receipt_accrual"].filter((type) => !policies.some((item) => item.policy_type === type && item.status === "active"));
+  const metrics = [["Open POs", open.length], ["Partial receipts", partial.length], ["Approval backlog", approvalBacklog.length], ["Open discrepancies", discrepancies.length], ["Returns in progress", returns.length], ["Policy gates", policyGates.length]] as const;
+  return <section aria-labelledby="supply-chain-reporting" className="space-y-3"><header><h2 id="supply-chain-reporting" className="text-xl font-bold">Supply Chain operations</h2><p className="text-content-muted">Live operational projection from authorized Purchasing evidence; no duplicate BI or financial posting.</p></header><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{metrics.map(([label, value]) => <Card key={label}><CardContent className="pt-6"><p className="text-sm text-content-muted">{label}</p><p className="text-2xl font-bold">{value}</p></CardContent></Card>)}</div><Card><CardHeader><CardTitle>Exception center</CardTitle><CardDescription>Operator work and policy readiness remain explicitly distinct.</CardDescription></CardHeader><CardContent className="space-y-2">{discrepancies.map((item) => <div key={item.id} className="flex items-center justify-between rounded-md border border-stroke p-2"><span>Receipt discrepancy · {item.category.replaceAll("_", " ")}</span><Badge>operator action</Badge></div>)}{returns.map((item) => <div key={item.id} className="flex items-center justify-between rounded-md border border-stroke p-2"><span>Vendor return · {item.status.replaceAll("_", " ")}</span><Badge>operator action</Badge></div>)}{policyGates.map((type) => <div key={type} className="flex items-center justify-between rounded-md border border-stroke p-2"><span>{type.replaceAll("_", " ")} is unconfigured</span><Badge>{type === "valuation" || type === "receipt_accrual" ? "finance configuration required" : "owner policy required"}</Badge></div>)}{discrepancies.length + returns.length + policyGates.length === 0 && <Alert>No active Supply Chain exceptions are visible in the authorized scope.</Alert>}</CardContent></Card></section>;
+}

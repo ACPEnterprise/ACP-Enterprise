@@ -208,6 +208,12 @@ class EventType(str, Enum):
     PURCHASING_REPLENISHMENT_REJECTED = "purchasing.replenishment.rejected"
     PURCHASING_REPLENISHMENT_LINKED = "purchasing.replenishment.purchase_order_linked"
     PURCHASING_BRANCH_POLICY_CONFIGURED = "purchasing.branch_policy.configured"
+    PURCHASING_REQUISITION_CREATED = "purchasing.requisition.created"
+    PURCHASING_REQUISITION_SUBMITTED = "purchasing.requisition.submitted"
+    PURCHASING_REQUISITION_APPROVED = "purchasing.requisition.approved"
+    PURCHASING_REQUISITION_REJECTED = "purchasing.requisition.rejected"
+    PURCHASING_REQUISITION_CONVERTED = "purchasing.requisition.converted"
+    SUPPLY_CHAIN_POLICY_CONFIGURED = "supply_chain.policy.configured"
 
     # Operations
     OPERATIONS_SERVICE_REQUEST_ACCEPTED = "operations.service_request.accepted"

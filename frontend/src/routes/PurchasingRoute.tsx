@@ -21,6 +21,10 @@ import { PurchaseOrderDispositionControls } from "../components/PurchaseOrderDis
 import { ReplenishmentWorkbench } from "../components/purchasing/ReplenishmentWorkbench";
 import { BranchPurchasingPolicyWorkbench } from "../components/purchasing/BranchPurchasingPolicyWorkbench";
 import { VendorPerformanceEvidence } from "../components/purchasing/VendorPerformanceEvidence";
+import { SupplyChainApprovalCenter } from "../components/purchasing/SupplyChainApprovalCenter";
+import { SupplyChainReadiness } from "../components/purchasing/SupplyChainReadiness";
+import { ProcurementMatchWorkbench } from "../components/purchasing/ProcurementMatchWorkbench";
+import { SupplyChainOperationsDashboard } from "../components/purchasing/SupplyChainOperationsDashboard";
 
 function changeErrorMessage(error: unknown): string | null {
   if (!error) return null;
@@ -61,6 +65,7 @@ export function PurchasingRoute() {
   const canApproveChange = useHasPermission("COMPANY_PURCHASING_CHANGE_APPROVE");
   const canCloseOrder = useHasPermission("COMPANY_PURCHASING_CLOSE");
   const canCancelOrder = useHasPermission("COMPANY_PURCHASING_CANCEL");
+  const canReviewMatches = useHasPermission("COMPANY_ACCOUNTS_PAYABLE_MATCH_REVIEW");
   const [search, setSearch] = useState("");
   const purchasing = usePurchasing(search || undefined, canRead);
   const inventory = useInventory(undefined, canReceive);
@@ -268,6 +273,26 @@ export function PurchasingRoute() {
           retrying.
         </Alert>
       )}
+      <SupplyChainApprovalCenter
+        branches={activeCompany.branches}
+        vendors={purchasing.data?.vendors ?? []}
+        requisitions={purchasing.data?.requisitions ?? []}
+        canManage={canManage}
+        canApprove={canApprove}
+      />
+      <SupplyChainOperationsDashboard
+        orders={purchasing.data?.purchase_orders ?? []}
+        requisitions={purchasing.data?.requisitions ?? []}
+        policies={purchasing.data?.policies ?? []}
+      />
+      <SupplyChainReadiness
+        policies={purchasing.data?.policies ?? []}
+        branches={activeCompany.branches}
+        canManage={canManage}
+        pending={Boolean(mutations.configureSupplyChainPolicy?.isPending)}
+        onSave={(input) => mutations.configureSupplyChainPolicy.mutateAsync(input)}
+      />
+      <ProcurementMatchWorkbench canReview={canReviewMatches} />
       <ReplenishmentWorkbench
         canApprove={canApprove}
         pending={mutations.replenishmentWorkbench.isPending}

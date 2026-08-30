@@ -29,6 +29,11 @@ import type {
   ReplenishmentDecisionCommand,
   BranchPurchasingPolicy,
   BranchPurchasingPolicyWrite,
+  PurchaseRequisition,
+  PurchaseRequisitionCreate,
+  PurchaseRequisitionTransition,
+  SupplyChainPolicy,
+  SupplyChainPolicyWrite,
 } from "../types/purchasing";
 
 const root = "/api/v1/purchasing";
@@ -48,6 +53,16 @@ export const configureBranchPurchasingPolicy = async (
   input: BranchPurchasingPolicyWrite,
 ): Promise<BranchPurchasingPolicy> =>
   (await apiClient.put<BranchPurchasingPolicy>(`${root}/branch-policies`, input)).data;
+export const createPurchaseRequisition = async (input: PurchaseRequisitionCreate): Promise<PurchaseRequisition> =>
+  (await apiClient.post<PurchaseRequisition>(`${root}/requisitions`, input)).data;
+export const transitionPurchaseRequisition = async (
+  id: string,
+  action: "submit" | "approve" | "reject" | "convert" | "cancel",
+  input: PurchaseRequisitionTransition,
+): Promise<PurchaseRequisition> =>
+  (await apiClient.post<PurchaseRequisition>(`${root}/requisitions/${id}/${action}`, input)).data;
+export const configureSupplyChainPolicy = async (input: SupplyChainPolicyWrite): Promise<SupplyChainPolicy> =>
+  (await apiClient.put<SupplyChainPolicy>(`${root}/supply-chain-policies`, input)).data;
 export const createOperationalVendor = async (
   input: VendorCreate,
 ): Promise<OperationalVendor> =>

@@ -167,6 +167,41 @@ export interface PurchaseOrderDispositionCommand {
 export interface PurchasingWorkspace {
   vendors: readonly OperationalVendor[];
   purchase_orders: readonly PurchaseOrder[];
+  requisitions: readonly PurchaseRequisition[];
+  policies: readonly SupplyChainPolicy[];
+}
+export interface PurchaseRequisition {
+  id: string; company_id: string; branch_id: string; request_number: string;
+  inventory_item_id: string | null; description: string; quantity: string; unit: string;
+  need_by: string | null; source_type: string; source_reference: string;
+  job_id: string | null; suggested_vendor_id: string | null; status: string;
+  reason: string; requester_user_id: string; decided_by_user_id: string | null;
+  decided_at: string | null; decision_reason: string | null; purchase_order_id: string | null;
+  evidence_digest: string; version: number; created_at: string; updated_at: string;
+}
+export interface PurchaseRequisitionCreate {
+  branch_id: string; request_number: string; inventory_item_id?: string | null;
+  description: string; quantity: string; unit: string; need_by?: string | null;
+  source_type: "manual" | "replenishment" | "job_material" | "stock_location" | "emergency_exception";
+  source_reference: string; job_id?: string | null; suggested_vendor_id?: string | null;
+  reason: string; idempotency_key: string;
+}
+export interface PurchaseRequisitionTransition {
+  expected_version: number; reason: string; vendor_id?: string | null;
+  po_number?: string | null; currency?: string | null; unit_cost?: string | null;
+  idempotency_key: string;
+}
+export interface SupplyChainPolicy {
+  id: string; company_id: string; branch_id: string; policy_type: string;
+  status: "unconfigured" | "draft" | "active" | "inactive";
+  configuration: Record<string, unknown>; readiness_reason: string;
+  evidence_digest: string; version: number; updated_by_user_id: string;
+  created_at: string; updated_at: string;
+}
+export interface SupplyChainPolicyWrite {
+  branch_id: string; policy_type: string; status: SupplyChainPolicy["status"];
+  configuration: Record<string, unknown>; readiness_reason: string;
+  expected_version?: number | null; idempotency_key: string;
 }
 export interface ReplenishmentWorkbenchRequest {
   as_of: string;

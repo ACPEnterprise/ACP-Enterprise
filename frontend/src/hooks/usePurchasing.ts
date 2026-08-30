@@ -19,6 +19,9 @@ import {
   decideReplenishment,
   getBranchPurchasingPolicies,
   configureBranchPurchasingPolicy,
+  configureSupplyChainPolicy,
+  createPurchaseRequisition,
+  transitionPurchaseRequisition,
 } from "../api/purchasing";
 import type {
   PurchaseOrderLineCreate,
@@ -34,6 +37,9 @@ import type {
   DecidePurchaseOrderChange,
   PurchaseOrderDispositionCommand,
   BranchPurchasingPolicyWrite,
+  PurchaseRequisitionCreate,
+  PurchaseRequisitionTransition,
+  SupplyChainPolicyWrite,
 } from "../types/purchasing";
 
 const keys = {
@@ -62,6 +68,20 @@ export function usePurchasingMutations() {
     configureBranchPolicy: useMutation({
       mutationFn: (input: BranchPurchasingPolicyWrite) =>
         configureBranchPurchasingPolicy(input),
+      onSuccess: refresh,
+    }),
+    createRequisition: useMutation({
+      mutationFn: (input: PurchaseRequisitionCreate) => createPurchaseRequisition(input),
+      onSuccess: refresh,
+    }),
+    transitionRequisition: useMutation({
+      mutationFn: ({ id, action, input }: { id: string; action: "submit" | "approve" | "reject" | "convert" | "cancel"; input: PurchaseRequisitionTransition }) =>
+        transitionPurchaseRequisition(id, action, input),
+      onSuccess: refresh,
+      onError: refresh,
+    }),
+    configureSupplyChainPolicy: useMutation({
+      mutationFn: (input: SupplyChainPolicyWrite) => configureSupplyChainPolicy(input),
       onSuccess: refresh,
     }),
     createVendor: useMutation({
