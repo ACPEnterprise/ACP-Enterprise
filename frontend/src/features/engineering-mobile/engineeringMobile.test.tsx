@@ -132,6 +132,7 @@ beforeEach(() => {
   permissions.add("COMPANY_ENGINEERING_COMMAND_MANAGE");
   permissions.add("COMPANY_ENGINEERING_COMMAND_APPROVE");
   permissions.add("COMPANY_ENGINEERING_CAPACITY_READ");
+  permissions.add("COMPANY_ENGINEERING_CAPACITY_MANAGE");
   vi.mocked(hooks.useApproveMobileReview).mockReturnValue(mutation());
   vi.mocked(hooks.useCancelMobileReview).mockReturnValue(mutation());
   vi.mocked(hooks.useDecideEngineeringReview).mockReturnValue(mutation());
@@ -561,6 +562,23 @@ describe("mobile Engineering Control", () => {
     expect(hooks.useMobileWorkstream).toHaveBeenCalledWith(review.id, false);
     expect(hooks.useMobileReview).toHaveBeenCalledWith(review.id, false);
     expect(screen.getByText(/not authorized to view this Engineering workstream/i)).toBeInTheDocument();
+  });
+
+  it("keeps capacity evidence read-only without capacity-manage authority", async () => {
+    permissions.clear();
+    permissions.add("COMPANY_ENGINEERING_COMMAND_READ");
+    permissions.add("COMPANY_ENGINEERING_CAPACITY_READ");
+    vi.mocked(hooks.useMobileWorkstreams).mockReturnValue({
+      isLoading: false,
+      data: { items: [], connectivity: disconnected, page: 1, page_size: 100, total_count: 0, total_pages: 0 },
+    } as never);
+
+    renderList();
+    await userEvent.click(screen.getByRole("button", { name: /Capacity/ }));
+
+    expect(screen.getByText("Current capacity evidence is read-only.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Save capacity limits" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("spinbutton", { name: "Maximum concurrent workstreams" })).not.toBeInTheDocument();
   });
 
   it("shows the pipeline and confirms owner control actions", async () => {
