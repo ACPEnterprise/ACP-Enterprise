@@ -358,7 +358,27 @@ class AccountsPayableService:
             await self._lock_identities(session, f"ap:posting-receipt:{spec.company_id}:{spec.source_event_id}")
             existing = await session.scalar(select(APPostingReceipt).where(APPostingReceipt.company_id == spec.company_id, APPostingReceipt.source_event_id == spec.source_event_id).with_for_update())
             if existing:
-                if _digest((existing.status, existing.journal_id, existing.journal_version)) != _digest((spec.status, spec.journal_id, spec.journal_version)):
+                existing_authority = (
+                    existing.source_type,
+                    existing.source_id,
+                    existing.journal_id,
+                    existing.journal_version,
+                    existing.mapping_version,
+                    existing.status,
+                    existing.effective_date,
+                    existing.failure_reason,
+                )
+                requested_authority = (
+                    spec.source_type,
+                    spec.source_id,
+                    spec.journal_id,
+                    spec.journal_version,
+                    spec.mapping_version,
+                    spec.status,
+                    spec.effective_date,
+                    spec.failure_reason,
+                )
+                if _digest(existing_authority) != _digest(requested_authority):
                     raise APConflict("Contradictory Accounting posting receipt.")
                 return existing
             receipt = APPostingReceipt(**spec.__dict__)

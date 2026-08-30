@@ -8,9 +8,11 @@ import pytest_asyncio
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from app.accounts_payable.contracts import PostingReceiptSpec
 from app.accounts_payable.errors import APConflict, APNotFound
 from app.accounts_payable.models import (
     AccountingVendor,
+    APPostingReceipt,
     APSubledgerEntry,
     Disbursement,
     DisbursementApplication,
@@ -169,3 +171,45 @@ async def test_concurrent_disbursement_replay_has_one_application_and_conserves_
                 key,
                 frozenset({uuid4()}),
             )
+
+
+@pytest.mark.asyncio
+async def test_posting_receipt_replay_binds_complete_source_authority(
+    ap_application_fixture,
+) -> None:
+    factory, (company_id, _branch_id, bill_id, _disbursement_id, _actor_id) = ap_application_fixture
+    service = AccountsPayableService()
+    spec = PostingReceiptSpec(
+        company_id=company_id,
+        source_event_id=uuid4(),
+        source_type="bill",
+        source_id=bill_id,
+        journal_id=uuid4(),
+        journal_version=1,
+        mapping_version="ap-v1",
+        status="posted",
+        effective_date=date(2026, 8, 30),
+    )
+
+    async def record(command: PostingReceiptSpec):
+        async with factory() as session:
+            return await service.record_posting_receipt(session, command)
+
+    first, replay = await asyncio.gather(record(spec), record(spec))
+    assert first.id == replay.id
+    async with factory() as session:
+        assert await session.scalar(select(func.count(APPostingReceipt.id)).where(APPostingReceipt.company_id == company_id, APPostingReceipt.source_event_id == spec.source_event_id)) == 1
+
+    contradictory = PostingReceiptSpec(
+        company_id=company_id,
+        source_event_id=spec.source_event_id,
+        source_type="bill",
+        source_id=uuid4(),
+        journal_id=spec.journal_id,
+        journal_version=spec.journal_version,
+        mapping_version=spec.mapping_version,
+        status=spec.status,
+        effective_date=spec.effective_date,
+    )
+    with pytest.raises(APConflict):
+        await record(contradictory)
