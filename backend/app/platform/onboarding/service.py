@@ -559,11 +559,45 @@ class IdentityOnboardingService:
         return record
 
     async def claim_protected_delivery(
-        self, session: AsyncSession, *, invitation_id: UUID
+        self,
+        session: AsyncSession,
+        *,
+        invitation_id: UUID | None = None,
+        context: AuthorizationContext | None = None,
+        request_id: UUID | None = None,
     ) -> ProtectedInvitationDelivery:
         """Internal provider boundary; never exposed by an HTTP route."""
+        if (invitation_id is None) == (request_id is None):
+            raise OnboardingConflictError("Protected delivery is unavailable.")
         now = datetime.now(timezone.utc)
         async with session.begin():
+            request: IdentityOnboardingRequest | None = None
+            if request_id is not None:
+                if context is None:
+                    raise OnboardingConflictError(
+                        "Protected delivery scope is unavailable."
+                    )
+                request = await session.scalar(
+                    select(IdentityOnboardingRequest).where(
+                        IdentityOnboardingRequest.id == request_id,
+                        IdentityOnboardingRequest.company_id == context.company.id,
+                        IdentityOnboardingRequest.status == "invited",
+                    )
+                )
+                if request is None or not context.can_access_branch(request.branch_id):
+                    raise OnboardingConflictError(
+                        "Protected delivery scope is unavailable."
+                    )
+                invitation = await session.scalar(
+                    select(IdentityOnboardingInvitation)
+                    .where(
+                        IdentityOnboardingInvitation.onboarding_request_id
+                        == request.id,
+                        IdentityOnboardingInvitation.status == "pending",
+                    )
+                    .with_for_update()
+                )
+                invitation_id = invitation.id if invitation is not None else None
             invitation = await session.scalar(
                 select(IdentityOnboardingInvitation)
                 .where(IdentityOnboardingInvitation.id == invitation_id)
@@ -584,9 +618,7 @@ class IdentityOnboardingService:
                 or envelope.status != "pending"
             ):
                 raise OnboardingConflictError("Protected delivery is unavailable.")
-            encoded = self.configuration.identity_onboarding_delivery_keys.get(
-                envelope.key_id
-            )
+            encoded = self._delivery_keyring().get(envelope.key_id)
             if not encoded:
                 raise OnboardingConflictError("Protected delivery key is unavailable.")
             try:
@@ -600,11 +632,13 @@ class IdentityOnboardingService:
                 raise OnboardingConflictError(
                     "Protected delivery is unavailable."
                 ) from error
-            request = await session.scalar(
-                select(IdentityOnboardingRequest).where(
-                    IdentityOnboardingRequest.id == invitation.onboarding_request_id
+            if request is None:
+                request = await session.scalar(
+                    select(IdentityOnboardingRequest).where(
+                        IdentityOnboardingRequest.id
+                        == invitation.onboarding_request_id
+                    )
                 )
-            )
             user = (
                 await session.scalar(select(User).where(User.id == request.user_id))
                 if request
@@ -618,6 +652,25 @@ class IdentityOnboardingService:
             return ProtectedInvitationDelivery(
                 invitation.id, user.normalized_email, secret
             )
+
+    async def claim_protected_delivery_for_owner(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        request_id: UUID,
+    ) -> ProtectedInvitationDelivery:
+        """Claim once for an authorized owner in an explicitly non-Production runtime."""
+        self._require_admin(context)
+        if self.configuration.environment not in {"development", "test", "preview"}:
+            raise OnboardingConflictError(
+                "Owner-mediated protected delivery is unavailable."
+            )
+        return await self.claim_protected_delivery(
+            session,
+            context=context,
+            request_id=request_id,
+        )
 
     async def complete_protected_delivery(
         self, session: AsyncSession, *, invitation_id: UUID
