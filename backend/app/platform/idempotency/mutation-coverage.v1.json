@@ -2474,8 +2474,88 @@
       "path": "/api/v1/estimates/commercial-policies",
       "reason": "Exact replay returns one Commercial policy version while contradictory identity or stale-version reuse fails closed.",
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "estimates",
+      "mechanism": "Company-scoped command identity, advisory locking, and immutable exact-revision evidence",
+      "method": "POST",
+      "operation_id": "prepare_estimate_presentation_api_v1_estimates__estimate_id__presentations_post",
+      "path": "/api/v1/estimates/{estimate_id}/presentations",
+      "reason": "Exact replay cannot duplicate presentation authority and contradictory command evidence fails closed.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "estimates",
+      "mechanism": "Company- and Estimate-scoped advisory locking with immutable sequence evidence",
+      "method": "POST",
+      "operation_id": "record_follow_up_api_v1_estimates__estimate_id__follow_ups_post",
+      "path": "/api/v1/estimates/{estimate_id}/follow-ups",
+      "reason": "Exact replay returns one follow-up command while contradictory identity or concurrent sequence reuse fails closed.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "estimates",
+      "mechanism": "HMAC presentation authority, exact revision binding, row locking, and semantic decision recovery",
+      "method": "POST",
+      "operation_id": "protected_estimate_decision_api_v1_estimates_protected_decision_post",
+      "path": "/api/v1/estimates/protected-decision",
+      "reason": "Equivalent replay recovers the single Customer decision while stale or contradictory evidence returns a controlled conflict.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "purchasing",
+      "mechanism": "Company-scoped Purchasing command receipt and canonical request digest",
+      "method": "POST",
+      "operation_id": "create_requisition_api_v1_purchasing_requisitions_post",
+      "path": "/api/v1/purchasing/requisitions",
+      "reason": "Procurement demand replay returns one durable requisition while contradictory identity reuse fails closed.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "purchasing",
+      "mechanism": "Company-scoped Purchasing command receipt, canonical request digest, and optimistic version",
+      "method": "POST",
+      "operation_id": "submit_requisition_api_v1_purchasing_requisitions__requisition_id__submit_post",
+      "path": "/api/v1/purchasing/requisitions/{requisition_id}/submit",
+      "reason": "Requisition submission is exactly-once and stale or contradictory commands fail closed.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "purchasing",
+      "mechanism": "Company-scoped Purchasing command receipt, canonical request digest, SOD, and optimistic version",
+      "method": "POST",
+      "operation_id": "decide_requisition_api_v1_purchasing_requisitions__requisition_id___action__post",
+      "path": "/api/v1/purchasing/requisitions/{requisition_id}/{action}",
+      "reason": "Approval, rejection, cancellation, and PO conversion converge on one governed requisition outcome.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "purchasing",
+      "mechanism": "Company-scoped Purchasing command receipt, canonical policy digest, and optimistic version",
+      "method": "PUT",
+      "operation_id": "configure_supply_chain_policy_api_v1_purchasing_supply_chain_policies_put",
+      "path": "/api/v1/purchasing/supply-chain-policies",
+      "reason": "Versioned policy readiness cannot be duplicated or silently overwritten by stale configuration.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "purchasing",
+      "mechanism": "Company-scoped Purchasing command receipt, canonical content digest, and immutable custody evidence",
+      "method": "POST",
+      "operation_id": "register_document_api_v1_purchasing_documents_post",
+      "path": "/api/v1/purchasing/documents",
+      "reason": "Exact replay returns one custody record while contradictory command identity reuse fails closed.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "e3089296d16df68f877c7f0a41ae671cd859163684ac917a69d7ea276f89e897",
+  "fingerprint": "df8dda165bc296922a1d8fa6c8f31eb8032f2469a6fa9877d87365a696931bd8",
   "schema_version": "1"
 }

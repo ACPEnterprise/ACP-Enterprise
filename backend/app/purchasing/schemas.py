@@ -199,6 +199,127 @@ class BranchPurchasingPolicyItem(PurchasingSchema):
     revisions: tuple[BranchPurchasingPolicyRevisionItem, ...] = ()
 
 
+class PurchaseRequisitionCreate(Command):
+    branch_id: UUID
+    request_number: str = Field(min_length=1, max_length=80)
+    inventory_item_id: UUID | None = None
+    description: str = Field(min_length=1, max_length=1000)
+    quantity: Decimal = Field(gt=0, max_digits=18, decimal_places=6)
+    unit: str = Field(min_length=1, max_length=40)
+    need_by: date | None = None
+    source_type: str = Field(
+        pattern=r"^(manual|replenishment|job_material|stock_location|emergency_exception)$"
+    )
+    source_reference: str = Field(min_length=1, max_length=240)
+    job_id: UUID | None = None
+    suggested_vendor_id: UUID | None = None
+    reason: str = Field(min_length=1, max_length=1000)
+
+
+class PurchaseRequisitionTransition(Command):
+    expected_version: int = Field(ge=1)
+    reason: str = Field(min_length=1, max_length=1000)
+    vendor_id: UUID | None = None
+    po_number: str | None = Field(default=None, min_length=1, max_length=80)
+    currency: str | None = Field(default=None, pattern=r"^[A-Z]{3}$")
+    unit_cost: Decimal | None = Field(
+        default=None, ge=0, max_digits=18, decimal_places=4
+    )
+
+
+class PurchaseRequisitionItem(PurchasingSchema):
+    id: UUID
+    company_id: UUID
+    branch_id: UUID
+    request_number: str
+    inventory_item_id: UUID | None
+    description: str
+    quantity: Decimal
+    unit: str
+    need_by: date | None
+    source_type: str
+    source_reference: str
+    job_id: UUID | None
+    suggested_vendor_id: UUID | None
+    status: str
+    reason: str
+    requester_user_id: UUID
+    decided_by_user_id: UUID | None
+    decided_at: datetime | None
+    decision_reason: str | None
+    purchase_order_id: UUID | None
+    evidence_digest: str
+    version: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class SupplyChainPolicyWrite(Command):
+    branch_id: UUID
+    policy_type: str = Field(
+        pattern=r"^(matching_tolerance|receiving|reorder|valuation|receipt_accrual|approval)$"
+    )
+    status: str = Field(pattern=r"^(unconfigured|draft|active|inactive)$")
+    configuration: dict[str, object] = Field(default_factory=dict)
+    readiness_reason: str = Field(min_length=1, max_length=1000)
+    expected_version: int | None = Field(default=None, ge=1)
+
+    @model_validator(mode="after")
+    def validate_configuration_readiness(self) -> "SupplyChainPolicyWrite":
+        if self.status == "unconfigured" and self.configuration:
+            raise ValueError("Unconfigured policy cannot claim configuration values")
+        if self.status == "active" and not self.configuration:
+            raise ValueError("Active policy requires explicit versioned configuration")
+        return self
+
+
+class SupplyChainPolicyItem(PurchasingSchema):
+    id: UUID
+    company_id: UUID
+    branch_id: UUID
+    policy_type: str
+    status: str
+    configuration: dict[str, object]
+    readiness_reason: str
+    evidence_digest: str
+    version: int
+    updated_by_user_id: UUID
+    created_at: datetime
+    updated_at: datetime
+
+
+class PurchasingDocumentCreate(Command):
+    branch_id: UUID
+    entity_type: str = Field(
+        pattern=r"^(purchase_order|requisition|receipt|discrepancy|purchase_return)$"
+    )
+    entity_id: UUID
+    document_type: str = Field(min_length=1, max_length=80)
+    filename: str = Field(min_length=1, max_length=240)
+    media_type: str = Field(min_length=1, max_length=120)
+    content_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    storage_reference: str = Field(min_length=1, max_length=500)
+    source_reference: str = Field(min_length=1, max_length=240)
+
+
+class PurchasingDocumentItem(PurchasingSchema):
+    id: UUID
+    company_id: UUID
+    branch_id: UUID
+    entity_type: str
+    entity_id: UUID
+    document_type: str
+    filename: str
+    media_type: str
+    content_digest: str
+    storage_reference: str
+    source_reference: str
+    status: str
+    evidence_digest: str
+    actor_user_id: UUID
+    created_at: datetime
+
+
 class PurchaseOrderCreate(Command):
     branch_id: UUID
     vendor_id: UUID
@@ -443,6 +564,19 @@ class PurchaseOrderItem(PurchasingSchema):
     disposition: "PurchaseOrderDispositionItem | None" = None
 
 
+class PurchaseOrderArtifactItem(PurchasingSchema):
+    schema_version: int = 1
+    template_version: str
+    purchase_order_id: UUID
+    purchase_order_version: int
+    issuance_digest: str
+    artifact_digest: str
+    filename: str
+    media_type: str = "text/html"
+    rendered_at: datetime
+    content: str
+
+
 class PurchaseOrderChangeOperation(PurchasingSchema):
     operation: str = Field(
         pattern=r"^(set_quantity|set_unit_cost|cancel_line|add_line|set_expected_date)$"
@@ -524,3 +658,6 @@ class PurchaseOrderDispositionItem(PurchasingSchema):
 class PurchasingWorkspace(PurchasingSchema):
     vendors: tuple[VendorItem, ...]
     purchase_orders: tuple[PurchaseOrderItem, ...]
+    requisitions: tuple[PurchaseRequisitionItem, ...] = ()
+    policies: tuple[SupplyChainPolicyItem, ...] = ()
+    documents: tuple[PurchasingDocumentItem, ...] = ()

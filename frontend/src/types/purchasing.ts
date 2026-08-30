@@ -143,6 +143,11 @@ export interface PurchaseOrder {
   revisions: readonly PurchaseOrderRevision[];
   disposition: PurchaseOrderDisposition | null;
 }
+export interface PurchaseOrderArtifact {
+  schema_version: number; template_version: string; purchase_order_id: string;
+  purchase_order_version: number; issuance_digest: string; artifact_digest: string;
+  filename: string; media_type: "text/html"; rendered_at: string; content: string;
+}
 export interface RequestPurchaseOrderChange {
   expected_po_version: number;
   base_revision: number;
@@ -167,6 +172,54 @@ export interface PurchaseOrderDispositionCommand {
 export interface PurchasingWorkspace {
   vendors: readonly OperationalVendor[];
   purchase_orders: readonly PurchaseOrder[];
+  requisitions: readonly PurchaseRequisition[];
+  policies: readonly SupplyChainPolicy[];
+  documents: readonly PurchasingDocument[];
+}
+export interface PurchasingDocument {
+  id: string; company_id: string; branch_id: string; entity_type: string;
+  entity_id: string; document_type: string; filename: string; media_type: string;
+  content_digest: string; storage_reference: string; source_reference: string;
+  status: string; evidence_digest: string; actor_user_id: string; created_at: string;
+}
+export interface PurchasingDocumentCreate {
+  branch_id: string; entity_type: "purchase_order" | "requisition" | "receipt" | "discrepancy" | "purchase_return";
+  entity_id: string; document_type: string; filename: string; media_type: string;
+  content_digest: string; storage_reference: string; source_reference: string;
+  idempotency_key: string;
+}
+export interface PurchaseRequisition {
+  id: string; company_id: string; branch_id: string; request_number: string;
+  inventory_item_id: string | null; description: string; quantity: string; unit: string;
+  need_by: string | null; source_type: string; source_reference: string;
+  job_id: string | null; suggested_vendor_id: string | null; status: string;
+  reason: string; requester_user_id: string; decided_by_user_id: string | null;
+  decided_at: string | null; decision_reason: string | null; purchase_order_id: string | null;
+  evidence_digest: string; version: number; created_at: string; updated_at: string;
+}
+export interface PurchaseRequisitionCreate {
+  branch_id: string; request_number: string; inventory_item_id?: string | null;
+  description: string; quantity: string; unit: string; need_by?: string | null;
+  source_type: "manual" | "replenishment" | "job_material" | "stock_location" | "emergency_exception";
+  source_reference: string; job_id?: string | null; suggested_vendor_id?: string | null;
+  reason: string; idempotency_key: string;
+}
+export interface PurchaseRequisitionTransition {
+  expected_version: number; reason: string; vendor_id?: string | null;
+  po_number?: string | null; currency?: string | null; unit_cost?: string | null;
+  idempotency_key: string;
+}
+export interface SupplyChainPolicy {
+  id: string; company_id: string; branch_id: string; policy_type: string;
+  status: "unconfigured" | "draft" | "active" | "inactive";
+  configuration: Record<string, unknown>; readiness_reason: string;
+  evidence_digest: string; version: number; updated_by_user_id: string;
+  created_at: string; updated_at: string;
+}
+export interface SupplyChainPolicyWrite {
+  branch_id: string; policy_type: string; status: SupplyChainPolicy["status"];
+  configuration: Record<string, unknown>; readiness_reason: string;
+  expected_version?: number | null; idempotency_key: string;
 }
 export interface ReplenishmentWorkbenchRequest {
   as_of: string;
