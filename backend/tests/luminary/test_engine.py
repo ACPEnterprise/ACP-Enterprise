@@ -5,6 +5,7 @@ from datetime import date, datetime, timezone
 from uuid import UUID
 
 import pytest
+
 from app.luminary.contracts import (
     BeaconConditionReference,
     EvidenceReference,
