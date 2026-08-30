@@ -1,9 +1,22 @@
 import { useState } from "react";
+import axios from "axios";
 
 import { useTechnicianField } from "../../hooks/useTechnicianField";
 import type { TechnicianItineraryItem } from "../../types/technician";
 import type { CustomerDisposition } from "../../types/technicianField";
 import { Alert, Button, Field, Input, Spinner, Textarea } from "../../ui";
+
+function fieldRecoveryMessage(error: unknown) {
+  if (axios.isAxiosError(error)) {
+    const recovery = (error.response?.data as { detail?: { recovery?: string } })?.detail?.recovery;
+    if (recovery === "RETRY_AFTER_REFRESH") return "Field authority changed. Refresh before recording another action.";
+    if (recovery === "USER_CORRECTION_REQUIRED") return "Field evidence requires correction. Your entered evidence was retained.";
+    if (recovery === "RECONCILIATION_REQUIRED") return "Field authority is uncertain and requires office reconciliation. Do not retry blindly.";
+    if (recovery === "TEMPORARILY_UNAVAILABLE") return "Field Service is temporarily unavailable. Your entered evidence was retained.";
+    if (recovery === "TERMINAL_FAILURE") return "This Field Service resource is no longer available. Return to the itinerary and refresh.";
+  }
+  return "Refresh authoritative state before retrying. No local success was assumed.";
+}
 
 export function TechnicianFieldPanel({ item }: { readonly item: TechnicianItineraryItem }) {
   const field = useTechnicianField(item.job_id ?? "", item.job_version ?? 1, item.assignment_version);
@@ -12,6 +25,7 @@ export function TechnicianFieldPanel({ item }: { readonly item: TechnicianItiner
   const [customerName, setCustomerName] = useState("");
   const [reason, setReason] = useState("");
   const busy = field.note.isPending || field.approval.isPending || field.arrival.isPending || field.lifecycle.isPending || field.handoff.isPending;
+  const failedMutation = [field.note, field.approval, field.arrival, field.lifecycle, field.handoff].find((mutation) => mutation.isError);
 
   if (!item.job_id) return null;
   if (field.state.isLoading) return <Spinner label="Loading field controls" />;
@@ -59,7 +73,7 @@ export function TechnicianFieldPanel({ item }: { readonly item: TechnicianItiner
       {state?.invoice_handoff_status === "completed" && <Alert variant="success" title="Invoice ready">The authoritative invoice handoff is complete.</Alert>}
       {state?.invoice_handoff_status === "pending" && <Alert variant="warning" title="Invoice handoff pending">No invoice has been reported complete. Retry after authoritative invoicing finishes.</Alert>}
       {state?.invoice_handoff_status === "reconciliation_required" && <Alert variant="danger" title="Invoice reconciliation required">Office review is required before this handoff can be treated as complete.</Alert>}
-      {(field.note.isError || field.approval.isError || field.arrival.isError || field.lifecycle.isError || field.handoff.isError) && <Alert variant="danger" title="Action not recorded">Refresh authoritative state before retrying. No local success was assumed.</Alert>}
+      {failedMutation && <Alert variant="danger" title="Action not recorded" role="alert" aria-live="assertive">{fieldRecoveryMessage(failedMutation.error)}</Alert>}
     </div>
   );
 }
