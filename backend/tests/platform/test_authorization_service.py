@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from app.core.config import settings
+from app.customers import models as customer_models  # noqa: F401
 from app.database.session import get_database_session, get_security_database_session
 from app.events.models import BusinessEvent
 from app.events.schemas import BusinessEventCreate
