@@ -5,15 +5,6 @@ from uuid import UUID, uuid4
 
 import pytest
 import pytest_asyncio
-from pydantic import ValidationError
-from sqlalchemy import func, select, text
-from sqlalchemy.ext.asyncio import (
-    AsyncEngine,
-    AsyncSession,
-    async_sessionmaker,
-    create_async_engine,
-)
-
 from app.core.config import Settings, settings
 from app.core.database import Base
 from app.customers import models as customer_models  # noqa: F401
@@ -55,6 +46,14 @@ from app.platform.permissions.models import (
 )
 from app.platform.users.models import User, UserCredential
 from app.scheduling import models as scheduling_models  # noqa: F401
+from pydantic import ValidationError
+from sqlalchemy import func, select, text
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 
 @dataclass(frozen=True)
