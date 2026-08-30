@@ -5,6 +5,18 @@ from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from app.core.config import Settings, settings
+from app.platform.reliability.correlation import current_correlation_id
+from app.platform.reliability.failures import ClientRecovery, FailureCode, SafeFailure
+
+
+def _forwarding_failure(message: str) -> JSONResponse:
+    failure = SafeFailure(
+        FailureCode.VALIDATION,
+        message,
+        ClientRecovery.USER_CORRECTION_REQUIRED,
+        current_correlation_id(),
+    )
+    return JSONResponse({"detail": failure.detail()}, status_code=400)
 
 
 class TrustedProxyMiddleware:
@@ -35,9 +47,7 @@ class TrustedProxyMiddleware:
             except ValueError:
                 trusted = False
         if not self.configuration.trust_forwarded_headers or not trusted:
-            response = JSONResponse(
-                {"detail": "Untrusted forwarding headers."}, status_code=400
-            )
+            response = _forwarding_failure("Forwarding headers are not accepted.")
             await response(scope, receive, send)
             return
         if forwarded_for:
@@ -46,9 +56,7 @@ class TrustedProxyMiddleware:
                     ip_address(value.strip()) for value in forwarded_for.split(",")
                 ]
             except ValueError:
-                response = JSONResponse(
-                    {"detail": "Invalid forwarding headers."}, status_code=400
-                )
+                response = _forwarding_failure("Forwarding headers are invalid.")
                 await response(scope, receive, send)
                 return
             client = next(
@@ -63,9 +71,7 @@ class TrustedProxyMiddleware:
         if forwarded_proto:
             protocol = forwarded_proto.split(",", 1)[0].strip().lower()
             if protocol not in {"http", "https"}:
-                response = JSONResponse(
-                    {"detail": "Invalid forwarding headers."}, status_code=400
-                )
+                response = _forwarding_failure("Forwarding headers are invalid.")
                 await response(scope, receive, send)
                 return
             scope["scheme"] = protocol

@@ -23,6 +23,7 @@ from app.platform.permissions.catalog import (
     PermissionScope,
     permission_catalog,
 )
+from app.platform.reliability.correlation import CorrelationMiddleware
 from app.platform.security.decisions import (
     AuthorizationDecisionLogger,
     AuthorizationDenial,
@@ -108,6 +109,7 @@ async def test_security_headers_and_trusted_proxy_validation() -> None:
     app = FastAPI()
     app.add_middleware(TrustedProxyMiddleware, configuration=configuration)
     app.add_middleware(SecurityHeadersMiddleware, configuration=configuration)
+    app.add_middleware(CorrelationMiddleware)
 
     @app.get("/client")
     async def client_endpoint() -> dict[str, str]:
@@ -149,6 +151,27 @@ async def test_security_headers_and_trusted_proxy_validation() -> None:
             "/client", headers={"X-Forwarded-For": "203.0.113.9"}
         )
     assert rejected.status_code == 400
+    assert rejected.json()["detail"]["code"] == "validation"
+    assert rejected.json()["detail"]["recovery"] == "USER_CORRECTION_REQUIRED"
+    assert rejected.json()["detail"]["correlation_id"] == rejected.headers[
+        "x-request-id"
+    ]
+    assert "203.0.113.9" not in rejected.text
+
+    malformed_transport = httpx.ASGITransport(app=app, client=("10.0.0.8", 443))
+    async with httpx.AsyncClient(
+        transport=malformed_transport, base_url="https://test"
+    ) as malformed_client:
+        malformed = await malformed_client.get(
+            "/client",
+            headers={"X-Forwarded-For": "protected-source-canary"},
+        )
+    assert malformed.status_code == 400
+    assert malformed.json()["detail"]["code"] == "validation"
+    assert malformed.json()["detail"]["correlation_id"] == malformed.headers[
+        "x-request-id"
+    ]
+    assert "protected-source-canary" not in malformed.text
 
 
 def test_jwt_key_identifiers_support_rotation_and_reject_unknown_keys() -> None:
