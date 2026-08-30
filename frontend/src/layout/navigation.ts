@@ -233,6 +233,7 @@ export const navigationGroups = [
       item("accounts-payable"),
       item("financial-reports"),
       item("inventory"),
+      item("purchasing"),
     ],
   },
   {
