@@ -36,19 +36,21 @@ export const mobileEngineeringKeys = {
   capacity: () => ["engineering-mobile", "capacity"] as const,
 };
 
-export function useMissionNotifications() {
+export function useMissionNotifications(enabled = true) {
   return useQuery({
     queryKey: mobileEngineeringKeys.notifications(),
     queryFn: mobileApi.listMissionNotifications,
     retry: shouldRetryApiQuery,
+    enabled,
   });
 }
 
-export function useEngineeringCapacity() {
+export function useEngineeringCapacity(enabled = true) {
   return useQuery({
     queryKey: mobileEngineeringKeys.capacity(),
     queryFn: mobileApi.getCapacitySummary,
     retry: shouldRetryApiQuery,
+    enabled,
   });
 }
 
@@ -98,19 +100,21 @@ export function useTransitionMissionNotification() {
   });
 }
 
-export function usePendingMobileReviews() {
+export function usePendingMobileReviews(enabled = true) {
   return useQuery({
     queryKey: mobileEngineeringKeys.approvalQueue(),
     queryFn: mobileApi.listPendingMobileReviews,
     retry: shouldRetryApiQuery,
+    enabled,
   });
 }
 
-export function useRoadmaps() {
+export function useRoadmaps(enabled = true) {
   return useQuery({
     queryKey: mobileEngineeringKeys.roadmaps(),
     queryFn: mobileApi.listRoadmaps,
     retry: shouldRetryApiQuery,
+    enabled,
   });
 }
 
@@ -187,19 +191,20 @@ export function useAllocationReconciliationMutation() {
   return useCapacityMutation<{ allocation: CapacityAllocation; resolution: "confirmed_active" | "confirmed_released" }>(({ allocation, resolution }) => mobileApi.reconcileCapacityAllocation(allocation, resolution));
 }
 
-export function useMobileWorkstreams(query: MobileReviewQuery) {
+export function useMobileWorkstreams(query: MobileReviewQuery, enabled = true) {
   return useQuery({
     queryKey: mobileEngineeringKeys.workstreams(query),
     queryFn: () => mobileApi.listMobileWorkstreams(query),
     retry: shouldRetryApiQuery,
+    enabled,
   });
 }
 
-export function useMobileWorkstream(commandId: string | undefined) {
+export function useMobileWorkstream(commandId: string | undefined, enabled = true) {
   return useQuery({
     queryKey: mobileEngineeringKeys.workstream(commandId ?? ""),
     queryFn: () => mobileApi.getMobileWorkstream(commandId as string),
-    enabled: Boolean(commandId),
+    enabled: enabled && Boolean(commandId),
     retry: shouldRetryApiQuery,
   });
 }
@@ -261,11 +266,11 @@ export function useMobileCommandStatus(reviewId: string | undefined) {
   });
 }
 
-export function useMobileReview(reviewId: string | undefined) {
+export function useMobileReview(reviewId: string | undefined, enabled = true) {
   return useQuery({
     queryKey: mobileEngineeringKeys.detail(reviewId ?? ""),
     queryFn: () => mobileApi.getMobileReview(reviewId as string),
-    enabled: Boolean(reviewId),
+    enabled: enabled && Boolean(reviewId),
     retry: shouldRetryApiQuery,
   });
 }
