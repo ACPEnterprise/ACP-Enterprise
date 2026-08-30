@@ -942,8 +942,9 @@ async def test_unknown_company_permission_is_visible_but_not_assignable(
     _, factory = admin_database
     fixture = await seed_admin_fixture(factory, "ADMINUNKNOWN")
     async with factory() as session, session.begin():
+        unknown_code = f"COMPANY_UNRECONCILED_{uuid4().hex[:12].upper()}_READ"
         unknown = Permission(
-            code="COMPANY_UNRECONCILED_READ",
+            code=unknown_code,
             name="Unreconciled Read",
             description="Requires platform contract reconciliation.",
             resource="unreconciled",

@@ -20,6 +20,14 @@ def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def unique_value(label: str) -> str:
+    return f"{label}{uuid4().hex[:10].upper()}"
+
+
+def unique_email(label: str) -> str:
+    return f"{label}-{uuid4().hex}@example.test"
+
+
 @pytest_asyncio.fixture
 async def identity_engine() -> AsyncIterator[AsyncEngine]:
     engine = create_async_engine(settings.database_url)
@@ -81,13 +89,14 @@ async def create_user(engine: AsyncEngine, email: str) -> UUID:
 async def test_unique_user_email_and_one_credential_per_user(
     identity_engine: AsyncEngine,
 ) -> None:
-    user_id = await create_user(identity_engine, "jordan@example.com")
+    email = unique_email("jordan")
+    user_id = await create_user(identity_engine, email)
 
     with pytest.raises(IntegrityError):
         async with identity_engine.begin() as connection:
             await connection.execute(
                 insert(User).values(
-                    normalized_email="jordan@example.com",
+                    normalized_email=email,
                     first_name="Other",
                     last_name="Person",
                     display_name="Other Person",
@@ -118,12 +127,16 @@ async def test_membership_uniqueness_status_and_default_branch_ownership(
     identity_engine: AsyncEngine,
 ) -> None:
     company_id, branch_id = await create_company_branch(
-        identity_engine, company_code="MEMBERA", branch_code="MAIN"
+        identity_engine,
+        company_code=unique_value("MEMBERA"),
+        branch_code=unique_value("MAIN"),
     )
     other_company_id, other_branch_id = await create_company_branch(
-        identity_engine, company_code="MEMBERB", branch_code="OTHER"
+        identity_engine,
+        company_code=unique_value("MEMBERB"),
+        branch_code=unique_value("OTHER"),
     )
-    user_id = await create_user(identity_engine, "membership@example.com")
+    user_id = await create_user(identity_engine, unique_email("membership"))
 
     with pytest.raises(IntegrityError):
         async with identity_engine.begin() as connection:
@@ -194,9 +207,11 @@ async def test_unique_membership_branch_access_and_restrictive_deletion(
     identity_engine: AsyncEngine,
 ) -> None:
     company_id, branch_id = await create_company_branch(
-        identity_engine, company_code="ACCESS", branch_code="FIELD"
+        identity_engine,
+        company_code=unique_value("ACCESS"),
+        branch_code=unique_value("FIELD"),
     )
-    user_id = await create_user(identity_engine, "access@example.com")
+    user_id = await create_user(identity_engine, unique_email("access"))
     membership_id = uuid4()
     async with identity_engine.begin() as connection:
         await connection.execute(
@@ -235,13 +250,17 @@ async def test_employee_uniqueness_and_same_company_links(
     identity_engine: AsyncEngine,
 ) -> None:
     company_id, branch_id = await create_company_branch(
-        identity_engine, company_code="EMPA", branch_code="HOME"
+        identity_engine,
+        company_code=unique_value("EMPA"),
+        branch_code=unique_value("HOME"),
     )
     other_company_id, other_branch_id = await create_company_branch(
-        identity_engine, company_code="EMPB", branch_code="AWAY"
+        identity_engine,
+        company_code=unique_value("EMPB"),
+        branch_code=unique_value("AWAY"),
     )
-    user_id = await create_user(identity_engine, "employee@example.com")
-    other_user_id = await create_user(identity_engine, "other-employee@example.com")
+    user_id = await create_user(identity_engine, unique_email("employee"))
+    other_user_id = await create_user(identity_engine, unique_email("other-employee"))
     membership_id = uuid4()
     other_membership_id = uuid4()
     async with identity_engine.begin() as connection:

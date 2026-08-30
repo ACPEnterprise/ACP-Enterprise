@@ -1,7 +1,7 @@
+import warnings
 from collections.abc import AsyncIterator
 from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
-import warnings
 
 import pytest
 import pytest_asyncio
@@ -24,6 +24,14 @@ from app.platform.users.models import User
 
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def unique_code(label: str) -> str:
+    return f"{label}_{uuid4().hex[:10].upper()}"
+
+
+def unique_email(label: str) -> str:
+    return f"{label}-{uuid4().hex}@example.test"
 
 
 @pytest_asyncio.fixture
@@ -117,13 +125,14 @@ async def create_permission(engine: AsyncEngine, code: str) -> UUID:
 async def test_permission_code_status_and_retirement_constraints(
     permission_engine: AsyncEngine,
 ) -> None:
-    await create_permission(permission_engine, "CUSTOMER_VIEW")
+    permission_code = unique_code("CUSTOMER_VIEW")
+    await create_permission(permission_engine, permission_code)
 
     with pytest.raises(IntegrityError):
         async with permission_engine.begin() as connection:
             await connection.execute(
                 insert(Permission).values(
-                    code="CUSTOMER_VIEW",
+                    code=permission_code,
                     name="Duplicate",
                     resource="customer",
                     action="view",
@@ -141,7 +150,7 @@ async def test_permission_code_status_and_retirement_constraints(
             async with permission_engine.begin() as connection:
                 await connection.execute(
                     insert(Permission).values(
-                        code=f"INVALID_PERMISSION_{index}",
+                        code=unique_code(f"INVALID_PERMISSION_{index}"),
                         name="Invalid Permission",
                         resource="customer",
                         action="invalid",
@@ -154,8 +163,10 @@ async def test_permission_code_status_and_retirement_constraints(
 async def test_company_role_code_status_and_archival_constraints(
     permission_engine: AsyncEngine,
 ) -> None:
-    company_id = await create_company(permission_engine, "ROLEA")
-    other_company_id = await create_company(permission_engine, "ROLEB")
+    company_id = await create_company(permission_engine, unique_code("ROLEA"))
+    other_company_id = await create_company(
+        permission_engine, unique_code("ROLEB")
+    )
     role_id = await create_role(permission_engine, company_id, "DISPATCHER")
     await create_role(permission_engine, other_company_id, "DISPATCHER")
 
@@ -202,9 +213,11 @@ async def test_company_role_code_status_and_archival_constraints(
 async def test_role_permission_is_unique_and_restrictive(
     permission_engine: AsyncEngine,
 ) -> None:
-    company_id = await create_company(permission_engine, "ROLEPERM")
+    company_id = await create_company(permission_engine, unique_code("ROLEPERM"))
     role_id = await create_role(permission_engine, company_id, "CSR")
-    permission_id = await create_permission(permission_engine, "CUSTOMER_CREATE")
+    permission_id = await create_permission(
+        permission_engine, unique_code("CUSTOMER_CREATE")
+    )
 
     async with permission_engine.begin() as connection:
         await connection.execute(
@@ -234,12 +247,14 @@ async def test_role_permission_is_unique_and_restrictive(
 async def test_membership_role_company_boundary_and_historical_reassignment(
     permission_engine: AsyncEngine,
 ) -> None:
-    company_id = await create_company(permission_engine, "ASSIGNA")
-    other_company_id = await create_company(permission_engine, "ASSIGNB")
+    company_id = await create_company(permission_engine, unique_code("ASSIGNA"))
+    other_company_id = await create_company(
+        permission_engine, unique_code("ASSIGNB")
+    )
     _, membership_id = await create_user_membership(
         permission_engine,
         company_id=company_id,
-        email="role-assignment@example.com",
+        email=unique_email("role-assignment"),
     )
     role_id = await create_role(permission_engine, company_id, "MANAGER")
     other_role_id = await create_role(permission_engine, other_company_id, "MANAGER")
@@ -304,11 +319,11 @@ async def test_membership_role_company_boundary_and_historical_reassignment(
 async def test_empty_assignments_and_roles_do_not_change_branch_access(
     permission_engine: AsyncEngine,
 ) -> None:
-    company_id = await create_company(permission_engine, "EMPTYAUTH")
+    company_id = await create_company(permission_engine, unique_code("EMPTYAUTH"))
     _, membership_id = await create_user_membership(
         permission_engine,
         company_id=company_id,
-        email="empty-auth@example.com",
+        email=unique_email("empty-auth"),
     )
     role_id = await create_role(permission_engine, company_id, "EMPTY_ROLE")
 

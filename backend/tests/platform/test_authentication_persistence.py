@@ -1,7 +1,7 @@
+import warnings
 from collections.abc import AsyncIterator
 from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
-import warnings
 
 import pytest
 import pytest_asyncio
@@ -24,6 +24,14 @@ from app.platform.users.models import User
 
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def unique_email(label: str) -> str:
+    return f"{label}-{uuid4().hex}@example.test"
+
+
+def unique_token_hash(label: str) -> str:
+    return f"hash:{label}:{uuid4().hex}"
 
 
 @pytest_asyncio.fixture
@@ -77,7 +85,7 @@ async def create_session(engine: AsyncEngine, user_id: UUID) -> tuple[UUID, date
 async def test_session_status_expiration_revocation_and_restrictive_user_fk(
     authentication_engine: AsyncEngine,
 ) -> None:
-    user_id = await create_user(authentication_engine, "session@example.com")
+    user_id = await create_user(authentication_engine, unique_email("session"))
     session_id, created_at = await create_session(authentication_engine, user_id)
 
     invalid_sessions: tuple[dict[str, object], ...] = (
@@ -126,16 +134,17 @@ async def test_session_status_expiration_revocation_and_restrictive_user_fk(
 async def test_refresh_token_rotation_constraints(
     authentication_engine: AsyncEngine,
 ) -> None:
-    user_id = await create_user(authentication_engine, "refresh@example.com")
+    user_id = await create_user(authentication_engine, unique_email("refresh"))
     session_id, issued_at = await create_session(authentication_engine, user_id)
     family_id = uuid4()
     token_id = uuid4()
+    first_hash = unique_token_hash("refresh-one")
     async with authentication_engine.begin() as connection:
         await connection.execute(
             insert(RefreshToken).values(
                 id=token_id,
                 session_id=session_id,
-                token_hash="hash:refresh:one",
+                token_hash=first_hash,
                 family_id=family_id,
                 sequence_number=0,
                 issued_at=issued_at,
@@ -145,25 +154,25 @@ async def test_refresh_token_rotation_constraints(
 
     invalid_tokens: tuple[dict[str, object], ...] = (
         {
-            "token_hash": "hash:refresh:one",
+            "token_hash": first_hash,
             "family_id": uuid4(),
             "sequence_number": 0,
             "expires_at": issued_at + timedelta(days=30),
         },
         {
-            "token_hash": "hash:refresh:duplicate-sequence",
+            "token_hash": unique_token_hash("refresh-duplicate-sequence"),
             "family_id": family_id,
             "sequence_number": 0,
             "expires_at": issued_at + timedelta(days=30),
         },
         {
-            "token_hash": "hash:refresh:expired",
+            "token_hash": unique_token_hash("refresh-expired"),
             "family_id": uuid4(),
             "sequence_number": 0,
             "expires_at": issued_at,
         },
         {
-            "token_hash": "hash:refresh:unused-reuse",
+            "token_hash": unique_token_hash("refresh-unused-reuse"),
             "family_id": uuid4(),
             "sequence_number": 0,
             "expires_at": issued_at + timedelta(days=30),
@@ -188,7 +197,7 @@ async def test_refresh_token_rotation_constraints(
                 insert(RefreshToken).values(
                     id=self_reference_id,
                     session_id=session_id,
-                    token_hash="hash:refresh:self",
+                    token_hash=unique_token_hash("refresh-self"),
                     family_id=uuid4(),
                     sequence_number=0,
                     issued_at=issued_at,
@@ -204,7 +213,7 @@ async def test_refresh_token_rotation_constraints(
             insert(RefreshToken).values(
                 id=replacement_id,
                 session_id=session_id,
-                token_hash="hash:refresh:two",
+                token_hash=unique_token_hash("refresh-two"),
                 family_id=family_id,
                 sequence_number=1,
                 issued_at=issued_at + timedelta(seconds=1),
@@ -226,13 +235,14 @@ async def test_refresh_token_rotation_constraints(
 async def test_password_reset_token_constraints(
     authentication_engine: AsyncEngine,
 ) -> None:
-    user_id = await create_user(authentication_engine, "reset@example.com")
+    user_id = await create_user(authentication_engine, unique_email("reset"))
     issued_at = utc_now()
+    first_hash = unique_token_hash("reset-one")
     async with authentication_engine.begin() as connection:
         await connection.execute(
             insert(PasswordResetToken).values(
                 user_id=user_id,
-                token_hash="hash:reset:one",
+                token_hash=first_hash,
                 issued_at=issued_at,
                 expires_at=issued_at + timedelta(hours=1),
             )
@@ -240,15 +250,15 @@ async def test_password_reset_token_constraints(
 
     invalid_tokens: tuple[dict[str, object], ...] = (
         {
-            "token_hash": "hash:reset:one",
+            "token_hash": first_hash,
             "expires_at": issued_at + timedelta(hours=1),
         },
         {
-            "token_hash": "hash:reset:expired",
+            "token_hash": unique_token_hash("reset-expired"),
             "expires_at": issued_at,
         },
         {
-            "token_hash": "hash:reset:two-states",
+            "token_hash": unique_token_hash("reset-two-states"),
             "expires_at": issued_at + timedelta(hours=1),
             "consumed_at": issued_at + timedelta(minutes=1),
             "revoked_at": issued_at + timedelta(minutes=2),
@@ -270,14 +280,16 @@ async def test_password_reset_token_constraints(
 async def test_email_verification_token_constraints_and_binding(
     authentication_engine: AsyncEngine,
 ) -> None:
-    user_id = await create_user(authentication_engine, "verify@example.com")
+    email = unique_email("verify")
+    user_id = await create_user(authentication_engine, email)
     issued_at = utc_now()
+    first_hash = unique_token_hash("verify-one")
     async with authentication_engine.begin() as connection:
         await connection.execute(
             insert(EmailVerificationToken).values(
                 user_id=user_id,
-                normalized_email="verify@example.com",
-                token_hash="hash:verify:one",
+                normalized_email=email,
+                token_hash=first_hash,
                 issued_at=issued_at,
                 expires_at=issued_at + timedelta(hours=24),
             )
@@ -285,28 +297,28 @@ async def test_email_verification_token_constraints_and_binding(
 
     invalid_tokens: tuple[dict[str, object], ...] = (
         {
-            "normalized_email": "verify@example.com",
-            "token_hash": "hash:verify:one",
+            "normalized_email": email,
+            "token_hash": first_hash,
             "expires_at": issued_at + timedelta(hours=24),
         },
         {
             "normalized_email": "Verify@Example.com",
-            "token_hash": "hash:verify:uppercase",
+            "token_hash": unique_token_hash("verify-uppercase"),
             "expires_at": issued_at + timedelta(hours=24),
         },
         {
             "normalized_email": " ",
-            "token_hash": "hash:verify:blank",
+            "token_hash": unique_token_hash("verify-blank"),
             "expires_at": issued_at + timedelta(hours=24),
         },
         {
-            "normalized_email": "verify@example.com",
-            "token_hash": "hash:verify:expired",
+            "normalized_email": email,
+            "token_hash": unique_token_hash("verify-expired"),
             "expires_at": issued_at,
         },
         {
-            "normalized_email": "verify@example.com",
-            "token_hash": "hash:verify:two-states",
+            "normalized_email": email,
+            "token_hash": unique_token_hash("verify-two-states"),
             "expires_at": issued_at + timedelta(hours=24),
             "consumed_at": issued_at + timedelta(minutes=1),
             "revoked_at": issued_at + timedelta(minutes=2),
@@ -328,7 +340,9 @@ async def test_email_verification_token_constraints_and_binding(
 async def test_authentication_creates_no_membership_or_role_access(
     authentication_engine: AsyncEngine,
 ) -> None:
-    user_id = await create_user(authentication_engine, "identity-only@example.com")
+    user_id = await create_user(
+        authentication_engine, unique_email("identity-only")
+    )
     await create_session(authentication_engine, user_id)
 
     async with authentication_engine.connect() as connection:

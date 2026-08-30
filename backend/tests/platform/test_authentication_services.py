@@ -20,9 +20,9 @@ from app.platform.auth.errors import (
     InvalidCredentialsError,
     InvalidTokenError,
     PasswordChangeRequiredError,
+    RateLimitExceededError,
     RefreshTokenReuseError,
     SessionInvalidError,
-    RateLimitExceededError,
 )
 from app.platform.auth.models import (
     AuthenticationSecurityEvent,
@@ -46,7 +46,6 @@ from app.platform.company.models import Company
 from app.platform.employees.models import Employee
 from app.platform.permissions.models import MembershipRole, Permission, Role
 from app.platform.users.models import User, UserCredential
-
 
 MODEL_REGISTRY = (Branch, Company)
 
@@ -132,6 +131,10 @@ async def create_user(
     return user_id
 
 
+def unique_email(label: str) -> str:
+    return f"{label}-{uuid4().hex}@example.test"
+
+
 async def set_password(
     session_factory: async_sessionmaker[AsyncSession],
     credential_service: CredentialService,
@@ -181,7 +184,10 @@ async def test_login_failure_lockout_and_authentication_boundary(
     ],
 ) -> None:
     _, factory, password_service, credential_service, auth_service, _ = service_stack
-    user_id = await create_user(factory, email="login-service@example.com")
+    login_email = unique_email("login-service")
+    missing_email = unique_email("missing-service")
+    inactive_email = unique_email("inactive-service")
+    user_id = await create_user(factory, email=login_email)
     await set_password(factory, credential_service, user_id)
     async with factory() as session:
         permission_count_before = await session.scalar(
@@ -198,7 +204,7 @@ async def test_login_failure_lockout_and_authentication_boundary(
     async with factory() as session:
         result = await auth_service.authenticate(
             session,
-            email="LOGIN-SERVICE@example.com",
+            email=login_email.upper(),
             password="correct horse battery staple",
             ip_address="127.0.0.1",
             user_agent="pytest",
@@ -255,7 +261,7 @@ async def test_login_failure_lockout_and_authentication_boundary(
         )
 
     public_messages: list[str] = []
-    for email in ("login-service@example.com", "missing-service@example.com"):
+    for email in (login_email, missing_email):
         async with factory() as session:
             with pytest.raises(InvalidCredentialsError) as caught:
                 await auth_service.authenticate(
@@ -270,7 +276,7 @@ async def test_login_failure_lockout_and_authentication_boundary(
         with pytest.raises(InvalidCredentialsError):
             await auth_service.authenticate(
                 session,
-                email="login-service@example.com",
+                email=login_email,
                 password="wrong password again",
             )
     async with factory() as session:
@@ -282,14 +288,14 @@ async def test_login_failure_lockout_and_authentication_boundary(
         assert credential.locked_until is not None
 
     inactive_id = await create_user(
-        factory, email="inactive-service@example.com", status="disabled"
+        factory, email=inactive_email, status="disabled"
     )
     await set_password(factory, credential_service, inactive_id)
     async with factory() as session:
         with pytest.raises(InvalidCredentialsError):
             await auth_service.authenticate(
                 session,
-                email="inactive-service@example.com",
+                email=inactive_email,
                 password="correct horse battery staple",
             )
 
@@ -306,12 +312,15 @@ async def test_refresh_rotation_reuse_versions_and_concurrency(
     ],
 ) -> None:
     _, factory, _, credential_service, auth_service, _ = service_stack
-    user_id = await create_user(factory, email="refresh-service@example.com")
+    refresh_email = unique_email("refresh-service")
+    concurrent_email = unique_email("concurrent-refresh")
+    version_email = unique_email("version-refresh")
+    user_id = await create_user(factory, email=refresh_email)
     await set_password(factory, credential_service, user_id)
     async with factory() as session:
         login = await auth_service.authenticate(
             session,
-            email="refresh-service@example.com",
+            email=refresh_email,
             password="correct horse battery staple",
         )
     original_hash = auth_service.token_service.hash_token(login.refresh_token)
@@ -356,12 +365,12 @@ async def test_refresh_rotation_reuse_versions_and_concurrency(
         )
         assert all(token.revoked_at is not None for token in family_tokens)
 
-    concurrent_id = await create_user(factory, email="concurrent-refresh@example.com")
+    concurrent_id = await create_user(factory, email=concurrent_email)
     await set_password(factory, credential_service, concurrent_id)
     async with factory() as session:
         concurrent_login = await auth_service.authenticate(
             session,
-            email="concurrent-refresh@example.com",
+            email=concurrent_email,
             password="correct horse battery staple",
         )
 
@@ -381,12 +390,12 @@ async def test_refresh_rotation_reuse_versions_and_concurrency(
     )
     assert sum(isinstance(outcome, RefreshTokenReuseError) for outcome in outcomes) == 1
 
-    version_id = await create_user(factory, email="version-refresh@example.com")
+    version_id = await create_user(factory, email=version_email)
     await set_password(factory, credential_service, version_id)
     async with factory() as session:
         version_login = await auth_service.authenticate(
             session,
-            email="version-refresh@example.com",
+            email=version_email,
             password="correct horse battery staple",
         )
     async with factory() as session, session.begin():
@@ -414,12 +423,14 @@ async def test_logout_password_reset_and_email_verification(
     _, factory, password_service, credential_service, auth_service, recovery = (
         service_stack
     )
-    user_id = await create_user(factory, email="recovery-service@example.com")
+    recovery_email = unique_email("recovery-service")
+    changed_email = unique_email("changed-recovery")
+    user_id = await create_user(factory, email=recovery_email)
     await set_password(factory, credential_service, user_id)
     async with factory() as session:
         first_login = await auth_service.authenticate(
             session,
-            email="recovery-service@example.com",
+            email=recovery_email,
             password="correct horse battery staple",
         )
     async with factory() as session:
@@ -451,12 +462,10 @@ async def test_logout_password_reset_and_email_verification(
 
     async with factory() as session:
         old_delivery = await recovery.request_password_reset(
-            session, email="recovery-service@example.com"
+            session, email=recovery_email
         )
     async with factory() as session:
-        delivery = await recovery.request_password_reset(
-            session, email="recovery-service@example.com"
-        )
+        delivery = await recovery.request_password_reset(session, email=recovery_email)
     assert old_delivery.plaintext_token is not None
     assert delivery.plaintext_token is not None
     async with factory() as session:
@@ -508,7 +517,7 @@ async def test_logout_password_reset_and_email_verification(
         await session.execute(
             update(User)
             .where(User.id == user_id)
-            .values(normalized_email="changed-recovery@example.com")
+            .values(normalized_email=changed_email)
         )
     async with factory() as session:
         with pytest.raises(InvalidTokenError):
@@ -551,13 +560,14 @@ async def test_expired_revoked_refresh_and_rate_limit_enforcement(
     ],
 ) -> None:
     _, factory, _, credential_service, auth_service, _ = service_stack
-    user_id = await create_user(factory, email="refresh-state@example.com")
+    refresh_state_email = unique_email("refresh-state")
+    user_id = await create_user(factory, email=refresh_state_email)
     await set_password(factory, credential_service, user_id)
 
     async with factory() as session:
         expired_login = await auth_service.authenticate(
             session,
-            email="refresh-state@example.com",
+            email=refresh_state_email,
             password="correct horse battery staple",
         )
     expired_hash = auth_service.token_service.hash_token(expired_login.refresh_token)
@@ -580,7 +590,7 @@ async def test_expired_revoked_refresh_and_rate_limit_enforcement(
     async with factory() as session:
         active_login = await auth_service.authenticate(
             session,
-            email="refresh-state@example.com",
+            email=refresh_state_email,
             password="correct horse battery staple",
         )
     active_hash = auth_service.token_service.hash_token(active_login.refresh_token)
@@ -625,7 +635,7 @@ async def test_forced_password_reset_blocks_session_until_password_change(
     ],
 ) -> None:
     _, factory, _, credential_service, auth_service, _ = service_stack
-    email = "forced-reset-login@example.com"
+    email = unique_email("forced-reset-login")
     user_id = await create_user(factory, email=email)
     await set_password(factory, credential_service, user_id)
     _, version_before_change = await require_password_change(factory, user_id)
@@ -721,7 +731,7 @@ async def test_password_change_rollback_preserves_forced_reset_state(
     ],
 ) -> None:
     _, factory, password_service, _, _, _ = service_stack
-    user_id = await create_user(factory, email="forced-reset-rollback@example.com")
+    user_id = await create_user(factory, email=unique_email("forced-reset-rollback"))
     credential_service = CredentialService(
         password_service,
         service_settings(),
@@ -764,7 +774,7 @@ async def test_password_recovery_clears_forced_reset_before_login(
     ],
 ) -> None:
     _, factory, _, credential_service, auth_service, recovery = service_stack
-    email = "forced-reset-recovery@example.com"
+    email = unique_email("forced-reset-recovery")
     user_id = await create_user(factory, email=email)
     await set_password(factory, credential_service, user_id)
     await require_password_change(factory, user_id)

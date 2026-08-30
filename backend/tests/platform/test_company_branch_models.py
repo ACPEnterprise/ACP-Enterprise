@@ -82,12 +82,16 @@ async def test_company_and_branch_database_constraints() -> None:
     test_engine = create_async_engine(settings.database_url)
     session_factory = async_sessionmaker(test_engine, expire_on_commit=False)
     company_id = uuid4()
+    namespace = uuid4().hex[:10].upper()
+    company_code = f"ACP{namespace}"
+    main_code = f"MAIN{namespace}"
+    north_code = f"NORTH{namespace}"
     async with session_factory() as session:
         session.add(
             Company(
                 id=company_id,
                 name="All County Plumbing & Leak",
-                code="ACP",
+                code=company_code,
                 status="active",
                 timezone="America/New_York",
             )
@@ -98,7 +102,7 @@ async def test_company_and_branch_database_constraints() -> None:
         session.add(
             Company(
                 name="Duplicate Code Company",
-                code="ACP",
+                code=company_code,
                 status="active",
                 timezone="America/Chicago",
             )
@@ -112,7 +116,7 @@ async def test_company_and_branch_database_constraints() -> None:
                 Branch(
                     company_id=company_id,
                     name="Main Office",
-                    code="MAIN",
+                    code=main_code,
                     status="active",
                     timezone="America/New_York",
                     is_primary=True,
@@ -120,7 +124,7 @@ async def test_company_and_branch_database_constraints() -> None:
                 Branch(
                     company_id=company_id,
                     name="North Office",
-                    code="NORTH",
+                    code=north_code,
                     status="active",
                     timezone="America/New_York",
                     is_primary=True,
@@ -136,7 +140,7 @@ async def test_company_and_branch_database_constraints() -> None:
                 Branch(
                     company_id=company_id,
                     name="Main Office",
-                    code="MAIN",
+                    code=main_code,
                     status="active",
                     timezone="America/New_York",
                     is_primary=True,
@@ -144,7 +148,7 @@ async def test_company_and_branch_database_constraints() -> None:
                 Branch(
                     company_id=company_id,
                     name="Secondary Office",
-                    code="MAIN",
+                    code=main_code,
                     status="inactive",
                     timezone="America/New_York",
                     is_primary=False,
@@ -159,7 +163,7 @@ async def test_company_and_branch_database_constraints() -> None:
             Branch(
                 company_id=company_id,
                 name="Main Office",
-                code="MAIN",
+                code=main_code,
                 status="active",
                 timezone="America/New_York",
                 is_primary=True,
