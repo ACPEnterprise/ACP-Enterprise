@@ -40,3 +40,11 @@ class OnboardingView(BaseModel):
     status: str
 
     model_config = ConfigDict(from_attributes=True, extra="forbid")
+
+
+class OnboardingOwnerClaimView(BaseModel):
+    """One-time non-Production handoff to an authorized onboarding owner."""
+
+    activation_token: str = Field(min_length=20, max_length=1024)
+
+    model_config = ConfigDict(extra="forbid")
