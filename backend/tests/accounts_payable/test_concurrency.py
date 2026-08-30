@@ -8,7 +8,7 @@ import pytest_asyncio
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from app.accounts_payable.errors import APConflict
+from app.accounts_payable.errors import APConflict, APNotFound
 from app.accounts_payable.models import (
     AccountingVendor,
     APSubledgerEntry,
@@ -106,7 +106,7 @@ async def ap_application_fixture():
         )
         session.add_all([bill, disbursement])
         await session.flush()
-        ids = company.id, bill.id, disbursement.id, user.id
+        ids = company.id, branch.id, bill.id, disbursement.id, user.id
     try:
         yield factory, ids
     finally:
@@ -117,7 +117,7 @@ async def ap_application_fixture():
 async def test_concurrent_disbursement_replay_has_one_application_and_conserves_amounts(
     ap_application_fixture,
 ) -> None:
-    factory, (company_id, bill_id, disbursement_id, actor_id) = ap_application_fixture
+    factory, (company_id, branch_id, bill_id, disbursement_id, actor_id) = ap_application_fixture
     service = AccountsPayableService()
     key = f"apply-{uuid4()}"
 
@@ -131,6 +131,7 @@ async def test_concurrent_disbursement_replay_has_one_application_and_conserves_
                 actor_id,
                 Decimal("60.00"),
                 key,
+                frozenset({branch_id}),
             )
 
     first, replay = await asyncio.gather(apply(), apply())
@@ -153,4 +154,18 @@ async def test_concurrent_disbursement_replay_has_one_application_and_conserves_
                 actor_id,
                 Decimal("40.00"),
                 key,
+                frozenset({branch_id}),
+            )
+
+    async with factory() as session:
+        with pytest.raises(APNotFound):
+            await service.apply_disbursement(
+                session,
+                company_id,
+                disbursement_id,
+                bill_id,
+                actor_id,
+                Decimal("60.00"),
+                key,
+                frozenset({uuid4()}),
             )
