@@ -22,18 +22,13 @@ Review = Annotated[
 @router.get("/readiness", name="migration-readiness-review")
 async def migration_readiness_review(context: Review) -> JSONResponse:
     branch = context.active_branch
-    if branch is None:
-        return JSONResponse(
-            status_code=409,
-            content={"status": "blocked", "safe_failure_code": "branch_required"},
-        )
     try:
         connected = get_sandbox_oauth_runtime().connection_state() == "connected"
     except Exception:  # noqa: BLE001 - never expose protected runtime failures
         connected = False
     projection = build_migration_product_projection(
         company_id=str(context.company.id),
-        branch_id=str(branch.id),
+        branch_id=str(branch.id) if branch is not None else None,
         qbo_sandbox_connected=connected,
     )
     return JSONResponse(
