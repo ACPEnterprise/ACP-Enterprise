@@ -19,6 +19,8 @@ from app.platform.audit.service import AuditEntry, audit_service
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import WorkerControlPermission
 from app.platform.permissions.dependencies import require_permission
+from app.platform.reliability.correlation import current_correlation_id
+from app.platform.reliability.failures import ClientRecovery, FailureCode, SafeFailure
 from app.worker_control.models import (
     EngineeringWorker,
     WorkerLease,
@@ -32,6 +34,16 @@ from app.worker_control.transport.http.dependencies import (
 
 class RecoveryAcknowledgementError(ValueError):
     pass
+
+
+def recovery_acknowledgement_failure() -> HTTPException:
+    failure = SafeFailure(
+        FailureCode.RECONCILIATION_REQUIRED,
+        "Worker recovery acknowledgement requires reconciliation.",
+        ClientRecovery.RECONCILIATION_REQUIRED,
+        current_correlation_id(),
+    )
+    return HTTPException(status_code=409, detail=failure.detail())
 
 
 class RecoveryAcknowledgementRequest(BaseModel):
@@ -333,13 +345,7 @@ async def acknowledge_recovery(
     try:
         return await service.acknowledge(session, context=context, request=data)
     except RecoveryAcknowledgementError as error:
-        raise HTTPException(
-            status_code=409,
-            detail={
-                "code": "worker_recovery_acknowledgement_rejected",
-                "message": str(error),
-            },
-        ) from error
+        raise recovery_acknowledgement_failure() from error
 
 
 class AppliedRequest(BaseModel):
@@ -385,10 +391,4 @@ async def recovery_acknowledgement_applied(
             local_archive_digest=data.local_archive_digest,
         )
     except RecoveryAcknowledgementError as error:
-        raise HTTPException(
-            status_code=409,
-            detail={
-                "code": "worker_recovery_acknowledgement_rejected",
-                "message": str(error),
-            },
-        ) from error
+        raise recovery_acknowledgement_failure() from error
