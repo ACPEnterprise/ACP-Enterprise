@@ -7,6 +7,7 @@ from app.events.schemas import BusinessEventCreate
 from app.events.service import BusinessEventService
 from app.events.types import EventType
 from app.platform.audit.service import AuditEntry, AuditService, audit_service
+from app.platform.branch.models import Branch
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import EconomicsPolicyPermission
 
@@ -39,6 +40,22 @@ class EconomicsProfitabilityPersistenceService:
             )
         if request.company_id != context.company.id:
             raise ProfitabilityPersistenceError("cross-Company profitability result")
+        if (
+            context.active_branch is not None
+            and request.branch_id != context.active_branch.id
+        ):
+            raise ProfitabilityPersistenceError("cross-Branch profitability result")
+        if request.branch_id is not None:
+            branch_id = await session.scalar(
+                select(Branch.id).where(
+                    Branch.company_id == context.company.id,
+                    Branch.id == request.branch_id,
+                )
+            )
+            if branch_id is None:
+                raise ProfitabilityPersistenceError(
+                    "profitability result branch is not available"
+                )
         identity = f"eco-profitability-result:{result.result_digest}"
         await session.execute(
             text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"),

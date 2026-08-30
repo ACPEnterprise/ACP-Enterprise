@@ -24,7 +24,7 @@
 | Accounting | Posting, API, contract and migration coverage (9 files including contract suites) | Full synthetic AR/AP/Payroll settlement balance rehearsal remains integration-level |
 | Payroll | Strong policy, calculation, approval/finalization, payment, remittance, reporting and protected artifact coverage (23 files) | Redis/storage integrated failure injection and payment-provider restart replay remain pending |
 | Migration | Extensive Customer and operational migration evidence (46 files) | Protected external source/storage rehearsal remains environment-dependent; no real provider contacted |
-| Business Economics | Policy, admission, allocation, profitability and source-conformance coverage (18 files) | Cross-source economic double-counting needs a consolidated rehearsal |
+| Business Economics | Policy, admission, allocation, profitability, source-conformance, owner-workspace and explicit Company/Branch persistence enforcement | Cross-source economic double-counting still needs a consolidated rehearsal |
 | Beacon | Evaluation, lifecycle, workflow, prioritization and acknowledgement coverage (16 files) | Read-only versus operational mutation matrix should be expanded at API level |
 | Mobile-facing APIs | Backend employee/engineering APIs and separate mobile Jest suite exist | Native mobile was not changed in this tranche; integrated device accessibility remains external |
 | Administration / frontend | Route/component tests cover authorization and representative loading/error states | Automated accessibility tooling and responsive viewport regression are not comprehensive |
@@ -43,11 +43,12 @@
 1. `STALE_FIXTURE`: sensitive-output catalog expansion changed the deterministic fingerprint without updating its qualification assertion. The assertion now binds the expanded catalog.
 2. `STALE_FIXTURE`: external-adoption successor evidence did not satisfy newly integrated execution-head and repository-readiness admission. The test now supplies matching authoritative-head evidence and isolates the orthogonal readiness adapter with an explicit mock.
 3. `DEPENDENCY`: direct `react-router` 7.18.1 fell within the lockfile audit's affected CSRF-bypass range. It was advanced only to the patched 7.18.3 line. Remaining audit findings are transitive and require separate applicability/upgrade qualification.
+4. `AUTHORIZATION/DURABLE_INTEGRITY`: Economics execution checked Company identity but accepted a result tagged to a different or nonexistent Branch, and the durable result table lacked a Company+Branch foreign key. Persistence now rejects active-branch escape and nonexistent Company branches before mutation; migration `c1a0e38d6bfc` enforces the same invariant in PostgreSQL. All 140 Business Economics tests pass, and the new migration passed fresh upgrade, downgrade/re-upgrade, current-head, and drift qualification.
 
 ## Release-readiness projection
 
 - Release SHA: starting authority above plus the OM2-C qualification commit recorded on this branch.
-- Schema head: `b0ff279c5aeb`, fresh-upgrade, incremental-upgrade and drift clean.
+- Schema head: OM2-C candidate `c1a0e38d6bfc` over protected `b0ff279c5aeb`; fresh-upgrade, downgrade/re-upgrade and drift clean.
 - Backend: broad functional coverage is high, but the integrated Redis test and a clean one-pass fresh-database rerun remain external gates.
 - Frontend: tests/lint/build qualified again after the bounded dependency repair.
 - Security: focused authorization/isolation/idempotency/safe-output suite qualified; dependency transitive findings and expanded direct API object-binding remain open work.
