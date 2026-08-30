@@ -17,7 +17,7 @@ import {
 export function InvoicesRoute() {
   const canRead = useHasPermission("COMPANY_INVOICE_READ");
   const canManage = useHasPermission("COMPANY_INVOICE_MANAGE");
-  const invoices = useInvoices();
+  const invoices = useInvoices(canRead);
   const mutations = useInvoiceMutations();
   const [form, setForm] = useState({
     branch: "",
