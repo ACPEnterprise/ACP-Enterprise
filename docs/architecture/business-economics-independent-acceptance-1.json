@@ -45,6 +45,23 @@
     "duplicate_business_event": "same_source_lineage_fails_closed",
     "duplicate_source_replay": "same_source_lineage_fails_closed"
   },
+  "canonical_lineage_regression": {
+    "technical_identity_changes": "same_logical_source_record_fails_closed",
+    "correction_versions": "competing_versions_of_one_source_record_fail_closed",
+    "distinct_source_records": "remain_distinct_and_reconcile",
+    "source_families": [
+      "jobs",
+      "invoicing",
+      "payments",
+      "payroll",
+      "inventory",
+      "purchasing",
+      "accounting",
+      "quickbooks_online",
+      "housecall_pro",
+      "business_events"
+    ]
+  },
   "repairs": [
     "P0_duplicate_source_lineage_double_count",
     "partial_or_stale_period_comparison_overstatement",
@@ -56,7 +73,14 @@
   ],
   "allocation_policy": "fully_allocated_profitability_unavailable_without_accepted_overhead_evidence",
   "beacon_boundary": "deterministic_conditions_only_no_threshold_or_fact_mutation",
+  "frontend_dependency_audit": {
+    "react_router": "patched_to_7.18.2",
+    "brace_expansion": "dev_only_eslint_transitive",
+    "undici": "dev_only_jsdom_transitive",
+    "postcss": "build_only_vite_transitive",
+    "nanoid": "build_only_vite_transitive"
+  },
   "autonomous_action": "PROHIBITED",
   "production": "UNTOUCHED",
-  "qualification_fingerprint": "0a8f142a5996efe3abf4fb76ec17193792f4997ca49420332b1ffed60c04353c"
+  "qualification_fingerprint": "ccf91cebdaedc215bdf136e9de60170fcc7aadfba6b8f1c4e953a32a3ddca1f7"
 }

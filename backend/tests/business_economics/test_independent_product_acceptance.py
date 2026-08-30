@@ -167,3 +167,80 @@ def test_duplicate_source_lineage_cannot_double_economic_truth() -> None:
     contradiction = replace(duplicate, amount_minor=duplicate.amount_minor + 1)
     with pytest.raises(ProfitabilityComputationError, match="source lineage"):
         compute(item_request, [*values, contradiction])
+
+
+@pytest.mark.parametrize(
+    ("source_system", "record_type"),
+    [
+        ("acp_jobs", "job_completion"),
+        ("acp_invoicing", "invoice_line"),
+        ("acp_payments", "payment_application"),
+        ("acp_payroll", "payroll_cost_fact"),
+        ("acp_inventory", "material_consumption"),
+        ("acp_purchasing", "vendor_bill_match"),
+        ("acp_accounting", "posting_fact"),
+        ("quickbooks_online", "source_assertion"),
+        ("housecall_pro", "source_assertion"),
+        ("acp_events", "business_event"),
+    ],
+)
+def test_logical_source_record_versions_cannot_double_economic_truth(
+    source_system: str, record_type: str
+) -> None:
+    item_request = request()
+    values = inputs(item_request)
+    original = next(
+        item for item in values if item.category is EconomicCategory.REVENUE
+    )
+    original_evidence = replace(
+        original.evidence[0],
+        source_system=source_system,
+        record_type=record_type,
+        record_id="canonical-source-record",
+    )
+    original = replace(original, evidence=(original_evidence,))
+    corrected_evidence = replace(
+        original_evidence,
+        source_version="2",
+        content_digest="a" * 64,
+    )
+    correction = replace(
+        original,
+        fact_id=uuid4(),
+        measurement_id=uuid4(),
+        fact_key="revenue-corrected-technical-identity",
+        version=2,
+        amount_minor=original.amount_minor + 1,
+        evidence=(corrected_evidence,),
+    )
+    remaining = [
+        item for item in values if item.category is not EconomicCategory.REVENUE
+    ]
+
+    with pytest.raises(ProfitabilityComputationError, match="source lineage"):
+        compute(item_request, [original, correction, *remaining])
+
+
+def test_distinct_authoritative_source_records_remain_distinct_economic_facts() -> None:
+    item_request = request()
+    values = inputs(item_request)
+    original = next(
+        item for item in values if item.category is EconomicCategory.REVENUE
+    )
+    second_evidence = replace(
+        original.evidence[0],
+        record_id="revenue-2",
+        content_digest="b" * 64,
+    )
+    second = replace(
+        original,
+        fact_id=uuid4(),
+        measurement_id=uuid4(),
+        fact_key="second-legitimate-revenue-fact",
+        amount_minor=86_500,
+        evidence=(second_evidence,),
+    )
+
+    result = compute(item_request, [*values, second])
+
+    assert result.analysis.revenue.amount_minor == 600_000
