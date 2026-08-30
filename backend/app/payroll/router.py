@@ -200,6 +200,8 @@ def _error(error: Exception) -> HTTPException:
             current_correlation_id(),
         )
         return HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, failure.detail())
+    if isinstance(error, OSError):
+        return _storage_unavailable()
     failure = SafeFailure(
         FailureCode.INTERNAL_FAILURE,
         "Payroll operation failed safely.",
@@ -302,7 +304,7 @@ async def approve_compliance_schema(schema_id: UUID, context: ReportingApprove, 
 async def render_payroll_report(report_id: UUID, context: ReportingManage, session: Session) -> dict[str, object]:
     try:
         value = await _compliance().render_report(session, context=context, report_id=report_id)
-    except (PayrollAuthorizationError, PayrollConflictError) as error:
+    except (PayrollAuthorizationError, PayrollConflictError, OSError) as error:
         raise _error(error) from error
     return {"artifact_id": value.id, "source_type": value.source_type, "source_id": value.source_id, "artifact_digest": value.digest, "media_type": value.media_type, "lifecycle": value.lifecycle}
 
@@ -320,7 +322,7 @@ async def prepare_filing_package(body: FilingPackagePrepare, context: ReportingA
 async def render_filing_package_preview(package_id: UUID, context: ReportingManage, session: Session) -> dict[str, object]:
     try:
         value = await _compliance().render_filing_preview(session, context=context, package_id=package_id)
-    except (PayrollAuthorizationError, PayrollConflictError) as error:
+    except (PayrollAuthorizationError, PayrollConflictError, OSError) as error:
         raise _error(error) from error
     return {"artifact_id": value.id, "source_type": value.source_type, "source_id": value.source_id, "artifact_digest": value.digest, "media_type": value.media_type, "lifecycle": value.lifecycle}
 
@@ -329,7 +331,7 @@ async def render_filing_package_preview(package_id: UUID, context: ReportingMana
 async def retrieve_payroll_report_artifact(artifact_id: UUID, context: ReportingRead, session: Session) -> Response:
     try:
         artifact, data = await _compliance().retrieve(session, context=context, artifact_id=artifact_id)
-    except (PayrollAuthorizationError, PayrollConflictError) as error:
+    except (PayrollAuthorizationError, PayrollConflictError, OSError) as error:
         raise _error(error) from error
     return Response(data, media_type=artifact.media_type, headers={"Content-Disposition": f'inline; filename="payroll-report-{artifact.id}.html"', "ETag": f'"{artifact.digest}"', "Cache-Control": "private, no-store"})
 
@@ -450,7 +452,7 @@ async def own_pay_statement_artifact(
         artifact, data = await _experience().own_artifact(
             session, context=context, statement_id=statement_id
         )
-    except (PayrollAuthorizationError, PayrollConflictError) as error:
+    except (PayrollAuthorizationError, PayrollConflictError, OSError) as error:
         raise _error(error) from error
     return Response(
         data,
@@ -473,7 +475,7 @@ async def render_pay_statement(
         artifact = await _experience().render(
             session, context=context, statement_id=statement_id
         )
-    except (PayrollAuthorizationError, PayrollConflictError) as error:
+    except (PayrollAuthorizationError, PayrollConflictError, OSError) as error:
         raise _error(error) from error
     return {
         "artifact_id": artifact.id,
@@ -492,7 +494,7 @@ async def administrative_pay_statement_artifact(
         artifact, data = await _experience().administrative_artifact(
             session, context=context, statement_id=statement_id
         )
-    except (PayrollAuthorizationError, PayrollConflictError) as error:
+    except (PayrollAuthorizationError, PayrollConflictError, OSError) as error:
         raise _error(error) from error
     return Response(
         data,

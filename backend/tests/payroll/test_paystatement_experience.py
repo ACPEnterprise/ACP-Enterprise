@@ -3,6 +3,9 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
 from app.payroll.contracts import PayrollAuthorizationError, PayrollConflictError
 from app.payroll.models import PayrollPayStatementArtifactRecord
 from app.payroll.paystatement import PayrollPayStatementService
@@ -14,9 +17,6 @@ from app.payroll.permissions import PayrollPermission
 from app.platform.company.membership_models import Membership
 from app.platform.employees.models import Employee
 from app.platform.notifications.models import NotificationOutbox
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-
 from tests.payroll.test_gross_pay_finalization import FakeContext
 from tests.payroll.test_gross_pay_finalization import finalization_database as _database
 from tests.payroll.test_payment_release_authority import approved_run
@@ -139,3 +139,51 @@ def test_storage_rejects_nonopaque_and_relative_locations(tmp_path: Path) -> Non
     storage = ProtectedStatementStorage(tmp_path.resolve())
     with pytest.raises(PayrollConflictError):
         storage.put(uuid4(), uuid4(), "../public", b"unsafe")
+
+
+@pytest.mark.asyncio
+async def test_storage_failure_creates_no_artifact_authority(
+    finalization_database: tuple[async_sessionmaker[AsyncSession], dict[str, object]],
+    tmp_path: Path,
+) -> None:
+    factory, values = finalization_database
+
+    class UnavailableStorage(ProtectedStatementStorage):
+        def put(
+            self, company_id, employee_id, reference: str, content: bytes
+        ) -> None:
+            raise OSError("synthetic protected storage unavailable")
+
+    async with factory() as session:
+        run, _ = await approved_run(session, values)
+        employee = await session.scalar(
+            select(Employee).where(Employee.id == values["employee_id"])
+        )
+        assert employee is not None
+        context = FakeContext(
+            values["company_id"],
+            values["actor_id"],
+            {PayrollPermission.STATEMENT_MANAGE},
+        )
+        statement = await PayrollPayStatementService().create(
+            session, context=context, run_id=run.id, employee_id=employee.id
+        )
+        await PayrollPayStatementService().issue(
+            session, context=context, statement_id=statement.id
+        )
+        service = PayrollPayStatementExperienceService(
+            UnavailableStorage(tmp_path.resolve())
+        )
+        artifact_count_before = await session.scalar(
+            select(func.count()).select_from(PayrollPayStatementArtifactRecord)
+        )
+
+        with pytest.raises(OSError, match="storage unavailable"):
+            await service.render(session, context=context, statement_id=statement.id)
+
+        assert (
+            await session.scalar(
+                select(func.count()).select_from(PayrollPayStatementArtifactRecord)
+            )
+            == artifact_count_before
+        )

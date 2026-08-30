@@ -365,8 +365,7 @@ class PayrollComplianceService:
         if value is None:
             raise PayrollConflictError("protected Payroll report was not found")
         data = self._storage.get(value.company_id, value.storage_reference)
-        if hashlib.sha256(data).hexdigest() != value.artifact_digest:
-            raise PayrollConflictError("protected Payroll report integrity failed")
+        self._verify(value, data=data)
         return self._view(value), data
 
     async def _persist_artifact(
@@ -392,6 +391,13 @@ class PayrollComplianceService:
             )
         )
         if existing is not None:
+            self._verify(
+                existing,
+                data=self._storage.get(
+                    existing.company_id,
+                    existing.storage_reference,
+                ),
+            )
             return self._view(existing)
         reference = f"pra-{digest}"
         self._storage.put(context.company.id, reference, data)
@@ -471,6 +477,14 @@ class PayrollComplianceService:
             value.media_type,
             value.lifecycle,
         )
+
+    @staticmethod
+    def _verify(value: PayrollReportingArtifactRecord, *, data: bytes) -> None:
+        if (
+            len(data) != value.byte_size
+            or hashlib.sha256(data).hexdigest() != value.artifact_digest
+        ):
+            raise PayrollConflictError("protected Payroll report integrity failed")
 
     @staticmethod
     def _require(context: AuthorizationContext, permission: str) -> None:

@@ -1,10 +1,16 @@
+import hashlib
 from datetime import date
 from pathlib import Path
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
 
-from app.payroll.compliance import DraftComplianceSchema, ProtectedPayrollReportStorage
+from app.payroll.compliance import (
+    DraftComplianceSchema,
+    PayrollComplianceService,
+    ProtectedPayrollReportStorage,
+)
 from app.payroll.contracts import PayrollConflictError
 
 
@@ -48,3 +54,15 @@ def test_reporting_storage_is_opaque_private_and_tenant_scoped(tmp_path: Path) -
         storage.get(company_id, "../public")
     with pytest.raises(ValueError):
         ProtectedPayrollReportStorage(Path("relative"))
+
+
+def test_reporting_artifact_verification_binds_digest_and_size() -> None:
+    data = b"synthetic protected report"
+    record = SimpleNamespace(
+        byte_size=len(data), artifact_digest=hashlib.sha256(data).hexdigest()
+    )
+    PayrollComplianceService._verify(record, data=data)  # type: ignore[arg-type]
+    with pytest.raises(PayrollConflictError, match="integrity failed"):
+        PayrollComplianceService._verify(  # type: ignore[arg-type]
+            record, data=b"tampered"
+        )

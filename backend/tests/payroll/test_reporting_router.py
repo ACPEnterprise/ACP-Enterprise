@@ -1,7 +1,7 @@
 import pytest
 from fastapi import FastAPI, HTTPException
 
-from app.payroll.router import _compliance, _experience, _not_found, router
+from app.payroll.router import _compliance, _error, _experience, _not_found, router
 
 app = FastAPI()
 app.include_router(router)
@@ -53,3 +53,11 @@ def test_protected_storage_and_report_absence_use_safe_recovery_contracts(
     assert missing.status_code == 404
     assert missing.detail["code"] == "not_found"
     assert missing.detail["recovery"] == "TERMINAL_FAILURE"
+
+
+def test_runtime_storage_failure_uses_dependency_unavailable_contract() -> None:
+    failure = _error(OSError("protected-storage-path-canary"))
+    assert failure.status_code == 503
+    assert failure.detail["code"] == "dependency_unavailable"
+    assert failure.detail["recovery"] == "OWNER_ADMIN_ACTION_REQUIRED"
+    assert "canary" not in failure.detail["message"].lower()
