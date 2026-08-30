@@ -14,9 +14,9 @@ export function PayrollRoute() {
   const canReadReporting = useHasPermission("COMPANY_PAYROLL_REPORTING_READ");
   const canReadRuns = useHasPermission("COMPANY_PAYROLL_RUN_READ");
   const canRead = canReadReporting && canReadRuns;
-  const operations = usePayrollOperationsSummary();
-  const reports = usePayrollReports();
-  const schemas = useComplianceSchemas();
+  const operations = usePayrollOperationsSummary(canRead);
+  const reports = usePayrollReports(canRead);
+  const schemas = useComplianceSchemas(canRead);
   if (!canRead) return <Alert variant="danger">You are not authorized to view Payroll Administration.</Alert>;
   if (operations.isPending || reports.isPending || schemas.isPending) return <Spinner label="Loading Payroll Administration" />;
   if (operations.isError || reports.isError || schemas.isError || !operations.data) return <Alert variant="danger" title="Payroll Administration unavailable">Authoritative Payroll readiness could not be loaded. No Payroll action was taken.</Alert>;
