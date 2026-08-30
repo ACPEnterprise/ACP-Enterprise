@@ -127,6 +127,7 @@ class SignalEvaluationService:
         evidence_digest = self._evidence_digest(definition, supporting_facts)
         return BeaconCondition(
             company_id=snapshot.company_id,
+            scope_identity=snapshot.scope_identity,
             definition_id=definition.definition_id,
             definition_version=definition.version,
             rule_code=definition.rule_code,
@@ -409,13 +410,15 @@ class SignalEvaluationService:
         return BeaconSignal(
             id=uuid5(
                 NAMESPACE_URL,
-                f"beacon:{condition.company_id}:{condition.rule_code}:"
+                f"beacon:{condition.company_id}:{condition.scope_identity}:"
+                f"{condition.rule_code}:"
                 f"{condition.evidence_digest}",
             ),
             condition_key=uuid5(
                 NAMESPACE_URL,
                 "beacon:condition:"
-                f"{condition.company_id}:{condition.source.value}:{condition.rule_code}",
+                f"{condition.company_id}:{condition.scope_identity}:"
+                f"{condition.source.value}:{condition.rule_code}",
             ),
             evidence_digest=condition.evidence_digest,
             definition_id=condition.definition_id,

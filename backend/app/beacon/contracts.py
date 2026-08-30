@@ -159,6 +159,7 @@ class BeaconSnapshot:
     overdue_appointments: OverdueAppointmentFacts
     paused_jobs: PausedJobFacts
     past_due_invoices: PastDueInvoiceFacts
+    scope_identity: str = "company"
 
 
 class BeaconFactRepository(Protocol):
@@ -167,5 +168,6 @@ class BeaconFactRepository(Protocol):
         session: AsyncSession,
         *,
         company_id: UUID,
+        branch_ids: frozenset[UUID],
         measured_at: datetime,
     ) -> BeaconSnapshot: ...
