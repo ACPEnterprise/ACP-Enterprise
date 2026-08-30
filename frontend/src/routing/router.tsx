@@ -249,6 +249,17 @@ export const appRoutes: RouteObject[] = [
             }),
           },
           {
+            path: "administration/identity-onboarding",
+            handle: administrationHandle,
+            lazy: async () => ({
+              Component: (
+                await import(
+                  "../features/administration/IdentityOnboardingRoute"
+                )
+              ).IdentityOnboardingRoute,
+            }),
+          },
+          {
             path: "*",
             handle: notFoundHandle,
             lazy: async () => {
