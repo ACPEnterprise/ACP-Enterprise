@@ -34,6 +34,7 @@ from app.platform.onboarding.service import (
     OnboardingAuthorizationError,
     OnboardingCommand,
     OnboardingConflictError,
+    ProtectedInvitationDelivery,
 )
 from app.platform.permissions.codes import AdministrationPermission
 from app.platform.users.models import User, UserCredential
@@ -277,7 +278,10 @@ async def test_owner_claim_reuses_protected_boundary_and_is_single_use(
                 IdentityOnboardingInvitation.onboarding_request_id == request_id
             )
         )
-        assert envelope is not None and envelope.status == "claimed"
+        assert envelope is not None and envelope.status == "delivered"
+        assert envelope.ciphertext == b""
+        assert envelope.nonce == b""
+        assert envelope.destroyed_at is not None
         audit = await session.scalar(
             select(AuditRecord).where(
                 AuditRecord.action == "identity.onboarding_owner_claimed",
@@ -316,6 +320,70 @@ async def test_owner_claim_reuses_protected_boundary_and_is_single_use(
         await session.refresh(envelope)
         assert envelope.status == "destroyed"
         assert envelope.ciphertext == b""
+
+
+@pytest.mark.asyncio
+async def test_concurrent_owner_claim_has_one_winner_and_one_audit(
+    onboarding_db: tuple[
+        async_sessionmaker[AsyncSession], Context, IdentityOnboardingService
+    ],
+) -> None:
+    factory, context, service = onboarding_db
+    async with factory() as setup:
+        record = await service.initiate(
+            setup,
+            context=context,
+            command=command(
+                context,
+                email=f"owner-claim-race-{uuid4()}@example.test",
+            ),
+        )
+        request_id = record.id
+
+    async def claim() -> ProtectedInvitationDelivery:
+        async with factory() as session:
+            return await service.claim_protected_delivery_for_owner(
+                session,
+                context=context,
+                request_id=request_id,
+            )
+
+    outcomes = await asyncio.gather(claim(), claim(), return_exceptions=True)
+    deliveries = [
+        outcome
+        for outcome in outcomes
+        if isinstance(outcome, ProtectedInvitationDelivery)
+    ]
+    conflicts = [
+        outcome for outcome in outcomes if isinstance(outcome, OnboardingConflictError)
+    ]
+    assert len(deliveries) == len(conflicts) == 1
+
+    async with factory() as verification:
+        envelopes = (
+            await verification.scalars(
+                select(ProtectedInvitationDeliveryEnvelope)
+                .join(IdentityOnboardingInvitation)
+                .where(
+                    IdentityOnboardingInvitation.onboarding_request_id == request_id
+                )
+            )
+        ).all()
+        audits = (
+            await verification.scalars(
+                select(AuditRecord).where(
+                    AuditRecord.action == "identity.onboarding_owner_claimed",
+                    AuditRecord.resource_id == request_id,
+                )
+            )
+        ).all()
+        assert len(envelopes) == 1
+        assert envelopes[0].status == "delivered"
+        assert envelopes[0].ciphertext == b""
+        assert envelopes[0].nonce == b""
+        assert envelopes[0].destroyed_at is not None
+        assert len(audits) == 1
+        assert deliveries[0].secret not in str(audits[0].details)
 
 
 @pytest.mark.asyncio

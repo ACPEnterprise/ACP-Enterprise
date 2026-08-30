@@ -648,8 +648,11 @@ class IdentityOnboardingService:
                 raise OnboardingConflictError(
                     "Protected delivery scope is unavailable."
                 )
-            envelope.status = "claimed"
             if context is not None:
+                envelope.ciphertext = b""
+                envelope.nonce = b""
+                envelope.status = "delivered"
+                envelope.destroyed_at = now
                 audit_service.stage(
                     session,
                     AuditEntry(
@@ -662,6 +665,8 @@ class IdentityOnboardingService:
                         details={"invitation_id": str(invitation.id)},
                     ),
                 )
+            else:
+                envelope.status = "claimed"
             return ProtectedInvitationDelivery(
                 invitation.id, user.normalized_email, secret
             )
