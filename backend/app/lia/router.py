@@ -23,13 +23,51 @@ Session = Annotated[AsyncSession, Depends(get_database_session)]
 @router.get("/readiness", response_model=LiaReadiness)
 async def readiness(context: ResolvedAuthorization) -> LiaReadiness:
     return LiaReadiness(
-        state="PRODUCT_READY_PROVIDER_GATE",
+        state="DETERMINISTIC_CAPABLE",
         provider_state="AI_PROVIDER_NOT_CONFIGURED",
-        deterministic_capabilities=("authorized_retrieval", "evidence_summary", "navigation", "safe_proposal"),
+        policy_state="POLICY_REQUIRED",
+        deterministic_capabilities=(
+            "authorized_retrieval",
+            "evidence_summary",
+            "navigation",
+            "safe_proposal",
+        ),
         generative_capabilities=(),
         policy_version=POLICY_VERSION,
         retention_state="TRANSCRIPT_RETENTION_POLICY_REQUIRED",
     )
+
+
+@router.get("/retention-options", response_model=dict[str, object])
+async def retention_options(context: ResolvedAuthorization) -> dict[str, object]:
+    return {
+        "company_id": str(context.company.id),
+        "state": "POLICY_REQUIRED",
+        "current_behavior": "NO_TRANSCRIPT_PERSISTENCE",
+        "options": [
+            {
+                "option": "NO_RETENTION",
+                "privacy": "Strongest minimization; no conversation continuity or retrospective quality review.",
+                "security": "No transcript repository or deletion workflow is required.",
+            },
+            {
+                "option": "SHORT_RETENTION",
+                "privacy": "Time-limited protected transcripts; requires an explicit duration and deletion evidence.",
+                "security": "Requires encrypted custody, narrow access, expiry enforcement, and access audit.",
+            },
+            {
+                "option": "GOVERNED_RETENTION",
+                "privacy": "Purpose-bound history for approved use cases; highest governance burden.",
+                "security": "Requires retention classes, legal holds, export/deletion controls, and privileged review audit.",
+            },
+        ],
+        "owner_decisions": [
+            "retention option",
+            "duration when applicable",
+            "authorized reviewer roles",
+            "approved purposes and legal-hold policy",
+        ],
+    }
 
 
 @router.post("/ask", response_model=LiaResponse)

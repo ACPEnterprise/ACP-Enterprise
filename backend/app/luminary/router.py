@@ -5,6 +5,8 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.business_economics.source_completeness import source_completeness_matrix
+from app.business_economics.workspace import EconomicsWorkspaceService
 from app.database.session import get_database_session
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import LuminaryPermission
@@ -114,11 +116,20 @@ async def history(
 
 
 @router.get("/source-readiness", response_model=dict[str, object])
-async def source_readiness(context: Reader) -> dict[str, object]:
+async def source_readiness(
+    session: Session,
+    context: Reader,
+    start: Annotated[date, Query()],
+    end: Annotated[date, Query()],
+) -> dict[str, object]:
     """Truthful admission map; unavailable sources never become implied facts."""
+    workspace = await EconomicsWorkspaceService().overview(
+        session, context=context, period_start=start, period_end=end
+    )
     return {
         "company_id": str(context.company.id),
         "branch_id": str(context.active_branch.id) if context.active_branch else None,
+        "profitability": source_completeness_matrix(workspace),
         "sources": [
             {
                 "domain": "business_economics",

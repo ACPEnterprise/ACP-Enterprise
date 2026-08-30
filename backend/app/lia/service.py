@@ -39,10 +39,20 @@ DOMAIN_KEYWORDS = {
     "payments": ("payment", "settlement", "cash"),
     "purchasing": ("purchasing", "purchase order", "vendor"),
     "inventory": ("inventory", "stock", "material"),
-    "business-economics": ("profit", "margin", "economics", "labor cost", "material cost"),
+    "business-economics": (
+        "profit",
+        "margin",
+        "economics",
+        "labor cost",
+        "labor burden",
+        "material cost",
+        "financial evidence",
+        "strongest job",
+        "losing money",
+    ),
     "beacon": ("beacon", "signal"),
-    "migration": ("migration", "cutover"),
-    "payroll": ("payroll", "pay statement", "pay statement", "remittance"),
+    "migration": ("migration", "cutover", "import blocker"),
+    "payroll": ("payroll", "pay statement", "remittance", "own pay"),
     "luminary": (
         "luminary",
         "finding",
@@ -62,8 +72,29 @@ ENTERPRISE_SUMMARY_PHRASES = (
     "owner briefing",
 )
 
+INTELLIGENCE_BRIEFING_DOMAINS = {
+    "business-economics",
+    "luminary",
+    "beacon",
+    "migration",
+    "payroll",
+}
+
+ASSOCIATION_QUESTION_PHRASES = (
+    "also showing",
+    "line up with",
+    "driving",
+    "causing",
+    "because of",
+    "contributing to",
+)
+
 ROUTES = {
     "luminary": "/luminary",
+    "business-economics": "/business-economics",
+    "beacon": "/mission-control",
+    "migration": "/administration",
+    "payroll": "/payroll",
     "customers": "/customers",
     "jobs": "/jobs",
     "scheduling": "/scheduling",
@@ -124,6 +155,14 @@ class LiaService:
         requested_domains = self._classify_domains(question, request)
         allowed = permitted_domain_names(context)
         selected = requested_domains & allowed if requested_domains else allowed
+        if (
+            requested_domains
+            and not selected
+            and any(
+                phrase in question.casefold() for phrase in ENTERPRISE_SUMMARY_PHRASES
+            )
+        ):
+            selected = allowed
         if requested_domains and not selected:
             return self._response(
                 context=context,
@@ -151,6 +190,35 @@ class LiaService:
                     "No eligible source adapter returned evidence.",
                 ),
             )
+
+        if len(selected) > 1 and any(
+            phrase in question.casefold() for phrase in ASSOCIATION_QUESTION_PHRASES
+        ):
+            response = self._response(
+                context=context,
+                request_id=request_id,
+                conversation_id=conversation_id,
+                classification=TruthClassification.INCOMPLETE,
+                answer=(
+                    "The authorized domains have evidence, but their safe summary adapters "
+                    "do not prove the requested cross-domain relationship. Review the "
+                    "digest-bound source results before treating co-occurrence as an association."
+                ),
+                evidence=evidence,
+                limitations=(
+                    "No causal claim was generated.",
+                    "A shared subject, period, and admitted attribution contract are required for a supported association.",
+                    "No external AI provider was invoked.",
+                ),
+                navigation=tuple(
+                    NavigationSuggestion(
+                        label=f"Open {item.label}", internal_path=ROUTES[item.domain]
+                    )
+                    for item in evidence
+                    if item.domain in ROUTES
+                ),
+            )
+            return response
 
         lines = [f"{item.label}: {item.count} ({item.state})." for item in evidence]
         answer = "Here is the current authorized ACP evidence: " + " ".join(lines)
@@ -187,7 +255,7 @@ class LiaService:
             return {request.context.domain}
         normalized = question.casefold()
         if any(phrase in normalized for phrase in ENTERPRISE_SUMMARY_PHRASES):
-            return set()
+            return set(INTELLIGENCE_BRIEFING_DOMAINS)
         return {
             domain
             for domain, keywords in DOMAIN_KEYWORDS.items()
