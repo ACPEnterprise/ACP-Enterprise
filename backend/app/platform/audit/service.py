@@ -5,6 +5,7 @@ from uuid import UUID, uuid4
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.platform.audit.models import AuditRecord
+from app.platform.reliability.correlation import current_correlation_id
 from app.platform.security.metrics import security_metrics
 from app.platform.security.safe_output import validate_no_sensitive_fields
 
@@ -21,7 +22,7 @@ class AuditEntry:
     reason_code: str | None = None
     ip_address: str | None = None
     user_agent: str | None = None
-    correlation_id: UUID = field(default_factory=uuid4)
+    correlation_id: UUID | None = None
     details: dict[str, object] = field(default_factory=dict)
     occurred_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
@@ -41,7 +42,7 @@ class AuditService:
             reason_code=entry.reason_code,
             ip_address=entry.ip_address,
             user_agent=entry.user_agent,
-            correlation_id=entry.correlation_id,
+            correlation_id=entry.correlation_id or current_correlation_id() or uuid4(),
             details=entry.details,
             occurred_at=entry.occurred_at,
         )
