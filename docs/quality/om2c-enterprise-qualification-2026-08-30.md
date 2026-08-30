@@ -32,7 +32,7 @@
 
 ## Qualification results
 
-- Frontend after authority reconciliation and repairs: 88 test files / 263 tests passed; ESLint passed; TypeScript and production Vite build passed.
+- Frontend after latest authority reconciliation and authorization repairs: 95 test files / 304 tests passed; repository-wide ESLint passed; TypeScript and production Vite build passed.
 - Backend focused security tranche: isolation, authorization composition, idempotency, provider uncertainty and safe-output tests passed after repairing a stale catalog fingerprint.
 - Backend broad run: 2,109 passed, 7 skipped, 12 failed. Classification: 10 `TEST_ISOLATION` failures caused by reusing a database containing focused-test fixtures (all 10 passed on a fresh schema); 1 `ENVIRONMENT` Redis test (failed closed because `redis` hostname/runtime was unavailable); 1 `STALE_FIXTURE` external-adoption test repaired and requalified.
 - Static: Python 3.12 compilation passed; MyPy passed across 621 source files. Repository-wide Ruff is not a clean gate at starting authority (246 findings, predominantly pre-existing import-order findings); no mass formatting was performed.
