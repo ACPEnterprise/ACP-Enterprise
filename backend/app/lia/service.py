@@ -3,15 +3,14 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-from datetime import datetime, timedelta, timezone
-from uuid import UUID, uuid4, uuid5
+from datetime import datetime, timezone
+from uuid import UUID, uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.platform.permissions.authorization import AuthorizationContext
 
 from .contracts import (
-    ActionProposal,
     LiaRequest,
     LiaResponse,
     NavigationSuggestion,
@@ -28,7 +27,6 @@ from .security import (
 
 logger = logging.getLogger("app.lia.audit")
 POLICY_VERSION = "lia-governed-assistant/v1"
-PROPOSAL_NAMESPACE = UUID("e6f922d4-73fa-4df8-b324-3548bd85ff4d")
 
 DOMAIN_KEYWORDS = {
     "customers": ("customer",),
@@ -39,7 +37,13 @@ DOMAIN_KEYWORDS = {
     "payments": ("payment", "settlement", "cash"),
     "purchasing": ("purchasing", "purchase order", "vendor"),
     "inventory": ("inventory", "stock", "material"),
-    "business-economics": ("profit", "margin", "economics", "labor cost", "material cost"),
+    "business-economics": (
+        "profit",
+        "margin",
+        "economics",
+        "labor cost",
+        "material cost",
+    ),
     "beacon": ("beacon", "signal"),
     "migration": ("migration", "cutover"),
     "payroll": ("payroll", "pay statement", "pay statement", "remittance"),
@@ -110,15 +114,16 @@ class LiaService:
                 limitations=("No business fact was changed or inferred.",),
             )
         if matches_any(question, HIGH_IMPACT_PATTERNS):
-            proposal = self._proposal(context, question)
             return self._response(
                 context=context,
                 request_id=request_id,
                 conversation_id=conversation_id,
                 classification=TruthClassification.POLICY_REQUIRED,
                 answer="LIA cannot execute that business action. Review it in the authoritative ACP workflow with the required permission and confirmation.",
-                limitations=("This is a non-executing review proposal.",),
-                proposals=(proposal,),
+                limitations=(
+                    "No action proposal was created: an exact target, authoritative evidence, current version, and required permission are mandatory.",
+                    "A future proposal must satisfy LIA_PROPOSED_ACTION.v1 and remains non-executing.",
+                ),
             )
 
         requested_domains = self._classify_domains(question, request)
@@ -203,17 +208,6 @@ class LiaService:
             for domain, keywords in DOMAIN_KEYWORDS.items()
             if any(keyword in normalized for keyword in keywords)
         }
-
-    def _proposal(self, context: AuthorizationContext, question: str) -> ActionProposal:
-        expires = datetime.now(timezone.utc) + timedelta(minutes=15)
-        canonical = f"{context.user.id}:{context.company.id}:{context.authorization_version}:{question.casefold()}"
-        digest = hashlib.sha256(canonical.encode()).hexdigest()
-        return ActionProposal(
-            proposal_id=uuid5(PROPOSAL_NAMESPACE, digest),
-            action="NAVIGATE_TO_AUTHORITATIVE_WORKFLOW",
-            expires_at=expires,
-            digest=digest,
-        )
 
     def _response(
         self,

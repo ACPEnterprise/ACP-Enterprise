@@ -1,0 +1,48 @@
+{
+  "schema_version": "1.0",
+  "qualification_contract": "LIA.FOUNDATION.v1",
+  "release_profile": "LIA.READ_ONLY.v1",
+  "authoritative_base": "be7f6796c1ca74a6252f2aa5658ee70f1806f079",
+  "beacon_intelligence_head": "8f1f841bb14a4ef605d65d591c50ceeba19019d0",
+  "classification": "LIA_FOUNDATION_READY_FOR_PROVIDER_IMPLEMENTATION",
+  "provider_configured": false,
+  "provider_called": false,
+  "autonomous_mutation_enabled": false,
+  "production_touched": false,
+  "fingerprint_algorithm": "sha256(sorted path=sha256(file) lines with LF)",
+  "qualification_fingerprint": "d2d207434bc0f5a0f72379f401013e878e8f9594150fa6cd87c79a9ec9c91313",
+  "inputs": {
+    "backend/app/lia/adapters.py": "13f2cba44d636e79d1dc9b4a252cd7d6b3a209f0388dc579fb6719241da069e0",
+    "backend/app/lia/evaluation.py": "f06adc789b3cd610a9a26195b04e52d8fbbf1c576bd13b77f0c3b90252d18a41",
+    "backend/app/lia/foundation.py": "9beae3e653b619e00c0d22e6ab0c722621d8e14176b6b8d7807bd9865d063291",
+    "backend/app/lia/safety.py": "9b41b550577a964409023926f76c786b567d91ad88b6db7be2f1e701b03fbdd0",
+    "backend/tests/lia/test_foundation_safety.py": "da8ac65f5bcc529aa9ee8341d84f7598398c97e61970519d289cf8db4e86f11f",
+    "docs/architecture/lia/foundation-readiness-v1.md": "f54ddf5d1762377a65723482c7ac50467d239fa3ebead05383843968906ab616",
+    "docs/architecture/lia/golden-evaluation-cases.v1.json": "2fbfce5c695e7158f3f4b27f8d0fad6da8f87cb5e1ceb96a65c3127784debe3b",
+    "docs/architecture/lia/preview-acceptance-plan-v1.md": "b25e3947f5ccd25e1ec227f053e349dfedc982c8248d19555af7927eb6066b30",
+    "docs/architecture/lia/threat-model-v1.md": "30fc4db4a40f838bac8173c5af9ef39ee4692ecb93dff55fe9cc0398855a6b0d"
+  },
+  "qualification": {
+    "lia_beacon_unit_tests": 170,
+    "authorization_isolation_postgresql_tests": 26,
+    "frontend_tests": 284,
+    "frontend_test_files": 95,
+    "ruff": "PASS",
+    "mypy": "PASS",
+    "python_compilation": "PASS",
+    "eslint": "PASS",
+    "typescript_vite_build": "PASS",
+    "alembic_head": "g5e4c93b0f6d",
+    "alembic_head_count": 1,
+    "fresh_postgresql_upgrade": "PASS"
+  },
+  "explicit_gates": [
+    "AI provider selection, credentials, configuration, and admission require separate owner approval.",
+    "Economics context remains partial until its accepted LIA adapter is authoritative.",
+    "Payroll own-statement context remains blocked until server-side Membership-to-Employee resolution is admitted.",
+    "Customer context remains partial until a minimum-necessary role-scoped projection is accepted.",
+    "Conversation transcript retention is not configured; hidden reasoning persistence is prohibited.",
+    "Preview role-matrix acceptance remains pending Enterprise integration and deployment.",
+    "Production autonomous mutation is disabled."
+  ]
+}

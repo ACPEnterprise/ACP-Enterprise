@@ -41,3 +41,19 @@ export interface LiaReadiness {
   policy_version: string;
   retention_state: string;
 }
+
+export interface LiaFoundationReadiness {
+  foundation_version: string;
+  release_profile: string;
+  provider_state: "NOT_CONFIGURED" | "AVAILABLE" | "TEMPORARILY_UNAVAILABLE" | "RATE_LIMITED" | "TIMEOUT" | "UNCERTAIN" | "FAILED";
+  provider_configured: boolean;
+  autonomous_mutation: boolean;
+  production_mutation: boolean;
+  source_states: Record<string, "READY" | "PARTIAL" | "BLOCKED">;
+  tool_count: number;
+  executable_tool_count: number;
+  permission_propagation: string;
+  conversation_retention: string;
+  evaluation_status: string;
+  blockers: string[];
+}

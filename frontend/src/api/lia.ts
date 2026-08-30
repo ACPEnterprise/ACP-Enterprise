@@ -1,8 +1,12 @@
 import { apiClient } from "./client";
-import type { LiaReadiness, LiaResponse } from "../types/lia";
+import type { LiaFoundationReadiness, LiaReadiness, LiaResponse } from "../types/lia";
 
 export async function getLiaReadiness(): Promise<LiaReadiness> {
   return (await apiClient.get<LiaReadiness>("/api/v1/lia/readiness")).data;
+}
+
+export async function getLiaFoundationReadiness(): Promise<LiaFoundationReadiness> {
+  return (await apiClient.get<LiaFoundationReadiness>("/api/v1/lia/foundation-readiness")).data;
 }
 
 export async function getOwnerBriefing(): Promise<LiaResponse> {

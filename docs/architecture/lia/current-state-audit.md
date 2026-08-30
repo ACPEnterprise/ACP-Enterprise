@@ -15,8 +15,11 @@ Audit authority: `origin/customer-management-v1` at the start of
 | Business Economics | AUTHORITATIVE | LIA explains only admitted results; does not recompute economics |
 | Beacon | AUTHORITATIVE | Stable composition seam; signal lifecycle remains owned by Beacon |
 | Migration readiness | AUTHORITATIVE | Stable composition seam; no cutover action is exposed |
-| Luminary product findings | BLOCKED_EXTERNAL | Adapter boundary is reserved; truthful unavailable behavior applies |
-| Product LIA request/response/provenance contract | ABSENT | Added as `lia-governed-assistant/v1` |
+| Luminary product findings | AUTHORITATIVE | Accepted persisted briefing adapter is Company/Branch and permission scoped |
+| Beacon intelligence packet | AUTHORITATIVE_ON_QUALIFIED_INTEGRATION_BRANCH | `BEACON.INTELLIGENCE.v1` is adapted without changing Beacon quality or action authority |
+| Business Economics LIA evidence | PARTIAL | Stable interface exists; accepted Economics adapter remains an explicit source gate |
+| Product LIA request/response/provenance contract | AUTHORITATIVE | `lia-governed-assistant/v1` remains the runtime foundation |
+| LIA safety/evidence/tool contracts | QUALIFIED_INTEGRATION_BRANCH | `LIA.FOUNDATION.v1` and `LIA.READ_ONLY.v1` add provider-neutral safety contracts |
 | Product model provider | BLOCKED_EXTERNAL | Provider-neutral protocol and explicit `AI_PROVIDER_NOT_CONFIGURED` gate |
 | Product conversation transcript retention | BLOCKED_POLICY | No transcript persistence; configurable policy remains required |
 | Autonomous LIA business mutation | NOT_APPLICABLE | Explicitly prohibited; proposals are non-executing |

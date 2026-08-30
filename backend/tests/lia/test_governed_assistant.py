@@ -27,7 +27,7 @@ def authorization_context(*permissions: str):
 
 
 @pytest.mark.asyncio
-async def test_high_impact_action_is_proposed_not_executed() -> None:
+async def test_high_impact_action_requires_exact_evidence_before_proposal() -> None:
     service = LiaService()
     result = await service.ask(
         AsyncMock(),
@@ -35,7 +35,8 @@ async def test_high_impact_action_is_proposed_not_executed() -> None:
         request=LiaRequest(question="Approve this purchase order"),
     )
     assert result.classification is TruthClassification.POLICY_REQUIRED
-    assert result.proposals[0].state == "REVIEW_REQUIRED"
+    assert result.proposals == ()
+    assert any("LIA_PROPOSED_ACTION.v1" in item for item in result.limitations)
     assert result.evidence == ()
 
 
