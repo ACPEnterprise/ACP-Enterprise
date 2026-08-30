@@ -2,12 +2,14 @@ from datetime import date
 from uuid import uuid4
 
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 
 from app.accounts_payable.errors import APValidation
+from app.accounts_payable.router import _branch as require_ap_branch
 from app.accounts_payable.router import router as accounts_payable_router
 from app.accounts_payable.service import AccountsPayableService
 from app.invoicing.errors import InvoiceValidation
+from app.invoicing.router import _branch as require_invoice_branch
 from app.invoicing.router import router as invoice_router
 from app.invoicing.service import InvoiceService
 
@@ -44,3 +46,20 @@ async def test_financial_services_reject_unbounded_internal_requests() -> None:
             frozenset({uuid4()}),
             limit=201,
         )
+
+
+def test_financial_branch_concealment_uses_safe_recovery_contract() -> None:
+    class DeniedContext:
+        @staticmethod
+        def can_access_branch(_branch_id) -> bool:
+            return False
+
+    canary = uuid4()
+    for boundary in (require_invoice_branch, require_ap_branch):
+        with pytest.raises(HTTPException) as captured:
+            boundary(DeniedContext(), canary)  # type: ignore[arg-type]
+        assert captured.value.status_code == 404
+        assert captured.value.detail["code"] == "not_found"
+        assert captured.value.detail["recovery"] == "TERMINAL_FAILURE"
+        assert captured.value.detail["correlation_id"] is None
+        assert str(canary) not in str(captured.value.detail)

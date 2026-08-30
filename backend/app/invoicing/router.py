@@ -58,7 +58,7 @@ def _error(error: InvoiceError) -> HTTPException:
 
 def _branch(context: AuthorizationContext, branch_id: UUID) -> None:
     if not context.can_access_branch(branch_id):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Invoice was not found.")
+        raise _error(InvoiceNotFound("Invoice was not found."))
 
 
 @router.get("", response_model=list[InvoiceItem])
@@ -82,7 +82,7 @@ async def list_invoices(
 async def get_invoice(invoice_id: UUID, context: Read, session: Session) -> InvoiceItem:
     row = await invoice_service.get(session, context.company.id, invoice_id)
     if row is None or not context.can_access_branch(row.branch_id):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Invoice was not found.")
+        raise _error(InvoiceNotFound("Invoice was not found."))
     return InvoiceItem.model_validate(row)
 
 

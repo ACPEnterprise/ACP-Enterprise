@@ -62,7 +62,7 @@ def _error(exc: AccountsPayableError) -> HTTPException:
 
 def _branch(context: AuthorizationContext, branch_id: UUID) -> None:
     if not context.can_access_branch(branch_id):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "AP resource was not found.")
+        raise _error(APNotFound("AP resource was not found."))
 
 
 @router.post("/vendors", response_model=VendorItem, status_code=status.HTTP_201_CREATED)
@@ -104,7 +104,7 @@ async def create_account_mapping(payload: AccountMappingInput, context: Approve,
 async def create_bill(payload: BillCreate, context: Prepare, session: Session) -> BillItem:
     _branch(context, payload.branch_id)
     if any(not context.can_access_branch(line.branch_id) for line in payload.lines):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "AP resource was not found.")
+        raise _error(APNotFound("AP resource was not found."))
     data = payload.model_dump(exclude={"lines"})
     spec = BillSpec(company_id=context.company.id, actor_user_id=context.user.id, lines=tuple(BillLineSpec(**line.model_dump()) for line in payload.lines), **data)
     try:
