@@ -13,7 +13,7 @@ function StateList({ values, empty }: { values: Record<string, number>; empty: s
 export function PayrollRoute() {
   const canReadReporting = useHasPermission("COMPANY_PAYROLL_REPORTING_READ");
   const canReadRuns = useHasPermission("COMPANY_PAYROLL_RUN_READ");
-  const canRead = canReadReporting && canReadRuns;
+  const canRead = canReadReporting || canReadRuns;
   const operations = usePayrollOperationsSummary();
   const reports = usePayrollReports();
   const schemas = useComplianceSchemas();
