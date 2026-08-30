@@ -12,6 +12,12 @@ from app.platform.permissions.dependencies import (
     ResolvedAuthorization,
     require_permission,
 )
+from app.platform.reliability.correlation import current_correlation_id
+from app.platform.reliability.failures import (
+    ClientRecovery,
+    FailureCode,
+    SafeFailure,
+)
 from app.platform.users.identity_models import PendingEmailChange
 from app.platform.users.identity_schemas import (
     AdministrativeEmailChangeRequest,
@@ -37,7 +43,6 @@ from app.platform.users.identity_service import (
 )
 from app.platform.users.models import UserCredential
 
-
 self_service_router = APIRouter(
     prefix="/api/v1/identity",
     tags=["Identity Self-Service"],
@@ -55,23 +60,47 @@ AdministrationContext = Annotated[
 
 def translate_identity_error(error: IdentityAdministrationError) -> HTTPException:
     if isinstance(error, IdentityAdministrationNotFoundError):
+        failure = SafeFailure(
+            FailureCode.NOT_FOUND,
+            "Identity resource was not found.",
+            ClientRecovery.TERMINAL_FAILURE,
+            current_correlation_id(),
+        )
         return HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Identity resource was not found.",
+            detail=failure.detail(),
         )
     if isinstance(error, IdentityAdministrationTokenError):
+        failure = SafeFailure(
+            FailureCode.RESOURCE_STATE_CONFLICT,
+            "Email change request is expired, revoked, or already processed.",
+            ClientRecovery.RETRY_AFTER_REFRESH,
+            current_correlation_id(),
+        )
         return HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Email change request is expired, revoked, or already processed.",
+            detail=failure.detail(),
         )
     if isinstance(error, IdentityAdministrationConflictError):
+        failure = SafeFailure(
+            FailureCode.RESOURCE_STATE_CONFLICT,
+            "Identity operation conflicts with current state.",
+            ClientRecovery.RETRY_AFTER_REFRESH,
+            current_correlation_id(),
+        )
         return HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Identity operation conflicts with current state.",
+            detail=failure.detail(),
         )
+    failure = SafeFailure(
+        FailureCode.VALIDATION,
+        "Identity operation could not be completed.",
+        ClientRecovery.USER_CORRECTION_REQUIRED,
+        current_correlation_id(),
+    )
     return HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
-        detail="Identity operation could not be completed.",
+        detail=failure.detail(),
     )
 
 
