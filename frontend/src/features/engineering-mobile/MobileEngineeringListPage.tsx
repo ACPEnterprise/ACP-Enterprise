@@ -130,9 +130,11 @@ function WorkstreamCard({ item }: { item: MobileWorkstreamSummary }) {
 function NotificationRow({
   item,
   workstreamName,
+  canManage,
 }: {
   item: MissionNotificationItem;
   workstreamName: string;
+  canManage: boolean;
 }) {
   const acknowledge = useAcknowledgeMissionNotification();
   const transition = useTransitionMissionNotification();
@@ -161,7 +163,7 @@ function NotificationRow({
       <p className="mt-ui-1 text-sm text-content-muted">
         {mobileEngineeringTimestamp(item.created_at)}
       </p>
-      <div className="mt-ui-3 flex flex-wrap gap-ui-2">
+      {canManage && <div className="mt-ui-3 flex flex-wrap gap-ui-2">
         {item.status === "unread" && (
           <Button
             className="min-h-11"
@@ -205,13 +207,14 @@ function NotificationRow({
             Archive
           </Button>
         )}
-      </div>
+      </div>}
     </li>
   );
 }
 
 export function MobileEngineeringListPage() {
   const canRead = useHasPermission("COMPANY_ENGINEERING_COMMAND_READ");
+  const canManage = useHasPermission("COMPANY_ENGINEERING_COMMAND_MANAGE");
   const canReadCapacity = useHasPermission("COMPANY_ENGINEERING_CAPACITY_READ");
   const [view, setView] = useState<View>("overview");
   const [filter, setFilter] = useState<InboxFilter>("all");
@@ -559,6 +562,7 @@ export function MobileEngineeringListPage() {
               <NotificationRow
                 key={item.id}
                 item={item}
+                canManage={canManage}
                 workstreamName={
                   workstreamNames.get(item.command_id) ??
                   "Engineering workstream"

@@ -581,6 +581,33 @@ describe("mobile Engineering Control", () => {
     expect(screen.queryByRole("spinbutton", { name: "Maximum concurrent workstreams" })).not.toBeInTheDocument();
   });
 
+  it("shows notification evidence without manage actions to command readers", async () => {
+    permissions.clear();
+    permissions.add("COMPANY_ENGINEERING_COMMAND_READ");
+    vi.mocked(hooks.useMobileWorkstreams).mockReturnValue({
+      isLoading: false,
+      data: { items: [], connectivity: disconnected, page: 1, page_size: 100, total_count: 0, total_pages: 0 },
+    } as never);
+    vi.mocked(hooks.useMissionNotifications).mockReturnValue({
+      data: {
+        items: [{
+          id: "notification-1", command_id: review.id, kind: "waiting_for_owner",
+          severity: "warning", status: "unread", created_at: review.created_at,
+          escalated_at: null, acknowledged_at: null, read_at: null, archived_at: null, version: 1,
+        }],
+        unread_count: 1, escalated_count: 0, page: 1, page_size: 25, total_count: 1, total_pages: 1,
+      },
+    } as never);
+
+    renderList();
+    await userEvent.click(screen.getByRole("button", { name: /Inbox/ }));
+
+    expect(screen.getByText("Waiting For Owner")).toBeInTheDocument();
+    for (const name of ["Mark read", "Acknowledge", "Archive"]) {
+      expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
+    }
+  });
+
   it("shows the pipeline and confirms owner control actions", async () => {
     const mutate = vi.fn();
     vi.mocked(hooks.useMobileWorkstream).mockReturnValue({
