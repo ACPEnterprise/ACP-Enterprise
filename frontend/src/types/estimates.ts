@@ -56,6 +56,20 @@ export interface EstimateProposalInput {
   discount_value?: string;
 }
 
+export interface EstimateTransitionInput {
+  branch_id: string;
+  expected_version: number;
+  occurred_at: string;
+}
+
+export interface EstimateDecisionInput extends EstimateTransitionInput {
+  customer_name: string;
+  customer_email?: string;
+  customer_comment?: string;
+  rejection_reason?: string;
+  evidence_reference?: string;
+}
+
 export interface EstimateSummary {
   id: string;
   branch_id: string;
