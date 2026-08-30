@@ -1,7 +1,7 @@
 import axios from "axios";
 import { Search, ShieldCheck, Unplug } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router";
+import { Link, useNavigate } from "react-router";
 
 import { useAuth } from "../../auth";
 import {
@@ -170,6 +170,25 @@ export function AdministrationRoute() {
         <Alert variant="danger" announcement="assertive">
           {mutationError}
         </Alert>
+      )}
+      {permissionCodes.includes("COMPANY_IDENTITY_ONBOARDING_MANAGE") && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Identity Onboarding</CardTitle>
+            <CardDescription>
+              Initiate the fixed Preview ACP Employee beta identity through protected
+              Company onboarding.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Link
+              className="inline-flex min-h-11 items-center justify-center rounded-md bg-action-primary px-ui-4 text-body-s font-semibold text-content-inverse"
+              to="/administration/identity-onboarding"
+            >
+              Open Identity Onboarding
+            </Link>
+          </CardContent>
+        </Card>
       )}
       {canAdminister && (
         <Card>
