@@ -40,6 +40,8 @@ from app.engineering_execution.models import EngineeringExecution
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import EngineeringCommandPermission
 from app.platform.permissions.dependencies import require_permission
+from app.platform.reliability.correlation import current_correlation_id
+from app.platform.reliability.failures import ClientRecovery, FailureCode, SafeFailure
 
 from .external_adoption import (
     ExternalAdoptionError,
@@ -79,6 +81,35 @@ router = APIRouter(
 )
 logger = logging.getLogger(__name__)
 ProjectionItem = TypeVar("ProjectionItem", bound=BaseModel)
+
+
+def _mobile_failure(
+    *,
+    status_code: int,
+    code: FailureCode,
+    message: str,
+    recovery: ClientRecovery,
+) -> HTTPException:
+    failure = SafeFailure(code, message, recovery, current_correlation_id())
+    return HTTPException(status_code=status_code, detail=failure.detail())
+
+
+def _mobile_not_found() -> HTTPException:
+    return _mobile_failure(
+        status_code=status.HTTP_404_NOT_FOUND,
+        code=FailureCode.NOT_FOUND,
+        message="Engineering control resource was not found.",
+        recovery=ClientRecovery.TERMINAL_FAILURE,
+    )
+
+
+def _mobile_conflict() -> HTTPException:
+    return _mobile_failure(
+        status_code=status.HTTP_409_CONFLICT,
+        code=FailureCode.RESOURCE_STATE_CONFLICT,
+        message="Engineering control operation conflicts with current authority.",
+        recovery=ClientRecovery.RETRY_AFTER_REFRESH,
+    )
 
 
 def _bounded_projection(
@@ -705,17 +736,16 @@ async def act_on_milestone(
                 reason=request.reason,
             )
     except LookupError as error:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, str(error)) from error
+        raise _mobile_not_found() from error
     except ProviderRepositoryReadinessNotCurrentError as error:
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            detail={
-                "code": "provider_repository_readiness_not_current",
-                "message": str(error),
-            },
+        raise _mobile_failure(
+            status_code=status.HTTP_409_CONFLICT,
+            code=FailureCode.RECONCILIATION_REQUIRED,
+            message="Provider repository readiness requires reconciliation.",
+            recovery=ClientRecovery.RECONCILIATION_REQUIRED,
         ) from error
     except ValueError as error:
-        raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
+        raise _mobile_conflict() from error
     except EngineeringControlError as error:
         raise engineering_http_error(error) from error
     return MilestoneItem.model_validate(item)
@@ -741,9 +771,9 @@ async def adopt_external_milestone(
             payload=request,
         )
     except LookupError as error:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, str(error)) from error
+        raise _mobile_not_found() from error
     except ExternalAdoptionError as error:
-        raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
+        raise _mobile_conflict() from error
     return ExternalAdoptionItem.model_validate(adoption)
 
 
@@ -768,9 +798,9 @@ async def handoff_external_evidence(
         adoption = await session.get(ExternalMilestoneAdoption, adoption_id)
         assert adoption is not None
     except LookupError as error:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, str(error)) from error
+        raise _mobile_not_found() from error
     except ExternalAdoptionError as error:
-        raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
+        raise _mobile_conflict() from error
     return ExternalAdoptionItem.model_validate(adoption)
 
 
@@ -822,9 +852,9 @@ async def acknowledge_mission_notification(
             expected_version=request.expected_version,
         )
     except LookupError as error:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, str(error)) from error
+        raise _mobile_not_found() from error
     except ValueError as error:
-        raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
+        raise _mobile_conflict() from error
     return MissionNotificationItem.model_validate(record)
 
 
@@ -848,9 +878,9 @@ async def transition_mission_notification(
             action=request.action,
         )
     except LookupError as error:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, str(error)) from error
+        raise _mobile_not_found() from error
     except ValueError as error:
-        raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
+        raise _mobile_conflict() from error
     return MissionNotificationItem.model_validate(record)
 
 
@@ -879,7 +909,7 @@ async def stream_workstream_events(
     try:
         await validate_resume_token(session, context.company.id, token)
     except InvalidResumeToken as error:
-        raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
+        raise _mobile_conflict() from error
     finally:
         # Release the request-scoped database connection before the stream's
         # intentionally long lifetime. Replays use short independent sessions.
@@ -950,11 +980,7 @@ async def control_workstream(
             reason=request.reason,
         )
     except ValueError as error:
-        from fastapi import HTTPException, status
-
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT, detail=str(error)
-        ) from error
+        raise _mobile_conflict() from error
     except EngineeringControlError as error:
         raise engineering_http_error(error) from error
 
