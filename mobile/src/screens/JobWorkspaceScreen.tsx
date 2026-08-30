@@ -1,9 +1,12 @@
 import { useState } from "react";
-import { Linking, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Linking, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import type { DayAssignment, EmployeeOperationsService } from "../api/employeeOperations";
+import type { FieldService } from "../api/fieldService";
 import { colors, spacing } from "../design/tokens";
 import { useAssignmentDetail } from "../myDay/useAssignmentDetail";
 import type { NetworkMonitor } from "../network/networkMonitor";
+import { useFieldWorkspace } from "../field/useFieldWorkspace";
+import { PrimaryButton } from "../components/PrimaryButton";
 
 function formatWindow(value: string, timezone: string) {
   return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short", timeZone: timezone }).format(new Date(value));
@@ -31,10 +34,13 @@ function Detail({ assignment, timezone, stale, onDirections }: { assignment: Day
   </View>;
 }
 
-export function JobWorkspaceScreen({ appointmentId, initialAssignment, initialTimezone, service, network }: { appointmentId: string; initialAssignment: DayAssignment | null; initialTimezone: string; service: EmployeeOperationsService; network: NetworkMonitor }) {
+export function JobWorkspaceScreen({ appointmentId, initialAssignment, initialTimezone, businessDate, service, fieldService, network, canReadField = false, canExecuteField = false }: { appointmentId: string; initialAssignment: DayAssignment | null; initialTimezone: string; businessDate?: string; service: EmployeeOperationsService; fieldService: FieldService; network: NetworkMonitor; canReadField?: boolean; canExecuteField?: boolean }) {
   const detail = useAssignmentDetail(service, network, appointmentId, initialAssignment);
   const [directionsError, setDirectionsError] = useState(false);
+  const [summary, setSummary] = useState("");
   const timezone = detail.timezone ?? initialTimezone;
+  const serviceDate = businessDate ?? detail.assignment?.window_start_at.slice(0, 10) ?? initialAssignment?.window_start_at.slice(0, 10) ?? new Date().toISOString().slice(0, 10);
+  const field = useFieldWorkspace(fieldService, network, appointmentId, detail.assignment?.job_id ?? initialAssignment?.job_id ?? null, serviceDate, canReadField);
   const stale = (detail.status === "offline" || detail.status === "error") && detail.assignment !== null;
   const message = detail.status === "not_authorized" ? "You are not authorized to view this assignment."
     : detail.status === "identity_not_ready" ? "Your employee account is not ready for assigned work."
@@ -56,12 +62,30 @@ export function JobWorkspaceScreen({ appointmentId, initialAssignment, initialTi
   }
   return <ScrollView testID="job-workspace-scroll" style={styles.safe} contentContainerStyle={styles.body} refreshControl={<RefreshControl refreshing={detail.status === "loading" || detail.refreshing} onRefresh={() => void detail.refresh()} accessibilityLabel="Refresh authoritative Job workspace" />}>
     <Text accessibilityRole="header" style={styles.title}>Job Workspace</Text>
-    <Text style={styles.readOnly}>Read-only assigned work. Job status and My Time remain independent.</Text>
+    <Text style={styles.readOnly}>{canExecuteField ? "Authorized field evidence. Job status and My Time remain independent." : "Read-only assigned work. Job status and My Time remain independent."}</Text>
     {directionsError && <Text accessibilityRole="alert" style={styles.message}>Directions are unavailable on this device. The service address remains shown below.</Text>}
     {message && <Text accessibilityRole="alert" style={stale ? styles.stale : styles.message}>{message}</Text>}
     {detail.status === "loading" && !detail.assignment && <Text accessibilityLabel="Loading authoritative assignment detail">Loading assignment…</Text>}
     {detail.assignment && <Detail assignment={detail.assignment} timezone={timezone} stale={stale} onDirections={() => void openDirections()} />}
+    {canReadField && detail.assignment?.job_id && <View style={styles.detail} accessible accessibilityLabel="Authoritative field workflow">
+      <Text style={styles.sectionTitle}>Field workflow</Text>
+      {field.status === "loading" && <Text>Refreshing authoritative field state…</Text>}
+      {field.status === "offline" && <Text accessibilityRole="alert" style={styles.stale}>You're offline. Field actions are disabled; displayed state may be stale.</Text>}
+      {field.status === "forbidden" && <Text accessibilityRole="alert">This assignment is no longer available for field execution.</Text>}
+      {(field.status === "conflict" || field.status === "error") && <Text accessibilityRole="alert">Field state changed or could not be confirmed. It has been refreshed before another action.</Text>}
+      {field.item && <><Text>Travel status: {field.item.arrival_state.replaceAll("_", " ")}</Text><Text>Assignment: {field.item.assignment_status}</Text></>}
+      {field.job && <><Text>Work summary: {field.job.work_summary_recorded ? "Recorded" : "Required"}</Text><Text>Customer disposition: {field.job.customer_disposition ?? "Not recorded"}</Text><Text>Completion readiness: {field.job.completion_ready ? "Ready" : `Blocked — ${field.job.missing_requirements.join(", ") || "requirements pending"}`}</Text><Text>Invoice handoff: {field.job.invoice_handoff_status ?? "Not available"}</Text></>}
+      {canExecuteField && field.item && field.item.job_id && field.item.job_version && <View style={styles.section}>
+        {field.item.arrival_state === "pending" && <PrimaryButton label="Begin Travel" disabled={field.status === "loading" || field.status === "offline"} onPress={() => void field.mutate(() => fieldService.arrival(appointmentId, "en_route", field.item!.assignment_version))} />}
+        {field.item.arrival_state === "en_route" && <PrimaryButton label="Mark Arrived" disabled={field.status === "loading" || field.status === "offline"} onPress={() => void field.mutate(() => fieldService.arrival(appointmentId, "arrived", field.item!.assignment_version))} />}
+        <Text style={styles.sectionTitle}>Work performed</Text><TextInput accessibilityLabel="Work performed summary" multiline value={summary} onChangeText={setSummary} editable={field.status !== "loading" && field.status !== "offline"} style={styles.input} placeholder="Describe completed work" />
+        <PrimaryButton label="Save Work Summary" disabled={!summary.trim() || field.status === "loading" || field.status === "offline"} onPress={() => void field.mutate(async () => { await fieldService.note(field.item!.job_id!, summary.trim(), field.item!.job_version!, field.item!.assignment_version); setSummary(""); })} />
+        <Text style={styles.sectionTitle}>Customer work approval</Text><PrimaryButton label="Customer Approved Work" disabled={field.status === "loading" || field.status === "offline"} onPress={() => void field.mutate(() => fieldService.approval(field.item!.job_id!, "approved", field.item!.job_version!, field.item!.assignment_version))} /><PrimaryButton label="Customer Unavailable" disabled={field.status === "loading" || field.status === "offline"} onPress={() => void field.mutate(() => fieldService.approval(field.item!.job_id!, "unavailable", field.item!.job_version!, field.item!.assignment_version))} /><PrimaryButton label="Customer Refused" disabled={field.status === "loading" || field.status === "offline"} onPress={() => void field.mutate(() => fieldService.approval(field.item!.job_id!, "refused", field.item!.job_version!, field.item!.assignment_version))} />
+        <PrimaryButton label="Refresh Invoice Handoff" disabled={field.status === "loading" || field.status === "offline"} onPress={() => void field.mutate(() => fieldService.refreshHandoff(field.item!.job_id!, field.item!.job_version!, field.item!.assignment_version))} />
+        <Text style={styles.readOnly}>Starting or completing the Job is not offered because the accepted command response contains administrative Job fields. Mobile records only assignment-scoped field evidence.</Text>
+      </View>}
+    </View>}
   </ScrollView>;
 }
 
-const styles = StyleSheet.create({ safe: { flex: 1, backgroundColor: colors.canvas }, body: { padding: spacing.lg, paddingBottom: spacing.xl, gap: spacing.md }, title: { fontSize: 30, fontWeight: "800", color: colors.text }, readOnly: { color: colors.muted, fontSize: 15, lineHeight: 22 }, message: { color: colors.text, fontSize: 16 }, stale: { color: colors.warning, fontWeight: "700", fontSize: 16, backgroundColor: "#FFF7D6", borderRadius: 12, padding: spacing.md }, detail: { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, borderRadius: 14, padding: spacing.lg, gap: spacing.md }, kicker: { fontSize: 13, fontWeight: "800", color: colors.brandDark }, customer: { fontSize: 24, fontWeight: "800", color: colors.text }, window: { fontSize: 17, fontWeight: "700", color: colors.brandDark }, section: { borderTopColor: colors.border, borderTopWidth: 1, paddingTop: spacing.md, gap: spacing.xs }, sectionTitle: { fontSize: 17, fontWeight: "700", color: colors.text }, line: { fontSize: 16, lineHeight: 23, color: colors.text }, directions: { alignItems: "center", alignSelf: "flex-start", borderColor: colors.brand, borderRadius: 10, borderWidth: 1, justifyContent: "center", minHeight: 48, marginTop: spacing.sm, paddingHorizontal: spacing.md }, directionsText: { color: colors.brand, fontSize: 16, fontWeight: "700" } });
+const styles = StyleSheet.create({ safe: { flex: 1, backgroundColor: colors.canvas }, body: { padding: spacing.lg, paddingBottom: spacing.xl, gap: spacing.md }, title: { fontSize: 30, fontWeight: "800", color: colors.text }, readOnly: { color: colors.muted, fontSize: 15, lineHeight: 22 }, message: { color: colors.text, fontSize: 16 }, stale: { color: colors.warning, fontWeight: "700", fontSize: 16, backgroundColor: "#FFF7D6", borderRadius: 12, padding: spacing.md }, detail: { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, borderRadius: 14, padding: spacing.lg, gap: spacing.md }, kicker: { fontSize: 13, fontWeight: "800", color: colors.brandDark }, customer: { fontSize: 24, fontWeight: "800", color: colors.text }, window: { fontSize: 17, fontWeight: "700", color: colors.brandDark }, section: { borderTopColor: colors.border, borderTopWidth: 1, paddingTop: spacing.md, gap: spacing.sm }, sectionTitle: { fontSize: 17, fontWeight: "700", color: colors.text }, line: { fontSize: 16, lineHeight: 23, color: colors.text }, input: { minHeight: 100, borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, fontSize: 16, textAlignVertical: "top", color: colors.text, backgroundColor: colors.surface }, directions: { alignItems: "center", alignSelf: "flex-start", borderColor: colors.brand, borderRadius: 10, borderWidth: 1, justifyContent: "center", minHeight: 48, marginTop: spacing.sm, paddingHorizontal: spacing.md }, directionsText: { color: colors.brand, fontSize: 16, fontWeight: "700" } });

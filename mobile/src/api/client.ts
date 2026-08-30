@@ -16,7 +16,7 @@ export class ApiClient {
   constructor(private readonly baseUrl: string, private readonly sessions: SessionRepository, private readonly network: NetworkMonitor, private readonly logger: SafeLogger, private readonly onExpired: () => void) {}
   setTenantContext(companyId: string, branchId: string | null) { this.companyId = companyId; this.branchId = branchId; }
   clearTenantContext() { this.companyId = null; this.branchId = null; }
-  async request<T>(path: string, schema: z.ZodType<T>, options: ApiRequestOptions = {}): Promise<T> {
+  private async fetchResponse(path: string, options: ApiRequestOptions = {}): Promise<Response> {
     if (!(await this.network.isConnected())) throw new ApiFailure("offline", "Network unavailable");
     const { authentication = "required", unauthorized = "expire", conflict = "conflict", ...init } = options;
     const session = authentication === "required" ? await this.sessions.load() : null;
@@ -34,13 +34,28 @@ export class ApiClient {
       if (response.status === 422) throw new ApiFailure("not_ready", "Employee timekeeping is not ready");
       if (response.status === 429) throw new ApiFailure("rate_limited", "Too many requests");
       if (!response.ok) { this.logger.error("ACP API request failed", { path, status: response.status }); throw new ApiFailure("unavailable", "Server unavailable"); }
-      const result = schema.safeParse(await response.json());
-      if (!result.success) throw new ApiFailure("malformed_response", "Malformed server response");
-      return result.data;
+      return response;
     } catch (error) {
       if (error instanceof ApiFailure) throw error;
       if (error instanceof Error && error.name === "AbortError") throw new ApiFailure("timeout", "Request timed out");
       throw new ApiFailure("unavailable", "Server unavailable");
     } finally { clearTimeout(timer); }
+  }
+  async request<T>(path: string, schema: z.ZodType<T>, options: ApiRequestOptions = {}): Promise<T> {
+    const response = await this.fetchResponse(path, options);
+    try {
+      const result = schema.safeParse(await response.json());
+      if (!result.success) throw new ApiFailure("malformed_response", "Malformed server response");
+      return result.data;
+    } catch (error) {
+      if (error instanceof ApiFailure) throw error;
+      throw new ApiFailure("malformed_response", "Malformed server response");
+    }
+  }
+  async requestText(path: string, options: ApiRequestOptions = {}): Promise<{ content: string; contentType: string }> {
+    const response = await this.fetchResponse(path, { ...options, headers: { Accept: "text/html", ...options.headers } });
+    const contentType = response.headers.get("content-type")?.split(";", 1)[0] ?? "";
+    if (contentType !== "text/html") throw new ApiFailure("malformed_response", "Unexpected protected artifact type");
+    return { content: await response.text(), contentType };
   }
 }

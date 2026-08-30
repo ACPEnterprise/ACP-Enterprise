@@ -32,7 +32,7 @@ function AssignmentCard({ assignment, timezone, stale, onOpen }: { assignment: D
   </Pressable>;
 }
 
-export function MyDayScreen({ service, network, onOpenAssignment }: { service: EmployeeOperationsService; network: NetworkMonitor; onOpenAssignment?(assignment: DayAssignment, timezone: string): void }) {
+export function MyDayScreen({ service, network, onOpenAssignment }: { service: EmployeeOperationsService; network: NetworkMonitor; onOpenAssignment?(assignment: DayAssignment, timezone: string, businessDate: string): void }) {
   const myDay = useMyDay(service, network);
   const stale = (myDay.status === "offline" || myDay.status === "error") && myDay.day !== null;
   const message = myDay.status === "not_authorized" ? "My Day is not available for your account."
@@ -47,7 +47,7 @@ export function MyDayScreen({ service, network, onOpenAssignment }: { service: E
     {message && <Text accessibilityRole="alert" style={stale ? styles.stale : styles.message}>{message}</Text>}
     {myDay.status === "loading" && !myDay.day && <Text accessibilityLabel="Loading authoritative assigned work">Loading assigned work…</Text>}
     {myDay.status === "empty" && <View accessible accessibilityLabel="No assigned work today" style={styles.empty}><Text style={styles.emptyTitle}>Your day is clear</Text><Text>No work is currently assigned to you today.</Text></View>}
-    {myDay.day?.assignments.map((assignment) => <AssignmentCard key={assignment.appointment_id} assignment={assignment} timezone={myDay.day!.timezone} stale={stale} onOpen={onOpenAssignment ? () => onOpenAssignment(assignment, myDay.day!.timezone) : undefined} />)}
+    {myDay.day?.assignments.map((assignment) => <AssignmentCard key={assignment.appointment_id} assignment={assignment} timezone={myDay.day!.timezone} stale={stale} onOpen={onOpenAssignment ? () => onOpenAssignment(assignment, myDay.day!.timezone, myDay.day!.business_date) : undefined} />)}
   </ScrollView>;
 }
 

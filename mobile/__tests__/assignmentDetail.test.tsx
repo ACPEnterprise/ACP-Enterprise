@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 import { Linking } from "react-native";
 import type { DayAssignment, EmployeeDay, EmployeeOperationsService } from "../src/api/employeeOperations";
+import type { FieldService } from "../src/api/fieldService";
 import { ApiFailure } from "../src/api/types";
 import { directionsUrl, JobWorkspaceScreen } from "../src/screens/JobWorkspaceScreen";
 import { MyDayScreen } from "../src/screens/MyDayScreen";
@@ -22,6 +23,9 @@ const assignment: DayAssignment = {
   service_location: { label: "Synthetic Detail Site", address_line_1: "200 Example Avenue", address_line_2: "Unit 2", city: "Example City", state: "NY", postal_code: "10002", country: "US" },
 };
 const projectedDay = (assignments: DayAssignment[] = [assignment]): EmployeeDay => ({ business_date: "2026-08-28", timezone: "America/New_York", assignments });
+const fieldService: FieldService = {
+  itinerary: jest.fn(), state: jest.fn(), arrival: jest.fn(), note: jest.fn(), approval: jest.fn(), refreshHandoff: jest.fn(),
+};
 
 function harness(initial = projectedDay(), connected = true) {
   let value = initial;
@@ -32,7 +36,7 @@ function harness(initial = projectedDay(), connected = true) {
 }
 
 function detail(h: ReturnType<typeof harness>, appointmentId = assignment.appointment_id, initial: DayAssignment | null = assignment) {
-  return <JobWorkspaceScreen appointmentId={appointmentId} initialAssignment={initial} initialTimezone="America/New_York" service={h.service} network={h.network} />;
+  return <JobWorkspaceScreen appointmentId={appointmentId} initialAssignment={initial} initialTimezone="America/New_York" service={h.service} fieldService={fieldService} network={h.network} />;
 }
 
 describe("native employee Job workspace", () => {
@@ -41,7 +45,7 @@ describe("native employee Job workspace", () => {
     const h = harness(); const open = jest.fn();
     render(<MyDayScreen service={h.service} network={h.network} onOpenAssignment={open} />);
     fireEvent.press(await screen.findByLabelText(/Open assignment detail.*Synthetic Detail Customer/));
-    expect(open).toHaveBeenCalledWith(assignment, "America/New_York");
+    expect(open).toHaveBeenCalledWith(assignment, "America/New_York", "2026-08-28");
   });
 
   it("renders only safe operational detail with accessible hierarchy", async () => {
