@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from uuid import UUID, uuid4
 
-from sqlalchemy import case, func, select
+from sqlalchemy import case, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.inventory.contracts import (
@@ -159,10 +159,16 @@ class InventoryRepository:
     async def post_movement(
         self, session: AsyncSession, *, spec: PostStockMovement
     ) -> StockMovementRecord:
+        key = spec.idempotency_key.strip()
+        if not key:
+            raise InventoryValidation("Movement idempotency key is required")
+        await self._lock_idempotency(
+            session, spec.company_id, "movement", key
+        )
         existing = await session.scalar(
             select(StockMovement).where(
                 StockMovement.company_id == spec.company_id,
-                StockMovement.idempotency_key == spec.idempotency_key,
+                StockMovement.idempotency_key == key,
             )
         )
         if existing:
@@ -219,7 +225,7 @@ class InventoryRepository:
             actor_user_id=spec.actor_user_id,
             provenance_type=spec.provenance_type,
             provenance_id=spec.provenance_id,
-            idempotency_key=spec.idempotency_key.strip(),
+            idempotency_key=key,
             reversal_of_id=spec.reversal_of_id,
             unit_cost=spec.unit_cost,
             currency=spec.currency,
@@ -273,10 +279,14 @@ class InventoryRepository:
     async def post_adjustment(
         self, session: AsyncSession, *, spec: PostInventoryAdjustment
     ) -> AdjustmentRecord:
+        key = spec.idempotency_key.strip()
+        if not key:
+            raise InventoryValidation("Adjustment idempotency key is required")
+        await self._lock_idempotency(session, spec.company_id, "adjustment", key)
         existing = await session.scalar(
             select(InventoryAdjustment).where(
                 InventoryAdjustment.company_id == spec.company_id,
-                InventoryAdjustment.idempotency_key == spec.idempotency_key.strip(),
+                InventoryAdjustment.idempotency_key == key,
             )
         )
         if existing:
@@ -284,7 +294,6 @@ class InventoryRepository:
             return self._adjustment_record(existing)
         reason = spec.reason.strip().lower()
         note = spec.note.strip()
-        key = spec.idempotency_key.strip()
         if reason not in {"gain", "loss", "damaged", "expired", "found"}:
             raise InventoryValidation("Unsupported adjustment reason")
         if not note or not key:
@@ -344,6 +353,11 @@ class InventoryRepository:
         self, session: AsyncSession, *, spec: StartCycleCount
     ) -> CycleCountSessionRecord:
         key = spec.idempotency_key.strip()
+        if not key or not spec.name.strip():
+            raise InventoryValidation(
+                "Cycle count name and idempotency key are required"
+            )
+        await self._lock_idempotency(session, spec.company_id, "cycle-start", key)
         existing = await session.scalar(
             select(CycleCountSession).where(
                 CycleCountSession.company_id == spec.company_id,
@@ -364,10 +378,6 @@ class InventoryRepository:
             ):
                 raise InventoryConflict("Cycle count idempotency key was reused")
             return self._cycle_session_record(existing)
-        if not key or not spec.name.strip():
-            raise InventoryValidation(
-                "Cycle count name and idempotency key are required"
-            )
         await self._active_location(
             session,
             company_id=spec.company_id,
@@ -451,6 +461,9 @@ class InventoryRepository:
         self, session: AsyncSession, *, spec: RecordCycleCount
     ) -> CycleCountEntryRecord:
         key = spec.idempotency_key.strip()
+        if not key:
+            raise InventoryValidation("Cycle count entry idempotency key is required")
+        await self._lock_idempotency(session, spec.company_id, "cycle-entry", key)
         existing = await session.scalar(
             select(CycleCountEntry).where(
                 CycleCountEntry.company_id == spec.company_id,
@@ -486,8 +499,6 @@ class InventoryRepository:
             and spec.counted_quantity != spec.counted_quantity.to_integral_value()
         ):
             raise InventoryValidation("Item does not allow fractional quantity")
-        if not key:
-            raise InventoryValidation("Cycle count entry idempotency key is required")
         expected = await self._authoritative_on_hand(
             session,
             company_id=spec.company_id,
@@ -636,10 +647,16 @@ class InventoryRepository:
     async def create_reservation(
         self, session: AsyncSession, *, spec: CreateReservation
     ) -> ReservationRecord:
+        key = spec.idempotency_key.strip()
+        if not key:
+            raise InventoryValidation("Reservation idempotency key is required")
+        await self._lock_idempotency(
+            session, spec.company_id, "reservation", key
+        )
         existing = await session.scalar(
             select(InventoryReservation).where(
                 InventoryReservation.company_id == spec.company_id,
-                InventoryReservation.idempotency_key == spec.idempotency_key,
+                InventoryReservation.idempotency_key == key,
             )
         )
         if existing:
@@ -668,7 +685,7 @@ class InventoryRepository:
             demand_id=spec.demand_id,
             status="requested",
             expires_at=spec.expires_at,
-            idempotency_key=spec.idempotency_key.strip(),
+            idempotency_key=key,
             version=1,
             created_by_user_id=spec.actor_user_id,
             updated_by_user_id=spec.actor_user_id,
@@ -1481,6 +1498,15 @@ class InventoryRepository:
         )
         if not all(values):
             raise InventoryConflict("Reservation idempotency key was reused")
+
+    @staticmethod
+    async def _lock_idempotency(
+        session: AsyncSession, company_id: UUID, operation: str, key: str
+    ) -> None:
+        await session.execute(
+            text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"),
+            {"key": f"inventory:{operation}:{company_id}:{key}"},
+        )
 
     @staticmethod
     def _authorize_branch(
