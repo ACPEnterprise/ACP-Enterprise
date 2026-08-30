@@ -133,6 +133,7 @@ def command(
         first_name="Synthetic",
         last_name="Employee",
         display_name="Synthetic Employee",
+        create_employee=True,
         employee_type="employee",
         employee_number_prefix="EMP-",
         employee_number_width=4,
@@ -216,6 +217,50 @@ async def test_invitation_activation_is_single_use_and_secret_safe(
             time_input=None,
         )
         assert admission.state is PayrollAdmissionState.BLOCKED_POLICY
+
+
+@pytest.mark.asyncio
+async def test_identity_only_invitation_does_not_create_employee(
+    onboarding_db: tuple[
+        async_sessionmaker[AsyncSession], Context, IdentityOnboardingService
+    ],
+) -> None:
+    factory, context, service = onboarding_db
+    email = f"office-{uuid4()}@example.test"
+    identity_command = OnboardingCommand(
+        request_key="identity-only",
+        branch_id=context.active_branch.id,
+        first_name="Synthetic",
+        last_name="Office",
+        display_name="Synthetic Office",
+        role_ids=(),
+        login_email=email,
+    )
+    async with factory() as session:
+        record = await service.initiate(
+            session, context=context, command=identity_command
+        )
+        assert record.employee_id is None
+        invitation = await session.scalar(
+            select(IdentityOnboardingInvitation).where(
+                IdentityOnboardingInvitation.onboarding_request_id == record.id
+            )
+        )
+        assert invitation is not None
+        invitation_id = invitation.id
+        await session.rollback()
+        delivery = await service.claim_protected_delivery(
+            session, invitation_id=invitation_id
+        )
+        activated = await service.activate(
+            session,
+            token=delivery.secret,
+            password="A-secure-office-passphrase-42!",
+        )
+        assert activated.status == "activated" and activated.employee_id is None
+        assert not await session.scalar(
+            select(Employee.id).where(Employee.membership_id == activated.membership_id)
+        )
 
 
 @pytest.mark.asyncio

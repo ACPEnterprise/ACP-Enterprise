@@ -12,6 +12,9 @@ from app.platform.permissions.dependencies import require_permission
 from .schemas import (
     OnboardingActivateRequest,
     OnboardingInitiateRequest,
+    OnboardingListView,
+    OnboardingOption,
+    OnboardingOptionsView,
     OnboardingView,
 )
 from .service import (
@@ -54,6 +57,7 @@ async def initiate(
                 first_name=data.first_name,
                 last_name=data.last_name,
                 display_name=data.display_name,
+                create_employee=data.create_employee,
                 employee_type=data.employee_type,
                 employee_number_prefix=data.employee_number_prefix,
                 employee_number_width=data.employee_number_width,
@@ -67,6 +71,32 @@ async def initiate(
     except (OnboardingAuthorizationError, OnboardingConflictError) as error:
         raise _safe_error(error) from error
     return OnboardingView.model_validate(record)
+
+
+@router.get("", response_model=list[OnboardingListView])
+async def list_onboarding(
+    context: OnboardingAdmin, session: Session
+) -> list[OnboardingListView]:
+    records = await identity_onboarding_service.list_requests(session, context=context)
+    return [OnboardingListView.model_validate(record) for record in records]
+
+
+@router.get("/options", response_model=OnboardingOptionsView)
+async def get_options(
+    context: OnboardingAdmin, session: Session
+) -> OnboardingOptionsView:
+    branches, roles = await identity_onboarding_service.options(
+        session, context=context
+    )
+    return OnboardingOptionsView(
+        branches=[
+            OnboardingOption(id=row.id, code=row.code, name=row.name)
+            for row in branches
+        ],
+        roles=[
+            OnboardingOption(id=row.id, code=row.code, name=row.name) for row in roles
+        ],
+    )
 
 
 @router.post("/activate/complete", response_model=OnboardingView)

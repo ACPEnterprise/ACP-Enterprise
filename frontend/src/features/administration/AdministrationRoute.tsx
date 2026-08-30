@@ -25,6 +25,7 @@ import {
 } from "./api";
 import { usePermissionMutation, useRolePermissions, useRoles } from "./hooks";
 import { MigrationWorkspace } from "./MigrationWorkspace";
+import { UserAdministrationWorkspace } from "./UserAdministrationWorkspace";
 
 type PendingChange = {
   action: "grant" | "remove";
@@ -232,6 +233,9 @@ export function AdministrationRoute() {
         </Card>
       )}
       {permissionCodes.includes("COMPANY_ADMINISTER") && <MigrationWorkspace />}
+      {permissionCodes.includes("COMPANY_IDENTITY_ONBOARDING_MANAGE") && (
+        <UserAdministrationWorkspace />
+      )}
       <Card>
         <CardHeader>
           <CardTitle>Company roles</CardTitle>

@@ -40,6 +40,12 @@ export const appRoutes: RouteObject[] = [
     },
   },
   {
+    path: "/invitation",
+    lazy: async () => ({
+      Component: (await import("../routes/InvitationRoute")).InvitationRoute,
+    }),
+  },
+  {
     path: "/",
     Component: ProtectedRoute,
     children: [

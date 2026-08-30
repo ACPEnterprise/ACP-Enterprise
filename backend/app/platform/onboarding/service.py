@@ -26,7 +26,12 @@ from app.platform.employees.models import Employee
 from app.platform.notifications.repository import NotificationOutboxRepository
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import AdministrationPermission
-from app.platform.permissions.models import MembershipRole, Role
+from app.platform.permissions.models import (
+    MembershipRole,
+    Permission,
+    Role,
+    RolePermission,
+)
 from app.platform.users.models import User, UserCredential
 
 from .models import (
@@ -56,9 +61,10 @@ class OnboardingCommand:
     first_name: str
     last_name: str
     display_name: str
-    employee_type: str
-    employee_number_prefix: str
-    employee_number_width: int
+    create_employee: bool = False
+    employee_type: str | None = None
+    employee_number_prefix: str | None = None
+    employee_number_width: int | None = None
     role_ids: tuple[UUID, ...] = ()
     login_email: str | None = field(default=None, repr=False)
     existing_user_id: UUID | None = None
@@ -102,11 +108,7 @@ class IdentityOnboardingService:
     def _delivery_cipher(self) -> tuple[str, AESGCM]:
         key_id = self.configuration.identity_onboarding_active_delivery_kid
         keyring = self._delivery_keyring()
-        encoded = (
-            keyring.get(key_id)
-            if key_id
-            else None
-        )
+        encoded = keyring.get(key_id) if key_id else None
         if not key_id or not encoded:
             raise OnboardingConflictError(
                 "Protected invitation delivery is not configured."
@@ -162,6 +164,55 @@ class IdentityOnboardingService:
             ),
         )
 
+    async def list_requests(
+        self, session: AsyncSession, *, context: AuthorizationContext
+    ) -> list[IdentityOnboardingRequest]:
+        self._require_admin(context)
+        return list(
+            (
+                await session.scalars(
+                    select(IdentityOnboardingRequest)
+                    .where(IdentityOnboardingRequest.company_id == context.company.id)
+                    .order_by(
+                        IdentityOnboardingRequest.created_at.desc(),
+                        IdentityOnboardingRequest.id,
+                    )
+                )
+            ).all()
+        )
+
+    async def options(
+        self, session: AsyncSession, *, context: AuthorizationContext
+    ) -> tuple[list[Branch], list[Role]]:
+        self._require_admin(context)
+        branches = list(
+            (
+                await session.scalars(
+                    select(Branch)
+                    .where(
+                        Branch.company_id == context.company.id,
+                        Branch.status == "active",
+                        Branch.archived_at.is_(None),
+                    )
+                    .order_by(Branch.name, Branch.id)
+                )
+            ).all()
+        )
+        roles = list(
+            (
+                await session.scalars(
+                    select(Role)
+                    .where(
+                        Role.company_id == context.company.id,
+                        Role.status == "active",
+                        Role.archived_at.is_(None),
+                    )
+                    .order_by(Role.name, Role.id)
+                )
+            ).all()
+        )
+        return branches, roles
+
     async def initiate(
         self,
         session: AsyncSession,
@@ -183,6 +234,15 @@ class IdentityOnboardingService:
                 "Exactly one login identity source is required."
             )
         email = normalize_email(command.login_email) if command.login_email else None
+        employee_fields = (
+            command.employee_type,
+            command.employee_number_prefix,
+            command.employee_number_width,
+        )
+        if command.create_employee != all(
+            value is not None for value in employee_fields
+        ):
+            raise OnboardingConflictError("Employee linkage configuration is invalid.")
         facts: dict[str, object] = {
             "version": 1,
             "company_id": str(context.company.id),
@@ -190,6 +250,7 @@ class IdentityOnboardingService:
             "first_name": command.first_name.strip(),
             "last_name": command.last_name.strip(),
             "display_name": command.display_name.strip(),
+            "create_employee": command.create_employee,
             "employee_type": command.employee_type,
             "prefix": command.employee_number_prefix,
             "width": command.employee_number_width,
@@ -237,28 +298,34 @@ class IdentityOnboardingService:
                     context.company.id.bytes[:8], "big", signed=True
                 )
                 await session.execute(select(func.pg_advisory_xact_lock(company_lock)))
-                policy = await session.scalar(
-                    select(EmployeeNumberPolicy)
-                    .where(EmployeeNumberPolicy.company_id == context.company.id)
-                    .with_for_update()
-                )
-                if policy is None:
-                    policy = EmployeeNumberPolicy(
-                        company_id=context.company.id,
-                        prefix=command.employee_number_prefix,
-                        width=command.employee_number_width,
-                        next_value=1,
+                employee_number = None
+                if command.create_employee:
+                    policy = await session.scalar(
+                        select(EmployeeNumberPolicy)
+                        .where(EmployeeNumberPolicy.company_id == context.company.id)
+                        .with_for_update()
                     )
-                    session.add(policy)
-                    await session.flush()
-                if (
-                    policy.prefix != command.employee_number_prefix
-                    or policy.width != command.employee_number_width
-                ):
-                    raise OnboardingConflictError("Employee-number policy conflicts.")
-                employee_number = f"{policy.prefix}{policy.next_value:0{policy.width}d}"
-                policy.next_value += 1
-                policy.updated_at = now
+                    if policy is None:
+                        policy = EmployeeNumberPolicy(
+                            company_id=context.company.id,
+                            prefix=command.employee_number_prefix,
+                            width=command.employee_number_width,
+                            next_value=1,
+                        )
+                        session.add(policy)
+                        await session.flush()
+                    if (
+                        policy.prefix != command.employee_number_prefix
+                        or policy.width != command.employee_number_width
+                    ):
+                        raise OnboardingConflictError(
+                            "Employee-number policy conflicts."
+                        )
+                    employee_number = (
+                        f"{policy.prefix}{policy.next_value:0{policy.width}d}"
+                    )
+                    policy.next_value += 1
+                    policy.updated_at = now
                 if command.existing_user_id:
                     user = await session.scalar(
                         select(User)
@@ -295,7 +362,7 @@ class IdentityOnboardingService:
                         raise OnboardingConflictError(
                             "Eligible existing credential was not found."
                         )
-                    if await session.scalar(
+                    if command.create_employee and await session.scalar(
                         select(Employee.id).where(
                             Employee.membership_id == membership.id
                         )
@@ -306,27 +373,66 @@ class IdentityOnboardingService:
                     issue_invitation = False
                 else:
                     assert email is not None
-                    if await session.scalar(
-                        select(User.id).where(User.normalized_email == email)
-                    ):
-                        raise OnboardingConflictError("Login identity already exists.")
-                    user = User(
-                        normalized_email=email,
-                        first_name=command.first_name.strip(),
-                        last_name=command.last_name.strip(),
-                        display_name=command.display_name.strip(),
-                        status="invited",
+                    user = await session.scalar(
+                        select(User)
+                        .where(User.normalized_email == email)
+                        .with_for_update()
                     )
-                    session.add(user)
-                    await session.flush()
-                    membership = Membership(
-                        user_id=user.id,
-                        company_id=context.company.id,
-                        status="invited",
-                        default_branch_id=branch.id,
-                        has_all_branch_access=False,
-                        invited_at=now,
-                    )
+                    if user is not None:
+                        if (
+                            user.status != "active"
+                            or user.archived_at is not None
+                            or user.email_verified_at is None
+                            or not await session.scalar(
+                                select(UserCredential.id).where(
+                                    UserCredential.user_id == user.id
+                                )
+                            )
+                        ):
+                            raise OnboardingConflictError(
+                                "Login identity is not eligible for Company access."
+                            )
+                        membership = await session.scalar(
+                            select(Membership)
+                            .where(
+                                Membership.user_id == user.id,
+                                Membership.company_id == context.company.id,
+                            )
+                            .with_for_update()
+                        )
+                        if membership is not None:
+                            raise OnboardingConflictError(
+                                "Company Membership already exists."
+                            )
+                        membership = Membership(
+                            user_id=user.id,
+                            company_id=context.company.id,
+                            status="active",
+                            default_branch_id=branch.id,
+                            has_all_branch_access=False,
+                            invited_at=now,
+                            accepted_at=now,
+                        )
+                        issue_invitation = False
+                    else:
+                        user = User(
+                            normalized_email=email,
+                            first_name=command.first_name.strip(),
+                            last_name=command.last_name.strip(),
+                            display_name=command.display_name.strip(),
+                            status="invited",
+                        )
+                        session.add(user)
+                        await session.flush()
+                        membership = Membership(
+                            user_id=user.id,
+                            company_id=context.company.id,
+                            status="invited",
+                            default_branch_id=branch.id,
+                            has_all_branch_access=False,
+                            invited_at=now,
+                        )
+                        issue_invitation = True
                     session.add(membership)
                     await session.flush()
                     session.add(
@@ -336,22 +442,23 @@ class IdentityOnboardingService:
                             assigned_by_user_id=context.user.id,
                         )
                     )
-                    issue_invitation = True
-                employee = Employee(
-                    company_id=context.company.id,
-                    membership_id=membership.id,
-                    home_branch_id=branch.id,
-                    employee_number=employee_number,
-                    first_name=command.first_name.strip(),
-                    last_name=command.last_name.strip(),
-                    display_name=command.display_name.strip(),
-                    employee_type=command.employee_type,
-                    status="active",
-                    created_by_user_id=context.user.id,
-                    updated_by_user_id=context.user.id,
-                )
-                session.add(employee)
-                await session.flush()
+                employee = None
+                if command.create_employee:
+                    employee = Employee(
+                        company_id=context.company.id,
+                        membership_id=membership.id,
+                        home_branch_id=branch.id,
+                        employee_number=employee_number,
+                        first_name=command.first_name.strip(),
+                        last_name=command.last_name.strip(),
+                        display_name=command.display_name.strip(),
+                        employee_type=command.employee_type,
+                        status="active",
+                        created_by_user_id=context.user.id,
+                        updated_by_user_id=context.user.id,
+                    )
+                    session.add(employee)
+                    await session.flush()
                 for role_id in sorted(set(command.role_ids), key=str):
                     role = await session.scalar(
                         select(Role).where(
@@ -364,6 +471,22 @@ class IdentityOnboardingService:
                     if role is None:
                         raise OnboardingConflictError(
                             "Approved Company role was not found."
+                        )
+                    role_codes = set(
+                        (
+                            await session.scalars(
+                                select(Permission.code)
+                                .join(
+                                    RolePermission,
+                                    RolePermission.permission_id == Permission.id,
+                                )
+                                .where(RolePermission.role_id == role.id)
+                            )
+                        ).all()
+                    )
+                    if not role_codes.issubset(context.permission_codes):
+                        raise OnboardingAuthorizationError(
+                            "Role assignment exceeds onboarding authority."
                         )
                     existing_assignment = await session.scalar(
                         select(MembershipRole.id).where(
@@ -384,7 +507,7 @@ class IdentityOnboardingService:
                 record = IdentityOnboardingRequest(
                     company_id=context.company.id,
                     branch_id=branch.id,
-                    employee_id=employee.id,
+                    employee_id=employee.id if employee else None,
                     user_id=user.id,
                     membership_id=membership.id,
                     request_key=request_key,
@@ -485,21 +608,29 @@ class IdentityOnboardingService:
                 .where(Membership.id == record.membership_id)
                 .with_for_update()
             )
-            employee = await session.scalar(
-                select(Employee)
-                .where(Employee.id == record.employee_id)
-                .with_for_update()
+            employee = (
+                await session.scalar(
+                    select(Employee)
+                    .where(Employee.id == record.employee_id)
+                    .with_for_update()
+                )
+                if record.employee_id
+                else None
             )
             if (
                 user is None
                 or membership is None
-                or employee is None
                 or membership.user_id != user.id
                 or membership.company_id != record.company_id
-                or employee.company_id != record.company_id
-                or employee.membership_id != membership.id
                 or membership.default_branch_id != record.branch_id
-                or employee.home_branch_id != record.branch_id
+                or (
+                    employee is not None
+                    and (
+                        employee.company_id != record.company_id
+                        or employee.membership_id != membership.id
+                        or employee.home_branch_id != record.branch_id
+                    )
+                )
             ):
                 raise OnboardingConflictError("Invitation scope is invalid.")
             if await session.scalar(
@@ -540,7 +671,7 @@ class IdentityOnboardingService:
                     company_id=record.company_id,
                     user_id=user.id,
                     payload={
-                        "employee_id": str(employee.id),
+                        "employee_id": str(employee.id) if employee else None,
                         "membership_id": str(membership.id),
                     },
                 ),
@@ -846,7 +977,7 @@ class IdentityOnboardingService:
         event_type: EventType,
     ) -> None:
         payload: dict[str, object] = {
-            "employee_id": str(record.employee_id),
+            "employee_id": str(record.employee_id) if record.employee_id else None,
             "membership_id": str(record.membership_id),
             "status": record.status,
             "request_digest": record.request_digest,

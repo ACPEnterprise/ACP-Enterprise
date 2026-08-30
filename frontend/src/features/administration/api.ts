@@ -22,6 +22,63 @@ export interface PermissionDefinition {
   reconciliation_required: boolean;
 }
 
+export interface OnboardingRecord {
+  id: string;
+  user_id: string;
+  employee_id: string | null;
+  membership_id: string;
+  branch_id: string;
+  masked_login: string;
+  status: "invited" | "activated" | "revoked";
+  created_at: string;
+}
+
+export interface OnboardingOption { id: string; code: string; name: string }
+export interface OnboardingOptions {
+  branches: OnboardingOption[];
+  roles: OnboardingOption[];
+}
+
+export interface OnboardingCreate {
+  request_key: string;
+  branch_id: string;
+  first_name: string;
+  last_name: string;
+  display_name: string;
+  create_employee: boolean;
+  employee_type?: "employee" | "contractor" | "vendor";
+  employee_number_prefix?: string;
+  employee_number_width?: number;
+  role_ids: string[];
+  login_email: string;
+}
+
+const ONBOARDING_PATH = "/api/v1/identity-onboarding";
+
+export async function listOnboarding(): Promise<OnboardingRecord[]> {
+  return (await apiClient.get<OnboardingRecord[]>(ONBOARDING_PATH)).data;
+}
+
+export async function getOnboardingOptions(): Promise<OnboardingOptions> {
+  return (await apiClient.get<OnboardingOptions>(`${ONBOARDING_PATH}/options`)).data;
+}
+
+export async function createOnboarding(data: OnboardingCreate): Promise<OnboardingRecord> {
+  return (await apiClient.post<OnboardingRecord>(ONBOARDING_PATH, data)).data;
+}
+
+export async function revokeOnboarding(id: string): Promise<OnboardingRecord> {
+  return (await apiClient.post<OnboardingRecord>(`${ONBOARDING_PATH}/${id}/revoke`)).data;
+}
+
+export async function reissueOnboarding(id: string): Promise<OnboardingRecord> {
+  return (await apiClient.post<OnboardingRecord>(`${ONBOARDING_PATH}/${id}/reissue`)).data;
+}
+
+export async function activateOnboarding(token: string, password: string): Promise<OnboardingRecord> {
+  return (await apiClient.post<OnboardingRecord>(`${ONBOARDING_PATH}/activate/complete`, { token, password })).data;
+}
+
 const ADMIN_PATH = "/api/v1/company-admin";
 const QBO_SANDBOX_AUTHORIZE_PATH = "/api/v1/integrations/qbo/oauth/authorize";
 const QBO_SANDBOX_CONNECTION_PATH = "/api/v1/integrations/qbo/connection";

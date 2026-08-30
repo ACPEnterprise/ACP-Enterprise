@@ -80,10 +80,10 @@ class IdentityOnboardingRequest(Base):
         ForeignKey("branches.id", ondelete="RESTRICT"),
         nullable=False,
     )
-    employee_id: Mapped[UUID] = mapped_column(
+    employee_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("employees.id", ondelete="RESTRICT"),
-        nullable=False,
+        nullable=True,
     )
     user_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
