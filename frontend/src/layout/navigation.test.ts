@@ -28,4 +28,17 @@ describe("employee mobile navigation", () => {
     });
     expect(operations?.items).toContain(workday);
   });
+
+  it("keeps the available Purchasing workspace discoverable in Operations", () => {
+    const purchasing = navigationCatalog.find((item) => item.id === "purchasing");
+    const operations = navigationGroups.find((group) => group.id === "operations");
+
+    expect(purchasing).toMatchObject({
+      label: "Purchasing",
+      path: "/purchasing",
+      availability: "available",
+      requiredPermission: "COMPANY_PURCHASING_READ",
+    });
+    expect(operations?.items).toContain(purchasing);
+  });
 });
