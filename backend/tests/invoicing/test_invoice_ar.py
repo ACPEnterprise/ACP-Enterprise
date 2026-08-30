@@ -124,10 +124,20 @@ async def test_accepted_work_creates_and_issues_one_exact_receivable(invoice_fix
     issued = await issue(factory, actor, invoice)
     assert issued.open_amount == issued.total_amount
     async with factory() as session:
-        assert await session.scalar(select(func.count(InvoiceLine.id))) == len(
-            estimate.current_revision.lines
+        assert await session.scalar(
+            select(func.count(InvoiceLine.id)).where(
+                InvoiceLine.invoice_id == invoice.id
+            )
+        ) == len(estimate.current_revision.lines)
+        entries = tuple(
+            (
+                await session.scalars(
+                    select(ARLedgerEntry).where(
+                        ARLedgerEntry.invoice_id == invoice.id
+                    )
+                )
+            ).all()
         )
-        entries = tuple((await session.scalars(select(ARLedgerEntry))).all())
     assert len(entries) == 1
     assert entries[0].entry_type == "obligation"
     assert entries[0].amount == issued.total_amount

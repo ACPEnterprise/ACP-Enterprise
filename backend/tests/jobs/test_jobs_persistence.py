@@ -1,13 +1,12 @@
 import asyncio
-from collections.abc import AsyncIterator
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import delete, select, text
+from sqlalchemy import delete, text
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -18,11 +17,11 @@ from sqlalchemy.ext.asyncio import (
 
 from app.core.config import settings
 from app.customers.models import Customer, ServiceLocation
-from app.jobs.models import Job, JobAppointmentLink, JobNumberSequence
+from app.jobs.models import Job, JobAppointmentLink
 from app.jobs.repository import JobRepository
 from app.jobs.types import JobPriority, JobStatus
-from app.platform.auth import models as auth_models  # noqa: F401
 from app.platform.audit import models as audit_models  # noqa: F401
+from app.platform.auth import models as auth_models  # noqa: F401
 from app.platform.branch.models import Branch
 from app.platform.company import membership_models  # noqa: F401
 from app.platform.company.models import Company
@@ -204,59 +203,6 @@ async def jobs_database() -> AsyncIterator[
     try:
         yield engine, factory, fixture
     finally:
-        async with factory() as session, session.begin():
-            company_ids = (fixture.company_id, fixture.other_company_id)
-            job_ids = select(Job.id).where(Job.company_id.in_(company_ids))
-            await session.execute(
-                delete(JobAppointmentLink).where(
-                    JobAppointmentLink.company_id.in_(company_ids)
-                )
-            )
-            await session.execute(delete(Job).where(Job.id.in_(job_ids)))
-            await session.execute(
-                delete(JobNumberSequence).where(
-                    JobNumberSequence.company_id.in_(company_ids)
-                )
-            )
-            await session.execute(
-                delete(Appointment).where(Appointment.company_id.in_(company_ids))
-            )
-            await session.execute(
-                delete(ServiceLocation).where(
-                    ServiceLocation.id.in_(
-                        (
-                            fixture.location_id,
-                            fixture.alternate_location_id,
-                            fixture.second_location_id,
-                            fixture.other_location_id,
-                        )
-                    )
-                )
-            )
-            await session.execute(
-                delete(Customer).where(
-                    Customer.id.in_(
-                        (
-                            fixture.customer_id,
-                            fixture.second_customer_id,
-                            fixture.other_customer_id,
-                        )
-                    )
-                )
-            )
-            await session.execute(
-                delete(Branch).where(
-                    Branch.id.in_(
-                        (
-                            fixture.branch_id,
-                            fixture.secondary_branch_id,
-                            fixture.other_branch_id,
-                        )
-                    )
-                )
-            )
-            await session.execute(delete(Company).where(Company.id.in_(company_ids)))
-            await session.execute(delete(User).where(User.id == fixture.user_id))
         await engine.dispose()
 
 

@@ -102,7 +102,7 @@ def test_callback_boundary_is_sanitized_and_maps_internal_headers(
         "status": "sandbox_oauth_callback",
         "result": "connection_completed",
     }
-    assert response.headers["cache-control"] == "no-store"
+    assert response.headers["cache-control"] == "private, no-store"
     assert runtime.received == (*markers, None)
     assert not any(marker in caplog.text for marker in markers)
     assert not any(marker in response.text for marker in markers)
