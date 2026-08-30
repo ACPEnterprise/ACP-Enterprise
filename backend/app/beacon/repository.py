@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
@@ -35,14 +37,19 @@ class SqlBeaconFactRepository:
         session: AsyncSession,
         *,
         company_id: UUID,
+        branch_ids: frozenset[UUID],
         measured_at: datetime,
     ) -> BeaconSnapshot:
+        scope_identity = hashlib.sha256(
+            json.dumps(sorted(str(value) for value in branch_ids)).encode()
+        ).hexdigest()
         appointment_rows = tuple(
             (
                 await session.execute(
                     select(Appointment.id, Appointment.arrival_window_start_at)
                     .where(
                         Appointment.company_id == company_id,
+                        Appointment.branch_id.in_(branch_ids),
                         Appointment.status.in_(("scheduled", "confirmed")),
                         Appointment.arrival_window_start_at < measured_at,
                     )
@@ -55,6 +62,7 @@ class SqlBeaconFactRepository:
             await session.scalar(
                 select(func.count(Appointment.id)).where(
                     Appointment.company_id == company_id,
+                    Appointment.branch_id.in_(branch_ids),
                     Appointment.status.in_(("scheduled", "confirmed")),
                     Appointment.arrival_window_start_at < measured_at,
                 )
@@ -65,7 +73,11 @@ class SqlBeaconFactRepository:
             (
                 await session.execute(
                     select(Job.id, Job.paused_at)
-                    .where(Job.company_id == company_id, Job.status == "paused")
+                    .where(
+                        Job.company_id == company_id,
+                        Job.branch_id.in_(branch_ids),
+                        Job.status == "paused",
+                    )
                     .order_by(Job.paused_at, Job.id)
                     .limit(EVIDENCE_LIMIT)
                 )
@@ -74,7 +86,9 @@ class SqlBeaconFactRepository:
         paused_job_count = int(
             await session.scalar(
                 select(func.count(Job.id)).where(
-                    Job.company_id == company_id, Job.status == "paused"
+                    Job.company_id == company_id,
+                    Job.branch_id.in_(branch_ids),
+                    Job.status == "paused",
                 )
             )
             or 0
@@ -85,6 +99,7 @@ class SqlBeaconFactRepository:
                     select(Invoice.id, Invoice.due_on, Invoice.total_amount)
                     .where(
                         Invoice.company_id == company_id,
+                        Invoice.branch_id.in_(branch_ids),
                         Invoice.status.in_(("issued", "partially_paid")),
                         Invoice.due_on.is_not(None),
                         Invoice.due_on < measured_at.date(),
@@ -101,6 +116,7 @@ class SqlBeaconFactRepository:
                     func.coalesce(func.sum(Invoice.total_amount), 0),
                 ).where(
                     Invoice.company_id == company_id,
+                    Invoice.branch_id.in_(branch_ids),
                     Invoice.status.in_(("issued", "partially_paid")),
                     Invoice.due_on.is_not(None),
                     Invoice.due_on < measured_at.date(),
@@ -121,6 +137,7 @@ class SqlBeaconFactRepository:
         return BeaconSnapshot(
             company_id=company_id,
             measured_at=measured_at,
+            scope_identity=scope_identity,
             overdue_appointments=OverdueAppointmentFacts(
                 count=appointment_count,
                 earliest_window_start=(

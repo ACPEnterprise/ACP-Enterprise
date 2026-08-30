@@ -58,6 +58,11 @@ class BeaconLifecycleService:
             signals = await self.query_service.evaluate_current(
                 session,
                 company_id=context.company.id,
+                branch_ids=(
+                    frozenset({context.active_branch.id})
+                    if context.active_branch is not None
+                    else context.authorized_branch_ids
+                ),
                 measured_at=occurred_at,
             )
             signal = next(

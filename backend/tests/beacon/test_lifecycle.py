@@ -24,6 +24,7 @@ from app.platform.permissions.authorization import (
 )
 from app.platform.permissions.codes import AnalyticsPermission, BeaconPermission
 from tests.beacon.test_beacon import (
+    BRANCH_ID,
     COMPANY_ID,
     NOW,
     FakeLifecycleRepository,
@@ -57,9 +58,11 @@ class CurrentSignalQuery:
         _session: AsyncSession,
         *,
         company_id: UUID,
+        branch_ids: frozenset[UUID],
         measured_at: datetime,
     ) -> tuple[BeaconSignal, ...]:
         assert measured_at == NOW
+        assert branch_ids == frozenset({BRANCH_ID})
         self.company_ids.append(company_id)
         return (self.signal,) if self.signal else ()
 
@@ -111,6 +114,7 @@ async def current_signal() -> BeaconSignal:
         await service.evaluate_current(
             object(),  # type: ignore[arg-type]
             company_id=COMPANY_ID,
+            branch_ids=frozenset({BRANCH_ID}),
             measured_at=NOW,
         )
     )[0]
@@ -256,6 +260,7 @@ async def test_active_snooze_suppresses_only_exact_evidence_then_expires() -> No
     signals = await service.evaluate_current(
         object(),  # type: ignore[arg-type]
         company_id=COMPANY_ID,
+        branch_ids=frozenset({BRANCH_ID}),
         measured_at=NOW,
     )
     target = signals[0]
@@ -300,6 +305,7 @@ async def test_acknowledged_and_reviewed_conditions_remain_visible(
     signals = await service.evaluate_current(
         object(),  # type: ignore[arg-type]
         company_id=COMPANY_ID,
+        branch_ids=frozenset({BRANCH_ID}),
         measured_at=NOW,
     )
     target = signals[0]

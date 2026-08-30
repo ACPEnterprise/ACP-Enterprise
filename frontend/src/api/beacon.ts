@@ -120,6 +120,19 @@ export interface BeaconSignal {
     level: BeaconConfidenceLevel;
     basis: string;
   };
+  evidence_quality?: {
+    definition_id: string;
+    definition_version: number;
+    source_authority: string;
+    completeness: "complete" | "partial" | "unknown";
+    reconciliation: "reconciled" | "limited" | "unknown" | "conflicting";
+    freshness: "current" | "stale" | "unknown" | "not_applicable";
+    confidence: "high" | "moderate" | "low" | "unknown" | "conflicting";
+    limitations: string[];
+    quality_digest: string;
+    conclusion_admissible: boolean;
+    explanation: string;
+  } | null;
   supporting_facts: BeaconSupportingFact[];
   recommended_action: string;
   created_at: string;

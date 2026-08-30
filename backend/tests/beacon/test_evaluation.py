@@ -71,6 +71,21 @@ def test_definition_version_is_part_of_reproducible_signal_evidence() -> None:
     assert versioned_signal.definition_version == 2
 
 
+def test_authorization_scope_is_part_of_signal_and_condition_identity() -> None:
+    service = SignalEvaluationService()
+    source = snapshot()
+    branch_a = service.evaluate_signals(
+        replace(source, scope_identity="branch-scope-a")
+    )[0]
+    branch_b = service.evaluate_signals(
+        replace(source, scope_identity="branch-scope-b")
+    )[0]
+
+    assert branch_a.evidence_digest == branch_b.evidence_digest
+    assert branch_a.condition_key != branch_b.condition_key
+    assert branch_a.id != branch_b.id
+
+
 def test_definitions_own_escalation_and_expiration_without_module_callbacks() -> None:
     service = SignalEvaluationService()
     signal = service.evaluate_signals(snapshot())[0]

@@ -190,7 +190,14 @@ class BeaconWorkflowService:
         if len(command.evidence_digest) != 64:
             raise BeaconSignalStaleError("Signal evidence digest is invalid.")
         signals = await self.query_service.evaluate_current(
-            session, company_id=context.company.id, measured_at=occurred_at
+            session,
+            company_id=context.company.id,
+            branch_ids=(
+                frozenset({context.active_branch.id})
+                if context.active_branch is not None
+                else context.authorized_branch_ids
+            ),
+            measured_at=occurred_at,
         )
         signal = next((item for item in signals if item.id == command.signal_id), None)
         if (

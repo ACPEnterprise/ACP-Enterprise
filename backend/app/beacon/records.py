@@ -82,6 +82,7 @@ class BeaconLifecycleProjection:
 @dataclass(frozen=True)
 class BeaconCondition:
     company_id: UUID
+    scope_identity: str
     definition_id: str
     definition_version: int
     rule_code: str
