@@ -429,10 +429,16 @@ async def list_customer_consents(
     customer_id: UUID,
     context: CustomerReadContext,
     session: DatabaseSession,
+    limit: Annotated[int, Query(ge=1, le=200)] = 100,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[CustomerConsentResponse]:
     try:
         return await customer_launch_service.list_consents(
-            session, context=context, customer_id=customer_id
+            session,
+            context=context,
+            customer_id=customer_id,
+            limit=limit,
+            offset=offset,
         )
     except CustomerError as error:
         raise not_found(error) from error
