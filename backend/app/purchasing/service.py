@@ -374,10 +374,12 @@ class PurchasingService:
             )
             if replay is not None:
                 existing = await session.get(PurchaseRequisition, replay)
-                if existing is None or existing.company_id != context.company.id:
-                    raise PurchasingConflict(
-                        "Requisition replay evidence is unavailable"
-                    )
+                if (
+                    existing is None
+                    or existing.company_id != context.company.id
+                    or not context.can_access_branch(existing.branch_id)
+                ):
+                    raise PurchasingNotFound("Purchase requisition was not found")
                 return PurchaseRequisitionItem.model_validate(existing)
             if session.get_bind().dialect.name == "postgresql":
                 await session.execute(
@@ -483,10 +485,12 @@ class PurchasingService:
             )
             if replay is not None:
                 existing = await session.get(PurchaseRequisition, replay)
-                if existing is None or existing.company_id != context.company.id:
-                    raise PurchasingConflict(
-                        "Requisition replay evidence is unavailable"
-                    )
+                if (
+                    existing is None
+                    or existing.company_id != context.company.id
+                    or not context.can_access_branch(existing.branch_id)
+                ):
+                    raise PurchasingNotFound("Purchase requisition was not found")
                 return PurchaseRequisitionItem.model_validate(existing)
             item = await session.scalar(
                 select(PurchaseRequisition)

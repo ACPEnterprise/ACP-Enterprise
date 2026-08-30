@@ -824,7 +824,7 @@ async def test_po_replay_revalidates_current_branch_authority(
 async def test_purchase_requisition_is_governed_idempotent_and_converts_to_draft_po(
     purchasing_fixture,
 ) -> None:
-    factory, company, _, branch, _, requester, approver = purchasing_fixture
+    factory, company, _, branch, other_branch, requester, approver = purchasing_fixture
     service = PurchasingService()
     async with factory() as session:
         vendor = await service.create_vendor(
@@ -865,16 +865,17 @@ async def test_purchase_requisition_is_governed_idempotent_and_converts_to_draft
                 context=requester,
                 payload=payload.model_copy(update={"description": "Contradiction"}),
             )
+        submit = PurchaseRequisitionTransition(
+            expected_version=request.version,
+            reason="Ready for review",
+            idempotency_key="req-100-submit",
+        )
         request = await service.transition_requisition(
             session,
             context=requester,
             requisition_id=request.id,
             action="submit",
-            payload=PurchaseRequisitionTransition(
-                expected_version=request.version,
-                reason="Ready for review",
-                idempotency_key="req-100-submit",
-            ),
+            payload=submit,
         )
         with pytest.raises(PurchasingConflict):
             await service.transition_requisition(
@@ -887,6 +888,26 @@ async def test_purchase_requisition_is_governed_idempotent_and_converts_to_draft
                     reason="Self approval prohibited",
                     idempotency_key="req-100-self",
                 ),
+            )
+    other_branch_context = AuthorizationContext(
+        user=requester.user,
+        company=requester.company,
+        membership=requester.membership,
+        authorized_branches=(other_branch,),
+        active_branch=other_branch,
+        effective_roles=requester.effective_roles,
+        effective_permissions=requester.effective_permissions,
+        credential_version=requester.credential_version,
+        authorization_version=requester.authorization_version,
+    )
+    async with factory() as session:
+        with pytest.raises(PurchasingNotFound):
+            await service.transition_requisition(
+                session,
+                context=other_branch_context,
+                requisition_id=request.id,
+                action="submit",
+                payload=submit,
             )
     async with factory() as session:
         request = await service.transition_requisition(
