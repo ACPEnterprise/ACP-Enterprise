@@ -9,6 +9,8 @@ from app.database.session import get_database_session
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import EngineeringCommandPermission
 from app.platform.permissions.dependencies import require_permission
+from app.platform.reliability.correlation import current_correlation_id
+from app.platform.reliability.failures import ClientRecovery, FailureCode, SafeFailure
 
 from .contracts import RepositoryAuthorizationState
 from .errors import (
@@ -50,10 +52,13 @@ ApproveContext = Annotated[
 
 def _http_error(error: Exception) -> HTTPException:
     if isinstance(error, RepositoryAuthorizationNotFoundError):
-        return HTTPException(
-            status.HTTP_404_NOT_FOUND,
-            "Repository authorization not found.",
+        failure = SafeFailure(
+            FailureCode.NOT_FOUND,
+            "Repository authorization was not found.",
+            ClientRecovery.TERMINAL_FAILURE,
+            current_correlation_id(),
         )
+        return HTTPException(status.HTTP_404_NOT_FOUND, failure.detail())
     if isinstance(
         error,
         (
@@ -61,8 +66,20 @@ def _http_error(error: Exception) -> HTTPException:
             RepositoryAuthorizationEvidenceMismatchError,
         ),
     ):
-        return HTTPException(status.HTTP_409_CONFLICT, str(error))
-    return HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(error))
+        failure = SafeFailure(
+            FailureCode.RESOURCE_STATE_CONFLICT,
+            "Repository authorization conflicts with current authority.",
+            ClientRecovery.RETRY_AFTER_REFRESH,
+            current_correlation_id(),
+        )
+        return HTTPException(status.HTTP_409_CONFLICT, failure.detail())
+    failure = SafeFailure(
+        FailureCode.VALIDATION,
+        "Repository authorization request requires correction.",
+        ClientRecovery.USER_CORRECTION_REQUIRED,
+        current_correlation_id(),
+    )
+    return HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, failure.detail())
 
 
 def _detail(record) -> RepositoryAuthorizationDetail:
