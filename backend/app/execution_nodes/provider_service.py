@@ -10,6 +10,8 @@ from uuid import UUID
 from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.platform.reliability.failures import ClientRecovery, FailureCode, SafeFailure
+
 from .authority import ExecutionAuthorityRegistry
 from .contracts import ProviderBoundary, ProviderExecutionRequest
 from .provider import (
@@ -63,6 +65,12 @@ class RepositoryPreparationPayload(BaseModel):
     repository_key: str = Field(pattern=r"^[a-z0-9][a-z0-9._-]{2,99}$")
     branch: str = Field(min_length=1, max_length=255)
     candidate_head: str = Field(pattern=r"^[0-9a-f]{40}$")
+
+
+def _provider_failure(
+    code: FailureCode, message: str, recovery: ClientRecovery
+) -> dict[str, str | None]:
+    return SafeFailure(code, message, recovery).detail()
 
 
 def create_app() -> FastAPI:
@@ -144,17 +152,24 @@ def create_app() -> FastAPI:
                 payload.authority_expires_at,
             )
         except ValueError as error:
-            raise HTTPException(status_code=409, detail=str(error)) from error
+            raise HTTPException(
+                status_code=409,
+                detail=_provider_failure(
+                    FailureCode.RESOURCE_STATE_CONFLICT,
+                    "Execution authority conflicts with current provider state.",
+                    ClientRecovery.RETRY_AFTER_REFRESH,
+                ),
+            ) from error
         try:
             result = provider.execute(request)
         except WorkspaceFailure as error:
             raise HTTPException(
                 status_code=409,
-                detail={
-                    "code": "provider_repository_preparation_rejected",
-                    "stage": "workspace_preparation",
-                    "message": str(error),
-                },
+                detail=_provider_failure(
+                    FailureCode.VALIDATION,
+                    "Provider repository preparation was rejected.",
+                    ClientRecovery.OWNER_ADMIN_ACTION_REQUIRED,
+                ),
             ) from error
         return {
             "execution_id": str(result.execution_id),
@@ -188,7 +203,14 @@ def create_app() -> FastAPI:
         try:
             authority.record(payload.execution_id, payload.lease_id, payload.expires_at)
         except ValueError as error:
-            raise HTTPException(status_code=409, detail=str(error)) from error
+            raise HTTPException(
+                status_code=409,
+                detail=_provider_failure(
+                    FailureCode.RESOURCE_STATE_CONFLICT,
+                    "Execution authority conflicts with current provider state.",
+                    ClientRecovery.RETRY_AFTER_REFRESH,
+                ),
+            ) from error
 
     @app.post("/repositories/prepare")
     def prepare_repository(
