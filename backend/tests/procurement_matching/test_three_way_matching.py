@@ -666,7 +666,7 @@ async def test_vendor_performance_is_deterministic_evidence_not_a_vendor_score(
                 idempotency_key=f"performance-{uuid4()}",
             ),
         )
-        evaluated_at = datetime(2026, 8, 30, tzinfo=timezone.utc)
+        evaluated_at = datetime(2026, 8, 31, tzinfo=timezone.utc)
         first = await service.vendor_performance(
             session,
             context=evaluator,
