@@ -33,6 +33,7 @@ export type NavigationItemId =
   | "accounts-payable"
   | "financial-reports"
   | "business-economics"
+  | "luminary"
   | "payroll"
   | "inventory"
   | "purchasing"
