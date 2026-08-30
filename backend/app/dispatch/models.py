@@ -204,6 +204,10 @@ class DispatchAssignmentHistory(Base):
             ondelete="RESTRICT",
         ),
         CheckConstraint("version >= 1", name="ck_dispatch_history_version"),
+        CheckConstraint(
+            "request_digest IS NULL OR length(request_digest) = 64",
+            name="ck_dispatch_history_request_digest",
+        ),
         UniqueConstraint(
             "company_id",
             "assignment_id",
@@ -244,6 +248,7 @@ class DispatchAssignmentHistory(Base):
     )
     reason: Mapped[str] = mapped_column(Text, nullable=False)
     evidence_reference: Mapped[str | None] = mapped_column(String(240))
+    request_digest: Mapped[str | None] = mapped_column(String(64))
     version: Mapped[int] = mapped_column(Integer, nullable=False)
     occurred_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
