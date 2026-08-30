@@ -123,6 +123,14 @@ async def test_security_headers_and_trusted_proxy_validation() -> None:
     async def revalidated_endpoint() -> Response:
         return Response(headers={"Cache-Control": "no-cache"})
 
+    @app.get("/api/unsafe-cache")
+    async def unsafe_cache_endpoint() -> Response:
+        return Response(headers={"Cache-Control": "public, max-age=3600"})
+
+    @app.get("/api/no-transform")
+    async def no_transform_endpoint() -> Response:
+        return Response(headers={"Cache-Control": "no-cache, no-transform"})
+
     trusted_transport = httpx.ASGITransport(app=app, client=("10.0.0.8", 443))
     async with httpx.AsyncClient(
         transport=trusted_transport, base_url="https://test"
@@ -133,6 +141,8 @@ async def test_security_headers_and_trusted_proxy_validation() -> None:
         )
         protected = await trusted_client.get("/api/protected")
         revalidated = await trusted_client.get("/api/revalidated")
+        unsafe_cache = await trusted_client.get("/api/unsafe-cache")
+        no_transform = await trusted_client.get("/api/no-transform")
     assert response.status_code == 200
     assert response.headers["strict-transport-security"].startswith("max-age=")
     assert response.headers["x-content-type-options"] == "nosniff"
@@ -141,7 +151,11 @@ async def test_security_headers_and_trusted_proxy_validation() -> None:
     assert "permissions-policy" in response.headers
     assert "cache-control" not in response.headers
     assert protected.headers["cache-control"] == "private, no-store"
-    assert revalidated.headers["cache-control"] == "no-cache"
+    assert revalidated.headers["cache-control"] == "private, no-store"
+    assert unsafe_cache.headers["cache-control"] == "private, no-store"
+    assert no_transform.headers["cache-control"] == (
+        "private, no-store, no-transform"
+    )
 
     untrusted_transport = httpx.ASGITransport(app=app, client=("198.51.100.9", 80))
     async with httpx.AsyncClient(

@@ -54,9 +54,13 @@ from app.scheduling import models as scheduling_models  # noqa: F401
 class AuthorizationFixture:
     authenticated: AuthenticatedContext
     company_id: UUID
+    company_code: str
     authorized_branch_id: UUID
+    authorized_branch_code: str
     unauthorized_branch_id: UUID
     other_company_id: UUID
+    permission_code: str
+    role_code: str
 
 
 class RequestMutationProbe:
@@ -106,9 +110,10 @@ async def seed_authorization_fixture(
     company_archived: bool = False,
 ) -> AuthorizationFixture:
     now = utc_now()
+    unique_prefix = f"{prefix}{uuid4().hex[:8].upper()}"
     user = User(
         id=uuid4(),
-        normalized_email=f"{prefix.lower()}@example.com",
+        normalized_email=f"{unique_prefix.lower()}@example.com",
         first_name="Authorization",
         last_name="Tester",
         display_name="Authorization Tester",
@@ -125,7 +130,7 @@ async def seed_authorization_fixture(
     company = Company(
         id=uuid4(),
         name=f"{prefix} Company",
-        code=f"{prefix}A",
+        code=f"{unique_prefix}A",
         status="active",
         timezone="America/New_York",
         archived_at=now if company_archived else None,
@@ -133,7 +138,7 @@ async def seed_authorization_fixture(
     other_company = Company(
         id=uuid4(),
         name=f"{prefix} Other Company",
-        code=f"{prefix}B",
+        code=f"{unique_prefix}B",
         status="active",
         timezone="America/New_York",
     )
@@ -141,7 +146,7 @@ async def seed_authorization_fixture(
         id=uuid4(),
         company_id=company.id,
         name="Authorized Branch",
-        code=f"{prefix}BR1",
+        code=f"{unique_prefix}BR1",
         status="active",
         timezone="America/New_York",
         is_primary=True,
@@ -150,7 +155,7 @@ async def seed_authorization_fixture(
         id=uuid4(),
         company_id=company.id,
         name="Unauthorized Branch",
-        code=f"{prefix}BR2",
+        code=f"{unique_prefix}BR2",
         status="active",
         timezone="America/New_York",
         is_primary=False,
@@ -169,7 +174,7 @@ async def seed_authorization_fixture(
     )
     permission = Permission(
         id=uuid4(),
-        code=f"{prefix}_CUSTOMER_VIEW",
+        code=f"{unique_prefix}_CUSTOMER_VIEW",
         name="Customer View",
         resource="customer",
         action="view",
@@ -178,7 +183,7 @@ async def seed_authorization_fixture(
     role = Role(
         id=uuid4(),
         company_id=company.id,
-        code=f"{prefix}_CSR",
+        code=f"{unique_prefix}_CSR",
         name="CSR",
         status="active",
         is_system=False,
@@ -236,9 +241,13 @@ async def seed_authorization_fixture(
     return AuthorizationFixture(
         authenticated=AuthenticatedContext(user, authentication_session, claims),
         company_id=company.id,
+        company_code=company.code,
         authorized_branch_id=authorized_branch.id,
+        authorized_branch_code=authorized_branch.code,
         unauthorized_branch_id=unauthorized_branch.id,
         other_company_id=other_company.id,
+        permission_code=permission.code,
+        role_code=role.code,
     )
 
 
@@ -262,8 +271,8 @@ async def test_permission_resolution_and_company_branch_isolation(
     assert context.active_branch is not None
     assert context.active_branch.id == fixture.authorized_branch_id
     assert context.authorized_branch_ids == {fixture.authorized_branch_id}
-    assert context.role_codes == {"AUTHZA_CSR"}
-    assert context.permission_codes == {"AUTHZA_CUSTOMER_VIEW"}
+    assert context.role_codes == {fixture.role_code}
+    assert context.permission_codes == {fixture.permission_code}
     assert context.credential_version == 1
     assert context.authorization_version == 1
     assert all(
@@ -416,7 +425,7 @@ async def test_router_dependency_enforces_permission_and_branch_scope(
     @app.get("/allowed")
     async def allowed(
         context: AuthorizationContext = Depends(
-            require_permission("AUTHZROUTER_CUSTOMER_VIEW")
+            require_permission(fixture.permission_code)
         ),
     ) -> dict[str, str]:
         return {"company_id": str(context.company.id)}
@@ -484,7 +493,7 @@ async def test_accessible_companies_router_uses_authenticated_identity(
     assert response.json() == [
         {
             "id": str(fixture.company_id),
-            "code": "AUTHZDISCOVERYA",
+            "code": fixture.company_code,
             "name": "AUTHZDISCOVERY Company",
             "membership_id": response.json()[0]["membership_id"],
             "default_branch_id": None,
@@ -492,7 +501,7 @@ async def test_accessible_companies_router_uses_authenticated_identity(
             "branches": [
                 {
                     "id": str(fixture.authorized_branch_id),
-                    "code": "AUTHZDISCOVERYBR1",
+                    "code": fixture.authorized_branch_code,
                     "name": "Authorized Branch",
                     "is_primary": True,
                 }
@@ -534,7 +543,7 @@ async def test_request_security_reads_do_not_conflict_with_service_transaction(
     @app.post("/mutate")
     async def mutate(
         context: AuthorizationContext = Depends(
-            require_permission("REQUESTTX_CUSTOMER_VIEW")
+            require_permission(fixture.permission_code)
         ),
         session: AsyncSession = Depends(get_database_session),
         fail_after_staging: bool = False,

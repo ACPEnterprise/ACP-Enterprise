@@ -97,11 +97,15 @@ class SecurityHeadersMiddleware:
                     self.configuration.content_security_policy
                 )
                 headers["Permissions-Policy"] = self.configuration.permissions_policy
-                if (
-                    scope.get("path", "").startswith("/api/")
-                    and "cache-control" not in headers
-                ):
-                    headers["Cache-Control"] = "private, no-store"
+                if scope.get("path", "").startswith("/api/"):
+                    existing_cache_control = headers.get("cache-control", "")
+                    directives = ["private", "no-store"]
+                    if "no-transform" in {
+                        item.strip().casefold()
+                        for item in existing_cache_control.split(",")
+                    }:
+                        directives.append("no-transform")
+                    headers["Cache-Control"] = ", ".join(directives)
                 if self.configuration.hsts_enabled and scope.get("scheme") == "https":
                     value = f"max-age={self.configuration.hsts_max_age_seconds}"
                     if self.configuration.hsts_include_subdomains:
