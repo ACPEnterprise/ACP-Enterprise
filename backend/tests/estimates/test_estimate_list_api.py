@@ -14,7 +14,9 @@ from app.estimates.service import estimate_service
 
 
 @pytest.mark.asyncio
-async def test_estimate_pipeline_is_company_and_branch_scoped(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_estimate_pipeline_is_company_and_branch_scoped(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     company_id, branch_id, customer_id = uuid4(), uuid4(), uuid4()
     item = EstimateSummary(
         id=uuid4(),
