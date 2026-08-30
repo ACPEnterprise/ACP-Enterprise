@@ -14,4 +14,3 @@ export const usePayrollReports = () =>
 
 export const useComplianceSchemas = () =>
   useQuery({ queryKey: ["payroll", "compliance-schemas"], queryFn: listComplianceSchemas });
-

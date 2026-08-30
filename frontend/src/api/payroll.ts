@@ -59,4 +59,3 @@ export async function listPayrollReports(): Promise<PayrollReportMetadata[]> {
 export async function listComplianceSchemas(): Promise<ComplianceSchemaMetadata[]> {
   return (await apiClient.get<ComplianceSchemaMetadata[]>("/api/v1/payroll/compliance/schemas")).data;
 }
-

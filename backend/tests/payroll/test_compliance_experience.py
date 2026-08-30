@@ -24,7 +24,15 @@ def test_compliance_schema_is_explicit_and_provider_neutral() -> None:
     assert value.required_evidence == ("approved-report", "complete-history")
     with pytest.raises(ValueError, match="quarter"):
         DraftComplianceSchema(
-            "synthetic", "quarterly", 2027, 5, "v1", "v1", ("report",), (), date(2027, 1, 1)
+            "synthetic",
+            "quarterly",
+            2027,
+            5,
+            "v1",
+            "v1",
+            ("report",),
+            (),
+            date(2027, 1, 1),
         )
 
 
