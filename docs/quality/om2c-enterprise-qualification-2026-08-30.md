@@ -4,7 +4,7 @@
 
 - Starting protected authority: `72f969bac74a0bf4c741bdc98133b5c23f18d91e` (`origin/customer-management-v1`).
 - Reconciled protected authority: `1fac637462b01869cc7962d7463af1dc12637a43`.
-- Latest reconciled protected authority: `f0fb25e4766abbbeda9b73e66c5d1f9bdf89d0a5`.
+- Latest reconciled protected authority: `f004204be8e21e4f9cfdd6ce2e461c48b792a93c`.
 - Qualification branch: `work/om2c-quality-security-program-1`.
 - The supplied OM2-A and OM2-B SHAs are not ancestors of starting authority. Their named remote branches were absent after `git fetch --prune`; no integration claim is made.
 - This is non-production evidence. It is not Production release approval.
