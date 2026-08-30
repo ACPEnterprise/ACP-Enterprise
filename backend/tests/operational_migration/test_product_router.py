@@ -5,7 +5,6 @@ from types import SimpleNamespace
 from uuid import UUID
 
 import pytest
-
 from app.operational_migration import product_router
 
 
