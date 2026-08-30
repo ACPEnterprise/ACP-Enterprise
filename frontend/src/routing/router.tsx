@@ -7,6 +7,7 @@ import {
   accountsPayableHandle,
   financialReportsHandle,
   businessEconomicsHandle,
+  luminaryHandle,
   administrationHandle,
   appointmentsHandle,
   commandCenterHandle,
@@ -179,6 +180,11 @@ export const appRoutes: RouteObject[] = [
             path: "business-economics",
             handle: businessEconomicsHandle,
             lazy: async () => ({ Component: (await import("../routes/BusinessEconomicsRoute")).BusinessEconomicsRoute }),
+          },
+          {
+            path: "luminary",
+            handle: luminaryHandle,
+            lazy: async () => ({ Component: (await import("../routes/LuminaryRoute")).LuminaryRoute }),
           },
           {
             path: "price-book",

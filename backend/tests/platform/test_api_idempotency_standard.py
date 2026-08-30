@@ -85,7 +85,7 @@ def test_every_mutating_operation_has_exactly_one_current_classification() -> No
     operations = _mutation_operations()
     coverage = mutation_coverage_registry.by_identity()
     assert operations.keys() == coverage.keys()
-    assert len(operations) == len(coverage) == 251
+    assert len(operations) == len(coverage) == 252
     for identity, operation in operations.items():
         assert operation["operationId"] == coverage[identity].operation_id
 
@@ -137,7 +137,7 @@ def test_append_only_classification_requires_concrete_replay_evidence() -> None:
         for entry in mutation_coverage_registry.entries
         if entry.classification is MutationClassification.APPEND_ONLY
     )
-    assert len(append_only) == 5
+    assert len(append_only) == 6
     assert all(entry.replay_evidence for entry in append_only)
     for entry in append_only:
         for evidence_path in entry.replay_evidence:

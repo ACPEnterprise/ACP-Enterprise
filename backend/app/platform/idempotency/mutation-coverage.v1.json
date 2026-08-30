@@ -2524,8 +2524,21 @@
       "path": "/api/v1/purchasing/documents",
       "reason": "Exact replay returns one custody record while contradictory command identity reuse fails closed.",
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IMMUTABLE_APPEND_ONLY",
+      "domain": "luminary",
+      "mechanism": "deterministic evidence digest, UUIDv5 identity, Company advisory lock, and unique persisted identity",
+      "method": "POST",
+      "operation_id": "analyze_api_v1_luminary_analyses_post",
+      "path": "/api/v1/luminary/analyses",
+      "reason": "Exact authoritative evidence replay converges on one immutable finding and briefing authority.",
+      "replay_evidence": [
+        "tests/luminary/test_engine.py"
+      ],
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "044efef27bb7559af8588a84bc79d0646226a56e253eb738350e16a0d3990cd1",
+  "fingerprint": "68ee81896847e6af5c7ef31524ae57ee83cb00718624121a65ced10852577b90",
   "schema_version": "1"
 }
