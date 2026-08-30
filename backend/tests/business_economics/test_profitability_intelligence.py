@@ -113,9 +113,7 @@ def analysis(*, missing_overhead: bool = False) -> ProfitabilityAnalysis:
         equipment=component(EconomicCategory.EQUIPMENT, 0),
         truck=component(EconomicCategory.TRUCK, 30_000),
         overhead=overhead,
-        gross_profit=(
-            component(EconomicCategory.GROSS_PROFIT, 41_000)
-        ),
+        gross_profit=(component(EconomicCategory.GROSS_PROFIT, 41_000)),
         net_profit=(
             missing(EconomicCategory.NET_PROFIT)
             if missing_overhead

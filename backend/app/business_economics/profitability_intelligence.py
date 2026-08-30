@@ -169,7 +169,9 @@ class ProfitabilityComponent:
             if self.amount_minor is not None or self.confidence_percent != 0:
                 raise ValueError("missing component has no amount and zero confidence")
             if self.evidence or self.allocations:
-                raise ValueError("missing component cannot claim evidence or allocations")
+                raise ValueError(
+                    "missing component cannot claim evidence or allocations"
+                )
             return
         if self.amount_minor is None:
             raise ValueError("known component requires an amount")
@@ -234,7 +236,9 @@ class ProfitabilityAnalysis:
             EconomicCategory.NET_PROFIT,
         )
         if tuple(item.category for item in components) != expected:
-            raise ValueError("profitability components are assigned to wrong categories")
+            raise ValueError(
+                "profitability components are assigned to wrong categories"
+            )
         if len({item.currency.upper() for item in components}) != 1:
             raise ValueError("profitability analysis cannot mix currencies")
         if self.version < 1:
@@ -255,16 +259,22 @@ class ProfitabilityAnalysis:
             assert truck is not None
             gross = revenue - labor - materials - equipment - truck
             if self.gross_profit.amount_minor != gross:
-                raise ValueError("gross profit does not reconcile to measured components")
+                raise ValueError(
+                    "gross profit does not reconcile to measured components"
+                )
         elif self.gross_profit.state is not ProfitabilityValueState.MISSING:
-            raise ValueError("gross profit remains missing when direct inputs are missing")
+            raise ValueError(
+                "gross profit remains missing when direct inputs are missing"
+            )
         overhead = self.overhead.amount_minor
         gross_amount = self.gross_profit.amount_minor
         if overhead is not None and gross_amount is not None:
             if self.net_profit.amount_minor != gross_amount - overhead:
                 raise ValueError("net profit does not reconcile to measured components")
         elif self.net_profit.state is not ProfitabilityValueState.MISSING:
-            raise ValueError("net profit remains missing when required inputs are missing")
+            raise ValueError(
+                "net profit remains missing when required inputs are missing"
+            )
 
 
 @dataclass(frozen=True, slots=True)

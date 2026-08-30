@@ -8,7 +8,7 @@ from datetime import date, timedelta
 from typing import Any, cast
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import exists, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.customers.models import Customer
@@ -16,7 +16,11 @@ from app.jobs.models import Job
 from app.platform.branch.models import Branch
 from app.platform.permissions.authorization import AuthorizationContext
 
-from .models import CompanyFinancePolicyGap, EconomicsProfitabilityResultRecord
+from .models import (
+    CompanyFinancePolicyGap,
+    EconomicsProfitabilityResultRecord,
+    EconomicsProfitabilityResultSupersessionRecord,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -115,6 +119,18 @@ class EconomicsWorkspaceService:
         value = await session.scalar(query)
         if value is None:
             raise LookupError("profitability result not found")
+        predecessor_edge = await session.scalar(
+            select(EconomicsProfitabilityResultSupersessionRecord).where(
+                EconomicsProfitabilityResultSupersessionRecord.successor_result_id
+                == value.id
+            )
+        )
+        successor_edge = await session.scalar(
+            select(EconomicsProfitabilityResultSupersessionRecord).where(
+                EconomicsProfitabilityResultSupersessionRecord.predecessor_result_id
+                == value.id
+            )
+        )
         return {
             "id": str(value.id),
             "subject_id": str(value.subject_id),
@@ -125,6 +141,7 @@ class EconomicsWorkspaceService:
             "components": value.components,
             "quality": value.quality,
             "explanation": value.explanation,
+            "authority_state": "historical" if successor_edge else "current",
             "lineage": {
                 "result_digest": value.result_digest,
                 "admission_digest": value.admission_digest,
@@ -133,6 +150,17 @@ class EconomicsWorkspaceService:
                 "acquisition_digests": value.acquisition_digests,
                 "allocation_digests": value.allocation_digests,
                 "explanation_ids": value.explanation_ids,
+                "predecessor_result_id": (
+                    str(predecessor_edge.predecessor_result_id)
+                    if predecessor_edge
+                    else None
+                ),
+                "successor_result_id": (
+                    str(successor_edge.successor_result_id) if successor_edge else None
+                ),
+                "supersession_reason": successor_edge.reason
+                if successor_edge
+                else None,
             },
         }
 
@@ -149,6 +177,10 @@ class EconomicsWorkspaceService:
             EconomicsProfitabilityResultRecord.period_end == end,
             EconomicsProfitabilityResultRecord.lifecycle == "admitted",
             EconomicsProfitabilityResultRecord.basis == "actual",
+            ~exists().where(
+                EconomicsProfitabilityResultSupersessionRecord.predecessor_result_id
+                == EconomicsProfitabilityResultRecord.id
+            ),
         )
         if context.active_branch is not None:
             query = query.where(
@@ -285,6 +317,10 @@ class EconomicsWorkspaceService:
             rows.append(
                 {
                     "result_id": str(item.id),
+                    "result_digest": item.result_digest,
+                    "package_digest": item.package_digest,
+                    "computation_digest": item.computation_digest,
+                    "authority_state": "current",
                     "job_id": str(item.subject_id),
                     "job_number": identity.job_number,
                     "job_status": identity.status,
