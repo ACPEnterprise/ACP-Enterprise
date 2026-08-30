@@ -14,6 +14,7 @@ from .contracts import (
     LiaRequest,
     LiaResponse,
 )
+from .foundation import FoundationReadiness, foundation_readiness
 from .service import POLICY_VERSION, lia_service
 
 router = APIRouter(prefix="/api/v1/lia", tags=["LIA"])
@@ -25,11 +26,26 @@ async def readiness(context: ResolvedAuthorization) -> LiaReadiness:
     return LiaReadiness(
         state="PRODUCT_READY_PROVIDER_GATE",
         provider_state="AI_PROVIDER_NOT_CONFIGURED",
-        deterministic_capabilities=("authorized_retrieval", "evidence_summary", "navigation", "safe_proposal"),
+        deterministic_capabilities=(
+            "authorized_retrieval",
+            "evidence_summary",
+            "navigation",
+            "safe_proposal",
+        ),
         generative_capabilities=(),
         policy_version=POLICY_VERSION,
         retention_state="TRANSCRIPT_RETENTION_POLICY_REQUIRED",
     )
+
+
+@router.get("/foundation-readiness", response_model=FoundationReadiness)
+async def foundation_readiness_status(
+    context: ResolvedAuthorization,
+) -> FoundationReadiness:
+    # Authentication and current authorization resolution are required even though
+    # the response contains no protected business evidence.
+    _ = context.authorization_version
+    return foundation_readiness()
 
 
 @router.post("/ask", response_model=LiaResponse)
