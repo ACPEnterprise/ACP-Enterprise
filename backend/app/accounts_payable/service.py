@@ -5,7 +5,7 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from uuid import UUID, uuid4
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.accounting.models import (
@@ -63,6 +63,7 @@ class AccountsPayableService:
         if not all((spec.code.strip(), spec.legal_name.strip(), spec.display_name.strip(), spec.provenance.strip())):
             raise APValidation("Vendor identity fields are required.")
         async with session.begin():
+            await self._lock_identities(session, f"ap:vendor:{spec.company_id}:{spec.code.strip()}")
             existing = await session.scalar(select(AccountingVendor).where(AccountingVendor.company_id == spec.company_id, AccountingVendor.code == spec.code.strip()).with_for_update())
             if existing:
                 raise APConflict("Vendor code is already assigned and cannot be reused.")
@@ -78,6 +79,7 @@ class AccountsPayableService:
             vendor = await self._vendor(session, company_id, vendor_id, lock=True)
             if vendor.status != "active" or not all(value.strip() for value in (source_system, source_company_id, source_vendor_id, source_digest)):
                 raise APValidation("Active vendor and immutable source identity evidence are required.")
+            await self._lock_identities(session, f"ap:vendor-source:{company_id}:{source_system}:{source_company_id}:{source_vendor_id}")
             existing = await session.scalar(select(VendorSourceMapping).where(VendorSourceMapping.company_id == company_id, VendorSourceMapping.source_system == source_system, VendorSourceMapping.source_company_id == source_company_id, VendorSourceMapping.source_vendor_id == source_vendor_id).with_for_update())
             if existing:
                 if existing.vendor_id != vendor_id or existing.source_digest != source_digest:
@@ -123,11 +125,17 @@ class AccountsPayableService:
         if not spec.lines or total <= 0 or spec.due_date < spec.bill_date or not spec.evidence_reference.strip():
             raise APValidation("Complete positive bill lines, valid dates, and evidence are required.")
         async with session.begin():
+            await self._lock_identities(
+                session,
+                f"ap:bill-source:{spec.company_id}:{spec.source_system}:{spec.source_identity}",
+                f"ap:bill-number:{spec.company_id}",
+            )
             await self._validate_core(session, spec.company_id, spec.currency, spec.bill_date)
             await self._vendor(session, spec.company_id, spec.vendor_id, lock=True)
             replay = await session.scalar(select(VendorBill).where(VendorBill.company_id == spec.company_id, VendorBill.source_system == spec.source_system, VendorBill.source_identity == spec.source_identity).with_for_update())
             if replay:
-                if replay.source_digest != spec.source_digest:
+                revision = await session.scalar(select(BillRevision).where(BillRevision.company_id == spec.company_id, BillRevision.bill_id == replay.id, BillRevision.revision == 1))
+                if replay.source_digest != spec.source_digest or revision is None or revision.canonical_digest != canonical:
                     raise APConflict("Source identity conflicts with prior bill evidence.")
                 return replay
             duplicate = await session.scalar(select(VendorBill).where(VendorBill.company_id == spec.company_id, VendorBill.vendor_id == spec.vendor_id, VendorBill.normalized_document_number == normalized))
@@ -198,6 +206,12 @@ class AccountsPayableService:
         if amount <= 0 or not spec.reason.strip():
             raise APValidation("Positive credit and reason are required.")
         async with session.begin():
+            await self._lock_identities(session, f"ap:credit-source:{spec.company_id}:{spec.source_system}:{spec.source_identity}")
+            replay = await session.scalar(select(VendorCredit).where(VendorCredit.company_id == spec.company_id, VendorCredit.source_system == spec.source_system, VendorCredit.source_identity == spec.source_identity))
+            if replay:
+                if replay.source_digest != spec.source_digest or replay.vendor_id != spec.vendor_id or replay.amount != amount or replay.currency != spec.currency.upper():
+                    raise APConflict("Source identity conflicts with prior credit evidence.")
+                return replay
             await self._vendor(session, spec.company_id, spec.vendor_id)
             await self._validate_core(session, spec.company_id, spec.currency, spec.credit_date)
             await self._mapping(session, spec.company_id, spec.mapping_id, spec.credit_date)
@@ -211,8 +225,11 @@ class AccountsPayableService:
     async def apply_credit(self, session: AsyncSession, company_id: UUID, credit_id: UUID, bill_id: UUID, actor_id: UUID, amount: Decimal, idempotency_key: str) -> CreditApplication:
         amount = amount.quantize(CENT)
         async with session.begin():
+            await self._lock_identities(session, f"ap:credit-application:{company_id}:{idempotency_key}")
             replay = await session.scalar(select(CreditApplication).where(CreditApplication.company_id == company_id, CreditApplication.idempotency_key == idempotency_key))
             if replay:
+                if replay.credit_id != credit_id or replay.bill_id != bill_id or replay.amount != amount:
+                    raise APConflict("Idempotency key conflicts with prior credit application.")
                 return replay
             credit = await session.scalar(select(VendorCredit).where(VendorCredit.company_id == company_id, VendorCredit.id == credit_id).with_for_update())
             bill = await self._bill(session, company_id, bill_id, lock=True)
@@ -231,6 +248,7 @@ class AccountsPayableService:
 
     async def unapply_credit(self, session: AsyncSession, company_id: UUID, application_id: UUID, actor_id: UUID, idempotency_key: str) -> CreditApplication:
         async with session.begin():
+            await self._lock_identities(session, f"ap:credit-unapply:{company_id}:{idempotency_key}")
             existing_entry = await session.scalar(select(APSubledgerEntry).where(APSubledgerEntry.company_id == company_id, APSubledgerEntry.idempotency_key == idempotency_key))
             application = await session.scalar(select(CreditApplication).where(CreditApplication.company_id == company_id, CreditApplication.id == application_id).with_for_update())
             if application is None:
@@ -253,6 +271,12 @@ class AccountsPayableService:
         if amount <= 0 or spec.recorder_user_id == spec.approver_user_id or not all((spec.external_reference.strip(), spec.source_identity.strip(), spec.evidence_digest.strip())):
             raise APValidation("Verified evidence and distinct recorder/approver are required.")
         async with session.begin():
+            await self._lock_identities(session, f"ap:disbursement-source:{spec.company_id}:{spec.source_system}:{spec.source_identity}")
+            replay = await session.scalar(select(Disbursement).where(Disbursement.company_id == spec.company_id, Disbursement.source_system == spec.source_system, Disbursement.source_identity == spec.source_identity))
+            if replay:
+                if replay.evidence_digest != spec.evidence_digest or replay.vendor_id != spec.vendor_id or replay.amount != amount or replay.currency != spec.currency.upper():
+                    raise APConflict("Source identity conflicts with prior disbursement evidence.")
+                return replay
             await self._vendor(session, spec.company_id, spec.vendor_id)
             await self._validate_core(session, spec.company_id, spec.currency, spec.effective_date)
             row = Disbursement(company_id=spec.company_id, branch_id=spec.branch_id, vendor_id=spec.vendor_id, amount=amount, available_amount=amount, currency=spec.currency.upper(), effective_date=spec.effective_date, method_category=spec.method_category, external_reference=spec.external_reference, source_system=spec.source_system, source_identity=spec.source_identity, evidence_digest=spec.evidence_digest, recorder_user_id=spec.recorder_user_id, approver_user_id=spec.approver_user_id)
@@ -264,8 +288,11 @@ class AccountsPayableService:
     async def apply_disbursement(self, session: AsyncSession, company_id: UUID, disbursement_id: UUID, bill_id: UUID, actor_id: UUID, amount: Decimal, idempotency_key: str) -> DisbursementApplication:
         amount = amount.quantize(CENT)
         async with session.begin():
+            await self._lock_identities(session, f"ap:disbursement-application:{company_id}:{idempotency_key}")
             replay = await session.scalar(select(DisbursementApplication).where(DisbursementApplication.company_id == company_id, DisbursementApplication.idempotency_key == idempotency_key))
             if replay:
+                if replay.disbursement_id != disbursement_id or replay.bill_id != bill_id or replay.amount != amount:
+                    raise APConflict("Idempotency key conflicts with prior disbursement application.")
                 return replay
             disbursement = await session.scalar(select(Disbursement).where(Disbursement.company_id == company_id, Disbursement.id == disbursement_id).with_for_update())
             bill = await self._bill(session, company_id, bill_id, lock=True)
@@ -324,6 +351,7 @@ class AccountsPayableService:
         if spec.status == "posted" and (spec.journal_id is None or spec.journal_version is None):
             raise APValidation("Posted status requires an Accounting journal receipt.")
         async with session.begin():
+            await self._lock_identities(session, f"ap:posting-receipt:{spec.company_id}:{spec.source_event_id}")
             existing = await session.scalar(select(APPostingReceipt).where(APPostingReceipt.company_id == spec.company_id, APPostingReceipt.source_event_id == spec.source_event_id).with_for_update())
             if existing:
                 if _digest((existing.status, existing.journal_id, existing.journal_version)) != _digest((spec.status, spec.journal_id, spec.journal_version)):
@@ -384,6 +412,10 @@ class AccountsPayableService:
         if bill is None:
             raise APNotFound("Vendor bill was not found.")
         return bill
+
+    async def _lock_identities(self, session: AsyncSession, *identities: str) -> None:
+        for identity in sorted(identities):
+            await session.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:identity, 0))"), {"identity": identity})
 
     def _event(self, session: AsyncSession, event_type: EventType, aggregate_id: UUID, company_id: UUID, actor_id: UUID, payload: dict[str, object]):
         return BusinessEventService.stage(session, BusinessEventCreate(event_type=event_type, entity_type="accounts_payable", entity_id=aggregate_id, company_id=company_id, user_id=actor_id, payload=payload))

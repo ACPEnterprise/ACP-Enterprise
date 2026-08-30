@@ -35,6 +35,8 @@ from app.database.session import get_database_session
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import AccountsPayablePermission
 from app.platform.permissions.dependencies import require_permission
+from app.platform.reliability.correlation import current_correlation_id
+from app.platform.reliability.failures import ClientRecovery, FailureCode, SafeFailure
 
 router = APIRouter(prefix="/api/v1/accounts-payable", tags=["Accounts Payable"])
 Session = Annotated[AsyncSession, Depends(get_database_session)]
@@ -49,10 +51,13 @@ ReportRead = Annotated[AuthorizationContext, Depends(require_permission(Accounts
 
 def _error(exc: AccountsPayableError) -> HTTPException:
     if isinstance(exc, APNotFound):
-        return HTTPException(status.HTTP_404_NOT_FOUND, str(exc))
+        failure = SafeFailure(FailureCode.NOT_FOUND, "AP resource was not found.", ClientRecovery.TERMINAL_FAILURE, current_correlation_id())
+        return HTTPException(status.HTTP_404_NOT_FOUND, failure.detail())
     if isinstance(exc, APConflict):
-        return HTTPException(status.HTTP_409_CONFLICT, str(exc))
-    return HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc))
+        failure = SafeFailure(FailureCode.RESOURCE_STATE_CONFLICT, "AP operation conflicts with current authority.", ClientRecovery.RETRY_AFTER_REFRESH, current_correlation_id())
+        return HTTPException(status.HTTP_409_CONFLICT, failure.detail())
+    failure = SafeFailure(FailureCode.VALIDATION, "AP request requires correction.", ClientRecovery.USER_CORRECTION_REQUIRED, current_correlation_id())
+    return HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, failure.detail())
 
 
 def _branch(context: AuthorizationContext, branch_id: UUID) -> None:
