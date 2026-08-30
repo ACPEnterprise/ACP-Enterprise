@@ -1,6 +1,7 @@
 from unittest.mock import Mock
 
 import pytest
+
 from app.business_economics.profitability_persistence import (
     EconomicsProfitabilityPersistenceService,
     ProfitabilityPersistenceError,
