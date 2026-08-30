@@ -29,6 +29,7 @@ export type NavigationItemId =
   | "invoices"
   | "accounts-payable"
   | "financial-reports"
+  | "payroll"
   | "inventory"
   | "purchasing"
   | "technician"
