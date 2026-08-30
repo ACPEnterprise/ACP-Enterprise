@@ -5,6 +5,7 @@ import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
+from uuid import UUID
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -105,7 +106,7 @@ class GovernedRetrievalService:
         *,
         context: AuthorizationContext,
         domains: set[str] | None = None,
-        entity_id: Any | None = None,
+        entity_id: UUID | None = None,
     ) -> tuple[EvidenceReference, ...]:
         # Permission checks select adapters before any protected query is executed.
         permitted = tuple(
@@ -203,25 +204,34 @@ class GovernedRetrievalService:
         if context.has_permission(EconomicsPolicyPermission.MEASUREMENT_READ) and (
             domains is None or "business-economics" in domains
         ):
-            evidence.extend(await self._economics(session, context, observed_at))
+            evidence.extend(
+                await self._economics(session, context, observed_at, entity_id)
+            )
         if context.has_permission(AnalyticsPermission.READ) and (
             domains is None or "beacon" in domains
         ):
-            evidence.extend(await self._beacon(session, context, observed_at))
+            evidence.extend(await self._beacon(session, context, observed_at, entity_id))
         if context.has_permission(AdministrationPermission.COMPANY_ADMINISTER) and (
             domains is None or "migration" in domains
         ):
-            evidence.extend(await self._migration(session, context, observed_at))
+            evidence.extend(
+                await self._migration(session, context, observed_at, entity_id)
+            )
         if (
             context.has_permission(PayrollPermission.REPORTING_READ)
             or context.has_permission(PayrollPermission.STATEMENT_OWN_READ)
         ) and (domains is None or "payroll" in domains):
-            evidence.extend(await self._payroll(session, context, observed_at))
+            evidence.extend(
+                await self._payroll(session, context, observed_at, entity_id)
+            )
         return tuple(evidence)
 
     @staticmethod
     async def _economics(
-        session: AsyncSession, context: AuthorizationContext, observed_at: datetime
+        session: AsyncSession,
+        context: AuthorizationContext,
+        observed_at: datetime,
+        entity_id: UUID | None,
     ) -> tuple[EvidenceReference, ...]:
         query = (
             select(EconomicsProfitabilityResultRecord)
@@ -243,6 +253,8 @@ class GovernedRetrievalService:
         query = query.where(
             EconomicsProfitabilityResultRecord.branch_id.in_(branch_ids)
         )
+        if entity_id is not None:
+            query = query.where(EconomicsProfitabilityResultRecord.id == entity_id)
         rows = tuple((await session.scalars(query)).all())
         states: dict[str, int] = {}
         for row in rows:
@@ -268,15 +280,24 @@ class GovernedRetrievalService:
 
     @staticmethod
     async def _beacon(
-        session: AsyncSession, context: AuthorizationContext, observed_at: datetime
+        session: AsyncSession,
+        context: AuthorizationContext,
+        observed_at: datetime,
+        entity_id: UUID | None,
     ) -> tuple[EvidenceReference, ...]:
         queue = await beacon_query_service.get_attention_queue(
             session, context=context, now=observed_at
         )
         signals = (*queue.active, *queue.snoozed)
+        if entity_id is not None:
+            signals = tuple(item for item in signals if item.id == entity_id)
         states = {
-            "active": len(queue.active),
-            "snoozed": len(queue.snoozed),
+            "active": sum(item.id == entity_id for item in queue.active)
+            if entity_id is not None
+            else len(queue.active),
+            "snoozed": sum(item.id == entity_id for item in queue.snoozed)
+            if entity_id is not None
+            else len(queue.snoozed),
         }
         return (
             _reference(
@@ -291,7 +312,10 @@ class GovernedRetrievalService:
 
     @staticmethod
     async def _migration(
-        session: AsyncSession, context: AuthorizationContext, observed_at: datetime
+        session: AsyncSession,
+        context: AuthorizationContext,
+        observed_at: datetime,
+        entity_id: UUID | None,
     ) -> tuple[EvidenceReference, ...]:
         query = (
             select(HcpMigrationMasterRun)
@@ -305,6 +329,8 @@ class GovernedRetrievalService:
             else context.authorized_branch_ids
         )
         query = query.where(HcpMigrationMasterRun.branch_id.in_(branch_ids))
+        if entity_id is not None:
+            query = query.where(HcpMigrationMasterRun.id == entity_id)
         rows = tuple((await session.scalars(query)).all())
         states: dict[str, int] = {}
         for row in rows:
@@ -322,23 +348,30 @@ class GovernedRetrievalService:
 
     @staticmethod
     async def _payroll(
-        session: AsyncSession, context: AuthorizationContext, observed_at: datetime
+        session: AsyncSession,
+        context: AuthorizationContext,
+        observed_at: datetime,
+        entity_id: UUID | None,
     ) -> tuple[EvidenceReference, ...]:
         if context.has_permission(PayrollPermission.REPORTING_READ):
+            reporting_query = (
+                select(PayrollReportingSnapshotRecord)
+                .where(
+                    PayrollReportingSnapshotRecord.company_id == context.company.id
+                )
+                .order_by(
+                    PayrollReportingSnapshotRecord.period_end.desc(),
+                    PayrollReportingSnapshotRecord.created_at.desc(),
+                )
+                .limit(100)
+            )
+            if entity_id is not None:
+                reporting_query = reporting_query.where(
+                    PayrollReportingSnapshotRecord.id == entity_id
+                )
             reporting_rows = tuple(
                 (
-                    await session.scalars(
-                        select(PayrollReportingSnapshotRecord)
-                        .where(
-                            PayrollReportingSnapshotRecord.company_id
-                            == context.company.id
-                        )
-                        .order_by(
-                            PayrollReportingSnapshotRecord.period_end.desc(),
-                            PayrollReportingSnapshotRecord.created_at.desc(),
-                        )
-                        .limit(100)
-                    )
+                    await session.scalars(reporting_query)
                 ).all()
             )
             reporting_states: dict[str, int] = {}
@@ -378,18 +411,23 @@ class GovernedRetrievalService:
                     states={"employee_link_unavailable": 1},
                 ),
             )
+        statement_query = (
+            select(PayrollPayStatementRecord)
+            .where(
+                PayrollPayStatementRecord.company_id == context.company.id,
+                PayrollPayStatementRecord.employee_id == employee_id,
+                PayrollPayStatementRecord.lifecycle == "issued",
+            )
+            .order_by(PayrollPayStatementRecord.created_at.desc())
+            .limit(50)
+        )
+        if entity_id is not None:
+            statement_query = statement_query.where(
+                PayrollPayStatementRecord.id == entity_id
+            )
         statement_rows = tuple(
             (
-                await session.scalars(
-                    select(PayrollPayStatementRecord)
-                    .where(
-                        PayrollPayStatementRecord.company_id == context.company.id,
-                        PayrollPayStatementRecord.employee_id == employee_id,
-                        PayrollPayStatementRecord.lifecycle == "issued",
-                    )
-                    .order_by(PayrollPayStatementRecord.created_at.desc())
-                    .limit(50)
-                )
+                await session.scalars(statement_query)
             ).all()
         )
         statement_states: dict[str, int] = {}

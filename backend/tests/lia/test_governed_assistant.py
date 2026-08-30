@@ -24,6 +24,7 @@ def authorization_context(*permissions: str):
     branch_id = uuid4()
     return SimpleNamespace(
         user=SimpleNamespace(id=uuid4()),
+        membership=SimpleNamespace(id=uuid4()),
         company=SimpleNamespace(id=company_id),
         active_branch=SimpleNamespace(id=branch_id),
         authorized_branch_ids=frozenset({branch_id}),
@@ -292,3 +293,116 @@ async def test_advertised_intelligence_adapters_are_retrieval_backed(
 
     for adapter in adapters.values():
         adapter.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_context_entity_identity_is_propagated_to_every_special_adapter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = GovernedRetrievalService()
+    entity_id = uuid4()
+    adapters = {
+        name: AsyncMock(return_value=())
+        for name in ("_economics", "_beacon", "_migration", "_payroll")
+    }
+    for name, adapter in adapters.items():
+        monkeypatch.setattr(service, name, adapter)
+
+    await service.retrieve(
+        AsyncMock(),
+        context=authorization_context(
+            "COMPANY_ECONOMICS_MEASUREMENT_READ",
+            "COMPANY_ANALYTICS_READ",
+            "COMPANY_ADMINISTER",
+            "COMPANY_PAYROLL_REPORTING_READ",
+        ),
+        domains={"business-economics", "beacon", "migration", "payroll"},
+        entity_id=entity_id,
+    )
+
+    for adapter in adapters.values():
+        assert adapter.await_args.args[-1] == entity_id
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("adapter_name", "permission", "expected_table"),
+    (
+        (
+            "_economics",
+            "COMPANY_ECONOMICS_MEASUREMENT_READ",
+            "economics_profitability_results.id",
+        ),
+        ("_migration", "COMPANY_ADMINISTER", "hcp_migration_master_runs.id"),
+        (
+            "_payroll",
+            "COMPANY_PAYROLL_REPORTING_READ",
+            "payroll_reporting_snapshots.id",
+        ),
+    ),
+)
+async def test_special_persisted_adapters_bind_context_entity_identity(
+    adapter_name: str, permission: str, expected_table: str
+) -> None:
+    session = SimpleNamespace(
+        scalars=AsyncMock(return_value=SimpleNamespace(all=lambda: ()))
+    )
+    entity_id = uuid4()
+
+    await getattr(GovernedRetrievalService(), adapter_name)(
+        session,
+        authorization_context(permission),
+        datetime.now(timezone.utc),
+        entity_id,
+    )
+
+    rendered = str(session.scalars.await_args.args[0])
+    assert expected_table in rendered
+    assert " = :id_1" in rendered
+
+
+@pytest.mark.asyncio
+async def test_own_pay_statement_entity_binding_retains_server_employee_scope() -> None:
+    employee_id = uuid4()
+    statement_id = uuid4()
+    session = SimpleNamespace(
+        scalar=AsyncMock(return_value=employee_id),
+        scalars=AsyncMock(return_value=SimpleNamespace(all=lambda: ())),
+    )
+
+    await GovernedRetrievalService()._payroll(
+        session,
+        authorization_context("COMPANY_PAYROLL_STATEMENT_OWN_READ"),
+        datetime.now(timezone.utc),
+        statement_id,
+    )
+
+    employee_lookup = str(session.scalar.await_args.args[0])
+    statement_lookup = str(session.scalars.await_args.args[0])
+    assert "employees.membership_id" in employee_lookup
+    assert "payroll_pay_statements.employee_id" in statement_lookup
+    assert "payroll_pay_statements.id" in statement_lookup
+
+
+@pytest.mark.asyncio
+async def test_beacon_context_entity_excludes_unrelated_authorized_signals(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    target_id = uuid4()
+    target = SimpleNamespace(id=target_id, evidence_digest="a" * 64)
+    unrelated = SimpleNamespace(id=uuid4(), evidence_digest="b" * 64)
+    queue = SimpleNamespace(active=(target, unrelated), snoozed=())
+    get_queue = AsyncMock(return_value=queue)
+    monkeypatch.setattr(
+        "app.lia.retrieval.beacon_query_service.get_attention_queue", get_queue
+    )
+
+    evidence = await GovernedRetrievalService()._beacon(
+        AsyncMock(),
+        authorization_context("COMPANY_ANALYTICS_READ"),
+        datetime.now(timezone.utc),
+        target_id,
+    )
+
+    assert evidence[0].count == 1
+    assert evidence[0].state == "active=1, snoozed=0"
