@@ -1,5 +1,6 @@
 import asyncio
 from dataclasses import replace
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from types import SimpleNamespace
 from uuid import uuid4
@@ -16,6 +17,7 @@ from app.events.models import BusinessEvent
 from app.payments.contracts import (
     ApplyReceipt,
     CreateIntent,
+    PostingReceiptFact,
     ProviderRequest,
     RequestRefund,
 )
@@ -409,3 +411,42 @@ async def test_concurrent_identical_application_changes_receipt_once(
             )
             == 1
         )
+
+
+@pytest.mark.asyncio
+async def test_payment_posting_receipt_replay_binds_complete_authority(
+    payment_fixture,
+) -> None:
+    factory, company, _, _, _ = payment_fixture
+    service = PaymentService(CountingFakeProvider(), "synthetic-merchant")
+    fact = PostingReceiptFact(
+        company_id=company.id,
+        source_event_id=uuid4(),
+        journal_id=uuid4(),
+        journal_version=3,
+        policy_version="cash-basis-v3",
+        status="posted",
+        effective_date=date(2026, 8, 30),
+        posted_at=datetime(2026, 8, 30, 18, 0, tzinfo=timezone.utc),
+    )
+    async with factory() as session:
+        first = await service.record_posting_receipt(session, fact)
+    async with factory() as session:
+        replay = await service.record_posting_receipt(session, fact)
+    assert replay.id == first.id
+
+    contradictions = (
+        replace(fact, journal_id=uuid4()),
+        replace(fact, journal_version=4),
+        replace(fact, policy_version="cash-basis-v4"),
+        replace(fact, status="reconciliation_required"),
+        replace(fact, effective_date=date(2026, 8, 31)),
+        replace(
+            fact,
+            posted_at=datetime(2026, 8, 30, 18, 1, tzinfo=timezone.utc),
+        ),
+    )
+    for contradiction in contradictions:
+        async with factory() as session:
+            with pytest.raises(PaymentConflict, match="conflicts with replay"):
+                await service.record_posting_receipt(session, contradiction)

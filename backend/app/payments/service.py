@@ -292,7 +292,16 @@ class PaymentService:
             )
             prior = await session.scalar(select(PaymentPostingReceipt).where(PaymentPostingReceipt.company_id == fact.company_id, PaymentPostingReceipt.source_event_id == fact.source_event_id))
             if prior:
-                if prior.journal_id != fact.journal_id or prior.status != fact.status:
+                if any(
+                    (
+                        prior.journal_id != fact.journal_id,
+                        prior.journal_version != fact.journal_version,
+                        prior.policy_version != fact.policy_version,
+                        prior.status != fact.status,
+                        prior.effective_date != fact.effective_date,
+                        prior.posted_at != fact.posted_at,
+                    )
+                ):
                     raise PaymentConflict("Accounting posting receipt conflicts with replay.")
                 return prior
             row = PaymentPostingReceipt(**asdict(fact))
