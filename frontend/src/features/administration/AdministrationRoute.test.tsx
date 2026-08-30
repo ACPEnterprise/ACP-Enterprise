@@ -324,11 +324,13 @@ describe("AdministrationRoute", () => {
     expect(screen.queryByRole("button", { name: "Remove" })).not.toBeInTheDocument();
   });
 
-  it("does not request role evidence without role-read authority", async () => {
+  it("renders Company-admin subworkspaces without requesting unauthorized role evidence", async () => {
     context.permissionCodes = ["COMPANY_ADMINISTER"];
     renderPage();
 
-    expect(await screen.findByText("You are not authorized to administer Company roles.")).toBeInTheDocument();
+    expect(await screen.findByText("Role administration requires role-read permission.")).toBeInTheDocument();
+    expect(screen.getByText("QuickBooks Development sandbox")).toBeInTheDocument();
+    expect(screen.getByText("Migration readiness")).toBeInTheDocument();
     expect(api.listRoles).not.toHaveBeenCalled();
     expect(api.listPermissions).not.toHaveBeenCalled();
   });
