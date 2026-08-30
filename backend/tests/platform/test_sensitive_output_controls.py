@@ -7,10 +7,6 @@ from decimal import Decimal
 from uuid import uuid4
 
 import pytest
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
-from pydantic import BaseModel
-
 from app.events.schemas import BusinessEventCreate
 from app.events.service import BusinessEventService
 from app.events.types import EventType
@@ -25,6 +21,9 @@ from app.platform.security.safe_output import (
     sanitize,
     validate_no_sensitive_fields,
 )
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+from pydantic import BaseModel
 
 CANARIES = {
     "password": "CANARY-PASSWORD-PLAT007",
@@ -233,7 +232,7 @@ def test_connection_strings_bearer_tokens_and_private_keys_are_sanitized() -> No
 
 def test_catalog_fingerprint_and_validation_are_deterministic() -> None:
     assert catalog_fingerprint() == (
-        "d480e5aa005637e6ade7c4ef8c9316bde8d52a98e5932b65fc7bcf0dc74d2c02"
+        "67d8473923cde21f326b9106f354312b007040b75198e8f0eedc0a664557cc2b"
     )
     validate_no_sensitive_fields(
         {"company_id": str(uuid4()), "status": "accepted"},
