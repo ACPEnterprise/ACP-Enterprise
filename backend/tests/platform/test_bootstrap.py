@@ -31,6 +31,7 @@ from app.platform.bootstrap.service import BootstrapResult, BootstrapService
 from app.platform.branch.models import Branch
 from app.platform.company.membership_models import Membership
 from app.platform.company.models import Company
+from app.platform.launch_controls import COMPANY_ADMINISTRATOR_OWNER_READ_PERMISSIONS
 from app.platform.permissions.authorization import AuthorizationService
 from app.platform.permissions.catalog import permission_catalog
 from app.platform.permissions.catalog_sync import PermissionCatalogSyncService
@@ -180,7 +181,7 @@ async def test_first_bootstrap_creates_complete_authorization_graph(
     assert permission_codes == {
         definition.code for definition in permission_catalog.definitions
     }
-    assert role_permission_count == len(permission_catalog.definitions)
+    assert role_permission_count == len(COMPANY_ADMINISTRATOR_OWNER_READ_PERMISSIONS)
     assert membership_role_count == 1
 
     async with bootstrap_database.sessions() as session:
@@ -209,7 +210,9 @@ async def test_first_bootstrap_creates_complete_authorization_graph(
                     permission.id for permission in scheduling_permissions
                 ),
             )
-        ) == len(SchedulingPermission.ALL)
+        ) == len(
+            SchedulingPermission.ALL & COMPANY_ADMINISTRATOR_OWNER_READ_PERMISSIONS
+        )
 
 
 @pytest.mark.asyncio
@@ -414,7 +417,5 @@ async def test_bootstrapped_administrator_can_login_and_resolve_authorization(
 
     assert context.membership.status == "active"
     assert context.role_codes == frozenset({"COMPANY_ADMINISTRATOR"})
-    assert context.permission_codes == frozenset(
-        definition.code for definition in permission_catalog.definitions
-    )
+    assert context.permission_codes == COMPANY_ADMINISTRATOR_OWNER_READ_PERMISSIONS
     assert context.authorized_branch_ids == frozenset({result.branch_id})
