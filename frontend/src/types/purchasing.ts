@@ -179,7 +179,7 @@ export interface PurchasingWorkspace {
 export interface PurchasingDocument {
   id: string; company_id: string; branch_id: string; entity_type: string;
   entity_id: string; document_type: string; filename: string; media_type: string;
-  content_digest: string; storage_reference: string; source_reference: string;
+  content_digest: string; source_reference: string;
   status: string; evidence_digest: string; actor_user_id: string; created_at: string;
 }
 export interface PurchasingDocumentCreate {

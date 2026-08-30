@@ -312,7 +312,6 @@ class PurchasingDocumentItem(PurchasingSchema):
     filename: str
     media_type: str
     content_digest: str
-    storage_reference: str
     source_reference: str
     status: str
     evidence_digest: str

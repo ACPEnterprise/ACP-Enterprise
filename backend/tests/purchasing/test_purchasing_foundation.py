@@ -118,6 +118,7 @@ async def test_purchasing_document_custody_is_scoped_append_only_and_idempotent(
             session, context=preparer, payload=command
         )
         assert replay.id == created.id
+        assert "storage_reference" not in replay.model_dump()
         assert (
                 await session.scalar(
                     select(func.count())
