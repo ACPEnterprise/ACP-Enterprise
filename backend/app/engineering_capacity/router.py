@@ -8,8 +8,16 @@ from app.database.session import get_database_session
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import EngineeringCapacityPermission
 from app.platform.permissions.dependencies import require_permission
+from app.platform.reliability.correlation import current_correlation_id
+from app.platform.reliability.failures import ClientRecovery, FailureCode, SafeFailure
 
-from .errors import EngineeringCapacityError
+from .errors import (
+    CapacityConflictError,
+    CapacityNotFoundError,
+    CapacityReconciliationRequiredError,
+    CapacityUnavailableError,
+    EngineeringCapacityError,
+)
 from .schemas import (
     CapacityAllocationRequest,
     CapacityAllocationResponse,
@@ -47,10 +55,42 @@ ManageContext = Annotated[
 
 
 def capacity_http_error(error: EngineeringCapacityError) -> HTTPException:
-    return HTTPException(
-        status_code=error.status_code,
-        detail={"code": error.code, "message": str(error)},
-    )
+    if isinstance(error, CapacityNotFoundError):
+        failure = SafeFailure(
+            FailureCode.NOT_FOUND,
+            "Engineering capacity resource was not found.",
+            ClientRecovery.TERMINAL_FAILURE,
+            current_correlation_id(),
+        )
+    elif isinstance(error, CapacityReconciliationRequiredError):
+        failure = SafeFailure(
+            FailureCode.RECONCILIATION_REQUIRED,
+            "Engineering capacity requires reconciliation.",
+            ClientRecovery.RECONCILIATION_REQUIRED,
+            current_correlation_id(),
+        )
+    elif isinstance(error, CapacityUnavailableError):
+        failure = SafeFailure(
+            FailureCode.DEPENDENCY_UNAVAILABLE,
+            "Engineering capacity is temporarily unavailable.",
+            ClientRecovery.TEMPORARILY_UNAVAILABLE,
+            current_correlation_id(),
+        )
+    elif isinstance(error, CapacityConflictError):
+        failure = SafeFailure(
+            FailureCode.RESOURCE_STATE_CONFLICT,
+            "Engineering capacity operation conflicts with current authority.",
+            ClientRecovery.RETRY_AFTER_REFRESH,
+            current_correlation_id(),
+        )
+    else:
+        failure = SafeFailure(
+            FailureCode.VALIDATION,
+            "Engineering capacity request requires correction.",
+            ClientRecovery.USER_CORRECTION_REQUIRED,
+            current_correlation_id(),
+        )
+    return HTTPException(status_code=error.status_code, detail=failure.detail())
 
 
 @router.get("/summary", response_model=CapacitySummaryResponse)
