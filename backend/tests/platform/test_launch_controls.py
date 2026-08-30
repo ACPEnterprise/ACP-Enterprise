@@ -13,6 +13,8 @@ from app.platform.audit.models import AuditRecord
 from app.platform.audit.repository import AuditReadRepository
 from app.platform.audit.router import audit_access_service, list_audit_records
 from app.platform.audit.service import AuditEntry, AuditService
+from app.platform.branch.models import Branch
+from app.platform.company.models import Company
 from app.platform.launch_controls import (
     COMPANY_ADMINISTRATOR_OWNER_READ_PERMISSIONS,
     LAUNCH_ROLE_MATRIX,
@@ -216,8 +218,52 @@ async def test_audit_read_is_company_and_branch_scoped(audit_database) -> None:
     other_company_id = uuid4()
     allowed_branch = uuid4()
     denied_branch = uuid4()
+    foreign_branch = uuid4()
     now = datetime.now(timezone.utc)
     async with factory() as session, session.begin():
+        session.add_all(
+            [
+                Company(
+                    id=company_id,
+                    name="Qualified Company",
+                    code=f"QC{company_id.hex[:8].upper()}",
+                    timezone="UTC",
+                ),
+                Company(
+                    id=other_company_id,
+                    name="Foreign Company",
+                    code=f"FC{other_company_id.hex[:8].upper()}",
+                    timezone="UTC",
+                ),
+            ]
+        )
+        await session.flush()
+        session.add_all(
+            [
+                Branch(
+                    id=allowed_branch,
+                    company_id=company_id,
+                    name="Allowed Branch",
+                    code="ALLOWED",
+                    timezone="UTC",
+                ),
+                Branch(
+                    id=denied_branch,
+                    company_id=company_id,
+                    name="Denied Branch",
+                    code="DENIED",
+                    timezone="UTC",
+                ),
+                Branch(
+                    id=foreign_branch,
+                    company_id=other_company_id,
+                    name="Foreign Branch",
+                    code="FOREIGN",
+                    timezone="UTC",
+                ),
+            ]
+        )
+        await session.flush()
         session.add_all(
             [
                 AuditRecord(
@@ -251,7 +297,7 @@ async def test_audit_read_is_company_and_branch_scoped(audit_database) -> None:
                     action="foreign.reviewed",
                     outcome="success",
                     company_id=other_company_id,
-                    branch_id=allowed_branch,
+                    branch_id=foreign_branch,
                     resource_type="job",
                     details={},
                     occurred_at=now,

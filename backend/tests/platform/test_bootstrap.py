@@ -274,12 +274,16 @@ async def test_catalog_sync_adds_only_missing_permissions_idempotently(
             select(Permission).where(Permission.code == SchedulingPermission.MANAGE)
         )
         assert scheduling_permission is not None
-        assignment = await session.scalar(
-            select(RolePermission).where(
-                RolePermission.permission_id == scheduling_permission.id
+        assignments = tuple(
+            await session.scalars(
+                select(RolePermission).where(
+                    RolePermission.permission_id == scheduling_permission.id
+                )
             )
         )
-        assert assignment is None
+        assert assignments
+        for assignment in assignments:
+            await session.delete(assignment)
         await session.delete(scheduling_permission)
         noncanonical = Permission(
             code="COMPANY_LOCAL_EXTENSION",
@@ -354,7 +358,9 @@ async def test_repeated_bootstrap_is_idempotent(
     async with bootstrap_database.sessions() as session:
         assert await session.scalar(select(func.count()).select_from(Company)) == 1
         assert await session.scalar(select(func.count()).select_from(User)) == 1
-        assert await session.scalar(select(func.count()).select_from(Role)) == 2
+        assert await session.scalar(select(func.count()).select_from(Role)) == (
+            len(LAUNCH_ROLE_MATRIX) + 1
+        )
 
 
 @pytest.mark.asyncio
