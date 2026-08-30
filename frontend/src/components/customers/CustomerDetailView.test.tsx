@@ -58,15 +58,33 @@ describe("CustomerDetailView", () => {
       isSuccess: true,
       data: [],
     } as never);
+    vi.mocked(customerHooks.useCustomerTimeline).mockReturnValue({
+      isLoading: false,
+      isError: false,
+      isSuccess: true,
+      data: {
+        items: [{
+          id: "event-1", timestamp: "2026-08-07T12:00:00Z",
+          event_type: "customer.created", actor: null,
+          entity: { type: "customer", id: customer.id },
+          summary: "Customer created", metadata: {}, branch_id: "branch-1",
+          company_id: "company-1", customer_id: customer.id,
+          correlation_id: "correlation-1",
+        }],
+        page: 1, page_size: 50, total_count: 1, total_pages: 1,
+      },
+    } as never);
   });
 
   it("uses the shared accessible confirmation before archiving", async () => {
     const archive = vi.fn();
     vi.mocked(customerHooks.useCustomerMutations).mockReturnValue({
       archive: mutation(archive),
+      restore: mutation(),
       update: mutation(),
       addNote: mutation(),
       recordConsent: mutation(),
+      duplicateCheck: mutation(),
       addProperty: mutation(),
       updateProperty: mutation(),
       addContact: mutation(),
@@ -137,9 +155,11 @@ describe("CustomerDetailView", () => {
     } as never);
     vi.mocked(customerHooks.useCustomerMutations).mockReturnValue({
       archive: mutation(),
+      restore: mutation(),
       update: mutation(),
       addNote: mutation(),
       recordConsent: mutation(),
+      duplicateCheck: mutation(),
       addProperty: mutation(),
       updateProperty: mutation(),
       addContact: mutation(),
@@ -174,7 +194,9 @@ describe("CustomerDetailView", () => {
     } as never);
     vi.mocked(customerHooks.useCustomerMutations).mockReturnValue({
       archive: mutation(), update: mutation(), addNote: mutation(),
+      restore: mutation(),
       recordConsent: mutation(recordConsent), addProperty: mutation(),
+      duplicateCheck: mutation(),
       updateProperty: mutation(), addContact: mutation(), updateContact: mutation(),
     } as never);
 
@@ -188,6 +210,46 @@ describe("CustomerDetailView", () => {
       source: "staff_confirmed",
       reason: null,
     });
+    expect(screen.getByText("Customer created")).toBeInTheDocument();
+    expect(screen.getByText("Recorded preference unavailable")).toBeInTheDocument();
+  });
+
+  it("restores archived evidence without rewriting history", async () => {
+    const restore = vi.fn();
+    vi.mocked(customerHooks.useCustomerDetail).mockReturnValue({
+      isLoading: false, isError: false,
+      data: { ...customer, archived_at: "2026-08-08T12:00:00Z" },
+    } as never);
+    vi.mocked(customerHooks.useCustomerMutations).mockReturnValue({
+      archive: mutation(), restore: mutation(restore), update: mutation(),
+      addNote: mutation(), recordConsent: mutation(), addProperty: mutation(),
+      duplicateCheck: mutation(),
+      updateProperty: mutation(), addContact: mutation(), updateContact: mutation(),
+    } as never);
+
+    render(<CustomerDetailView customerId={customer.id} onBack={vi.fn()} />);
+    await userEvent.click(screen.getByRole("button", { name: "Restore customer" }));
+    expect(restore).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("button", { name: "Archive" })).not.toBeInTheDocument();
+  });
+
+  it("reviews duplicate evidence without offering an unsafe merge", async () => {
+    const duplicateCheck = vi.fn((_input, options) => options.onSuccess([{
+      ...customer, id: "candidate-2", reasons: ["matching_normalized_email"],
+    }]));
+    vi.mocked(customerHooks.useCustomerMutations).mockReturnValue({
+      archive: mutation(), restore: mutation(), update: mutation(), addNote: mutation(),
+      recordConsent: mutation(), duplicateCheck: mutation(duplicateCheck),
+      addProperty: mutation(), updateProperty: mutation(), addContact: mutation(),
+      updateContact: mutation(),
+    } as never);
+
+    render(<CustomerDetailView customerId={customer.id} onBack={vi.fn()} />);
+    await userEvent.click(screen.getByRole("button", { name: "Check for possible duplicates" }));
+    expect(duplicateCheck).toHaveBeenCalledOnce();
+    expect(screen.getByText("matching normalized email")).toBeInTheDocument();
+    expect(screen.getByText(/Native consolidation authority is not available/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /merge/i })).not.toBeInTheDocument();
   });
 
   it("shows customer evidence to read-only users without mutation controls", () => {
