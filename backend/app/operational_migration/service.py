@@ -299,7 +299,9 @@ class OperationalMigrationService:
             )
             if run is not None:
                 if (
-                    run.source_digest != digest
+                    run.company_id != context.company.id
+                    or run.branch_id != context.active_branch.id
+                    or run.source_digest != digest
                     or run.master_run_id != master_run_id
                     or run.repair_of_run_id != repair_of_run_id
                     or run.repair_generation != repair_generation

@@ -297,6 +297,48 @@ async def test_operational_import_repairs_single_primary_location_identity(
         )
 
 
+@pytest.mark.asyncio
+async def test_operational_resume_rejects_foreign_company_run(
+    migration_database: tuple[AsyncEngine, async_sessionmaker[AsyncSession]],
+) -> None:
+    _, factory = migration_database
+    foreign_context = await seed_context(factory)
+    caller_context = await seed_context(factory)
+    service = OperationalMigrationService()
+    digest = service._digest("housecall_pro", [], [])
+    assert foreign_context.active_branch is not None
+    async with factory() as session, session.begin():
+        foreign_run = OperationalMigrationRun(
+            company_id=foreign_context.company.id,
+            branch_id=foreign_context.active_branch.id,
+            initiated_by_user_id=foreign_context.user.id,
+            source_system="housecall_pro",
+            source_digest=digest,
+            mode="import",
+            status="failed",
+        )
+        session.add(foreign_run)
+        await session.flush()
+        foreign_run_id = foreign_run.id
+
+    with pytest.raises(ValueError, match="resume authority is contradictory"):
+        await service.run(
+            factory,
+            context=caller_context,
+            source_system="housecall_pro",
+            jobs=[],
+            appointments=[],
+            dry_run=False,
+            resume_run_id=foreign_run_id,
+        )
+
+    async with factory() as session:
+        persisted = await session.get(OperationalMigrationRun, foreign_run_id)
+        assert persisted is not None
+        assert persisted.company_id == foreign_context.company.id
+        assert persisted.status == "failed"
+
+
 def records() -> tuple[list[JobMigrationRecord], list[AppointmentMigrationRecord]]:
     jobs = [
         JobMigrationRecord(
