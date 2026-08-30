@@ -5,23 +5,53 @@ from uuid import uuid4
 import httpx
 import pytest
 import pytest_asyncio
+from fastapi import FastAPI
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
 from app.core.config import settings
 from app.database.session import get_database_session
-from app.engineering_capacity.router import router
+from app.engineering_capacity.errors import (
+    CapacityConflictError,
+    CapacityNotFoundError,
+    CapacityReconciliationRequiredError,
+    CapacityUnavailableError,
+    EngineeringCapacityError,
+)
+from app.engineering_capacity.router import capacity_http_error, router
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import EngineeringCapacityPermission
 from app.platform.permissions.dependencies import get_authorization_context
 from app.worker_control.models import EngineeringWorker
 from app.worker_identity.models import WorkerCredential, WorkerIdentity
-from fastapi import FastAPI
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-
 from tests.engineering_control.test_engineering_command_service import (
     ServiceFixture,
     context_with_permissions,
     seed_service_fixture,
     utc_now,
 )
+
+
+def test_capacity_failures_are_classified_and_non_reflective() -> None:
+    canary = "worker-credential=capacity-canary /private/provider/path"
+    failures = tuple(
+        capacity_http_error(error(canary))
+        for error in (
+            CapacityNotFoundError,
+            CapacityConflictError,
+            CapacityUnavailableError,
+            CapacityReconciliationRequiredError,
+            EngineeringCapacityError,
+        )
+    )
+
+    assert [failure.detail["recovery"] for failure in failures] == [
+        "TERMINAL_FAILURE",
+        "RETRY_AFTER_REFRESH",
+        "TEMPORARILY_UNAVAILABLE",
+        "RECONCILIATION_REQUIRED",
+        "USER_CORRECTION_REQUIRED",
+    ]
+    assert all(canary not in str(failure.detail) for failure in failures)
 
 
 @pytest_asyncio.fixture
