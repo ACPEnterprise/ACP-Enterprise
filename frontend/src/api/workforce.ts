@@ -25,6 +25,29 @@ export interface WorkforceEmployeeDetail extends WorkforceEmployeeSummary {
   branches: Array<{ branch_id: string; status: string; starts_on: string | null; ends_on: string | null }>;
   work_restrictions: string[];
   equipment_capabilities: Array<{ code: string; display_name: string; proficiency: string; status: string }>;
+  availability: Array<{ branch_id: string; start_at: string; end_at: string; status: string; source: string }>;
+}
+
+export interface WorkforceEligibilityRequest {
+  branch_id: string;
+  window_start_at: string;
+  window_end_at: string;
+  required_capability_codes: string[];
+  required_language_codes: string[];
+}
+
+export interface WorkforceEligibilityItem {
+  employee_id: string;
+  employee_number: string;
+  display_name: string;
+  branch_id: string;
+  job_title: string | null;
+  capability_codes: string[];
+  language_codes: string[];
+  decision: string;
+  reasons: string[];
+  availability_confidence: string;
+  eligible: boolean;
 }
 
 export async function listWorkforceEmployees(): Promise<WorkforceEmployeeSummary[]> {
@@ -35,4 +58,9 @@ export async function listWorkforceEmployees(): Promise<WorkforceEmployeeSummary
 export async function getWorkforceEmployee(employeeId: string): Promise<WorkforceEmployeeDetail> {
   const response = await apiClient.get<WorkforceEmployeeDetail>(`/api/v1/workforce/employees/${employeeId}`);
   return response.data;
+}
+
+export async function evaluateWorkforceEligibility(payload: WorkforceEligibilityRequest): Promise<WorkforceEligibilityItem[]> {
+  const response = await apiClient.post<{ items: WorkforceEligibilityItem[] }>("/api/v1/workforce/eligibility", payload);
+  return response.data.items;
 }

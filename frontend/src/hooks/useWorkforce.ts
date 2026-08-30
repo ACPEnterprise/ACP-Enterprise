@@ -1,9 +1,15 @@
 import { useQuery } from "@tanstack/react-query";
 
-import { getWorkforceEmployee, listWorkforceEmployees } from "../api/workforce";
+import { useMutation } from "@tanstack/react-query";
+
+import { evaluateWorkforceEligibility, getWorkforceEmployee, listWorkforceEmployees } from "../api/workforce";
 
 export function useWorkforceDirectory() {
   return useQuery({ queryKey: ["workforce-directory"], queryFn: listWorkforceEmployees });
+}
+
+export function useWorkforceEligibility() {
+  return useMutation({ mutationFn: evaluateWorkforceEligibility });
 }
 
 export function useWorkforceEmployee(employeeId: string | null) {

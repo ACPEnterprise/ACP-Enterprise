@@ -42,6 +42,14 @@ class WorkforceBranchItem(WorkforceSchema):
     ends_on: date | None
 
 
+class WorkforceAvailabilityItem(WorkforceSchema):
+    branch_id: UUID
+    start_at: datetime
+    end_at: datetime
+    status: str
+    source: str
+
+
 class WorkforceEmployeeSummary(WorkforceSchema):
     employee_id: UUID
     employee_number: str
@@ -67,6 +75,7 @@ class WorkforceEmployeeDetail(WorkforceEmployeeSummary):
     branches: tuple[WorkforceBranchItem, ...]
     work_restrictions: tuple[str, ...]
     equipment_capabilities: tuple[WorkforceCapabilityItem, ...]
+    availability: tuple[WorkforceAvailabilityItem, ...]
 
 
 class WorkforceDirectory(WorkforceSchema):
