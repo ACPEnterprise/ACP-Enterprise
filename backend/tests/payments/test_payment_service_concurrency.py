@@ -12,7 +12,7 @@ from app.core.config import settings
 from app.customers.models import Customer
 from app.events.models import BusinessEvent
 from app.payments.contracts import CreateIntent, ProviderRequest, RequestRefund
-from app.payments.errors import PaymentConflict
+from app.payments.errors import PaymentConflict, PaymentNotFound, PaymentValidation
 from app.payments.models import (
     PaymentIntent,
     PaymentReceipt,
@@ -20,6 +20,7 @@ from app.payments.models import (
     Refund,
 )
 from app.payments.provider import DeterministicFakeProvider
+from app.payments.router import _error
 from app.payments.service import PaymentService
 from app.platform.branch.models import Branch
 from app.platform.company import membership_models  # noqa: F401
@@ -37,6 +38,37 @@ class CountingFakeProvider(DeterministicFakeProvider):
     async def collect(self, request: ProviderRequest):
         self.collect_calls += 1
         return await super().collect(request)
+
+
+@pytest.mark.parametrize(
+    ("error", "status_code", "code", "recovery"),
+    [
+        (PaymentNotFound("protected identifier"), 404, "not_found", "TERMINAL_FAILURE"),
+        (
+            PaymentConflict("downstream SQL or invoice detail"),
+            409,
+            "resource_state_conflict",
+            "RETRY_AFTER_REFRESH",
+        ),
+        (
+            PaymentValidation("protected provider payload"),
+            422,
+            "validation",
+            "USER_CORRECTION_REQUIRED",
+        ),
+    ],
+)
+def test_payment_failures_use_safe_non_reflective_recovery_contract(
+    error, status_code: int, code: str, recovery: str
+) -> None:
+    translated = _error(error)
+    assert translated.status_code == status_code
+    assert translated.detail["code"] == code
+    assert translated.detail["recovery"] == recovery
+    assert translated.detail["correlation_id"] is None
+    message = translated.detail["message"].lower()
+    assert "sql" not in message
+    assert "provider payload" not in message
 
 
 @pytest_asyncio.fixture
