@@ -20,6 +20,7 @@ export type NavigationItemId =
   | "command-center"
   | "mission-control"
   | "customers"
+  | "service-agreements"
   | "scheduling"
   | "dispatch"
   | "price-book"

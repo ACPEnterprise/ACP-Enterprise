@@ -23,6 +23,7 @@ import {
   LayoutDashboard,
   Settings,
   Users,
+  BadgeCheck,
 } from "lucide-react";
 
 import type { NavigationGroup, NavigationItem } from "./types";
@@ -49,6 +50,7 @@ export const navigationCatalog = [
     icon: Users,
     availability: "available",
   },
+  { id: "service-agreements", label: "Service Agreements", path: "/service-agreements", icon: BadgeCheck, availability: "available", requiredPermission: "COMPANY_SERVICE_AGREEMENT_READ" },
   {
     id: "workday",
     label: "My time clock",
@@ -248,6 +250,7 @@ export const navigationGroups = [
     label: "Operations",
     items: [
       item("customers"),
+      item("service-agreements"),
       item("technician"),
       item("workday"),
       item("scheduling"),

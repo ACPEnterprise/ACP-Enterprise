@@ -26,6 +26,7 @@ import {
   notFoundHandle,
   priceBookHandle,
   schedulingHandle,
+  serviceAgreementsHandle,
   technicianHandle,
   workdayHandle,
 } from "./routeMetadata";
@@ -80,6 +81,7 @@ export const appRoutes: RouteObject[] = [
                 .CustomerDetailRoute,
             }),
           },
+          { path: "service-agreements", handle: serviceAgreementsHandle, lazy: async () => ({ Component: (await import("../routes/ServiceAgreementsRoute")).ServiceAgreementsRoute }) },
           {
             path: "scheduling",
             handle: schedulingHandle,
