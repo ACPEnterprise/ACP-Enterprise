@@ -13,6 +13,8 @@ from app.platform.permissions.authorization import (
 )
 from app.platform.permissions.codes import LaunchPlatformPermission
 from app.platform.permissions.dependencies import require_permission
+from app.platform.reliability.correlation import current_correlation_id
+from app.platform.reliability.failures import ClientRecovery, FailureCode, SafeFailure
 
 router = APIRouter(prefix="/api/v1/platform/audit", tags=["Platform Audit"])
 DatabaseSession = Annotated[AsyncSession, Depends(get_database_session)]
@@ -37,9 +39,15 @@ async def list_audit_records(
             limit=limit,
         )
     except TenantAccessDeniedError as error:
+        failure = SafeFailure(
+            FailureCode.FORBIDDEN,
+            "Branch access denied.",
+            ClientRecovery.OWNER_ADMIN_ACTION_REQUIRED,
+            current_correlation_id(),
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Branch access denied.",
+            detail=failure.detail(),
         ) from error
     return [
         AuditRecordResponse.model_validate(record, from_attributes=True)
