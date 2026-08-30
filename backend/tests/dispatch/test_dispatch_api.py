@@ -1,10 +1,41 @@
 import httpx
 import pytest
 
+from app.dispatch.errors import DispatchConflict, DispatchNotFound, DispatchValidation
+from app.dispatch.router import dispatch_http
 from app.main import app
 from app.platform.launch_controls import LAUNCH_ROLE_MATRIX, LaunchRoleCode
 from app.platform.permissions.catalog import permission_catalog
 from app.platform.permissions.codes import DispatchPermission, JobPermission
+
+
+@pytest.mark.parametrize(
+    ("error", "status_code", "code", "recovery"),
+    [
+        (DispatchNotFound("hidden"), 404, "not_found", "TERMINAL_FAILURE"),
+        (
+            DispatchConflict("internal conflict detail"),
+            409,
+            "resource_state_conflict",
+            "RETRY_AFTER_REFRESH",
+        ),
+        (
+            DispatchValidation("internal validation detail"),
+            422,
+            "validation",
+            "USER_CORRECTION_REQUIRED",
+        ),
+    ],
+)
+def test_dispatch_failures_use_safe_recovery_contract(
+    error, status_code: int, code: str, recovery: str
+) -> None:
+    translated = dispatch_http(error)
+    assert translated.status_code == status_code
+    assert translated.detail["code"] == code
+    assert translated.detail["recovery"] == recovery
+    assert translated.detail["correlation_id"] is None
+    assert "internal" not in translated.detail["message"].lower()
 
 
 def test_dispatch_permissions_are_canonical_and_separate() -> None:
