@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import * as paymentsApi from "../api/payments";
 import { PaymentsRoute } from "./PaymentsRoute";
 
 let permissions = new Set<string>();
@@ -14,10 +15,11 @@ vi.mock("../api/payments", () => ({
 const renderRoute = () => render(<QueryClientProvider client={new QueryClient()}><MemoryRouter><PaymentsRoute /></MemoryRouter></QueryClientProvider>);
 
 describe("PaymentsRoute", () => {
-  beforeEach(() => { permissions = new Set(); });
+  beforeEach(() => { permissions = new Set(); vi.mocked(paymentsApi.listPaymentReceipts).mockClear(); });
   it("fails closed without payment read permission", () => {
     renderRoute();
     expect(screen.getByText("You are not authorized to view Payments.")).toBeVisible();
+    expect(paymentsApi.listPaymentReceipts).not.toHaveBeenCalled();
   });
   it("separates read and collect controls", async () => {
     permissions = new Set(["COMPANY_PAYMENT_READ"]); renderRoute();

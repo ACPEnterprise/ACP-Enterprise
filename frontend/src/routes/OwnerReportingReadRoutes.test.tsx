@@ -5,6 +5,11 @@ import { AccountsPayableRoute } from "./AccountsPayableRoute";
 import { PayrollRoute } from "./PayrollRoute";
 
 let permissions = new Set<string>();
+const apMocks = vi.hoisted(() => ({
+  aging: vi.fn(() => ({ isPending: false, isError: false, data: [] })),
+  matchWorkbench: vi.fn((props: { canReview: boolean }) =>
+    props.canReview ? "Review matching evidence" : "Read-only matching evidence"),
+}));
 
 vi.mock("../auth", () => ({
   useHasPermission: (code: string) => permissions.has(code),
@@ -27,15 +32,15 @@ vi.mock("../hooks/usePayroll", () => ({
   useComplianceSchemas: () => ({ isPending: false, isError: false, data: [] }),
 }));
 vi.mock("../hooks/useAccountsPayable", () => ({
-  useAPAging: () => ({ isPending: false, isError: false, data: [] }),
+  useAPAging: apMocks.aging,
   useAPMutations: () => ({ createVendor: { mutateAsync: vi.fn(), isPending: false } }),
 }));
 vi.mock("../components/purchasing/ProcurementMatchWorkbench", () => ({
-  ProcurementMatchWorkbench: () => <div>Read-only matching evidence</div>,
+  ProcurementMatchWorkbench: apMocks.matchWorkbench,
 }));
 
 describe("owner reporting read routes", () => {
-  beforeEach(() => { permissions = new Set(); });
+  beforeEach(() => { permissions = new Set(); vi.clearAllMocks(); });
 
   it("renders Payroll Administration with reporting-read alone", () => {
     permissions.add("COMPANY_PAYROLL_REPORTING_READ");
@@ -47,6 +52,19 @@ describe("owner reporting read routes", () => {
     permissions.add("COMPANY_ACCOUNTS_PAYABLE_REPORT_READ");
     render(<AccountsPayableRoute />);
     expect(screen.getByRole("heading", { name: "Accounts Payable" })).toBeVisible();
+    expect(apMocks.aging).toHaveBeenCalledWith(expect.any(String), true);
+    expect(apMocks.matchWorkbench).not.toHaveBeenCalled();
+  });
+
+  it("does not request AP reporting for operational-read alone", () => {
+    permissions.add("COMPANY_ACCOUNTS_PAYABLE_READ");
+    render(<AccountsPayableRoute />);
+    expect(screen.getByRole("heading", { name: "Accounts Payable" })).toBeVisible();
+    expect(apMocks.aging).toHaveBeenCalledWith(expect.any(String), false);
+    expect(apMocks.matchWorkbench).toHaveBeenCalled();
+    expect(apMocks.matchWorkbench.mock.calls[0]?.[0]).toEqual(
+      expect.objectContaining({ canReview: false }),
+    );
   });
 
   it("keeps both routes fail-closed without an accepted read permission", () => {

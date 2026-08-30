@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import * as invoicesApi from "../api/invoices";
 import { InvoicesRoute } from "./InvoicesRoute";
 
 let permissions = new Set<string>();
@@ -38,12 +39,14 @@ function renderRoute() {
 describe("InvoicesRoute", () => {
   beforeEach(() => {
     permissions = new Set();
+    vi.mocked(invoicesApi.listInvoices).mockClear();
   });
   it("fails closed without Invoice read permission", () => {
     renderRoute();
     expect(
       screen.getByText("You are not authorized to view Invoices."),
     ).toBeVisible();
+    expect(invoicesApi.listInvoices).not.toHaveBeenCalled();
   });
   it("shows receivables without mutation controls for read-only users", async () => {
     permissions = new Set(["COMPANY_INVOICE_READ"]);
