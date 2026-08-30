@@ -11,9 +11,14 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from app.core.config import settings
 from app.customers.models import Customer
 from app.events.models import BusinessEvent
-from app.payments.contracts import CreateIntent, RequestRefund
+from app.payments.contracts import CreateIntent, ProviderRequest, RequestRefund
 from app.payments.errors import PaymentConflict
-from app.payments.models import PaymentIntent, PaymentReceipt, Refund
+from app.payments.models import (
+    PaymentIntent,
+    PaymentReceipt,
+    ReconciliationException,
+    Refund,
+)
 from app.payments.provider import DeterministicFakeProvider
 from app.payments.service import PaymentService
 from app.platform.branch.models import Branch
@@ -22,6 +27,16 @@ from app.platform.company.models import Company
 from app.platform.permissions import models as permission_models  # noqa: F401
 from app.platform.users.models import User
 from app.scheduling.models import Appointment  # noqa: F401
+
+
+class CountingFakeProvider(DeterministicFakeProvider):
+    def __init__(self) -> None:
+        super().__init__()
+        self.collect_calls = 0
+
+    async def collect(self, request: ProviderRequest):
+        self.collect_calls += 1
+        return await super().collect(request)
 
 
 @pytest_asyncio.fixture
@@ -72,7 +87,8 @@ async def test_concurrent_collection_and_refund_replay_have_one_economic_authori
     payment_fixture,
 ) -> None:
     factory, company, branch, actor, customer = payment_fixture
-    service = PaymentService(DeterministicFakeProvider(), "synthetic-merchant")
+    provider = CountingFakeProvider()
+    service = PaymentService(provider, "synthetic-merchant")
     collect = CreateIntent(
         company_id=company.id,
         branch_id=branch.id,
@@ -90,6 +106,7 @@ async def test_concurrent_collection_and_refund_replay_have_one_economic_authori
 
     first, replay = await asyncio.gather(collect_once(), collect_once())
     assert first.id == replay.id
+    assert provider.collect_calls == 1
     async with factory() as session:
         intent = await session.get(PaymentIntent, first.id)
         receipt = await session.scalar(
@@ -154,3 +171,48 @@ async def test_concurrent_collection_and_refund_replay_have_one_economic_authori
                 session,
                 replace(collect, amount=Decimal("126.25")),
             )
+
+
+@pytest.mark.asyncio
+async def test_ambiguous_provider_outcome_is_reconciled_without_blind_retry(
+    payment_fixture,
+) -> None:
+    factory, company, branch, actor, customer = payment_fixture
+    provider = CountingFakeProvider()
+    service = PaymentService(provider, "synthetic-merchant")
+    command = CreateIntent(
+        company_id=company.id,
+        branch_id=branch.id,
+        customer_id=customer.id,
+        amount=Decimal("41.00"),
+        currency="USD",
+        opaque_payment_method="opaque_ambiguous_after_acceptance",
+        idempotency_key=f"ambiguous-{uuid4()}",
+        actor_user_id=actor.id,
+    )
+    async with factory() as session:
+        first = await service.collect(session, command)
+    async with factory() as session:
+        replay = await service.collect(session, command)
+    assert first.id == replay.id
+    assert first.status == replay.status == "reconciliation_required"
+    assert provider.collect_calls == 1
+    async with factory() as session:
+        assert (
+            await session.scalar(
+                select(func.count(PaymentReceipt.id)).where(
+                    PaymentReceipt.intent_id == first.id
+                )
+            )
+            == 0
+        )
+        assert (
+            await session.scalar(
+                select(func.count(ReconciliationException.id)).where(
+                    ReconciliationException.entity_id == first.id,
+                    ReconciliationException.reason_code
+                    == "ambiguous_processor_outcome",
+                )
+            )
+            == 1
+        )
