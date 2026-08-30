@@ -3,6 +3,7 @@
   "qualification_contract": "LIA.FOUNDATION.v1",
   "release_profile": "LIA.READ_ONLY.v1",
   "authoritative_base": "be7f6796c1ca74a6252f2aa5658ee70f1806f079",
+  "reconciled_authority": "bd600685b9ace055a9f9cae7d1f90025f851698c",
   "beacon_intelligence_head": "8f1f841bb14a4ef605d65d591c50ceeba19019d0",
   "classification": "LIA_FOUNDATION_READY_FOR_PROVIDER_IMPLEMENTATION",
   "provider_configured": false,
@@ -23,16 +24,16 @@
     "docs/architecture/lia/threat-model-v1.md": "30fc4db4a40f838bac8173c5af9ef39ee4692ecb93dff55fe9cc0398855a6b0d"
   },
   "qualification": {
-    "lia_beacon_unit_tests": 170,
+    "lia_beacon_unit_tests": 172,
     "authorization_isolation_postgresql_tests": 26,
-    "frontend_tests": 284,
-    "frontend_test_files": 95,
+    "frontend_tests": 325,
+    "frontend_test_files": 101,
     "ruff": "PASS",
     "mypy": "PASS",
     "python_compilation": "PASS",
     "eslint": "PASS",
     "typescript_vite_build": "PASS",
-    "alembic_head": "g5e4c93b0f6d",
+    "alembic_head": "l0j9h48g5e1c",
     "alembic_head_count": 1,
     "fresh_postgresql_upgrade": "PASS"
   },
