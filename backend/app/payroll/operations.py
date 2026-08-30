@@ -49,8 +49,8 @@ class PayrollOperationsService:
     async def summary(
         self, session: AsyncSession, *, context: AuthorizationContext
     ) -> PayrollOperationsSummary:
-        if not context.has_permission(PayrollPermission.RUN_READ):
-            raise PayrollAuthorizationError("Payroll run read permission denied")
+        if not context.has_permission(PayrollPermission.REPORTING_READ):
+            raise PayrollAuthorizationError("Payroll reporting permission denied")
         company_id = context.company.id
         run_counts = await self._states(
             session, PayrollRunRecord, PayrollRunRecord.lifecycle, company_id
