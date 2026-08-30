@@ -8,7 +8,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database.session import get_database_session
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import LuminaryPermission
-from app.platform.permissions.dependencies import require_permission
+from app.platform.permissions.dependencies import (
+    require_all_permissions,
+    require_permission,
+)
 from app.platform.reliability.correlation import current_correlation_id
 from app.platform.reliability.failures import ClientRecovery, FailureCode, SafeFailure
 
@@ -19,9 +22,11 @@ Session = Annotated[AsyncSession, Depends(get_database_session)]
 Reader = Annotated[
     AuthorizationContext, Depends(require_permission(LuminaryPermission.READ))
 ]
-Analyst = Annotated[
-    AuthorizationContext, Depends(require_permission(LuminaryPermission.ANALYZE))
-]
+require_luminary_analyst = require_all_permissions(
+    LuminaryPermission.READ,
+    LuminaryPermission.ANALYZE,
+)
+Analyst = Annotated[AuthorizationContext, Depends(require_luminary_analyst)]
 
 
 def _luminary_http_error(error: Exception) -> HTTPException:
