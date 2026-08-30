@@ -6,7 +6,7 @@ import { appointmentKeys } from "./useScheduling";
 
 export const jobKeys = { all: ["jobs"] as const, lists: () => ["jobs", "list"] as const, list: (query: JobListParams) => ["jobs", "list", query] as const, detail: (id: string) => ["jobs", "detail", id] as const };
 export function useJobs(query: JobListParams, enabled = true) { return useQuery({ queryKey: jobKeys.list(query), queryFn: () => jobsApi.listJobs(query), retry: shouldRetryApiQuery, enabled }); }
-export function useJob(jobId: string | undefined) { return useQuery({ queryKey: jobKeys.detail(jobId ?? ""), queryFn: () => jobsApi.getJob(jobId as string), enabled: Boolean(jobId), retry: shouldRetryApiQuery }); }
+export function useJob(jobId: string | undefined, enabled = true) { return useQuery({ queryKey: jobKeys.detail(jobId ?? ""), queryFn: () => jobsApi.getJob(jobId as string), enabled: enabled && Boolean(jobId), retry: shouldRetryApiQuery }); }
 function useJobMutation<T>(mutationFn: (input: T) => Promise<{ id: string }>) { const client = useQueryClient(); return useMutation({ mutationFn, onSuccess: async (job) => { await Promise.all([client.invalidateQueries({ queryKey: jobKeys.lists() }), client.invalidateQueries({ queryKey: jobKeys.detail(job.id) })]); } }); }
 export function useCreateJob() { return useJobMutation<JobCreateInput>(jobsApi.createJob); }
 export function useJobForAppointment(appointmentId: string | undefined) {
