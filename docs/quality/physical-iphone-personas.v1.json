@@ -1,0 +1,38 @@
+{
+  "contract_version": "OM2B.PHYSICAL_IPHONE.PERSONAS.v1",
+  "data_classification": "SYNTHETIC_ONLY",
+  "environment": "PREVIEW_ONLY",
+  "personas": [
+    {"role":"TECHNICIAN","employee_link":true,"allows":["assigned field context","job execution"],"denies":["administration","Payroll administration","Accounting","Purchasing approval","other Employee data"]},
+    {"role":"DISPATCHER","employee_link":false,"allows":["Customer read","Scheduling manage","Dispatch manage","Job manage in granted Branch"],"denies":["Payroll","Accounting","Administration","Employee pay data"]},
+    {"role":"SERVICE_CSR","employee_link":false,"allows":["Customer manage","Estimate manage","Scheduling read","Job read","Dispatch read","Invoice read","Payment read","Communications read"],"denies":["financial execution","Payroll","Accounting","Purchasing mutation","Inventory mutation","Administration","Migration","Beacon ownership"]},
+    {"role":"OFFICE_MANAGER","employee_link":false,"allows":["accepted office operations in granted Branch"],"denies":["Payroll mutation","Accounting posting","Migration execution unless separately granted"]},
+    {"role":"COMPANY_ADMINISTRATOR","employee_link":false,"allows":["identity and access administration","bounded owner reads"],"denies":["domain execution absent an explicit permission"]},
+    {"role":"OWN_DATA_ROLE","employee_link":true,"allows":["own day","own Timekeeping","own Pay Statements"],"denies":["other Employee data","broad Customer data","Payroll administration","Accounting","Purchasing","Migration","Administration"]}
+  ],
+  "sequence": [
+    "create synthetic User",
+    "create active Company Membership",
+    "link synthetic Employee where required",
+    "grant one Branch",
+    "assign exactly one canonical role",
+    "claim Preview invitation without recording the secret",
+    "authenticate and record authorization version",
+    "verify expected navigation and direct API allows",
+    "verify direct API denies and identity-substitution attacks",
+    "remove role and confirm stale authorization is rejected",
+    "restore role and reauthenticate",
+    "remove Branch grant and confirm Branch denial",
+    "deactivate Membership and confirm protected denial",
+    "restore only the intended authority and reauthenticate"
+  ],
+  "mandatory_attacks": [
+    "Employee A requests Employee B Pay Statement",
+    "Employee A requests Employee B Timekeeping evidence",
+    "Employee A substitutes Employee B in field context",
+    "user crosses an ungranted Branch",
+    "user crosses Company",
+    "removed role is retried with an old access token"
+  ],
+  "prohibitions": ["real Employee data", "Production", "Xcode signing", "activation secret in logs or evidence"]
+}
