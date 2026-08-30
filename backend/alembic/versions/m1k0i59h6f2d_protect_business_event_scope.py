@@ -1,7 +1,7 @@
 """Protect Business Event and audit tenant scope.
 
 Revision ID: m1k0i59h6f2d
-Revises: l0j9h48g5e1c
+Revises: h6f8j0l2n497
 """
 
 from collections.abc import Sequence
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "m1k0i59h6f2d"
-down_revision: str | Sequence[str] | None = "l0j9h48g5e1c"
+down_revision: str | Sequence[str] | None = "h6f8j0l2n497"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
