@@ -113,7 +113,4 @@ async def test_profitability_question_selects_authorized_luminary_source() -> No
         context=context,
         request=LiaRequest(question="Why did profitability and margin change?"),
     )
-    assert retrieval.retrieve.await_args.kwargs["domains"] == {
-        "business-economics",
-        "luminary",
-    }
+    assert retrieval.retrieve.await_args.kwargs["domains"] == {"luminary"}
