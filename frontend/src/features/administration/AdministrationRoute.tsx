@@ -38,13 +38,15 @@ function errorStatus(error: unknown): number | undefined {
 export function AdministrationRoute() {
   const navigate = useNavigate();
   const { permissionCodes = [], requireReauthentication } = useAuth();
-  const roles = useRoles();
+  const canReadRoles = permissionCodes.includes("COMPANY_ROLE_READ");
+  const canManagePermissions = permissionCodes.includes("COMPANY_PERMISSION_MANAGE");
+  const roles = useRoles(canReadRoles);
   const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null);
   const selectedRole =
     roles.data?.find((role) => role.id === selectedRoleId) ??
     roles.data?.[0] ??
     null;
-  const permissions = useRolePermissions(selectedRole?.id ?? null);
+  const permissions = useRolePermissions(selectedRole?.id ?? null, canReadRoles);
   const [search, setSearch] = useState("");
   const [pending, setPending] = useState<PendingChange | null>(null);
   const [mutationError, setMutationError] = useState<string | null>(null);
@@ -83,7 +85,7 @@ export function AdministrationRoute() {
     );
   }, [permissions.data, search]);
 
-  if (errorStatus(roles.error) === 403) {
+  if (!canReadRoles || errorStatus(roles.error) === 403) {
     return (
       <Alert variant="danger" announcement="assertive">
         You are not authorized to administer Company roles.
@@ -326,7 +328,7 @@ export function AdministrationRoute() {
                           {permission.description || permission.name}
                         </p>
                       </div>
-                      <Button
+                      {canManagePermissions && <Button
                         className="shrink-0 sm:min-w-28"
                         variant={permission.assigned ? "outline" : "primary"}
                         disabled={!permission.assignable}
@@ -338,7 +340,7 @@ export function AdministrationRoute() {
                         }
                       >
                         {permission.assigned ? "Remove" : "Grant"}
-                      </Button>
+                      </Button>}
                     </div>
                   </li>
                 ))}
@@ -347,7 +349,7 @@ export function AdministrationRoute() {
           </CardContent>
         </Card>
       )}
-      {pending && selectedRole && (
+      {canManagePermissions && pending && selectedRole && (
         <ConfirmationDialog
           title={`${pending.action === "grant" ? "Grant" : "Remove"} permission?`}
           description={`${pending.permission.code} ${pending.action === "grant" ? "will be granted to" : "will be removed from"} ${selectedRole.name}. You will sign in again after this change.`}
