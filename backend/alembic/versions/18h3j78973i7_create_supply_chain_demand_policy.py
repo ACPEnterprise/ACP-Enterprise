@@ -1,7 +1,7 @@
 """create supply chain demand and policy authority
 
 Revision ID: 18h3j78973i7
-Revises: 17g2i67862h6
+Revises: b0ff279c5aeb
 """
 
 from collections.abc import Sequence
@@ -11,7 +11,7 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision: str = "18h3j78973i7"
-down_revision: str | Sequence[str] | None = "17g2i67862h6"
+down_revision: str | Sequence[str] | None = "b0ff279c5aeb"
 branch_labels = None
 depends_on = None
 

@@ -110,6 +110,27 @@ class EstimateItem(EstimateSchema):
     customer_decision: object | None
 
 
+class EstimateSummary(EstimateSchema):
+    id: UUID
+    branch_id: UUID
+    customer_id: UUID
+    service_location_id: UUID | None
+    estimate_number: str
+    status: str
+    acceptance_status: str
+    version: int
+    proposal_title: str
+    currency: str
+    total_amount: Decimal
+    expires_at: datetime | None
+    updated_at: datetime
+
+
+class EstimateList(EstimateSchema):
+    items: tuple[EstimateSummary, ...]
+    total: int
+
+
 class TaxPolicyItem(EstimateSchema):
     id: UUID
     company_id: UUID

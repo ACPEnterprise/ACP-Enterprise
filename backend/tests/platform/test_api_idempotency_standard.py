@@ -85,7 +85,7 @@ def test_every_mutating_operation_has_exactly_one_current_classification() -> No
     operations = _mutation_operations()
     coverage = mutation_coverage_registry.by_identity()
     assert operations.keys() == coverage.keys()
-    assert len(operations) == len(coverage) == 245
+    assert len(operations) == len(coverage) == 250
     for identity, operation in operations.items():
         assert operation["operationId"] == coverage[identity].operation_id
 
@@ -190,9 +190,10 @@ def test_replenishment_decision_has_concrete_company_scoped_replay_evidence() ->
 def test_coverage_is_tenant_explicit_and_bound_into_platform_contract() -> None:
     assert len(mutation_coverage_registry.fingerprint) == 64
     assert all(entry.tenant_scope for entry in mutation_coverage_registry.entries)
-    assert {
-        entry.tenant_scope for entry in mutation_coverage_registry.entries
-    } <= {"COMPANY_WITH_BRANCH_CONTEXT", "PLATFORM_GLOBAL"}
+    assert {entry.tenant_scope for entry in mutation_coverage_registry.entries} <= {
+        "COMPANY_WITH_BRANCH_CONTEXT",
+        "PLATFORM_GLOBAL",
+    }
     assert all(
         entry.tenant_scope == "COMPANY_WITH_BRANCH_CONTEXT"
         for entry in mutation_coverage_registry.entries

@@ -57,7 +57,41 @@ class EconomicsProfitabilityPersistenceService:
                 )
             return existing
         analysis = result.computation.computation.analysis
+        explanation = result.computation.computation.explanation
         metrics = result.computation.metrics
+        components = {
+            item.category.value: {
+                "state": item.state.value,
+                "amount_minor": item.amount_minor,
+                "currency": item.currency.upper(),
+                "confidence_percent": item.confidence_percent,
+                "explanation": item.explanation,
+                "evidence": [
+                    {
+                        "owner": evidence.owner,
+                        "source_system": evidence.source_system,
+                        "record_type": evidence.record_type,
+                        "record_id": evidence.record_id,
+                        "source_version": evidence.source_version,
+                        "content_digest": evidence.content_digest,
+                    }
+                    for evidence in item.evidence
+                ],
+                "allocation_digests": [
+                    allocation.input_digest for allocation in item.allocations
+                ],
+            }
+            for item in (
+                analysis.revenue,
+                analysis.labor,
+                analysis.materials,
+                analysis.equipment,
+                analysis.truck,
+                analysis.overhead,
+                analysis.gross_profit,
+                analysis.net_profit,
+            )
+        }
         value = EconomicsProfitabilityResultRecord(
             company_id=context.company.id,
             branch_id=request.branch_id,
@@ -84,6 +118,30 @@ class EconomicsProfitabilityPersistenceService:
                 "confidence_percent": analysis.quality.confidence_percent,
                 "completeness_percent": analysis.quality.completeness_percent,
                 "freshness_status": analysis.quality.freshness_status,
+            },
+            components=components,
+            quality={
+                "confidence_percent": analysis.quality.confidence_percent,
+                "completeness_percent": analysis.quality.completeness_percent,
+                "freshness_status": analysis.quality.freshness_status,
+                "fresh_as_of": analysis.quality.fresh_as_of.isoformat(),
+                "explanation": analysis.quality.explanation,
+                "missing_categories": [item.value for item in analysis.quality.missing_categories],
+            },
+            explanation={
+                "answer": explanation.answer,
+                "findings": [
+                    {
+                        "kind": item.kind.value,
+                        "summary": item.summary,
+                        "components": [component.value for component in item.component_categories],
+                        "evidence_digests": list(item.evidence_digests),
+                        "explanation": item.explanation,
+                    }
+                    for item in explanation.findings
+                ],
+                "limitations": list(explanation.limitations),
+                "lineage_digest": explanation.lineage_digest,
             },
             acquisition_digests=list(result.computation.acquisition_digests),
             allocation_digests=list(result.computation.allocation_digests),

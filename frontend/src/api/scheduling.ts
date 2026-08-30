@@ -14,6 +14,7 @@ export async function listAppointments(query: AppointmentListParams): Promise<Ca
     branch_id: query.branchId,
     status: query.status,
     page: query.page,
-    page_size: query.pageSize,
+      page_size: query.pageSize,
+      customer_id: query.customerId,
   } })).data;
 }

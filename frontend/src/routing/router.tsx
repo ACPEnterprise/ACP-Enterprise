@@ -6,6 +6,7 @@ import { TechnicianRouteGuard } from "../features/technician/TechnicianRouteGuar
 import {
   accountsPayableHandle,
   financialReportsHandle,
+  businessEconomicsHandle,
   administrationHandle,
   appointmentsHandle,
   commandCenterHandle,
@@ -18,6 +19,8 @@ import {
   purchasingHandle,
   invoicesHandle,
   paymentsHandle,
+  payrollHandle,
+  revenueCycleHandle,
   jobsHandle,
   missionControlHandle,
   notFoundHandle,
@@ -144,6 +147,19 @@ export const appRoutes: RouteObject[] = [
             lazy: async () => ({ Component: (await import("../routes/PaymentDetailRoute")).PaymentDetailRoute }),
           },
           {
+            path: "payroll",
+            handle: payrollHandle,
+            lazy: async () => ({ Component: (await import("../routes/PayrollRoute")).PayrollRoute }),
+          },
+          {
+            path: "revenue-cycle",
+            handle: revenueCycleHandle,
+            lazy: async () => ({
+              Component: (await import("../routes/RevenueCycleRoute"))
+                .RevenueCycleRoute,
+            }),
+          },
+          {
             path: "accounts-payable",
             handle: accountsPayableHandle,
             lazy: async () => ({ Component: (await import("../routes/AccountsPayableRoute")).AccountsPayableRoute }),
@@ -152,6 +168,11 @@ export const appRoutes: RouteObject[] = [
             path: "financial-reports",
             handle: financialReportsHandle,
             lazy: async () => ({ Component: (await import("../routes/FinancialReportsRoute")).FinancialReportsRoute }),
+          },
+          {
+            path: "business-economics",
+            handle: businessEconomicsHandle,
+            lazy: async () => ({ Component: (await import("../routes/BusinessEconomicsRoute")).BusinessEconomicsRoute }),
           },
           {
             path: "price-book",

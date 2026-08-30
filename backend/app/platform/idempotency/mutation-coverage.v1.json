@@ -2,6 +2,56 @@
   "entries": [
     {
       "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "payroll",
+      "mechanism": "deterministic Company/schema digest and durable uniqueness",
+      "method": "POST",
+      "operation_id": "create_compliance_schema_api_v1_payroll_compliance_schemas_post",
+      "path": "/api/v1/payroll/compliance/schemas",
+      "reason": "Accepted immutable Payroll evidence converges on one Company-scoped authority or rejects contradictory replay.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "payroll",
+      "mechanism": "row lock plus convergent approved target state",
+      "method": "POST",
+      "operation_id": "approve_compliance_schema_api_v1_payroll_compliance_schemas__schema_id__approve_post",
+      "path": "/api/v1/payroll/compliance/schemas/{schema_id}/approve",
+      "reason": "Accepted immutable Payroll evidence converges on one Company-scoped authority or rejects contradictory replay.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "payroll",
+      "mechanism": "deterministic package identity and immutable amendment predecessor uniqueness",
+      "method": "POST",
+      "operation_id": "prepare_filing_package_api_v1_payroll_filing_packages_prepare_post",
+      "path": "/api/v1/payroll/filing-packages/prepare",
+      "reason": "Accepted immutable Payroll evidence converges on one Company-scoped authority or rejects contradictory replay.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "payroll",
+      "mechanism": "deterministic source/render identity with advisory locking",
+      "method": "POST",
+      "operation_id": "render_filing_package_preview_api_v1_payroll_filing_packages__package_id__artifact_post",
+      "path": "/api/v1/payroll/filing-packages/{package_id}/artifact",
+      "reason": "Accepted immutable Payroll evidence converges on one Company-scoped authority or rejects contradictory replay.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "payroll",
+      "mechanism": "deterministic source/render identity with advisory locking",
+      "method": "POST",
+      "operation_id": "render_payroll_report_api_v1_payroll_reporting__report_id__artifact_post",
+      "path": "/api/v1/payroll/reporting/{report_id}/artifact",
+      "reason": "Accepted immutable Payroll evidence converges on one Company-scoped authority or rejects contradictory replay.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
       "domain": "company_admin",
       "mechanism": "resource identity plus target state or optimistic aggregate version",
       "method": "DELETE",
@@ -2466,6 +2516,6 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "5bfd8eebdc42d9f525841eaafd5b69a1740dfb9df79dc189fce7e1d54a4f9740",
+  "fingerprint": "5f3d02f6e865e665e15362c0f7dc3f209e4374c7c4ce73ea0e7c359935866b46",
   "schema_version": "1"
 }

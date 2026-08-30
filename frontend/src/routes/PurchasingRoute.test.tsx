@@ -117,6 +117,7 @@ describe("PurchasingRoute", () => {
       createRequisition: mutation,
       transitionRequisition: mutation,
       configureSupplyChainPolicy: mutation,
+      registerDocument: mutation,
     } as never);
   });
   it("keeps recommendations read-only without approval authority", () => {

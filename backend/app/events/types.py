@@ -77,6 +77,7 @@ class EventType(str, Enum):
     PAYROLL_STATEMENT_DELIVERY_PREPARED = "payroll.statement_delivery_prepared"
     PAYROLL_REPORT_CREATED = "payroll.report_created"
     PAYROLL_FILING_PACKAGE_PREPARED = "payroll.filing_package_prepared"
+    PAYROLL_REPORT_ARTIFACT_GENERATED = "payroll.report_artifact_generated"
     ECONOMICS_PROFITABILITY_ADMITTED = "economics.profitability_admitted"
     PAYROLL_ADJUSTMENT_CREATED = "payroll.adjustment_created"
     PAYROLL_ADJUSTMENT_REVIEWED = "payroll.adjustment_reviewed"
