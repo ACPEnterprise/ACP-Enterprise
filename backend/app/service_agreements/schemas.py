@@ -24,11 +24,22 @@ class PlanCreate(Schema):
     cancellation_policy: dict[str, object] = {}
 
 
-class PlanOut(PlanCreate):
+class PlanOut(Schema):
     id: UUID
     company_id: UUID
+    branch_id: UUID | None
+    code: str
+    name: str
     version: int
     status: str
+    currency: str
+    price_amount: Decimal | None
+    billing_cadence: str
+    duration_months: int
+    included_visits: int
+    benefits: list[dict[str, object]]
+    renewal_policy: dict[str, object]
+    cancellation_policy: dict[str, object]
     definition_digest: str
     activated_at: datetime | None
     created_at: datetime
