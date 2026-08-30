@@ -153,6 +153,10 @@ export const financialReportsHandle = {
   workspace: { pageTitle: "Financial Reports", breadcrumbs: [{ label: "Financial Reports" }], helpTopic: "financial-reporting", aiContext: "financial-reporting" },
 } as const satisfies ShellRouteHandle;
 
+export const payrollHandle = {
+  workspace: { pageTitle: "Payroll Administration", breadcrumbs: [{ label: "Payroll" }], helpTopic: "payroll-administration", aiContext: "payroll-administration" },
+} as const satisfies ShellRouteHandle;
+
 export const engineeringHandle = {
   workspace: {
     pageTitle: "Engineering",
