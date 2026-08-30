@@ -441,6 +441,9 @@ class EventType(str, Enum):
     ESTIMATE_MIGRATED = "estimate.migrated"
     ESTIMATE_CONVERTED = "estimate.converted"
     COMMERCIAL_POLICY_CONFIGURED = "commercial.policy.configured"
+    ESTIMATE_PRESENTATION_PREPARED = "estimate.presentation_prepared"
+    ESTIMATE_PRESENTATION_VIEWED = "estimate.presentation_viewed"
+    ESTIMATE_FOLLOW_UP_CHANGED = "estimate.follow_up_changed"
 
     # Jobs
     JOB_CREATED = "job.created"

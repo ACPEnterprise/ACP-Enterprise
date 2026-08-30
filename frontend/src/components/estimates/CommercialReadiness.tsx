@@ -2,7 +2,7 @@ import { useState, type FormEvent } from "react";
 import type { CommercialPolicy, CommercialPolicyWrite } from "../../types/estimates";
 import { Alert, Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, Select } from "../../ui";
 
-const required = ["discount", "price_override", "estimate_expiration", "rounding", "tax_readiness", "document_template", "delivery_readiness"];
+const required = ["discount", "price_override", "estimate_expiration", "rounding", "tax_readiness", "document_template", "delivery_readiness", "follow_up_cadence"];
 
 export function CommercialReadiness({ branches, policies, canManage, pending, onSave }: { branches: readonly { id: string; name: string }[]; policies: readonly CommercialPolicy[]; canManage: boolean; pending: boolean; onSave: (input: CommercialPolicyWrite) => Promise<unknown> }) {
   const [form, setForm] = useState({ branch_id: "", policy_type: "discount", status: "unconfigured" as CommercialPolicy["status"], configuration: "{}", readiness_reason: "Company Commercial policy is not configured." });

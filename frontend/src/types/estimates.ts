@@ -115,3 +115,26 @@ export interface CommercialPolicyWrite {
   configuration: Record<string, unknown>; readiness_reason: string;
   expected_version?: number; idempotency_key: string;
 }
+export interface EstimateFollowUp {
+  id: string; branch_id: string; estimate_id: string; revision_id: string;
+  assigned_user_id: string; state: "open" | "snoozed" | "completed" | "canceled";
+  due_at: string | null; disposition: string | null; sequence: number;
+  evidence_digest: string; occurred_at: string;
+}
+export interface EstimateFollowUpWrite {
+  branch_id: string; assigned_user_id: string; state: EstimateFollowUp["state"];
+  due_at?: string; disposition?: string; occurred_at: string; idempotency_key: string;
+}
+export interface PresentationCredential {
+  id: string; estimate_id: string; revision_id: string; revision_number: number; estimate_version: number;
+  artifact_digest: string; recipient_reference: string; channel: string; status: string;
+  expires_at: string | null; evidence_digest: string; created_at: string;
+  viewed_at: string | null; access_token: string;
+}
+export interface CommercialReport {
+  created: number; presented: number; viewed: number; accepted: number; rejected: number;
+  expired: number; accepted_not_converted: number; converted: number;
+  accepted_value_by_currency: Record<string, string>;
+  outstanding_value_by_currency: Record<string, string>;
+}
+export interface CommercialHistoryItem { evidence_type: string; state: string; occurred_at: string; actor_reference: string | null; revision_id: string | null; evidence_digest: string | null; detail: string | null }

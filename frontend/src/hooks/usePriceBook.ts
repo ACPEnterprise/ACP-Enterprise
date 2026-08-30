@@ -13,5 +13,6 @@ export function usePriceBookMutations() {
     activate: useMutation({ mutationFn: ({ id, version }: { id: string; version: number }) => api.activatePriceVersion(id, version), onSuccess: refresh }),
     optionGroup: useMutation({ mutationFn: api.createOptionGroup, onSuccess: refresh }),
     option: useMutation({ mutationFn: ({ groupId, data }: { groupId: string; data: Parameters<typeof api.addOption>[1] }) => api.addOption(groupId, data), onSuccess: refresh }),
+    snapshot: useMutation({ mutationFn: ({ itemId, data }: { itemId: string; data: Parameters<typeof api.createSnapshot>[1] }) => api.createSnapshot(itemId, data) }),
   };
 }

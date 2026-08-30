@@ -1,5 +1,5 @@
 import { apiClient } from "./client";
-import type { PriceBookCatalog, PriceBookCategory, PriceBookOption, PriceBookOptionGroup, PriceBookServiceItem, PriceBookVersion, TaxClassification } from "../types/priceBook";
+import type { PriceBookCatalog, PriceBookCategory, PriceBookOption, PriceBookOptionGroup, PriceBookServiceItem, PriceBookSnapshot, PriceBookVersion, TaxClassification } from "../types/priceBook";
 
 const path = "/api/v1/price-book";
 export async function getPriceBook(branchId?: string): Promise<PriceBookCatalog> { return (await apiClient.get<PriceBookCatalog>(path, { params: branchId ? { branch_id: branchId } : undefined })).data; }
@@ -10,3 +10,4 @@ export async function createPriceVersion(itemId: string, data: { branch_id?: str
 export async function activatePriceVersion(versionId: string, version: number): Promise<PriceBookVersion> { return (await apiClient.post<PriceBookVersion>(`${path}/versions/${versionId}/activate`, { expected_version: version, reason: "Owner activated Price Book version." })).data; }
 export async function createOptionGroup(data: { code: string; name: string; minimum_selections: number; maximum_selections: number }): Promise<PriceBookOptionGroup> { return (await apiClient.post<PriceBookOptionGroup>(`${path}/option-groups`, data)).data; }
 export async function addOption(groupId: string, data: { service_item_id: string; label: string; position: number }): Promise<PriceBookOption> { return (await apiClient.post<PriceBookOption>(`${path}/option-groups/${groupId}/options`, data)).data; }
+export async function createSnapshot(itemId: string, data: { branch_id: string; quantity: string; currency: string; effective_at: string; idempotency_key: string }): Promise<PriceBookSnapshot> { return (await apiClient.post<PriceBookSnapshot>(`${path}/service-items/${itemId}/snapshots`, data)).data; }

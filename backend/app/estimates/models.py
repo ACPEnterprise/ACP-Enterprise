@@ -54,7 +54,7 @@ class CommercialPolicyVersion(Base):
             ondelete="RESTRICT",
         ),
         CheckConstraint(
-            "policy_type IN ('discount','price_override','estimate_expiration','rounding','tax_readiness','document_template','delivery_readiness')",
+            "policy_type IN ('discount','price_override','estimate_expiration','rounding','tax_readiness','document_template','delivery_readiness','follow_up_cadence')",
             name="ck_commercial_policy_type",
         ),
         CheckConstraint(
@@ -595,3 +595,88 @@ class EstimateJobConversion(Base):
     converted_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
     )
+
+
+class EstimatePresentationAuthority(Base):
+    """Append-only authority for protected, provider-neutral Estimate presentation."""
+
+    __tablename__ = "estimate_presentation_authorities"
+    __table_args__ = (
+        ForeignKeyConstraint(["company_id", "branch_id"], ["branches.company_id", "branches.id"], name="fk_estimate_presentations_branch", ondelete="RESTRICT"),
+        ForeignKeyConstraint(
+            ["company_id", "estimate_id"],
+            ["estimate_proposals.company_id", "estimate_proposals.id"],
+            name="fk_estimate_presentations_estimate",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "revision_id"],
+            ["estimate_revisions.company_id", "estimate_revisions.id"],
+            name="fk_estimate_presentations_revision",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "channel IN ('protected_link','print','email_preparation','sms_preparation')",
+            name="ck_estimate_presentations_channel",
+        ),
+        CheckConstraint(
+            "status IN ('prepared','viewed','revoked','superseded')",
+            name="ck_estimate_presentations_status",
+        ),
+        CheckConstraint("revision_number >= 1", name="ck_estimate_presentations_revision"),
+        CheckConstraint("estimate_version >= 1", name="ck_estimate_presentations_estimate_version"),
+        CheckConstraint("artifact_digest ~ '^[0-9a-f]{64}$'", name="ck_estimate_presentations_artifact_digest"),
+        CheckConstraint("evidence_digest ~ '^[0-9a-f]{64}$'", name="ck_estimate_presentations_evidence_digest"),
+        UniqueConstraint("company_id", "token_digest", name="uq_estimate_presentations_token"),
+        UniqueConstraint("company_id", "idempotency_key", name="uq_estimate_presentations_command"),
+        Index("ix_estimate_presentations_timeline", "company_id", "estimate_id", "created_at"),
+    )
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("companies.id", ondelete="RESTRICT"), nullable=False)
+    branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    estimate_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    revision_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    revision_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    estimate_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    artifact_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    recipient_reference: Mapped[str] = mapped_column(String(320), nullable=False)
+    channel: Mapped[str] = mapped_column(String(32), nullable=False)
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="prepared")
+    token_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(160), nullable=False)
+    created_by_user_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+    viewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class EstimateFollowUpEvidence(Base):
+    """Immutable Estimate follow-up commands; current state is the latest sequence."""
+
+    __tablename__ = "estimate_follow_up_evidence"
+    __table_args__ = (
+        ForeignKeyConstraint(["company_id", "branch_id"], ["branches.company_id", "branches.id"], name="fk_estimate_followups_branch", ondelete="RESTRICT"),
+        ForeignKeyConstraint(["company_id", "estimate_id"], ["estimate_proposals.company_id", "estimate_proposals.id"], name="fk_estimate_followups_estimate", ondelete="RESTRICT"),
+        ForeignKeyConstraint(["company_id", "revision_id"], ["estimate_revisions.company_id", "estimate_revisions.id"], name="fk_estimate_followups_revision", ondelete="RESTRICT"),
+        CheckConstraint("state IN ('open','snoozed','completed','canceled')", name="ck_estimate_followups_state"),
+        CheckConstraint("sequence >= 1", name="ck_estimate_followups_sequence"),
+        CheckConstraint("evidence_digest ~ '^[0-9a-f]{64}$'", name="ck_estimate_followups_digest"),
+        UniqueConstraint("company_id", "estimate_id", "sequence", name="uq_estimate_followups_sequence"),
+        UniqueConstraint("company_id", "idempotency_key", name="uq_estimate_followups_command"),
+        Index("ix_estimate_followups_queue", "company_id", "branch_id", "state", "due_at"),
+    )
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("companies.id", ondelete="RESTRICT"), nullable=False)
+    branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    estimate_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    revision_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    assigned_user_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    state: Mapped[str] = mapped_column(String(24), nullable=False)
+    due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    disposition: Mapped[str | None] = mapped_column(String(240))
+    sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(160), nullable=False)
+    actor_user_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

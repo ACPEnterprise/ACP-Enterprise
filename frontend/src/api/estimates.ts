@@ -1,5 +1,5 @@
 import { apiClient } from "./client";
-import type { CommercialPolicy, CommercialPolicyWrite, Estimate, EstimateArtifact, EstimateDecisionInput, EstimateList, EstimateProposalInput, EstimateTransitionInput } from "../types/estimates";
+import type { CommercialHistoryItem, CommercialPolicy, CommercialPolicyWrite, CommercialReport, Estimate, EstimateArtifact, EstimateDecisionInput, EstimateFollowUp, EstimateFollowUpWrite, EstimateList, EstimateProposalInput, EstimateTransitionInput, PresentationCredential } from "../types/estimates";
 
 const root = "/api/v1/estimates";
 
@@ -15,6 +15,21 @@ export async function getCommercialPolicies(): Promise<CommercialPolicy[]> {
 }
 export async function configureCommercialPolicy(input: CommercialPolicyWrite): Promise<CommercialPolicy> {
   return (await apiClient.put<CommercialPolicy>(`${root}/commercial-policies`, input)).data;
+}
+export async function listEstimateFollowUps(state?: string): Promise<EstimateFollowUp[]> {
+  return (await apiClient.get<EstimateFollowUp[]>(`${root}/follow-ups`, { params: { state } })).data;
+}
+export async function getCommercialReport(): Promise<CommercialReport> {
+  return (await apiClient.get<CommercialReport>(`${root}/commercial-report`)).data;
+}
+export async function getCommercialHistory(id: string): Promise<CommercialHistoryItem[]> {
+  return (await apiClient.get<CommercialHistoryItem[]>(`${root}/${id}/commercial-history`)).data;
+}
+export async function recordEstimateFollowUp(id: string, input: EstimateFollowUpWrite): Promise<EstimateFollowUp> {
+  return (await apiClient.post<EstimateFollowUp>(`${root}/${id}/follow-ups`, input)).data;
+}
+export async function prepareEstimatePresentation(id: string, input: { branch_id: string; recipient_reference: string; channel: string; expires_at?: string; idempotency_key: string }): Promise<PresentationCredential> {
+  return (await apiClient.post<PresentationCredential>(`${root}/${id}/presentations`, input)).data;
 }
 
 export async function listEstimates(status?: string, customerId?: string): Promise<EstimateList> {

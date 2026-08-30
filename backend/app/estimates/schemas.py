@@ -148,7 +148,7 @@ class EstimateArtifact(EstimateSchema):
 class CommercialPolicyWrite(EstimateSchema):
     branch_id: UUID
     policy_type: str = Field(
-        pattern=r"^(discount|price_override|estimate_expiration|rounding|tax_readiness|document_template|delivery_readiness)$"
+        pattern=r"^(discount|price_override|estimate_expiration|rounding|tax_readiness|document_template|delivery_readiness|follow_up_cadence)$"
     )
     status: str = Field(pattern=r"^(unconfigured|draft|active|inactive)$")
     configuration: dict[str, object] = {}
@@ -169,6 +169,96 @@ class CommercialPolicyItem(EstimateSchema):
     evidence_digest: str
     created_by_user_id: UUID
     created_at: datetime
+
+
+class PresentationPrepareInput(EstimateSchema):
+    branch_id: UUID
+    recipient_reference: str = Field(min_length=1, max_length=320)
+    channel: str = Field(pattern=r"^(protected_link|print|email_preparation|sms_preparation)$")
+    expires_at: datetime | None = None
+    idempotency_key: str = Field(pattern=r"^[A-Za-z0-9._:-]{8,128}$")
+
+
+class PresentationAuthorityItem(EstimateSchema):
+    id: UUID
+    estimate_id: UUID
+    revision_id: UUID
+    revision_number: int
+    estimate_version: int
+    artifact_digest: str
+    recipient_reference: str
+    channel: str
+    status: str
+    expires_at: datetime | None
+    evidence_digest: str
+    created_at: datetime
+    viewed_at: datetime | None
+
+
+class PresentationCredential(PresentationAuthorityItem):
+    access_token: str
+
+
+class ProtectedEstimateView(EstimateSchema):
+    presentation: PresentationAuthorityItem
+    artifact: EstimateArtifact
+
+
+class ProtectedEstimateDecision(EstimateSchema):
+    revision_id: UUID
+    decision: str = Field(pattern=r"^(approve|reject)$")
+    customer_name: str = Field(min_length=1, max_length=240)
+    customer_email: str | None = Field(default=None, max_length=320)
+    customer_comment: str | None = Field(default=None, max_length=4000)
+    rejection_reason: str | None = Field(default=None, max_length=4000)
+    occurred_at: datetime
+
+
+class FollowUpWrite(EstimateSchema):
+    branch_id: UUID
+    assigned_user_id: UUID
+    state: str = Field(pattern=r"^(open|snoozed|completed|canceled)$")
+    due_at: datetime | None = None
+    disposition: str | None = Field(default=None, max_length=240)
+    occurred_at: datetime
+    idempotency_key: str = Field(pattern=r"^[A-Za-z0-9._:-]{8,128}$")
+
+
+class FollowUpItem(EstimateSchema):
+    id: UUID
+    branch_id: UUID
+    estimate_id: UUID
+    revision_id: UUID
+    assigned_user_id: UUID
+    state: str
+    due_at: datetime | None
+    disposition: str | None
+    sequence: int
+    evidence_digest: str
+    occurred_at: datetime
+
+
+class CommercialReport(EstimateSchema):
+    created: int
+    presented: int
+    viewed: int
+    accepted: int
+    rejected: int
+    expired: int
+    accepted_not_converted: int
+    converted: int
+    accepted_value_by_currency: dict[str, Decimal]
+    outstanding_value_by_currency: dict[str, Decimal]
+
+
+class CommercialHistoryItem(EstimateSchema):
+    evidence_type: str
+    state: str
+    occurred_at: datetime
+    actor_reference: UUID | None
+    revision_id: UUID | None
+    evidence_digest: str | None
+    detail: str | None
 
 
 class TaxPolicyItem(EstimateSchema):

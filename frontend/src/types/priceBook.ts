@@ -6,3 +6,4 @@ export interface PriceBookVersion { id: string; company_id: string; service_item
 export interface PriceBookOptionGroup { id: string; company_id: string; code: string; name: string; minimum_selections: number; maximum_selections: number; status: string }
 export interface PriceBookOption { id: string; company_id: string; option_group_id: string; service_item_id: string; label: string; position: number }
 export interface PriceBookCatalog { categories: PriceBookCategory[]; tax_classifications: TaxClassification[]; service_items: PriceBookServiceItem[]; versions: PriceBookVersion[]; option_groups: PriceBookOptionGroup[]; options: PriceBookOption[] }
+export interface PriceBookSnapshot { id: string; service_item_id: string; quantity: string; unit_price: string; extended_amount: string; currency: string; digest: string }

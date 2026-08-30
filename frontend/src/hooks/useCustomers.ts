@@ -16,10 +16,11 @@ import {
   updateCustomerProperty,
 } from "../api/customers";
 
-export function useCustomerList(search: string, limit: number, offset: number) {
+export function useCustomerList(search: string, limit: number, offset: number, enabled = true) {
   return useQuery({
     queryKey: ["customers", search, limit, offset],
     queryFn: () => listCustomers(search, limit, offset),
+    enabled,
   });
 }
 export function useCustomerDetail(customerId: string | null) {

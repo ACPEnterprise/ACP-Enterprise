@@ -17,6 +17,10 @@ vi.mock("../api/estimates", () => ({
   }),
   createEstimate: vi.fn(), reviseEstimate: vi.fn(),
   getCommercialPolicies: vi.fn().mockResolvedValue([]), configureCommercialPolicy: vi.fn(),
+  listEstimateFollowUps: vi.fn().mockResolvedValue([]),
+  getCommercialReport: vi.fn().mockResolvedValue({ created: 1, presented: 0, viewed: 0, accepted: 0, rejected: 0, expired: 0, accepted_not_converted: 0, converted: 0, accepted_value_by_currency: {}, outstanding_value_by_currency: {} }),
+  getCommercialHistory: vi.fn().mockResolvedValue([]),
+  recordEstimateFollowUp: vi.fn(), prepareEstimatePresentation: vi.fn(),
 }));
 
 function renderRoute(path = "/estimates") {
