@@ -5,6 +5,10 @@ import * as analyticsHook from "../hooks/useAnalyticsSummary";
 import { MissionControlRoute } from "./MissionControlRoute";
 
 vi.mock("../hooks/useAnalyticsSummary");
+const permissions = new Set<string>();
+vi.mock("../auth", () => ({
+  useHasPermission: (code: string) => permissions.has(code),
+}));
 vi.mock("../components/RevenueTrendChart", () => ({
   RevenueTrendChart: () => <div>Authoritative revenue trend</div>,
 }));
@@ -19,7 +23,11 @@ const data = {
 };
 
 describe("MissionControlRoute", () => {
-  beforeEach(() => vi.resetAllMocks());
+  beforeEach(() => {
+    vi.resetAllMocks();
+    permissions.clear();
+    permissions.add("COMPANY_ANALYTICS_READ");
+  });
 
   it("renders a truthful loading state", () => {
     vi.mocked(analyticsHook.useAnalyticsSummary).mockReturnValue({
@@ -36,12 +44,13 @@ describe("MissionControlRoute", () => {
     vi.mocked(analyticsHook.useAnalyticsSummary).mockReturnValue({
       isLoading: false,
       isError: true,
-      error: new Error("Unavailable"),
+      error: new Error("sql://protected-analytics-canary"),
       dataUpdatedAt: 0,
     } as never);
     render(<MissionControlRoute />);
     expect(screen.getByText("Analytics API unavailable")).toBeInTheDocument();
     expect(screen.queryByText("System Online")).not.toBeInTheDocument();
+    expect(screen.queryByText(/protected-analytics-canary/)).not.toBeInTheDocument();
   });
 
   it("uses only authoritative metrics and an honest empty activity state", () => {
@@ -57,5 +66,18 @@ describe("MissionControlRoute", () => {
     expect(screen.queryByText("Today's Revenue Goal")).not.toBeInTheDocument();
     expect(screen.queryByText("Top Technicians")).not.toBeInTheDocument();
     expect(screen.queryByText("Mike")).not.toBeInTheDocument();
+  });
+
+  it("does not request Analytics without exact read authority", () => {
+    permissions.clear();
+    vi.mocked(analyticsHook.useAnalyticsSummary).mockReturnValue({
+      isLoading: false, isError: false, dataUpdatedAt: 0,
+    } as never);
+
+    render(<MissionControlRoute />);
+
+    expect(analyticsHook.useAnalyticsSummary).toHaveBeenCalledWith(false);
+    expect(screen.getByText(/not authorized to view Mission Control/i)).toBeInTheDocument();
+    expect(screen.queryByText("Analytics API available")).not.toBeInTheDocument();
   });
 });

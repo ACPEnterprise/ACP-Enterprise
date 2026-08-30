@@ -53,6 +53,7 @@ export function IdentityOnboardingRoute() {
   const [branchId, setBranchId] = useState(initialBranchId);
   const [loginAddress, setLoginAddress] = useState("");
   const [preparation, setPreparation] = useState<Preparation>({ state: "loading" });
+  const [readinessAttempt, setReadinessAttempt] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<"success" | "error" | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
@@ -106,7 +107,7 @@ export function IdentityOnboardingRoute() {
     return () => {
       current = false;
     };
-  }, [authorized]);
+  }, [authorized, readinessAttempt]);
 
   if (!authorized) {
     return (
@@ -176,7 +177,20 @@ export function IdentityOnboardingRoute() {
           {preparation.state === "loading" ? (
             <Spinner label="Checking Employee onboarding readiness" />
           ) : preparation.state === "blocked" ? (
-            <Alert variant="danger">{preparation.message}</Alert>
+            <Alert variant="danger">
+              <div className="space-y-ui-3">
+                <p>{preparation.message}</p>
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    setPreparation({ state: "loading" });
+                    setReadinessAttempt((attempt) => attempt + 1);
+                  }}
+                >
+                  Retry readiness
+                </Button>
+              </div>
+            </Alert>
           ) : (
             <form className="space-y-ui-4" onSubmit={(event) => void submit(event)}>
               <label className="block space-y-ui-2">

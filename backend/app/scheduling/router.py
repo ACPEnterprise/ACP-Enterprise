@@ -117,7 +117,7 @@ def translate_scheduling_error(error: SchedulingError) -> HTTPException:
         current_correlation_id(),
     )
     return HTTPException(
-        status_code=status.HTTP_400_BAD_REQUEST,
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         detail=failure.detail(),
     )
 

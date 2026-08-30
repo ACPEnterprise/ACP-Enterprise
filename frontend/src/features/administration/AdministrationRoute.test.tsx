@@ -86,7 +86,7 @@ const requireReauthentication = vi.fn();
 const context: AuthenticationContextValue = {
   status: "authenticated",
   activeCompany: null,
-  permissionCodes: ["COMPANY_ADMINISTER"],
+  permissionCodes: ["COMPANY_ADMINISTER", "COMPANY_ROLE_READ", "COMPANY_PERMISSION_MANAGE"],
   user: {
     id: "owner",
     normalized_email: "owner@example.com",
@@ -127,6 +127,7 @@ function renderPage() {
 describe("AdministrationRoute", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    context.permissionCodes = ["COMPANY_ADMINISTER", "COMPANY_ROLE_READ", "COMPANY_PERMISSION_MANAGE"];
     vi.mocked(api.listRoles).mockResolvedValue([role]);
     vi.mocked(api.listPermissions).mockResolvedValue(permissions);
     vi.mocked(api.grantPermission).mockResolvedValue(undefined);
@@ -312,5 +313,25 @@ describe("AdministrationRoute", () => {
       ),
     ).toBeInTheDocument();
     expect(requireReauthentication).not.toHaveBeenCalled();
+  });
+
+  it("keeps role evidence read-only without permission-manage authority", async () => {
+    context.permissionCodes = ["COMPANY_ROLE_READ"];
+    renderPage();
+
+    expect(await screen.findByText("COMPANY_DISPATCH_READ")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Grant" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Remove" })).not.toBeInTheDocument();
+  });
+
+  it("renders Company-admin subworkspaces without requesting unauthorized role evidence", async () => {
+    context.permissionCodes = ["COMPANY_ADMINISTER"];
+    renderPage();
+
+    expect(await screen.findByText("Role administration requires role-read permission.")).toBeInTheDocument();
+    expect(screen.getByText("QuickBooks Development sandbox")).toBeInTheDocument();
+    expect(screen.getByText("Migration readiness")).toBeInTheDocument();
+    expect(api.listRoles).not.toHaveBeenCalled();
+    expect(api.listPermissions).not.toHaveBeenCalled();
   });
 });

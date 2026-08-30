@@ -165,6 +165,7 @@ class GovernedRetrievalService:
                 .order_by(
                     LuminaryBriefingRecord.period_end.desc(),
                     LuminaryBriefingRecord.created_at.desc(),
+                    LuminaryBriefingRecord.id.desc(),
                 )
                 .limit(1)
             )

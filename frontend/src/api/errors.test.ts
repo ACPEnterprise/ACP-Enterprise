@@ -69,4 +69,13 @@ describe("operator API errors", () => {
   ])("distinguishes owner-action failures", (error, title) => {
     expect(getOperatorApiError(error, "Milestone").title).toBe(title);
   });
+
+  it.each([400, 409, 422])("does not reflect unstructured detail for status %s", (status) => {
+    const result = getOperatorApiError(
+      failure(status, "sql://provider-secret-customer-canary"),
+      "Customer",
+    );
+    expect(result.message).not.toContain("provider-secret-customer-canary");
+    expect(result.message).not.toContain("sql://");
+  });
 });

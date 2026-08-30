@@ -412,6 +412,8 @@ class InventoryRepositoryContract(Protocol):
         *,
         company_id: UUID,
         branch_ids: tuple[UUID, ...],
+        limit: int,
+        offset: int,
     ) -> tuple[
         tuple[CycleCountSessionRecord, tuple[CycleCountEntryRecord, ...]], ...
     ]: ...

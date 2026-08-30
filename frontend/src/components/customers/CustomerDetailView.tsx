@@ -1,7 +1,8 @@
 import { useState, type FormEvent } from "react";
 import { ArrowLeft, Edit3, MapPin, Plus, Star, UserRound } from "lucide-react";
 
-import { getApiErrorMessage, getOperatorApiError } from "../../api/errors";
+import { getOperatorApiError } from "../../api/errors";
+import { useHasPermission } from "../../auth";
 import { useCustomerConsents, useCustomerDetail, useCustomerMutations } from "../../hooks/useCustomers";
 import {
   formatCustomerSource,
@@ -34,6 +35,7 @@ function displayName(customer: {
 }
 
 export function CustomerDetailView({ customerId, onBack }: CustomerDetailViewProps) {
+  const canManage = useHasPermission("COMPANY_CUSTOMER_MANAGE");
   const detail = useCustomerDetail(customerId);
   const mutations = useCustomerMutations(customerId);
   const consents = useCustomerConsents(customerId);
@@ -93,7 +95,7 @@ export function CustomerDetailView({ customerId, onBack }: CustomerDetailViewPro
               <span className="rounded-full bg-blue-950 px-3 py-1 text-blue-300">Source: {formatCustomerSource(customer.source)}</span>
             </div>
           </div>
-          {!archived && (
+          {canManage && !archived && (
             <div className="grid w-full gap-3 sm:flex sm:w-auto">
               <Button type="button" variant="outline" onClick={() => setIsEditingCustomer(true)} leadingIcon={<Edit3 size={16} />}>Edit</Button>
               <Button
@@ -125,7 +127,7 @@ export function CustomerDetailView({ customerId, onBack }: CustomerDetailViewPro
       <Card className="p-ui-4 sm:p-ui-6">
         <p className="text-sm text-action-primary">Communication consent</p>
         <h3 className="mt-1 text-xl font-semibold">Consent-safe history</h3>
-        {!archived && (
+        {canManage && !archived && (
           <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto_auto]">
             <select className="min-h-11 rounded-lg border border-stroke-strong bg-surface px-3" value={consentChannel} onChange={(event) => setConsentChannel(event.target.value as "sms" | "email")} aria-label="Consent channel">
               <option value="sms">SMS</option><option value="email">Email</option>
@@ -134,51 +136,51 @@ export function CustomerDetailView({ customerId, onBack }: CustomerDetailViewPro
             <Button type="button" variant="outline" disabled={mutations.recordConsent.isPending} onClick={() => mutations.recordConsent.mutate({ channel: consentChannel, decision: "withdrawn", source: "customer_request", reason: null })}>Record withdrawal</Button>
           </div>
         )}
-        {consents.isError && <Alert variant="danger" title="Consent history unavailable">{getApiErrorMessage(consents.error)}</Alert>}
+        {consents.isError && <Alert variant="danger" title="Consent history unavailable">{getOperatorApiError(consents.error, "Customer consent").message}</Alert>}
         <div className="mt-4 space-y-2">
           {(consents.data ?? []).map((consent) => <div key={consent.id} className="rounded-lg border border-stroke p-3 text-sm"><span className="font-medium uppercase">{consent.channel}</span> · {consent.decision.replaceAll("_", " ")}<p className="mt-1 text-xs text-content-muted">{new Date(consent.recorded_at).toLocaleString()} · {consent.source.replaceAll("_", " ")}</p></div>)}
           {consents.isSuccess && consents.data.length === 0 && <p className="text-sm text-content-muted">No consent decisions have been recorded.</p>}
         </div>
       </Card>
 
-      {Boolean(actionError) && <Alert variant="danger" title="Customer update failed">{getApiErrorMessage(actionError)}</Alert>}
+      {Boolean(actionError) && <Alert variant="danger" title="Customer update failed">{getOperatorApiError(actionError, "Customer").message}</Alert>}
 
       <Card className="p-ui-4 sm:p-ui-6">
-        <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm text-action-primary">Service locations</p><h3 className="mt-1 text-xl font-semibold">Properties</h3></div>{!archived && <Button type="button" onClick={() => setEditingProperty("new")} leadingIcon={<Plus size={16} />}>Add property</Button>}</div>
+        <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm text-action-primary">Service locations</p><h3 className="mt-1 text-xl font-semibold">Properties</h3></div>{canManage && !archived && <Button type="button" onClick={() => setEditingProperty("new")} leadingIcon={<Plus size={16} />}>Add property</Button>}</div>
         {customer.properties.length === 0 && editingProperty === null && <p className="mt-5 rounded-xl border border-dashed border-stroke p-5 text-sm text-content-muted">No service properties have been added.</p>}
         <div className="mt-5 grid gap-3 md:grid-cols-2">
           {customer.properties.map((property) => (
             <article key={property.id} className="min-w-0 rounded-xl border border-stroke bg-surface-subtle p-4">
               <div className="flex min-w-0 flex-wrap justify-between gap-3"><div className="flex min-w-0 gap-3"><MapPin size={18} className="mt-0.5 shrink-0 text-action-primary" /><div className="min-w-0 break-words"><p className="font-medium">{property.address_line_1}</p>{property.address_line_2 && <p className="text-sm text-content-muted">{property.address_line_2}</p>}<p className="text-sm text-content-muted">{property.city}, {property.state} {property.postal_code}</p></div></div>{property.is_primary && <span className="h-fit rounded-full bg-status-information/15 px-2 py-1 text-xs text-status-information">Primary</span>}</div>
               <p className="mt-3 text-xs text-content-muted">{property.property_type.replaceAll("_", " ")} · {property.sewer_septic ?? "waste system unknown"}</p>
-              {!archived && <button type="button" onClick={() => setEditingProperty(property)} className="mt-3 text-sm text-action-primary">Edit property</button>}
+              {canManage && !archived && <button type="button" onClick={() => setEditingProperty(property)} className="mt-3 text-sm text-action-primary">Edit property</button>}
             </article>
           ))}
         </div>
-        {editingProperty && <PropertyForm key={editingProperty === "new" ? "new" : editingProperty.id} property={editingProperty === "new" ? undefined : editingProperty} isSaving={mutations.addProperty.isPending || mutations.updateProperty.isPending} onCancel={() => setEditingProperty(null)} onSubmit={(input) => { setActionError(null); if (editingProperty === "new") mutations.addProperty.mutate(input, { onSuccess: () => setEditingProperty(null), onError: setActionError }); else mutations.updateProperty.mutate({ propertyId: editingProperty.id, input }, { onSuccess: () => setEditingProperty(null), onError: setActionError }); }} />}
+        {canManage && editingProperty && <PropertyForm key={editingProperty === "new" ? "new" : editingProperty.id} property={editingProperty === "new" ? undefined : editingProperty} isSaving={mutations.addProperty.isPending || mutations.updateProperty.isPending} onCancel={() => setEditingProperty(null)} onSubmit={(input) => { setActionError(null); if (editingProperty === "new") mutations.addProperty.mutate(input, { onSuccess: () => setEditingProperty(null), onError: setActionError }); else mutations.updateProperty.mutate({ propertyId: editingProperty.id, input }, { onSuccess: () => setEditingProperty(null), onError: setActionError }); }} />}
       </Card>
 
       <Card className="p-ui-4 sm:p-ui-6">
-        <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm text-action-primary">Customer relationships</p><h3 className="mt-1 text-xl font-semibold">Contacts</h3></div>{!archived && <Button type="button" onClick={() => setEditingContact("new")} leadingIcon={<Plus size={16} />}>Add contact</Button>}</div>
+        <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm text-action-primary">Customer relationships</p><h3 className="mt-1 text-xl font-semibold">Contacts</h3></div>{canManage && !archived && <Button type="button" onClick={() => setEditingContact("new")} leadingIcon={<Plus size={16} />}>Add contact</Button>}</div>
         {customer.contacts.length === 0 && editingContact === null && <p className="mt-5 rounded-xl border border-dashed border-stroke p-5 text-sm text-content-muted">No additional contacts have been added.</p>}
         <div className="mt-5 grid gap-3 md:grid-cols-2">
           {customer.contacts.map((contact) => (
             <article key={contact.id} className="min-w-0 rounded-xl border border-stroke bg-surface-subtle p-4">
               <div className="flex min-w-0 gap-3"><UserRound size={18} className="mt-0.5 shrink-0 text-action-primary" /><div className="min-w-0 break-words"><p className="font-medium">{contact.first_name} {contact.last_name ?? ""}</p><p className="text-sm text-content-muted">{contact.relationship_or_role ?? "Contact"}</p><p className="mt-2 break-all text-sm text-content-secondary">{contact.phone ?? contact.email}</p></div></div>
               <div className="mt-3 flex flex-wrap gap-2 text-xs">{contact.is_preferred && <span className="rounded-full bg-blue-950 px-2 py-1 text-blue-300">Preferred</span>}{contact.can_approve_work && <span className="rounded-full bg-emerald-950 px-2 py-1 text-emerald-300">May approve work</span>}</div>
-              {!archived && <button type="button" onClick={() => setEditingContact(contact)} className="mt-3 text-sm text-action-primary">Edit contact</button>}
+              {canManage && !archived && <button type="button" onClick={() => setEditingContact(contact)} className="mt-3 text-sm text-action-primary">Edit contact</button>}
             </article>
           ))}
         </div>
-        {editingContact && <ContactForm key={editingContact === "new" ? "new" : editingContact.id} contact={editingContact === "new" ? undefined : editingContact} isSaving={mutations.addContact.isPending || mutations.updateContact.isPending} onCancel={() => setEditingContact(null)} onSubmit={(input) => { setActionError(null); if (editingContact === "new") mutations.addContact.mutate(input, { onSuccess: () => setEditingContact(null), onError: setActionError }); else mutations.updateContact.mutate({ contactId: editingContact.id, input }, { onSuccess: () => setEditingContact(null), onError: setActionError }); }} />}
+        {canManage && editingContact && <ContactForm key={editingContact === "new" ? "new" : editingContact.id} contact={editingContact === "new" ? undefined : editingContact} isSaving={mutations.addContact.isPending || mutations.updateContact.isPending} onCancel={() => setEditingContact(null)} onSubmit={(input) => { setActionError(null); if (editingContact === "new") mutations.addContact.mutate(input, { onSuccess: () => setEditingContact(null), onError: setActionError }); else mutations.updateContact.mutate({ contactId: editingContact.id, input }, { onSuccess: () => setEditingContact(null), onError: setActionError }); }} />}
       </Card>
 
       <Card className="p-ui-4 sm:p-ui-6">
         <p className="text-sm text-action-primary">Internal history</p><h3 className="mt-1 text-xl font-semibold">Notes</h3>
-        {!archived && <form onSubmit={addNote} className="mt-5"><Textarea value={noteBody} onChange={(event) => setNoteBody(event.target.value)} required maxLength={4000} placeholder="Add operational context for internal staff…" /><div className="mt-2"><Button fullWidth disabled={mutations.addNote.isPending} loading={mutations.addNote.isPending}>{mutations.addNote.isPending ? "Adding…" : "Add note"}</Button></div></form>}
+        {canManage && !archived && <form onSubmit={addNote} className="mt-5"><Textarea value={noteBody} onChange={(event) => setNoteBody(event.target.value)} required maxLength={4000} placeholder="Add operational context for internal staff…" /><div className="mt-2"><Button fullWidth disabled={mutations.addNote.isPending} loading={mutations.addNote.isPending}>{mutations.addNote.isPending ? "Adding…" : "Add note"}</Button></div></form>}
         {customer.notes.length === 0 ? <p className="mt-5 rounded-xl border border-dashed border-stroke p-5 text-sm text-content-muted">No internal notes have been added.</p> : <div className="mt-5 space-y-3">{[...customer.notes].sort((a, b) => b.created_at.localeCompare(a.created_at)).map((note) => <article key={note.id} className="rounded-xl border border-slate-800 bg-slate-950/60 p-4"><p className="whitespace-pre-wrap text-sm text-slate-200">{note.body}</p><p className="mt-2 text-xs text-content-muted">{new Date(note.created_at).toLocaleString()} · {note.author_user_id ? "Authenticated user" : "Author unavailable"}</p></article>)}</div>}
       </Card>
-      {confirmArchive && (
+      {canManage && confirmArchive && (
         <ConfirmationDialog
           title="Archive this customer?"
           description="They will be removed from normal search and cannot be edited."

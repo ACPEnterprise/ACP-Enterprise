@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -144,17 +144,14 @@ def _metadata(value: PayStatementView) -> StatementMetadata:
 def _experience() -> PayrollPayStatementExperienceService:
     root = settings.payroll_paystatement_artifact_root
     if not root:
-        raise HTTPException(
-            status.HTTP_503_SERVICE_UNAVAILABLE,
-            "Protected pay-statement storage is not configured.",
-        )
+        raise _storage_unavailable()
     return PayrollPayStatementExperienceService(ProtectedStatementStorage(Path(root)))
 
 
 def _compliance() -> PayrollComplianceService:
     root = settings.payroll_paystatement_artifact_root
     if not root:
-        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Protected Payroll report storage is not configured.")
+        raise _storage_unavailable()
     return PayrollComplianceService(ProtectedPayrollReportStorage(Path(root)))
 
 
@@ -209,12 +206,35 @@ def _error(error: Exception) -> HTTPException:
         ClientRecovery.OWNER_ADMIN_ACTION_REQUIRED,
         current_correlation_id(),
     )
-    return HTTPException(status.HTTP_400_BAD_REQUEST, failure.detail())
+    return HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, failure.detail())
+
+
+def _storage_unavailable() -> HTTPException:
+    failure = SafeFailure(
+        FailureCode.DEPENDENCY_UNAVAILABLE,
+        "Protected Payroll storage is unavailable.",
+        ClientRecovery.OWNER_ADMIN_ACTION_REQUIRED,
+        current_correlation_id(),
+    )
+    return HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, failure.detail())
+
+
+def _not_found() -> HTTPException:
+    failure = SafeFailure(
+        FailureCode.NOT_FOUND,
+        "Payroll report was not found.",
+        ClientRecovery.TERMINAL_FAILURE,
+        current_correlation_id(),
+    )
+    return HTTPException(status.HTTP_404_NOT_FOUND, failure.detail())
 
 
 @router.get("/reporting", response_model=list[PayrollReportingMetadata])
 async def list_payroll_reporting(
-    context: ReportingRead, session: Session
+    context: ReportingRead,
+    session: Session,
+    limit: Annotated[int, Query(ge=1, le=200)] = 100,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[PayrollReportingMetadata]:
     values = (
         await session.scalars(
@@ -223,7 +243,10 @@ async def list_payroll_reporting(
             .order_by(
                 PayrollReportingSnapshotRecord.period_end.desc(),
                 PayrollReportingSnapshotRecord.created_at.desc(),
+                PayrollReportingSnapshotRecord.id.desc(),
             )
+            .offset(offset)
+            .limit(limit)
         )
     ).all()
     return [_report_metadata(value) for value in values]
@@ -236,8 +259,25 @@ async def payroll_operations_summary(context: ReportingRead, session: Session) -
 
 
 @router.get("/compliance/schemas", response_model=list[ComplianceSchemaMetadata])
-async def compliance_schemas(context: ReportingRead, session: Session) -> list[ComplianceSchemaMetadata]:
-    values = (await session.scalars(select(PayrollComplianceSchemaRecord).where(PayrollComplianceSchemaRecord.company_id == context.company.id).order_by(PayrollComplianceSchemaRecord.tax_year.desc()))).all()
+async def compliance_schemas(
+    context: ReportingRead,
+    session: Session,
+    limit: Annotated[int, Query(ge=1, le=200)] = 100,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> list[ComplianceSchemaMetadata]:
+    values = (
+        await session.scalars(
+            select(PayrollComplianceSchemaRecord)
+            .where(PayrollComplianceSchemaRecord.company_id == context.company.id)
+            .order_by(
+                PayrollComplianceSchemaRecord.tax_year.desc(),
+                PayrollComplianceSchemaRecord.created_at.desc(),
+                PayrollComplianceSchemaRecord.id.desc(),
+            )
+            .offset(offset)
+            .limit(limit)
+        )
+    ).all()
     return [_schema_metadata(value) for value in values]
 
 
@@ -307,7 +347,7 @@ async def payroll_reporting_detail(
         )
     )
     if value is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Payroll report not found.")
+        raise _not_found()
     return _report_metadata(value)
 
 
@@ -316,7 +356,11 @@ async def payroll_reporting_detail(
     response_model=list[PayrollFilingPackageMetadata],
 )
 async def payroll_filing_packages(
-    report_id: UUID, context: ReportingRead, session: Session
+    report_id: UUID,
+    context: ReportingRead,
+    session: Session,
+    limit: Annotated[int, Query(ge=1, le=200)] = 100,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[PayrollFilingPackageMetadata]:
     report = await session.scalar(
         select(PayrollReportingSnapshotRecord.id).where(
@@ -325,7 +369,7 @@ async def payroll_filing_packages(
         )
     )
     if report is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Payroll report not found.")
+        raise _not_found()
     values = (
         await session.scalars(
             select(PayrollFilingPackageRecord)
@@ -333,7 +377,12 @@ async def payroll_filing_packages(
                 PayrollFilingPackageRecord.reporting_snapshot_id == report_id,
                 PayrollFilingPackageRecord.company_id == context.company.id,
             )
-            .order_by(PayrollFilingPackageRecord.created_at.desc())
+            .order_by(
+                PayrollFilingPackageRecord.created_at.desc(),
+                PayrollFilingPackageRecord.id.desc(),
+            )
+            .offset(offset)
+            .limit(limit)
         )
     ).all()
     return [
@@ -352,13 +401,16 @@ async def payroll_filing_packages(
 
 @router.get("/me/pay-statements", response_model=list[StatementMetadata])
 async def list_own_pay_statements(
-    context: OwnRead, session: Session
+    context: OwnRead,
+    session: Session,
+    limit: Annotated[int, Query(ge=1, le=200)] = 100,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[StatementMetadata]:
     try:
         return [
             _metadata(value)
             for value in await PayrollPayStatementService().list_own(
-                session, context=context
+                session, context=context, limit=limit, offset=offset
             )
         ]
     except (PayrollAuthorizationError, PayrollConflictError) as error:
@@ -368,11 +420,12 @@ async def list_own_pay_statements(
 @router.get("/me/payroll-status", response_model=dict[str, object])
 async def own_payroll_status(context: OwnRead, session: Session) -> dict[str, object]:
     try:
-        values = await PayrollPayStatementService().list_own(session, context=context)
+        statement_count, current = await PayrollPayStatementService().own_summary(
+            session, context=context
+        )
     except (PayrollAuthorizationError, PayrollConflictError) as error:
         raise _error(error) from error
-    current = values[0] if values else None
-    return {"statement_count": len(values), "current_statement_id": current.id if current else None, "current_pay_period_id": current.pay_period_id if current else None, "payment_status": current.payment_status if current else "unavailable", "ytd_status": current.ytd_status if current else "unavailable", "has_correction": bool(current and current.version > 1)}
+    return {"statement_count": statement_count, "current_statement_id": current.id if current else None, "current_pay_period_id": current.pay_period_id if current else None, "payment_status": current.payment_status if current else "unavailable", "ytd_status": current.ytd_status if current else "unavailable", "has_correction": bool(current and current.version > 1)}
 
 
 @router.get("/me/pay-statements/{statement_id}", response_model=StatementMetadata)

@@ -117,13 +117,19 @@ class CompanyAdministrationService:
         session: AsyncSession,
         *,
         context: AuthorizationContext,
+        limit: int = 100,
+        offset: int = 0,
     ) -> list[Membership]:
+        if not 1 <= limit <= 200 or offset < 0:
+            raise AccessPolicyConflictError("Membership pagination is invalid.")
         return list(
             (
                 await session.scalars(
                     select(Membership)
                     .where(Membership.company_id == context.company.id)
                     .order_by(Membership.created_at, Membership.id)
+                    .offset(offset)
+                    .limit(limit)
                 )
             ).all()
         )

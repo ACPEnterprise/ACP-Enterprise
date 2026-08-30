@@ -5,7 +5,7 @@ from uuid import uuid4
 import httpx
 import jwt
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 from sqlalchemy import select, update
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
@@ -23,6 +23,7 @@ from app.platform.permissions.catalog import (
     PermissionScope,
     permission_catalog,
 )
+from app.platform.reliability.correlation import CorrelationMiddleware
 from app.platform.security.decisions import (
     AuthorizationDecisionLogger,
     AuthorizationDenial,
@@ -108,10 +109,19 @@ async def test_security_headers_and_trusted_proxy_validation() -> None:
     app = FastAPI()
     app.add_middleware(TrustedProxyMiddleware, configuration=configuration)
     app.add_middleware(SecurityHeadersMiddleware, configuration=configuration)
+    app.add_middleware(CorrelationMiddleware)
 
     @app.get("/client")
     async def client_endpoint() -> dict[str, str]:
         return {"ok": "yes"}
+
+    @app.get("/api/protected")
+    async def protected_endpoint() -> dict[str, str]:
+        return {"classification": "protected"}
+
+    @app.get("/api/revalidated")
+    async def revalidated_endpoint() -> Response:
+        return Response(headers={"Cache-Control": "no-cache"})
 
     trusted_transport = httpx.ASGITransport(app=app, client=("10.0.0.8", 443))
     async with httpx.AsyncClient(
@@ -121,12 +131,17 @@ async def test_security_headers_and_trusted_proxy_validation() -> None:
             "/client",
             headers={"X-Forwarded-For": "203.0.113.8", "X-Forwarded-Proto": "https"},
         )
+        protected = await trusted_client.get("/api/protected")
+        revalidated = await trusted_client.get("/api/revalidated")
     assert response.status_code == 200
     assert response.headers["strict-transport-security"].startswith("max-age=")
     assert response.headers["x-content-type-options"] == "nosniff"
     assert response.headers["x-frame-options"] == "DENY"
     assert "content-security-policy" in response.headers
     assert "permissions-policy" in response.headers
+    assert "cache-control" not in response.headers
+    assert protected.headers["cache-control"] == "private, no-store"
+    assert revalidated.headers["cache-control"] == "no-cache"
 
     untrusted_transport = httpx.ASGITransport(app=app, client=("198.51.100.9", 80))
     async with httpx.AsyncClient(
@@ -136,6 +151,27 @@ async def test_security_headers_and_trusted_proxy_validation() -> None:
             "/client", headers={"X-Forwarded-For": "203.0.113.9"}
         )
     assert rejected.status_code == 400
+    assert rejected.json()["detail"]["code"] == "validation"
+    assert rejected.json()["detail"]["recovery"] == "USER_CORRECTION_REQUIRED"
+    assert rejected.json()["detail"]["correlation_id"] == rejected.headers[
+        "x-request-id"
+    ]
+    assert "203.0.113.9" not in rejected.text
+
+    malformed_transport = httpx.ASGITransport(app=app, client=("10.0.0.8", 443))
+    async with httpx.AsyncClient(
+        transport=malformed_transport, base_url="https://test"
+    ) as malformed_client:
+        malformed = await malformed_client.get(
+            "/client",
+            headers={"X-Forwarded-For": "protected-source-canary"},
+        )
+    assert malformed.status_code == 400
+    assert malformed.json()["detail"]["code"] == "validation"
+    assert malformed.json()["detail"]["correlation_id"] == malformed.headers[
+        "x-request-id"
+    ]
+    assert "protected-source-canary" not in malformed.text
 
 
 def test_jwt_key_identifiers_support_rotation_and_reject_unknown_keys() -> None:

@@ -5,6 +5,9 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
+from fastapi import HTTPException
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
 from app.core.config import settings
 from app.engineering_control.commands import CreateEngineeringCommand
 from app.engineering_control.service import EngineeringControlService
@@ -21,6 +24,10 @@ from app.engineering_execution.status.contracts import (
     SupervisorStatusSource,
     TransportSessionStatusSource,
 )
+from app.engineering_execution.status.router import (
+    get_execution_status,
+    mobile_execution_status_service,
+)
 from app.engineering_execution.status.service import (
     ExecutionStatusNotFoundError,
     MobileExecutionStatusService,
@@ -33,8 +40,6 @@ from app.platform.permissions.codes import (
     EngineeringCommandPermission,
     EngineeringExecutionPermission,
 )
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from tests.engineering_control.test_engineering_command_service import (
     ServiceFixture,
     context_with_permissions,
@@ -45,6 +50,23 @@ from tests.engineering_execution.test_engineering_execution import (
     approved_command,
     execution_context,
 )
+
+
+@pytest.mark.asyncio
+async def test_missing_status_has_terminal_recovery_contract(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def missing(*_args, **_kwargs):
+        raise ExecutionStatusNotFoundError
+
+    monkeypatch.setattr(mobile_execution_status_service, "get", missing)
+
+    with pytest.raises(HTTPException) as raised:
+        await get_execution_status(uuid4(), object(), object())  # type: ignore[arg-type]
+
+    assert raised.value.status_code == 404
+    assert raised.value.detail["code"] == "not_found"
+    assert raised.value.detail["recovery"] == "TERMINAL_FAILURE"
 
 
 @pytest_asyncio.fixture

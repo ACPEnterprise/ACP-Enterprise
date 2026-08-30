@@ -131,4 +131,18 @@ describe("IdentityOnboardingRoute", () => {
     ).toBeInTheDocument();
     expect(screen.queryByLabelText("Employee login address")).not.toBeInTheDocument();
   });
+
+  it("recovers readiness after a temporary API failure", async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.listRoles)
+      .mockRejectedValueOnce(new Error("temporary unavailable"))
+      .mockResolvedValueOnce([employeeRole]);
+    renderPage();
+    expect(
+      await screen.findByText("Employee onboarding readiness could not be verified."),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Retry readiness" }));
+    expect(await screen.findByLabelText("Employee login address")).toBeInTheDocument();
+    expect(api.listRoles).toHaveBeenCalledTimes(2);
+  });
 });

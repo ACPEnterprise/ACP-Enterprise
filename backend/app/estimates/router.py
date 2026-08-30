@@ -78,12 +78,18 @@ def _error(error: EstimateError) -> HTTPException:
         ClientRecovery.OWNER_ADMIN_ACTION_REQUIRED,
         current_correlation_id(),
     )
-    return HTTPException(status.HTTP_400_BAD_REQUEST, failure.detail())
+    return HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, failure.detail())
 
 
 def _branch(context: AuthorizationContext, branch_id: UUID) -> None:
     if branch_id not in {branch.id for branch in context.authorized_branches}:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Branch access is denied.")
+        failure = SafeFailure(
+            FailureCode.FORBIDDEN,
+            "Estimate Branch access is denied.",
+            ClientRecovery.OWNER_ADMIN_ACTION_REQUIRED,
+            current_correlation_id(),
+        )
+        raise HTTPException(status.HTTP_403_FORBIDDEN, failure.detail())
 
 
 def _lines(payload: ProposalInput) -> tuple[EstimateLineSpec, ...]:
@@ -126,7 +132,7 @@ async def get_estimate(
     if result is None or result.branch_id not in {
         branch.id for branch in context.authorized_branches
     }:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Estimate was not found.")
+        raise _error(EstimateNotFoundError("Estimate was not found."))
     return EstimateItem.model_validate(result)
 
 
@@ -313,9 +319,8 @@ async def create_tax_policy(
     if payload.branch_id is not None:
         _branch(context, payload.branch_id)
     if payload.expires_at is not None and payload.expires_at <= payload.effective_at:
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_CONTENT,
-            "Tax policy effective window is invalid.",
+        raise _error(
+            EstimateValidationError("Tax policy effective window is invalid.")
         )
     policy = OperationalTaxPolicy(
         id=uuid4(),

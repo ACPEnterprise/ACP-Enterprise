@@ -11,6 +11,7 @@ import { useState } from "react";
 import { Link } from "react-router";
 
 import { getOperatorApiError } from "../../api/errors";
+import { useHasPermission } from "../../auth";
 import { Alert, Badge, Button, Card, EmptyState, Spinner } from "../../ui";
 import { useMilestoneAction, useRoadmaps } from "./hooks";
 import { milestoneDisplayStatus, mobileEngineeringLabel } from "./presentation";
@@ -37,9 +38,11 @@ function actions(item: MilestoneItem): readonly MilestoneAction[] {
 function MilestoneCard({
   item,
   prominent = false,
+  canApprove,
 }: {
   item: MilestoneItem;
   prominent?: boolean;
+  canApprove: boolean;
 }) {
   const mutation = useMilestoneAction();
   const [confirming, setConfirming] = useState<MilestoneAction | null>(null);
@@ -180,7 +183,7 @@ function MilestoneCard({
           {getOperatorApiError(mutation.error, "Milestone action").message}
         </Alert>
       )}
-      <div className="mt-ui-4 flex flex-wrap gap-ui-2">
+      {canApprove && <div className="mt-ui-4 flex flex-wrap gap-ui-2">
         {actions(item).map((action) => (
           <Button
             key={action}
@@ -204,8 +207,8 @@ function MilestoneCard({
             {actionLabels[action]}
           </Button>
         ))}
-      </div>
-      {confirming && (
+      </div>}
+      {canApprove && confirming && (
         <div className="mt-ui-3 rounded-xl border border-amber-400/40 bg-amber-400/10 p-ui-3">
           <p className="text-sm font-semibold">
             {actionLabels[confirming]} this milestone?
@@ -237,6 +240,7 @@ function MilestoneCard({
 }
 
 export function MissionRoadmapPanel() {
+  const canApprove = useHasPermission("COMPANY_ENGINEERING_COMMAND_APPROVE");
   const query = useRoadmaps();
   if (query.isLoading)
     return (
@@ -331,7 +335,7 @@ export function MissionRoadmapPanel() {
         ) : (
           <div className="mt-ui-4 grid gap-ui-3">
             {data.owner_attention.map((item) => (
-              <MilestoneCard key={item.id} item={item} prominent />
+              <MilestoneCard key={item.id} item={item} prominent canApprove={canApprove} />
             ))}
           </div>
         )}
@@ -356,7 +360,7 @@ export function MissionRoadmapPanel() {
           {items.length ? (
             <div className="mt-ui-3 grid gap-ui-3">
               {items.map((item) => (
-                <MilestoneCard key={item.id} item={item} />
+              <MilestoneCard key={item.id} item={item} canApprove={canApprove} />
               ))}
             </div>
           ) : (

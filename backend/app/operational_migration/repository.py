@@ -163,8 +163,12 @@ class OperationalMigrationRepository:
         )
 
     @staticmethod
-    async def get_job(session: AsyncSession, job_id: UUID) -> Job | None:
-        return await session.get(Job, job_id)
+    async def get_job(
+        session: AsyncSession, *, company_id: UUID, job_id: UUID
+    ) -> Job | None:
+        return await session.scalar(
+            select(Job).where(Job.id == job_id, Job.company_id == company_id)
+        )
 
     @staticmethod
     def add_job_identity(session: AsyncSession, identity: JobSourceIdentity) -> None:

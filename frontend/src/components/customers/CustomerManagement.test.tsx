@@ -6,6 +6,10 @@ import * as customerHooks from "../../hooks/useCustomers";
 import { CustomerManagement } from "./CustomerManagement";
 
 vi.mock("../../hooks/useCustomers");
+const permissions = new Set<string>();
+vi.mock("../../auth", () => ({
+  useHasPermission: (code: string) => permissions.has(code),
+}));
 
 const mutation = {
   mutate: vi.fn(),
@@ -16,6 +20,8 @@ const mutation = {
 describe("CustomerManagement", () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    permissions.clear();
+    permissions.add("COMPANY_CUSTOMER_MANAGE");
     vi.mocked(customerHooks.useCustomerMutations).mockReturnValue({
       create: mutation,
       duplicateCheck: mutation,
@@ -115,5 +121,27 @@ describe("CustomerManagement", () => {
     );
 
     expect(screen.getByText("business · unknown")).toBeInTheDocument();
+  });
+
+  it("keeps authorized customer evidence visible without exposing manage controls", () => {
+    permissions.clear();
+    permissions.add("COMPANY_CUSTOMER_READ");
+    vi.mocked(customerHooks.useCustomerList).mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: {
+        items: [{
+          id: "customer-1", customer_type: "individual", first_name: "Alex",
+          last_name: "Rivera", business_name: null, primary_phone: "555-0100",
+          email: null, status: "active", source: "referral", is_vip: false,
+        }],
+        total: 1,
+      },
+    } as never);
+
+    render(<MemoryRouter><CustomerManagement /></MemoryRouter>);
+
+    expect(screen.getByRole("link", { name: /Alex Rivera/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "New customer" })).not.toBeInTheDocument();
   });
 });

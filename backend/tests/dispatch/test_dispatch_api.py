@@ -1,8 +1,17 @@
+from uuid import uuid4
+
 import httpx
 import pytest
+from fastapi import HTTPException
 
-from app.dispatch.errors import DispatchConflict, DispatchNotFound, DispatchValidation
-from app.dispatch.router import dispatch_http
+from app.dispatch.errors import (
+    DispatchConflict,
+    DispatchError,
+    DispatchNotFound,
+    DispatchValidation,
+)
+from app.dispatch.router import dispatch_http, replace
+from app.dispatch.schemas import AssignPrimaryRequest
 from app.main import app
 from app.platform.launch_controls import LAUNCH_ROLE_MATRIX, LaunchRoleCode
 from app.platform.permissions.catalog import permission_catalog
@@ -24,6 +33,12 @@ from app.platform.permissions.codes import DispatchPermission, JobPermission
             422,
             "validation",
             "USER_CORRECTION_REQUIRED",
+        ),
+        (
+            DispatchError("internal provider detail"),
+            500,
+            "internal_failure",
+            "TERMINAL_FAILURE",
         ),
     ],
 )
@@ -48,6 +63,27 @@ def test_dispatch_permissions_are_canonical_and_separate() -> None:
     )
     assert JobPermission.EXECUTE in technician.permission_codes
     assert DispatchPermission.MANAGE not in technician.permission_codes
+
+
+@pytest.mark.asyncio
+async def test_replace_missing_version_uses_safe_validation_contract() -> None:
+    request = AssignPrimaryRequest(
+        employee_id=uuid4(),
+        reason="Synthetic replacement",
+        idempotency_key="replace-safe-contract",
+    )
+    with pytest.raises(HTTPException) as captured:
+        await replace(
+            uuid4(),
+            request,
+            object(),  # type: ignore[arg-type]
+            object(),  # type: ignore[arg-type]
+        )
+
+    assert captured.value.status_code == 422
+    assert captured.value.detail["code"] == "validation"
+    assert captured.value.detail["recovery"] == "USER_CORRECTION_REQUIRED"
+    assert "Expected version" not in str(captured.value.detail)
 
 
 @pytest.mark.asyncio

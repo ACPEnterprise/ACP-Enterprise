@@ -1,12 +1,13 @@
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.events.delivery_contracts import delivery_consumers, event_version
 from app.events.models import BusinessEvent, BusinessEventDelivery
 from app.events.schemas import BusinessEventCreate
+from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.security.safe_output import validate_no_sensitive_fields
 
 
@@ -79,11 +80,13 @@ class BusinessEventService:
     @staticmethod
     async def list_events(
         session: AsyncSession,
+        context: AuthorizationContext,
         limit: int = 50,
         offset: int = 0,
     ) -> list[BusinessEvent]:
         statement = (
             select(BusinessEvent)
+            .where(BusinessEvent.company_id == context.company.id)
             .order_by(
                 BusinessEvent.occurred_at.desc(),
                 BusinessEvent.created_at.desc(),
@@ -91,6 +94,13 @@ class BusinessEventService:
             .limit(limit)
             .offset(offset)
         )
+        if not context.membership.has_all_branch_access:
+            statement = statement.where(
+                or_(
+                    BusinessEvent.branch_id.is_(None),
+                    BusinessEvent.branch_id.in_(context.authorized_branch_ids),
+                )
+            )
 
         result = await session.execute(statement)
         return list(result.scalars().all())
@@ -98,10 +108,12 @@ class BusinessEventService:
     @staticmethod
     async def latest_events(
         session: AsyncSession,
+        context: AuthorizationContext,
         limit: int = 10,
     ) -> list[BusinessEvent]:
         return await BusinessEventService.list_events(
             session=session,
+            context=context,
             limit=limit,
             offset=0,
         )

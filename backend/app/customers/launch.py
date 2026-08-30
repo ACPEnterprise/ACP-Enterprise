@@ -332,7 +332,11 @@ class CustomerLaunchService:
         *,
         context: AuthorizationContext,
         customer_id: UUID,
+        limit: int = 100,
+        offset: int = 0,
     ) -> list[CustomerConsentResponse]:
+        if not 1 <= limit <= 200 or offset < 0:
+            raise ValueError("Customer consent pagination is invalid.")
         self._validate_scope(context)
         customer = await CustomerRepository.get(
             session, company_id=context.company.id, customer_id=customer_id
@@ -350,6 +354,8 @@ class CustomerLaunchService:
                         == EventType.CUSTOMER_CONSENT_RECORDED.value,
                     )
                     .order_by(BusinessEvent.occurred_at.desc(), BusinessEvent.id.desc())
+                    .offset(offset)
+                    .limit(limit)
                 )
             ).all()
         )

@@ -22,11 +22,11 @@ export function useCustomerList(search: string, limit: number, offset: number) {
     queryFn: () => listCustomers(search, limit, offset),
   });
 }
-export function useCustomerDetail(customerId: string | null) {
+export function useCustomerDetail(customerId: string | null, enabled = true) {
   return useQuery({
     queryKey: ["customer", customerId],
     queryFn: () => getCustomer(customerId as string),
-    enabled: Boolean(customerId),
+    enabled: enabled && Boolean(customerId),
   });
 }
 export function useCustomerConsents(customerId: string | null) {

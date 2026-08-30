@@ -38,13 +38,16 @@ function errorStatus(error: unknown): number | undefined {
 export function AdministrationRoute() {
   const navigate = useNavigate();
   const { permissionCodes = [], requireReauthentication } = useAuth();
-  const roles = useRoles();
+  const canAdminister = permissionCodes.includes("COMPANY_ADMINISTER");
+  const canReadRoles = permissionCodes.includes("COMPANY_ROLE_READ");
+  const canManagePermissions = permissionCodes.includes("COMPANY_PERMISSION_MANAGE");
+  const roles = useRoles(canReadRoles);
   const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null);
   const selectedRole =
     roles.data?.find((role) => role.id === selectedRoleId) ??
     roles.data?.[0] ??
     null;
-  const permissions = useRolePermissions(selectedRole?.id ?? null);
+  const permissions = useRolePermissions(selectedRole?.id ?? null, canReadRoles);
   const [search, setSearch] = useState("");
   const [pending, setPending] = useState<PendingChange | null>(null);
   const [mutationError, setMutationError] = useState<string | null>(null);
@@ -58,7 +61,7 @@ export function AdministrationRoute() {
   const mutation = usePermissionMutation(pending?.action ?? "grant");
 
   useEffect(() => {
-    if (!permissionCodes.includes("COMPANY_ADMINISTER")) return;
+    if (!canAdminister) return;
     let active = true;
     void getQuickBooksSandboxConnection()
       .then((connectionState) => {
@@ -70,7 +73,7 @@ export function AdministrationRoute() {
     return () => {
       active = false;
     };
-  }, [permissionCodes]);
+  }, [canAdminister]);
 
   const visiblePermissions = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -83,20 +86,20 @@ export function AdministrationRoute() {
     );
   }, [permissions.data, search]);
 
-  if (errorStatus(roles.error) === 403) {
+  if ((!canReadRoles && !canAdminister) || errorStatus(roles.error) === 403) {
     return (
       <Alert variant="danger" announcement="assertive">
         You are not authorized to administer Company roles.
       </Alert>
     );
   }
-  if (roles.isPending)
+  if (canReadRoles && roles.isPending)
     return (
       <div className="grid min-h-48 place-items-center">
         <Spinner label="Loading role administration" />
       </div>
     );
-  if (roles.isError)
+  if (canReadRoles && roles.isError)
     return (
       <Alert variant="danger">
         Role Administration could not be loaded. Try again.
@@ -187,7 +190,7 @@ export function AdministrationRoute() {
           </CardContent>
         </Card>
       )}
-      {permissionCodes.includes("COMPANY_ADMINISTER") && (
+      {canAdminister && (
         <Card>
           <CardHeader>
             <CardTitle>QuickBooks Development sandbox</CardTitle>
@@ -250,8 +253,9 @@ export function AdministrationRoute() {
           </CardContent>
         </Card>
       )}
-      {permissionCodes.includes("COMPANY_ADMINISTER") && <MigrationWorkspace />}
-      <Card>
+      {canAdminister && <MigrationWorkspace />}
+      {!canReadRoles && <Alert variant="information">Role administration requires role-read permission.</Alert>}
+      {canReadRoles && <Card>
         <CardHeader>
           <CardTitle>Company roles</CardTitle>
           <CardDescription>
@@ -272,8 +276,8 @@ export function AdministrationRoute() {
             ))}
           </div>
         </CardContent>
-      </Card>
-      {selectedRole && (
+      </Card>}
+      {canReadRoles && selectedRole && (
         <Card>
           <CardHeader>
             <div className="flex flex-wrap items-start justify-between gap-ui-2">
@@ -345,7 +349,7 @@ export function AdministrationRoute() {
                           {permission.description || permission.name}
                         </p>
                       </div>
-                      <Button
+                      {canManagePermissions && <Button
                         className="shrink-0 sm:min-w-28"
                         variant={permission.assigned ? "outline" : "primary"}
                         disabled={!permission.assignable}
@@ -357,7 +361,7 @@ export function AdministrationRoute() {
                         }
                       >
                         {permission.assigned ? "Remove" : "Grant"}
-                      </Button>
+                      </Button>}
                     </div>
                   </li>
                 ))}
@@ -366,7 +370,7 @@ export function AdministrationRoute() {
           </CardContent>
         </Card>
       )}
-      {pending && selectedRole && (
+      {canManagePermissions && pending && selectedRole && (
         <ConfirmationDialog
           title={`${pending.action === "grant" ? "Grant" : "Remove"} permission?`}
           description={`${pending.permission.code} ${pending.action === "grant" ? "will be granted to" : "will be removed from"} ${selectedRole.name}. You will sign in again after this change.`}

@@ -1,6 +1,7 @@
 import { Activity, Radio } from "lucide-react";
 
 import { RevenueTrendChart } from "../components/RevenueTrendChart";
+import { useHasPermission } from "../auth";
 import { KPIStatCard } from "../components/dashboard/KPIStatCard";
 import { useAnalyticsSummary } from "../hooks/useAnalyticsSummary";
 import { Alert, Card, Spinner } from "../ui";
@@ -22,7 +23,8 @@ function formatEventName(eventType: string): string {
 }
 
 export function MissionControlRoute() {
-  const { data, isLoading, isError, error, dataUpdatedAt } = useAnalyticsSummary();
+  const canRead = useHasPermission("COMPANY_ANALYTICS_READ");
+  const { data, isLoading, isError, dataUpdatedAt } = useAnalyticsSummary(canRead);
   const metrics = data
     ? [
         { label: data.cash_collected.name, value: formatCurrency(data.cash_collected.value), detail: `${data.cash_collected.event_count ?? 0} payment events` },
@@ -32,6 +34,10 @@ export function MissionControlRoute() {
         { label: data.total_events.name, value: String(data.total_events.value), detail: "Business events processed" },
       ]
     : [];
+
+  if (!canRead) {
+    return <Alert variant="danger">You are not authorized to view Mission Control.</Alert>;
+  }
 
   return (
     <>
@@ -62,7 +68,6 @@ export function MissionControlRoute() {
       {isError && (
         <Alert variant="danger" title="Analytics unavailable">
           Unable to load analytics from the FastAPI backend.
-          <span className="mt-2 block text-sm">{error instanceof Error ? error.message : "Unknown API error"}</span>
         </Alert>
       )}
       {data && (

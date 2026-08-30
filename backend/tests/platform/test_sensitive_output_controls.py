@@ -7,6 +7,10 @@ from decimal import Decimal
 from uuid import uuid4
 
 import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+from pydantic import BaseModel
+
 from app.events.schemas import BusinessEventCreate
 from app.events.service import BusinessEventService
 from app.events.types import EventType
@@ -21,9 +25,6 @@ from app.platform.security.safe_output import (
     sanitize,
     validate_no_sensitive_fields,
 )
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
-from pydantic import BaseModel
 
 CANARIES = {
     "password": "CANARY-PASSWORD-PLAT007",
@@ -169,25 +170,32 @@ def test_audit_preserves_accountability_but_rejects_sensitive_details() -> None:
     AuditService._validate(safe)
 
 
-def test_business_event_rejects_secret_and_raw_source_metadata() -> None:
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"verification_token": CANARIES["verification_token"]},
+        {"raw_source_payload": CANARIES["raw_source_payload"]},
+        {"employee": {"social-security-number": "999-88-7777"}},
+        {"vendor": {"taxpayer_identification_number": "12-3456789"}},
+    ],
+)
+def test_business_event_rejects_secret_and_raw_source_metadata(
+    payload: dict[str, object],
+) -> None:
     class Session:
         def add(self, value: object) -> None:
             raise AssertionError("secret event must fail before persistence")
 
-    for payload in (
-        {"verification_token": CANARIES["verification_token"]},
-        {"raw_source_payload": CANARIES["raw_source_payload"]},
-    ):
-        with pytest.raises(ValueError, match="Business Event payload"):
-            BusinessEventService.stage(  # type: ignore[arg-type]
-                Session(),
-                BusinessEventCreate(
-                    event_type=EventType.SYSTEM_STARTED,
-                    entity_type="synthetic",
-                    company_id=uuid4(),
-                    payload=payload,
-                ),
-            )
+    with pytest.raises(ValueError, match="Business Event payload"):
+        BusinessEventService.stage(  # type: ignore[arg-type]
+            Session(),
+            BusinessEventCreate(
+                event_type=EventType.SYSTEM_STARTED,
+                entity_type="synthetic",
+                company_id=uuid4(),
+                payload=payload,
+            ),
+        )
 
 
 def test_ordinary_business_event_facts_remain_available() -> None:
@@ -232,7 +240,7 @@ def test_connection_strings_bearer_tokens_and_private_keys_are_sanitized() -> No
 
 def test_catalog_fingerprint_and_validation_are_deterministic() -> None:
     assert catalog_fingerprint() == (
-        "67d8473923cde21f326b9106f354312b007040b75198e8f0eedc0a664557cc2b"
+        "f2244fb4204cec1c582146dcfdf63a13e07cd59ed961b2a83090ed3c7ea8ca84"
     )
     validate_no_sensitive_fields(
         {"company_id": str(uuid4()), "status": "accepted"},

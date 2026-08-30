@@ -9,11 +9,13 @@ from uuid import UUID, uuid4
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.customers.models import Customer
 from app.events.schemas import BusinessEventCreate
 from app.events.service import BusinessEventService
 from app.events.types import EventType
 from app.invoicing.contracts import PaymentApplication, PaymentReceiptFact
 from app.invoicing.errors import InvoiceError
+from app.invoicing.models import Invoice
 from app.invoicing.service import invoice_service
 from app.payments.contracts import (
     ApplyReceipt,
@@ -69,6 +71,25 @@ class PaymentService:
                 return existing
             if amount <= 0 or len(spec.currency) != 3 or not spec.opaque_payment_method.startswith("opaque_"):
                 raise PaymentValidation("Positive amount, ISO currency, and provider-safe opaque identity are required.")
+            customer = await session.scalar(
+                select(Customer.id).where(
+                    Customer.company_id == spec.company_id,
+                    Customer.id == spec.customer_id,
+                )
+            )
+            if customer is None:
+                raise PaymentNotFound("Payment Customer was not found.")
+            if spec.invoice_id is not None:
+                invoice = await session.scalar(
+                    select(Invoice.id).where(
+                        Invoice.company_id == spec.company_id,
+                        Invoice.branch_id == spec.branch_id,
+                        Invoice.customer_id == spec.customer_id,
+                        Invoice.id == spec.invoice_id,
+                    )
+                )
+                if invoice is None:
+                    raise PaymentNotFound("Payment Invoice was not found.")
             intent = PaymentIntent(company_id=spec.company_id, branch_id=spec.branch_id, customer_id=spec.customer_id, invoice_id=spec.invoice_id, amount=amount, currency=spec.currency.upper(), provider=self.provider.name, merchant_account=self.merchant_account, opaque_payment_method=spec.opaque_payment_method, idempotency_key=spec.idempotency_key, request_digest=request_digest, provider_idempotency_key=f"pay_{uuid4().hex}", created_by_user_id=spec.actor_user_id)
             session.add(intent)
             await session.flush()
@@ -118,6 +139,19 @@ class PaymentService:
             raise PaymentConflict(str(exc)) from exc
         async with session.begin():
             receipt = await self._receipt(session, spec.company_id, spec.branch_id, spec.receipt_id, True)
+            prior = await session.scalar(
+                select(ReceiptEvent).where(
+                    ReceiptEvent.company_id == spec.company_id,
+                    ReceiptEvent.receipt_id == spec.receipt_id,
+                    ReceiptEvent.idempotency_key == spec.idempotency_key,
+                )
+            )
+            if prior:
+                if prior.evidence_digest != digest:
+                    raise PaymentConflict(
+                        "Idempotency key conflicts with the original application."
+                    )
+                return receipt
             receipt.available_amount -= amount
             receipt.applied_amount += amount
             receipt.status = "fully_applied" if receipt.available_amount == 0 else "partially_applied"
@@ -167,6 +201,8 @@ class PaymentService:
         return refund
 
     async def record_webhook(self, session: AsyncSession, company_id: UUID, provider: str, evidence: VerifiedWebhook) -> WebhookReceipt:
+        conflict = False
+        result: WebhookReceipt | None = None
         async with session.begin():
             await self._lock_command(
                 session,
@@ -176,14 +212,33 @@ class PaymentService:
             )
             prior = await session.scalar(select(WebhookReceipt).where(WebhookReceipt.company_id == company_id, WebhookReceipt.provider == provider, WebhookReceipt.merchant_account == evidence.merchant_account, WebhookReceipt.provider_event_id == evidence.provider_event_id))
             if prior:
-                if prior.evidence_digest != evidence.evidence_digest:
-                    self._exception_raw(session, company_id, "webhook", prior.id, "contradictory_provider_event", evidence.evidence_digest)
-                    raise PaymentConflict("Provider event identity conflicts with prior evidence.")
-                return prior
-            row = WebhookReceipt(company_id=company_id, provider=provider, merchant_account=evidence.merchant_account, provider_event_id=evidence.provider_event_id, event_type=evidence.event_type, evidence_digest=evidence.evidence_digest, secret_version=evidence.secret_version, allowed_evidence=evidence.allowed_evidence)
-            session.add(row)
-            await session.flush()
-            return row
+                conflict = any(
+                    (
+                        prior.event_type != evidence.event_type,
+                        prior.evidence_digest != evidence.evidence_digest,
+                        prior.secret_version != evidence.secret_version,
+                        prior.allowed_evidence != evidence.allowed_evidence,
+                    )
+                )
+                if conflict:
+                    existing_exception = await session.scalar(
+                        select(ReconciliationException).where(
+                            ReconciliationException.company_id == company_id,
+                            ReconciliationException.idempotency_key
+                            == f"webhook:{prior.id}:contradictory_provider_event",
+                        )
+                    )
+                    if existing_exception is None:
+                        self._exception_raw(session, company_id, "webhook", prior.id, "contradictory_provider_event", evidence.evidence_digest)
+                result = prior
+            else:
+                result = WebhookReceipt(company_id=company_id, provider=provider, merchant_account=evidence.merchant_account, provider_event_id=evidence.provider_event_id, event_type=evidence.event_type, evidence_digest=evidence.evidence_digest, secret_version=evidence.secret_version, allowed_evidence=evidence.allowed_evidence)
+                session.add(result)
+                await session.flush()
+        if conflict:
+            raise PaymentConflict("Provider event identity conflicts with prior evidence.")
+        assert result is not None
+        return result
 
     async def create_deposit(self, session: AsyncSession, spec: CreateDeposit) -> Deposit:
         digest = _digest({"receipt_ids": sorted(str(value) for value in spec.receipt_ids), "currency": spec.currency, "destination_reference": spec.destination_reference})
@@ -220,7 +275,19 @@ class PaymentService:
             )
             prior = await session.scalar(select(Settlement).where(Settlement.company_id == spec.company_id, Settlement.provider == spec.provider, Settlement.merchant_account == spec.merchant_account, Settlement.provider_payout_id == spec.provider_payout_id))
             if prior:
-                if prior.evidence_digest != spec.evidence_digest:
+                if any(
+                    (
+                        prior.currency != spec.currency,
+                        prior.settlement_date != spec.settlement_date,
+                        prior.gross_amount != spec.gross_amount,
+                        prior.refund_amount != spec.refund_amount,
+                        prior.dispute_amount != spec.dispute_amount,
+                        prior.fee_amount != spec.fee_amount,
+                        prior.adjustment_amount != spec.adjustment_amount,
+                        prior.net_amount != spec.net_amount,
+                        prior.evidence_digest != spec.evidence_digest,
+                    )
+                ):
                     raise PaymentConflict("Settlement evidence conflicts with replay.")
                 return prior
             if spec.merchant_account != self.merchant_account or spec.provider != self.provider.name or len(spec.evidence_digest) != 64:
@@ -236,18 +303,31 @@ class PaymentService:
 
     async def record_dispute(self, session: AsyncSession, spec: RecordDispute) -> PaymentReceipt:
         amount = spec.amount.quantize(CENT)
+        provider_dispute_id = spec.provider_dispute_id.strip()
+        request_digest = _digest(
+            {
+                "receipt_id": spec.receipt_id,
+                "amount": amount,
+                "provider_dispute_id": provider_dispute_id,
+                "evidence_digest": spec.evidence_digest,
+            }
+        )
         async with session.begin():
             receipt = await self._receipt(session, spec.company_id, spec.branch_id, spec.receipt_id, True)
             prior = await session.scalar(select(ReceiptEvent).where(ReceiptEvent.company_id == spec.company_id, ReceiptEvent.receipt_id == receipt.id, ReceiptEvent.idempotency_key == spec.idempotency_key))
             if prior:
+                if prior.request_digest != request_digest:
+                    raise PaymentConflict(
+                        "Idempotency key conflicts with the original dispute."
+                    )
                 return receipt
-            if receipt.version != spec.expected_version or amount <= 0 or amount > receipt.available_amount or len(spec.evidence_digest) != 64:
+            if receipt.version != spec.expected_version or amount <= 0 or amount > receipt.available_amount or not provider_dispute_id or len(spec.evidence_digest) != 64:
                 raise PaymentConflict("Dispute is stale or exceeds receipt availability.")
             receipt.available_amount -= amount
             receipt.disputed_amount += amount
             receipt.status = "disputed"
             receipt.version += 1
-            session.add(ReceiptEvent(company_id=spec.company_id, receipt_id=receipt.id, event_type="dispute_recorded", amount=amount, idempotency_key=spec.idempotency_key, evidence_digest=spec.evidence_digest))
+            session.add(ReceiptEvent(company_id=spec.company_id, receipt_id=receipt.id, event_type="dispute_recorded", amount=amount, provider_reference=provider_dispute_id, idempotency_key=spec.idempotency_key, evidence_digest=spec.evidence_digest, request_digest=request_digest))
             self._event(session, receipt, EventType.PAYMENT_DISPUTE_RECORDED, spec.actor_user_id)
             return receipt
 
@@ -258,7 +338,16 @@ class PaymentService:
             )
             prior = await session.scalar(select(PaymentPostingReceipt).where(PaymentPostingReceipt.company_id == fact.company_id, PaymentPostingReceipt.source_event_id == fact.source_event_id))
             if prior:
-                if prior.journal_id != fact.journal_id or prior.status != fact.status:
+                if any(
+                    (
+                        prior.journal_id != fact.journal_id,
+                        prior.journal_version != fact.journal_version,
+                        prior.policy_version != fact.policy_version,
+                        prior.status != fact.status,
+                        prior.effective_date != fact.effective_date,
+                        prior.posted_at != fact.posted_at,
+                    )
+                ):
                     raise PaymentConflict("Accounting posting receipt conflicts with replay.")
                 return prior
             row = PaymentPostingReceipt(**asdict(fact))
@@ -266,8 +355,33 @@ class PaymentService:
             await session.flush()
             return row
 
-    async def list_receipts(self, session: AsyncSession, company_id: UUID, branches: frozenset[UUID]) -> tuple[PaymentReceipt, ...]:
-        return tuple((await session.scalars(select(PaymentReceipt).where(PaymentReceipt.company_id == company_id, PaymentReceipt.branch_id.in_(branches)).order_by(PaymentReceipt.captured_at.desc()))).all())
+    async def list_receipts(
+        self,
+        session: AsyncSession,
+        company_id: UUID,
+        branches: frozenset[UUID],
+        *,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> tuple[PaymentReceipt, ...]:
+        if not 1 <= limit <= 200 or offset < 0:
+            raise PaymentValidation("Payment receipt page is invalid.")
+        return tuple(
+            (
+                await session.scalars(
+                    select(PaymentReceipt)
+                    .where(
+                        PaymentReceipt.company_id == company_id,
+                        PaymentReceipt.branch_id.in_(branches),
+                    )
+                    .order_by(
+                        PaymentReceipt.captured_at.desc(), PaymentReceipt.id.desc()
+                    )
+                    .limit(limit)
+                    .offset(offset)
+                )
+            ).all()
+        )
 
     async def get_receipt(self, session: AsyncSession, company_id: UUID, receipt_id: UUID) -> PaymentReceipt | None:
         return await session.scalar(select(PaymentReceipt).where(PaymentReceipt.company_id == company_id, PaymentReceipt.id == receipt_id))
@@ -300,7 +414,7 @@ class PaymentService:
 
     @staticmethod
     def _exception_raw(session: AsyncSession, company_id: UUID, entity_type: str, entity_id: UUID, reason: str, digest: str, branch_id: UUID | None = None, actor: UUID | None = None) -> None:
-        row = ReconciliationException(company_id=company_id, branch_id=branch_id, entity_type=entity_type, entity_id=entity_id, reason_code=reason, idempotency_key=f"{entity_type}:{entity_id}:{reason}", evidence_digest=digest, opened_by_user_id=actor)
+        row = ReconciliationException(id=uuid4(), company_id=company_id, branch_id=branch_id, entity_type=entity_type, entity_id=entity_id, reason_code=reason, idempotency_key=f"{entity_type}:{entity_id}:{reason}", evidence_digest=digest, opened_by_user_id=actor)
         session.add(row)
         BusinessEventService.stage(session, BusinessEventCreate(event_type=EventType.PAYMENT_RECONCILIATION_EXCEPTION_OPENED, entity_type="payment_reconciliation_exception", entity_id=row.id, company_id=company_id, branch_id=branch_id, user_id=actor, payload={"schema_version": "1.0", "reason_code": reason, "evidence_digest": digest}))
 
