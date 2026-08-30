@@ -197,18 +197,39 @@ class EconomicsWorkspaceService:
         records: tuple[EconomicsProfitabilityResultRecord, ...],
         identities: dict[UUID, JobIdentity],
     ) -> dict[str, Any]:
-        jobs = [
-            item
-            for item in records
-            if item.scope == "job" and item.subject_id in identities
-        ]
-        if not jobs:
+        source_jobs = [item for item in records if item.scope == "job"]
+        if not source_jobs:
             return cls._empty_projection("unavailable")
-        if len({item.subject_id for item in jobs}) != len(jobs):
+        if len({item.subject_id for item in source_jobs}) != len(source_jobs):
             return cls._empty_projection("conflicting")
-        currencies = {item.currency.upper() for item in jobs}
+        currencies = {item.currency.upper() for item in source_jobs}
         if len(currencies) != 1:
             return cls._empty_projection("conflicting")
+        if any(
+            item.subject_id in identities
+            and item.branch_id != identities[item.subject_id].branch_id
+            for item in source_jobs
+        ):
+            return cls._empty_projection(
+                "conflicting",
+                source_result_count=len(source_jobs),
+                explanation=(
+                    "Admitted Job profitability Branch evidence conflicts with the "
+                    "authoritative Job Branch; no result was included in owner totals."
+                ),
+            )
+        jobs = [item for item in source_jobs if item.subject_id in identities]
+        excluded_job_count = len(source_jobs) - len(jobs)
+        if not jobs:
+            return cls._empty_projection(
+                "partial",
+                source_result_count=len(source_jobs),
+                excluded_job_count=excluded_job_count,
+                explanation=(
+                    "Admitted Job profitability evidence exists, but Job attribution "
+                    "is unavailable; no result was included in owner totals."
+                ),
+            )
         keys = (
             "revenue",
             "labor",
@@ -228,6 +249,7 @@ class EconomicsWorkspaceService:
             item
             for item in directly_computable
             if (item.quality or item.metrics).get("completeness_percent") == 100
+            and (item.quality or item.metrics).get("freshness_status") == "current"
         ]
         stale = any(
             (item.quality or {}).get("freshness_status") != "current" for item in jobs
@@ -235,12 +257,26 @@ class EconomicsWorkspaceService:
         quality_state = (
             "stale"
             if stale
-            else ("complete" if len(complete) == len(jobs) else "partial")
+            else (
+                "complete"
+                if len(complete) == len(jobs) and excluded_job_count == 0
+                else "partial"
+            )
         )
-        totals = {
+        totals: dict[str, int | None] = {
             key: sum(cls._component(item, key) or 0 for item in directly_computable)
-            for key in keys
+            for key in keys[:5]
         }
+        totals["gross_profit"] = sum(
+            cls._component(item, "gross_profit") or 0 for item in directly_computable
+        )
+        for key in ("overhead", "net_profit"):
+            values = [cls._component(item, key) for item in directly_computable]
+            totals[key] = (
+                sum(value for value in values if value is not None)
+                if all(value is not None for value in values)
+                else None
+            )
         rows = []
         for item in jobs:
             identity = identities[item.subject_id]
@@ -296,6 +332,8 @@ class EconomicsWorkspaceService:
         return {
             "quality_state": quality_state,
             "currency": currencies.pop(),
+            "source_result_count": len(source_jobs),
+            "excluded_job_count": excluded_job_count,
             "job_count": len(jobs),
             "complete_job_count": len(complete),
             "unclassified_job_count": sum(
@@ -307,7 +345,17 @@ class EconomicsWorkspaceService:
             "customers": rollups["customer_name"],
             "branches": rollups["branch_name"],
             "fully_allocated_available": fully_allocated,
-            "explanation": "Direct contribution totals include only admitted Jobs with complete direct inputs. Missing indirect allocation remains visible and prevents a fully allocated answer.",
+            "explanation": (
+                "Direct contribution totals include only admitted Jobs with complete "
+                "direct inputs. Missing indirect allocation remains visible and prevents "
+                "a fully allocated answer."
+                + (
+                    f" {excluded_job_count} admitted Job result(s) were excluded because "
+                    "authoritative Job attribution was unavailable."
+                    if excluded_job_count
+                    else ""
+                )
+            ),
         }
 
     @staticmethod
@@ -335,9 +383,10 @@ class EconomicsWorkspaceService:
                 row["contribution_minor"] is not None
                 and row["revenue_minor"] is not None
             ):
-                group["complete_jobs"] += 1
                 group["revenue_minor"] += row["revenue_minor"]
                 group["contribution_minor"] += row["contribution_minor"]
+            if row["quality_state"] == "complete":
+                group["complete_jobs"] += 1
         return [
             {
                 "label": label,
@@ -354,7 +403,12 @@ class EconomicsWorkspaceService:
         current: dict[str, Any], prior: dict[str, Any]
     ) -> dict[str, object]:
         current_totals, prior_totals = current.get("totals"), prior.get("totals")
-        if not current_totals or not prior_totals:
+        if (
+            current.get("quality_state") != "complete"
+            or prior.get("quality_state") != "complete"
+            or not current_totals
+            or not prior_totals
+        ):
             return {
                 "state": "unavailable",
                 "reason": "Both comparable periods require complete admitted Job populations.",
@@ -392,10 +446,18 @@ class EconomicsWorkspaceService:
         return values
 
     @staticmethod
-    def _empty_projection(state: str) -> dict[str, Any]:
+    def _empty_projection(
+        state: str,
+        *,
+        source_result_count: int = 0,
+        excluded_job_count: int = 0,
+        explanation: str | None = None,
+    ) -> dict[str, Any]:
         return {
             "quality_state": state,
             "currency": None,
+            "source_result_count": source_result_count,
+            "excluded_job_count": excluded_job_count,
             "job_count": 0,
             "complete_job_count": 0,
             "unclassified_job_count": 0,
@@ -405,5 +467,6 @@ class EconomicsWorkspaceService:
             "customers": [],
             "branches": [],
             "fully_allocated_available": False,
-            "explanation": "No complete admitted Job profitability evidence exists for this period.",
+            "explanation": explanation
+            or "No complete admitted Job profitability evidence exists for this period.",
         }

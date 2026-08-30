@@ -1,0 +1,62 @@
+{
+  "schema_version": "1.0",
+  "qualification_id": "BUSINESS.ECONOMICS.INDEPENDENT.ACCEPTANCE.1",
+  "eco_capability_commit": "2401a9ca76cd81343936ee9dde77d1974e8e235b",
+  "eco_protected_integration": "1fac637462b01869cc7962d7463af1dc12637a43",
+  "qualification_basis": "synthetic_non_production_authoritative_evidence",
+  "owner_questions": {
+    "revenue": "economically_recognized_revenue_or_unavailable",
+    "work_cost": "direct_cost_with_missing_components_explicit",
+    "labor_cost": "accepted_payroll_attribution_only",
+    "material_cost": "accepted_job_consumption_only",
+    "job_profitability": "direct_contribution_and_policy_gated_fully_allocated",
+    "service_branch_performance": "reconciled_rollups_with_coverage",
+    "period_change": "available_only_for_complete_current_comparable_populations",
+    "causality": "observed_variance_only_no_invented_cause",
+    "trust": "quality_freshness_completeness_and_lineage_exposed"
+  },
+  "adversarial_vectors": [
+    "profitable_job",
+    "break_even_job",
+    "losing_job",
+    "partial_labor_evidence",
+    "missing_material_evidence",
+    "returned_material",
+    "payroll_correction",
+    "invoice_correction",
+    "unpaid_invoice",
+    "paid_invoice",
+    "multiple_invoices",
+    "voided_financial_evidence",
+    "cross_period_job",
+    "stale_evidence",
+    "conflicting_evidence",
+    "duplicate_source_lineage",
+    "branch_boundary",
+    "incomplete_attribution"
+  ],
+  "double_counting_boundaries": {
+    "invoice_plus_payment": "distinct_revenue_and_settlement_components",
+    "purchase_order_receipt_ap": "purchasing_evidence_not_job_consumption_or_accounting_truth",
+    "payroll_accrual_settlement": "accepted_payroll_reporting_and_attribution_only",
+    "material_receipt_consumption": "receipt_not_job_consumption",
+    "adjustment_original": "versioned_correction_authority_required",
+    "qbo_plus_acp": "qbo_source_reported_not_accepted_native_truth",
+    "duplicate_business_event": "same_source_lineage_fails_closed",
+    "duplicate_source_replay": "same_source_lineage_fails_closed"
+  },
+  "repairs": [
+    "P0_duplicate_source_lineage_double_count",
+    "partial_or_stale_period_comparison_overstatement",
+    "partial_rollup_mislabeled_complete",
+    "unattributed_admitted_result_silently_excluded",
+    "missing_overhead_and_net_profit_coerced_to_zero",
+    "unauthorized_or_inactive_branch_result_persistence",
+    "profitability_result_job_branch_conflict"
+  ],
+  "allocation_policy": "fully_allocated_profitability_unavailable_without_accepted_overhead_evidence",
+  "beacon_boundary": "deterministic_conditions_only_no_threshold_or_fact_mutation",
+  "autonomous_action": "PROHIBITED",
+  "production": "UNTOUCHED",
+  "qualification_fingerprint": "0a8f142a5996efe3abf4fb76ec17193792f4997ca49420332b1ffed60c04353c"
+}

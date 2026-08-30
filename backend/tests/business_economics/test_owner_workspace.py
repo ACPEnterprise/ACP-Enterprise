@@ -42,6 +42,7 @@ def _record(
             "missing_categories": [] if complete else ["overhead"],
         },
         metrics={},
+        branch_id=uuid4(),
     )
 
 
@@ -72,6 +73,8 @@ def test_owner_projection_reconciles_jobs_rollups_and_losses() -> None:
             "repair",
         ),
     }
+    profitable.branch_id = identities[profitable.subject_id].branch_id
+    losing.branch_id = identities[losing.subject_id].branch_id
     value = EconomicsWorkspaceService._project((profitable, losing), identities)
     assert value["quality_state"] == "complete"
     assert value["totals"]["revenue"] == 140_000
@@ -97,6 +100,7 @@ def test_incomplete_job_remains_visible_but_is_not_fabricated_into_totals() -> N
             "JOB-000003", "in_progress", uuid4(), "Main", uuid4(), "Synthetic", None
         )
     }
+    incomplete.branch_id = identities[incomplete.subject_id].branch_id
     value = EconomicsWorkspaceService._project((incomplete,), identities)
     assert value["quality_state"] == "partial"
     assert value["jobs"][0]["quality_state"] == "partial"
@@ -113,10 +117,37 @@ def test_period_comparison_fails_closed_without_both_complete_periods() -> None:
 
 
 def test_competing_active_job_results_fail_closed_instead_of_double_counting() -> None:
-    first = _record(revenue=100_000, labor=30_000, materials=20_000, contribution=50_000)
-    second = _record(revenue=100_000, labor=30_000, materials=20_000, contribution=50_000)
+    first = _record(
+        revenue=100_000, labor=30_000, materials=20_000, contribution=50_000
+    )
+    second = _record(
+        revenue=100_000, labor=30_000, materials=20_000, contribution=50_000
+    )
     second.subject_id = first.subject_id
-    identities = {first.subject_id: JobIdentity("JOB-000004", "completed", uuid4(), "Main", uuid4(), "Synthetic", "repair")}
+    identities = {
+        first.subject_id: JobIdentity(
+            "JOB-000004", "completed", uuid4(), "Main", uuid4(), "Synthetic", "repair"
+        )
+    }
+    first.branch_id = identities[first.subject_id].branch_id
+    second.branch_id = identities[first.subject_id].branch_id
     value = EconomicsWorkspaceService._project((first, second), identities)
     assert value["quality_state"] == "conflicting"
     assert value["totals"] is None
+
+
+def test_owner_projection_rejects_result_job_branch_conflict() -> None:
+    record = _record(
+        revenue=100_000, labor=30_000, materials=20_000, contribution=50_000
+    )
+    identities = {
+        record.subject_id: JobIdentity(
+            "JOB-000005", "completed", uuid4(), "North", uuid4(), "Synthetic", "repair"
+        )
+    }
+
+    value = EconomicsWorkspaceService._project((record,), identities)
+
+    assert value["quality_state"] == "conflicting"
+    assert value["totals"] is None
+    assert "branch" in value["explanation"].lower()
