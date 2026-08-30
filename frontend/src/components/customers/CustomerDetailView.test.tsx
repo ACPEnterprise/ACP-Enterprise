@@ -7,6 +7,10 @@ import type { CustomerDetail } from "../../types/customers";
 import { CustomerDetailView } from "./CustomerDetailView";
 
 vi.mock("../../hooks/useCustomers");
+const permissions = new Set<string>();
+vi.mock("../../auth", () => ({
+  useHasPermission: (code: string) => permissions.has(code),
+}));
 vi.mock("./CustomerOperationsPanel", () => ({
   CustomerOperationsPanel: () => <div>Customer operational workspace</div>,
 }));
@@ -42,6 +46,8 @@ const mutation = (mutate = vi.fn(), isPending = false) => ({
 describe("CustomerDetailView", () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    permissions.clear();
+    permissions.add("COMPANY_CUSTOMER_MANAGE");
     vi.mocked(customerHooks.useCustomerDetail).mockReturnValue({
       isLoading: false,
       isError: false,
@@ -182,5 +188,22 @@ describe("CustomerDetailView", () => {
       source: "staff_confirmed",
       reason: null,
     });
+  });
+
+  it("shows customer evidence to read-only users without mutation controls", () => {
+    permissions.clear();
+    permissions.add("COMPANY_CUSTOMER_READ");
+    vi.mocked(customerHooks.useCustomerMutations).mockReturnValue({
+      archive: mutation(), update: mutation(), addNote: mutation(),
+      recordConsent: mutation(), addProperty: mutation(), updateProperty: mutation(),
+      addContact: mutation(), updateContact: mutation(),
+    } as never);
+
+    render(<CustomerDetailView customerId={customer.id} onBack={vi.fn()} />);
+
+    expect(screen.getByText("Authoritative customer context")).toBeInTheDocument();
+    for (const name of ["Edit", "Archive", "Record consent", "Record withdrawal", "Add property", "Add contact", "Add note"]) {
+      expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
+    }
   });
 });
