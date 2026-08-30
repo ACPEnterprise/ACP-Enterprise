@@ -7,7 +7,7 @@ import { Alert, Button, Card, CardContent, CardDescription, CardHeader, CardTitl
 export function PaymentsRoute() {
   const canRead = useHasPermission("COMPANY_PAYMENT_READ");
   const canCollect = useHasPermission("COMPANY_PAYMENT_COLLECT");
-  const receipts = usePayments(); const mutations = usePaymentMutations();
+  const receipts = usePayments(canRead); const mutations = usePaymentMutations();
   const [form, setForm] = useState({ branch: "", customer: "", invoice: "", amount: "", currency: "USD", method: "" });
   if (!canRead) return <Alert variant="danger">You are not authorized to view Payments.</Alert>;
   const submit = async (event: FormEvent) => { event.preventDefault(); await mutations.collect.mutateAsync({ branch_id: form.branch, customer_id: form.customer, invoice_id: form.invoice || undefined, amount: form.amount, currency: form.currency, opaque_payment_method: form.method, idempotency_key: crypto.randomUUID() }); };

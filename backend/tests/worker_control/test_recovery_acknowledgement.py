@@ -8,7 +8,18 @@ from app.worker_control.recovery_acknowledgement import (
     RecoveryAcknowledgementError,
     RecoveryAcknowledgementRequest,
     RecoveryAcknowledgementService,
+    recovery_acknowledgement_failure,
 )
+
+
+def test_recovery_api_failure_is_classified_and_non_reflective() -> None:
+    canary = "worker-credential=recovery-canary provider-journal=/private/path"
+    failure = recovery_acknowledgement_failure()
+
+    assert failure.status_code == 409
+    assert failure.detail["code"] == "reconciliation_required"
+    assert failure.detail["recovery"] == "RECONCILIATION_REQUIRED"
+    assert canary not in str(failure.detail)
 
 
 def _request() -> RecoveryAcknowledgementRequest:

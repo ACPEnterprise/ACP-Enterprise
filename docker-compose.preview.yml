@@ -15,6 +15,9 @@ x-backend-environment: &backend-environment
   ACCESS_TOKEN_ISSUER: ${ACCESS_TOKEN_ISSUER:-acp-enterprise-preview}
   ACCESS_TOKEN_AUDIENCE: ${ACCESS_TOKEN_AUDIENCE:-acp-enterprise-preview-api}
   SECURITY_TOKEN_HMAC_KEY: ${SECURITY_TOKEN_HMAC_KEY:?Set SECURITY_TOKEN_HMAC_KEY in .env.preview}
+  IDENTITY_ONBOARDING_DELIVERY_KEY_FILE: /run/secrets/acp/identity-onboarding-delivery-keyring.json
+  IDENTITY_ONBOARDING_ACTIVE_DELIVERY_KID: ${IDENTITY_ONBOARDING_ACTIVE_DELIVERY_KID:?Set IDENTITY_ONBOARDING_ACTIVE_DELIVERY_KID in .env.preview}
+  IDENTITY_ONBOARDING_DELIVERY_PROVIDER: owner-mediated-preview
   SECURITY_HEADERS_ENABLED: "true"
   HSTS_ENABLED: "true"
   TRUST_FORWARDED_HEADERS: "true"
@@ -93,6 +96,7 @@ services:
       - preview_qbo_sandbox_state:/var/lib/acp-qbo-sandbox
       - preview_qbo_production_state:/var/lib/acp-qbo-production
       - preview_qbo_production_evidence:/var/lib/acp-qbo-production-evidence
+      - ${IDENTITY_ONBOARDING_DELIVERY_SECRET_DIR_HOST:?Set IDENTITY_ONBOARDING_DELIVERY_SECRET_DIR_HOST in .env.preview}:/run/secrets/acp:ro
     healthcheck:
       test: ["CMD", "python", "-c", "import json,urllib.request; data=json.load(urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)); assert data['status']=='healthy'"]
       interval: 10s
