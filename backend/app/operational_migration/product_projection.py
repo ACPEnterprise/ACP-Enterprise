@@ -88,6 +88,7 @@ def build_migration_product_projection(
         "HCP source freeze",
         "Final go/no-go",
     )
+    hcp_exception_count = sum(item.exception for item in counts)
     return {
         "company_id": company_id,
         "branch_id": branch_id,
@@ -163,7 +164,7 @@ def build_migration_product_projection(
                 "reconciliation": "plan_conforming",
                 "replay": "verified",
                 "holds": 594,
-                "exceptions": 12970,
+                "exceptions": hcp_exception_count,
             },
             {
                 "run_id": QBO_FIXTURE_DIGEST[:32],
