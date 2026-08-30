@@ -65,3 +65,6 @@ def test_owner_decisions_history_and_opening_gate_remain_visible() -> None:
     )
     assert result["run_history"][0]["run_id"] == HCP_MASTER_ID
     assert result["run_history"][0]["replay"] == "verified"
+    assert result["run_history"][0]["exceptions"] == sum(
+        item["exception"] for item in result["counts"]
+    )
