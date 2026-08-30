@@ -104,3 +104,14 @@ export interface EstimateArtifact {
   media_type: "text/html";
   content: string;
 }
+export interface CommercialPolicy {
+  id: string; company_id: string; branch_id: string; policy_type: string;
+  status: "unconfigured" | "draft" | "active" | "inactive";
+  configuration: Record<string, unknown>; readiness_reason: string; version: number;
+  evidence_digest: string; created_by_user_id: string; created_at: string;
+}
+export interface CommercialPolicyWrite {
+  branch_id: string; policy_type: string; status: CommercialPolicy["status"];
+  configuration: Record<string, unknown>; readiness_reason: string;
+  expected_version?: number; idempotency_key: string;
+}

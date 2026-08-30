@@ -2464,8 +2464,18 @@
         "tests/payroll/test_paystatement_experience.py"
       ],
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "estimates",
+      "mechanism": "Company-scoped immutable policy version and command identity",
+      "method": "PUT",
+      "operation_id": "configure_commercial_policy_api_v1_estimates_commercial_policies_put",
+      "path": "/api/v1/estimates/commercial-policies",
+      "reason": "Exact replay returns one Commercial policy version while contradictory identity or stale-version reuse fails closed.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "af8516ba5fe37693d8b3001c52e09a9540d00164798226a3c8b381c8131544ce",
+  "fingerprint": "e3089296d16df68f877c7f0a41ae671cd859163684ac917a69d7ea276f89e897",
   "schema_version": "1"
 }

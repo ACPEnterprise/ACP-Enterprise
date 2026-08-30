@@ -1,8 +1,11 @@
+import hashlib
+import json
 from collections.abc import Awaitable, Callable
 from typing import Annotated
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_database_session
@@ -20,7 +23,10 @@ from app.estimates.errors import (
     EstimateNotFoundError,
     EstimateValidationError,
 )
+from app.estimates.models import CommercialPolicyVersion
 from app.estimates.schemas import (
+    CommercialPolicyItem,
+    CommercialPolicyWrite,
     DecisionInput,
     EstimateArtifact,
     EstimateItem,
@@ -32,6 +38,8 @@ from app.estimates.schemas import (
     TransitionInput,
 )
 from app.estimates.service import estimate_service
+from app.events.models import BusinessEvent
+from app.events.types import EventType
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import EstimatePermission
 from app.platform.permissions.dependencies import require_permission
@@ -45,6 +53,132 @@ ReadContext = Annotated[
 ManageContext = Annotated[
     AuthorizationContext, Depends(require_permission(EstimatePermission.MANAGE))
 ]
+
+
+@router.get("/commercial-policies", response_model=tuple[CommercialPolicyItem, ...])
+async def commercial_policies(
+    context: ReadContext, session: DatabaseSession
+) -> tuple[CommercialPolicyItem, ...]:
+    rows = (
+        await session.scalars(
+            select(CommercialPolicyVersion)
+            .where(
+                CommercialPolicyVersion.company_id == context.company.id,
+                CommercialPolicyVersion.branch_id.in_(
+                    tuple(branch.id for branch in context.authorized_branches)
+                ),
+            )
+            .order_by(
+                CommercialPolicyVersion.branch_id,
+                CommercialPolicyVersion.policy_type,
+                CommercialPolicyVersion.version.desc(),
+            )
+        )
+    ).all()
+    latest: dict[tuple[UUID, str], CommercialPolicyVersion] = {}
+    for row in rows:
+        latest.setdefault((row.branch_id, row.policy_type), row)
+    return tuple(CommercialPolicyItem.model_validate(row) for row in latest.values())
+
+
+@router.put("/commercial-policies", response_model=CommercialPolicyItem)
+async def configure_commercial_policy(
+    payload: CommercialPolicyWrite,
+    context: ManageContext,
+    session: DatabaseSession,
+) -> CommercialPolicyItem:
+    _branch(context, payload.branch_id)
+    if payload.status == "unconfigured" and payload.configuration:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "Unconfigured Commercial policy cannot contain assumed values.",
+        )
+    if payload.status == "active" and not payload.configuration:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "Active Commercial policy requires explicit configuration.",
+        )
+    async with session.begin():
+        replay = await session.scalar(
+            select(CommercialPolicyVersion).where(
+                CommercialPolicyVersion.company_id == context.company.id,
+                CommercialPolicyVersion.idempotency_key == payload.idempotency_key,
+            )
+        )
+        requested = payload.model_dump(
+            mode="json", exclude={"idempotency_key", "expected_version"}
+        )
+        if replay is not None:
+            existing = {
+                "branch_id": str(replay.branch_id),
+                "policy_type": replay.policy_type,
+                "status": replay.status,
+                "configuration": replay.configuration,
+                "readiness_reason": replay.readiness_reason,
+            }
+            if existing != requested:
+                raise HTTPException(
+                    status.HTTP_409_CONFLICT,
+                    "Commercial policy command identity was reused with contradictory evidence.",
+                )
+            return CommercialPolicyItem.model_validate(replay)
+        current = await session.scalar(
+            select(CommercialPolicyVersion)
+            .where(
+                CommercialPolicyVersion.company_id == context.company.id,
+                CommercialPolicyVersion.branch_id == payload.branch_id,
+                CommercialPolicyVersion.policy_type == payload.policy_type,
+            )
+            .order_by(CommercialPolicyVersion.version.desc())
+            .limit(1)
+            .with_for_update()
+        )
+        current_version = current.version if current else None
+        if payload.expected_version != current_version:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "Commercial policy changed; refresh authoritative readiness.",
+            )
+        version = (current_version or 0) + 1
+        evidence = {
+            "company_id": str(context.company.id),
+            **requested,
+            "version": version,
+        }
+        evidence_digest = hashlib.sha256(
+            json.dumps(evidence, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+        record = CommercialPolicyVersion(
+            company_id=context.company.id,
+            branch_id=payload.branch_id,
+            policy_type=payload.policy_type,
+            status=payload.status,
+            configuration=payload.configuration,
+            readiness_reason=payload.readiness_reason,
+            version=version,
+            evidence_digest=evidence_digest,
+            idempotency_key=payload.idempotency_key,
+            created_by_user_id=context.user.id,
+        )
+        session.add(record)
+        await session.flush()
+        session.add(
+            BusinessEvent(
+                event_type=EventType.COMMERCIAL_POLICY_CONFIGURED.value,
+                entity_type="commercial_policy",
+                entity_id=record.id,
+                company_id=context.company.id,
+                branch_id=payload.branch_id,
+                user_id=context.user.id,
+                payload={
+                    "policy_type": record.policy_type,
+                    "status": record.status,
+                    "version": record.version,
+                    "evidence_digest": record.evidence_digest,
+                },
+            )
+        )
+    return CommercialPolicyItem.model_validate(record)
 
 
 def _error(error: EstimateError) -> HTTPException:

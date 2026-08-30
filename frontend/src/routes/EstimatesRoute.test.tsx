@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { EstimatesRoute } from "./EstimatesRoute";
 
 let permissions = new Set<string>();
-vi.mock("../auth", () => ({ useHasPermission: (code: string) => permissions.has(code) }));
+vi.mock("../auth", () => ({ useAuth: () => ({ activeCompany: { branches: [{ id: "branch-1", name: "Main" }] } }), useHasPermission: (code: string) => permissions.has(code) }));
 vi.mock("../api/estimates", () => ({
   listEstimates: vi.fn().mockResolvedValue({
     total: 1,
@@ -16,6 +16,7 @@ vi.mock("../api/estimates", () => ({
     current_revision: { id: "revision-1", revision_number: 1, proposal_title: "Heating proposal", currency: "USD", subtotal_amount: "100.00", discount_type: "fixed", discount_value: "10.00", discount_amount: "10.00", taxable_basis: "90.00", tax_amount: "7.20", total_amount: "97.20", customer_message: null, terms: null, lines: [{ id: "line-1", title: "Heating service", description: null, snapshot_id: "snapshot-1", snapshot_digest: "a".repeat(64), quantity: "1", unit_price: "100", line_total: "100", currency: "USD", option_group_id: "group-1", option_id: "option-1", discount_allocation: "10", discounted_basis: "90", tax_amount: "7.20", taxable: true }] },
   }),
   createEstimate: vi.fn(), reviseEstimate: vi.fn(),
+  getCommercialPolicies: vi.fn().mockResolvedValue([]), configureCommercialPolicy: vi.fn(),
 }));
 
 function renderRoute(path = "/estimates") {

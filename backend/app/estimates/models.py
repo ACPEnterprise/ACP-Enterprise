@@ -42,6 +42,68 @@ class EstimateNumberSequence(Base):
     )
 
 
+class CommercialPolicyVersion(Base):
+    """Versioned Commercial readiness without assumed Company policy values."""
+
+    __tablename__ = "commercial_policy_versions"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "branch_id"],
+            ["branches.company_id", "branches.id"],
+            name="fk_commercial_policy_branch",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "policy_type IN ('discount','price_override','estimate_expiration','rounding','tax_readiness','document_template','delivery_readiness')",
+            name="ck_commercial_policy_type",
+        ),
+        CheckConstraint(
+            "status IN ('unconfigured','draft','active','inactive')",
+            name="ck_commercial_policy_status",
+        ),
+        CheckConstraint("version >= 1", name="ck_commercial_policy_version"),
+        UniqueConstraint(
+            "company_id",
+            "branch_id",
+            "policy_type",
+            "version",
+            name="uq_commercial_policy_version",
+        ),
+        UniqueConstraint(
+            "company_id", "idempotency_key", name="uq_commercial_policy_command"
+        ),
+        Index(
+            "ix_commercial_policy_current",
+            "company_id",
+            "branch_id",
+            "policy_type",
+            "version",
+        ),
+    )
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    policy_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False)
+    configuration: Mapped[dict[str, object]] = mapped_column(
+        JSONB, nullable=False, default=dict
+    )
+    readiness_reason: Mapped[str] = mapped_column(String(500), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    created_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
 class Estimate(Base):
     __tablename__ = "estimate_proposals"
     __table_args__ = (

@@ -145,6 +145,32 @@ class EstimateArtifact(EstimateSchema):
     content: str
 
 
+class CommercialPolicyWrite(EstimateSchema):
+    branch_id: UUID
+    policy_type: str = Field(
+        pattern=r"^(discount|price_override|estimate_expiration|rounding|tax_readiness|document_template|delivery_readiness)$"
+    )
+    status: str = Field(pattern=r"^(unconfigured|draft|active|inactive)$")
+    configuration: dict[str, object] = {}
+    readiness_reason: str = Field(min_length=1, max_length=500)
+    expected_version: int | None = Field(default=None, ge=1)
+    idempotency_key: str = Field(pattern=r"^[A-Za-z0-9._:-]{8,128}$")
+
+
+class CommercialPolicyItem(EstimateSchema):
+    id: UUID
+    company_id: UUID
+    branch_id: UUID
+    policy_type: str
+    status: str
+    configuration: dict[str, object]
+    readiness_reason: str
+    version: int
+    evidence_digest: str
+    created_by_user_id: UUID
+    created_at: datetime
+
+
 class TaxPolicyItem(EstimateSchema):
     id: UUID
     company_id: UUID

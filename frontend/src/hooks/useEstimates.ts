@@ -5,7 +5,12 @@ export const estimateKeys = {
   all: ["estimates"] as const,
   list: (status?: string, customerId?: string) => ["estimates", "list", status ?? "all", customerId ?? "all"] as const,
   detail: (id: string) => ["estimates", id] as const,
+  policies: ["estimates", "commercial-policies"] as const,
 };
+
+export function useCommercialPolicies(enabled = true) {
+  return useQuery({ queryKey: estimateKeys.policies, queryFn: api.getCommercialPolicies, enabled });
+}
 
 export function useEstimates(status?: string, customerId?: string, enabled = true) {
   return useQuery({ queryKey: estimateKeys.list(status, customerId), queryFn: () => api.listEstimates(status, customerId), enabled });
@@ -29,5 +34,6 @@ export function useEstimateMutations() {
     }),
     transition: useMutation({ mutationFn: ({ id, action, input }: { id: string; action: "send" | "view" | "expire"; input: Parameters<typeof api.transitionEstimate>[2] }) => api.transitionEstimate(id, action, input), onSuccess: update }),
     decide: useMutation({ mutationFn: ({ id, action, input }: { id: string; action: "approve" | "reject"; input: Parameters<typeof api.decideEstimate>[2] }) => api.decideEstimate(id, action, input), onSuccess: update }),
+    configurePolicy: useMutation({ mutationFn: api.configureCommercialPolicy, onSuccess: () => client.invalidateQueries({ queryKey: estimateKeys.policies }) }),
   };
 }

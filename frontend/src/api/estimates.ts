@@ -1,5 +1,5 @@
 import { apiClient } from "./client";
-import type { Estimate, EstimateArtifact, EstimateDecisionInput, EstimateList, EstimateProposalInput, EstimateTransitionInput } from "../types/estimates";
+import type { CommercialPolicy, CommercialPolicyWrite, Estimate, EstimateArtifact, EstimateDecisionInput, EstimateList, EstimateProposalInput, EstimateTransitionInput } from "../types/estimates";
 
 const root = "/api/v1/estimates";
 
@@ -9,6 +9,12 @@ export async function getEstimate(id: string): Promise<Estimate> {
 
 export async function getEstimateArtifact(id: string): Promise<EstimateArtifact> {
   return (await apiClient.get<EstimateArtifact>(`${root}/${id}/artifact`)).data;
+}
+export async function getCommercialPolicies(): Promise<CommercialPolicy[]> {
+  return (await apiClient.get<CommercialPolicy[]>(`${root}/commercial-policies`)).data;
+}
+export async function configureCommercialPolicy(input: CommercialPolicyWrite): Promise<CommercialPolicy> {
+  return (await apiClient.put<CommercialPolicy>(`${root}/commercial-policies`, input)).data;
 }
 
 export async function listEstimates(status?: string, customerId?: string): Promise<EstimateList> {
