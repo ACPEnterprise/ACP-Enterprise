@@ -1,17 +1,56 @@
 from dataclasses import dataclass
 from enum import StrEnum
 
-from app.platform.permissions.catalog import PermissionCatalog, permission_catalog
+from app.payroll.permissions import PayrollPermission
+from app.platform.permissions.catalog import PermissionCatalog
 from app.platform.permissions.codes import (
+    AccountingPermission,
+    AccountsPayablePermission,
+    AdministrationPermission,
     AnalyticsPermission,
+    BeaconPermission,
+    CommunicationsPermission,
     CustomerPermission,
     DispatchPermission,
+    EstimatePermission,
     InventoryPermission,
+    InvoicePermission,
     JobPermission,
     LaunchPlatformPermission,
+    PaymentPermission,
     PriceBookPermission,
     PurchasingPermission,
     SchedulingPermission,
+)
+
+COMPANY_ADMINISTRATOR_OWNER_READ_PERMISSIONS = frozenset(
+    {
+        AdministrationPermission.MEMBERSHIP_READ,
+        AdministrationPermission.MEMBERSHIP_MANAGE,
+        AdministrationPermission.BRANCH_ACCESS_MANAGE,
+        AdministrationPermission.ROLE_READ,
+        AdministrationPermission.ROLE_MANAGE,
+        AdministrationPermission.PERMISSION_MANAGE,
+        AdministrationPermission.COMPANY_ADMINISTER,
+        AdministrationPermission.IDENTITY_ONBOARDING_MANAGE,
+        LaunchPlatformPermission.AUDIT_READ,
+        AnalyticsPermission.READ,
+        BeaconPermission.REVIEW,
+        CustomerPermission.READ,
+        SchedulingPermission.READ,
+        JobPermission.READ,
+        DispatchPermission.READ,
+        InventoryPermission.READ,
+        PurchasingPermission.READ,
+        AccountingPermission.REPORT_READ,
+        PriceBookPermission.READ,
+        CommunicationsPermission.READ,
+        EstimatePermission.READ,
+        InvoicePermission.READ,
+        PaymentPermission.READ,
+        AccountsPayablePermission.REPORT_READ,
+        PayrollPermission.REPORTING_READ,
+    }
 )
 
 
@@ -37,9 +76,7 @@ LAUNCH_ROLE_MATRIX = (
     LaunchRoleDefinition(
         code=LaunchRoleCode.COMPANY_ADMINISTRATOR,
         purpose="Company-owned tenant and access-policy administration.",
-        permission_codes=frozenset(
-            definition.code for definition in permission_catalog.definitions
-        ),
+        permission_codes=COMPANY_ADMINISTRATOR_OWNER_READ_PERMISSIONS,
     ),
     LaunchRoleDefinition(
         code=LaunchRoleCode.OFFICE_MANAGER,
