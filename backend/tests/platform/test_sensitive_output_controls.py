@@ -128,6 +128,27 @@ def test_logging_filter_sanitizes_structured_fields_and_exception_chains() -> No
     assert "CANARY" not in output
 
 
+def test_logging_filter_redacts_secret_assignments_in_plain_messages() -> None:
+    logger = logging.getLogger("plat007-plain-message-test")
+    logger.handlers.clear()
+    logger.propagate = False
+    stream = io.StringIO()
+    handler = logging.StreamHandler(stream)
+    logger.addHandler(handler)
+    install_sensitive_data_logging_controls(logger)
+
+    logger.warning(
+        "provider failed token=PLAIN-TOKEN-CANARY "
+        "api_key: 'PLAIN-API-CANARY' "
+        'client-secret="PLAIN-CLIENT-CANARY" status=retryable'
+    )
+
+    output = stream.getvalue()
+    assert "status=retryable" in output
+    assert output.count(f"{REDACTED}:secret") == 3
+    assert "CANARY" not in output
+
+
 def test_safe_exception_exposes_type_code_and_digest_not_messages() -> None:
     try:
         try:
