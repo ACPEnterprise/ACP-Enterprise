@@ -683,7 +683,9 @@ class OperationalMigrationService:
                     job = planned_jobs.get(record.source_job_id)
                     if job is None and job_identity is not None:
                         job = await self._repository.get_job(
-                            session, job_identity.job_id
+                            session,
+                            company_id=context.company.id,
+                            job_id=job_identity.job_id,
                         )
                     if job is None:
                         raise ParentResolutionError(
