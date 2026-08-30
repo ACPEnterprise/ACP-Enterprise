@@ -8,9 +8,11 @@ import {
   checkCustomerDuplicates,
   createCustomer,
   getCustomer,
+  getCustomerTimeline,
   listCustomers,
   listCustomerConsents,
   recordCustomerConsent,
+  restoreCustomer,
   updateCustomer,
   updateCustomerContact,
   updateCustomerProperty,
@@ -36,6 +38,13 @@ export function useCustomerConsents(customerId: string | null) {
     enabled: Boolean(customerId),
   });
 }
+export function useCustomerTimeline(customerId: string | null) {
+  return useQuery({
+    queryKey: ["customer-timeline", customerId],
+    queryFn: () => getCustomerTimeline(customerId as string),
+    enabled: Boolean(customerId),
+  });
+}
 
 export function useCustomerMutations(customerId?: string) {
   const queryClient = useQueryClient();
@@ -58,6 +67,10 @@ export function useCustomerMutations(customerId?: string) {
     }),
     archive: useMutation({
       mutationFn: () => archiveCustomer(customerId as string),
+      onSuccess: () => refresh(customerId),
+    }),
+    restore: useMutation({
+      mutationFn: () => restoreCustomer(customerId as string),
       onSuccess: () => refresh(customerId),
     }),
     duplicateCheck: useMutation({ mutationFn: checkCustomerDuplicates }),
