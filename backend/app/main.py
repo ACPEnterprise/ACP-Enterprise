@@ -44,6 +44,7 @@ from app.financial_reporting.router import router as financial_reporting_router
 from app.inventory.router import router as inventory_router
 from app.invoicing.router import router as invoicing_router
 from app.jobs.router import router as jobs_router
+from app.operational_migration.product_router import router as migration_product_router
 from app.operations.router import router as operations_router
 from app.payments.router import router as payments_router
 from app.payroll.router import router as payroll_router
@@ -195,6 +196,7 @@ app.include_router(worker_transport_router)
 app.include_router(worker_recovery_router)
 app.include_router(worker_recovery_transport_router)
 app.include_router(qbo_source_router)
+app.include_router(migration_product_router)
 
 
 @app.get("/", tags=["System"])
