@@ -15,7 +15,11 @@ from app.lia.contracts import (
     TruthClassification,
 )
 from app.lia.foundation import SOURCE_REGISTRY
-from app.lia.retrieval import RUNTIME_SOURCE_BINDINGS, GovernedRetrievalService
+from app.lia.retrieval import (
+    RUNTIME_SOURCE_BINDINGS,
+    GovernedRetrievalService,
+    permitted_domain_names,
+)
 from app.lia.service import LiaService
 from app.platform.permissions.codes import LuminaryPermission
 
@@ -439,3 +443,35 @@ async def test_economics_retrieval_enforces_registered_result_budget() -> None:
     )
     assert registered.max_results == 20
     assert 20 in statement.compile().params.values()
+
+
+@pytest.mark.parametrize(
+    ("permission", "forbidden_domain"),
+    (
+        ("COMPANY_MIGRATION_REHEARSAL_EXECUTE", "migration"),
+        ("COMPANY_LUMINARY_ANALYZE", "luminary"),
+        ("COMPANY_BEACON_REVIEW", "beacon"),
+        ("COMPANY_BEACON_OWN", "beacon"),
+        ("COMPANY_BEACON_ASSIGN", "beacon"),
+        ("COMPANY_ECONOMICS_POLICY_MANAGE", "business-economics"),
+        ("COMPANY_PAYROLL_REPORTING_MANAGE", "payroll"),
+        ("COMPANY_PAYROLL_REPORTING_APPROVE", "payroll"),
+        ("COMPANY_PAYROLL_STATEMENT_READ", "payroll"),
+        ("COMPANY_PAYROLL_STATEMENT_MANAGE", "payroll"),
+    ),
+)
+def test_protected_source_permissions_do_not_compose_by_name_or_domain(
+    permission: str, forbidden_domain: str
+) -> None:
+    assert forbidden_domain not in permitted_domain_names(
+        authorization_context(permission)
+    )
+
+
+def test_payroll_reporting_and_own_read_are_independent_admissions() -> None:
+    assert "payroll" in permitted_domain_names(
+        authorization_context("COMPANY_PAYROLL_REPORTING_READ")
+    )
+    assert "payroll" in permitted_domain_names(
+        authorization_context("COMPANY_PAYROLL_STATEMENT_OWN_READ")
+    )
