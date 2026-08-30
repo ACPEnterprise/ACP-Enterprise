@@ -8,6 +8,7 @@ from sqlalchemy import (
     Date,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     String,
@@ -367,6 +368,12 @@ class EconomicsProfitabilityResultRecord(Base):
 
     __tablename__ = "economics_profitability_results"
     __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "branch_id"],
+            ["branches.company_id", "branches.id"],
+            name="fk_eco_profitability_result_company_branch",
+            ondelete="RESTRICT",
+        ),
         CheckConstraint("lifecycle IN ('admitted','superseded','voided')", name="ck_eco_profitability_result_lifecycle"),
         UniqueConstraint("company_id", "result_identity", name="uq_eco_profitability_result_identity"),
         Index("ix_eco_profitability_result_subject", "company_id", "subject_id", "period_start", "period_end"),

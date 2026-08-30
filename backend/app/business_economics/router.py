@@ -9,6 +9,8 @@ from app.database.session import get_database_session
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import EconomicsPolicyPermission
 from app.platform.permissions.dependencies import require_permission
+from app.platform.reliability.correlation import current_correlation_id
+from app.platform.reliability.failures import ClientRecovery, FailureCode, SafeFailure
 
 from .workspace import EconomicsWorkspaceService
 
@@ -32,7 +34,15 @@ async def economics_workspace(
             session, context=context, period_start=start, period_end=end
         )
     except ValueError as error:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(error)) from error
+        failure = SafeFailure(
+            FailureCode.VALIDATION,
+            "Business Economics request requires correction.",
+            ClientRecovery.USER_CORRECTION_REQUIRED,
+            current_correlation_id(),
+        )
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY, failure.detail()
+        ) from error
 
 
 @router.get("/results/{result_id}", response_model=dict[str, object])
@@ -44,4 +54,10 @@ async def economics_result(
             session, context=context, result_id=result_id
         )
     except LookupError as error:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, str(error)) from error
+        failure = SafeFailure(
+            FailureCode.NOT_FOUND,
+            "Business Economics result was not found.",
+            ClientRecovery.TERMINAL_FAILURE,
+            current_correlation_id(),
+        )
+        raise HTTPException(status.HTTP_404_NOT_FOUND, failure.detail()) from error

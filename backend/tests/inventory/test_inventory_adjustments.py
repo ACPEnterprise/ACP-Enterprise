@@ -1,3 +1,4 @@
+import asyncio
 from dataclasses import replace
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -96,6 +97,52 @@ async def test_adjustments_are_attributed_append_only_and_idempotent(
                 .values(note="rewritten")
             )
         await session.rollback()
+
+
+@pytest.mark.asyncio
+async def test_concurrent_exact_adjustment_replay_has_one_authoritative_winner(
+    inventory_fixture,  # noqa: F811
+) -> None:
+    factory, company, branch, _, actor = inventory_fixture
+    repository, item, warehouse, _ = await seed_foundation(
+        factory, company, branch, actor
+    )
+    spec = replace(
+        adjustment_spec(company, branch, actor, item, warehouse, "gain", "2"),
+        idempotency_key=f"  concurrent-adjustment-{uuid4()}  ",
+    )
+
+    async def post():
+        async with factory() as session, session.begin():
+            return await repository.post_adjustment(session, spec=spec)
+
+    first, replay = await asyncio.gather(post(), post())
+    assert first.id == replay.id
+    assert first.movement_id == replay.movement_id
+    async with factory() as session:
+        adjustments = tuple(
+            (
+                await session.scalars(
+                    select(InventoryAdjustment).where(
+                        InventoryAdjustment.company_id == company.id,
+                        InventoryAdjustment.idempotency_key
+                        == spec.idempotency_key.strip(),
+                    )
+                )
+            ).all()
+        )
+        movements = tuple(
+            (
+                await session.scalars(
+                    select(StockMovement).where(
+                        StockMovement.company_id == company.id,
+                        StockMovement.idempotency_key
+                        == f"adjustment:{spec.idempotency_key.strip()}",
+                    )
+                )
+            ).all()
+        )
+        assert len(adjustments) == len(movements) == 1
 
 
 @pytest.mark.asyncio

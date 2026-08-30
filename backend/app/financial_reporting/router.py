@@ -25,6 +25,8 @@ from app.financial_reporting.service import financial_reporting_service
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import AccountingPermission
 from app.platform.permissions.dependencies import require_permission
+from app.platform.reliability.correlation import current_correlation_id
+from app.platform.reliability.failures import ClientRecovery, FailureCode, SafeFailure
 
 router = APIRouter(prefix="/api/v1/accounting/reports", tags=["Financial Reporting"])
 DatabaseSession = Annotated[AsyncSession, Depends(get_database_session)]
@@ -46,12 +48,25 @@ async def _generate(
     try:
         return await operation()
     except ReportingNotFound as error:
-        raise HTTPException(status_code=404, detail=str(error)) from error
+        failure = SafeFailure(
+            FailureCode.NOT_FOUND,
+            "Financial report evidence was not found.",
+            ClientRecovery.TERMINAL_FAILURE,
+            current_correlation_id(),
+        )
+        raise HTTPException(status_code=404, detail=failure.detail()) from error
     except ReportingRequestError as error:
-        raise HTTPException(status_code=422, detail=str(error)) from error
+        failure = SafeFailure(
+            FailureCode.VALIDATION,
+            "Financial report request requires correction.",
+            ClientRecovery.USER_CORRECTION_REQUIRED,
+            current_correlation_id(),
+        )
+        raise HTTPException(status_code=422, detail=failure.detail()) from error
     except ReportingIntegrityError as error:
         await session.rollback()
         digest = sha256(request_identity.encode()).hexdigest()
+        correlation_id = current_correlation_id() or uuid4()
         await accounting_service.record_posting_failure(
             session,
             context=context,
@@ -59,13 +74,19 @@ async def _generate(
             source_type=report_name,
             source_identity=request_identity[:200],
             source_digest=digest,
-            error_code=str(error),
-            correlation_id=uuid4(),
+            error_code="ledger_integrity_failure",
+            correlation_id=correlation_id,
             details={"report_name": report_name, "definition_version": "acc-rpt-1.0"},
+        )
+        failure = SafeFailure(
+            FailureCode.RECONCILIATION_REQUIRED,
+            "Ledger integrity prevents authoritative report generation.",
+            ClientRecovery.RECONCILIATION_REQUIRED,
+            correlation_id,
         )
         raise HTTPException(
             status_code=409,
-            detail="Ledger integrity prevents authoritative report generation",
+            detail=failure.detail(),
         ) from error
 
 

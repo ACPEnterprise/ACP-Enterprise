@@ -1,7 +1,8 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import * as estimatesApi from "../api/estimates";
 import { EstimatesRoute } from "./EstimatesRoute";
 
 let permissions = new Set<string>();
@@ -23,7 +24,10 @@ function renderRoute(path = "/estimates") {
 }
 
 describe("EstimatesRoute", () => {
-  beforeEach(() => { permissions = new Set(); });
+  beforeEach(() => {
+    permissions = new Set();
+    vi.mocked(estimatesApi.createEstimate).mockReset();
+  });
   it("fails closed without read permission", () => {
     renderRoute();
     expect(screen.getByText("You are not authorized to view Estimates.")).toBeVisible();
@@ -44,5 +48,22 @@ describe("EstimatesRoute", () => {
     expect((await screen.findAllByText("Heating proposal"))[0]).toBeVisible();
     expect(screen.getAllByText("$97.20")).toHaveLength(2);
     expect(screen.getByLabelText("Discount type")).toBeVisible();
+  });
+  it("retains proposal evidence and hides backend details after rejection", async () => {
+    permissions = new Set(["COMPANY_ESTIMATE_READ", "COMPANY_ESTIMATE_MANAGE"]);
+    vi.mocked(estimatesApi.createEstimate).mockRejectedValueOnce({
+      isAxiosError: true,
+      response: { data: { detail: { recovery: "USER_CORRECTION_REQUIRED", message: "sql-provider-secret-canary" } } },
+    });
+    renderRoute();
+    await screen.findByText("Create proposal");
+    fireEvent.change(screen.getByLabelText("Branch ID"), { target: { value: "branch-1" } });
+    fireEvent.change(screen.getByLabelText("Customer ID"), { target: { value: "customer-1" } });
+    fireEvent.change(screen.getByLabelText("Commercial snapshot ID"), { target: { value: "snapshot-1" } });
+    fireEvent.change(screen.getByLabelText("Proposal title"), { target: { value: "Heating proposal" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create immutable revision" }));
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent(/requires correction/i));
+    expect(screen.getByLabelText("Proposal title")).toHaveValue("Heating proposal");
+    expect(screen.queryByText(/sql-provider-secret-canary/)).not.toBeInTheDocument();
   });
 });

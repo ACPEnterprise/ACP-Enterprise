@@ -25,6 +25,8 @@ from app.platform.company.admin_service import (
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import AdministrationPermission
 from app.platform.permissions.dependencies import require_permission
+from app.platform.reliability.correlation import current_correlation_id
+from app.platform.reliability.failures import ClientRecovery, FailureCode, SafeFailure
 
 router = APIRouter(prefix="/api/v1/company-admin", tags=["Company Administration"])
 DatabaseSession = Annotated[AsyncSession, Depends(get_database_session)]
@@ -56,18 +58,36 @@ PermissionManageContext = Annotated[
 
 def translate_admin_error(error: AccessPolicyAdministrationError) -> HTTPException:
     if isinstance(error, AccessPolicyNotFoundError):
+        failure = SafeFailure(
+            FailureCode.NOT_FOUND,
+            "Access-policy resource was not found.",
+            ClientRecovery.TERMINAL_FAILURE,
+            current_correlation_id(),
+        )
         return HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Access-policy resource was not found.",
+            detail=failure.detail(),
         )
     if isinstance(error, AccessPolicyConflictError):
+        failure = SafeFailure(
+            FailureCode.RESOURCE_STATE_CONFLICT,
+            "Access-policy operation conflicts with current authority.",
+            ClientRecovery.RETRY_AFTER_REFRESH,
+            current_correlation_id(),
+        )
         return HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=str(error),
+            detail=failure.detail(),
         )
+    failure = SafeFailure(
+        FailureCode.VALIDATION,
+        "Access-policy request requires correction.",
+        ClientRecovery.USER_CORRECTION_REQUIRED,
+        current_correlation_id(),
+    )
     return HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
-        detail="Access-policy operation failed.",
+        detail=failure.detail(),
     )
 
 

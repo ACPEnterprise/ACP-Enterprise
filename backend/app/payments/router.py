@@ -19,6 +19,8 @@ from app.payments.service import payment_service
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import PaymentPermission
 from app.platform.permissions.dependencies import require_permission
+from app.platform.reliability.correlation import current_correlation_id
+from app.platform.reliability.failures import ClientRecovery, FailureCode, SafeFailure
 
 router = APIRouter(prefix="/api/v1/payments", tags=["Payments"])
 Session = Annotated[AsyncSession, Depends(get_database_session)]
@@ -30,15 +32,37 @@ RefundPermission = Annotated[AuthorizationContext, Depends(require_permission(Pa
 
 def _error(exc: PaymentError) -> HTTPException:
     if isinstance(exc, PaymentNotFound):
-        return HTTPException(status.HTTP_404_NOT_FOUND, str(exc))
+        return _not_found()
     if isinstance(exc, PaymentConflict):
-        return HTTPException(status.HTTP_409_CONFLICT, str(exc))
-    return HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc))
+        failure = SafeFailure(
+            FailureCode.RESOURCE_STATE_CONFLICT,
+            "Payment operation conflicts with current authority.",
+            ClientRecovery.RETRY_AFTER_REFRESH,
+            current_correlation_id(),
+        )
+        return HTTPException(status.HTTP_409_CONFLICT, failure.detail())
+    failure = SafeFailure(
+        FailureCode.VALIDATION,
+        "Payment request violates domain validation rules.",
+        ClientRecovery.USER_CORRECTION_REQUIRED,
+        current_correlation_id(),
+    )
+    return HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, failure.detail())
+
+
+def _not_found() -> HTTPException:
+    failure = SafeFailure(
+        FailureCode.NOT_FOUND,
+        "Payment resource was not found.",
+        ClientRecovery.TERMINAL_FAILURE,
+        current_correlation_id(),
+    )
+    return HTTPException(status.HTTP_404_NOT_FOUND, failure.detail())
 
 
 def _branch(context: AuthorizationContext, branch_id: UUID) -> None:
     if not context.can_access_branch(branch_id):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Payment was not found.")
+        raise _not_found()
 
 
 @router.post("/intents", response_model=IntentItem, status_code=status.HTTP_201_CREATED)
@@ -60,7 +84,7 @@ async def list_receipts(context: Read, session: Session) -> list[ReceiptItem]:
 async def get_receipt(receipt_id: UUID, context: Read, session: Session) -> ReceiptItem:
     row = await payment_service.get_receipt(session, context.company.id, receipt_id)
     if row is None or not context.can_access_branch(row.branch_id):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Payment was not found.")
+        raise _not_found()
     return ReceiptItem.model_validate(row)
 
 

@@ -194,9 +194,33 @@ class ProcurementMatchingService:
                 )
             )
             if replay is not None:
+                replay_order = await session.scalar(
+                    select(PurchaseOrder).where(
+                        PurchaseOrder.company_id == context.company.id,
+                        PurchaseOrder.id == replay.purchase_order_id,
+                    )
+                )
+                replay_bill = await session.scalar(
+                    select(VendorBill).where(
+                        VendorBill.company_id == context.company.id,
+                        VendorBill.id == replay.vendor_bill_id,
+                    )
+                )
+                if (
+                    replay_order is None
+                    or replay_bill is None
+                    or not context.can_access_branch(replay_order.branch_id)
+                    or not context.can_access_branch(replay_bill.branch_id)
+                ):
+                    raise ProcurementMatchingNotFound(
+                        "PO or Vendor Bill was not found"
+                    )
                 if (
                     replay.purchase_order_id != payload.purchase_order_id
                     or replay.vendor_bill_id != payload.vendor_bill_id
+                    or replay.purchase_order_version
+                    != payload.expected_purchase_order_version
+                    or replay.bill_version != payload.expected_bill_version
                 ):
                     raise ProcurementMatchingConflict(
                         "Idempotency key conflicts with different matching evidence"
@@ -1198,14 +1222,17 @@ procurement_matching_service = ProcurementMatchingService()
 
 
 async def _current_source_digest(
-    session: AsyncSession, match: ProcurementMatch, bill: VendorBill
+    session: AsyncSession,
+    match: ProcurementMatch,
+    bill: VendorBill,
+    *,
+    lock_order: bool = False,
 ) -> str | None:
-    order = await session.scalar(
-        select(PurchaseOrder).where(
+    order_query = select(PurchaseOrder).where(
             PurchaseOrder.company_id == match.company_id,
             PurchaseOrder.id == match.purchase_order_id,
         )
-    )
+    order = await session.scalar(order_query.with_for_update() if lock_order else order_query)
     revision = await session.scalar(
         select(BillRevision).where(
             BillRevision.company_id == match.company_id,
@@ -1293,10 +1320,16 @@ async def _current_source_digest(
 
 
 async def is_current_eligible_match(
-    session: AsyncSession, match: ProcurementMatch, bill: VendorBill
+    session: AsyncSession,
+    match: ProcurementMatch,
+    bill: VendorBill,
+    *,
+    lock_order: bool = False,
 ) -> bool:
     """Fail closed when PO, receipt, or bill authority changed after evaluation."""
-    current_digest = await _current_source_digest(session, match, bill)
+    current_digest = await _current_source_digest(
+        session, match, bill, lock_order=lock_order
+    )
     return (
         match.admission_state == "eligible"
         and match.superseded_at is None

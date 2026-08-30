@@ -35,6 +35,8 @@ from app.database.session import get_database_session
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import AccountsPayablePermission
 from app.platform.permissions.dependencies import require_permission
+from app.platform.reliability.correlation import current_correlation_id
+from app.platform.reliability.failures import ClientRecovery, FailureCode, SafeFailure
 
 router = APIRouter(prefix="/api/v1/accounts-payable", tags=["Accounts Payable"])
 Session = Annotated[AsyncSession, Depends(get_database_session)]
@@ -49,10 +51,13 @@ ReportRead = Annotated[AuthorizationContext, Depends(require_permission(Accounts
 
 def _error(exc: AccountsPayableError) -> HTTPException:
     if isinstance(exc, APNotFound):
-        return HTTPException(status.HTTP_404_NOT_FOUND, str(exc))
+        failure = SafeFailure(FailureCode.NOT_FOUND, "AP resource was not found.", ClientRecovery.TERMINAL_FAILURE, current_correlation_id())
+        return HTTPException(status.HTTP_404_NOT_FOUND, failure.detail())
     if isinstance(exc, APConflict):
-        return HTTPException(status.HTTP_409_CONFLICT, str(exc))
-    return HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc))
+        failure = SafeFailure(FailureCode.RESOURCE_STATE_CONFLICT, "AP operation conflicts with current authority.", ClientRecovery.RETRY_AFTER_REFRESH, current_correlation_id())
+        return HTTPException(status.HTTP_409_CONFLICT, failure.detail())
+    failure = SafeFailure(FailureCode.VALIDATION, "AP request requires correction.", ClientRecovery.USER_CORRECTION_REQUIRED, current_correlation_id())
+    return HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, failure.detail())
 
 
 def _branch(context: AuthorizationContext, branch_id: UUID) -> None:
@@ -111,7 +116,7 @@ async def create_bill(payload: BillCreate, context: Prepare, session: Session) -
 @router.post("/bills/{bill_id}/submit", response_model=BillItem)
 async def submit_bill(bill_id: UUID, payload: TransitionInput, context: Prepare, session: Session) -> BillItem:
     try:
-        return BillItem.model_validate(await accounts_payable_service.submit_bill(session, context.company.id, bill_id, context.user.id, payload.expected_version))
+        return BillItem.model_validate(await accounts_payable_service.submit_bill(session, context.company.id, bill_id, context.user.id, payload.expected_version, context.authorized_branch_ids))
     except AccountsPayableError as exc:
         raise _error(exc) from exc
 
@@ -119,7 +124,7 @@ async def submit_bill(bill_id: UUID, payload: TransitionInput, context: Prepare,
 @router.post("/bills/{bill_id}/approve", response_model=BillItem)
 async def approve_bill(bill_id: UUID, payload: TransitionInput, context: Approve, session: Session) -> BillItem:
     try:
-        return BillItem.model_validate(await accounts_payable_service.approve_bill(session, context.company.id, bill_id, context.user.id, payload.expected_version))
+        return BillItem.model_validate(await accounts_payable_service.approve_bill(session, context.company.id, bill_id, context.user.id, payload.expected_version, context.authorized_branch_ids))
     except AccountsPayableError as exc:
         raise _error(exc) from exc
 
@@ -127,7 +132,7 @@ async def approve_bill(bill_id: UUID, payload: TransitionInput, context: Approve
 @router.post("/bills/{bill_id}/duplicate-override", status_code=status.HTTP_201_CREATED)
 async def override_duplicate(bill_id: UUID, payload: DuplicateOverrideInput, context: Approve, session: Session) -> dict[str, UUID]:
     try:
-        row = await accounts_payable_service.authorize_duplicate(session, context.company.id, bill_id, payload.duplicate_bill_id, payload.requester_user_id, context.user.id, payload.reason, payload.evidence_reference)
+        row = await accounts_payable_service.authorize_duplicate(session, context.company.id, bill_id, payload.duplicate_bill_id, payload.requester_user_id, context.user.id, payload.reason, payload.evidence_reference, context.authorized_branch_ids)
         return {"id": row.id}
     except AccountsPayableError as exc:
         raise _error(exc) from exc
@@ -136,7 +141,7 @@ async def override_duplicate(bill_id: UUID, payload: DuplicateOverrideInput, con
 @router.post("/bills/{bill_id}/reverse", response_model=BillItem)
 async def reverse_bill(bill_id: UUID, payload: ReverseInput, context: Approve, session: Session) -> BillItem:
     try:
-        return BillItem.model_validate(await accounts_payable_service.reverse_bill(session, context.company.id, bill_id, context.user.id, payload.effective_date, payload.reason))
+        return BillItem.model_validate(await accounts_payable_service.reverse_bill(session, context.company.id, bill_id, context.user.id, payload.effective_date, payload.reason, context.authorized_branch_ids))
     except AccountsPayableError as exc:
         raise _error(exc) from exc
 
@@ -153,7 +158,7 @@ async def issue_credit(payload: CreditCreate, context: CreditManage, session: Se
 @router.post("/credits/{credit_id}/applications", status_code=status.HTTP_201_CREATED)
 async def apply_credit(credit_id: UUID, payload: CreditApplyInput, context: CreditManage, session: Session) -> dict[str, UUID]:
     try:
-        row = await accounts_payable_service.apply_credit(session, context.company.id, credit_id, payload.bill_id, context.user.id, payload.amount, payload.idempotency_key)
+        row = await accounts_payable_service.apply_credit(session, context.company.id, credit_id, payload.bill_id, context.user.id, payload.amount, payload.idempotency_key, context.authorized_branch_ids)
         return {"id": row.id}
     except AccountsPayableError as exc:
         raise _error(exc) from exc
@@ -162,7 +167,7 @@ async def apply_credit(credit_id: UUID, payload: CreditApplyInput, context: Cred
 @router.post("/credit-applications/{application_id}/unapply")
 async def unapply_credit(application_id: UUID, payload: UnapplyInput, context: CreditManage, session: Session) -> dict[str, UUID]:
     try:
-        row = await accounts_payable_service.unapply_credit(session, context.company.id, application_id, context.user.id, payload.idempotency_key)
+        row = await accounts_payable_service.unapply_credit(session, context.company.id, application_id, context.user.id, payload.idempotency_key, context.authorized_branch_ids)
         return {"id": row.id}
     except AccountsPayableError as exc:
         raise _error(exc) from exc
@@ -181,7 +186,7 @@ async def record_disbursement(payload: DisbursementCreate, context: Disbursement
 @router.post("/disbursements/{disbursement_id}/applications", status_code=status.HTTP_201_CREATED)
 async def apply_disbursement(disbursement_id: UUID, payload: DisbursementApplyInput, context: DisbursementRecord, session: Session) -> dict[str, UUID]:
     try:
-        row = await accounts_payable_service.apply_disbursement(session, context.company.id, disbursement_id, payload.bill_id, context.user.id, payload.amount, payload.idempotency_key)
+        row = await accounts_payable_service.apply_disbursement(session, context.company.id, disbursement_id, payload.bill_id, context.user.id, payload.amount, payload.idempotency_key, context.authorized_branch_ids)
         return {"id": row.id}
     except AccountsPayableError as exc:
         raise _error(exc) from exc
@@ -190,7 +195,7 @@ async def apply_disbursement(disbursement_id: UUID, payload: DisbursementApplyIn
 @router.post("/disbursements/{disbursement_id}/reverse")
 async def reverse_disbursement(disbursement_id: UUID, payload: ReverseInput, context: DisbursementRecord, session: Session) -> dict[str, UUID]:
     try:
-        row = await accounts_payable_service.reverse_disbursement(session, context.company.id, disbursement_id, context.user.id, payload.reason)
+        row = await accounts_payable_service.reverse_disbursement(session, context.company.id, disbursement_id, context.user.id, payload.reason, context.authorized_branch_ids)
         return {"id": row.id}
     except AccountsPayableError as exc:
         raise _error(exc) from exc

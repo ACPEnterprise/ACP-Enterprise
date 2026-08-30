@@ -6,6 +6,10 @@ from uuid import uuid4
 import httpx
 import pytest
 import pytest_asyncio
+from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
 from app.accounting.models import Journal
 from app.accounts_payable.models import AccountingVendor, VendorBill
 from app.business_economics.models import CompanyFinancePolicyVersion
@@ -49,7 +53,9 @@ from app.purchasing.schemas import (
     PurchaseOrderCreate,
     PurchaseOrderDispositionCommand,
     PurchaseOrderLineWrite,
+    PurchaseOrderUpdate,
     PurchaseRequisitionCreate,
+    PurchaseRequisitionItem,
     PurchaseRequisitionTransition,
     PurchaseReturnTransitionCommand,
     PurchasingDocumentCreate,
@@ -60,15 +66,13 @@ from app.purchasing.schemas import (
     ReplenishmentWorkbenchRequest,
     RequestPurchaseOrderChangeCommand,
     ResolveDiscrepancyCommand,
+    SupplyChainPolicyItem,
     SupplyChainPolicyWrite,
     TransitionCommand,
     VendorCreate,
     VendorUpdate,
 )
 from app.purchasing.service import PurchasingService
-from sqlalchemy import func, select
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 
 @pytest.mark.asyncio
@@ -114,6 +118,7 @@ async def test_purchasing_document_custody_is_scoped_append_only_and_idempotent(
             session, context=preparer, payload=command
         )
         assert replay.id == created.id
+        assert "storage_reference" not in replay.model_dump()
         assert (
                 await session.scalar(
                     select(func.count())
@@ -148,6 +153,47 @@ async def test_purchasing_document_custody_is_scoped_append_only_and_idempotent(
                 payload=command.model_copy(
                     update={
                         "branch_id": other_branch.id,
+                        "idempotency_key": f"document-{uuid4()}",
+                    }
+                ),
+            )
+
+    concurrent = command.model_copy(
+        update={"content_digest": "b" * 64, "idempotency_key": "unused"}
+    )
+
+    async def register(key: str):
+        async with factory() as session:
+            return await service.register_document(
+                session,
+                context=preparer,
+                payload=concurrent.model_copy(update={"idempotency_key": key}),
+            )
+
+    first, second = await asyncio.gather(
+        register(f"document-{uuid4()}"), register(f"document-{uuid4()}")
+    )
+    assert first.id == second.id
+    async with factory() as session:
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(PurchasingDocumentEvidence)
+                .where(
+                    PurchasingDocumentEvidence.company_id == company.id,
+                    PurchasingDocumentEvidence.entity_id == requisition.id,
+                )
+            )
+            == 2
+        )
+        await session.rollback()
+        with pytest.raises(PurchasingConflict):
+            await service.register_document(
+                session,
+                context=preparer,
+                payload=concurrent.model_copy(
+                    update={
+                        "filename": "same-content-different-name.pdf",
                         "idempotency_key": f"document-{uuid4()}",
                     }
                 ),
@@ -713,10 +759,73 @@ def command(version: int, key: str, reason: str | None = None) -> TransitionComm
 
 
 @pytest.mark.asyncio
+async def test_po_replay_revalidates_current_branch_authority(
+    purchasing_fixture,
+) -> None:
+    factory, _, _, branch, other_branch, preparer, _ = purchasing_fixture
+    service = PurchasingService()
+    other_branch_context = AuthorizationContext(
+        user=preparer.user,
+        company=preparer.company,
+        membership=preparer.membership,
+        authorized_branches=(other_branch,),
+        active_branch=other_branch,
+        effective_roles=preparer.effective_roles,
+        effective_permissions=preparer.effective_permissions,
+        credential_version=preparer.credential_version,
+        authorization_version=preparer.authorization_version,
+    )
+    async with factory() as session:
+        vendor = await service.create_vendor(
+            session,
+            context=preparer,
+            payload=VendorCreate(
+                code=f"REPLAY-{uuid4().hex[:8]}",
+                display_name="Replay authority vendor",
+                idempotency_key=f"replay-vendor-{uuid4()}",
+            ),
+        )
+        order = await service.create_order(
+            session,
+            context=preparer,
+            payload=PurchaseOrderCreate(
+                branch_id=branch.id,
+                vendor_id=vendor.id,
+                po_number=f"REPLAY-{uuid4().hex[:8]}",
+                currency="USD",
+                idempotency_key=f"replay-po-{uuid4()}",
+            ),
+        )
+        original_version = order.version
+        payload = PurchaseOrderUpdate(
+            expected_version=original_version,
+            vendor_id=vendor.id,
+            expected_date=None,
+            idempotency_key=f"replay-update-{uuid4()}",
+        )
+        updated = await service.update_order(
+            session,
+            context=preparer,
+            po_id=order.id,
+            payload=payload,
+        )
+        assert updated.version == original_version + 1
+
+    async with factory() as session:
+        with pytest.raises(PurchasingNotFound, match="Purchasing Branch was not found"):
+            await service.update_order(
+                session,
+                context=other_branch_context,
+                po_id=order.id,
+                payload=payload,
+            )
+
+
+@pytest.mark.asyncio
 async def test_purchase_requisition_is_governed_idempotent_and_converts_to_draft_po(
     purchasing_fixture,
 ) -> None:
-    factory, company, _, branch, _, requester, approver = purchasing_fixture
+    factory, company, _, branch, other_branch, requester, approver = purchasing_fixture
     service = PurchasingService()
     async with factory() as session:
         vendor = await service.create_vendor(
@@ -741,6 +850,18 @@ async def test_purchase_requisition_is_governed_idempotent_and_converts_to_draft
             reason="Synthetic demand evidence",
             idempotency_key="req-100",
         )
+        with pytest.raises(PurchasingNotFound):
+            await service.create_requisition(
+                session,
+                context=requester,
+                payload=payload.model_copy(
+                    update={
+                        "request_number": "REQ-INVALID-JOB",
+                        "job_id": uuid4(),
+                        "idempotency_key": f"req-invalid-job-{uuid4()}",
+                    }
+                ),
+            )
         request = await service.create_requisition(
             session, context=requester, payload=payload
         )
@@ -757,16 +878,17 @@ async def test_purchase_requisition_is_governed_idempotent_and_converts_to_draft
                 context=requester,
                 payload=payload.model_copy(update={"description": "Contradiction"}),
             )
+        submit = PurchaseRequisitionTransition(
+            expected_version=request.version,
+            reason="Ready for review",
+            idempotency_key="req-100-submit",
+        )
         request = await service.transition_requisition(
             session,
             context=requester,
             requisition_id=request.id,
             action="submit",
-            payload=PurchaseRequisitionTransition(
-                expected_version=request.version,
-                reason="Ready for review",
-                idempotency_key="req-100-submit",
-            ),
+            payload=submit,
         )
         with pytest.raises(PurchasingConflict):
             await service.transition_requisition(
@@ -779,6 +901,26 @@ async def test_purchase_requisition_is_governed_idempotent_and_converts_to_draft
                     reason="Self approval prohibited",
                     idempotency_key="req-100-self",
                 ),
+            )
+    other_branch_context = AuthorizationContext(
+        user=requester.user,
+        company=requester.company,
+        membership=requester.membership,
+        authorized_branches=(other_branch,),
+        active_branch=other_branch,
+        effective_roles=requester.effective_roles,
+        effective_permissions=requester.effective_permissions,
+        credential_version=requester.credential_version,
+        authorization_version=requester.authorization_version,
+    )
+    async with factory() as session:
+        with pytest.raises(PurchasingNotFound):
+            await service.transition_requisition(
+                session,
+                context=other_branch_context,
+                requisition_id=request.id,
+                action="submit",
+                payload=submit,
             )
     async with factory() as session:
         request = await service.transition_requisition(
@@ -818,6 +960,70 @@ async def test_purchase_requisition_is_governed_idempotent_and_converts_to_draft
             await session.scalar(select(func.count()).select_from(PurchaseRequisition))
             >= 1
         )
+        assert "fk_purchasing_requisition_job" in {
+            constraint.name for constraint in PurchaseRequisition.__table__.constraints
+        }
+
+
+@pytest.mark.asyncio
+async def test_concurrent_requisition_and_policy_business_identities_fail_cleanly(
+    purchasing_fixture,
+) -> None:
+    factory, company, _, branch, _, manager, _ = purchasing_fixture
+    service = PurchasingService()
+    request_number = f"RACE-{uuid4().hex[:8]}"
+
+    async def create_requisition(key: str):
+        async with factory() as session:
+            return await service.create_requisition(
+                session,
+                context=manager,
+                payload=PurchaseRequisitionCreate(
+                    branch_id=branch.id,
+                    request_number=request_number,
+                    description="Concurrent governed demand",
+                    quantity=Decimal(1),
+                    unit="each",
+                    source_type="manual",
+                    source_reference="synthetic-concurrency",
+                    reason="Qualify request-number authority",
+                    idempotency_key=key,
+                ),
+            )
+
+    requisitions = await asyncio.gather(
+        create_requisition(f"req-{uuid4()}"),
+        create_requisition(f"req-{uuid4()}"),
+        return_exceptions=True,
+    )
+    assert sum(isinstance(item, PurchaseRequisitionItem) for item in requisitions) == 1
+    assert sum(isinstance(item, PurchasingConflict) for item in requisitions) == 1
+
+    async def configure_policy(key: str):
+        async with factory() as session:
+            return await service.configure_supply_chain_policy(
+                session,
+                context=manager,
+                payload=SupplyChainPolicyWrite(
+                    branch_id=branch.id,
+                    policy_type="receipt_accrual",
+                    status="unconfigured",
+                    configuration={},
+                    readiness_reason="Finance policy remains unconfigured",
+                    idempotency_key=key,
+                ),
+            )
+
+    policies = await asyncio.gather(
+        configure_policy(f"policy-{uuid4()}"),
+        configure_policy(f"policy-{uuid4()}"),
+        return_exceptions=True,
+    )
+    assert sum(isinstance(item, SupplyChainPolicyItem) for item in policies) == 1
+    assert sum(isinstance(item, PurchasingConflict) for item in policies) == 1
+    async with factory() as session:
+        assert await session.scalar(select(func.count(PurchaseRequisition.id)).where(PurchaseRequisition.company_id == company.id, PurchaseRequisition.request_number == request_number)) == 1
+        assert await session.scalar(select(func.count(SupplyChainPolicy.id)).where(SupplyChainPolicy.company_id == company.id, SupplyChainPolicy.branch_id == branch.id, SupplyChainPolicy.policy_type == "receipt_accrual")) == 1
 
 
 @pytest.mark.asyncio
@@ -873,8 +1079,15 @@ async def test_vendor_identity_is_company_owned_idempotent_and_concurrent(
         contact_reference="contact-ref-1",
         idempotency_key="vendor-create-1",
     )
+    async def create():
+        async with factory() as session:
+            return await service.create_vendor(
+                session, context=preparer, payload=payload
+            )
+
+    first, concurrent_replay = await asyncio.gather(create(), create())
+    assert concurrent_replay.id == first.id
     async with factory() as session:
-        first = await service.create_vendor(session, context=preparer, payload=payload)
         replay = await service.create_vendor(session, context=preparer, payload=payload)
         first_id = first.id
         assert (

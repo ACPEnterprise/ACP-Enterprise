@@ -10,7 +10,13 @@ from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from app.database.session import get_database_session
-from app.jobs.router import router
+from app.jobs.errors import (
+    JobInvalidTransitionError,
+    JobNotFoundError,
+    JobValidationError,
+    JobVersionConflictError,
+)
+from app.jobs.router import router, translate_job_error
 from app.platform.permissions.authorization import (
     AuthorizationContext,
     AuthorizedPermission,
@@ -21,6 +27,43 @@ from tests.jobs.test_jobs_persistence import JobsFixture, build_appointment
 from tests.jobs.test_jobs_query import _context_from_fixture
 
 pytest_plugins = ("tests.jobs.test_jobs_persistence",)
+
+
+@pytest.mark.parametrize(
+    ("error", "status_code", "code", "recovery"),
+    [
+        (JobNotFoundError(uuid4()), 404, "not_found", "TERMINAL_FAILURE"),
+        (
+            JobVersionConflictError("stale"),
+            409,
+            "stale_version",
+            "RETRY_AFTER_REFRESH",
+        ),
+        (
+            JobInvalidTransitionError("state"),
+            409,
+            "resource_state_conflict",
+            "RETRY_AFTER_REFRESH",
+        ),
+        (
+            JobValidationError("invalid"),
+            422,
+            "validation",
+            "USER_CORRECTION_REQUIRED",
+        ),
+    ],
+)
+def test_job_failures_use_safe_recovery_contract(
+    error, status_code: int, code: str, recovery: str
+) -> None:
+    translated = translate_job_error(error)
+    assert translated.status_code == status_code
+    assert translated.detail == {
+        "code": code,
+        "message": translated.detail["message"],
+        "recovery": recovery,
+        "correlation_id": None,
+    }
 
 
 @dataclass(frozen=True)

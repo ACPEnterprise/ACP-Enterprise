@@ -4,9 +4,19 @@ import { ProcurementMatchWorkbench } from "./ProcurementMatchWorkbench";
 
 const mutateAsync = vi.fn();
 const hookState = {
-  query: { data: undefined, error: null },
-  evaluate: { data: undefined, error: null, isPending: false, mutateAsync },
-  resolve: { data: undefined, error: null, isPending: false, mutateAsync },
+  query: { data: undefined, error: null as unknown },
+  evaluate: {
+    data: undefined,
+    error: null as unknown,
+    isPending: false,
+    mutateAsync,
+  },
+  resolve: {
+    data: undefined,
+    error: null as unknown,
+    isPending: false,
+    mutateAsync,
+  },
   candidates: {
     data: [
       {
@@ -71,5 +81,25 @@ describe("ProcurementMatchWorkbench authority", () => {
     expect(
       screen.getByRole("button", { name: "Evaluate match" }),
     ).toBeVisible();
+  });
+
+  it("renders structured recovery safely without reflecting backend details", () => {
+    hookState.query.error = {
+      isAxiosError: true,
+      response: {
+        status: 503,
+        data: {
+          detail: {
+            recovery: "RECONCILIATION_REQUIRED",
+            message: "sql-provider-secret-canary",
+          },
+        },
+      },
+    };
+    render(<ProcurementMatchWorkbench canReview />);
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      /requires reconciliation/i,
+    );
+    expect(screen.queryByText(/sql-provider-secret-canary/)).not.toBeInTheDocument();
   });
 });

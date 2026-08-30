@@ -9,6 +9,8 @@ from app.database.session import get_database_session
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import SchedulingPermission
 from app.platform.permissions.dependencies import require_permission
+from app.platform.reliability.correlation import current_correlation_id
+from app.platform.reliability.failures import ClientRecovery, FailureCode, SafeFailure
 from app.scheduling.errors import (
     SchedulingCapacityError,
     SchedulingConflictError,
@@ -54,33 +56,69 @@ AppointmentResponseType = TypeVar(
 
 def translate_scheduling_error(error: SchedulingError) -> HTTPException:
     if isinstance(error, SchedulingNotFoundError):
+        failure = SafeFailure(
+            FailureCode.NOT_FOUND,
+            "Scheduling resource was not found.",
+            ClientRecovery.TERMINAL_FAILURE,
+            current_correlation_id(),
+        )
         return HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Scheduling resource was not found.",
+            detail=failure.detail(),
         )
     if isinstance(error, SchedulingVersionConflictError):
+        failure = SafeFailure(
+            FailureCode.STALE_VERSION,
+            "Appointment version conflicts with the current state.",
+            ClientRecovery.RETRY_AFTER_REFRESH,
+            current_correlation_id(),
+        )
         return HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Appointment version conflicts with the current state.",
+            detail=failure.detail(),
         )
     if isinstance(error, SchedulingCapacityError):
+        failure = SafeFailure(
+            FailureCode.CONCURRENCY_CONFLICT,
+            "Requested scheduling capacity or availability is unavailable.",
+            ClientRecovery.RETRY_AFTER_REFRESH,
+            current_correlation_id(),
+        )
         return HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Requested scheduling capacity or availability is unavailable.",
+            detail=failure.detail(),
         )
     if isinstance(error, SchedulingConflictError):
+        failure = SafeFailure(
+            FailureCode.RESOURCE_STATE_CONFLICT,
+            "Scheduling operation conflicts with the current state.",
+            ClientRecovery.RETRY_AFTER_REFRESH,
+            current_correlation_id(),
+        )
         return HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Scheduling operation conflicts with the current state.",
+            detail=failure.detail(),
         )
     if isinstance(error, SchedulingValidationError):
+        failure = SafeFailure(
+            FailureCode.VALIDATION,
+            "Scheduling request violates domain validation rules.",
+            ClientRecovery.USER_CORRECTION_REQUIRED,
+            current_correlation_id(),
+        )
         return HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="Scheduling request violates domain validation rules.",
+            detail=failure.detail(),
         )
+    failure = SafeFailure(
+        FailureCode.INTERNAL_FAILURE,
+        "Scheduling operation could not be completed.",
+        ClientRecovery.TERMINAL_FAILURE,
+        current_correlation_id(),
+    )
     return HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
-        detail="Scheduling operation could not be completed.",
+        detail=failure.detail(),
     )
 
 

@@ -24,6 +24,9 @@ from app.engineering_control.mobile.roadmaps import (
 from app.engineering_control.mobile.router import (
     _attention,
     _bounded_projection,
+    _mobile_conflict,
+    _mobile_failure,
+    _mobile_not_found,
     router,
 )
 from app.engineering_control.mobile.schemas import MilestoneItem
@@ -39,6 +42,7 @@ from app.platform.permissions.codes import (
     EngineeringExecutionPermission,
 )
 from app.platform.permissions.dependencies import get_authorization_context
+from app.platform.reliability.failures import ClientRecovery, FailureCode
 from app.worker_control.models import EngineeringWorker
 from tests.engineering_control.review.test_engineering_review import completed_command
 from tests.engineering_control.test_engineering_command_service import (
@@ -1230,7 +1234,29 @@ async def test_realtime_stream_rejects_unknown_company_resume_token(
         f"/api/v1/engineering/mobile/events?after={uuid4()}",
     )
     assert response.status_code == 409
-    assert "resume token" in response.json()["detail"]
+    assert response.json()["detail"]["code"] == "resource_state_conflict"
+    assert response.json()["detail"]["recovery"] == "RETRY_AFTER_REFRESH"
+
+
+def test_mobile_failure_contract_is_recovery_classified_and_non_reflective() -> None:
+    canary = "credential=mobile-secret-canary provider/path/internal"
+    failures = (
+        _mobile_not_found(),
+        _mobile_conflict(),
+        _mobile_failure(
+            status_code=409,
+            code=FailureCode.RECONCILIATION_REQUIRED,
+            message="Provider repository readiness requires reconciliation.",
+            recovery=ClientRecovery.RECONCILIATION_REQUIRED,
+        ),
+    )
+
+    assert [failure.detail["recovery"] for failure in failures] == [
+        "TERMINAL_FAILURE",
+        "RETRY_AFTER_REFRESH",
+        "RECONCILIATION_REQUIRED",
+    ]
+    assert all(canary not in str(failure.detail) for failure in failures)
 
 
 def test_realtime_authentication_sessions_close_before_streaming_response() -> None:

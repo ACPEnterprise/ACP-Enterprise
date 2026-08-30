@@ -1,11 +1,15 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PriceBookRoute } from "./PriceBookRoute";
 
 const authState = vi.hoisted(() => ({
   permissionCodes: ["COMPANY_PRICE_BOOK_READ", "COMPANY_PRICE_BOOK_MANAGE", "COMPANY_PRICE_BOOK_ACTIVATE"],
+}));
+const mutationState = vi.hoisted(() => ({
+  categoryError: null as unknown,
+  categoryMutate: vi.fn(),
 }));
 
 vi.mock("../auth", () => ({
@@ -32,11 +36,15 @@ vi.mock("../hooks/usePriceBook", () => ({
     },
   }),
   usePriceBookMutations: () => ({
-    category: { isPending: false, mutateAsync: vi.fn() }, tax: { isPending: false, mutateAsync: vi.fn() }, item: { isPending: false, mutateAsync: vi.fn() }, version: { isPending: false, mutateAsync: vi.fn() }, activate: { mutateAsync: vi.fn() }, optionGroup: { isPending: false, mutateAsync: vi.fn() }, option: { isPending: false, mutateAsync: vi.fn() },
+    category: { isPending: false, isError: Boolean(mutationState.categoryError), error: mutationState.categoryError, mutateAsync: mutationState.categoryMutate }, tax: { isPending: false, isError: false, error: null, mutateAsync: vi.fn() }, item: { isPending: false, isError: false, error: null, mutateAsync: vi.fn() }, version: { isPending: false, isError: false, error: null, mutateAsync: vi.fn() }, activate: { isError: false, error: null, mutateAsync: vi.fn() }, optionGroup: { isPending: false, isError: false, error: null, mutateAsync: vi.fn() }, option: { isPending: false, isError: false, error: null, mutateAsync: vi.fn() },
   }),
 }));
 
 describe("PriceBookRoute", () => {
+  beforeEach(() => {
+    mutationState.categoryError = null;
+    mutationState.categoryMutate.mockReset();
+  });
   it("fails closed without Price Book read authority", () => {
     authState.permissionCodes = [];
     render(<MemoryRouter><PriceBookRoute /></MemoryRouter>);
@@ -73,5 +81,30 @@ describe("PriceBookRoute", () => {
     expect(screen.getByRole("button", { name: "Create tax classification" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Create option group" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Activate version" })).toBeVisible();
+  });
+
+  it("renders structured recovery without reflecting backend details", () => {
+    mutationState.categoryError = {
+      isAxiosError: true,
+      response: { data: { detail: { recovery: "OWNER_ADMIN_ACTION_REQUIRED", message: "sql-provider-secret-canary" } } },
+    };
+    render(<MemoryRouter><PriceBookRoute /></MemoryRouter>);
+    expect(screen.getByRole("alert")).toHaveTextContent(/administrator action/i);
+    expect(screen.queryByText(/sql-provider-secret-canary/)).not.toBeInTheDocument();
+  });
+
+  it("retains commercial evidence when a command rejects", async () => {
+    mutationState.categoryMutate.mockRejectedValueOnce(new Error("unavailable"));
+    render(<MemoryRouter><PriceBookRoute /></MemoryRouter>);
+    fireEvent.change(screen.getByLabelText("Category code"), {
+      target: { value: "DRAIN" },
+    });
+    fireEvent.change(screen.getByLabelText("Category name"), {
+      target: { value: "Drain Services" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Create category" }));
+    await waitFor(() => expect(mutationState.categoryMutate).toHaveBeenCalled());
+    expect(screen.getByLabelText("Category code")).toHaveValue("DRAIN");
+    expect(screen.getByLabelText("Category name")).toHaveValue("Drain Services");
   });
 });

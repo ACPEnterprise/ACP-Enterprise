@@ -199,7 +199,7 @@ async def dispatch_fixture() -> AsyncIterator[
 
 @pytest.mark.asyncio
 async def test_assignment_is_idempotent_audited_and_releasable(dispatch_fixture):
-    factory, context, appointment, technician, _ = dispatch_fixture
+    factory, context, appointment, technician, other_technician = dispatch_fixture
     service = DispatchService()
     async with factory() as session:
         eligible = await service.eligible(
@@ -239,14 +239,12 @@ async def test_assignment_is_idempotent_audited_and_releasable(dispatch_fixture)
             )
             == 1
         )
-        assert (
-            await session.scalar(
-                select(func.count(DispatchAssignmentHistory.id)).where(
-                    DispatchAssignmentHistory.assignment_id == first.id
-                )
+        history = await session.scalar(
+            select(DispatchAssignmentHistory).where(
+                DispatchAssignmentHistory.assignment_id == first.id
             )
-            == 1
         )
+        assert history is not None and len(history.request_digest or "") == 64
         assert (
             await session.scalar(
                 select(func.count(BusinessEvent.id)).where(
@@ -265,6 +263,16 @@ async def test_assignment_is_idempotent_audited_and_releasable(dispatch_fixture)
             expected_version=first.version,
         )
     assert released.status == "released"
+    async with factory() as session:
+        with pytest.raises(DispatchConflict, match="Idempotency key conflicts"):
+            await service.assign(
+                session,
+                context=context,
+                appointment_id=appointment.id,
+                employee_id=other_technician.id,
+                reason="Contradictory technician",
+                idempotency_key="dispatch-assign-001",
+            )
 
 
 @pytest.mark.asyncio

@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import axios from "axios";
 import { useAuth, useHasPermission } from "../auth";
 import { InventoryCountAdjustmentWorkbench } from "../components/InventoryCountAdjustmentWorkbench";
 import { useInventory, useInventoryMutations } from "../hooks/useInventory";
@@ -15,6 +16,23 @@ import {
   Select,
   Spinner,
 } from "../ui";
+
+const inventoryRecoveryMessage = (error: unknown) => {
+  if (axios.isAxiosError(error)) {
+    const recovery = (error.response?.data as {
+      detail?: { recovery?: string };
+    })?.detail?.recovery;
+    if (recovery === "RECONCILIATION_REQUIRED")
+      return "Inventory authority is uncertain and requires reconciliation. Do not retry blindly.";
+    if (recovery === "TEMPORARILY_UNAVAILABLE")
+      return "Inventory is temporarily unavailable. Your inputs were retained for a safe retry.";
+    if (recovery === "USER_CORRECTION_REQUIRED")
+      return "Inventory evidence requires correction. Review the retained inputs and try again.";
+    if (recovery === "TERMINAL_FAILURE")
+      return "The Inventory resource is no longer available. Refresh authoritative state before continuing.";
+  }
+  return "Inventory change could not be completed. Refresh authoritative state and try again.";
+};
 
 export function InventoryRoute() {
   const { activeCompany } = useAuth();
@@ -58,50 +76,70 @@ export function InventoryRoute() {
   const submitTransfer = async (event: FormEvent) => {
     event.preventDefault();
     if (!branch) return;
-    await mutations.transfer.mutateAsync({
-      ...transfer,
-      branch_id: branch,
-      occurred_at: new Date().toISOString(),
-      idempotency_key: crypto.randomUUID(),
-    });
-    setTransfer({
-      item_id: "",
-      source_location_id: "",
-      destination_location_id: "",
-      quantity: "",
-    });
+    try {
+      await mutations.transfer.mutateAsync({
+        ...transfer,
+        branch_id: branch,
+        occurred_at: new Date().toISOString(),
+        idempotency_key: crypto.randomUUID(),
+      });
+      setTransfer({
+        item_id: "",
+        source_location_id: "",
+        destination_location_id: "",
+        quantity: "",
+      });
+    } catch {
+      // The governed mutation error is rendered without reflecting backend text.
+    }
   };
   const submitLocation = async (event: FormEvent) => {
     event.preventDefault();
     if (!branch) return;
-    await mutations.createLocation.mutateAsync({
-      ...location,
-      branch_id: branch,
-    });
-    setLocation({ code: "", name: "", location_type: "warehouse" });
+    try {
+      await mutations.createLocation.mutateAsync({
+        ...location,
+        branch_id: branch,
+      });
+      setLocation({ code: "", name: "", location_type: "warehouse" });
+    } catch {
+      // Retain the location evidence for correction or retry.
+    }
   };
   const submitReservation = async (event: FormEvent) => {
     event.preventDefault();
     if (!branch) return;
-    await mutations.createReservation.mutateAsync({
-      ...reservation,
-      branch_id: branch,
-      idempotency_key: crypto.randomUUID(),
-    });
-    setReservation({
-      item_id: "",
-      location_id: "",
-      quantity: "",
-      demand_type: "job",
-      demand_id: "",
-    });
+    try {
+      await mutations.createReservation.mutateAsync({
+        ...reservation,
+        branch_id: branch,
+        idempotency_key: crypto.randomUUID(),
+      });
+      setReservation({
+        item_id: "",
+        location_id: "",
+        quantity: "",
+        demand_type: "job",
+        demand_id: "",
+      });
+    } catch {
+      // Retain the reservation evidence for correction or retry.
+    }
   };
-  const mutationError =
-    mutations.createLocation.isError ||
-    mutations.transfer.isError ||
-    mutations.createReservation.isError ||
-    mutations.allocate.isError ||
-    mutations.release.isError;
+  const failedMutation = [
+    mutations.createLocation,
+    mutations.transfer,
+    mutations.createReservation,
+    mutations.allocate,
+    mutations.release,
+  ].find((mutation) => mutation.isError);
+  const runReservationMutation = async (operation: () => Promise<unknown>) => {
+    try {
+      await operation();
+    } catch {
+      // The governed mutation error is announced below.
+    }
+  };
   const itemName = (id: string) =>
     inventory.data?.items.find((item) => item.id === id)?.name ?? id;
   const locationName = (id: string) =>
@@ -147,10 +185,9 @@ export function InventoryRoute() {
         <Alert variant="danger">Inventory could not be loaded.</Alert>
       ) : (
         <>
-          {mutationError && (
-            <Alert variant="danger">
-              Inventory change could not be completed. Refresh authoritative
-              state and try again.
+          {failedMutation && (
+            <Alert variant="danger" role="alert" aria-live="assertive">
+              {inventoryRecoveryMessage(failedMutation.error)}
             </Alert>
           )}
           {canManage && branch && (
@@ -464,15 +501,17 @@ export function InventoryRoute() {
                           ) && (
                             <Button
                               onClick={() =>
-                                void mutations.allocate.mutateAsync({
-                                  id: reservation.id,
-                                  data: {
-                                    quantity: null,
-                                    allow_partial: true,
-                                    expected_version: reservation.version,
-                                    idempotency_key: crypto.randomUUID(),
-                                  },
-                                })
+                                void runReservationMutation(() =>
+                                  mutations.allocate.mutateAsync({
+                                    id: reservation.id,
+                                    data: {
+                                      quantity: null,
+                                      allow_partial: true,
+                                      expected_version: reservation.version,
+                                      idempotency_key: crypto.randomUUID(),
+                                    },
+                                  }),
+                                )
                               }
                               loading={mutations.allocate.isPending}
                             >
@@ -481,10 +520,12 @@ export function InventoryRoute() {
                           )}
                           <Button
                             onClick={() =>
-                              void mutations.release.mutateAsync({
-                                id: reservation.id,
-                                version: reservation.version,
-                              })
+                              void runReservationMutation(() =>
+                                mutations.release.mutateAsync({
+                                  id: reservation.id,
+                                  version: reservation.version,
+                                }),
+                              )
                             }
                             loading={mutations.release.isPending}
                           >
