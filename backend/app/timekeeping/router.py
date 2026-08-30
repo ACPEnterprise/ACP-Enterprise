@@ -14,6 +14,8 @@ from app.platform.permissions.dependencies import (
     ResolvedAuthorization,
     require_permission,
 )
+from app.platform.reliability.correlation import current_correlation_id
+from app.platform.reliability.failures import ClientRecovery, FailureCode, SafeFailure
 
 from .commands import CorrectTimeEntry, RecordManualTime, RecordPunch
 from .contracts import (
@@ -70,10 +72,28 @@ IdempotencyKey = Annotated[
 
 def _error(value: WorkdayTimeError | WorkdayAuthorizationError) -> HTTPException:
     if isinstance(value, WorkdayAuthorizationError):
-        return HTTPException(status.HTTP_403_FORBIDDEN, str(value))
+        failure = SafeFailure(
+            FailureCode.FORBIDDEN,
+            "Timekeeping authority does not permit this operation.",
+            ClientRecovery.TERMINAL_FAILURE,
+            current_correlation_id(),
+        )
+        return HTTPException(status.HTTP_403_FORBIDDEN, failure.detail())
     if isinstance(value, WorkdayConflictError):
-        return HTTPException(status.HTTP_409_CONFLICT, str(value))
-    return HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(value))
+        failure = SafeFailure(
+            FailureCode.RESOURCE_STATE_CONFLICT,
+            "Timekeeping operation conflicts with current authority.",
+            ClientRecovery.RETRY_AFTER_REFRESH,
+            current_correlation_id(),
+        )
+        return HTTPException(status.HTTP_409_CONFLICT, failure.detail())
+    failure = SafeFailure(
+        FailureCode.VALIDATION,
+        "Timekeeping request requires correction.",
+        ClientRecovery.USER_CORRECTION_REQUIRED,
+        current_correlation_id(),
+    )
+    return HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, failure.detail())
 
 
 def _branch_and_timezone(context: AuthorizationContext) -> tuple[UUID | None, str]:
