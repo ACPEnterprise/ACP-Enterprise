@@ -3144,6 +3144,13 @@ class PurchasingService:
         data: dict[str, Any],
         result_type: str,
     ) -> UUID | None:
+        purchase_order_id = data.get("po_id")
+        if purchase_order_id is not None:
+            await self._order(
+                session,
+                context,
+                UUID(str(purchase_order_id)),
+            )
         receipt = await self.repository.receipt(session, context.company.id, key)
         if receipt is None:
             return None

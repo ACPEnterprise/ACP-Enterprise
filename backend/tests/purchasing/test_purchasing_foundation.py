@@ -6,6 +6,10 @@ from uuid import uuid4
 import httpx
 import pytest
 import pytest_asyncio
+from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
 from app.accounting.models import Journal
 from app.accounts_payable.models import AccountingVendor, VendorBill
 from app.business_economics.models import CompanyFinancePolicyVersion
@@ -46,6 +50,7 @@ from app.purchasing.schemas import (
     PurchaseOrderCreate,
     PurchaseOrderDispositionCommand,
     PurchaseOrderLineWrite,
+    PurchaseOrderUpdate,
     PurchaseReturnTransitionCommand,
     ReceiptLineCommand,
     RecordReceiptCommand,
@@ -59,9 +64,6 @@ from app.purchasing.schemas import (
     VendorUpdate,
 )
 from app.purchasing.service import PurchasingService
-from sqlalchemy import func, select
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 
 @pytest.mark.asyncio
@@ -617,6 +619,69 @@ def command(version: int, key: str, reason: str | None = None) -> TransitionComm
     return TransitionCommand(
         expected_version=version, idempotency_key=key, reason=reason
     )
+
+
+@pytest.mark.asyncio
+async def test_po_replay_revalidates_current_branch_authority(
+    purchasing_fixture,
+) -> None:
+    factory, _, _, branch, other_branch, preparer, _ = purchasing_fixture
+    service = PurchasingService()
+    other_branch_context = AuthorizationContext(
+        user=preparer.user,
+        company=preparer.company,
+        membership=preparer.membership,
+        authorized_branches=(other_branch,),
+        active_branch=other_branch,
+        effective_roles=preparer.effective_roles,
+        effective_permissions=preparer.effective_permissions,
+        credential_version=preparer.credential_version,
+        authorization_version=preparer.authorization_version,
+    )
+    async with factory() as session:
+        vendor = await service.create_vendor(
+            session,
+            context=preparer,
+            payload=VendorCreate(
+                code=f"REPLAY-{uuid4().hex[:8]}",
+                display_name="Replay authority vendor",
+                idempotency_key=f"replay-vendor-{uuid4()}",
+            ),
+        )
+        order = await service.create_order(
+            session,
+            context=preparer,
+            payload=PurchaseOrderCreate(
+                branch_id=branch.id,
+                vendor_id=vendor.id,
+                po_number=f"REPLAY-{uuid4().hex[:8]}",
+                currency="USD",
+                idempotency_key=f"replay-po-{uuid4()}",
+            ),
+        )
+        original_version = order.version
+        payload = PurchaseOrderUpdate(
+            expected_version=original_version,
+            vendor_id=vendor.id,
+            expected_date=None,
+            idempotency_key=f"replay-update-{uuid4()}",
+        )
+        updated = await service.update_order(
+            session,
+            context=preparer,
+            po_id=order.id,
+            payload=payload,
+        )
+        assert updated.version == original_version + 1
+
+    async with factory() as session:
+        with pytest.raises(PurchasingNotFound, match="Purchasing Branch was not found"):
+            await service.update_order(
+                session,
+                context=other_branch_context,
+                po_id=order.id,
+                payload=payload,
+            )
 
 
 @pytest.mark.asyncio
