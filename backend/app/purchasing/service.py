@@ -379,6 +379,29 @@ class PurchasingService:
                         "Requisition replay evidence is unavailable"
                     )
                 return PurchaseRequisitionItem.model_validate(existing)
+            if session.get_bind().dialect.name == "postgresql":
+                await session.execute(
+                    text(
+                        "SELECT pg_advisory_xact_lock(hashtextextended(:identity, 0))"
+                    ),
+                    {
+                        "identity": (
+                            f"purchasing-requisition-number:{context.company.id}:"
+                            f"{payload.request_number.strip()}"
+                        )
+                    },
+                )
+            existing_number = await session.scalar(
+                select(PurchaseRequisition.id).where(
+                    PurchaseRequisition.company_id == context.company.id,
+                    PurchaseRequisition.request_number
+                    == payload.request_number.strip(),
+                )
+            )
+            if existing_number is not None:
+                raise PurchasingConflict(
+                    "Purchase requisition number is already authoritative"
+                )
             if payload.inventory_item_id is not None:
                 await self._inventory_item(
                     session, context.company.id, payload.inventory_item_id
@@ -512,11 +535,33 @@ class PurchasingService:
                 )
                 if vendor is None or vendor.status != "active":
                     raise PurchasingNotFound("Active Vendor was not found")
+                if session.get_bind().dialect.name == "postgresql":
+                    await session.execute(
+                        text(
+                            "SELECT pg_advisory_xact_lock(hashtextextended(:identity, 0))"
+                        ),
+                        {
+                            "identity": (
+                                f"purchasing-po-number:{context.company.id}:"
+                                f"{payload.po_number.strip()}"
+                            )
+                        },
+                    )
+                existing_order = await session.scalar(
+                    select(PurchaseOrder.id).where(
+                        PurchaseOrder.company_id == context.company.id,
+                        PurchaseOrder.po_number == payload.po_number.strip(),
+                    )
+                )
+                if existing_order is not None:
+                    raise PurchasingConflict(
+                        "Purchase Order number is already authoritative"
+                    )
                 order = PurchaseOrder(
                     company_id=context.company.id,
                     branch_id=item.branch_id,
                     vendor_id=vendor.id,
-                    po_number=payload.po_number,
+                    po_number=payload.po_number.strip(),
                     status="draft",
                     currency=payload.currency,
                     expected_date=item.need_by,
@@ -610,6 +655,18 @@ class PurchasingService:
                         "Supply Chain policy replay evidence is unavailable"
                     )
                 return SupplyChainPolicyItem.model_validate(existing)
+            if session.get_bind().dialect.name == "postgresql":
+                await session.execute(
+                    text(
+                        "SELECT pg_advisory_xact_lock(hashtextextended(:identity, 0))"
+                    ),
+                    {
+                        "identity": (
+                            f"supply-chain-policy:{context.company.id}:"
+                            f"{payload.branch_id}:{payload.policy_type}"
+                        )
+                    },
+                )
             policy = await session.scalar(
                 select(SupplyChainPolicy)
                 .where(

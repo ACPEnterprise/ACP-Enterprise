@@ -55,6 +55,7 @@ from app.purchasing.schemas import (
     PurchaseOrderLineWrite,
     PurchaseOrderUpdate,
     PurchaseRequisitionCreate,
+    PurchaseRequisitionItem,
     PurchaseRequisitionTransition,
     PurchaseReturnTransitionCommand,
     PurchasingDocumentCreate,
@@ -65,6 +66,7 @@ from app.purchasing.schemas import (
     ReplenishmentWorkbenchRequest,
     RequestPurchaseOrderChangeCommand,
     ResolveDiscrepancyCommand,
+    SupplyChainPolicyItem,
     SupplyChainPolicyWrite,
     TransitionCommand,
     VendorCreate,
@@ -924,6 +926,67 @@ async def test_purchase_requisition_is_governed_idempotent_and_converts_to_draft
             await session.scalar(select(func.count()).select_from(PurchaseRequisition))
             >= 1
         )
+
+
+@pytest.mark.asyncio
+async def test_concurrent_requisition_and_policy_business_identities_fail_cleanly(
+    purchasing_fixture,
+) -> None:
+    factory, company, _, branch, _, manager, _ = purchasing_fixture
+    service = PurchasingService()
+    request_number = f"RACE-{uuid4().hex[:8]}"
+
+    async def create_requisition(key: str):
+        async with factory() as session:
+            return await service.create_requisition(
+                session,
+                context=manager,
+                payload=PurchaseRequisitionCreate(
+                    branch_id=branch.id,
+                    request_number=request_number,
+                    description="Concurrent governed demand",
+                    quantity=Decimal(1),
+                    unit="each",
+                    source_type="manual",
+                    source_reference="synthetic-concurrency",
+                    reason="Qualify request-number authority",
+                    idempotency_key=key,
+                ),
+            )
+
+    requisitions = await asyncio.gather(
+        create_requisition(f"req-{uuid4()}"),
+        create_requisition(f"req-{uuid4()}"),
+        return_exceptions=True,
+    )
+    assert sum(isinstance(item, PurchaseRequisitionItem) for item in requisitions) == 1
+    assert sum(isinstance(item, PurchasingConflict) for item in requisitions) == 1
+
+    async def configure_policy(key: str):
+        async with factory() as session:
+            return await service.configure_supply_chain_policy(
+                session,
+                context=manager,
+                payload=SupplyChainPolicyWrite(
+                    branch_id=branch.id,
+                    policy_type="receipt_accrual",
+                    status="unconfigured",
+                    configuration={},
+                    readiness_reason="Finance policy remains unconfigured",
+                    idempotency_key=key,
+                ),
+            )
+
+    policies = await asyncio.gather(
+        configure_policy(f"policy-{uuid4()}"),
+        configure_policy(f"policy-{uuid4()}"),
+        return_exceptions=True,
+    )
+    assert sum(isinstance(item, SupplyChainPolicyItem) for item in policies) == 1
+    assert sum(isinstance(item, PurchasingConflict) for item in policies) == 1
+    async with factory() as session:
+        assert await session.scalar(select(func.count(PurchaseRequisition.id)).where(PurchaseRequisition.company_id == company.id, PurchaseRequisition.request_number == request_number)) == 1
+        assert await session.scalar(select(func.count(SupplyChainPolicy.id)).where(SupplyChainPolicy.company_id == company.id, SupplyChainPolicy.branch_id == branch.id, SupplyChainPolicy.policy_type == "receipt_accrual")) == 1
 
 
 @pytest.mark.asyncio
