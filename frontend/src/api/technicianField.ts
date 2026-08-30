@@ -1,4 +1,4 @@
-import type { CustomerDisposition, FieldJobState } from "../types/technicianField";
+import type { CustomerDisposition, FieldJobState, FieldNoteType } from "../types/technicianField";
 import { apiClient } from "./client";
 
 const ROOT = "/api/v1/technician";
@@ -7,9 +7,9 @@ export async function getFieldJob(jobId: string): Promise<FieldJobState> {
   return (await apiClient.get<FieldJobState>(`${ROOT}/jobs/${jobId}`)).data;
 }
 
-export async function addWorkNote(jobId: string, content: string, jobVersion: number, assignmentVersion: number): Promise<FieldJobState> {
+export async function addWorkNote(jobId: string, noteType: FieldNoteType, content: string, jobVersion: number, assignmentVersion: number): Promise<FieldJobState> {
   return (await apiClient.post<FieldJobState>(`${ROOT}/jobs/${jobId}/notes`, {
-    note_type: "work_performed",
+    note_type: noteType,
     content,
     idempotency_key: crypto.randomUUID(),
     expected_job_version: jobVersion,

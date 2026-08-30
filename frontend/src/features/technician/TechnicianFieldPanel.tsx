@@ -2,12 +2,13 @@ import { useState } from "react";
 
 import { useTechnicianField } from "../../hooks/useTechnicianField";
 import type { TechnicianItineraryItem } from "../../types/technician";
-import type { CustomerDisposition } from "../../types/technicianField";
+import type { CustomerDisposition, FieldNoteType } from "../../types/technicianField";
 import { Alert, Button, Field, Input, Spinner, Textarea } from "../../ui";
 
 export function TechnicianFieldPanel({ item }: { readonly item: TechnicianItineraryItem }) {
   const field = useTechnicianField(item.job_id ?? "", item.job_version ?? 1, item.assignment_version);
   const [summary, setSummary] = useState("");
+  const [noteType, setNoteType] = useState<FieldNoteType>("work_performed");
   const [disposition, setDisposition] = useState<CustomerDisposition>("approved");
   const [customerName, setCustomerName] = useState("");
   const [reason, setReason] = useState("");
@@ -26,12 +27,10 @@ export function TechnicianFieldPanel({ item }: { readonly item: TechnicianItiner
         {item.job_status === "in_progress" && <Button variant="outline" disabled={busy} onClick={() => field.lifecycle.mutate({ action: "pause", version: item.job_version ?? 1 })}>Pause</Button>}
         {item.job_status === "paused" && <Button disabled={busy} onClick={() => field.lifecycle.mutate({ action: "resume", version: item.job_version ?? 1 })}>Resume</Button>}
       </div>
-      {!state?.work_summary_recorded && (
-        <Field label="Work performed" controlId={`work-summary-${item.job_id}`}>
+      <div className="space-y-ui-2"><Field label="Evidence type" controlId={`note-type-${item.job_id}`}><select id={`note-type-${item.job_id}`} className="min-h-11 w-full rounded-md border border-border-default bg-surface-primary px-ui-3" value={noteType} onChange={(event) => setNoteType(event.target.value as FieldNoteType)}><option value="work_performed">Work performed</option><option value="internal">Internal operational note</option><option value="customer_visible">Customer-visible note</option></select></Field>{(!state?.work_summary_recorded || noteType !== "work_performed") && <Field label={noteType === "work_performed" ? "Work performed" : "Operational evidence"} controlId={`work-summary-${item.job_id}`}>
           <Textarea id={`work-summary-${item.job_id}`} value={summary} onChange={(event) => setSummary(event.target.value)} rows={3} />
-          <Button className="mt-ui-2" disabled={busy || !summary.trim()} onClick={() => field.note.mutate(summary)}>Save work summary</Button>
-        </Field>
-      )}
+          <Button className="mt-ui-2" disabled={busy || !summary.trim()} onClick={() => field.note.mutate({ noteType, content: summary })}>Save evidence</Button>
+        </Field>}</div>
       {!state?.customer_disposition && (
         <div className="space-y-ui-2">
           <Field label="Customer disposition" controlId={`disposition-${item.job_id}`}>

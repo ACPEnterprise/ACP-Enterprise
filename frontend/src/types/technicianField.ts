@@ -13,3 +13,4 @@ export interface FieldJobState {
 }
 
 export type CustomerDisposition = "approved" | "unavailable" | "refused";
+export type FieldNoteType = "work_performed" | "internal" | "customer_visible";
