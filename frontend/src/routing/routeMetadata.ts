@@ -145,6 +145,15 @@ export const paymentsHandle = {
   workspace: { pageTitle: "Payments", breadcrumbs: [{ label: "Payments" }], helpTopic: "payments", aiContext: "payments" },
 } as const satisfies ShellRouteHandle;
 
+export const revenueCycleHandle = {
+  workspace: {
+    pageTitle: "Revenue cycle",
+    breadcrumbs: [{ label: "Revenue cycle" }],
+    helpTopic: "revenue-cycle",
+    aiContext: "revenue-cycle",
+  },
+} as const satisfies ShellRouteHandle;
+
 export const accountsPayableHandle = {
   workspace: { pageTitle: "Accounts Payable", breadcrumbs: [{ label: "Accounts Payable" }], helpTopic: "accounts-payable", aiContext: "accounts-payable" },
 } as const satisfies ShellRouteHandle;
@@ -155,6 +164,10 @@ export const financialReportsHandle = {
 
 export const businessEconomicsHandle = {
   workspace: { pageTitle: "Business Economics", breadcrumbs: [{ label: "Business Economics" }], helpTopic: "business-economics", aiContext: "business-economics" },
+} as const satisfies ShellRouteHandle;
+
+export const payrollHandle = {
+  workspace: { pageTitle: "Payroll Administration", breadcrumbs: [{ label: "Payroll" }], helpTopic: "payroll-administration", aiContext: "payroll-administration" },
 } as const satisfies ShellRouteHandle;
 
 export const engineeringHandle = {

@@ -1,7 +1,7 @@
 """complete business economics owner experience
 
 Revision ID: b0ff279c5aeb
-Revises: 17g2i67862h6
+Revises: 99abf7192edf
 Create Date: 2026-08-30 13:42:12.693560
 
 """
@@ -14,7 +14,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision: str = "b0ff279c5aeb"
-down_revision: Union[str, Sequence[str], None] = "17g2i67862h6"
+down_revision: Union[str, Sequence[str], None] = "99abf7192edf"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

@@ -16,6 +16,7 @@ import {
   Textarea,
 } from "../../ui";
 import { ContactForm } from "./ContactForm";
+import { CustomerOperationsPanel } from "./CustomerOperationsPanel";
 import { CustomerForm } from "./CustomerForm";
 import { PropertyForm } from "./PropertyForm";
 
@@ -118,6 +119,8 @@ export function CustomerDetailView({ customerId, onBack }: CustomerDetailViewPro
           </div>
         )}
       </Card>
+
+      <CustomerOperationsPanel customerId={customerId} />
 
       <Card className="p-ui-4 sm:p-ui-6">
         <p className="text-sm text-action-primary">Communication consent</p>

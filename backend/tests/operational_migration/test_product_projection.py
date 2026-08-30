@@ -20,6 +20,7 @@ def test_projection_is_scoped_safe_and_reconciled() -> None:
     result = projection()
     assert result["company_id"] == "company-a"
     assert result["branch_id"] == "branch-a"
+    assert result["scope"] == "branch"
     assert result["overall_status"] == "external_owner_gate"
     counts = result["counts"]
     assert isinstance(counts, tuple)
@@ -51,6 +52,17 @@ def test_unavailable_sandbox_never_fabricates_connection_readiness() -> None:
     sources = {item["source"]: item for item in projection(connected=False)["sources"]}
     assert sources["QBO Development"]["status"] == "incomplete"
     assert sources["QBO Development"]["connection_state"] == "unavailable"
+
+
+def test_company_wide_review_does_not_fabricate_branch_scope() -> None:
+    result = build_migration_product_projection(
+        company_id="company-a",
+        branch_id=None,
+        qbo_sandbox_connected=True,
+    )
+    assert result["company_id"] == "company-a"
+    assert result["branch_id"] is None
+    assert result["scope"] == "company"
 
 
 def test_owner_decisions_history_and_opening_gate_remain_visible() -> None:

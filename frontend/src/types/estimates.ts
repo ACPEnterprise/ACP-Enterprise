@@ -55,3 +55,38 @@ export interface EstimateProposalInput {
   discount_type?: "fixed" | "percentage";
   discount_value?: string;
 }
+
+export interface EstimateTransitionInput {
+  branch_id: string;
+  expected_version: number;
+  occurred_at: string;
+}
+
+export interface EstimateDecisionInput extends EstimateTransitionInput {
+  customer_name: string;
+  customer_email?: string;
+  customer_comment?: string;
+  rejection_reason?: string;
+  evidence_reference?: string;
+}
+
+export interface EstimateSummary {
+  id: string;
+  branch_id: string;
+  customer_id: string;
+  service_location_id: string | null;
+  estimate_number: string;
+  status: string;
+  acceptance_status: string;
+  version: number;
+  proposal_title: string;
+  currency: string;
+  total_amount: string;
+  expires_at: string | null;
+  updated_at: string;
+}
+
+export interface EstimateList {
+  items: EstimateSummary[];
+  total: number;
+}
