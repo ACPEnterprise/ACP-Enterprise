@@ -1356,6 +1356,16 @@
     {
       "classification": "EXPLICIT_EXEMPTION",
       "domain": "identity_onboarding",
+      "mechanism": "single-use encrypted envelope claim with row locking and fail-closed replay rejection",
+      "method": "POST",
+      "operation_id": "owner_claim_api_v1_identity_onboarding__request_id__owner_claim_post",
+      "path": "/api/v1/identity-onboarding/{request_id}/owner-claim",
+      "reason": "A replay must not return activation material a second time; the durable claimed envelope state intentionally rejects repeated delivery.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "EXPLICIT_EXEMPTION",
+      "domain": "identity_onboarding",
       "mechanism": "legacy compatibility boundary; no shared durable receipt asserted",
       "method": "POST",
       "operation_id": "reissue_api_v1_identity_onboarding__request_id__reissue_post",
@@ -2516,6 +2526,6 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "5f3d02f6e865e665e15362c0f7dc3f209e4374c7c4ce73ea0e7c359935866b46",
+  "fingerprint": "044efef27bb7559af8588a84bc79d0646226a56e253eb738350e16a0d3990cd1",
   "schema_version": "1"
 }
