@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -214,7 +214,10 @@ def _error(error: Exception) -> HTTPException:
 
 @router.get("/reporting", response_model=list[PayrollReportingMetadata])
 async def list_payroll_reporting(
-    context: ReportingRead, session: Session
+    context: ReportingRead,
+    session: Session,
+    limit: Annotated[int, Query(ge=1, le=200)] = 100,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[PayrollReportingMetadata]:
     values = (
         await session.scalars(
@@ -223,7 +226,10 @@ async def list_payroll_reporting(
             .order_by(
                 PayrollReportingSnapshotRecord.period_end.desc(),
                 PayrollReportingSnapshotRecord.created_at.desc(),
+                PayrollReportingSnapshotRecord.id.desc(),
             )
+            .offset(offset)
+            .limit(limit)
         )
     ).all()
     return [_report_metadata(value) for value in values]
@@ -236,8 +242,25 @@ async def payroll_operations_summary(context: ReportingRead, session: Session) -
 
 
 @router.get("/compliance/schemas", response_model=list[ComplianceSchemaMetadata])
-async def compliance_schemas(context: ReportingRead, session: Session) -> list[ComplianceSchemaMetadata]:
-    values = (await session.scalars(select(PayrollComplianceSchemaRecord).where(PayrollComplianceSchemaRecord.company_id == context.company.id).order_by(PayrollComplianceSchemaRecord.tax_year.desc()))).all()
+async def compliance_schemas(
+    context: ReportingRead,
+    session: Session,
+    limit: Annotated[int, Query(ge=1, le=200)] = 100,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> list[ComplianceSchemaMetadata]:
+    values = (
+        await session.scalars(
+            select(PayrollComplianceSchemaRecord)
+            .where(PayrollComplianceSchemaRecord.company_id == context.company.id)
+            .order_by(
+                PayrollComplianceSchemaRecord.tax_year.desc(),
+                PayrollComplianceSchemaRecord.created_at.desc(),
+                PayrollComplianceSchemaRecord.id.desc(),
+            )
+            .offset(offset)
+            .limit(limit)
+        )
+    ).all()
     return [_schema_metadata(value) for value in values]
 
 
@@ -316,7 +339,11 @@ async def payroll_reporting_detail(
     response_model=list[PayrollFilingPackageMetadata],
 )
 async def payroll_filing_packages(
-    report_id: UUID, context: ReportingRead, session: Session
+    report_id: UUID,
+    context: ReportingRead,
+    session: Session,
+    limit: Annotated[int, Query(ge=1, le=200)] = 100,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[PayrollFilingPackageMetadata]:
     report = await session.scalar(
         select(PayrollReportingSnapshotRecord.id).where(
@@ -333,7 +360,12 @@ async def payroll_filing_packages(
                 PayrollFilingPackageRecord.reporting_snapshot_id == report_id,
                 PayrollFilingPackageRecord.company_id == context.company.id,
             )
-            .order_by(PayrollFilingPackageRecord.created_at.desc())
+            .order_by(
+                PayrollFilingPackageRecord.created_at.desc(),
+                PayrollFilingPackageRecord.id.desc(),
+            )
+            .offset(offset)
+            .limit(limit)
         )
     ).all()
     return [
