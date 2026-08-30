@@ -1,4 +1,5 @@
 import hashlib
+import html
 import json
 from datetime import date, datetime, timezone
 from decimal import Decimal
@@ -46,6 +47,7 @@ from .schemas import (
     CreatePurchaseReturnCommand,
     DecidePurchaseOrderChangeCommand,
     DiscrepancyItem,
+    PurchaseOrderArtifactItem,
     PurchaseOrderChangeItem,
     PurchaseOrderCreate,
     PurchaseOrderDispositionCommand,
@@ -487,6 +489,74 @@ class PurchasingService:
     ) -> PurchaseOrderItem:
         order = await self._order(session, context, po_id)
         return await self._item(session, order)
+
+    async def purchase_order_artifact(
+        self, session: AsyncSession, *, context: AuthorizationContext, po_id: UUID
+    ) -> PurchaseOrderArtifactItem:
+        order = await self._order(session, context, po_id)
+        evidence = await self.repository.evidence(session, context.company.id, order.id)
+        if evidence is None:
+            raise PurchasingConflict(
+                "Only immutable issued Purchase Order evidence can be rendered"
+            )
+        snapshot = evidence.snapshot
+        vendor = snapshot.get("vendor")
+        lines = snapshot.get("lines")
+        if not isinstance(vendor, dict) or not isinstance(lines, list):
+            raise PurchasingConflict(
+                "Purchase Order issuance evidence is not renderable"
+            )
+        rows: list[str] = []
+        total = Decimal(0)
+        for raw in lines:
+            if not isinstance(raw, dict):
+                raise PurchasingConflict(
+                    "Purchase Order line evidence is not renderable"
+                )
+            extended = Decimal(str(raw.get("extended_cost", "0")))
+            total += extended
+            rows.append(
+                "<tr>"
+                f"<td>{html.escape(str(raw.get('line_number', '')))}</td>"
+                f"<td>{html.escape(str(raw.get('description', '')))}</td>"
+                f"<td>{html.escape(str(raw.get('quantity', '')))} {html.escape(str(raw.get('unit', '')))}</td>"
+                f"<td>{html.escape(str(raw.get('unit_cost', '')))}</td>"
+                f"<td>{html.escape(str(raw.get('extended_cost', '')))}</td>"
+                "</tr>"
+            )
+        template_version = "purchase-order-html.v1"
+        artifact_authority = {
+            "template_version": template_version,
+            "issuance_digest": evidence.digest,
+            "snapshot": snapshot,
+        }
+        artifact_digest = digest(artifact_authority)
+        content = (
+            "<!doctype html><html lang='en'><head><meta charset='utf-8'>"
+            "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+            "<title>Purchase Order</title><style>body{font-family:system-ui;margin:2rem;color:#172033}"
+            "header{display:flex;justify-content:space-between;border-bottom:2px solid #315b8a}"
+            "table{width:100%;border-collapse:collapse;margin-top:2rem}th,td{padding:.6rem;border-bottom:1px solid #ccd4dd;text-align:left}"
+            ".total{text-align:right;font-weight:700}.evidence{margin-top:2rem;font-size:.75rem;overflow-wrap:anywhere}</style></head><body>"
+            f"<header><div><h1>Purchase Order {html.escape(str(snapshot.get('po_number', '')))}</h1>"
+            f"<p>Expected {html.escape(str(snapshot.get('expected_date') or 'Not specified'))}</p></div>"
+            f"<div><strong>{html.escape(str(vendor.get('display_name', 'Vendor')))}</strong><br>"
+            f"{html.escape(str(vendor.get('legal_name') or ''))}</div></header>"
+            "<table><thead><tr><th>Line</th><th>Description</th><th>Quantity</th><th>Unit cost</th><th>Extended</th></tr></thead>"
+            f"<tbody>{''.join(rows)}</tbody></table><p class='total'>Total {html.escape(str(snapshot.get('currency', '')))} {total}</p>"
+            f"<p class='evidence'>Immutable issuance evidence: {evidence.digest}<br>Artifact: {artifact_digest}</p>"
+            "</body></html>"
+        )
+        return PurchaseOrderArtifactItem(
+            template_version=template_version,
+            purchase_order_id=order.id,
+            purchase_order_version=evidence.purchase_order_version,
+            issuance_digest=evidence.digest,
+            artifact_digest=artifact_digest,
+            filename=f"purchase-order-{order.po_number}.html",
+            rendered_at=evidence.issued_at,
+            content=content,
+        )
 
     async def receiving_reconciliation(
         self,

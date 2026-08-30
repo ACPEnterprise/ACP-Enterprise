@@ -3,6 +3,7 @@ import axios from "axios";
 import { useAuth, useHasPermission } from "../auth";
 import { useBranchPurchasingPolicies, usePurchasing, usePurchasingMutations } from "../hooks/usePurchasing";
 import { useInventory } from "../hooks/useInventory";
+import { getPurchaseOrderArtifact } from "../api/purchasing";
 import {
   Alert,
   Badge,
@@ -241,6 +242,12 @@ export function PurchasingRoute() {
         idempotency_key: crypto.randomUUID(),
       },
     });
+  const openArtifact = async (poId: string) => {
+    const artifact = await getPurchaseOrderArtifact(poId);
+    const url = URL.createObjectURL(new Blob([artifact.content], { type: artifact.media_type }));
+    window.open(url, "_blank", "noopener,noreferrer");
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  };
   const failed =
     mutations.createVendor.isError ||
     mutations.updateVendor.isError ||
@@ -642,6 +649,11 @@ export function PurchasingRoute() {
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
+                    {po.issuance_digest && (
+                      <Button variant="secondary" onClick={() => void openArtifact(po.id)}>
+                        Print issued PO
+                      </Button>
+                    )}
                     {canManage && po.status === "draft" && (
                       <Button
                         onClick={() =>

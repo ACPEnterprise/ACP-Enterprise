@@ -2,6 +2,7 @@ import { apiClient } from "./client";
 import type {
   OperationalVendor,
   PurchaseOrder,
+  PurchaseOrderArtifact,
   PurchaseOrderCreate,
   PurchaseOrderUpdate,
   PurchaseOrderLine,
@@ -41,6 +42,8 @@ export const getPurchasingWorkspace = async (
   search?: string,
 ): Promise<PurchasingWorkspace> =>
   (await apiClient.get<PurchasingWorkspace>(root, { params: { search } })).data;
+export const getPurchaseOrderArtifact = async (id: string): Promise<PurchaseOrderArtifact> =>
+  (await apiClient.get<PurchaseOrderArtifact>(`${root}/purchase-orders/${id}/artifact`)).data;
 export const getReplenishmentWorkbench = async (
   input: ReplenishmentWorkbenchRequest,
 ): Promise<ReplenishmentWorkbench> =>

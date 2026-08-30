@@ -143,6 +143,11 @@ export interface PurchaseOrder {
   revisions: readonly PurchaseOrderRevision[];
   disposition: PurchaseOrderDisposition | null;
 }
+export interface PurchaseOrderArtifact {
+  schema_version: number; template_version: string; purchase_order_id: string;
+  purchase_order_version: number; issuance_digest: string; artifact_digest: string;
+  filename: string; media_type: "text/html"; rendered_at: string; content: string;
+}
 export interface RequestPurchaseOrderChange {
   expected_po_version: number;
   base_revision: number;

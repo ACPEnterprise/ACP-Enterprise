@@ -532,6 +532,19 @@ class PurchaseOrderItem(PurchasingSchema):
     disposition: "PurchaseOrderDispositionItem | None" = None
 
 
+class PurchaseOrderArtifactItem(PurchasingSchema):
+    schema_version: int = 1
+    template_version: str
+    purchase_order_id: UUID
+    purchase_order_version: int
+    issuance_digest: str
+    artifact_digest: str
+    filename: str
+    media_type: str = "text/html"
+    rendered_at: datetime
+    content: str
+
+
 class PurchaseOrderChangeOperation(PurchasingSchema):
     operation: str = Field(
         pattern=r"^(set_quantity|set_unit_cost|cancel_line|add_line|set_expected_date)$"

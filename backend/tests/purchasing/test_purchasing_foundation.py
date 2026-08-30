@@ -915,6 +915,16 @@ async def test_po_lifecycle_sod_immutable_issuance_and_nonmutation(
         )
         assert evidence is not None and len(evidence.digest) == 64
         assert evidence.snapshot["vendor"]["display_name"] == "Vendor Two"
+        artifact = await service.purchase_order_artifact(
+            session, context=approver, po_id=order_id
+        )
+        replay_artifact = await service.purchase_order_artifact(
+            session, context=approver, po_id=order_id
+        )
+        assert artifact.artifact_digest == replay_artifact.artifact_digest
+        assert artifact.issuance_digest == evidence.digest
+        assert "Purchase Order PO-100" in artifact.content
+        assert "Non-catalog fitting" in artifact.content
         after = tuple(
             [
                 await session.scalar(select(func.count()).select_from(model))

@@ -22,6 +22,7 @@ from .schemas import (
     CreatePurchaseReturnCommand,
     DecidePurchaseOrderChangeCommand,
     DiscrepancyItem,
+    PurchaseOrderArtifactItem,
     PurchaseOrderChangeItem,
     PurchaseOrderCreate,
     PurchaseOrderDispositionCommand,
@@ -257,6 +258,20 @@ async def get_order(
 ) -> PurchaseOrderItem:
     try:
         return await purchasing_service.get_order(session, context=context, po_id=po_id)
+    except PurchasingError as error:
+        raise http_error(error) from error
+
+
+@router.get(
+    "/purchase-orders/{po_id}/artifact", response_model=PurchaseOrderArtifactItem
+)
+async def purchase_order_artifact(
+    po_id: UUID, context: ReadContext, session: DatabaseSession
+) -> PurchaseOrderArtifactItem:
+    try:
+        return await purchasing_service.purchase_order_artifact(
+            session, context=context, po_id=po_id
+        )
     except PurchasingError as error:
         raise http_error(error) from error
 
