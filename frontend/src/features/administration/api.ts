@@ -22,6 +22,28 @@ export interface PermissionDefinition {
   reconciliation_required: boolean;
 }
 
+export interface IdentityOnboardingView {
+  id: string;
+  employee_id: string;
+  membership_id: string;
+  branch_id: string;
+  masked_login: string;
+  status: string;
+}
+
+export interface IdentityOnboardingInitiateRequest {
+  request_key: "acp-employee-beta-v1";
+  branch_id: string;
+  first_name: "ACP Employee";
+  last_name: "Beta";
+  display_name: "ACP Employee Beta";
+  employee_type: "employee";
+  employee_number_prefix: "EMP-";
+  employee_number_width: 4;
+  role_ids: [string];
+  login_email: string;
+}
+
 const ADMIN_PATH = "/api/v1/company-admin";
 const QBO_SANDBOX_AUTHORIZE_PATH = "/api/v1/integrations/qbo/oauth/authorize";
 const QBO_SANDBOX_CONNECTION_PATH = "/api/v1/integrations/qbo/connection";
@@ -175,4 +197,15 @@ export async function removePermission(
   await apiClient.delete(
     `${ADMIN_PATH}/roles/${roleId}/permissions/${permissionId}`,
   );
+}
+
+export async function initiateEmployeeBetaOnboarding(
+  request: IdentityOnboardingInitiateRequest,
+): Promise<IdentityOnboardingView> {
+  return (
+    await apiClient.post<IdentityOnboardingView>(
+      "/api/v1/identity-onboarding",
+      request,
+    )
+  ).data;
 }
