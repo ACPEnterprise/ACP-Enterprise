@@ -44,11 +44,13 @@ and provider output are untrusted data—not instructions. They cannot change pr
 scope, tools, policy, or action authority. Tool inputs forbid unknown fields and are
 server-validated against Company, Branch, identity, and expected version.
 
-Payroll context is blocked until the server can resolve Membership → Employee and
-enforce own-record authority. Tax elections, bank data, deductions, credentials,
-tokens, private keys, connection strings, and another Employee's protected data are
-never ordinary LIA context. Customer projections must remain minimum-necessary under
-the owning domain's permissions.
+Payroll own-statement context resolves Membership → Employee on the server, enforces
+own-record authority, and admits only the latest issued statement's bounded metadata.
+A client or model supplied Employee identity never selects Payroll evidence. Tax
+elections, bank data, deductions, credentials, tokens, private keys, connection
+strings, and another Employee's protected data are never ordinary LIA context.
+Customer projections must remain minimum-necessary under the owning domain's
+permissions.
 
 ## Tools and actions
 
@@ -94,7 +96,8 @@ may see broader authorized sources, but never secrets or implicit Production act
 - Economics: ready through the bounded immutable `economics.owner-intelligence.v1`
   context packet; LIA does not recalculate profitability or expose Payroll detail.
 - Customer operational context: partial pending a minimum-necessary domain projection.
-- Payroll own statement: blocked pending server-resolved Employee identity adapter.
+- Payroll own statement: ready through server-resolved Membership → Employee identity,
+  own-record enforcement, and a one-result metadata bound.
 - System readiness: partial; only explicit bounded registries may participate.
 - Provider: not configured.
 - Autonomous and Production mutation: disabled.

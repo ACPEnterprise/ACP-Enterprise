@@ -378,10 +378,12 @@ async def test_own_pay_statement_entity_binding_retains_server_employee_scope() 
     )
 
     employee_lookup = str(session.scalar.await_args.args[0])
-    statement_lookup = str(session.scalars.await_args.args[0])
+    statement = session.scalars.await_args.args[0]
+    statement_lookup = str(statement)
     assert "employees.membership_id" in employee_lookup
     assert "payroll_pay_statements.employee_id" in statement_lookup
     assert "payroll_pay_statements.id" in statement_lookup
+    assert 1 in statement.compile().params.values()
 
 
 @pytest.mark.asyncio

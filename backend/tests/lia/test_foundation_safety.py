@@ -12,6 +12,7 @@ from app.beacon.operational_prioritization import operational_signal_prioritizer
 from app.lia.adapters import beacon_evidence, economics_evidence
 from app.lia.evaluation import evaluate_case
 from app.lia.foundation import (
+    SOURCE_REGISTRY,
     TOOL_REGISTRY,
     ActionProposalV1,
     ActionRisk,
@@ -26,6 +27,7 @@ from app.lia.foundation import (
     ProviderState,
     QuestionIntent,
     Reversibility,
+    SourceReadiness,
     SupportState,
     foundation_readiness,
     permitted_sources,
@@ -340,6 +342,14 @@ def test_readiness_never_claims_provider_or_execution_authority() -> None:
     assert not readiness.production_mutation
     assert readiness.executable_tool_count == 0
     assert readiness.blockers
+
+    own_statement = next(
+        item for item in SOURCE_REGISTRY if item.source_id == "PAYROLL_OWN_STATEMENT"
+    )
+    assert own_statement.readiness is SourceReadiness.READY
+    assert own_statement.max_results == 1
+    assert own_statement.provenance_contract == "SERVER_RESOLVED_EMPLOYEE"
+    assert own_statement.blocker is None
 
 
 def test_numeric_and_temporal_claims_require_exact_structured_authority() -> None:

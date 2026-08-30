@@ -419,7 +419,7 @@ class GovernedRetrievalService:
                 PayrollPayStatementRecord.lifecycle == "issued",
             )
             .order_by(PayrollPayStatementRecord.created_at.desc())
-            .limit(50)
+            .limit(1)
         )
         if entity_id is not None:
             statement_query = statement_query.where(

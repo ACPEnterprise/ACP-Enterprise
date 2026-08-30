@@ -562,8 +562,7 @@ SOURCE_REGISTRY = (
         max_results=1,
         freshness_contract="PAYROLL_STATEMENT_VERSION",
         provenance_contract="SERVER_RESOLVED_EMPLOYEE",
-        readiness=SourceReadiness.BLOCKED,
-        blocker="No LIA adapter may accept a client/model supplied Employee identity.",
+        readiness=SourceReadiness.READY,
     ),
     SourceSpec(
         source_id="SYSTEM_READINESS",
