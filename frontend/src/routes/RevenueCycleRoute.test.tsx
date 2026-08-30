@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -8,7 +8,7 @@ const permission = vi.fn();
 vi.mock("../auth", () => ({ useHasPermission: (code: string) => permission(code) }));
 vi.mock("../hooks/useJobs", () => ({ useJobs: () => ({ isPending: false, isError: false, data: { items: [
   { id: "job-ready", job_number: "J-1", customer_display_name: "Ready Customer", status: "ready", appointment_count: 0 },
-  { id: "job-complete", job_number: "J-2", customer_display_name: "Done Customer", status: "completed", appointment_count: 1 },
+  { id: "job-complete", job_number: "J-2", customer_display_name: "Done Customer", service_location_label: "10 Main Street", status: "completed", appointment_count: 1 },
 ] } }) }));
 vi.mock("../hooks/useEstimates", () => ({ useEstimates: () => ({ isPending: false, data: { items: [{ id: "est-1", status: "sent", converted_job_id: null }, { id: "est-2", status: "approved", converted_job_id: null }] } }) }));
 vi.mock("../hooks/useInvoices", () => ({ useInvoices: () => ({ isPending: false, data: [{ id: "inv-1", job_id: "another-job", status: "issued", open_amount: "50.00", accounting_status: "pending" }] }) }));
@@ -30,5 +30,10 @@ describe("RevenueCycleRoute", () => {
     permission.mockImplementation((code: string) => code !== "COMPANY_JOB_READ");
     render(<MemoryRouter><RevenueCycleRoute /></MemoryRouter>);
     expect(screen.getByText("You are not authorized to view the operational revenue cycle.")).toBeVisible();
+  });
+  it("searches only explicit loaded operational identities", () => {
+    render(<MemoryRouter><RevenueCycleRoute /></MemoryRouter>);
+    fireEvent.change(screen.getByLabelText("Search operational records"), { target: { value: "10 Main" } });
+    expect(screen.getByText("Done Customer · 10 Main Street").closest("a")).toHaveAttribute("href", "/jobs/job-complete");
   });
 });

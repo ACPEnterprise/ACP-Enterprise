@@ -1,7 +1,8 @@
 import { Link } from "react-router";
+import { useState } from "react";
 
 import { useHasPermission } from "../auth";
-import { Alert, Badge, Card, CardContent, CardHeader, CardTitle, Spinner } from "../ui";
+import { Alert, Badge, Card, CardContent, CardHeader, CardTitle, Input, Spinner } from "../ui";
 import { useEstimates } from "../hooks/useEstimates";
 import { useInvoices } from "../hooks/useInvoices";
 import { useJobs } from "../hooks/useJobs";
@@ -14,6 +15,7 @@ function Queue({ title, count, detail, href }: { readonly title: string; readonl
 }
 
 export function RevenueCycleRoute() {
+  const [search, setSearch] = useState("");
   const canReadJobs = useHasPermission("COMPANY_JOB_READ");
   const canReadEstimates = useHasPermission("COMPANY_ESTIMATE_READ");
   const canReadInvoices = useHasPermission("COMPANY_INVOICE_READ");
@@ -33,9 +35,16 @@ export function RevenueCycleRoute() {
   const invoicedJobs = new Set(invoiceItems.map((invoice) => invoice.job_id));
   const completedNotInvoiced = jobItems.filter((job) => job.status === "completed" && !invoicedJobs.has(job.id));
   const paymentItems = payments.data ?? [];
+  const needle = search.trim().toLowerCase();
+  const results = needle ? [
+    ...(estimates.data?.items ?? []).filter((item) => `${item.estimate_number} ${item.proposal_title}`.toLowerCase().includes(needle)).map((item) => ({ id: `estimate-${item.id}`, label: item.estimate_number, detail: item.proposal_title, href: `/estimates?id=${item.id}` })),
+    ...jobItems.filter((item) => `${item.job_number} ${item.customer_display_name} ${item.service_location_label}`.toLowerCase().includes(needle)).map((item) => ({ id: `job-${item.id}`, label: item.job_number, detail: `${item.customer_display_name} · ${item.service_location_label}`, href: `/jobs/${item.id}` })),
+    ...invoiceItems.filter((item) => (item.invoice_number ?? "").toLowerCase().includes(needle)).map((item) => ({ id: `invoice-${item.id}`, label: item.invoice_number, detail: item.status, href: `/invoices/${item.id}` })),
+  ] : [];
 
   return <div className="space-y-6">
     <header><p className="text-sm font-semibold text-action-primary">Field Operations / Customer to Cash</p><h1 className="mt-1 text-2xl font-bold sm:text-3xl">Revenue cycle</h1><p className="mt-2 max-w-3xl text-content-muted">Operational visibility from commercial decision through Job completion, Invoice handoff, and native Payment evidence. Amounts never influence queue priority.</p></header>
+    <Card><CardHeader><CardTitle>Operational search</CardTitle></CardHeader><CardContent className="space-y-3"><Input aria-label="Search operational records" placeholder="Estimate, Job, Customer, Service Location, or Invoice" value={search} onChange={(event) => setSearch(event.target.value)} />{needle && <div className="grid gap-2">{results.map((result) => <Link key={result.id} className="flex flex-wrap justify-between gap-2 rounded-lg border border-stroke p-3 text-sm" to={result.href}><strong>{result.label}</strong><span className="text-content-muted">{result.detail}</span></Link>)}{results.length === 0 && <p className="text-sm text-content-muted">No loaded authoritative records match this search.</p>}</div>}<p className="text-xs text-content-muted">Results are limited to authorized records in the current operational projections.</p></CardContent></Card>
     <section aria-label="Operational revenue queues" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
       {canReadEstimates && <Queue title="Estimates awaiting decision" count={(estimates.data?.items ?? []).filter((item) => ["sent", "viewed"].includes(item.status)).length} detail="Presented proposals with no accepted or rejected state." href="/estimates" />}
       {canReadEstimates && <Queue title="Accepted not converted" count={(estimates.data?.items ?? []).filter((item) => item.status === "approved" && !item.converted_job_id).length} detail="Approved Estimates with no explicit Estimate-to-Job conversion evidence." href="/estimates?status=approved" />}
