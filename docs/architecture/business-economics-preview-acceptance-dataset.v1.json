@@ -1,0 +1,103 @@
+{
+  "schema_version": "1.0",
+  "dataset_id": "BUSINESS.ECONOMICS.PREVIEW.ACCEPTANCE.V1",
+  "classification": "synthetic_non_production",
+  "currency": "USD",
+  "current_period": {
+    "start": "2026-08-01",
+    "end": "2026-08-31",
+    "jobs": [
+      {
+        "job_key": "ECO-PROFITABLE",
+        "branch": "Main",
+        "service_category": "installation",
+        "revenue_minor": 100000,
+        "labor_minor": 30000,
+        "materials_minor": 20000,
+        "other_direct_cost_minor": 0,
+        "contribution_minor": 50000,
+        "payment_state": "unpaid",
+        "quality_state": "complete_direct_missing_allocation"
+      },
+      {
+        "job_key": "ECO-BREAK-EVEN",
+        "branch": "Main",
+        "service_category": "repair",
+        "revenue_minor": 50000,
+        "labor_minor": 30000,
+        "materials_minor": 20000,
+        "other_direct_cost_minor": 0,
+        "contribution_minor": 0,
+        "payment_state": "paid",
+        "quality_state": "complete_direct_missing_allocation"
+      },
+      {
+        "job_key": "ECO-LOSING",
+        "branch": "North",
+        "service_category": "repair",
+        "revenue_minor": 40000,
+        "labor_minor": 30000,
+        "materials_minor": 20000,
+        "other_direct_cost_minor": 0,
+        "contribution_minor": -10000,
+        "payment_state": "paid",
+        "quality_state": "complete_direct_missing_allocation"
+      }
+    ],
+    "expected": {
+      "recognized_revenue_minor": 190000,
+      "labor_minor": 90000,
+      "materials_minor": 60000,
+      "direct_cost_minor": 150000,
+      "contribution_minor": 40000,
+      "fully_allocated_profitability": "unavailable_policy_required",
+      "paid_unpaid_revenue_difference_minor": 0,
+      "main_branch_revenue_minor": 150000,
+      "main_branch_contribution_minor": 50000,
+      "north_branch_revenue_minor": 40000,
+      "north_branch_contribution_minor": -10000
+    }
+  },
+  "evidence_state_cases": [
+    {
+      "case": "missing_material",
+      "expected": "partial_contribution_unavailable_not_zero"
+    },
+    {
+      "case": "missing_labor_attribution",
+      "expected": "partial_labor_unavailable_not_zero"
+    },
+    {
+      "case": "corrected_payroll",
+      "expected": "latest_authoritative_version_only"
+    },
+    {
+      "case": "returned_material",
+      "expected": "accepted_consumption_correction_not_receipt_double_count"
+    },
+    {
+      "case": "stale_period",
+      "expected": "stale_comparison_unavailable"
+    },
+    {
+      "case": "conflicting_lineage",
+      "expected": "conflicting_totals_unavailable"
+    },
+    {
+      "case": "missing_job_attribution",
+      "expected": "excluded_count_explicit_totals_partial"
+    }
+  ],
+  "comparison_fixture": {
+    "current_revenue_minor": 190000,
+    "prior_revenue_minor": 170000,
+    "current_contribution_minor": 40000,
+    "prior_contribution_minor": 30000,
+    "expected_revenue_change_minor": 20000,
+    "expected_contribution_change_minor": 10000,
+    "availability_requires": "both_periods_complete_current_and_comparable"
+  },
+  "provisioning": "requires_accepted_preview_acceptance_identity_and_synthetic_fixture_adapter",
+  "real_financial_data": "PROHIBITED",
+  "dataset_fingerprint": "1ffa24b6c96d7fabea2f67280465bce2f0d362f7f9c1f8bebca6620d4d7b62fe"
+}
