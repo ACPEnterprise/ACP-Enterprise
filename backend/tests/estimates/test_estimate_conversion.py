@@ -145,6 +145,51 @@ async def test_conversion_retry_is_idempotent_and_different_key_fails(estimate_f
 
 
 @pytest.mark.asyncio
+async def test_conversion_replay_normalizes_key_and_emits_one_authority(
+    estimate_fixture,
+):
+    factory, company, branch, actor, customer, location, snapshot = estimate_fixture
+    record = await approved_estimate(
+        factory, company, branch, actor, customer, location, snapshot
+    )
+    spec = conversion_spec(
+        record, branch, actor, key=f"  estimate-concurrent-{uuid4()}  "
+    )
+
+    async with factory() as session:
+        first = await EstimateService().convert_to_job(session, spec=spec)
+    async with factory() as session:
+        replay = await EstimateService().convert_to_job(session, spec=spec)
+    assert first == replay
+    async with factory() as session:
+        assert (
+            await session.scalar(
+                select(func.count(Job.id)).where(Job.company_id == company.id)
+            )
+            == 1
+        )
+        assert (
+            await session.scalar(
+                select(func.count(EstimateJobConversion.id)).where(
+                    EstimateJobConversion.company_id == company.id,
+                    EstimateJobConversion.idempotency_key
+                    == spec.idempotency_key.strip(),
+                )
+            )
+            == 1
+        )
+        assert (
+            await session.scalar(
+                select(func.count(BusinessEvent.id)).where(
+                    BusinessEvent.entity_id == record.id,
+                    BusinessEvent.event_type == "estimate.converted",
+                )
+            )
+            == 1
+        )
+
+
+@pytest.mark.asyncio
 async def test_conversion_requires_approved_estimate(estimate_fixture):
     factory, company, branch, actor, customer, location, snapshot = estimate_fixture
     service = EstimateService()
