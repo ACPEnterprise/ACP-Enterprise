@@ -41,6 +41,13 @@ class AnalyticsPermission:
     ALL = frozenset({READ})
 
 
+class LuminaryPermission:
+    READ = "COMPANY_LUMINARY_READ"
+    ANALYZE = "COMPANY_LUMINARY_ANALYZE"
+
+    ALL = frozenset({READ, ANALYZE})
+
+
 class BeaconPermission:
     REVIEW = "COMPANY_BEACON_REVIEW"
     OWN = "COMPANY_BEACON_OWN"

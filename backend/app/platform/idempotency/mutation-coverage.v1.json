@@ -2524,8 +2524,41 @@
       "path": "/api/v1/purchasing/documents",
       "reason": "Exact replay returns one custody record while contradictory command identity reuse fails closed.",
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IMMUTABLE_APPEND_ONLY",
+      "domain": "luminary",
+      "mechanism": "deterministic evidence digest, UUIDv5 identity, Company advisory lock, and unique persisted identity",
+      "method": "POST",
+      "operation_id": "analyze_api_v1_luminary_analyses_post",
+      "path": "/api/v1/luminary/analyses",
+      "reason": "Exact authoritative evidence replay converges on one immutable finding and briefing authority.",
+      "replay_evidence": [
+        "tests/luminary/test_engine.py"
+      ],
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "EXPLICIT_EXEMPTION",
+      "domain": "lia",
+      "mechanism": "read-only governed evidence retrieval despite POST transport",
+      "method": "POST",
+      "operation_id": "ask_api_v1_lia_ask_post",
+      "path": "/api/v1/lia/ask",
+      "reason": "The request reads authorized evidence and returns a non-executing response; it creates no business authority or operational mutation.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "EXPLICIT_EXEMPTION",
+      "domain": "lia",
+      "mechanism": "non-authoritative quality telemetry with no business-state mutation",
+      "method": "POST",
+      "operation_id": "feedback_api_v1_lia_feedback_post",
+      "path": "/api/v1/lia/feedback",
+      "reason": "Feedback is diagnostic quality evidence only and cannot rewrite authoritative facts or execute an operation.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "044efef27bb7559af8588a84bc79d0646226a56e253eb738350e16a0d3990cd1",
+  "fingerprint": "fe16f7c22b0099b11cb2b1a394a1cd8030e19995a4bd2deddce61e3140543626",
   "schema_version": "1"
 }
