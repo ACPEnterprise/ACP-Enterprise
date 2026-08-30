@@ -3,6 +3,8 @@ from decimal import Decimal
 from uuid import uuid4
 
 import pytest
+from sqlalchemy import func, select
+
 from app.events.models import BusinessEvent
 from app.inventory.contracts import CreateStockLocation
 from app.inventory.errors import InventoryNotFound
@@ -19,8 +21,6 @@ from app.inventory.schemas import (
 from app.inventory.service import InventoryService
 from app.platform.company.membership_models import Membership
 from app.platform.permissions.authorization import AuthorizationContext
-from sqlalchemy import func, select
-
 from tests.inventory.test_inventory_foundation import (
     inventory_fixture,  # noqa: F401
     opening_spec,
