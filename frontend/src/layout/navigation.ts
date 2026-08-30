@@ -15,6 +15,7 @@ import {
   Headphones,
   Landmark,
   TrendingUp,
+  Sparkles,
   Megaphone,
   MonitorCog,
   ShieldCheck,
@@ -172,6 +173,14 @@ export const navigationCatalog = [
     icon: TrendingUp,
     availability: "available",
     requiredPermission: "COMPANY_ECONOMICS_MEASUREMENT_READ",
+  },
+  {
+    id: "luminary",
+    label: "Luminary",
+    path: "/luminary",
+    icon: Sparkles,
+    availability: "available",
+    requiredPermission: "COMPANY_LUMINARY_READ",
   },
   {
     id: "inventory",
