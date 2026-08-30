@@ -10,10 +10,6 @@ from uuid import UUID, uuid4
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import select, text, update
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-
 from app.core.config import Settings, settings
 from app.payroll.contracts import PayrollAdmissionState, evaluate_payroll_admission
 from app.platform.audit.models import AuditRecord
@@ -42,6 +38,9 @@ from app.platform.onboarding.service import (
 from app.platform.permissions.codes import AdministrationPermission
 from app.platform.users.models import User, UserCredential
 from app.timekeeping.repository import timekeeping_repository
+from sqlalchemy import select, text, update
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 
 class Context:
@@ -631,6 +630,47 @@ async def test_employee_number_allocation_is_concurrent_and_never_reuses(
         assert next_employee is not None
         assert next_employee.employee_number not in allocated
         assert next_employee.employee_number != archived_number
+
+
+@pytest.mark.asyncio
+async def test_concurrent_exact_initiation_replays_one_authority(
+    onboarding_db: tuple[
+        async_sessionmaker[AsyncSession], Context, IdentityOnboardingService
+    ],
+) -> None:
+    factory, context, service = onboarding_db
+    request_key = f"concurrent-exact-{uuid4()}"
+    exact_command = command(
+        context,
+        request_key=request_key,
+        email=f"{request_key}@example.test",
+    )
+
+    async def initiate() -> IdentityOnboardingRequest:
+        async with factory() as session:
+            return await service.initiate(
+                session,
+                context=context,
+                command=exact_command,
+            )
+
+    first, second = await asyncio.gather(initiate(), initiate())
+    assert first.id == second.id
+    assert first.employee_id == second.employee_id
+    assert first.membership_id == second.membership_id
+
+    async with factory() as session:
+        records = list(
+            (
+                await session.scalars(
+                    select(IdentityOnboardingRequest).where(
+                        IdentityOnboardingRequest.company_id == context.company.id,
+                        IdentityOnboardingRequest.request_key == request_key,
+                    )
+                )
+            ).all()
+        )
+        assert [record.id for record in records] == [first.id]
 
 
 @pytest.mark.asyncio

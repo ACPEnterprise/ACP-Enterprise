@@ -6,10 +6,10 @@ from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
-
 from app.lia.contracts import LiaFeedbackReceipt, LiaRequest, TruthClassification
 from app.lia.retrieval import GovernedRetrievalService
 from app.lia.service import LiaService
+from app.platform.permissions.codes import LuminaryPermission
 
 
 def authorization_context(*permissions: str):
@@ -51,7 +51,9 @@ async def test_exfiltration_and_injection_fail_without_retrieval(question: str) 
     retrieval = AsyncMock(spec=GovernedRetrievalService)
     service = LiaService(retrieval=retrieval)
     result = await service.ask(
-        AsyncMock(), context=authorization_context(), request=LiaRequest(question=question)
+        AsyncMock(),
+        context=authorization_context(),
+        request=LiaRequest(question=question),
     )
     assert result.classification is TruthClassification.UNAUTHORIZED
     retrieval.retrieve.assert_not_awaited()
@@ -105,7 +107,9 @@ async def test_authorized_adapter_receives_only_selected_domain() -> None:
     retrieval.retrieve.return_value = ()
     context = authorization_context("COMPANY_JOB_READ", "COMPANY_INVOICE_READ")
     await LiaService(retrieval=retrieval).ask(
-        AsyncMock(), context=context, request=LiaRequest(question="What jobs need attention?")
+        AsyncMock(),
+        context=context,
+        request=LiaRequest(question="What jobs need attention?"),
     )
     retrieval.retrieve.assert_awaited_once()
     assert retrieval.retrieve.await_args.kwargs["domains"] == {"jobs"}
@@ -136,3 +140,16 @@ def test_feedback_receipt_does_not_claim_durable_evidence() -> None:
     receipt = LiaFeedbackReceipt(feedback_id=uuid4())
     assert receipt.state == "EPHEMERAL_TELEMETRY_ACCEPTED"
     assert "RECORDED" not in receipt.state
+
+
+@pytest.mark.asyncio
+async def test_profitability_question_selects_authorized_luminary_source() -> None:
+    retrieval = AsyncMock(spec=GovernedRetrievalService)
+    retrieval.retrieve.return_value = ()
+    context = authorization_context(LuminaryPermission.READ)
+    await LiaService(retrieval=retrieval).ask(
+        AsyncMock(),
+        context=context,
+        request=LiaRequest(question="Why did profitability and margin change?"),
+    )
+    assert retrieval.retrieve.await_args.kwargs["domains"] == {"luminary"}

@@ -23,10 +23,11 @@ from app.platform.permissions.codes import (
     InvoicePermission,
     JobPermission,
     LaunchPlatformPermission,
+    LuminaryPermission,
+    MigrationPermission,
     PaymentPermission,
     PriceBookPermission,
     PurchasingPermission,
-    MigrationPermission,
     SchedulingPermission,
     WorkerControlPermission,
     WorkerIdentityPermission,
@@ -144,6 +145,18 @@ ANALYTICS_DEFINITIONS = tuple(
         scope=PermissionScope.COMPANY,
     )
     for code in sorted(AnalyticsPermission.ALL)
+)
+
+LUMINARY_DEFINITIONS = tuple(
+    PermissionDefinition(
+        code=code,
+        name=code.replace("_", " ").title(),
+        resource="luminary",
+        action=code.removeprefix("COMPANY_LUMINARY_").lower(),
+        scope=PermissionScope.COMPANY,
+        reserved=True,
+    )
+    for code in sorted(LuminaryPermission.ALL)
 )
 
 BEACON_DEFINITIONS = tuple(
@@ -419,6 +432,7 @@ permission_catalog = PermissionCatalog(
     + LAUNCH_PLATFORM_DEFINITIONS
     + CUSTOMER_DEFINITIONS
     + ANALYTICS_DEFINITIONS
+    + LUMINARY_DEFINITIONS
     + BEACON_DEFINITIONS
     + TIMEKEEPING_DEFINITIONS
     + PAYROLL_DEFINITIONS

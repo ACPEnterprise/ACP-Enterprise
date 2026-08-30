@@ -43,7 +43,14 @@ DOMAIN_KEYWORDS = {
     "beacon": ("beacon", "signal"),
     "migration": ("migration", "cutover"),
     "payroll": ("payroll", "pay statement", "pay statement", "remittance"),
-    "luminary": ("luminary", "finding"),
+    "luminary": (
+        "luminary",
+        "finding",
+        "briefing",
+        "how are we doing",
+        "what changed",
+        "why did",
+    ),
 }
 
 ENTERPRISE_SUMMARY_PHRASES = (
@@ -56,6 +63,7 @@ ENTERPRISE_SUMMARY_PHRASES = (
 )
 
 ROUTES = {
+    "luminary": "/luminary",
     "customers": "/customers",
     "jobs": "/jobs",
     "scheduling": "/scheduling",
@@ -88,7 +96,9 @@ class LiaService:
                 conversation_id=conversation_id,
                 classification=TruthClassification.UNAUTHORIZED,
                 answer="I can’t provide protected credentials, private instructions, or information outside your authorized scope.",
-                limitations=("The request crossed ACP’s protected-information boundary.",),
+                limitations=(
+                    "The request crossed ACP’s protected-information boundary.",
+                ),
             )
         if matches_any(question, FABRICATION_PATTERNS):
             return self._response(
@@ -114,15 +124,6 @@ class LiaService:
         requested_domains = self._classify_domains(question, request)
         allowed = permitted_domain_names(context)
         selected = requested_domains & allowed if requested_domains else allowed
-        if "luminary" in requested_domains:
-            return self._response(
-                context=context,
-                request_id=request_id,
-                conversation_id=conversation_id,
-                classification=TruthClassification.EXTERNAL_GATE,
-                answer="No authoritative Luminary finding adapter is available yet. I won’t invent a higher-order finding.",
-                limitations=("LUMINARY_ADAPTER_NOT_AVAILABLE",),
-            )
         if requested_domains and not selected:
             return self._response(
                 context=context,
@@ -145,19 +146,27 @@ class LiaService:
                 conversation_id=conversation_id,
                 classification=TruthClassification.UNAVAILABLE,
                 answer="No authorized authoritative evidence is available for this question.",
-                limitations=("AI_PROVIDER_NOT_CONFIGURED", "No eligible source adapter returned evidence."),
+                limitations=(
+                    "AI_PROVIDER_NOT_CONFIGURED",
+                    "No eligible source adapter returned evidence.",
+                ),
             )
 
         lines = [f"{item.label}: {item.count} ({item.state})." for item in evidence]
         answer = "Here is the current authorized ACP evidence: " + " ".join(lines)
-        if any(word in question.casefold() for word in ("why", "profit", "margin", "economics")):
+        if any(
+            word in question.casefold()
+            for word in ("why", "profit", "margin", "economics")
+        ):
             answer += " A causal explanation requires an admitted Business Economics result; these operational counts alone do not establish cause or profitability."
         limitations = (
             "This deterministic response summarizes current ACP records; no external AI provider was invoked.",
             "Counts are not a substitute for domain approval, settlement, posting, or payroll authority.",
         )
         navigation = tuple(
-            NavigationSuggestion(label=f"Open {item.label}", internal_path=ROUTES[item.domain])
+            NavigationSuggestion(
+                label=f"Open {item.label}", internal_path=ROUTES[item.domain]
+            )
             for item in evidence
             if item.domain in ROUTES
         )
@@ -210,7 +219,9 @@ class LiaService:
         proposals=(),
     ) -> LiaResponse:
         canonical = [item.evidence_digest for item in evidence]
-        digest = hashlib.sha256(json.dumps(canonical, sort_keys=True).encode()).hexdigest()
+        digest = hashlib.sha256(
+            json.dumps(canonical, sort_keys=True).encode()
+        ).hexdigest()
         response = LiaResponse(
             request_id=request_id,
             conversation_id=conversation_id,
@@ -220,7 +231,9 @@ class LiaService:
             limitations=limitations,
             navigation=navigation,
             proposals=proposals,
-            completeness="COMPLETE_FOR_AUTHORIZED_ADAPTERS" if evidence else "NO_EVIDENCE_USED",
+            completeness="COMPLETE_FOR_AUTHORIZED_ADAPTERS"
+            if evidence
+            else "NO_EVIDENCE_USED",
             freshness="CURRENT_QUERY" if evidence else "NOT_APPLICABLE",
             provider="deterministic-acp",
             provider_version="v1",

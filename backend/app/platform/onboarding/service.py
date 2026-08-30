@@ -207,6 +207,10 @@ class IdentityOnboardingService:
         now = datetime.now(timezone.utc)
         try:
             async with session.begin():
+                company_lock = int.from_bytes(
+                    context.company.id.bytes[:8], "big", signed=True
+                )
+                await session.execute(select(func.pg_advisory_xact_lock(company_lock)))
                 existing = await session.scalar(
                     select(IdentityOnboardingRequest)
                     .where(
@@ -235,10 +239,6 @@ class IdentityOnboardingService:
                     raise OnboardingConflictError(
                         "Active Company Branch was not found."
                     )
-                company_lock = int.from_bytes(
-                    context.company.id.bytes[:8], "big", signed=True
-                )
-                await session.execute(select(func.pg_advisory_xact_lock(company_lock)))
                 policy = await session.scalar(
                     select(EmployeeNumberPolicy)
                     .where(EmployeeNumberPolicy.company_id == context.company.id)

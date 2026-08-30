@@ -46,6 +46,7 @@ from app.inventory.router import router as inventory_router
 from app.invoicing.router import router as invoicing_router
 from app.jobs.router import router as jobs_router
 from app.lia.router import router as lia_router
+from app.luminary.router import router as luminary_router
 from app.operational_migration.product_router import router as migration_product_router
 from app.operations.router import router as operations_router
 from app.payments.router import router as payments_router
@@ -161,6 +162,7 @@ app.include_router(accounting_router)
 app.include_router(financial_reporting_router)
 app.include_router(beacon_router)
 app.include_router(business_economics_router)
+app.include_router(luminary_router)
 app.include_router(customers_router)
 app.include_router(location_identity_router)
 app.include_router(auth_router)
