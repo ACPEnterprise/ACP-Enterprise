@@ -1,0 +1,31 @@
+{
+  "schema_version": "1.0",
+  "qualification_id": "LAPTOP1A.BEACON.OPERATIONAL.INTELLIGENCE.PORTFOLIO.1",
+  "state": "QUALIFIED_INTEGRATION_READY_WITH_EXPLICIT_GATES",
+  "starting_authority_sha": "5fbfda1640646f519517970aa64433990059b5ed",
+  "reconciled_authority_sha": "be7f6796c1ca74a6252f2aa5658ee70f1806f079",
+  "security_hardening_sha": "b597768",
+  "operator_intelligence_sha": "d8241f9",
+  "intelligence_contract": "BEACON.INTELLIGENCE.v1",
+  "qualified_evidence": [
+    "fact projection is restricted to the principal's authorized or active Branch scope",
+    "authorization scope participates in condition and signal identity",
+    "unchanged admitted evidence produces a deterministic intelligence packet digest",
+    "packet action availability is derived from explicit Beacon permissions",
+    "source-domain navigation never grants source-domain mutation authority",
+    "Command Center exposes evidence completeness, freshness, reconciliation, limitations, and safe drillback",
+    "unknown Company escalation and priority values remain visibly unconfigured",
+    "acknowledgement, ownership, snooze, prioritization, and escalation do not alter source truth",
+    "no autonomous action, notification send, provider call, Preview deployment, or Production operation occurred"
+  ],
+  "explicit_gates": {
+    "operator_resolution": "OWNER_POLICY_REQUIRED_SOURCE_ATTESTATION_CONTRACT",
+    "historical_reporting": "DURABLE_SIGNAL_INSTANCE_AUTHORITY_REQUIRED",
+    "financial_signals_007b": "BLOCKED_FINANCE_POLICY",
+    "external_signals_007c": "BLOCKED_SOURCE_ACCEPTANCE",
+    "economics_composition": "BLOCKED_ACCEPTED_ECONOMICS_FINDING_CONTRACT",
+    "notification_delivery": "BLOCKED_ACCEPTED_ROUTING_AND_CONTENT_POLICY",
+    "preview_acceptance": "SEPARATELY_GATED"
+  },
+  "qualification_fingerprint": "ec34329f71b200ca6443b13ba89db635576898623b002386f6afa101c531dda5"
+}
