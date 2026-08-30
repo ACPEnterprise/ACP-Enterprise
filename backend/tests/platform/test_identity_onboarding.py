@@ -10,7 +10,8 @@ from uuid import UUID, uuid4
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import select
+from sqlalchemy import select, text, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.core.config import Settings, settings
@@ -485,6 +486,65 @@ async def test_initiate_rejects_valid_but_unauthorized_company_branch(
                 IdentityOnboardingRequest.request_key == request_key,
             )
         ) is None
+
+
+@pytest.mark.asyncio
+async def test_database_rejects_cross_company_onboarding_branch(
+    onboarding_db: tuple[
+        async_sessionmaker[AsyncSession], Context, IdentityOnboardingService
+    ],
+) -> None:
+    factory, context, service = onboarding_db
+    async with factory() as session:
+        record = await service.initiate(
+            session,
+            context=context,
+            command=command(
+                context,
+                request_key=f"constraint-{uuid4()}",
+                email=f"constraint-{uuid4()}@example.test",
+            ),
+        )
+        other_company = Company(
+            id=uuid4(),
+            name=f"Other {uuid4()}",
+            code=f"O{uuid4().hex[:8].upper()}",
+            status="active",
+            timezone="America/New_York",
+        )
+        other_branch = Branch(
+            id=uuid4(),
+            company_id=other_company.id,
+            name="Other",
+            code="OTHER",
+            status="active",
+            timezone="America/New_York",
+            is_primary=True,
+        )
+        session.add_all([other_company, other_branch])
+        await session.commit()
+        with pytest.raises(IntegrityError):
+            async with session.begin():
+                await session.execute(
+                    update(IdentityOnboardingRequest)
+                    .where(IdentityOnboardingRequest.id == record.id)
+                    .values(branch_id=other_branch.id)
+                )
+        constraint_names = set(
+            (
+                await session.scalars(
+                    text(
+                        "SELECT conname FROM pg_constraint "
+                        "WHERE conrelid = "
+                        "'identity_onboarding_requests'::regclass"
+                    )
+                )
+            ).all()
+        )
+        assert {
+            "fk_identity_onboarding_request_company_branch",
+            "fk_identity_onboarding_request_company_employee",
+        } <= constraint_names
 
 
 @pytest.mark.asyncio

@@ -65,6 +65,18 @@ class IdentityOnboardingRequest(Base):
             ["memberships.company_id", "memberships.id"],
             ondelete="RESTRICT",
         ),
+        ForeignKeyConstraint(
+            ["company_id", "branch_id"],
+            ["branches.company_id", "branches.id"],
+            name="fk_identity_onboarding_request_company_branch",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "employee_id"],
+            ["employees.company_id", "employees.id"],
+            name="fk_identity_onboarding_request_company_employee",
+            ondelete="RESTRICT",
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(
@@ -77,12 +89,10 @@ class IdentityOnboardingRequest(Base):
     )
     branch_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
-        ForeignKey("branches.id", ondelete="RESTRICT"),
         nullable=False,
     )
     employee_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
-        ForeignKey("employees.id", ondelete="RESTRICT"),
         nullable=False,
     )
     user_id: Mapped[UUID] = mapped_column(
