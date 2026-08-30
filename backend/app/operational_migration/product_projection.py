@@ -34,7 +34,7 @@ class DomainCount:
 
 
 def build_migration_product_projection(
-    *, company_id: str, branch_id: str, qbo_sandbox_connected: bool
+    *, company_id: str, branch_id: str | None, qbo_sandbox_connected: bool
 ) -> dict[str, object]:
     counts = (
         DomainCount("Customers", 5296, 5296),
@@ -92,6 +92,7 @@ def build_migration_product_projection(
     return {
         "company_id": company_id,
         "branch_id": branch_id,
+        "scope": "branch" if branch_id is not None else "company",
         "overall_status": "external_owner_gate",
         "current_phase": "owner_ready",
         "authority_digest": HCP_DIGEST,
