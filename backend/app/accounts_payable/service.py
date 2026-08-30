@@ -161,6 +161,7 @@ class AccountsPayableService:
 
     async def approve_bill(self, session: AsyncSession, company_id: UUID, bill_id: UUID, actor_id: UUID, expected_version: int, authorized_branch_ids: frozenset[UUID]) -> VendorBill:
         async with session.begin():
+            await self._lock_identities(session, f"procurement-match:{company_id}:{bill_id}")
             bill = await self._bill(session, company_id, bill_id, lock=True, branch_ids=authorized_branch_ids)
             if bill.status != "submitted" or bill.version != expected_version:
                 raise APConflict("Bill state or version changed.")
@@ -169,8 +170,8 @@ class AccountsPayableService:
             revision_for_match = await session.scalar(select(BillRevision).where(BillRevision.company_id == company_id, BillRevision.bill_id == bill.id, BillRevision.revision == bill.current_revision))
             has_purchasing_reference = await session.scalar(select(BillLine.id).where(BillLine.company_id == company_id, BillLine.revision_id == revision_for_match.id, BillLine.purchasing_reference.is_not(None))) if revision_for_match else None
             if has_purchasing_reference is not None:
-                procurement_match = await session.scalar(select(ProcurementMatch).where(ProcurementMatch.company_id == company_id, ProcurementMatch.vendor_bill_id == bill.id).with_for_update())
-                if procurement_match is None or not await is_current_eligible_match(session, procurement_match, bill):
+                procurement_match = await session.scalar(select(ProcurementMatch).where(ProcurementMatch.company_id == company_id, ProcurementMatch.vendor_bill_id == bill.id, ProcurementMatch.superseded_at.is_(None)).with_for_update())
+                if procurement_match is None or not await is_current_eligible_match(session, procurement_match, bill, lock_order=True):
                     raise APConflict("PO-backed Vendor Bill requires current eligible three-way match evidence.")
             await self._validate_core(session, company_id, bill.currency, bill.bill_date)
             possible = await session.scalar(select(VendorBill).where(VendorBill.company_id == company_id, VendorBill.vendor_id == bill.vendor_id, VendorBill.id != bill.id, VendorBill.bill_date == bill.bill_date, VendorBill.currency == bill.currency, VendorBill.total_amount == bill.total_amount))
