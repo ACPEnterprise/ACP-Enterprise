@@ -35,6 +35,7 @@ import {
   serviceAgreementsHandle,
   technicianHandle,
   workdayHandle,
+  workforceHandle,
 } from "./routeMetadata";
 import { RouteErrorBoundary } from "./RouteErrorBoundary";
 
@@ -116,6 +117,11 @@ export const appRoutes: RouteObject[] = [
             lazy: async () => ({
               Component: (await import("../routes/WorkdayRoute")).WorkdayRoute,
             }),
+          },
+          {
+            path: "employees",
+            handle: workforceHandle,
+            lazy: async () => ({ Component: (await import("../routes/WorkforceRoute")).WorkforceRoute }),
           },
           {
             path: "dispatch",
