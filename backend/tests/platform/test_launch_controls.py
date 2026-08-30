@@ -4,14 +4,14 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from app.core.config import settings
+from app.payroll.permissions import PayrollPermission
 from app.platform.audit.access_service import AuditAccessService
 from app.platform.audit.models import AuditRecord
 from app.platform.audit.repository import AuditReadRepository
 from app.platform.audit.service import AuditEntry, AuditService
 from app.platform.launch_controls import (
+    COMPANY_ADMINISTRATOR_OWNER_READ_PERMISSIONS,
     LAUNCH_ROLE_MATRIX,
     LaunchRoleCode,
     validate_launch_role_matrix,
@@ -23,6 +23,7 @@ from app.platform.permissions.authorization import (
 )
 from app.platform.permissions.catalog import permission_catalog
 from app.platform.permissions.codes import LaunchPlatformPermission
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 
 @pytest_asyncio.fixture
@@ -70,6 +71,10 @@ def test_launch_role_matrix_uses_only_canonical_least_privilege_permissions() ->
     )
     assert roles[LaunchRoleCode.SUPPORT].permission_codes == frozenset()
     assert all(not role.tenant_impersonation_allowed for role in roles.values())
+    administrator = roles[LaunchRoleCode.COMPANY_ADMINISTRATOR].permission_codes
+    assert administrator == COMPANY_ADMINISTRATOR_OWNER_READ_PERMISSIONS
+    assert PayrollPermission.REPORTING_READ in administrator
+    assert PayrollPermission.REPORTING_MANAGE not in administrator
 
 
 def test_audit_permission_fails_closed_without_explicit_grant() -> None:

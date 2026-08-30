@@ -261,6 +261,21 @@ class ProfitabilityComputationService:
             if prior is not None and prior != item:
                 raise ProfitabilityComputationError("contradictory fact versions")
             identities[identity] = item
+        source_lineages: dict[
+            tuple[EconomicCategory, tuple[tuple[str, ...], ...]],
+            ProfitabilityFactInput,
+        ] = {}
+        for item in identities.values():
+            lineage = (
+                item.category,
+                tuple(sorted(self._evidence_key(value) for value in item.evidence)),
+            )
+            prior = source_lineages.get(lineage)
+            if prior is not None:
+                raise ProfitabilityComputationError(
+                    "duplicate or contradictory source lineage"
+                )
+            source_lineages[lineage] = item
         return tuple(sorted(identities.values(), key=self._fact_key))
 
     def _allocations(
