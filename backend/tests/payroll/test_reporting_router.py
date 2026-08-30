@@ -1,6 +1,7 @@
-from fastapi import FastAPI
+import pytest
+from fastapi import FastAPI, HTTPException
 
-from app.payroll.router import router
+from app.payroll.router import _compliance, _experience, _not_found, router
 
 app = FastAPI()
 app.include_router(router)
@@ -30,3 +31,25 @@ def test_reporting_lists_publish_bounded_pagination_contract() -> None:
         assert parameters["limit"]["schema"]["maximum"] == 200
         assert parameters["offset"]["schema"]["default"] == 0
         assert parameters["offset"]["schema"]["minimum"] == 0
+
+
+def test_protected_storage_and_report_absence_use_safe_recovery_contracts(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        "app.payroll.router.settings.payroll_paystatement_artifact_root", None
+    )
+    for factory in (_experience, _compliance):
+        with pytest.raises(HTTPException) as captured:
+            factory()
+        assert captured.value.status_code == 503
+        assert captured.value.detail["code"] == "dependency_unavailable"
+        assert (
+            captured.value.detail["recovery"] == "OWNER_ADMIN_ACTION_REQUIRED"
+        )
+        assert "configured" not in captured.value.detail["message"].lower()
+
+    missing = _not_found()
+    assert missing.status_code == 404
+    assert missing.detail["code"] == "not_found"
+    assert missing.detail["recovery"] == "TERMINAL_FAILURE"

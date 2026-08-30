@@ -144,17 +144,14 @@ def _metadata(value: PayStatementView) -> StatementMetadata:
 def _experience() -> PayrollPayStatementExperienceService:
     root = settings.payroll_paystatement_artifact_root
     if not root:
-        raise HTTPException(
-            status.HTTP_503_SERVICE_UNAVAILABLE,
-            "Protected pay-statement storage is not configured.",
-        )
+        raise _storage_unavailable()
     return PayrollPayStatementExperienceService(ProtectedStatementStorage(Path(root)))
 
 
 def _compliance() -> PayrollComplianceService:
     root = settings.payroll_paystatement_artifact_root
     if not root:
-        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Protected Payroll report storage is not configured.")
+        raise _storage_unavailable()
     return PayrollComplianceService(ProtectedPayrollReportStorage(Path(root)))
 
 
@@ -210,6 +207,26 @@ def _error(error: Exception) -> HTTPException:
         current_correlation_id(),
     )
     return HTTPException(status.HTTP_400_BAD_REQUEST, failure.detail())
+
+
+def _storage_unavailable() -> HTTPException:
+    failure = SafeFailure(
+        FailureCode.DEPENDENCY_UNAVAILABLE,
+        "Protected Payroll storage is unavailable.",
+        ClientRecovery.OWNER_ADMIN_ACTION_REQUIRED,
+        current_correlation_id(),
+    )
+    return HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, failure.detail())
+
+
+def _not_found() -> HTTPException:
+    failure = SafeFailure(
+        FailureCode.NOT_FOUND,
+        "Payroll report was not found.",
+        ClientRecovery.TERMINAL_FAILURE,
+        current_correlation_id(),
+    )
+    return HTTPException(status.HTTP_404_NOT_FOUND, failure.detail())
 
 
 @router.get("/reporting", response_model=list[PayrollReportingMetadata])
@@ -330,7 +347,7 @@ async def payroll_reporting_detail(
         )
     )
     if value is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Payroll report not found.")
+        raise _not_found()
     return _report_metadata(value)
 
 
@@ -352,7 +369,7 @@ async def payroll_filing_packages(
         )
     )
     if report is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Payroll report not found.")
+        raise _not_found()
     values = (
         await session.scalars(
             select(PayrollFilingPackageRecord)
