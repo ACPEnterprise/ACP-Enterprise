@@ -6,7 +6,6 @@ from uuid import UUID
 
 from app.scheduling.types import AppointmentStatus
 
-
 MAX_CALENDAR_RANGE = timedelta(days=93)
 
 

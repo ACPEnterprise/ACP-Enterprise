@@ -1,7 +1,6 @@
 import re
 import unicodedata
 
-
 EMAIL_PATTERN = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 POSTAL_CODE_PATTERN = re.compile(r"^\d{5}(?:-\d{4})?$")
 
