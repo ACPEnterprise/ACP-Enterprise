@@ -90,6 +90,7 @@ class BusinessEventService:
             .order_by(
                 BusinessEvent.occurred_at.desc(),
                 BusinessEvent.created_at.desc(),
+                BusinessEvent.id.desc(),
             )
             .limit(limit)
             .offset(offset)
