@@ -41,6 +41,7 @@ export type NavigationItemId =
   | "audit"
   | "reports"
   | "operator-guide"
+  | "owner-operations"
   | "employees"
   | "settings"
   | "dispatch-ai"

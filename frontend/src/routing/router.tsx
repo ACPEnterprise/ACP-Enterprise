@@ -11,6 +11,7 @@ import {
   auditHandle,
   reportsHandle,
   operatorGuideHandle,
+  ownerOperationsHandle,
   appointmentsHandle,
   commandCenterHandle,
   customerDetailHandle,
@@ -241,6 +242,11 @@ export const appRoutes: RouteObject[] = [
                 await import("../features/engineering-mobile/MobileEngineeringDetailPage")
               ).MobileEngineeringDetailPage,
             }),
+          },
+          {
+            path: "owner-operations",
+            handle: ownerOperationsHandle,
+            lazy: async () => ({ Component: (await import("../routes/OwnerOperationsRoute")).OwnerOperationsRoute }),
           },
           {
             path: "audit",

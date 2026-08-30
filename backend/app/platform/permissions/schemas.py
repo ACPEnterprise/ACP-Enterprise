@@ -28,3 +28,17 @@ class EffectiveAuthorizationResponse(StrictSchema):
     company_id: UUID
     active_branch_id: UUID | None
     permission_codes: list[str]
+
+
+class LaunchRoleResponse(StrictSchema):
+    code: str
+    purpose: str
+    permission_codes: list[str]
+    branch_access_required: bool
+
+
+class PermissionExplanationResponse(StrictSchema):
+    permission_code: str
+    branch_id: UUID | None
+    decision: str
+    reasons: list[str]

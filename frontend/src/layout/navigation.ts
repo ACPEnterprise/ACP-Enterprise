@@ -192,6 +192,14 @@ export const navigationCatalog = [
     availability: "coming-soon",
   },
   {
+    id: "owner-operations",
+    label: "Owner Operations",
+    path: "/owner-operations",
+    icon: ShieldCheck,
+    availability: "available",
+    requiredPermission: "COMPANY_ADMINISTER",
+  },
+  {
     id: "audit",
     label: "Audit history",
     path: "/audit",
@@ -305,6 +313,7 @@ export const navigationGroups = [
     label: "Management",
     items: [
       item("mission-control"),
+      item("owner-operations"),
       item("employees"),
       item("reports"),
       item("audit"),

@@ -200,6 +200,10 @@ export const operatorGuideHandle = {
   workspace: { pageTitle: "Operator guide", breadcrumbs: [{ label: "Operator guide" }], helpTopic: "operator-guide" },
 } as const satisfies ShellRouteHandle;
 
+export const ownerOperationsHandle = {
+  workspace: { pageTitle: "Owner Operations", breadcrumbs: [{ label: "Owner Operations" }], helpTopic: "owner-operations" },
+} as const satisfies ShellRouteHandle;
+
 export const notFoundHandle = {
   workspace: {
     pageTitle: "Page not found",
