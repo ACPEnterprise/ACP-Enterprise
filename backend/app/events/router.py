@@ -1,15 +1,14 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_database_session
-from app.events.schemas import (
-    BusinessEventCreate,
-    BusinessEventResponse,
-)
+from app.events.schemas import BusinessEventResponse
 from app.events.service import BusinessEventService
-
+from app.platform.permissions.authorization import AuthorizationContext
+from app.platform.permissions.codes import LaunchPlatformPermission
+from app.platform.permissions.dependencies import require_permission
 
 router = APIRouter(
     prefix="/api/v1/events",
@@ -20,23 +19,10 @@ DatabaseSession = Annotated[
     AsyncSession,
     Depends(get_database_session),
 ]
-
-
-@router.post(
-    "",
-    response_model=BusinessEventResponse,
-    status_code=status.HTTP_201_CREATED,
-)
-async def publish_event(
-    event_data: BusinessEventCreate,
-    session: DatabaseSession,
-) -> BusinessEventResponse:
-    event = await BusinessEventService.publish(
-        session=session,
-        event_data=event_data,
-    )
-
-    return BusinessEventResponse.model_validate(event)
+EventReader = Annotated[
+    AuthorizationContext,
+    Depends(require_permission(LaunchPlatformPermission.AUDIT_READ)),
+]
 
 
 @router.get(
@@ -44,12 +30,14 @@ async def publish_event(
     response_model=list[BusinessEventResponse],
 )
 async def list_events(
+    context: EventReader,
     session: DatabaseSession,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[BusinessEventResponse]:
     events = await BusinessEventService.list_events(
         session=session,
+        context=context,
         limit=limit,
         offset=offset,
     )
@@ -62,11 +50,13 @@ async def list_events(
     response_model=list[BusinessEventResponse],
 )
 async def latest_events(
+    context: EventReader,
     session: DatabaseSession,
     limit: Annotated[int, Query(ge=1, le=100)] = 10,
 ) -> list[BusinessEventResponse]:
     events = await BusinessEventService.latest_events(
         session=session,
+        context=context,
         limit=limit,
     )
 

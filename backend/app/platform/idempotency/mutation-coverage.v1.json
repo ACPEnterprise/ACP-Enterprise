@@ -1284,16 +1284,6 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     },
     {
-      "classification": "EXPLICIT_EXEMPTION",
-      "domain": "events",
-      "mechanism": "legacy compatibility boundary; no deterministic request identity or replay receipt",
-      "method": "POST",
-      "operation_id": "publish_event_api_v1_events_post",
-      "path": "/api/v1/events",
-      "reason": "Direct publication creates a fresh Business Event identity and cannot recover an earlier result after an uncertain network outcome.",
-      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
-    },
-    {
       "classification": "NON_MUTATING_READ_ONLY",
       "domain": "identity_admin",
       "mechanism": "query/qualification operation expressed as POST",
@@ -2516,6 +2506,6 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "5f3d02f6e865e665e15362c0f7dc3f209e4374c7c4ce73ea0e7c359935866b46",
+  "fingerprint": "4ad2caf90ec516abb38b5c58c1cf4bd2266f4d15c0551ce0a7e8e415735b967a",
   "schema_version": "1"
 }
