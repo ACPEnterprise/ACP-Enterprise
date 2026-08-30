@@ -697,8 +697,15 @@ async def test_vendor_identity_is_company_owned_idempotent_and_concurrent(
         contact_reference="contact-ref-1",
         idempotency_key="vendor-create-1",
     )
+    async def create():
+        async with factory() as session:
+            return await service.create_vendor(
+                session, context=preparer, payload=payload
+            )
+
+    first, concurrent_replay = await asyncio.gather(create(), create())
+    assert concurrent_replay.id == first.id
     async with factory() as session:
-        first = await service.create_vendor(session, context=preparer, payload=payload)
         replay = await service.create_vendor(session, context=preparer, payload=payload)
         first_id = first.id
         assert (

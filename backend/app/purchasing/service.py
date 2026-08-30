@@ -3151,6 +3151,15 @@ class PurchasingService:
                 context,
                 UUID(str(purchase_order_id)),
             )
+        if session.get_bind().dialect.name == "postgresql":
+            await session.execute(
+                text("SELECT pg_advisory_xact_lock(hashtextextended(:identity, 0))"),
+                {
+                    "identity": (
+                        f"purchasing-command:{context.company.id}:{key}"
+                    )
+                },
+            )
         receipt = await self.repository.receipt(session, context.company.id, key)
         if receipt is None:
             return None
