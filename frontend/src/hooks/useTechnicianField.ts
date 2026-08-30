@@ -5,11 +5,19 @@ import type { CustomerDisposition } from "../types/technicianField";
 
 const key = (jobId: string) => ["technician-field", jobId] as const;
 
+export function useFieldJobState(jobId: string, enabled = true) {
+  return useQuery({
+    queryKey: key(jobId),
+    queryFn: () => api.getFieldJob(jobId),
+    enabled: Boolean(jobId) && enabled,
+  });
+}
+
 export function useTechnicianField(jobId: string, jobVersion: number, assignmentVersion: number) {
   const client = useQueryClient();
   const update = (value: Awaited<ReturnType<typeof api.getFieldJob>>) => client.setQueryData(key(jobId), value);
   return {
-    state: useQuery({ queryKey: key(jobId), queryFn: () => api.getFieldJob(jobId), enabled: Boolean(jobId) }),
+    state: useFieldJobState(jobId),
     note: useMutation({ mutationFn: (content: string) => api.addWorkNote(jobId, content, jobVersion, assignmentVersion), onSuccess: update }),
     approval: useMutation({
       mutationFn: (input: { disposition: CustomerDisposition; customerName: string; reason: string }) =>

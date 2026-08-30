@@ -28,6 +28,7 @@ export interface AppointmentListParams {
   status?: readonly AppointmentStatus[];
   page?: number;
   pageSize?: number;
+  customerId?: string;
 }
 
 export interface CalendarQueryResult {
