@@ -237,14 +237,19 @@ async def list_beacon_signals(
         context=context,
         now=evaluated_at,
     )
+    workflows = await beacon_workflow_service.current_for_conditions(
+        session,
+        context=context,
+        condition_keys=tuple(
+            item.condition_key for item in (*queue.active, *queue.snoozed)
+        ),
+    )
 
     async def response(item) -> BeaconSignalResponse:
         base = BeaconSignalResponse.model_validate(item)
         if item.evidence_quality is None:
             return base
-        workflow = await beacon_workflow_service.current(
-            session, context=context, condition_key=item.condition_key
-        )
+        workflow = workflows.get(item.condition_key)
         escalation = escalation_service.project(
             item,
             company_id=context.company.id,
@@ -294,11 +299,14 @@ async def list_operational_workflow_signals(
     queue = await beacon_query_service.get_operational_attention_queue(
         session, context=context
     )
+    workflows = await beacon_workflow_service.current_for_conditions(
+        session,
+        context=context,
+        condition_keys=tuple(item.signal.condition_key for item in queue.items),
+    )
     items: list[OperationalWorkflowSignalResponse] = []
     for item in queue.items:
-        workflow = await beacon_workflow_service.current(
-            session, context=context, condition_key=item.signal.condition_key
-        )
+        workflow = workflows.get(item.signal.condition_key)
         if view == "unowned" and workflow and workflow.owner_user_id is not None:
             continue
         if view == "mine" and (

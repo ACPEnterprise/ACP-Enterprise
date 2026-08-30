@@ -5,14 +5,14 @@ from unittest.mock import AsyncMock, MagicMock
 from uuid import UUID, uuid4
 
 import pytest
+
 from app.beacon.contracts import BeaconWorkflowAction
 from app.beacon.errors import BeaconWorkflowConflictError
 from app.beacon.evaluation import SignalEvaluationService
 from app.beacon.records import BeaconWorkflowState
 from app.beacon.workflow import BeaconWorkflowCommand, BeaconWorkflowService
 from app.platform.permissions.authorization import PermissionDeniedError
-from app.platform.permissions.codes import BeaconPermission
-
+from app.platform.permissions.codes import AnalyticsPermission, BeaconPermission
 from tests.beacon.test_beacon import COMPANY_ID, snapshot
 
 NOW = datetime(2026, 7, 28, 16, 0, tzinfo=timezone.utc)
@@ -77,6 +77,45 @@ def command(action, *, owner=None, version=0):
         expected_version=version,
         owner_user_id=owner,
     )
+
+
+@pytest.mark.asyncio
+async def test_current_workflows_are_loaded_in_one_scoped_batch() -> None:
+    first_key, second_key = uuid4(), uuid4()
+
+    def row(condition_key):
+        return SimpleNamespace(
+            company_id=COMPANY_ID,
+            branch_id=BRANCH_ID,
+            condition_key=condition_key,
+            signal_id=uuid4(),
+            definition_id="qualification",
+            definition_version="v1",
+            evidence_digest="a" * 64,
+            workflow_version=2,
+            acknowledged_at=None,
+            acknowledged_by_user_id=None,
+            owner_user_id=USER_A,
+            owned_since=NOW,
+            action=BeaconWorkflowAction.CLAIM.value,
+            actor_user_id=USER_A,
+            action_at=NOW,
+        )
+
+    result = MagicMock()
+    result.all.return_value = [row(first_key), row(second_key)]
+    session = SimpleNamespace(scalars=AsyncMock(return_value=result))
+    context = Context(permissions=(AnalyticsPermission.READ,))
+
+    workflows = await BeaconWorkflowService().current_for_conditions(
+        session,  # type: ignore[arg-type]
+        context=context,  # type: ignore[arg-type]
+        condition_keys=(first_key, second_key),
+    )
+
+    session.scalars.assert_awaited_once()
+    assert set(workflows) == {first_key, second_key}
+    assert all(value.owner_user_id == USER_A for value in workflows.values())
 
 
 @pytest.mark.asyncio

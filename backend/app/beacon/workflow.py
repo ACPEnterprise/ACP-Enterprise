@@ -157,6 +157,37 @@ class BeaconWorkflowService:
         self._assert_branch(context, row.branch_id)
         return _state_from_row(row)
 
+    async def current_for_conditions(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        condition_keys: tuple[UUID, ...],
+    ) -> dict[UUID, BeaconWorkflowState]:
+        authorization_service.require_permission(context, AnalyticsPermission.READ)
+        if not condition_keys:
+            return {}
+        rows = tuple(
+            (
+                await session.scalars(
+                    select(BeaconSignalReviewEventModel)
+                    .where(
+                        BeaconSignalReviewEventModel.company_id == context.company.id,
+                        BeaconSignalReviewEventModel.condition_key.in_(condition_keys),
+                        BeaconSignalReviewEventModel.workflow_version.is_not(None),
+                    )
+                    .distinct(BeaconSignalReviewEventModel.condition_key)
+                    .order_by(
+                        BeaconSignalReviewEventModel.condition_key,
+                        BeaconSignalReviewEventModel.workflow_version.desc(),
+                    )
+                )
+            ).all()
+        )
+        for row in rows:
+            self._assert_branch(context, row.branch_id)
+        return {row.condition_key: _state_from_row(row) for row in rows}
+
     async def history(
         self,
         session: AsyncSession,

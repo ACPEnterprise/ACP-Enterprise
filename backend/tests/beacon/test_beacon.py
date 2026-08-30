@@ -2,6 +2,7 @@ from dataclasses import FrozenInstanceError
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 from uuid import UUID, uuid4
 
 import httpx
@@ -308,10 +309,11 @@ async def test_beacon_http_api_returns_bounded_company_scoped_signals(
         lifecycle_repository,
     )
 
-    async def no_workflow(*_args, **_kwargs):
-        return None
+    batch_workflows = AsyncMock(return_value={})
 
-    monkeypatch.setattr(beacon_workflow_service, "current", no_workflow)
+    monkeypatch.setattr(
+        beacon_workflow_service, "current_for_conditions", batch_workflows
+    )
     app = FastAPI()
     app.include_router(router)
 
@@ -330,6 +332,7 @@ async def test_beacon_http_api_returns_bounded_company_scoped_signals(
         operational_response = await client.get("/api/v1/beacon/operational-signals")
 
     assert response.status_code == 200
+    batch_workflows.assert_awaited_once()
     body = response.json()
     assert len(body["items"]) == 3
     assert body["items"][0]["supporting_facts"]
