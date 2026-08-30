@@ -18,6 +18,10 @@ from app.core.config import Settings, settings
 from app.core.database import Base
 from app.customers import models as customer_models  # noqa: F401
 from app.inventory import models as inventory_models  # noqa: F401
+from app.main import app as application  # noqa: F401
+from app.operational_migration import (
+    models as operational_migration_models,  # noqa: F401
+)
 from app.platform.audit import models as audit_models  # noqa: F401
 from app.platform.auth import models as auth_models
 from app.platform.auth.access_tokens import AccessTokenService
@@ -33,6 +37,7 @@ from app.platform.bootstrap.service import BootstrapResult, BootstrapService
 from app.platform.branch.models import Branch
 from app.platform.company.membership_models import Membership
 from app.platform.company.models import Company
+from app.platform.employees import models as employee_models  # noqa: F401
 from app.platform.launch_controls import COMPANY_ADMINISTRATOR_OWNER_READ_PERMISSIONS
 from app.platform.permissions.authorization import AuthorizationService
 from app.platform.permissions.catalog import permission_catalog
