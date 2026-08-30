@@ -9,6 +9,15 @@ export const commandCenterHandle = {
   },
 } as const satisfies ShellRouteHandle;
 
+export const liaHandle = {
+  workspace: {
+    pageTitle: "LIA",
+    breadcrumbs: [{ label: "LIA" }],
+    helpTopic: "lia",
+    aiContext: "lia",
+  },
+} as const satisfies ShellRouteHandle;
+
 export const missionControlHandle = {
   workspace: {
     pageTitle: "Mission Control",
