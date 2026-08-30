@@ -34,9 +34,9 @@
 
 - Frontend after latest authority reconciliation and authorization repairs: 95 test files / 304 tests passed; repository-wide ESLint passed; TypeScript and production Vite build passed.
 - Backend focused security tranche: isolation, authorization composition, idempotency, provider uncertainty and safe-output tests passed after repairing a stale catalog fingerprint.
-- Backend broad run: 2,109 passed, 7 skipped, 12 failed. Classification: 10 `TEST_ISOLATION` failures caused by reusing a database containing focused-test fixtures (all 10 passed on a fresh schema); 1 `ENVIRONMENT` Redis test (failed closed because `redis` hostname/runtime was unavailable); 1 `STALE_FIXTURE` external-adoption test repaired and requalified.
+- Backend latest broad run on a fresh isolated r15 schema: 2,195 passed, 7 skipped, 1 failed. The sole failure is `ENVIRONMENT`: the configured Docker hostname `redis` has no local runtime and authentication rate limiting fails closed with `RateLimitUnavailableError`. No local Redis binary or running Docker engine is available, so this remains `PENDING_INTEGRATED_REDIS_QUALIFICATION`; no functional regression was observed.
 - Static: Python 3.12 compilation passed; MyPy passed across 621 source files. Repository-wide Ruff is not a clean gate at starting authority (246 findings, predominantly pre-existing import-order findings); no mass formatting was performed.
-- Database: PostgreSQL 16.15 fresh upgrade passed, followed by successful authority-advance upgrades; exactly one candidate Alembic head `f4d3b82a9e5c`; `current=head`; `alembic check` reports no drift. OM2-C migrations passed focused downgrade/re-upgrade qualification, and the Supply Chain/OM2-C merge passed a second entirely fresh database upgrade.
+- Database: PostgreSQL 16.15 fresh upgrade passed again on isolated database `acp_enterprise_om2c_quality_20260830_r15`; exactly one candidate Alembic head `f4d3b82a9e5c`; `current=head`; `alembic check` reports no drift. OM2-C migrations passed focused downgrade/re-upgrade qualification, and the Supply Chain/OM2-C merge has passed repeated entirely fresh database upgrades.
 - Secret scan: only intentional synthetic canary tests matched the high-confidence token/private-key patterns; no discovered secret value was emitted.
 
 ## Defects and repairs
