@@ -10,11 +10,11 @@ export function useInvoices(enabled = true) {
   return useQuery({ queryKey: invoiceKeys.all, queryFn: api.listInvoices, enabled });
 }
 
-export function useInvoice(id: string) {
+export function useInvoice(id: string, enabled = true) {
   return useQuery({
     queryKey: invoiceKeys.detail(id),
     queryFn: () => api.getInvoice(id),
-    enabled: Boolean(id),
+    enabled: enabled && Boolean(id),
   });
 }
 

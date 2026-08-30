@@ -29,7 +29,7 @@ export function EstimatesRoute() {
   const estimate = useEstimate(id, canRead && Boolean(id));
   const mutations = useEstimateMutations();
   const [statusFilter, setStatusFilter] = useState("");
-  const estimates = useEstimates(statusFilter || undefined);
+  const estimates = useEstimates(statusFilter || undefined, undefined, canRead);
   const [lookup, setLookup] = useState(id);
   const [form, setForm] = useState({ branch: "", customer: "", snapshot: "", title: "", discountType: "", discountValue: "" });
 

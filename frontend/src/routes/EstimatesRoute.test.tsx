@@ -27,10 +27,14 @@ describe("EstimatesRoute", () => {
   beforeEach(() => {
     permissions = new Set();
     vi.mocked(estimatesApi.createEstimate).mockReset();
+    vi.mocked(estimatesApi.listEstimates).mockClear();
+    vi.mocked(estimatesApi.getEstimate).mockClear();
   });
   it("fails closed without read permission", () => {
     renderRoute();
     expect(screen.getByText("You are not authorized to view Estimates.")).toBeVisible();
+    expect(estimatesApi.listEstimates).not.toHaveBeenCalled();
+    expect(estimatesApi.getEstimate).not.toHaveBeenCalled();
   });
   it("keeps management controls separate from read access", async () => {
     permissions = new Set(["COMPANY_ESTIMATE_READ"]);
