@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 import app.platform.permissions.models  # noqa: F401
 from app.core.config import settings
+from app.customers import models as customer_models  # noqa: F401
 from app.engineering_control.commands import (
     ApproveEngineeringCommand,
     CancelEngineeringCommand,
