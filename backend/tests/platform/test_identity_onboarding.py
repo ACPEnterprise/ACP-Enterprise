@@ -62,6 +62,9 @@ class Context:
     def has_permission(self, code: str) -> bool:
         return code in self.permission_codes
 
+    def can_access_branch(self, branch_id: UUID) -> bool:
+        return branch_id == self.active_branch.id
+
 
 @pytest_asyncio.fixture
 async def onboarding_db() -> AsyncIterator[
@@ -216,6 +219,97 @@ async def test_invitation_activation_is_single_use_and_secret_safe(
             time_input=None,
         )
         assert admission.state is PayrollAdmissionState.BLOCKED_POLICY
+
+
+@pytest.mark.asyncio
+async def test_owner_claim_reuses_protected_boundary_and_is_single_use(
+    onboarding_db: tuple[
+        async_sessionmaker[AsyncSession], Context, IdentityOnboardingService
+    ],
+) -> None:
+    factory, context, service = onboarding_db
+    async with factory() as session:
+        record = await service.initiate(
+            session,
+            context=context,
+            command=command(context, email=f"owner-claim-{uuid4()}@example.test"),
+        )
+        request_id = record.id
+        delivery = await service.claim_protected_delivery_for_owner(
+            session,
+            context=context,
+            request_id=request_id,
+        )
+        envelope = await session.scalar(
+            select(ProtectedInvitationDeliveryEnvelope)
+            .join(IdentityOnboardingInvitation)
+            .where(
+                IdentityOnboardingInvitation.onboarding_request_id == request_id
+            )
+        )
+        assert envelope is not None and envelope.status == "claimed"
+        await session.rollback()
+        with pytest.raises(OnboardingConflictError):
+            await service.claim_protected_delivery_for_owner(
+                session,
+                context=context,
+                request_id=request_id,
+            )
+        activated = await service.activate(
+            session,
+            token=delivery.secret,
+            password="A-secure-owner-claim-passphrase-42!",
+        )
+        assert activated.status == "activated"
+        await session.refresh(envelope)
+        assert envelope.status == "destroyed"
+        assert envelope.ciphertext == b""
+
+
+@pytest.mark.asyncio
+async def test_owner_claim_requires_permission_scope_and_non_production(
+    onboarding_db: tuple[
+        async_sessionmaker[AsyncSession], Context, IdentityOnboardingService
+    ],
+) -> None:
+    factory, context, service = onboarding_db
+    async with factory() as session:
+        record = await service.initiate(
+            session,
+            context=context,
+            command=command(context, email=f"owner-claim-guards-{uuid4()}@example.test"),
+        )
+        request_id = record.id
+        denied = Context(
+            context.company,
+            context.active_branch,
+            context.user,
+            context.membership,
+            False,
+        )
+        with pytest.raises(OnboardingAuthorizationError):
+            await service.claim_protected_delivery_for_owner(
+                session, context=denied, request_id=request_id
+            )
+
+        inaccessible = Context(
+            context.company,
+            Branch(id=uuid4(), company_id=context.company.id),
+            context.user,
+            context.membership,
+        )
+        with pytest.raises(OnboardingConflictError):
+            await service.claim_protected_delivery_for_owner(
+                session, context=inaccessible, request_id=request_id
+            )
+
+        production = IdentityOnboardingService(
+            service.configuration.model_copy(update={"environment": "production"})
+        )
+        with pytest.raises(OnboardingConflictError):
+            await production.claim_protected_delivery_for_owner(
+                session, context=context, request_id=request_id
+            )
 
 
 @pytest.mark.asyncio

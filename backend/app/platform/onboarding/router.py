@@ -1,7 +1,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_database_session
@@ -12,6 +12,7 @@ from app.platform.permissions.dependencies import require_permission
 from .schemas import (
     OnboardingActivateRequest,
     OnboardingInitiateRequest,
+    OnboardingOwnerClaimView,
     OnboardingView,
 )
 from .service import (
@@ -104,6 +105,32 @@ async def reissue(
     except (OnboardingAuthorizationError, OnboardingConflictError) as error:
         raise _safe_error(error) from error
     return OnboardingView.model_validate(record)
+
+
+@router.post(
+    "/{request_id}/owner-claim",
+    response_model=OnboardingOwnerClaimView,
+    response_model_exclude_none=True,
+)
+async def owner_claim(
+    request_id: UUID,
+    context: OnboardingAdmin,
+    session: Session,
+    response: Response,
+) -> OnboardingOwnerClaimView:
+    response.headers["Cache-Control"] = "no-store, private"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["Vary"] = "Authorization"
+    try:
+        delivery = await identity_onboarding_service.claim_protected_delivery_for_owner(
+            session,
+            context=context,
+            request_id=request_id,
+        )
+    except (OnboardingAuthorizationError, OnboardingConflictError) as error:
+        raise _safe_error(error) from error
+    return OnboardingOwnerClaimView(activation_token=delivery.secret)
 
 
 @router.get("/{request_id}", response_model=OnboardingView)
