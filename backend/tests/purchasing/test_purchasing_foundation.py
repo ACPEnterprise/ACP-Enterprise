@@ -155,6 +155,47 @@ async def test_purchasing_document_custody_is_scoped_append_only_and_idempotent(
                 ),
             )
 
+    concurrent = command.model_copy(
+        update={"content_digest": "b" * 64, "idempotency_key": "unused"}
+    )
+
+    async def register(key: str):
+        async with factory() as session:
+            return await service.register_document(
+                session,
+                context=preparer,
+                payload=concurrent.model_copy(update={"idempotency_key": key}),
+            )
+
+    first, second = await asyncio.gather(
+        register(f"document-{uuid4()}"), register(f"document-{uuid4()}")
+    )
+    assert first.id == second.id
+    async with factory() as session:
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(PurchasingDocumentEvidence)
+                .where(
+                    PurchasingDocumentEvidence.company_id == company.id,
+                    PurchasingDocumentEvidence.entity_id == requisition.id,
+                )
+            )
+            == 2
+        )
+        await session.rollback()
+        with pytest.raises(PurchasingConflict):
+            await service.register_document(
+                session,
+                context=preparer,
+                payload=concurrent.model_copy(
+                    update={
+                        "filename": "same-content-different-name.pdf",
+                        "idempotency_key": f"document-{uuid4()}",
+                    }
+                ),
+            )
+
 
 @pytest.mark.asyncio
 async def test_replenishment_workbench_is_deterministic_isolated_and_read_only(

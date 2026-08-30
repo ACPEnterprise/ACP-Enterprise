@@ -219,6 +219,59 @@ class PurchasingService:
                 raise PurchasingNotFound(
                     "Scoped Purchasing document entity was not found"
                 )
+            if session.get_bind().dialect.name == "postgresql":
+                await session.execute(
+                    text(
+                        "SELECT pg_advisory_xact_lock(hashtextextended(:identity, 0))"
+                    ),
+                    {
+                        "identity": (
+                            "purchasing-document-content:"
+                            f"{context.company.id}:{payload.entity_type}:"
+                            f"{payload.entity_id}:{payload.content_digest}"
+                        )
+                    },
+                )
+            existing_content = await session.scalar(
+                select(PurchasingDocumentEvidence).where(
+                    PurchasingDocumentEvidence.company_id == context.company.id,
+                    PurchasingDocumentEvidence.entity_type == payload.entity_type,
+                    PurchasingDocumentEvidence.entity_id == payload.entity_id,
+                    PurchasingDocumentEvidence.content_digest
+                    == payload.content_digest,
+                )
+            )
+            if existing_content is not None:
+                existing_metadata = (
+                    existing_content.branch_id,
+                    existing_content.document_type,
+                    existing_content.filename,
+                    existing_content.media_type,
+                    existing_content.storage_reference,
+                    existing_content.source_reference,
+                )
+                requested_metadata = (
+                    payload.branch_id,
+                    payload.document_type.strip(),
+                    payload.filename.strip(),
+                    payload.media_type.strip().lower(),
+                    payload.storage_reference.strip(),
+                    payload.source_reference.strip(),
+                )
+                if existing_metadata != requested_metadata:
+                    raise PurchasingConflict(
+                        "Document content identity conflicts with prior custody evidence"
+                    )
+                self._receipt(
+                    session,
+                    context,
+                    "purchasing.document.register",
+                    payload.idempotency_key,
+                    data,
+                    "purchasing_document",
+                    existing_content.id,
+                )
+                return PurchasingDocumentItem.model_validate(existing_content)
             evidence = {
                 "schema_version": 1,
                 "company_id": str(context.company.id),
