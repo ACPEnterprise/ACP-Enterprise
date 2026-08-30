@@ -179,7 +179,9 @@ async def test_http_semantics_distinguish_empty_forbidden_identity_and_bad_date(
         assert empty.json()["assignments"] == []
         assert invalid.status_code == 422
         assert not_ready.status_code == 422
-        assert "not ready" in not_ready.json()["detail"].lower()
+        detail = not_ready.json()["detail"]
+        assert detail["code"] == "resource_state_conflict"
+        assert detail["recovery"] == "OWNER_ADMIN_ACTION_REQUIRED"
 
         async def forbidden_context():
             return FakeContext(permitted=False)
