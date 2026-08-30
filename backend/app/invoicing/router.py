@@ -23,6 +23,8 @@ from app.invoicing.service import invoice_service
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import InvoicePermission
 from app.platform.permissions.dependencies import require_permission
+from app.platform.reliability.correlation import current_correlation_id
+from app.platform.reliability.failures import ClientRecovery, FailureCode, SafeFailure
 
 router = APIRouter(prefix="/api/v1/invoices", tags=["Invoices"])
 Session = Annotated[AsyncSession, Depends(get_database_session)]
@@ -45,10 +47,13 @@ Apply = Annotated[
 
 def _error(error: InvoiceError) -> HTTPException:
     if isinstance(error, InvoiceNotFound):
-        return HTTPException(status.HTTP_404_NOT_FOUND, str(error))
+        failure = SafeFailure(FailureCode.NOT_FOUND, "Invoice was not found.", ClientRecovery.TERMINAL_FAILURE, current_correlation_id())
+        return HTTPException(status.HTTP_404_NOT_FOUND, failure.detail())
     if isinstance(error, InvoiceConflict):
-        return HTTPException(status.HTTP_409_CONFLICT, str(error))
-    return HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(error))
+        failure = SafeFailure(FailureCode.RESOURCE_STATE_CONFLICT, "Invoice operation conflicts with current authority.", ClientRecovery.RETRY_AFTER_REFRESH, current_correlation_id())
+        return HTTPException(status.HTTP_409_CONFLICT, failure.detail())
+    failure = SafeFailure(FailureCode.VALIDATION, "Invoice request requires correction.", ClientRecovery.USER_CORRECTION_REQUIRED, current_correlation_id())
+    return HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, failure.detail())
 
 
 def _branch(context: AuthorizationContext, branch_id: UUID) -> None:

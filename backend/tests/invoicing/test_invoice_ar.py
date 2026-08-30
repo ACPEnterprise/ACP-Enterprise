@@ -1,3 +1,4 @@
+import asyncio
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
@@ -6,7 +7,10 @@ from uuid import uuid4
 import pytest
 import pytest_asyncio
 from sqlalchemy import func, select, update
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from app.core.config import settings
+from app.customers.models import Customer
 from app.estimates.service import EstimateService
 from app.events.models import BusinessEvent
 from app.invoicing.contracts import (
@@ -18,9 +22,18 @@ from app.invoicing.contracts import (
     PostingReceiptFact,
 )
 from app.invoicing.errors import InvoiceConflict, InvoiceNotFound
-from app.invoicing.models import AccountingPostingReceipt, ARLedgerEntry, InvoiceLine
+from app.invoicing.models import (
+    AccountingPostingReceipt,
+    ARLedgerEntry,
+    Invoice,
+    InvoiceIdempotency,
+    InvoiceLine,
+    PaymentReceiptEvidence,
+)
 from app.invoicing.service import InvoiceService
 from app.jobs.models import Job
+from app.platform.branch.models import Branch
+from app.platform.company.models import Company
 from tests.estimates.test_estimate_conversion import (
     approved_estimate,
     conversion_spec,
@@ -101,6 +114,13 @@ async def test_accepted_work_creates_and_issues_one_exact_receivable(invoice_fix
     async with factory() as session:
         replay = await service.create_from_estimate(session, spec)
     assert replay.id == invoice.id
+    async with factory() as session:
+        alternate_key = await service.create_from_estimate(
+            session, replace(spec, idempotency_key="invoice-create-alternate")
+        )
+        assert alternate_key.id == invoice.id
+        assert await session.scalar(select(func.count(Invoice.id)).where(Invoice.estimate_revision_id == invoice.estimate_revision_id)) == 1
+        assert await session.scalar(select(func.count(InvoiceIdempotency.id)).where(InvoiceIdempotency.invoice_id == invoice.id, InvoiceIdempotency.operation == "create")) == 2
     issued = await issue(factory, actor, invoice)
     assert issued.open_amount == issued.total_amount
     async with factory() as session:
@@ -251,9 +271,17 @@ async def test_verified_receipt_application_and_accounting_receipt_seams(
         posted = await service.record_posting_receipt(session, posting)
     assert posted.accounting_status == "posted"
     async with factory() as session:
+        replay = await service.record_posting_receipt(session, posting)
+        assert replay.id == posted.id
+    async with factory() as session:
         assert (
             await session.scalar(select(func.count(AccountingPostingReceipt.id))) == 1
         )
+    async with factory() as session:
+        with pytest.raises(InvoiceConflict):
+            await service.record_posting_receipt(
+                session, replace(posting, policy_version="contradictory-policy")
+            )
 
 
 @pytest.mark.asyncio
@@ -272,3 +300,73 @@ async def test_company_branch_and_source_linkage_are_closed(invoice_fixture):
                 session,
                 replace(spec, branch_id=uuid4(), idempotency_key="wrong-branch"),
             )
+
+
+@pytest_asyncio.fixture
+async def receipt_concurrency_fixture():
+    engine = create_async_engine(settings.database_url)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with factory() as session, session.begin():
+        company = Company(
+            name="Invoice receipt concurrency",
+            code=f"IRC{uuid4().hex[:7].upper()}",
+            status="active",
+            timezone="America/New_York",
+        )
+        branch = Branch(
+            company=company,
+            name="Main",
+            code=f"I{uuid4().hex[:7].upper()}",
+            status="active",
+            timezone="America/New_York",
+            is_primary=True,
+        )
+        session.add_all([company, branch])
+        await session.flush()
+        customer = Customer(
+            company_id=company.id,
+            customer_number=f"CUS-{uuid4().int % 1000000:06d}",
+            status="active",
+            customer_type="residential",
+            display_name="Receipt Customer",
+            preferred_contact_method="email",
+            normalized_name="receipt customer",
+        )
+        session.add(customer)
+        await session.flush()
+        ids = company.id, branch.id, customer.id
+    try:
+        yield factory, ids
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_concurrent_payment_receipt_registration_has_one_authority(
+    receipt_concurrency_fixture,
+) -> None:
+    factory, (company_id, branch_id, customer_id) = receipt_concurrency_fixture
+    service = InvoiceService()
+    fact = PaymentReceiptFact(
+        company_id=company_id,
+        branch_id=branch_id,
+        customer_id=customer_id,
+        receipt_id=uuid4(),
+        currency="USD",
+        verified_amount=Decimal("37.25"),
+        occurred_at=datetime.now(timezone.utc),
+        evidence_digest="c" * 64,
+    )
+
+    async def register(value: PaymentReceiptFact):
+        async with factory() as session:
+            return await service.register_payment_receipt(session, value)
+
+    first, replay = await asyncio.gather(register(fact), register(fact))
+    assert first.id == replay.id
+    async with factory() as session:
+        assert await session.scalar(select(func.count(PaymentReceiptEvidence.id)).where(PaymentReceiptEvidence.company_id == company_id, PaymentReceiptEvidence.receipt_id == fact.receipt_id)) == 1
+    with pytest.raises(InvoiceConflict):
+        await register(replace(fact, evidence_digest="d" * 64))
+    with pytest.raises(InvoiceConflict):
+        await register(replace(fact, verified_amount=Decimal("99.00")))

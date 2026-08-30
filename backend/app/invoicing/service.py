@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -85,6 +85,35 @@ class InvoiceService:
                 or estimate.acceptance_status not in {"approved", "accepted"}
             ):
                 raise InvoiceNotFound("Accepted Estimate was not found.")
+            replay = await self._replay(
+                session, spec.company_id, spec.idempotency_key, "create", request
+            )
+            if replay:
+                return replay
+            existing_invoice = await session.scalar(
+                select(Invoice).where(
+                    Invoice.company_id == spec.company_id,
+                    Invoice.estimate_revision_id == estimate.current_revision_id,
+                )
+            )
+            if existing_invoice is not None:
+                if (
+                    existing_invoice.branch_id != spec.branch_id
+                    or existing_invoice.job_id != spec.job_id
+                    or existing_invoice.due_date != spec.due_date
+                    or existing_invoice.terms != spec.terms.strip()
+                ):
+                    raise InvoiceConflict(
+                        "Estimate revision already has contradictory Invoice authority."
+                    )
+                self._idempotency(
+                    session,
+                    existing_invoice,
+                    spec.idempotency_key,
+                    "create",
+                    request,
+                )
+                return existing_invoice
             conversion = await session.scalar(
                 select(EstimateJobConversion).where(
                     EstimateJobConversion.company_id == spec.company_id,
@@ -265,6 +294,18 @@ class InvoiceService:
         self, session: AsyncSession, fact: PaymentReceiptFact
     ) -> PaymentReceiptEvidence:
         async with session.begin():
+            if session.get_bind().dialect.name == "postgresql":
+                await session.execute(
+                    text(
+                        "SELECT pg_advisory_xact_lock(hashtextextended(:identity, 0))"
+                    ),
+                    {
+                        "identity": (
+                            f"invoice-payment-receipt:{fact.company_id}:"
+                            f"{fact.receipt_id}"
+                        )
+                    },
+                )
             existing = await session.scalar(
                 select(PaymentReceiptEvidence).where(
                     PaymentReceiptEvidence.company_id == fact.company_id,
@@ -272,7 +313,23 @@ class InvoiceService:
                 )
             )
             if existing:
-                if existing.evidence_digest != fact.evidence_digest:
+                existing_authority = (
+                    existing.branch_id,
+                    existing.customer_id,
+                    existing.currency,
+                    existing.verified_amount,
+                    existing.occurred_at,
+                    existing.evidence_digest,
+                )
+                requested_authority = (
+                    fact.branch_id,
+                    fact.customer_id,
+                    fact.currency,
+                    fact.verified_amount,
+                    fact.occurred_at,
+                    fact.evidence_digest,
+                )
+                if existing_authority != requested_authority:
                     raise InvoiceConflict(
                         "Payment receipt evidence conflicts with replay."
                     )
@@ -426,10 +483,25 @@ class InvoiceService:
                 )
             )
             if existing:
-                if (
-                    existing.journal_id != fact.journal_id
-                    or existing.status != fact.status
-                ):
+                existing_authority = (
+                    existing.invoice_id,
+                    existing.journal_id,
+                    existing.journal_version,
+                    existing.policy_version,
+                    existing.status,
+                    existing.effective_date,
+                    existing.posted_at,
+                )
+                requested_authority = (
+                    fact.invoice_id,
+                    fact.journal_id,
+                    fact.journal_version,
+                    fact.policy_version,
+                    fact.status,
+                    fact.effective_date,
+                    fact.posted_at,
+                )
+                if existing_authority != requested_authority:
                     raise InvoiceConflict("Accounting receipt conflicts with replay.")
                 return invoice
             session.add(AccountingPostingReceipt(**asdict(fact)))
