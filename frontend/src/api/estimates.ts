@@ -7,8 +7,8 @@ export async function getEstimate(id: string): Promise<Estimate> {
   return (await apiClient.get<Estimate>(`${root}/${id}`)).data;
 }
 
-export async function listEstimates(status?: string): Promise<EstimateList> {
-  return (await apiClient.get<EstimateList>(root, { params: status ? { status } : undefined })).data;
+export async function listEstimates(status?: string, customerId?: string): Promise<EstimateList> {
+  return (await apiClient.get<EstimateList>(root, { params: { status: status || undefined, customer_id: customerId } })).data;
 }
 
 export async function createEstimate(input: EstimateProposalInput): Promise<Estimate> {

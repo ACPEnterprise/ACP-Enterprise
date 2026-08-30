@@ -11,6 +11,7 @@ export interface JobListParams {
   jobType?: readonly string[]; branchId?: string; page?: number; pageSize?: number;
   sortField?: JobSortField; sortDirection?: SortDirection;
   appointmentId?: string;
+  customerId?: string;
 }
 export interface JobCreateInput { branch_id: string; customer_id: string; service_location_id: string; job_type_code?: string | null; priority?: JobPriority; customer_reported_problem?: string | null; internal_description?: string | null; }
 export interface JobCreateFromAppointmentInput extends Omit<JobCreateInput, "branch_id" | "customer_id" | "service_location_id"> { appointment_id: string; }
