@@ -209,6 +209,7 @@ class LuminaryService:
             .order_by(
                 LuminaryBriefingRecord.period_end.desc(),
                 LuminaryBriefingRecord.created_at.desc(),
+                LuminaryBriefingRecord.id.desc(),
             )
             .limit(limit)
         )
@@ -304,7 +305,10 @@ class LuminaryService:
             else query.where(LuminaryFindingRecord.branch_id.is_(None))
         )
         return await session.scalar(
-            query.order_by(LuminaryFindingRecord.created_at.desc()).limit(1)
+            query.order_by(
+                LuminaryFindingRecord.created_at.desc(),
+                LuminaryFindingRecord.id.desc(),
+            ).limit(1)
         )
 
     @staticmethod
@@ -327,26 +331,40 @@ class LuminaryService:
             else query.where(LuminaryBriefingRecord.branch_id.is_(None))
         )
         return await session.scalar(
-            query.order_by(LuminaryBriefingRecord.created_at.desc()).limit(1)
+            query.order_by(
+                LuminaryBriefingRecord.created_at.desc(),
+                LuminaryBriefingRecord.id.desc(),
+            ).limit(1)
         )
 
     async def _projection(
         self, session: AsyncSession, record: LuminaryBriefingRecord
     ) -> dict[str, object]:
         ids = [UUID(value) for value in record.finding_ids]
+        query = select(LuminaryFindingRecord).where(
+            LuminaryFindingRecord.id.in_(ids),
+            LuminaryFindingRecord.company_id == record.company_id,
+        )
+        query = (
+            query.where(LuminaryFindingRecord.branch_id == record.branch_id)
+            if record.branch_id is not None
+            else query.where(LuminaryFindingRecord.branch_id.is_(None))
+        )
         records = tuple(
             (
-                await session.scalars(
-                    select(LuminaryFindingRecord).where(
-                        LuminaryFindingRecord.id.in_(ids)
-                    )
-                )
+                await session.scalars(query)
             ).all()
         )
         by_id = {item.id: item for item in records}
-        return self._serialize(
-            record, [by_id[value] for value in ids if value in by_id]
-        )
+        if len(by_id) != len(ids) or len(record.finding_digests) != len(ids):
+            raise RuntimeError("Luminary briefing finding authority is incomplete.")
+        ordered = [by_id[value] for value in ids]
+        if any(
+            finding.finding_digest != digest
+            for finding, digest in zip(ordered, record.finding_digests, strict=True)
+        ):
+            raise RuntimeError("Luminary briefing finding authority conflicts.")
+        return self._serialize(record, ordered)
 
     @classmethod
     def _serialize(
