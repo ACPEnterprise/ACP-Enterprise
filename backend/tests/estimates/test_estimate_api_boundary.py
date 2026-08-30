@@ -1,12 +1,15 @@
 from uuid import uuid4
 
+import pytest
+from fastapi import HTTPException
+
 from app.estimates.errors import (
     EstimateConflictError,
     EstimateError,
     EstimateNotFoundError,
     EstimateValidationError,
 )
-from app.estimates.router import _error
+from app.estimates.router import _branch, _error
 
 
 def test_estimate_errors_use_safe_recovery_envelopes_without_reflection() -> None:
@@ -27,7 +30,7 @@ def test_estimate_errors_use_safe_recovery_envelopes_without_reflection() -> Non
         ),
         (
             EstimateError(secret),
-            400,
+            500,
             "internal_failure",
             "OWNER_ADMIN_ACTION_REQUIRED",
         ),
@@ -38,3 +41,17 @@ def test_estimate_errors_use_safe_recovery_envelopes_without_reflection() -> Non
         assert response.detail["code"] == code
         assert response.detail["recovery"] == recovery
         assert secret not in str(response.detail)
+
+
+def test_estimate_branch_denial_uses_safe_forbidden_contract() -> None:
+    class Context:
+        authorized_branches = ()
+
+    canary = uuid4()
+    with pytest.raises(HTTPException) as captured:
+        _branch(Context(), canary)  # type: ignore[arg-type]
+
+    assert captured.value.status_code == 403
+    assert captured.value.detail["code"] == "forbidden"
+    assert captured.value.detail["recovery"] == "OWNER_ADMIN_ACTION_REQUIRED"
+    assert str(canary) not in str(captured.value.detail)

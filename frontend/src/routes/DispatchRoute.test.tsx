@@ -6,6 +6,7 @@ import { useDispatchBoard } from "../hooks/useDispatch";
 import { useJobs } from "../hooks/useJobs";
 import { DispatchRoute } from "./DispatchRoute";
 
+let permissions = new Set(["COMPANY_DISPATCH_READ", "COMPANY_DISPATCH_MANAGE", "COMPANY_JOB_READ"]);
 vi.mock("../auth", () => ({
   useAuth: () => ({
     activeCompany: {
@@ -16,6 +17,7 @@ vi.mock("../auth", () => ({
       ],
     },
   }),
+  useHasPermission: (code: string) => permissions.has(code),
 }));
 vi.mock("../hooks/useJobs");
 vi.mock("../hooks/useDispatch", () => ({
@@ -48,6 +50,7 @@ const job = {
 
 describe("DispatchRoute", () => {
   beforeEach(() => {
+    permissions = new Set(["COMPANY_DISPATCH_READ", "COMPANY_DISPATCH_MANAGE", "COMPANY_JOB_READ"]);
     vi.clearAllMocks();
     vi.mocked(useDispatchBoard).mockReturnValue({
       isLoading: false,
@@ -96,13 +99,32 @@ describe("DispatchRoute", () => {
       expect.any(String),
       expect.any(String),
       "branch-2",
+      true,
     );
     expect(useJobs).toHaveBeenLastCalledWith(
       expect.objectContaining({ branchId: "branch-2" }),
+      true,
     );
     const first = vi.mocked(useDispatchBoard).mock.calls[0][0];
     fireEvent.click(screen.getByRole("button", { name: "Next day" }));
     expect(vi.mocked(useDispatchBoard).mock.calls.at(-1)?.[0]).not.toBe(first);
+  });
+  it("disables Dispatch and Job queries without Dispatch read authority", () => {
+    permissions = new Set();
+    render(<MemoryRouter><DispatchRoute /></MemoryRouter>);
+    expect(screen.getByText(/not authorized to view Dispatch/i)).toBeVisible();
+    expect(useDispatchBoard).toHaveBeenCalledWith(
+      expect.any(String), expect.any(String), undefined, false,
+    );
+    expect(useJobs).toHaveBeenCalledWith(expect.any(Object), false);
+  });
+  it("separates Dispatch read, manage, and Job read authority", () => {
+    permissions = new Set(["COMPANY_DISPATCH_READ"]);
+    render(<MemoryRouter><DispatchRoute /></MemoryRouter>);
+    expect(screen.getByText("APT-000001")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Assign technician" })).not.toBeInTheDocument();
+    expect(screen.getByText(/Operational Jobs require Job read authority/i)).toBeVisible();
+    expect(useJobs).toHaveBeenCalledWith(expect.any(Object), false);
   });
   it("isolates a failed Dispatch board from Jobs", () => {
     vi.mocked(useDispatchBoard).mockReturnValue({

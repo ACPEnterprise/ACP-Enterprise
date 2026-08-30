@@ -70,7 +70,7 @@ export function getOperatorApiError(
   if (status === 400)
     return {
       title: "Request rejected",
-      message: getApiErrorMessage(error),
+      message: structuredMessage ?? "Review the request and correct the entered information.",
       retryable: false,
     };
   if (status === 409 && code === "engineering_execution_not_connected")
@@ -99,7 +99,7 @@ export function getOperatorApiError(
   if (status === 409)
     return {
       title: `${resource} changed`,
-      message: structuredMessage ?? getApiErrorMessage(error),
+      message: structuredMessage ?? "Refresh the authoritative record before trying again.",
       retryable: false,
     };
   if (status === 422 && code === "engineering_command_invalid")
@@ -113,7 +113,7 @@ export function getOperatorApiError(
   if (status === 422)
     return {
       title: "Invalid milestone data",
-      message: getApiErrorMessage(error),
+      message: structuredMessage ?? "Review the entered information and correct invalid values.",
       retryable: false,
     };
   return {

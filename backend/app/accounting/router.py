@@ -214,9 +214,10 @@ async def close_period(
     if not context.has_permission(
         AccountingPermission.PERIOD_MANAGE
     ) or not context.has_permission(AccountingPermission.FINANCE_APPROVE):
-        raise HTTPException(
-            status_code=403,
-            detail="Period management and Finance approval permissions are required",
+        raise translate(
+            AccountingPermissionDenied(
+                "Period close requires period management and Finance approval."
+            )
         )
     try:
         return PeriodResponse.model_validate(
@@ -254,8 +255,10 @@ async def approve_reopen(
     session: DatabaseSession,
 ) -> PeriodResponse:
     if not context.has_permission(AccountingPermission.FINANCE_APPROVE):
-        raise HTTPException(
-            status_code=403, detail="Finance approval permission is required"
+        raise translate(
+            AccountingPermissionDenied(
+                "Period reopen approval requires Finance approval."
+            )
         )
     try:
         return PeriodResponse.model_validate(

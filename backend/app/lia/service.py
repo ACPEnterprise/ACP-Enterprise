@@ -33,7 +33,7 @@ PROPOSAL_NAMESPACE = UUID("e6f922d4-73fa-4df8-b324-3548bd85ff4d")
 DOMAIN_KEYWORDS = {
     "customers": ("customer",),
     "jobs": ("job", "work"),
-    "scheduling": ("schedule", "appointment", "today", "dispatch"),
+    "scheduling": ("schedule", "appointment", "dispatch"),
     "estimates": ("estimate", "proposal"),
     "invoicing": ("invoice", "outstanding", "revenue"),
     "payments": ("payment", "settlement", "cash"),
@@ -180,16 +180,6 @@ class LiaService:
             limitations=limitations,
             navigation=navigation,
         )
-        logger.info(
-            "lia_request request_id=%s actor_id=%s company_id=%s branch_id=%s classification=%s domains=%s evidence_digest=%s",
-            request_id,
-            context.user.id,
-            context.company.id,
-            context.active_branch.id if context.active_branch else None,
-            response.classification,
-            ",".join(item.domain for item in evidence),
-            response.evidence_digest,
-        )
         return response
 
     def _classify_domains(self, question: str, request: LiaRequest) -> set[str]:
@@ -232,7 +222,7 @@ class LiaService:
         digest = hashlib.sha256(
             json.dumps(canonical, sort_keys=True).encode()
         ).hexdigest()
-        return LiaResponse(
+        response = LiaResponse(
             request_id=request_id,
             conversation_id=conversation_id,
             classification=classification,
@@ -252,6 +242,17 @@ class LiaService:
             authorization_version=context.authorization_version,
             generated_at=datetime.now(timezone.utc),
         )
+        logger.info(
+            "lia_request request_id=%s actor_id=%s company_id=%s branch_id=%s classification=%s domains=%s evidence_digest=%s",
+            request_id,
+            context.user.id,
+            context.company.id,
+            context.active_branch.id if context.active_branch else None,
+            response.classification,
+            ",".join(item.domain for item in response.evidence),
+            response.evidence_digest,
+        )
+        return response
 
 
 lia_service = LiaService()

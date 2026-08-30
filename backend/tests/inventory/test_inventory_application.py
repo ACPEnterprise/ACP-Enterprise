@@ -211,11 +211,37 @@ async def test_adjustment_and_cycle_count_operator_services_are_idempotent_and_e
             data=CycleCountComplete(expected_version=cycle.version),
         )
         assert completed.status == "completed"
+        latest = await service.start_cycle_count(
+            session,
+            context=authorization,
+            data=CycleCountStart(
+                branch_id=branch.id,
+                location_id=warehouse.id,
+                name="Next operator cycle count",
+                idempotency_key=f"cycle-{uuid4()}",
+            ),
+        )
         history = await service.list_cycle_counts(
             session, context=authorization, branch_id=branch.id
         )
-        assert history[0].id == cycle.id
-        assert history[0].entries[0].variance == Decimal("-1.5")
+        assert history[0].id == latest.id
+        first_page = await service.list_cycle_counts(
+            session,
+            context=authorization,
+            branch_id=branch.id,
+            limit=1,
+            offset=0,
+        )
+        second_page = await service.list_cycle_counts(
+            session,
+            context=authorization,
+            branch_id=branch.id,
+            limit=1,
+            offset=1,
+        )
+        assert [item.id for item in first_page] == [latest.id]
+        assert [item.id for item in second_page] == [cycle.id]
+        assert second_page[0].entries[0].variance == Decimal("-1.5")
     async with factory() as session:
         event_counts = {
             event_type: await session.scalar(
@@ -233,7 +259,12 @@ async def test_adjustment_and_cycle_count_operator_services_are_idempotent_and_e
                 "inventory.cycle_count_completed",
             )
         }
-        assert event_counts == {event_type: 1 for event_type in event_counts}
+        assert event_counts == {
+            "inventory.adjustment_posted": 1,
+            "inventory.cycle_count_started": 2,
+            "inventory.cycle_count_recorded": 1,
+            "inventory.cycle_count_completed": 1,
+        }
 
 
 @pytest.mark.asyncio

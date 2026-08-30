@@ -299,7 +299,9 @@ class OperationalMigrationService:
             )
             if run is not None:
                 if (
-                    run.source_digest != digest
+                    run.company_id != context.company.id
+                    or run.branch_id != context.active_branch.id
+                    or run.source_digest != digest
                     or run.master_run_id != master_run_id
                     or run.repair_of_run_id != repair_of_run_id
                     or run.repair_generation != repair_generation
@@ -683,7 +685,9 @@ class OperationalMigrationService:
                     job = planned_jobs.get(record.source_job_id)
                     if job is None and job_identity is not None:
                         job = await self._repository.get_job(
-                            session, job_identity.job_id
+                            session,
+                            company_id=context.company.id,
+                            job_id=job_identity.job_id,
                         )
                     if job is None:
                         raise ParentResolutionError(

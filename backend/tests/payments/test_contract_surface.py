@@ -1,7 +1,13 @@
 from pathlib import Path
 
+from fastapi import FastAPI
+
 from app.events.types import EventType
+from app.payments.router import router
 from app.platform.permissions.codes import PaymentPermission
+
+app = FastAPI()
+app.include_router(router)
 
 
 def test_permissions_and_business_events_match_packet() -> None:
@@ -22,3 +28,13 @@ def test_slot_three_migration_has_invoice_parent_and_sensitive_columns_are_absen
     lowered = migration.lower()
     for forbidden in ('"pan"', '"cvv"', '"webhook_secret"', '"raw_payload"', '"bank_credentials"'):
         assert forbidden not in lowered
+
+
+def test_receipt_list_publishes_bounded_pagination_contract() -> None:
+    operation = app.openapi()["paths"]["/api/v1/payments/receipts"]["get"]
+    parameters = {item["name"]: item for item in operation["parameters"]}
+
+    assert parameters["limit"]["schema"]["default"] == 100
+    assert parameters["limit"]["schema"]["maximum"] == 200
+    assert parameters["offset"]["schema"]["default"] == 0
+    assert parameters["offset"]["schema"]["minimum"] == 0

@@ -28,6 +28,7 @@ import {
   useBeaconWorkflowActions,
 } from "../hooks/useBeaconSignals";
 import { useJobs } from "../hooks/useJobs";
+import { Alert } from "../ui";
 
 function formatCurrency(value: string | number): string {
   const numeric = Number(value);
@@ -52,11 +53,13 @@ function metricState(
 export function CommandCenterRoute() {
   const { user } = useAuth();
   const permissions = useEffectivePermissions();
-  const analytics = useAnalyticsSummary();
-  const beacon = useBeaconSignals();
+  const canReadAnalytics = permissions.has("COMPANY_ANALYTICS_READ");
+  const canReadJobs = permissions.has("COMPANY_JOB_READ");
+  const analytics = useAnalyticsSummary(canReadAnalytics);
+  const beacon = useBeaconSignals(canReadAnalytics);
   const beaconLifecycle = useBeaconLifecycleActions();
   const beaconWorkflow = useBeaconWorkflowActions();
-  const jobs = useJobs({ page: 1, pageSize: 1 });
+  const jobs = useJobs({ page: 1, pageSize: 1 }, canReadJobs);
   const revenue = analytics.data
     ? { value: formatCurrency(analytics.data.booked_revenue.value) }
     : metricState(analytics.isLoading, analytics.isError, undefined);
@@ -117,7 +120,7 @@ export function CommandCenterRoute() {
         </div>
       </section>
 
-      <BeaconPanel
+      {canReadAnalytics ? <BeaconPanel
         signals={beacon.data?.items}
         snoozedSignals={beacon.data?.snoozed_items}
         canReview={beacon.data?.lifecycle_commands_available ?? false}
@@ -143,7 +146,7 @@ export function CommandCenterRoute() {
           })
         }
         retry={() => void beacon.refetch()}
-      />
+      /> : <Alert variant="information" title="Beacon access unavailable">Analytics read permission is required to view Beacon evidence.</Alert>}
 
       <div className="grid gap-ui-6 xl:grid-cols-[1.15fr_0.85fr]">
         <CommandCenterPanel

@@ -96,4 +96,4 @@ class LiaFeedback(LiaSchema):
 
 class LiaFeedbackReceipt(LiaSchema):
     feedback_id: UUID
-    state: str = "RECORDED_AS_QUALITY_EVIDENCE"
+    state: str = "EPHEMERAL_TELEMETRY_ACCEPTED"

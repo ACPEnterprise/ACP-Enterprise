@@ -1,21 +1,34 @@
 import asyncio
 from dataclasses import replace
+from datetime import date, datetime, timezone
 from decimal import Decimal
-from uuid import uuid4
+from types import SimpleNamespace
+from uuid import UUID, uuid4
 
 import pytest
 import pytest_asyncio
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.core.config import settings
 from app.customers.models import Customer
 from app.events.models import BusinessEvent
-from app.payments.contracts import CreateIntent, ProviderRequest, RequestRefund
+from app.payments.contracts import (
+    ApplyReceipt,
+    CreateIntent,
+    PostingReceiptFact,
+    ProviderRequest,
+    RecordDispute,
+    RecordSettlement,
+    RequestRefund,
+    VerifiedWebhook,
+)
 from app.payments.errors import PaymentConflict, PaymentNotFound, PaymentValidation
 from app.payments.models import (
     PaymentIntent,
     PaymentReceipt,
+    ReceiptEvent,
     ReconciliationException,
     Refund,
 )
@@ -206,6 +219,80 @@ async def test_concurrent_collection_and_refund_replay_have_one_economic_authori
 
 
 @pytest.mark.asyncio
+async def test_collection_rejects_foreign_company_customer_before_provider_call(
+    payment_fixture,
+) -> None:
+    factory, company, branch, actor, _ = payment_fixture
+    async with factory() as session, session.begin():
+        foreign_company = Company(
+            name="Foreign Payment Company",
+            code=f"FP{uuid4().hex[:8].upper()}",
+            status="active",
+            timezone="America/New_York",
+        )
+        foreign_customer = Customer(
+            company=foreign_company,
+            customer_number=f"CUS-{uuid4().int % 1000000:06d}",
+            status="active",
+            customer_type="residential",
+            display_name="Foreign Payment Customer",
+            preferred_contact_method="email",
+            normalized_name=f"foreign payment customer {uuid4().hex}",
+        )
+        session.add_all([foreign_company, foreign_customer])
+        await session.flush()
+
+    provider = CountingFakeProvider()
+    service = PaymentService(provider, "synthetic-merchant")
+    command = CreateIntent(
+        company_id=company.id,
+        branch_id=branch.id,
+        customer_id=foreign_customer.id,
+        amount=Decimal("19.99"),
+        currency="USD",
+        opaque_payment_method="opaque_captured_test",
+        idempotency_key=f"foreign-customer-{uuid4()}",
+        actor_user_id=actor.id,
+    )
+    async with factory() as session:
+        with pytest.raises(PaymentNotFound, match="Customer was not found"):
+            await service.collect(session, command)
+
+    assert provider.collect_calls == 0
+    async with factory() as session:
+        assert (
+            await session.scalar(
+                select(func.count(PaymentIntent.id)).where(
+                    PaymentIntent.company_id == company.id,
+                    PaymentIntent.idempotency_key == command.idempotency_key,
+                )
+            )
+            == 0
+        )
+
+    async with factory() as session:
+        with pytest.raises(IntegrityError):
+            async with session.begin():
+                session.add(
+                    PaymentIntent(
+                        company_id=company.id,
+                        branch_id=branch.id,
+                        customer_id=foreign_customer.id,
+                        amount=Decimal("19.99"),
+                        currency="USD",
+                        provider="synthetic",
+                        merchant_account="synthetic-merchant",
+                        opaque_payment_method="opaque_corruption_canary",
+                        idempotency_key=f"corrupt-{uuid4()}",
+                        request_digest="1" * 64,
+                        provider_idempotency_key=f"pay_{uuid4().hex}",
+                        created_by_user_id=actor.id,
+                    )
+                )
+                await session.flush()
+
+
+@pytest.mark.asyncio
 async def test_ambiguous_provider_outcome_is_reconciled_without_blind_retry(
     payment_fixture,
 ) -> None:
@@ -248,3 +335,382 @@ async def test_ambiguous_provider_outcome_is_reconciled_without_blind_retry(
             )
             == 1
         )
+@pytest.mark.asyncio
+async def test_concurrent_identical_application_changes_receipt_once(
+    payment_fixture, monkeypatch
+) -> None:
+    factory, company, branch, actor, customer = payment_fixture
+    service = PaymentService(CountingFakeProvider(), "synthetic-merchant")
+    async with factory() as session:
+        intent = await service.collect(
+            session,
+            CreateIntent(
+                company_id=company.id,
+                branch_id=branch.id,
+                customer_id=customer.id,
+                amount=Decimal("80.00"),
+                currency="USD",
+                opaque_payment_method="opaque_captured_test",
+                idempotency_key=f"apply-source-{uuid4()}",
+                actor_user_id=actor.id,
+            ),
+        )
+    async with factory() as session:
+        receipt = await session.scalar(
+            select(PaymentReceipt).where(PaymentReceipt.intent_id == intent.id)
+        )
+        assert receipt is not None
+
+    both_entered = asyncio.Event()
+    release = asyncio.Event()
+
+    class ConcurrentInvoiceService:
+        calls = 0
+
+        async def apply_payment(self, _session, fact):
+            self.calls += 1
+            if self.calls == 2:
+                both_entered.set()
+            await release.wait()
+            return SimpleNamespace(id=fact.invoice_id)
+
+    invoice_boundary = ConcurrentInvoiceService()
+    monkeypatch.setattr("app.payments.service.invoice_service", invoice_boundary)
+    command = ApplyReceipt(
+        company_id=company.id,
+        branch_id=branch.id,
+        receipt_id=receipt.id,
+        invoice_id=uuid4(),
+        amount=Decimal("30.00"),
+        expected_invoice_version=1,
+        idempotency_key=f"apply-{uuid4()}",
+        actor_user_id=actor.id,
+        occurred_at=receipt.captured_at,
+    )
+
+    async def apply_once() -> PaymentReceipt:
+        async with factory() as session:
+            return await service.apply(session, command)
+
+    tasks = (asyncio.create_task(apply_once()), asyncio.create_task(apply_once()))
+    await asyncio.wait_for(both_entered.wait(), timeout=2)
+    release.set()
+    first, replay = await asyncio.gather(*tasks)
+    assert first.id == replay.id == receipt.id
+
+    async with factory() as session:
+        stored = await session.get(PaymentReceipt, receipt.id)
+        assert stored is not None
+        assert stored.applied_amount == Decimal("30.00")
+        assert stored.available_amount == Decimal("50.00")
+        assert (
+            await session.scalar(
+                select(func.count(ReceiptEvent.id)).where(
+                    ReceiptEvent.receipt_id == receipt.id,
+                    ReceiptEvent.idempotency_key == command.idempotency_key,
+                )
+            )
+            == 1
+        )
+
+
+@pytest.mark.asyncio
+async def test_payment_posting_receipt_replay_binds_complete_authority(
+    payment_fixture,
+) -> None:
+    factory, company, _, _, _ = payment_fixture
+    service = PaymentService(CountingFakeProvider(), "synthetic-merchant")
+    fact = PostingReceiptFact(
+        company_id=company.id,
+        source_event_id=uuid4(),
+        journal_id=uuid4(),
+        journal_version=3,
+        policy_version="cash-basis-v3",
+        status="posted",
+        effective_date=date(2026, 8, 30),
+        posted_at=datetime(2026, 8, 30, 18, 0, tzinfo=timezone.utc),
+    )
+    async with factory() as session:
+        first = await service.record_posting_receipt(session, fact)
+    async with factory() as session:
+        replay = await service.record_posting_receipt(session, fact)
+    assert replay.id == first.id
+
+    contradictions = (
+        replace(fact, journal_id=uuid4()),
+        replace(fact, journal_version=4),
+        replace(fact, policy_version="cash-basis-v4"),
+        replace(fact, status="reconciliation_required"),
+        replace(fact, effective_date=date(2026, 8, 31)),
+        replace(
+            fact,
+            posted_at=datetime(2026, 8, 30, 18, 1, tzinfo=timezone.utc),
+        ),
+    )
+    for contradiction in contradictions:
+        async with factory() as session:
+            with pytest.raises(PaymentConflict, match="conflicts with replay"):
+                await service.record_posting_receipt(session, contradiction)
+
+
+@pytest.mark.asyncio
+async def test_dispute_replay_binds_amount_provider_and_evidence(payment_fixture) -> None:
+    factory, company, branch, actor, customer = payment_fixture
+    service = PaymentService(CountingFakeProvider(), "synthetic-merchant")
+    async with factory() as session:
+        intent = await service.collect(
+            session,
+            CreateIntent(
+                company_id=company.id,
+                branch_id=branch.id,
+                customer_id=customer.id,
+                amount=Decimal("90.00"),
+                currency="USD",
+                opaque_payment_method="opaque_captured_test",
+                idempotency_key=f"dispute-source-{uuid4()}",
+                actor_user_id=actor.id,
+            ),
+        )
+    async with factory() as session:
+        receipt = await session.scalar(
+            select(PaymentReceipt).where(PaymentReceipt.intent_id == intent.id)
+        )
+        assert receipt is not None
+
+    command = RecordDispute(
+        company_id=company.id,
+        branch_id=branch.id,
+        receipt_id=receipt.id,
+        amount=Decimal("20.00"),
+        provider_dispute_id="provider-dispute-1001",
+        evidence_digest="a" * 64,
+        idempotency_key=f"dispute-{uuid4()}",
+        actor_user_id=actor.id,
+        expected_version=receipt.version,
+    )
+    async with factory() as session:
+        first = await service.record_dispute(session, command)
+    async with factory() as session:
+        replay = await service.record_dispute(session, command)
+    assert replay.id == first.id
+    assert replay.disputed_amount == Decimal("20.00")
+    assert replay.available_amount == Decimal("70.00")
+
+    contradictions = (
+        replace(command, amount=Decimal("21.00")),
+        replace(command, provider_dispute_id="provider-dispute-1002"),
+        replace(command, evidence_digest="b" * 64),
+    )
+    for contradiction in contradictions:
+        async with factory() as session:
+            with pytest.raises(PaymentConflict, match="original dispute"):
+                await service.record_dispute(session, contradiction)
+
+    async with factory() as session:
+        event = await session.scalar(
+            select(ReceiptEvent).where(
+                ReceiptEvent.receipt_id == receipt.id,
+                ReceiptEvent.idempotency_key == command.idempotency_key,
+            )
+        )
+        assert event is not None
+        assert event.provider_reference == command.provider_dispute_id
+        assert event.request_digest is not None and len(event.request_digest) == 64
+
+
+@pytest.mark.asyncio
+async def test_settlement_replay_binds_complete_economic_evidence(
+    payment_fixture,
+) -> None:
+    factory, company, _, actor, _ = payment_fixture
+    service = PaymentService(CountingFakeProvider(), "synthetic-merchant")
+    command = RecordSettlement(
+        company_id=company.id,
+        provider="deterministic_fake",
+        merchant_account="synthetic-merchant",
+        provider_payout_id=f"payout-{uuid4()}",
+        currency="USD",
+        settlement_date=date(2026, 8, 30),
+        gross_amount=Decimal("100.00"),
+        refund_amount=Decimal("10.00"),
+        dispute_amount=Decimal("5.00"),
+        fee_amount=Decimal("2.00"),
+        adjustment_amount=Decimal("1.00"),
+        net_amount=Decimal("84.00"),
+        evidence_digest="d" * 64,
+        actor_user_id=actor.id,
+    )
+    async with factory() as session:
+        first = await service.record_settlement(session, command)
+    async with factory() as session:
+        replay = await service.record_settlement(session, command)
+    assert replay.id == first.id
+
+    contradictions = (
+        replace(command, currency="CAD"),
+        replace(command, settlement_date=date(2026, 8, 31)),
+        replace(
+            command,
+            gross_amount=Decimal("101.00"),
+            net_amount=Decimal("85.00"),
+        ),
+        replace(
+            command,
+            refund_amount=Decimal("11.00"),
+            net_amount=Decimal("83.00"),
+        ),
+        replace(
+            command,
+            dispute_amount=Decimal("6.00"),
+            net_amount=Decimal("83.00"),
+        ),
+        replace(
+            command,
+            fee_amount=Decimal("3.00"),
+            net_amount=Decimal("83.00"),
+        ),
+        replace(
+            command,
+            adjustment_amount=Decimal("2.00"),
+            net_amount=Decimal("85.00"),
+        ),
+        replace(command, evidence_digest="e" * 64),
+    )
+    for contradiction in contradictions:
+        async with factory() as session:
+            with pytest.raises(PaymentConflict, match="conflicts with replay"):
+                await service.record_settlement(session, contradiction)
+
+
+@pytest.mark.asyncio
+async def test_webhook_contradiction_persists_one_reconciliation_exception(
+    payment_fixture,
+) -> None:
+    factory, company, _, _, _ = payment_fixture
+    service = PaymentService(CountingFakeProvider(), "synthetic-merchant")
+    evidence = VerifiedWebhook(
+        provider_event_id=f"event-{uuid4()}",
+        merchant_account="synthetic-merchant",
+        event_type="payment.captured",
+        occurred_at=datetime(2026, 8, 30, 18, 0, tzinfo=timezone.utc),
+        allowed_evidence={"amount": "25.00", "currency": "USD"},
+        evidence_digest="f" * 64,
+        secret_version="v1",
+    )
+    async with factory() as session:
+        first = await service.record_webhook(
+            session, company.id, "deterministic_fake", evidence
+        )
+    async with factory() as session:
+        replay = await service.record_webhook(
+            session, company.id, "deterministic_fake", evidence
+        )
+    assert replay.id == first.id
+
+    contradiction = replace(
+        evidence,
+        event_type="payment.refunded",
+        allowed_evidence={"amount": "26.00", "currency": "USD"},
+        evidence_digest="0" * 64,
+        secret_version="v2",
+    )
+    for _ in range(2):
+        async with factory() as session:
+            with pytest.raises(PaymentConflict, match="conflicts with prior evidence"):
+                await service.record_webhook(
+                    session, company.id, "deterministic_fake", contradiction
+                )
+
+    async with factory() as session:
+        exception = await session.scalar(
+            select(ReconciliationException).where(
+                ReconciliationException.entity_type == "webhook",
+                ReconciliationException.entity_id == first.id,
+                ReconciliationException.reason_code
+                == "contradictory_provider_event",
+            )
+        )
+        assert exception is not None
+        assert exception.evidence_digest == contradiction.evidence_digest
+        assert (
+            await session.scalar(
+                select(func.count(ReconciliationException.id)).where(
+                    ReconciliationException.entity_type == "webhook",
+                    ReconciliationException.entity_id == first.id,
+                    ReconciliationException.reason_code
+                    == "contradictory_provider_event",
+                )
+            )
+            == 1
+        )
+        assert (
+            await session.scalar(
+                select(func.count(BusinessEvent.id)).where(
+                    BusinessEvent.entity_type == "payment_reconciliation_exception",
+                    BusinessEvent.entity_id == exception.id,
+                )
+            )
+            == 1
+        )
+
+
+@pytest.mark.asyncio
+async def test_receipt_listing_is_stably_bounded_and_service_enforced(
+    payment_fixture,
+) -> None:
+    factory, company, branch, actor, customer = payment_fixture
+    service = PaymentService(CountingFakeProvider(), "synthetic-merchant")
+    receipt_ids: set[UUID] = set()
+    for position in range(3):
+        async with factory() as session:
+            intent = await service.collect(
+                session,
+                CreateIntent(
+                    company_id=company.id,
+                    branch_id=branch.id,
+                    customer_id=customer.id,
+                    amount=Decimal("10.00") + position,
+                    currency="USD",
+                    opaque_payment_method="opaque_captured_test",
+                    idempotency_key=f"list-receipt-{uuid4()}",
+                    actor_user_id=actor.id,
+                ),
+            )
+        async with factory() as session:
+            receipt_id = await session.scalar(
+                select(PaymentReceipt.id).where(PaymentReceipt.intent_id == intent.id)
+            )
+            assert receipt_id is not None
+            receipt_ids.add(receipt_id)
+
+    async with factory() as session:
+        first_page = await service.list_receipts(
+            session,
+            company.id,
+            frozenset({branch.id}),
+            limit=2,
+            offset=0,
+        )
+        second_page = await service.list_receipts(
+            session,
+            company.id,
+            frozenset({branch.id}),
+            limit=2,
+            offset=2,
+        )
+    assert len(first_page) == 2
+    assert {row.id for row in first_page}.isdisjoint(
+        {row.id for row in second_page}
+    )
+    assert receipt_ids.issubset(
+        {row.id for row in first_page} | {row.id for row in second_page}
+    )
+
+    async with factory() as session:
+        with pytest.raises(PaymentValidation, match="page is invalid"):
+            await service.list_receipts(
+                session,
+                company.id,
+                frozenset({branch.id}),
+                limit=201,
+            )

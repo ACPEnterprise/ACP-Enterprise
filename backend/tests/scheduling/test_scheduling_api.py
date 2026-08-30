@@ -40,6 +40,7 @@ from app.platform.permissions.models import (
 from app.platform.users.models import User, UserCredential
 from app.scheduling.errors import (
     SchedulingCapacityError,
+    SchedulingError,
     SchedulingValidationError,
     SchedulingVersionConflictError,
 )
@@ -878,29 +879,40 @@ async def test_create_conceals_tenant_and_branch_references(
 
 
 @pytest.mark.parametrize(
-    ("error", "code", "recovery"),
+    ("error", "status_code", "code", "recovery"),
     [
         (
             SchedulingVersionConflictError("stale"),
+            409,
             "stale_version",
             "RETRY_AFTER_REFRESH",
         ),
         (
             SchedulingCapacityError("capacity"),
+            409,
             "concurrency_conflict",
             "RETRY_AFTER_REFRESH",
         ),
         (
             SchedulingValidationError("invalid"),
+            422,
             "validation",
             "USER_CORRECTION_REQUIRED",
+        ),
+        (
+            SchedulingError("internal provider detail"),
+            500,
+            "internal_failure",
+            "TERMINAL_FAILURE",
         ),
     ],
 )
 def test_scheduling_failures_use_safe_recovery_contract(
-    error, code: str, recovery: str
+    error, status_code: int, code: str, recovery: str
 ) -> None:
-    detail = translate_scheduling_error(error).detail
+    translated = translate_scheduling_error(error)
+    assert translated.status_code == status_code
+    detail = translated.detail
     assert detail["code"] == code
     assert detail["recovery"] == recovery
     assert detail["correlation_id"] is None

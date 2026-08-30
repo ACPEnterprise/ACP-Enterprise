@@ -45,6 +45,8 @@ from app.platform.idempotency.reliability import MutationReliabilityError
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import CustomerPermission
 from app.platform.permissions.dependencies import require_permission
+from app.platform.reliability.correlation import current_correlation_id
+from app.platform.reliability.failures import ClientRecovery, FailureCode, SafeFailure
 
 router = APIRouter(prefix="/api/v1/customers", tags=["Customers"])
 DatabaseSession = Annotated[AsyncSession, Depends(get_database_session)]
@@ -57,17 +59,30 @@ CustomerManageContext = Annotated[
 
 
 def not_found(error: CustomerError) -> HTTPException:
+    del error
+    failure = SafeFailure(
+        FailureCode.NOT_FOUND,
+        "Customer resource was not found.",
+        ClientRecovery.TERMINAL_FAILURE,
+        current_correlation_id(),
+    )
     return HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,
-        detail="Customer resource was not found.",
+        detail=failure.detail(),
     )
 
 
 def update_error(error: CustomerError) -> HTTPException:
     if isinstance(error, CustomerStatusTransitionError):
+        failure = SafeFailure(
+            FailureCode.RESOURCE_STATE_CONFLICT,
+            "The requested Customer status transition is not allowed.",
+            ClientRecovery.RETRY_AFTER_REFRESH,
+            current_correlation_id(),
+        )
         return HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="The requested Customer status transition is not allowed.",
+            detail=failure.detail(),
         )
     return not_found(error)
 
@@ -414,10 +429,16 @@ async def list_customer_consents(
     customer_id: UUID,
     context: CustomerReadContext,
     session: DatabaseSession,
+    limit: Annotated[int, Query(ge=1, le=200)] = 100,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[CustomerConsentResponse]:
     try:
         return await customer_launch_service.list_consents(
-            session, context=context, customer_id=customer_id
+            session,
+            context=context,
+            customer_id=customer_id,
+            limit=limit,
+            offset=offset,
         )
     except CustomerError as error:
         raise not_found(error) from error

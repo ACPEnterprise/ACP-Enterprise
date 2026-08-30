@@ -26,12 +26,12 @@ from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import AdministrationPermission
 from app.platform.permissions.dependencies import get_authorization_context
 from app.platform.permissions.models import Permission
+from app.platform.users.identity_models import PendingEmailChange
+from app.platform.users.identity_repository import UserIdentityRepository
 from app.platform.users.identity_router import (
     administration_router,
     self_service_router,
 )
-from app.platform.users.identity_models import PendingEmailChange
-from app.platform.users.identity_repository import UserIdentityRepository
 from app.platform.users.models import User, UserCredential
 
 
@@ -311,9 +311,10 @@ async def test_duplicate_revocation_and_confirmation_error_mapping(
             f"/api/v1/identity-admin/email-changes/{change_id}"
         )
     assert duplicate.status_code == 409
-    assert duplicate.json()["detail"] == (
-        "Identity operation conflicts with current state."
-    )
+    detail = duplicate.json()["detail"]
+    assert detail["code"] == "resource_state_conflict"
+    assert detail["message"] == "Identity operation conflicts with current state."
+    assert detail["recovery"] == "RETRY_AFTER_REFRESH"
     assert revoked.status_code == 200
     assert revoked.json()["changed"] is True
     assert repeated.status_code == 200
@@ -326,7 +327,9 @@ async def test_duplicate_revocation_and_confirmation_error_mapping(
             json={"token": created.json()["development_token"]},
         )
     assert confirmation.status_code == 409
-    assert "expired, revoked, or already processed" in confirmation.json()["detail"]
+    confirmation_detail = confirmation.json()["detail"]
+    assert confirmation_detail["code"] == "resource_state_conflict"
+    assert confirmation_detail["recovery"] == "RETRY_AFTER_REFRESH"
 
     async with await client_for(app) as client:
         expiring = await client.post(

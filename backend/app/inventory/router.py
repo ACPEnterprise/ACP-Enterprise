@@ -1,7 +1,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_database_session
@@ -202,11 +202,19 @@ async def post_adjustment(
 
 @router.get("/cycle-counts", response_model=tuple[CycleCountSessionResponse, ...])
 async def list_cycle_counts(
-    context: ReadContext, session: DatabaseSession, branch_id: UUID | None = None
+    context: ReadContext,
+    session: DatabaseSession,
+    branch_id: UUID | None = None,
+    limit: Annotated[int, Query(ge=1, le=200)] = 100,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> tuple[CycleCountSessionResponse, ...]:
     try:
         return await inventory_service.list_cycle_counts(
-            session, context=context, branch_id=branch_id
+            session,
+            context=context,
+            branch_id=branch_id,
+            limit=limit,
+            offset=offset,
         )
     except (InventoryNotFound, InventoryConflict, InventoryValidation) as error:
         raise translate(error) from error

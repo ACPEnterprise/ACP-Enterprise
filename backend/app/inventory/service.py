@@ -24,6 +24,7 @@ from app.inventory.contracts import (
     StockMovementRecord,
     TransitionReservation,
 )
+from app.inventory.errors import InventoryValidation
 from app.inventory.repository import InventoryRepository
 from app.inventory.schemas import (
     AdjustmentCreate,
@@ -323,14 +324,22 @@ class InventoryService:
         *,
         context: AuthorizationContext,
         branch_id: UUID | None,
+        limit: int = 100,
+        offset: int = 0,
     ) -> tuple[CycleCountSessionResponse, ...]:
+        if not 1 <= limit <= 200 or offset < 0:
+            raise InventoryValidation("Cycle-count pagination is invalid")
         branches = (
             tuple(context.authorized_branch_ids) if branch_id is None else (branch_id,)
         )
         if branch_id is not None:
             self._branch(context, branch_id)
         rows = await self.repository.list_cycle_counts(
-            session, company_id=context.company.id, branch_ids=branches
+            session,
+            company_id=context.company.id,
+            branch_ids=branches,
+            limit=limit,
+            offset=offset,
         )
         return tuple(
             CycleCountSessionResponse.model_validate(cycle).model_copy(

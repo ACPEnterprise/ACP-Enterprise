@@ -132,9 +132,10 @@ async def test_customer_update_transition_tenant_and_archive_guards(
             f"/api/v1/customers/{customer_id}", json={"status": "prospect"}
         )
     assert prohibited.status_code == 409
-    assert prohibited.json() == {
-        "detail": "The requested Customer status transition is not allowed."
-    }
+    detail = prohibited.json()["detail"]
+    assert detail["code"] == "resource_state_conflict"
+    assert detail["message"] == "The requested Customer status transition is not allowed."
+    assert detail["recovery"] == "RETRY_AFTER_REFRESH"
 
     other_app = build_app(factory, fixture.other_context)
     async with httpx.AsyncClient(

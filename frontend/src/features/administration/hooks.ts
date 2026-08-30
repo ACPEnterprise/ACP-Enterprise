@@ -29,19 +29,20 @@ export function useMigrationReadiness() {
   });
 }
 
-export function useRoles() {
+export function useRoles(enabled = true) {
   return useQuery({
     queryKey: administrationKeys.roles,
     queryFn: api.listRoles,
     retry: shouldRetryApiQuery,
+    enabled,
   });
 }
 
-export function useRolePermissions(roleId: string | null) {
+export function useRolePermissions(roleId: string | null, enabled = true) {
   return useQuery({
     queryKey: administrationKeys.permissions(roleId ?? "none"),
     queryFn: () => api.listPermissions(roleId ?? undefined),
-    enabled: Boolean(roleId),
+    enabled: enabled && Boolean(roleId),
     retry: shouldRetryApiQuery,
   });
 }

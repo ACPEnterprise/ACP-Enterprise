@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from uuid import UUID
 
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.events.schemas import BusinessEventCreate
@@ -318,8 +318,15 @@ class PayrollPayStatementService:
         return self._view(value)
 
     async def list_own(
-        self, session: AsyncSession, *, context: AuthorizationContext
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        limit: int = 100,
+        offset: int = 0,
     ) -> tuple[PayStatementView, ...]:
+        if not 1 <= limit <= 200 or offset < 0:
+            raise PayrollConflictError("pay-statement pagination is invalid")
         self._require(context, PayrollPermission.STATEMENT_OWN_READ)
         employee = await session.scalar(
             select(Employee).where(
@@ -341,11 +348,50 @@ class PayrollPayStatementService:
                         PayrollPayStatementRecord.employee_id == employee.id,
                         PayrollPayStatementRecord.lifecycle == "issued",
                     )
-                    .order_by(PayrollPayStatementRecord.created_at.desc())
+                    .order_by(
+                        PayrollPayStatementRecord.created_at.desc(),
+                        PayrollPayStatementRecord.id.desc(),
+                    )
+                    .offset(offset)
+                    .limit(limit)
                 )
             ).all()
         )
         return tuple(self._view(value) for value in values)
+
+    async def own_summary(
+        self, session: AsyncSession, *, context: AuthorizationContext
+    ) -> tuple[int, PayStatementView | None]:
+        self._require(context, PayrollPermission.STATEMENT_OWN_READ)
+        employee = await session.scalar(
+            select(Employee).where(
+                Employee.company_id == context.company.id,
+                Employee.membership_id == context.membership.id,
+                Employee.status == "active",
+            )
+        )
+        if employee is None:
+            raise PayrollAuthorizationError(
+                "authenticated membership is not linked to an active Employee"
+            )
+        scope = (
+            PayrollPayStatementRecord.company_id == context.company.id,
+            PayrollPayStatementRecord.employee_id == employee.id,
+            PayrollPayStatementRecord.lifecycle == "issued",
+        )
+        count = await session.scalar(
+            select(func.count(PayrollPayStatementRecord.id)).where(*scope)
+        )
+        current = await session.scalar(
+            select(PayrollPayStatementRecord)
+            .where(*scope)
+            .order_by(
+                PayrollPayStatementRecord.created_at.desc(),
+                PayrollPayStatementRecord.id.desc(),
+            )
+            .limit(1)
+        )
+        return int(count or 0), self._view(current) if current is not None else None
 
     async def administrative(
         self,

@@ -30,7 +30,9 @@ describe("CommandCenterRoute", () => {
     vi.mocked(useAuth).mockReturnValue({ user: { id: "user-a" } } as ReturnType<
       typeof useAuth
     >);
-    vi.mocked(useEffectivePermissions).mockReturnValue(new Set());
+    vi.mocked(useEffectivePermissions).mockReturnValue(new Set([
+      "COMPANY_ANALYTICS_READ", "COMPANY_JOB_READ",
+    ]));
     beaconWorkflowHook.mockReturnValue({
       mutate: vi.fn(),
       isPending: false,
@@ -88,7 +90,9 @@ describe("CommandCenterRoute", () => {
     vi.mocked(useAuth).mockReturnValue({ user: { id: "user-a" } } as ReturnType<
       typeof useAuth
     >);
-    vi.mocked(useEffectivePermissions).mockReturnValue(new Set());
+    vi.mocked(useEffectivePermissions).mockReturnValue(new Set([
+      "COMPANY_ANALYTICS_READ", "COMPANY_JOB_READ",
+    ]));
     beaconWorkflowHook.mockReturnValue({
       mutate: vi.fn(),
       isPending: false,
@@ -121,5 +125,23 @@ describe("CommandCenterRoute", () => {
     expect(screen.queryByText("$0")).not.toBeInTheDocument();
     expect(screen.queryByText("0%")).not.toBeInTheDocument();
     expect(screen.getByText("Beacon signals unavailable")).toBeInTheDocument();
+  });
+
+  it("does not request cross-domain evidence without its exact read permission", () => {
+    vi.mocked(useAuth).mockReturnValue({ user: { id: "user-a" } } as ReturnType<typeof useAuth>);
+    vi.mocked(useEffectivePermissions).mockReturnValue(new Set());
+    analyticsHook.mockReturnValue({ isLoading: false, isError: false } as ReturnType<typeof useAnalyticsSummary>);
+    beaconHook.mockReturnValue({ isLoading: false, isError: false } as ReturnType<typeof useBeaconSignals>);
+    jobsHook.mockReturnValue({ isLoading: false, isError: false } as ReturnType<typeof useJobs>);
+    beaconWorkflowHook.mockReturnValue({ mutate: vi.fn(), isPending: false, isError: false } as unknown as ReturnType<typeof useBeaconWorkflowActions>);
+    beaconLifecycleHook.mockReturnValue({ mutate: vi.fn(), isPending: false, isError: false } as unknown as ReturnType<typeof useBeaconLifecycleActions>);
+
+    render(<MemoryRouter><CommandCenterRoute /></MemoryRouter>);
+
+    expect(analyticsHook).toHaveBeenCalledWith(false);
+    expect(beaconHook).toHaveBeenCalledWith(false);
+    expect(jobsHook).toHaveBeenCalledWith({ page: 1, pageSize: 1 }, false);
+    expect(screen.getByText("Beacon access unavailable")).toBeInTheDocument();
+    expect(screen.queryByText("No active Beacon signals")).not.toBeInTheDocument();
   });
 });

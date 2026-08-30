@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from app.database.session import get_database_session
 from app.jobs.errors import (
+    JobError,
     JobInvalidTransitionError,
     JobNotFoundError,
     JobValidationError,
@@ -50,6 +51,12 @@ pytest_plugins = ("tests.jobs.test_jobs_persistence",)
             422,
             "validation",
             "USER_CORRECTION_REQUIRED",
+        ),
+        (
+            JobError("internal provider detail"),
+            500,
+            "internal_failure",
+            "TERMINAL_FAILURE",
         ),
     ],
 )
@@ -346,6 +353,22 @@ async def test_transport_validation_is_422(
 ) -> None:
     response = await _request(jobs_api.app, "GET", path, params=params)
     assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_incomplete_date_range_has_user_correction_contract(
+    jobs_api: JobsApiFixture,
+) -> None:
+    response = await _request(
+        jobs_api.app,
+        "GET",
+        "/api/v1/jobs",
+        params={"created_start_at": "2025-01-01T00:00:00Z"},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "validation"
+    assert response.json()["detail"]["recovery"] == "USER_CORRECTION_REQUIRED"
 
 
 @pytest.mark.asyncio

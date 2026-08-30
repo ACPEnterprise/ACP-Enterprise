@@ -77,7 +77,7 @@ def dispatch_http(error: DispatchError) -> HTTPException:
         current_correlation_id(),
     )
     return HTTPException(
-        status.HTTP_400_BAD_REQUEST, failure.detail()
+        status.HTTP_500_INTERNAL_SERVER_ERROR, failure.detail()
     )
 
 
@@ -163,9 +163,8 @@ async def replace(
     session: DatabaseSession,
 ) -> AssignmentItem:
     if request.expected_version is None:
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_CONTENT,
-            "Expected version is required for replacement.",
+        raise dispatch_http(
+            DispatchValidation("Expected version is required for replacement.")
         )
     try:
         return await dispatch_service.replace(

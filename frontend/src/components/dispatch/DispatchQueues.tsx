@@ -263,12 +263,14 @@ export function DispatchWorkQueue({
   error,
   onRetry,
   onSelect,
+  canManage,
 }: {
   readonly items?: readonly DispatchBoardItem[];
   readonly loading: boolean;
   readonly error: unknown;
   readonly onRetry: () => void;
   readonly onSelect: (item: DispatchBoardItem) => void;
+  readonly canManage: boolean;
 }) {
   return (
     <section className="min-w-0" aria-labelledby="dispatch-work-heading">
@@ -321,9 +323,9 @@ export function DispatchWorkQueue({
                     </p>
                   )}
                 </div>
-                <Button onClick={() => onSelect(item)}>
+                {canManage && <Button onClick={() => onSelect(item)}>
                   {item.assignment ? "Manage assignment" : "Assign technician"}
-                </Button>
+                </Button>}
               </article>
             ))}
           </div>

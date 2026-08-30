@@ -139,4 +139,7 @@ async def test_customer_detail_is_company_scoped_and_returns_not_found(
     ) as client:
         response = await client.get(f"/api/v1/customers/{customer_id}")
     assert response.status_code == 404
-    assert response.json() == {"detail": "Customer resource was not found."}
+    detail = response.json()["detail"]
+    assert detail["code"] == "not_found"
+    assert detail["message"] == "Customer resource was not found."
+    assert detail["recovery"] == "TERMINAL_FAILURE"

@@ -1,5 +1,6 @@
 from dataclasses import replace
 from datetime import datetime, timezone
+from unittest.mock import AsyncMock
 from uuid import UUID, uuid4
 
 import httpx
@@ -9,10 +10,22 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.core.config import settings
+from app.customers.launch import CustomerLaunchService
 from app.customers.models import CustomerNote
 from app.events.models import BusinessEvent
 from app.platform.permissions.authorization import AuthorizedBranch
 from tests.customers.test_api import build_app, seed_customer_fixture
+
+
+@pytest.mark.asyncio
+async def test_consent_history_rejects_internal_pagination_bypass() -> None:
+    with pytest.raises(ValueError, match="pagination"):
+        await CustomerLaunchService().list_consents(
+            AsyncMock(),
+            context=object(),  # type: ignore[arg-type]
+            customer_id=uuid4(),
+            limit=201,
+        )
 
 
 @pytest_asyncio.fixture
@@ -121,6 +134,22 @@ async def test_launch_intake_duplicate_note_consent_and_location_workflow(
             "withdrawn",
             "granted",
         ]
+        newest_consent = await client.get(
+            f"/api/v1/customers/{customer['id']}/consents",
+            params={"limit": 1, "offset": 0},
+        )
+        oldest_consent = await client.get(
+            f"/api/v1/customers/{customer['id']}/consents",
+            params={"limit": 1, "offset": 1},
+        )
+        assert [item["decision"] for item in newest_consent.json()] == ["withdrawn"]
+        assert [item["decision"] for item in oldest_consent.json()] == ["granted"]
+        assert (
+            await client.get(
+                f"/api/v1/customers/{customer['id']}/consents",
+                params={"limit": 201},
+            )
+        ).status_code == 422
         detail = await client.get(f"/api/v1/customers/{customer['id']}")
         assert detail.json()["note_history"][0]["body"] == note.json()["body"]
         timeline = await client.get(f"/api/v1/customers/{customer['id']}/timeline")

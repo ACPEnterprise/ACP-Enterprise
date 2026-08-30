@@ -3,17 +3,16 @@ import base64
 import json
 import os
 from collections.abc import AsyncIterator
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from uuid import UUID, uuid4
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-
 from app.core.config import Settings, settings
 from app.payroll.contracts import PayrollAdmissionState, evaluate_payroll_admission
+from app.platform.audit.models import AuditRecord
 from app.platform.auth.models import EmailVerificationToken  # noqa: F401
 from app.platform.auth.passwords import PasswordService
 from app.platform.auth.services import CredentialService
@@ -25,17 +24,23 @@ from app.platform.notifications.models import NotificationOutbox
 from app.platform.onboarding.delivery import ProtectedEnvelopeQualificationDelivery
 from app.platform.onboarding.models import (
     IdentityOnboardingInvitation,
+    IdentityOnboardingRequest,
     ProtectedInvitationDeliveryEnvelope,
 )
+from app.platform.onboarding.router import _safe_error
 from app.platform.onboarding.service import (
     IdentityOnboardingService,
     OnboardingAuthorizationError,
     OnboardingCommand,
     OnboardingConflictError,
+    ProtectedInvitationDelivery,
 )
 from app.platform.permissions.codes import AdministrationPermission
 from app.platform.users.models import User, UserCredential
 from app.timekeeping.repository import timekeeping_repository
+from sqlalchemy import select, text, update
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 
 class Context:
@@ -64,6 +69,34 @@ class Context:
 
     def can_access_branch(self, branch_id: UUID) -> bool:
         return branch_id == self.active_branch.id
+
+
+@pytest.mark.parametrize(
+    ("error", "status_code", "code", "recovery"),
+    (
+        (
+            OnboardingAuthorizationError("protected authority detail"),
+            403,
+            "forbidden",
+            "OWNER_ADMIN_ACTION_REQUIRED",
+        ),
+        (
+            OnboardingConflictError("protected token/provider detail"),
+            409,
+            "resource_state_conflict",
+            "RETRY_AFTER_REFRESH",
+        ),
+    ),
+)
+def test_onboarding_errors_use_safe_recovery_contract(
+    error: Exception, status_code: int, code: str, recovery: str
+) -> None:
+    translated = _safe_error(error)
+    assert translated.status_code == status_code
+    assert translated.detail["code"] == code
+    assert translated.detail["recovery"] == recovery
+    assert translated.detail["correlation_id"] is None
+    assert str(error) not in str(translated.detail)
 
 
 @pytest_asyncio.fixture
@@ -247,7 +280,22 @@ async def test_owner_claim_reuses_protected_boundary_and_is_single_use(
                 IdentityOnboardingInvitation.onboarding_request_id == request_id
             )
         )
-        assert envelope is not None and envelope.status == "claimed"
+        assert envelope is not None and envelope.status == "delivered"
+        assert envelope.ciphertext == b""
+        assert envelope.nonce == b""
+        assert envelope.destroyed_at is not None
+        audit = await session.scalar(
+            select(AuditRecord).where(
+                AuditRecord.action == "identity.onboarding_owner_claimed",
+                AuditRecord.resource_id == request_id,
+            )
+        )
+        assert audit is not None
+        assert audit.actor_user_id == context.user.id
+        assert audit.company_id == context.company.id
+        assert audit.branch_id == context.active_branch.id
+        assert audit.details == {"invitation_id": str(delivery.invitation_id)}
+        assert delivery.secret not in str(audit.details)
         await session.rollback()
         with pytest.raises(OnboardingConflictError):
             await service.claim_protected_delivery_for_owner(
@@ -255,6 +303,16 @@ async def test_owner_claim_reuses_protected_boundary_and_is_single_use(
                 context=context,
                 request_id=request_id,
             )
+        audits = (
+            await session.scalars(
+                select(AuditRecord).where(
+                    AuditRecord.action == "identity.onboarding_owner_claimed",
+                    AuditRecord.resource_id == request_id,
+                )
+            )
+        ).all()
+        assert len(audits) == 1
+        await session.rollback()
         activated = await service.activate(
             session,
             token=delivery.secret,
@@ -264,6 +322,70 @@ async def test_owner_claim_reuses_protected_boundary_and_is_single_use(
         await session.refresh(envelope)
         assert envelope.status == "destroyed"
         assert envelope.ciphertext == b""
+
+
+@pytest.mark.asyncio
+async def test_concurrent_owner_claim_has_one_winner_and_one_audit(
+    onboarding_db: tuple[
+        async_sessionmaker[AsyncSession], Context, IdentityOnboardingService
+    ],
+) -> None:
+    factory, context, service = onboarding_db
+    async with factory() as setup:
+        record = await service.initiate(
+            setup,
+            context=context,
+            command=command(
+                context,
+                email=f"owner-claim-race-{uuid4()}@example.test",
+            ),
+        )
+        request_id = record.id
+
+    async def claim() -> ProtectedInvitationDelivery:
+        async with factory() as session:
+            return await service.claim_protected_delivery_for_owner(
+                session,
+                context=context,
+                request_id=request_id,
+            )
+
+    outcomes = await asyncio.gather(claim(), claim(), return_exceptions=True)
+    deliveries = [
+        outcome
+        for outcome in outcomes
+        if isinstance(outcome, ProtectedInvitationDelivery)
+    ]
+    conflicts = [
+        outcome for outcome in outcomes if isinstance(outcome, OnboardingConflictError)
+    ]
+    assert len(deliveries) == len(conflicts) == 1
+
+    async with factory() as verification:
+        envelopes = (
+            await verification.scalars(
+                select(ProtectedInvitationDeliveryEnvelope)
+                .join(IdentityOnboardingInvitation)
+                .where(
+                    IdentityOnboardingInvitation.onboarding_request_id == request_id
+                )
+            )
+        ).all()
+        audits = (
+            await verification.scalars(
+                select(AuditRecord).where(
+                    AuditRecord.action == "identity.onboarding_owner_claimed",
+                    AuditRecord.resource_id == request_id,
+                )
+            )
+        ).all()
+        assert len(envelopes) == 1
+        assert envelopes[0].status == "delivered"
+        assert envelopes[0].ciphertext == b""
+        assert envelopes[0].nonce == b""
+        assert envelopes[0].destroyed_at is not None
+        assert len(audits) == 1
+        assert deliveries[0].secret not in str(audits[0].details)
 
 
 @pytest.mark.asyncio
@@ -302,6 +424,21 @@ async def test_owner_claim_requires_permission_scope_and_non_production(
             await service.claim_protected_delivery_for_owner(
                 session, context=inaccessible, request_id=request_id
             )
+        for operation in (service.get, service.revoke, service.reissue):
+            with pytest.raises(OnboardingConflictError):
+                await operation(
+                    session,
+                    context=inaccessible,
+                    request_id=request_id,
+                )
+            await session.rollback()
+        preserved = await service.get(
+            session,
+            context=context,
+            request_id=request_id,
+        )
+        assert preserved.status == "invited"
+        await session.rollback()
 
         production = IdentityOnboardingService(
             service.configuration.model_copy(update={"environment": "production"})
@@ -310,6 +447,103 @@ async def test_owner_claim_requires_permission_scope_and_non_production(
             await production.claim_protected_delivery_for_owner(
                 session, context=context, request_id=request_id
             )
+
+
+@pytest.mark.asyncio
+async def test_initiate_rejects_valid_but_unauthorized_company_branch(
+    onboarding_db: tuple[
+        async_sessionmaker[AsyncSession], Context, IdentityOnboardingService
+    ],
+) -> None:
+    factory, context, service = onboarding_db
+    foreign_branch = Branch(
+        id=uuid4(),
+        company_id=context.company.id,
+        name="Restricted",
+        code=f"R{uuid4().hex[:7].upper()}",
+        status="active",
+        timezone="America/New_York",
+        is_primary=False,
+    )
+    async with factory() as session:
+        session.add(foreign_branch)
+        await session.commit()
+        request_key = f"foreign-branch-{uuid4()}"
+        attempted = replace(
+            command(
+                context,
+                request_key=request_key,
+                email=f"foreign-branch-{uuid4()}@example.test",
+            ),
+            branch_id=foreign_branch.id,
+        )
+        with pytest.raises(OnboardingConflictError, match="Branch"):
+            await service.initiate(session, context=context, command=attempted)
+        assert await session.scalar(
+            select(IdentityOnboardingRequest.id).where(
+                IdentityOnboardingRequest.company_id == context.company.id,
+                IdentityOnboardingRequest.request_key == request_key,
+            )
+        ) is None
+
+
+@pytest.mark.asyncio
+async def test_database_rejects_cross_company_onboarding_branch(
+    onboarding_db: tuple[
+        async_sessionmaker[AsyncSession], Context, IdentityOnboardingService
+    ],
+) -> None:
+    factory, context, service = onboarding_db
+    async with factory() as session:
+        record = await service.initiate(
+            session,
+            context=context,
+            command=command(
+                context,
+                request_key=f"constraint-{uuid4()}",
+                email=f"constraint-{uuid4()}@example.test",
+            ),
+        )
+        other_company = Company(
+            id=uuid4(),
+            name=f"Other {uuid4()}",
+            code=f"O{uuid4().hex[:8].upper()}",
+            status="active",
+            timezone="America/New_York",
+        )
+        other_branch = Branch(
+            id=uuid4(),
+            company_id=other_company.id,
+            name="Other",
+            code="OTHER",
+            status="active",
+            timezone="America/New_York",
+            is_primary=True,
+        )
+        session.add_all([other_company, other_branch])
+        await session.commit()
+        with pytest.raises(IntegrityError):
+            async with session.begin():
+                await session.execute(
+                    update(IdentityOnboardingRequest)
+                    .where(IdentityOnboardingRequest.id == record.id)
+                    .values(branch_id=other_branch.id)
+                )
+        constraint_names = set(
+            (
+                await session.scalars(
+                    text(
+                        "SELECT conname FROM pg_constraint "
+                        "WHERE conrelid = "
+                        "'identity_onboarding_requests'::regclass"
+                    )
+                )
+            ).all()
+        )
+        assert {
+            "fk_identity_onboarding_request_company_branch",
+            "fk_identity_onboarding_request_company_employee",
+        } <= constraint_names
 
 
 @pytest.mark.asyncio
@@ -396,6 +630,47 @@ async def test_employee_number_allocation_is_concurrent_and_never_reuses(
         assert next_employee is not None
         assert next_employee.employee_number not in allocated
         assert next_employee.employee_number != archived_number
+
+
+@pytest.mark.asyncio
+async def test_concurrent_exact_initiation_replays_one_authority(
+    onboarding_db: tuple[
+        async_sessionmaker[AsyncSession], Context, IdentityOnboardingService
+    ],
+) -> None:
+    factory, context, service = onboarding_db
+    request_key = f"concurrent-exact-{uuid4()}"
+    exact_command = command(
+        context,
+        request_key=request_key,
+        email=f"{request_key}@example.test",
+    )
+
+    async def initiate() -> IdentityOnboardingRequest:
+        async with factory() as session:
+            return await service.initiate(
+                session,
+                context=context,
+                command=exact_command,
+            )
+
+    first, second = await asyncio.gather(initiate(), initiate())
+    assert first.id == second.id
+    assert first.employee_id == second.employee_id
+    assert first.membership_id == second.membership_id
+
+    async with factory() as session:
+        records = list(
+            (
+                await session.scalars(
+                    select(IdentityOnboardingRequest).where(
+                        IdentityOnboardingRequest.company_id == context.company.id,
+                        IdentityOnboardingRequest.request_key == request_key,
+                    )
+                )
+            ).all()
+        )
+        assert [record.id for record in records] == [first.id]
 
 
 @pytest.mark.asyncio
