@@ -31,14 +31,19 @@ class EconomicsProfitabilityPersistenceService:
         request: ProfitabilityComputationRequest,
         result: AdmittedProfitabilityResult,
     ) -> EconomicsProfitabilityResultRecord:
-        if not context.has_permission(
-            EconomicsPolicyPermission.MEASUREMENT_EXECUTE
-        ):
+        if not context.has_permission(EconomicsPolicyPermission.MEASUREMENT_EXECUTE):
             raise ProfitabilityPersistenceError(
                 "Economics measurement execution permission denied"
             )
         if request.company_id != context.company.id:
             raise ProfitabilityPersistenceError("cross-Company profitability result")
+        if request.branch_id not in context.authorized_branch_ids:
+            raise ProfitabilityPersistenceError("cross-Branch profitability result")
+        if (
+            context.active_branch is not None
+            and request.branch_id != context.active_branch.id
+        ):
+            raise ProfitabilityPersistenceError("inactive-Branch profitability result")
         identity = f"eco-profitability-result:{result.result_digest}"
         await session.execute(
             text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"),
@@ -126,7 +131,9 @@ class EconomicsProfitabilityPersistenceService:
                 "freshness_status": analysis.quality.freshness_status,
                 "fresh_as_of": analysis.quality.fresh_as_of.isoformat(),
                 "explanation": analysis.quality.explanation,
-                "missing_categories": [item.value for item in analysis.quality.missing_categories],
+                "missing_categories": [
+                    item.value for item in analysis.quality.missing_categories
+                ],
             },
             explanation={
                 "answer": explanation.answer,
@@ -134,7 +141,9 @@ class EconomicsProfitabilityPersistenceService:
                     {
                         "kind": item.kind.value,
                         "summary": item.summary,
-                        "components": [component.value for component in item.component_categories],
+                        "components": [
+                            component.value for component in item.component_categories
+                        ],
                         "evidence_digests": list(item.evidence_digests),
                         "explanation": item.explanation,
                     }
@@ -145,9 +154,7 @@ class EconomicsProfitabilityPersistenceService:
             },
             acquisition_digests=list(result.computation.acquisition_digests),
             allocation_digests=list(result.computation.allocation_digests),
-            explanation_ids=[
-                str(item) for item in result.computation.explanation_ids
-            ],
+            explanation_ids=[str(item) for item in result.computation.explanation_ids],
             lifecycle="admitted",
             created_by_user_id=context.user.id,
         )
