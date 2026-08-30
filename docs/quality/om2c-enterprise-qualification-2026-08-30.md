@@ -31,7 +31,7 @@
 
 ## Qualification results
 
-- Frontend after authority reconciliation and dependency repair: 88 test files / 262 tests passed; ESLint passed; TypeScript and production Vite build passed.
+- Frontend after authority reconciliation and repairs: 88 test files / 263 tests passed; ESLint passed; TypeScript and production Vite build passed.
 - Backend focused security tranche: isolation, authorization composition, idempotency, provider uncertainty and safe-output tests passed after repairing a stale catalog fingerprint.
 - Backend broad run: 2,109 passed, 7 skipped, 12 failed. Classification: 10 `TEST_ISOLATION` failures caused by reusing a database containing focused-test fixtures (all 10 passed on a fresh schema); 1 `ENVIRONMENT` Redis test (failed closed because `redis` hostname/runtime was unavailable); 1 `STALE_FIXTURE` external-adoption test repaired and requalified.
 - Static: Python 3.12 compilation passed; MyPy passed across 621 source files. Repository-wide Ruff is not a clean gate at starting authority (246 findings, predominantly pre-existing import-order findings); no mass formatting was performed.
@@ -44,6 +44,7 @@
 2. `STALE_FIXTURE`: external-adoption successor evidence did not satisfy newly integrated execution-head and repository-readiness admission. The test now supplies matching authoritative-head evidence and isolates the orthogonal readiness adapter with an explicit mock.
 3. `DEPENDENCY`: direct `react-router` 7.18.1 fell within the lockfile audit's affected CSRF-bypass range. It was advanced only to the patched 7.18.3 line. Remaining audit findings are transitive and require separate applicability/upgrade qualification.
 4. `AUTHORIZATION/DURABLE_INTEGRITY`: Economics execution checked Company identity but accepted a result tagged to a different or nonexistent Branch, and the durable result table lacked a Company+Branch foreign key. Persistence now rejects active-branch escape and nonexistent Company branches before mutation; migration `c1a0e38d6bfc` enforces the same invariant in PostgreSQL. All 140 Business Economics tests pass, and the new migration passed fresh upgrade, downgrade/re-upgrade, current-head, and drift qualification.
+5. `FRONTEND_AUTHORIZATION/RECOVERY`: the Economics route initiated its protected workspace request even when the current user lacked read authority, and its temporary-unavailable state had no recovery action. The query is now disabled unless read permission is present, and the safe error state exposes a tested retry without rendering backend details.
 
 ## Release-readiness projection
 

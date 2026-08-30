@@ -22,11 +22,11 @@ export function BusinessEconomicsRoute() {
   const canRead = useHasPermission("COMPANY_ECONOMICS_MEASUREMENT_READ");
   const [start, setStart] = useState(monthStart); const [end, setEnd] = useState(today);
   const [scope, setScope] = useState({ start: monthStart, end: today }); const [selected, setSelected] = useState<string | null>(null);
-  const workspace = useEconomicsWorkspace(scope.start, scope.end); const detail = useEconomicsResult(selected);
+  const workspace = useEconomicsWorkspace(scope.start, scope.end, canRead); const detail = useEconomicsResult(selected);
   const sortedLosses = useMemo(() => workspace.data?.jobs.filter((job) => job.contribution_minor != null && job.contribution_minor < 0) ?? [], [workspace.data]);
   if (!canRead) return <Alert variant="danger">You are not authorized to view Business Economics.</Alert>;
   if (workspace.isPending) return <Spinner label="Loading Business Economics" />;
-  if (workspace.isError || !workspace.data) return <Alert variant="danger" title="Economics unavailable">Accepted profitability evidence could not be loaded. No value was inferred.</Alert>;
+  if (workspace.isError || !workspace.data) return <Alert variant="danger" title="Economics temporarily unavailable"><div className="space-y-3"><p>Accepted profitability evidence could not be loaded. No value was inferred.</p><Button onClick={() => void workspace.refetch()} type="button" variant="secondary">Retry Economics</Button></div></Alert>;
   const value = workspace.data; const currency = value.currency ?? "USD"; const directCost = value.totals ? value.totals.labor + value.totals.materials + value.totals.equipment + value.totals.truck : null;
   return <div className="mx-auto max-w-7xl space-y-6 pb-12"><header><p className="text-sm font-semibold text-action-primary">Owner Intelligence</p><h1 className="mt-1 text-2xl font-bold sm:text-3xl">Business Economics</h1><p className="mt-2 max-w-3xl text-content-muted">Authoritative profitability from admitted Jobs, revenue, labor, materials, and approved allocation evidence—with missing evidence kept visible.</p></header>
     <Card><CardContent className="pt-6"><form className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]" onSubmit={(event) => { event.preventDefault(); setScope({ start, end }); setSelected(null); }}><Input aria-label="Start date" type="date" value={start} onChange={(event) => setStart(event.target.value)} /><Input aria-label="End date" type="date" value={end} onChange={(event) => setEnd(event.target.value)} /><Button type="submit">Compare period</Button></form></CardContent></Card>
