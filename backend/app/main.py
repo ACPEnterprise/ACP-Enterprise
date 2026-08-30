@@ -91,6 +91,7 @@ from app.worker_control.recovery_acknowledgement import (
     worker_router as worker_recovery_transport_router,
 )
 from app.worker_control.transport.http.router import router as worker_transport_router
+from app.workforce.router import router as workforce_router
 
 logging.basicConfig(
     level=getattr(logging, settings.log_level),
@@ -180,6 +181,7 @@ app.include_router(procurement_matching_router)
 app.include_router(operations_router)
 app.include_router(dispatch_router)
 app.include_router(employee_operations_router)
+app.include_router(workforce_router)
 app.include_router(field_service_router)
 app.include_router(price_book_router)
 app.include_router(estimates_router)

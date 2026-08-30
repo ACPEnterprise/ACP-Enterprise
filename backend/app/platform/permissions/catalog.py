@@ -23,13 +23,14 @@ from app.platform.permissions.codes import (
     InvoicePermission,
     JobPermission,
     LaunchPlatformPermission,
+    MigrationPermission,
     PaymentPermission,
     PriceBookPermission,
     PurchasingPermission,
-    MigrationPermission,
     SchedulingPermission,
     WorkerControlPermission,
     WorkerIdentityPermission,
+    WorkforcePermission,
 )
 from app.timekeeping.permissions import TimekeepingPermission
 
@@ -222,6 +223,17 @@ DISPATCH_DEFINITIONS = tuple(
         scope=PermissionScope.COMPANY,
     )
     for code in sorted(DispatchPermission.ALL)
+)
+
+WORKFORCE_DEFINITIONS = tuple(
+    PermissionDefinition(
+        code=code,
+        name=code.replace("_", " ").title(),
+        resource="workforce",
+        action=code.removeprefix("COMPANY_WORKFORCE_").lower(),
+        scope=PermissionScope.COMPANY,
+    )
+    for code in sorted(WorkforcePermission.ALL)
 )
 
 EMPLOYEE_OPERATIONS_DEFINITIONS = tuple(
@@ -426,6 +438,7 @@ permission_catalog = PermissionCatalog(
     + SCHEDULING_DEFINITIONS
     + JOB_DEFINITIONS
     + DISPATCH_DEFINITIONS
+    + WORKFORCE_DEFINITIONS
     + EMPLOYEE_OPERATIONS_DEFINITIONS
     + INVENTORY_DEFINITIONS
     + PURCHASING_DEFINITIONS
