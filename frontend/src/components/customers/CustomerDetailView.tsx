@@ -18,6 +18,7 @@ import {
   Textarea,
 } from "../../ui";
 import { ContactForm } from "./ContactForm";
+import { CustomerCommunicationHistory } from "./CustomerCommunicationHistory";
 import { CustomerOperationsPanel } from "./CustomerOperationsPanel";
 import { CustomerForm } from "./CustomerForm";
 import { PropertyForm } from "./PropertyForm";
@@ -41,6 +42,7 @@ export function CustomerDetailView({ customerId, onBack }: CustomerDetailViewPro
   const mutations = useCustomerMutations(customerId);
   const consents = useCustomerConsents(customerId);
   const timeline = useCustomerTimeline(customerId);
+  const canReadCommunications = useHasPermission("COMPANY_COMMUNICATIONS_READ");
   const [isEditingCustomer, setIsEditingCustomer] = useState(false);
   const [editingProperty, setEditingProperty] = useState<CustomerProperty | "new" | null>(null);
   const [editingContact, setEditingContact] = useState<CustomerContact | "new" | null>(null);
@@ -140,6 +142,7 @@ export function CustomerDetailView({ customerId, onBack }: CustomerDetailViewPro
       </Card>
 
       <CustomerOperationsPanel customerId={customerId} />
+      {canReadCommunications && <CustomerCommunicationHistory customerId={customerId} />}
 
       <Card className="p-ui-4 sm:p-ui-6">
         <p className="text-sm text-action-primary">Identity quality</p>

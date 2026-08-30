@@ -83,6 +83,7 @@ class CommunicationRepository:
         *,
         company_id: UUID,
         branch_id: UUID | None,
+        customer_id: UUID | None,
         limit: int,
     ) -> list[NotificationOutbox]:
         statement: Select[tuple[NotificationOutbox]] = select(NotificationOutbox).where(
@@ -92,6 +93,10 @@ class CommunicationRepository:
         if branch_id is not None:
             statement = statement.where(
                 NotificationOutbox.branch_id == branch_id
+            )
+        if customer_id is not None:
+            statement = statement.where(
+                NotificationOutbox.payload["customer_id"].astext == str(customer_id)
             )
         statement = statement.order_by(
             NotificationOutbox.created_at.desc(), NotificationOutbox.id.desc()
