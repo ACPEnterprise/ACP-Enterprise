@@ -952,3 +952,224 @@ class BranchPurchasingPolicyRevision(Base):
     occurred_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
     )
+
+
+class PurchaseRequisition(Base):
+    """Governed procurement demand; approval is distinct from PO authority."""
+
+    __tablename__ = "purchasing_requisitions"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "branch_id"],
+            ["branches.company_id", "branches.id"],
+            name="fk_purchasing_requisition_branch",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "inventory_item_id"],
+            ["inventory_items.company_id", "inventory_items.id"],
+            name="fk_purchasing_requisition_item",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "suggested_vendor_id"],
+            [
+                "purchasing_operational_vendors.company_id",
+                "purchasing_operational_vendors.id",
+            ],
+            name="fk_purchasing_requisition_vendor",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "purchase_order_id"],
+            ["purchasing_purchase_orders.company_id", "purchasing_purchase_orders.id"],
+            name="fk_purchasing_requisition_po",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint("quantity > 0", name="ck_purchasing_requisition_quantity"),
+        CheckConstraint(
+            "status IN ('draft','submitted','approved','rejected','cancelled','converted')",
+            name="ck_purchasing_requisition_status",
+        ),
+        CheckConstraint(
+            "source_type IN ('manual','replenishment','job_material','stock_location','emergency_exception')",
+            name="ck_purchasing_requisition_source",
+        ),
+        CheckConstraint("version >= 1", name="ck_purchasing_requisition_version"),
+        UniqueConstraint(
+            "company_id", "request_number", name="uq_purchasing_requisition_number"
+        ),
+        UniqueConstraint(
+            "company_id", "idempotency_key", name="uq_purchasing_requisition_key"
+        ),
+        UniqueConstraint("company_id", "id", name="uq_purchasing_requisition_company"),
+        Index(
+            "ix_purchasing_requisition_queue",
+            "company_id",
+            "branch_id",
+            "status",
+            "need_by",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    request_number: Mapped[str] = mapped_column(String(80), nullable=False)
+    inventory_item_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    quantity: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False)
+    unit: Mapped[str] = mapped_column(String(40), nullable=False)
+    need_by: Mapped[date | None] = mapped_column(Date)
+    source_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    source_reference: Mapped[str] = mapped_column(String(240), nullable=False)
+    job_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    suggested_vendor_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="draft")
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    requester_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    decided_by_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT")
+    )
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    decision_reason: Mapped[str | None] = mapped_column(Text)
+    purchase_order_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
+class SupplyChainPolicy(Base):
+    """Versioned configuration readiness without selecting Company policy."""
+
+    __tablename__ = "supply_chain_policies"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "branch_id"],
+            ["branches.company_id", "branches.id"],
+            name="fk_supply_chain_policy_branch",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "policy_type IN ('matching_tolerance','receiving','reorder','valuation','receipt_accrual','approval')",
+            name="ck_supply_chain_policy_type",
+        ),
+        CheckConstraint(
+            "status IN ('unconfigured','draft','active','inactive')",
+            name="ck_supply_chain_policy_status",
+        ),
+        CheckConstraint("version >= 1", name="ck_supply_chain_policy_version"),
+        UniqueConstraint(
+            "company_id",
+            "branch_id",
+            "policy_type",
+            name="uq_supply_chain_policy_scope",
+        ),
+        UniqueConstraint("company_id", "id", name="uq_supply_chain_policy_company"),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    policy_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="unconfigured"
+    )
+    configuration: Mapped[dict[str, object]] = mapped_column(
+        JSONB, nullable=False, default=dict
+    )
+    readiness_reason: Mapped[str] = mapped_column(Text, nullable=False)
+    evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    updated_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
+class PurchasingDocumentEvidence(Base):
+    """Append-only provider-neutral document custody metadata."""
+
+    __tablename__ = "purchasing_document_evidence"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "branch_id"],
+            ["branches.company_id", "branches.id"],
+            name="fk_purchasing_document_branch",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "entity_type IN ('purchase_order','requisition','receipt','discrepancy','purchase_return')",
+            name="ck_purchasing_document_entity_type",
+        ),
+        CheckConstraint(
+            "length(content_digest) = 64", name="ck_purchasing_document_digest"
+        ),
+        CheckConstraint(
+            "status IN ('active','superseded')", name="ck_purchasing_document_status"
+        ),
+        UniqueConstraint(
+            "company_id", "idempotency_key", name="uq_purchasing_document_key"
+        ),
+        UniqueConstraint(
+            "company_id",
+            "entity_type",
+            "entity_id",
+            "content_digest",
+            name="uq_purchasing_document_content",
+        ),
+        UniqueConstraint("company_id", "id", name="uq_purchasing_document_company"),
+        Index(
+            "ix_purchasing_document_entity",
+            "company_id",
+            "entity_type",
+            "entity_id",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    entity_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    entity_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    document_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    filename: Mapped[str] = mapped_column(String(240), nullable=False)
+    media_type: Mapped[str] = mapped_column(String(120), nullable=False)
+    content_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    storage_reference: Mapped[str] = mapped_column(String(500), nullable=False)
+    source_reference: Mapped[str] = mapped_column(String(240), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
+    evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    actor_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )

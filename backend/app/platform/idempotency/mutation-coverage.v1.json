@@ -2464,8 +2464,58 @@
         "tests/payroll/test_paystatement_experience.py"
       ],
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "purchasing",
+      "mechanism": "Company-scoped Purchasing command receipt and canonical request digest",
+      "method": "POST",
+      "operation_id": "create_requisition_api_v1_purchasing_requisitions_post",
+      "path": "/api/v1/purchasing/requisitions",
+      "reason": "Procurement demand replay returns one durable requisition while contradictory identity reuse fails closed.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "purchasing",
+      "mechanism": "Company-scoped Purchasing command receipt, canonical request digest, and optimistic version",
+      "method": "POST",
+      "operation_id": "submit_requisition_api_v1_purchasing_requisitions__requisition_id__submit_post",
+      "path": "/api/v1/purchasing/requisitions/{requisition_id}/submit",
+      "reason": "Requisition submission is exactly-once and stale or contradictory commands fail closed.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "purchasing",
+      "mechanism": "Company-scoped Purchasing command receipt, canonical request digest, SOD, and optimistic version",
+      "method": "POST",
+      "operation_id": "decide_requisition_api_v1_purchasing_requisitions__requisition_id___action__post",
+      "path": "/api/v1/purchasing/requisitions/{requisition_id}/{action}",
+      "reason": "Approval, rejection, cancellation, and PO conversion converge on one governed requisition outcome.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "purchasing",
+      "mechanism": "Company-scoped Purchasing command receipt, canonical policy digest, and optimistic version",
+      "method": "PUT",
+      "operation_id": "configure_supply_chain_policy_api_v1_purchasing_supply_chain_policies_put",
+      "path": "/api/v1/purchasing/supply-chain-policies",
+      "reason": "Versioned policy readiness cannot be duplicated or silently overwritten by stale configuration.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "purchasing",
+      "mechanism": "Company-scoped Purchasing command receipt, canonical content digest, and immutable custody evidence",
+      "method": "POST",
+      "operation_id": "register_document_api_v1_purchasing_documents_post",
+      "path": "/api/v1/purchasing/documents",
+      "reason": "Exact replay returns one custody record while contradictory command identity reuse fails closed.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "af8516ba5fe37693d8b3001c52e09a9540d00164798226a3c8b381c8131544ce",
+  "fingerprint": "5f3d02f6e865e665e15362c0f7dc3f209e4374c7c4ce73ea0e7c359935866b46",
   "schema_version": "1"
 }

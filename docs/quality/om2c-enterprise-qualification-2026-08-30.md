@@ -4,7 +4,7 @@
 
 - Starting protected authority: `72f969bac74a0bf4c741bdc98133b5c23f18d91e` (`origin/customer-management-v1`).
 - Reconciled protected authority: `1fac637462b01869cc7962d7463af1dc12637a43`.
-- Latest reconciled protected authority: `9cab6952b09828b15e69410628b4a77a25ca8718`.
+- Latest reconciled protected authority: `f6cffe45fb66f412e1647134de59da24ff3ec96e`.
 - Qualification branch: `work/om2c-quality-security-program-1`.
 - The supplied OM2-A and OM2-B SHAs are not ancestors of starting authority. Their named remote branches were absent after `git fetch --prune`; no integration claim is made.
 - This is non-production evidence. It is not Production release approval.
@@ -36,7 +36,7 @@
 - Backend focused security tranche: isolation, authorization composition, idempotency, provider uncertainty and safe-output tests passed after repairing a stale catalog fingerprint.
 - Backend broad run: 2,109 passed, 7 skipped, 12 failed. Classification: 10 `TEST_ISOLATION` failures caused by reusing a database containing focused-test fixtures (all 10 passed on a fresh schema); 1 `ENVIRONMENT` Redis test (failed closed because `redis` hostname/runtime was unavailable); 1 `STALE_FIXTURE` external-adoption test repaired and requalified.
 - Static: Python 3.12 compilation passed; MyPy passed across 621 source files. Repository-wide Ruff is not a clean gate at starting authority (246 findings, predominantly pre-existing import-order findings); no mass formatting was performed.
-- Database: PostgreSQL 16.15 fresh upgrade passed, followed by successful authority-advance upgrades; exactly one OM2-C candidate Alembic head `d2b1f49e7c0a`; `current=head`; `alembic check` reports no drift. Both OM2-C migrations passed focused downgrade/re-upgrade qualification.
+- Database: PostgreSQL 16.15 fresh upgrade passed, followed by successful authority-advance upgrades; exactly one merged Alembic head `e3c2a71f8d4b`; `current=head`; `alembic check` reports no drift. OM2-C migrations passed focused downgrade/re-upgrade qualification, and the Supply Chain/OM2-C merge passed a second entirely fresh database upgrade.
 - Secret scan: only intentional synthetic canary tests matched the high-confidence token/private-key patterns; no discovered secret value was emitted.
 
 ## Defects and repairs
@@ -61,11 +61,12 @@
 18. `AP_CONCURRENCY/ECONOMIC_IDEMPOTENCY/SAFE_OUTPUT`: AP creation and application boundaries used absent-row replay checks without a shared identity lock. Concurrent exact requests could race into unique constraints, while credit/disbursement source identities lacked safe replay and application keys returned prior authority without rejecting a changed amount or target. Company-scoped advisory identities now serialize Vendor, source, Bill-number, credit, disbursement, application, and posting-receipt authority; replays validate immutable request evidence and contradictions fail as typed AP conflicts. An independent-engine test proves two concurrent 60.00 disbursement applications create one application/subledger fact and reduce both available/open balances exactly once, while changed-amount key reuse fails closed. AP responses now use fixed recovery-classified envelopes without reflected exception text. All 13 AP/procurement-matching tests plus focused Ruff, MyPy, and diff checks pass.
 19. `AP_OBJECT_AUTHORIZATION`: AP creation and aging enforced authorized Branch scope, but Bill lifecycle, duplicate override, credit/disbursement application and reversal accepted any valid same-Company resource ID. A Branch-restricted permission holder could therefore mutate a Bill or replay application authority from another Branch. Every public resource mutation now binds the parent Bill/disbursement to the caller's current authorized Branch set before replay or state mutation and conceals unauthorized identities as not found. The adversarial replay test proves an exact valid application key cannot escape its Branch. All 13 AP/procurement-matching tests plus focused Ruff, MyPy, and diff checks pass.
 20. `AP_ACCOUNTING_RECEIPT_INTEGRITY`: AP Accounting posting receipt replay compared only status and journal identity. Reuse of the same source Event ID with a different AP source, mapping version, effective date, or failure reason was accepted as replay, weakening source provenance. Replay now binds the complete immutable receipt authority. Independent concurrent exact replay returns one receipt, while changed source identity fails as a typed conflict; all 14 AP/procurement-matching tests pass.
+21. `MIGRATION_GRAPH/RELEASE_BLOCKER`: Protected authority `f6cffe4` integrated Supply Chain migrations from `b0ff279c5aeb` alongside OM2-C's Economics/Dispatch lineage from the same parent, producing heads `19i4k89084j8` and `d2b1f49e7c0a`. Repository-standard `alembic upgrade head` failed immediately. Forward-only merge revision `e3c2a71f8d4b` preserves both histories and restores exactly one head. Existing-schema and entirely fresh PostgreSQL upgrades both reach current=head with no drift; all 65 Purchasing/procurement/idempotency tests pass on the reconciled schema.
 
 ## Release-readiness projection
 
 - Release SHA: starting authority above plus the OM2-C qualification commit recorded on this branch.
-- Schema head: OM2-C candidate `d2b1f49e7c0a` over `c1a0e38d6bfc` and protected `b0ff279c5aeb`; fresh-upgrade ancestry, focused downgrade/re-upgrades, and drift clean.
+- Schema head: merged candidate `e3c2a71f8d4b` over Supply Chain `19i4k89084j8` and OM2-C `d2b1f49e7c0a`; fresh-upgrade ancestry, focused downgrade/re-upgrades, and drift clean.
 - Backend: broad functional coverage is high, but the integrated Redis test and a clean one-pass fresh-database rerun remain external gates.
 - Frontend: tests/lint/build qualified again after the bounded dependency repair.
 - Security: focused authorization/isolation/idempotency/safe-output suite qualified; dependency transitive findings and expanded direct API object-binding remain open work.

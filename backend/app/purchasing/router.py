@@ -22,6 +22,7 @@ from .schemas import (
     CreatePurchaseReturnCommand,
     DecidePurchaseOrderChangeCommand,
     DiscrepancyItem,
+    PurchaseOrderArtifactItem,
     PurchaseOrderChangeItem,
     PurchaseOrderCreate,
     PurchaseOrderDispositionCommand,
@@ -31,8 +32,13 @@ from .schemas import (
     PurchaseOrderLineUpdate,
     PurchaseOrderLineWrite,
     PurchaseOrderUpdate,
+    PurchaseRequisitionCreate,
+    PurchaseRequisitionItem,
+    PurchaseRequisitionTransition,
     PurchaseReturnItem,
     PurchaseReturnTransitionCommand,
+    PurchasingDocumentCreate,
+    PurchasingDocumentItem,
     PurchasingWorkspace,
     ReceiptItem,
     ReceiptLineItem,
@@ -44,6 +50,8 @@ from .schemas import (
     ReplenishmentWorkbenchRequest,
     RequestPurchaseOrderChangeCommand,
     ResolveDiscrepancyCommand,
+    SupplyChainPolicyItem,
+    SupplyChainPolicyWrite,
     TransitionCommand,
     VendorCreate,
     VendorItem,
@@ -115,6 +123,95 @@ def http_error(error: PurchasingError) -> HTTPException:
     return HTTPException(status.HTTP_400_BAD_REQUEST, "Purchasing operation failed")
 
 
+@router.post(
+    "/requisitions",
+    response_model=PurchaseRequisitionItem,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_requisition(
+    payload: PurchaseRequisitionCreate, context: ManageContext, session: DatabaseSession
+) -> PurchaseRequisitionItem:
+    try:
+        return await purchasing_service.create_requisition(
+            session, context=context, payload=payload
+        )
+    except PurchasingError as error:
+        raise http_error(error) from error
+
+
+@router.post(
+    "/requisitions/{requisition_id}/submit", response_model=PurchaseRequisitionItem
+)
+async def submit_requisition(
+    requisition_id: UUID,
+    payload: PurchaseRequisitionTransition,
+    context: ManageContext,
+    session: DatabaseSession,
+) -> PurchaseRequisitionItem:
+    try:
+        return await purchasing_service.transition_requisition(
+            session,
+            context=context,
+            requisition_id=requisition_id,
+            action="submit",
+            payload=payload,
+        )
+    except PurchasingError as error:
+        raise http_error(error) from error
+
+
+@router.post(
+    "/requisitions/{requisition_id}/{action}", response_model=PurchaseRequisitionItem
+)
+async def decide_requisition(
+    requisition_id: UUID,
+    action: str,
+    payload: PurchaseRequisitionTransition,
+    context: ApproveContext,
+    session: DatabaseSession,
+) -> PurchaseRequisitionItem:
+    if action not in {"approve", "reject", "convert", "cancel"}:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Unsupported requisition action")
+    try:
+        return await purchasing_service.transition_requisition(
+            session,
+            context=context,
+            requisition_id=requisition_id,
+            action=action,
+            payload=payload,
+        )
+    except PurchasingError as error:
+        raise http_error(error) from error
+
+
+@router.put("/supply-chain-policies", response_model=SupplyChainPolicyItem)
+async def configure_supply_chain_policy(
+    payload: SupplyChainPolicyWrite, context: ManageContext, session: DatabaseSession
+) -> SupplyChainPolicyItem:
+    try:
+        return await purchasing_service.configure_supply_chain_policy(
+            session, context=context, payload=payload
+        )
+    except PurchasingError as error:
+        raise http_error(error) from error
+
+
+@router.post(
+    "/documents",
+    response_model=PurchasingDocumentItem,
+    status_code=status.HTTP_201_CREATED,
+)
+async def register_document(
+    payload: PurchasingDocumentCreate, context: ManageContext, session: DatabaseSession
+) -> PurchasingDocumentItem:
+    try:
+        return await purchasing_service.register_document(
+            session, context=context, payload=payload
+        )
+    except PurchasingError as error:
+        raise http_error(error) from error
+
+
 @router.get("/branch-policies", response_model=tuple[BranchPurchasingPolicyItem, ...])
 async def branch_policies(
     context: ReadContext, session: DatabaseSession
@@ -179,6 +276,20 @@ async def get_order(
 ) -> PurchaseOrderItem:
     try:
         return await purchasing_service.get_order(session, context=context, po_id=po_id)
+    except PurchasingError as error:
+        raise http_error(error) from error
+
+
+@router.get(
+    "/purchase-orders/{po_id}/artifact", response_model=PurchaseOrderArtifactItem
+)
+async def purchase_order_artifact(
+    po_id: UUID, context: ReadContext, session: DatabaseSession
+) -> PurchaseOrderArtifactItem:
+    try:
+        return await purchasing_service.purchase_order_artifact(
+            session, context=context, po_id=po_id
+        )
     except PurchasingError as error:
         raise http_error(error) from error
 

@@ -1,4 +1,5 @@
 import hashlib
+import html
 import json
 from datetime import date, datetime, timezone
 from decimal import Decimal
@@ -32,9 +33,12 @@ from .models import (
     PurchaseOrderReceipt,
     PurchaseOrderReceiptLine,
     PurchaseOrderRevision,
+    PurchaseRequisition,
     PurchaseReturn,
     PurchasingCommandReceipt,
+    PurchasingDocumentEvidence,
     ReplenishmentDecisionEvidence,
+    SupplyChainPolicy,
 )
 from .repository import PurchasingRepository, purchasing_repository
 from .schemas import (
@@ -44,6 +48,7 @@ from .schemas import (
     CreatePurchaseReturnCommand,
     DecidePurchaseOrderChangeCommand,
     DiscrepancyItem,
+    PurchaseOrderArtifactItem,
     PurchaseOrderChangeItem,
     PurchaseOrderCreate,
     PurchaseOrderDispositionCommand,
@@ -54,8 +59,13 @@ from .schemas import (
     PurchaseOrderLineWrite,
     PurchaseOrderRevisionItem,
     PurchaseOrderUpdate,
+    PurchaseRequisitionCreate,
+    PurchaseRequisitionItem,
+    PurchaseRequisitionTransition,
     PurchaseReturnItem,
     PurchaseReturnTransitionCommand,
+    PurchasingDocumentCreate,
+    PurchasingDocumentItem,
     PurchasingWorkspace,
     ReceiptItem,
     ReceiptLineItem,
@@ -70,6 +80,8 @@ from .schemas import (
     ReplenishmentWorkbenchRequest,
     RequestPurchaseOrderChangeCommand,
     ResolveDiscrepancyCommand,
+    SupplyChainPolicyItem,
+    SupplyChainPolicyWrite,
     TransitionCommand,
     VendorCreate,
     VendorItem,
@@ -115,18 +127,570 @@ class PurchasingService:
         orders = await self.repository.purchase_orders(
             session, context.company.id, tuple(context.authorized_branch_ids)
         )
+        requisitions = tuple(
+            (
+                await session.scalars(
+                    select(PurchaseRequisition)
+                    .where(
+                        PurchaseRequisition.company_id == context.company.id,
+                        PurchaseRequisition.branch_id.in_(
+                            tuple(context.authorized_branch_ids)
+                        ),
+                    )
+                    .order_by(PurchaseRequisition.created_at.desc())
+                )
+            ).all()
+        )
+        policies = tuple(
+            (
+                await session.scalars(
+                    select(SupplyChainPolicy)
+                    .where(
+                        SupplyChainPolicy.company_id == context.company.id,
+                        SupplyChainPolicy.branch_id.in_(
+                            tuple(context.authorized_branch_ids)
+                        ),
+                    )
+                    .order_by(
+                        SupplyChainPolicy.branch_id, SupplyChainPolicy.policy_type
+                    )
+                )
+            ).all()
+        )
+        documents = tuple(
+            (
+                await session.scalars(
+                    select(PurchasingDocumentEvidence)
+                    .where(
+                        PurchasingDocumentEvidence.company_id == context.company.id,
+                        PurchasingDocumentEvidence.branch_id.in_(
+                            tuple(context.authorized_branch_ids)
+                        ),
+                    )
+                    .order_by(PurchasingDocumentEvidence.created_at.desc())
+                )
+            ).all()
+        )
         return PurchasingWorkspace(
             vendors=tuple(VendorItem.model_validate(vendor) for vendor in vendors),
             purchase_orders=tuple(
                 [await self._item(session, order) for order in orders]
             ),
+            requisitions=tuple(
+                PurchaseRequisitionItem.model_validate(item) for item in requisitions
+            ),
+            policies=tuple(
+                SupplyChainPolicyItem.model_validate(item) for item in policies
+            ),
+            documents=tuple(
+                PurchasingDocumentItem.model_validate(item) for item in documents
+            ),
         )
+
+    async def register_document(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        payload: PurchasingDocumentCreate,
+    ) -> PurchasingDocumentItem:
+        self.branch(context, payload.branch_id)
+        data = payload.model_dump(mode="json", exclude={"idempotency_key"})
+        async with session.begin():
+            replay = await self._replay(
+                session,
+                context,
+                "purchasing.document.register",
+                payload.idempotency_key,
+                data,
+                "purchasing_document",
+            )
+            if replay is not None:
+                existing = await session.get(PurchasingDocumentEvidence, replay)
+                if existing is None or existing.company_id != context.company.id:
+                    raise PurchasingConflict("Document replay evidence is unavailable")
+                return PurchasingDocumentItem.model_validate(existing)
+            branch_id = await self._document_entity_branch(
+                session, context.company.id, payload.entity_type, payload.entity_id
+            )
+            if branch_id != payload.branch_id or not context.can_access_branch(
+                branch_id
+            ):
+                raise PurchasingNotFound(
+                    "Scoped Purchasing document entity was not found"
+                )
+            evidence = {
+                "schema_version": 1,
+                "company_id": str(context.company.id),
+                **data,
+                "actor_user_id": str(context.user.id),
+            }
+            record = PurchasingDocumentEvidence(
+                company_id=context.company.id,
+                branch_id=payload.branch_id,
+                entity_type=payload.entity_type,
+                entity_id=payload.entity_id,
+                document_type=payload.document_type.strip(),
+                filename=payload.filename.strip(),
+                media_type=payload.media_type.strip().lower(),
+                content_digest=payload.content_digest,
+                storage_reference=payload.storage_reference.strip(),
+                source_reference=payload.source_reference.strip(),
+                status="active",
+                evidence_digest=digest(evidence),
+                idempotency_key=payload.idempotency_key,
+                actor_user_id=context.user.id,
+            )
+            session.add(record)
+            await session.flush()
+            self._receipt(
+                session,
+                context,
+                "purchasing.document.register",
+                payload.idempotency_key,
+                data,
+                "purchasing_document",
+                record.id,
+            )
+            self._event(
+                session,
+                context,
+                EventType.PURCHASING_DOCUMENT_REGISTERED,
+                "purchasing_document",
+                record.id,
+                record.branch_id,
+                {
+                    "document_id": str(record.id),
+                    "entity_type": record.entity_type,
+                    "entity_id": str(record.entity_id),
+                    "content_digest": record.content_digest,
+                    "evidence_digest": record.evidence_digest,
+                },
+            )
+        return PurchasingDocumentItem.model_validate(record)
+
+    @staticmethod
+    async def _document_entity_branch(
+        session: AsyncSession, company_id: UUID, entity_type: str, entity_id: UUID
+    ) -> UUID:
+        if entity_type == "purchase_order":
+            query = select(PurchaseOrder.branch_id).where(
+                PurchaseOrder.company_id == company_id, PurchaseOrder.id == entity_id
+            )
+        elif entity_type == "requisition":
+            query = select(PurchaseRequisition.branch_id).where(
+                PurchaseRequisition.company_id == company_id,
+                PurchaseRequisition.id == entity_id,
+            )
+        elif entity_type == "receipt":
+            query = select(PurchaseOrderReceipt.branch_id).where(
+                PurchaseOrderReceipt.company_id == company_id,
+                PurchaseOrderReceipt.id == entity_id,
+            )
+        elif entity_type == "discrepancy":
+            query = select(PurchaseOrderDiscrepancy.branch_id).where(
+                PurchaseOrderDiscrepancy.company_id == company_id,
+                PurchaseOrderDiscrepancy.id == entity_id,
+            )
+        else:
+            query = select(PurchaseReturn.branch_id).where(
+                PurchaseReturn.company_id == company_id, PurchaseReturn.id == entity_id
+            )
+        branch_id = await session.scalar(query)
+        if branch_id is None:
+            raise PurchasingNotFound("Purchasing document entity was not found")
+        return branch_id
+
+    async def create_requisition(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        payload: PurchaseRequisitionCreate,
+    ) -> PurchaseRequisitionItem:
+        self.branch(context, payload.branch_id)
+        data = payload.model_dump(mode="json", exclude={"idempotency_key"})
+        async with session.begin():
+            replay = await self._replay(
+                session,
+                context,
+                "requisition.create",
+                payload.idempotency_key,
+                data,
+                "purchase_requisition",
+            )
+            if replay is not None:
+                existing = await session.get(PurchaseRequisition, replay)
+                if existing is None or existing.company_id != context.company.id:
+                    raise PurchasingConflict(
+                        "Requisition replay evidence is unavailable"
+                    )
+                return PurchaseRequisitionItem.model_validate(existing)
+            if payload.inventory_item_id is not None:
+                await self._inventory_item(
+                    session, context.company.id, payload.inventory_item_id
+                )
+            if payload.suggested_vendor_id is not None:
+                vendor = await self.repository.vendor(
+                    session, context.company.id, payload.suggested_vendor_id
+                )
+                if vendor is None or vendor.status != "active":
+                    raise PurchasingNotFound("Active suggested Vendor was not found")
+            item = PurchaseRequisition(
+                company_id=context.company.id,
+                branch_id=payload.branch_id,
+                request_number=payload.request_number.strip(),
+                inventory_item_id=payload.inventory_item_id,
+                description=payload.description.strip(),
+                quantity=payload.quantity,
+                unit=payload.unit.strip(),
+                need_by=payload.need_by,
+                source_type=payload.source_type,
+                source_reference=payload.source_reference.strip(),
+                job_id=payload.job_id,
+                suggested_vendor_id=payload.suggested_vendor_id,
+                status="draft",
+                reason=payload.reason.strip(),
+                requester_user_id=context.user.id,
+                evidence_digest=digest(data),
+                idempotency_key=payload.idempotency_key,
+                version=1,
+            )
+            session.add(item)
+            await session.flush()
+            self._receipt(
+                session,
+                context,
+                "requisition.create",
+                payload.idempotency_key,
+                data,
+                "purchase_requisition",
+                item.id,
+            )
+            self._event(
+                session,
+                context,
+                EventType.PURCHASING_REQUISITION_CREATED,
+                "purchase_requisition",
+                item.id,
+                item.branch_id,
+                {
+                    "requisition_id": str(item.id),
+                    "evidence_digest": item.evidence_digest,
+                },
+            )
+        return PurchaseRequisitionItem.model_validate(item)
+
+    async def transition_requisition(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        requisition_id: UUID,
+        action: str,
+        payload: PurchaseRequisitionTransition,
+    ) -> PurchaseRequisitionItem:
+        data = {
+            "requisition_id": str(requisition_id),
+            "action": action,
+            **payload.model_dump(mode="json", exclude={"idempotency_key"}),
+        }
+        operation = f"requisition.{action}"
+        async with session.begin():
+            replay = await self._replay(
+                session,
+                context,
+                operation,
+                payload.idempotency_key,
+                data,
+                "purchase_requisition",
+            )
+            if replay is not None:
+                existing = await session.get(PurchaseRequisition, replay)
+                if existing is None or existing.company_id != context.company.id:
+                    raise PurchasingConflict(
+                        "Requisition replay evidence is unavailable"
+                    )
+                return PurchaseRequisitionItem.model_validate(existing)
+            item = await session.scalar(
+                select(PurchaseRequisition)
+                .where(
+                    PurchaseRequisition.company_id == context.company.id,
+                    PurchaseRequisition.id == requisition_id,
+                )
+                .with_for_update()
+            )
+            if item is None or not context.can_access_branch(item.branch_id):
+                raise PurchasingNotFound("Purchase requisition was not found")
+            if item.version != payload.expected_version:
+                raise PurchasingConflict("Purchase requisition version is stale")
+            transitions = {
+                ("draft", "submit"): "submitted",
+                ("submitted", "approve"): "approved",
+                ("submitted", "reject"): "rejected",
+                ("draft", "cancel"): "cancelled",
+                ("approved", "convert"): "converted",
+            }
+            target = transitions.get((item.status, action))
+            if target is None:
+                raise PurchasingConflict(
+                    "Purchase requisition transition is not eligible"
+                )
+            if (
+                action in {"approve", "reject"}
+                and item.requester_user_id == context.user.id
+            ):
+                raise PurchasingConflict(
+                    "Requester cannot decide their own requisition"
+                )
+            if action == "convert":
+                vendor_id = payload.vendor_id or item.suggested_vendor_id
+                if (
+                    vendor_id is None
+                    or payload.po_number is None
+                    or payload.currency is None
+                    or payload.unit_cost is None
+                ):
+                    raise PurchasingValidation(
+                        "Conversion requires explicit Vendor, PO number, currency, and unit cost"
+                    )
+                vendor = await self.repository.vendor(
+                    session, context.company.id, vendor_id
+                )
+                if vendor is None or vendor.status != "active":
+                    raise PurchasingNotFound("Active Vendor was not found")
+                order = PurchaseOrder(
+                    company_id=context.company.id,
+                    branch_id=item.branch_id,
+                    vendor_id=vendor.id,
+                    po_number=payload.po_number,
+                    status="draft",
+                    currency=payload.currency,
+                    expected_date=item.need_by,
+                    prepared_by_user_id=context.user.id,
+                    version=1,
+                    effective_revision=1,
+                )
+                session.add(order)
+                await session.flush()
+                line = PurchaseOrderLine(
+                    company_id=context.company.id,
+                    purchase_order_id=order.id,
+                    line_number=1,
+                    inventory_item_id=item.inventory_item_id,
+                    description=item.description,
+                    quantity=item.quantity,
+                    unit=item.unit,
+                    unit_cost=payload.unit_cost,
+                    extended_cost=item.quantity * payload.unit_cost,
+                    expected_date=item.need_by,
+                    version=1,
+                    is_cancelled=False,
+                    created_by_user_id=context.user.id,
+                )
+                session.add(line)
+                item.purchase_order_id = order.id
+            item.status = target
+            item.version += 1
+            item.updated_at = now()
+            if action in {"approve", "reject"}:
+                item.decided_by_user_id = context.user.id
+                item.decided_at = item.updated_at
+                item.decision_reason = payload.reason
+            event = {
+                "submit": EventType.PURCHASING_REQUISITION_SUBMITTED,
+                "approve": EventType.PURCHASING_REQUISITION_APPROVED,
+                "reject": EventType.PURCHASING_REQUISITION_REJECTED,
+                "convert": EventType.PURCHASING_REQUISITION_CONVERTED,
+                "cancel": EventType.PURCHASING_REQUISITION_REJECTED,
+            }[action]
+            self._event(
+                session,
+                context,
+                event,
+                "purchase_requisition",
+                item.id,
+                item.branch_id,
+                {
+                    "requisition_id": str(item.id),
+                    "status": item.status,
+                    "version": item.version,
+                    "purchase_order_id": str(item.purchase_order_id)
+                    if item.purchase_order_id
+                    else None,
+                },
+            )
+            self._receipt(
+                session,
+                context,
+                operation,
+                payload.idempotency_key,
+                data,
+                "purchase_requisition",
+                item.id,
+            )
+        return PurchaseRequisitionItem.model_validate(item)
+
+    async def configure_supply_chain_policy(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        payload: SupplyChainPolicyWrite,
+    ) -> SupplyChainPolicyItem:
+        self.branch(context, payload.branch_id)
+        evidence = payload.model_dump(mode="json", exclude={"idempotency_key"})
+        evidence_digest = digest(evidence)
+        async with session.begin():
+            replay = await self._replay(
+                session,
+                context,
+                "supply_chain_policy.configure",
+                payload.idempotency_key,
+                evidence,
+                "supply_chain_policy",
+            )
+            if replay is not None:
+                existing = await session.get(SupplyChainPolicy, replay)
+                if existing is None or existing.company_id != context.company.id:
+                    raise PurchasingConflict(
+                        "Supply Chain policy replay evidence is unavailable"
+                    )
+                return SupplyChainPolicyItem.model_validate(existing)
+            policy = await session.scalar(
+                select(SupplyChainPolicy)
+                .where(
+                    SupplyChainPolicy.company_id == context.company.id,
+                    SupplyChainPolicy.branch_id == payload.branch_id,
+                    SupplyChainPolicy.policy_type == payload.policy_type,
+                )
+                .with_for_update()
+            )
+            if policy is None:
+                if payload.expected_version is not None:
+                    raise PurchasingConflict("Supply Chain policy does not exist")
+                policy = SupplyChainPolicy(
+                    company_id=context.company.id,
+                    branch_id=payload.branch_id,
+                    policy_type=payload.policy_type,
+                    status=payload.status,
+                    configuration=payload.configuration,
+                    readiness_reason=payload.readiness_reason,
+                    evidence_digest=evidence_digest,
+                    version=1,
+                    updated_by_user_id=context.user.id,
+                )
+                session.add(policy)
+            else:
+                if payload.expected_version != policy.version:
+                    raise PurchasingConflict("Supply Chain policy version is stale")
+                policy.status = payload.status
+                policy.configuration = payload.configuration
+                policy.readiness_reason = payload.readiness_reason
+                policy.evidence_digest = evidence_digest
+                policy.version += 1
+                policy.updated_by_user_id = context.user.id
+                policy.updated_at = now()
+            await session.flush()
+            self._receipt(
+                session,
+                context,
+                "supply_chain_policy.configure",
+                payload.idempotency_key,
+                evidence,
+                "supply_chain_policy",
+                policy.id,
+            )
+            self._event(
+                session,
+                context,
+                EventType.SUPPLY_CHAIN_POLICY_CONFIGURED,
+                "supply_chain_policy",
+                policy.id,
+                policy.branch_id,
+                {
+                    "policy_id": str(policy.id),
+                    "policy_type": policy.policy_type,
+                    "status": policy.status,
+                    "version": policy.version,
+                    "evidence_digest": policy.evidence_digest,
+                },
+            )
+        return SupplyChainPolicyItem.model_validate(policy)
 
     async def get_order(
         self, session: AsyncSession, *, context: AuthorizationContext, po_id: UUID
     ) -> PurchaseOrderItem:
         order = await self._order(session, context, po_id)
         return await self._item(session, order)
+
+    async def purchase_order_artifact(
+        self, session: AsyncSession, *, context: AuthorizationContext, po_id: UUID
+    ) -> PurchaseOrderArtifactItem:
+        order = await self._order(session, context, po_id)
+        evidence = await self.repository.evidence(session, context.company.id, order.id)
+        if evidence is None:
+            raise PurchasingConflict(
+                "Only immutable issued Purchase Order evidence can be rendered"
+            )
+        snapshot = evidence.snapshot
+        vendor = snapshot.get("vendor")
+        lines = snapshot.get("lines")
+        if not isinstance(vendor, dict) or not isinstance(lines, list):
+            raise PurchasingConflict(
+                "Purchase Order issuance evidence is not renderable"
+            )
+        rows: list[str] = []
+        total = Decimal(0)
+        for raw in lines:
+            if not isinstance(raw, dict):
+                raise PurchasingConflict(
+                    "Purchase Order line evidence is not renderable"
+                )
+            extended = Decimal(str(raw.get("extended_cost", "0")))
+            total += extended
+            rows.append(
+                "<tr>"
+                f"<td>{html.escape(str(raw.get('line_number', '')))}</td>"
+                f"<td>{html.escape(str(raw.get('description', '')))}</td>"
+                f"<td>{html.escape(str(raw.get('quantity', '')))} {html.escape(str(raw.get('unit', '')))}</td>"
+                f"<td>{html.escape(str(raw.get('unit_cost', '')))}</td>"
+                f"<td>{html.escape(str(raw.get('extended_cost', '')))}</td>"
+                "</tr>"
+            )
+        template_version = "purchase-order-html.v1"
+        artifact_authority = {
+            "template_version": template_version,
+            "issuance_digest": evidence.digest,
+            "snapshot": snapshot,
+        }
+        artifact_digest = digest(artifact_authority)
+        content = (
+            "<!doctype html><html lang='en'><head><meta charset='utf-8'>"
+            "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+            "<title>Purchase Order</title><style>body{font-family:system-ui;margin:2rem;color:#172033}"
+            "header{display:flex;justify-content:space-between;border-bottom:2px solid #315b8a}"
+            "table{width:100%;border-collapse:collapse;margin-top:2rem}th,td{padding:.6rem;border-bottom:1px solid #ccd4dd;text-align:left}"
+            ".total{text-align:right;font-weight:700}.evidence{margin-top:2rem;font-size:.75rem;overflow-wrap:anywhere}</style></head><body>"
+            f"<header><div><h1>Purchase Order {html.escape(str(snapshot.get('po_number', '')))}</h1>"
+            f"<p>Expected {html.escape(str(snapshot.get('expected_date') or 'Not specified'))}</p></div>"
+            f"<div><strong>{html.escape(str(vendor.get('display_name', 'Vendor')))}</strong><br>"
+            f"{html.escape(str(vendor.get('legal_name') or ''))}</div></header>"
+            "<table><thead><tr><th>Line</th><th>Description</th><th>Quantity</th><th>Unit cost</th><th>Extended</th></tr></thead>"
+            f"<tbody>{''.join(rows)}</tbody></table><p class='total'>Total {html.escape(str(snapshot.get('currency', '')))} {total}</p>"
+            f"<p class='evidence'>Immutable issuance evidence: {evidence.digest}<br>Artifact: {artifact_digest}</p>"
+            "</body></html>"
+        )
+        return PurchaseOrderArtifactItem(
+            template_version=template_version,
+            purchase_order_id=order.id,
+            purchase_order_version=evidence.purchase_order_version,
+            issuance_digest=evidence.digest,
+            artifact_digest=artifact_digest,
+            filename=f"purchase-order-{order.po_number}.html",
+            rendered_at=evidence.issued_at,
+            content=content,
+        )
 
     async def receiving_reconciliation(
         self,
@@ -230,7 +794,9 @@ class PurchasingService:
                     bill_state="missing_bill",
                     reconciliation_state=reconciliation_state,
                     cost_evidence_state=(
-                        "po_cost_unposted" if line.unit_cost is not None else "unresolved"
+                        "po_cost_unposted"
+                        if line.unit_cost is not None
+                        else "unresolved"
                     ),
                 )
             )
@@ -2326,7 +2892,10 @@ class PurchasingService:
                 receipt_line = await session.get(
                     PurchaseOrderReceiptLine, record.receipt_line_id
                 )
-                if receipt_line is None or receipt_line.company_id != context.company.id:
+                if (
+                    receipt_line is None
+                    or receipt_line.company_id != context.company.id
+                ):
                     raise PurchasingConflict("Authoritative receipt line is missing")
                 if receipt_line.inventory_movement_id is not None:
                     original = await session.scalar(

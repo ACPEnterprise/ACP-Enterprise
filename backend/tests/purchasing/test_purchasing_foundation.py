@@ -40,8 +40,11 @@ from app.purchasing.models import (
     PurchaseOrderDispositionEvidence,
     PurchaseOrderIssuanceEvidence,
     PurchaseOrderRevision,
+    PurchaseRequisition,
     PurchaseReturn,
+    PurchasingDocumentEvidence,
     ReplenishmentDecisionEvidence,
+    SupplyChainPolicy,
 )
 from app.purchasing.schemas import (
     CreatePurchaseReturnCommand,
@@ -51,7 +54,10 @@ from app.purchasing.schemas import (
     PurchaseOrderDispositionCommand,
     PurchaseOrderLineWrite,
     PurchaseOrderUpdate,
+    PurchaseRequisitionCreate,
+    PurchaseRequisitionTransition,
     PurchaseReturnTransitionCommand,
+    PurchasingDocumentCreate,
     ReceiptLineCommand,
     RecordReceiptCommand,
     ReplenishmentDecisionCommand,
@@ -59,11 +65,95 @@ from app.purchasing.schemas import (
     ReplenishmentWorkbenchRequest,
     RequestPurchaseOrderChangeCommand,
     ResolveDiscrepancyCommand,
+    SupplyChainPolicyWrite,
     TransitionCommand,
     VendorCreate,
     VendorUpdate,
 )
 from app.purchasing.service import PurchasingService
+
+
+@pytest.mark.asyncio
+async def test_purchasing_document_custody_is_scoped_append_only_and_idempotent(
+    purchasing_fixture,
+) -> None:
+    factory, company, _, branch, other_branch, preparer, _ = purchasing_fixture
+    service = PurchasingService()
+    async with factory() as session:
+        requisition = await service.create_requisition(
+            session,
+            context=preparer,
+            payload=PurchaseRequisitionCreate(
+                branch_id=branch.id,
+                request_number=f"DOC-{uuid4().hex[:8]}",
+                description="Synthetic document custody qualification",
+                quantity=Decimal(1),
+                unit="each",
+                source_type="manual",
+                source_reference="synthetic-qualification",
+                reason="Qualify append-only provider-neutral custody",
+                idempotency_key=f"req-{uuid4()}",
+            ),
+        )
+    command = PurchasingDocumentCreate(
+        branch_id=branch.id,
+        entity_type="requisition",
+        entity_id=requisition.id,
+        document_type="supporting_evidence",
+        filename="synthetic-evidence.pdf",
+        media_type="application/pdf",
+        content_digest="a" * 64,
+        storage_reference="synthetic://document/evidence",
+        source_reference="synthetic-qualification",
+        idempotency_key=f"document-{uuid4()}",
+    )
+    async with factory() as session:
+        created = await service.register_document(
+            session, context=preparer, payload=command
+        )
+    async with factory() as session:
+        replay = await service.register_document(
+            session, context=preparer, payload=command
+        )
+        assert replay.id == created.id
+        assert (
+                await session.scalar(
+                    select(func.count())
+                    .select_from(PurchasingDocumentEvidence)
+                    .where(PurchasingDocumentEvidence.company_id == company.id)
+                )
+            == 1
+        )
+        assert (
+                await session.scalar(
+                    select(func.count())
+                    .select_from(BusinessEvent)
+                    .where(
+                        BusinessEvent.company_id == company.id,
+                        BusinessEvent.entity_id == created.id,
+                    )
+                )
+            == 1
+        )
+    async with factory() as session:
+        with pytest.raises(PurchasingConflict):
+            await service.register_document(
+                session,
+                context=preparer,
+                payload=command.model_copy(update={"filename": "contradiction.pdf"}),
+            )
+    async with factory() as session:
+        with pytest.raises(PurchasingNotFound):
+            await service.register_document(
+                session,
+                context=preparer,
+                payload=command.model_copy(
+                    update={
+                        "branch_id": other_branch.id,
+                        "idempotency_key": f"document-{uuid4()}",
+                    }
+                ),
+            )
 
 
 @pytest.mark.asyncio
@@ -457,7 +547,12 @@ async def test_concurrent_equivalent_replenishment_approvals_recover_one_authori
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("change", "value"),
-    (("decision", "rejected"), ("vendor_index", 1), ("quantity", Decimal(4)), ("unit_cost", Decimal(2))),
+    (
+        ("decision", "rejected"),
+        ("vendor_index", 1),
+        ("quantity", Decimal(4)),
+        ("unit_cost", Decimal(2)),
+    ),
 )
 async def test_concurrent_contradictory_replenishment_disposition_is_conflict(
     purchasing_fixture,
@@ -516,9 +611,7 @@ async def test_unrelated_replenishment_integrity_error_is_not_misclassified(
 
     monkeypatch.setattr(service, "_decide_replenishment_once", fail)
     with pytest.raises(IntegrityError) as raised:
-        await service.decide_replenishment(
-            object(), context=object(), payload=object()
-        )
+        await service.decide_replenishment(object(), context=object(), payload=object())
     assert raised.value is unrelated
 
 
@@ -685,6 +778,154 @@ async def test_po_replay_revalidates_current_branch_authority(
 
 
 @pytest.mark.asyncio
+async def test_purchase_requisition_is_governed_idempotent_and_converts_to_draft_po(
+    purchasing_fixture,
+) -> None:
+    factory, company, _, branch, _, requester, approver = purchasing_fixture
+    service = PurchasingService()
+    async with factory() as session:
+        vendor = await service.create_vendor(
+            session,
+            context=requester,
+            payload=VendorCreate(
+                code="REQ-VENDOR",
+                display_name="Requisition Vendor",
+                idempotency_key="req-vendor",
+            ),
+        )
+        vendor_id = vendor.id
+        payload = PurchaseRequisitionCreate(
+            branch_id=branch.id,
+            request_number="REQ-100",
+            description="Warehouse consumable",
+            quantity=Decimal(12),
+            unit="each",
+            source_type="manual",
+            source_reference="synthetic-qualification",
+            suggested_vendor_id=vendor_id,
+            reason="Synthetic demand evidence",
+            idempotency_key="req-100",
+        )
+        request = await service.create_requisition(
+            session, context=requester, payload=payload
+        )
+        replay = await service.create_requisition(
+            session, context=requester, payload=payload
+        )
+        assert (
+            replay.id == request.id
+            and replay.evidence_digest == request.evidence_digest
+        )
+        with pytest.raises(PurchasingConflict):
+            await service.create_requisition(
+                session,
+                context=requester,
+                payload=payload.model_copy(update={"description": "Contradiction"}),
+            )
+        request = await service.transition_requisition(
+            session,
+            context=requester,
+            requisition_id=request.id,
+            action="submit",
+            payload=PurchaseRequisitionTransition(
+                expected_version=request.version,
+                reason="Ready for review",
+                idempotency_key="req-100-submit",
+            ),
+        )
+        with pytest.raises(PurchasingConflict):
+            await service.transition_requisition(
+                session,
+                context=requester,
+                requisition_id=request.id,
+                action="approve",
+                payload=PurchaseRequisitionTransition(
+                    expected_version=request.version,
+                    reason="Self approval prohibited",
+                    idempotency_key="req-100-self",
+                ),
+            )
+    async with factory() as session:
+        request = await service.transition_requisition(
+            session,
+            context=approver,
+            requisition_id=request.id,
+            action="approve",
+            payload=PurchaseRequisitionTransition(
+                expected_version=request.version,
+                reason="Approved synthetic demand",
+                idempotency_key="req-100-approve",
+            ),
+        )
+        request = await service.transition_requisition(
+            session,
+            context=approver,
+            requisition_id=request.id,
+            action="convert",
+            payload=PurchaseRequisitionTransition(
+                expected_version=request.version,
+                reason="Create governed draft PO",
+                vendor_id=vendor_id,
+                po_number="REQ-PO-100",
+                currency="USD",
+                unit_cost=Decimal("2.5000"),
+                idempotency_key="req-100-convert",
+            ),
+        )
+        order = await session.get(PurchaseOrder, request.purchase_order_id)
+        assert request.status == "converted"
+        assert (
+            order is not None
+            and order.status == "draft"
+            and order.company_id == company.id
+        )
+        assert (
+            await session.scalar(select(func.count()).select_from(PurchaseRequisition))
+            >= 1
+        )
+
+
+@pytest.mark.asyncio
+async def test_supply_chain_policy_preserves_unconfigured_readiness_and_versions(
+    purchasing_fixture,
+) -> None:
+    factory, _, _, branch, _, manager, _ = purchasing_fixture
+    service = PurchasingService()
+    async with factory() as session:
+        first = await service.configure_supply_chain_policy(
+            session,
+            context=manager,
+            payload=SupplyChainPolicyWrite(
+                branch_id=branch.id,
+                policy_type="valuation",
+                status="unconfigured",
+                configuration={},
+                readiness_reason="Company valuation method requires Finance configuration",
+                idempotency_key="valuation-unconfigured",
+            ),
+        )
+        assert first.status == "unconfigured" and first.configuration == {}
+        updated = await service.configure_supply_chain_policy(
+            session,
+            context=manager,
+            payload=SupplyChainPolicyWrite(
+                branch_id=branch.id,
+                policy_type="valuation",
+                status="draft",
+                configuration={"supported_modes": ["weighted_average", "fifo"]},
+                readiness_reason="Synthetic modes qualified; Company selection remains pending",
+                expected_version=first.version,
+                idempotency_key="valuation-draft",
+            ),
+        )
+        assert updated.version == 2 and updated.status == "draft"
+        assert (
+            await session.scalar(select(func.count()).select_from(SupplyChainPolicy))
+            >= 1
+        )
+
+
+@pytest.mark.asyncio
 async def test_vendor_identity_is_company_owned_idempotent_and_concurrent(
     purchasing_fixture,
 ) -> None:
@@ -831,6 +1072,16 @@ async def test_po_lifecycle_sod_immutable_issuance_and_nonmutation(
         )
         assert evidence is not None and len(evidence.digest) == 64
         assert evidence.snapshot["vendor"]["display_name"] == "Vendor Two"
+        artifact = await service.purchase_order_artifact(
+            session, context=approver, po_id=order_id
+        )
+        replay_artifact = await service.purchase_order_artifact(
+            session, context=approver, po_id=order_id
+        )
+        assert artifact.artifact_digest == replay_artifact.artifact_digest
+        assert artifact.issuance_digest == evidence.digest
+        assert "Purchase Order PO-100" in artifact.content
+        assert "Non-catalog fitting" in artifact.content
         after = tuple(
             [
                 await session.scalar(select(func.count()).select_from(model))
@@ -1446,6 +1697,7 @@ async def test_inventory_receiving_posts_one_native_movement_and_replay_is_safe(
                 for model in (VendorBill, Journal, PaymentIntent, Refund)
             ]
         )
+
     async def apply_receipt():
         async with factory() as session:
             return await service.record_receipt(
@@ -1521,9 +1773,7 @@ async def test_inventory_receiving_fails_closed_for_unmapped_item_or_wrong_branc
         session.add_all([wrong_location, correct_location])
         await session.flush()
         wrong_location_id, correct_location_id = wrong_location.id, correct_location.id
-    po_id, line_id, version = await issued_order(
-        factory, branch, preparer, approver
-    )
+    po_id, line_id, version = await issued_order(factory, branch, preparer, approver)
     async with factory() as session:
         with pytest.raises(PurchasingValidation, match="RECEIVING_LOCATION_NOT_FOUND"):
             await service.record_receipt(
@@ -1615,9 +1865,7 @@ async def test_physical_purchase_return_posts_one_inverse_inventory_movement(
         )
         order = await service.get_order(session, context=approver, po_id=po_id)
         receipt_line = (
-            await service.repository.receipt_lines(
-                session, company.id, received.id
-            )
+            await service.repository.receipt_lines(session, company.id, received.id)
         )[0]
         receipt_id, receipt_line_id = received.id, receipt_line.id
         await session.rollback()
