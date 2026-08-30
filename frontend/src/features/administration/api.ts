@@ -26,8 +26,69 @@ const ADMIN_PATH = "/api/v1/company-admin";
 const QBO_SANDBOX_AUTHORIZE_PATH = "/api/v1/integrations/qbo/oauth/authorize";
 const QBO_SANDBOX_CONNECTION_PATH = "/api/v1/integrations/qbo/connection";
 const QBO_SANDBOX_DISCONNECT_PATH = "/api/v1/integrations/qbo/oauth/disconnect";
+const MIGRATION_READINESS_PATH = "/api/v1/migration/readiness";
 
-export type QboSandboxConnectionState = "connected" | "not_connected" | "disconnecting" | "disconnect_failed" | "unavailable";
+export interface MigrationReadiness {
+  overall_status: string;
+  current_phase: string;
+  authority_digest: string;
+  reconciliation_digest: string;
+  stale: boolean;
+  safe_failure_code: string | null;
+  historical_window: {
+    starts_on: string | null;
+    ends_on: string;
+    opening_evidence_state: string;
+    completeness: string;
+  };
+  sources: Array<{
+    source: string;
+    environment: string;
+    status: string;
+    connection_state: string;
+    acquisition_state: string;
+    manifest_state: string;
+    delta_state: string;
+    freeze_state: string;
+    authority_digest: string;
+  }>;
+  counts: Array<{
+    domain: string;
+    source: number;
+    migrated: number;
+    held: number;
+    exception: number;
+    non_applicable: number;
+    deferred: number;
+    unresolved: number;
+    delta: number;
+  }>;
+  timeline: Array<{ phase: string; status: string }>;
+  authority_states: Array<{ fact: string; state: string }>;
+  owner_decisions: Array<{ decision: string; state: string }>;
+  run_history: Array<{
+    run_id: string;
+    source: string;
+    state: string;
+    reconciliation: string;
+    replay: string;
+    holds: number;
+    exceptions: number;
+  }>;
+  recovery_state: string;
+}
+
+export async function getMigrationReadiness(): Promise<MigrationReadiness> {
+  return (await apiClient.get<MigrationReadiness>(MIGRATION_READINESS_PATH))
+    .data;
+}
+
+export type QboSandboxConnectionState =
+  | "connected"
+  | "not_connected"
+  | "disconnecting"
+  | "disconnect_failed"
+  | "unavailable";
 
 interface QboSandboxConnectionResponse {
   status: "qbo_sandbox_connection";
@@ -62,32 +123,56 @@ function validatedIntuitAuthorizationUrl(value: string): string {
 export async function launchQuickBooksSandbox(
   navigate: (url: string) => void = (url) => window.location.assign(url),
 ): Promise<void> {
-  const response = await apiClient.post<QboSandboxAuthorizationResponse>(QBO_SANDBOX_AUTHORIZE_PATH);
+  const response = await apiClient.post<QboSandboxAuthorizationResponse>(
+    QBO_SANDBOX_AUTHORIZE_PATH,
+  );
   navigate(validatedIntuitAuthorizationUrl(response.data.authorization_url));
 }
 
 export async function getQuickBooksSandboxConnection(): Promise<QboSandboxConnectionState> {
-  return (await apiClient.get<QboSandboxConnectionResponse>(QBO_SANDBOX_CONNECTION_PATH)).data.connection_state;
+  return (
+    await apiClient.get<QboSandboxConnectionResponse>(
+      QBO_SANDBOX_CONNECTION_PATH,
+    )
+  ).data.connection_state;
 }
 
 export async function disconnectQuickBooksSandbox(): Promise<QboSandboxConnectionState> {
-  return (await apiClient.post<QboSandboxConnectionResponse>(QBO_SANDBOX_DISCONNECT_PATH)).data.connection_state;
+  return (
+    await apiClient.post<QboSandboxConnectionResponse>(
+      QBO_SANDBOX_DISCONNECT_PATH,
+    )
+  ).data.connection_state;
 }
 
 export async function listRoles(): Promise<CompanyRole[]> {
   return (await apiClient.get<CompanyRole[]>(`${ADMIN_PATH}/roles`)).data;
 }
 
-export async function listPermissions(roleId?: string): Promise<PermissionDefinition[]> {
-  return (await apiClient.get<PermissionDefinition[]>(`${ADMIN_PATH}/permissions`, {
-    params: roleId ? { role_id: roleId } : undefined,
-  })).data;
+export async function listPermissions(
+  roleId?: string,
+): Promise<PermissionDefinition[]> {
+  return (
+    await apiClient.get<PermissionDefinition[]>(`${ADMIN_PATH}/permissions`, {
+      params: roleId ? { role_id: roleId } : undefined,
+    })
+  ).data;
 }
 
-export async function grantPermission(roleId: string, permissionId: string): Promise<void> {
-  await apiClient.put(`${ADMIN_PATH}/roles/${roleId}/permissions/${permissionId}`);
+export async function grantPermission(
+  roleId: string,
+  permissionId: string,
+): Promise<void> {
+  await apiClient.put(
+    `${ADMIN_PATH}/roles/${roleId}/permissions/${permissionId}`,
+  );
 }
 
-export async function removePermission(roleId: string, permissionId: string): Promise<void> {
-  await apiClient.delete(`${ADMIN_PATH}/roles/${roleId}/permissions/${permissionId}`);
+export async function removePermission(
+  roleId: string,
+  permissionId: string,
+): Promise<void> {
+  await apiClient.delete(
+    `${ADMIN_PATH}/roles/${roleId}/permissions/${permissionId}`,
+  );
 }

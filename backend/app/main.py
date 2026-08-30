@@ -44,6 +44,7 @@ from app.financial_reporting.router import router as financial_reporting_router
 from app.inventory.router import router as inventory_router
 from app.invoicing.router import router as invoicing_router
 from app.jobs.router import router as jobs_router
+from app.operational_migration.product_router import router as migration_product_router
 from app.operations.router import router as operations_router
 from app.payments.router import router as payments_router
 from app.payroll.router import router as payroll_router
@@ -60,6 +61,7 @@ from app.platform.launch_controls import validate_launch_role_matrix
 from app.platform.onboarding.router import router as identity_onboarding_router
 from app.platform.permissions.catalog import permission_catalog
 from app.platform.permissions.router import router as authorization_router
+from app.platform.reliability.correlation import CorrelationMiddleware
 from app.platform.security.middleware import (
     SecurityHeadersMiddleware,
     TrustedProxyMiddleware,
@@ -72,6 +74,7 @@ from app.platform.users.identity_router import (
     self_service_router as identity_self_service_router,
 )
 from app.price_book.router import router as price_book_router
+from app.procurement_matching.router import router as procurement_matching_router
 from app.purchasing.router import router as purchasing_router
 from app.qbo_source.router import router as qbo_source_router
 from app.qbo_source.runtime import (
@@ -147,6 +150,7 @@ app.add_middleware(
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.allowed_hosts)
 app.add_middleware(TrustedProxyMiddleware, configuration=settings)
 app.add_middleware(SecurityHeadersMiddleware, configuration=settings)
+app.add_middleware(CorrelationMiddleware)
 
 app.include_router(health_router)
 app.include_router(events_router)
@@ -170,6 +174,7 @@ app.include_router(timekeeping_router)
 app.include_router(jobs_router)
 app.include_router(inventory_router)
 app.include_router(purchasing_router)
+app.include_router(procurement_matching_router)
 app.include_router(operations_router)
 app.include_router(dispatch_router)
 app.include_router(employee_operations_router)
@@ -193,6 +198,7 @@ app.include_router(worker_transport_router)
 app.include_router(worker_recovery_router)
 app.include_router(worker_recovery_transport_router)
 app.include_router(qbo_source_router)
+app.include_router(migration_product_router)
 
 
 @app.get("/", tags=["System"])

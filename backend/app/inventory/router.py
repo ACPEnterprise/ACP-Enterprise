@@ -11,7 +11,14 @@ from app.inventory.errors import (
     InventoryValidation,
 )
 from app.inventory.schemas import (
+    AdjustmentCreate,
+    AdjustmentResponse,
     AllocationResponse,
+    CycleCountComplete,
+    CycleCountEntryResponse,
+    CycleCountRecord,
+    CycleCountSessionResponse,
+    CycleCountStart,
     InventoryOverview,
     LocationCreate,
     LocationResponse,
@@ -40,6 +47,12 @@ MoveContext = Annotated[
 ]
 ReserveContext = Annotated[
     AuthorizationContext, Depends(require_permission(InventoryPermission.RESERVE))
+]
+AdjustContext = Annotated[
+    AuthorizationContext, Depends(require_permission(InventoryPermission.ADJUST))
+]
+CountContext = Annotated[
+    AuthorizationContext, Depends(require_permission(InventoryPermission.COUNT))
 ]
 
 
@@ -145,6 +158,93 @@ async def release(
         return ReservationResponse.model_validate(
             await inventory_service.release(
                 session, context=context, reservation_id=reservation_id, data=data
+            )
+        )
+    except (InventoryNotFound, InventoryConflict, InventoryValidation) as error:
+        raise translate(error) from error
+
+
+@router.post(
+    "/adjustments",
+    response_model=AdjustmentResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def post_adjustment(
+    data: AdjustmentCreate, context: AdjustContext, session: DatabaseSession
+) -> AdjustmentResponse:
+    try:
+        return AdjustmentResponse.model_validate(
+            await inventory_service.post_adjustment(session, context=context, data=data)
+        )
+    except (InventoryNotFound, InventoryConflict, InventoryValidation) as error:
+        raise translate(error) from error
+
+
+@router.get("/cycle-counts", response_model=tuple[CycleCountSessionResponse, ...])
+async def list_cycle_counts(
+    context: ReadContext, session: DatabaseSession, branch_id: UUID | None = None
+) -> tuple[CycleCountSessionResponse, ...]:
+    try:
+        return await inventory_service.list_cycle_counts(
+            session, context=context, branch_id=branch_id
+        )
+    except (InventoryNotFound, InventoryConflict, InventoryValidation) as error:
+        raise translate(error) from error
+
+
+@router.post(
+    "/cycle-counts",
+    response_model=CycleCountSessionResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def start_cycle_count(
+    data: CycleCountStart, context: CountContext, session: DatabaseSession
+) -> CycleCountSessionResponse:
+    try:
+        return CycleCountSessionResponse.model_validate(
+            await inventory_service.start_cycle_count(
+                session, context=context, data=data
+            )
+        )
+    except (InventoryNotFound, InventoryConflict, InventoryValidation) as error:
+        raise translate(error) from error
+
+
+@router.post(
+    "/cycle-counts/{cycle_count_id}/entries",
+    response_model=CycleCountEntryResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def record_cycle_count(
+    cycle_count_id: UUID,
+    data: CycleCountRecord,
+    context: CountContext,
+    session: DatabaseSession,
+) -> CycleCountEntryResponse:
+    try:
+        return CycleCountEntryResponse.model_validate(
+            await inventory_service.record_cycle_count(
+                session, context=context, session_id=cycle_count_id, data=data
+            )
+        )
+    except (InventoryNotFound, InventoryConflict, InventoryValidation) as error:
+        raise translate(error) from error
+
+
+@router.post(
+    "/cycle-counts/{cycle_count_id}/complete",
+    response_model=CycleCountSessionResponse,
+)
+async def complete_cycle_count(
+    cycle_count_id: UUID,
+    data: CycleCountComplete,
+    context: AdjustContext,
+    session: DatabaseSession,
+) -> CycleCountSessionResponse:
+    try:
+        return CycleCountSessionResponse.model_validate(
+            await inventory_service.complete_cycle_count(
+                session, context=context, session_id=cycle_count_id, data=data
             )
         )
     except (InventoryNotFound, InventoryConflict, InventoryValidation) as error:

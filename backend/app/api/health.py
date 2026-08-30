@@ -1,11 +1,11 @@
 from typing import Any
 
 from fastapi import APIRouter, Response, status
-from redis.asyncio import Redis
-from sqlalchemy import text
 
 from app.core.config import settings
 from app.database.session import engine
+from app.platform.health.contracts import HealthState, SystemReadiness
+from app.platform.health.service import PlatformHealthService
 
 router = APIRouter(tags=["System"])
 
@@ -20,41 +20,34 @@ async def liveness_check() -> dict[str, str]:
     }
 
 
+@router.get("/health/ready", response_model=SystemReadiness)
+async def readiness_check(response: Response) -> SystemReadiness:
+    result = await PlatformHealthService(configuration=settings, engine=engine).inspect()
+    if result.state is not HealthState.HEALTHY:
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    return result
+
+
 @router.get("/health")
 async def health_check(response: Response) -> dict[str, Any]:
-    database_status = "disconnected"
-    redis_status = "disconnected"
-
-    try:
-        async with engine.connect() as connection:
-            await connection.execute(text("SELECT 1"))
-        database_status = "connected"
-    except Exception:
-        database_status = "disconnected"
-
-    redis_client = Redis.from_url(
-        settings.redis_url,
-        encoding="utf-8",
-        decode_responses=True,
-    )
-
-    try:
-        await redis_client.ping()
-        redis_status = "connected"
-    except Exception:
-        redis_status = "disconnected"
-    finally:
-        await redis_client.aclose()
-
-    healthy = database_status == "connected" and redis_status == "connected"
-    if not healthy:
+    """Preserve the accepted compact health contract for existing consumers."""
+    result = await PlatformHealthService(configuration=settings, engine=engine).inspect()
+    by_name = {component.component: component for component in result.components}
+    if result.state is not HealthState.HEALTHY:
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
-
     return {
-        "status": "healthy" if healthy else "degraded",
-        "application": settings.app_name,
-        "version": settings.app_version,
-        "environment": settings.environment,
-        "database": database_status,
-        "redis": redis_status,
+        "status": "healthy" if result.state is HealthState.HEALTHY else "degraded",
+        "application": result.application,
+        "version": result.version,
+        "environment": result.environment,
+        "database": (
+            "connected"
+            if by_name["database"].state is HealthState.HEALTHY
+            else "disconnected"
+        ),
+        "redis": (
+            "connected"
+            if by_name["redis"].state is HealthState.HEALTHY
+            else "disconnected"
+        ),
     }

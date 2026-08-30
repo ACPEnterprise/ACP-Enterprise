@@ -149,6 +149,7 @@ class BillLine(Base):
         ForeignKeyConstraint(["company_id", "mapping_id"], ["ap_account_mappings.company_id", "ap_account_mappings.id"], ondelete="RESTRICT"),
         CheckConstraint("position >= 1 AND quantity > 0 AND net_amount >= 0 AND tax_amount >= 0", name="ck_ap_bill_lines_amounts"),
         UniqueConstraint("company_id", "revision_id", "position", name="uq_ap_bill_line_position"),
+        UniqueConstraint("company_id", "id", name="uq_ap_bill_lines_company_id"),
     )
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
     company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)

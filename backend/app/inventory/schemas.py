@@ -53,6 +53,35 @@ class ReservationRelease(InventorySchema):
     idempotency_key: str = Field(min_length=1, max_length=128)
 
 
+class AdjustmentCreate(InventorySchema):
+    branch_id: UUID
+    item_id: UUID
+    location_id: UUID
+    reason: str = Field(pattern=r"^(gain|loss|damaged|expired|found)$")
+    quantity_delta: Decimal = Field(max_digits=18, decimal_places=6)
+    note: str = Field(min_length=1, max_length=1000)
+    occurred_at: AwareDatetime
+    idempotency_key: str = Field(min_length=1, max_length=128)
+
+
+class CycleCountStart(InventorySchema):
+    branch_id: UUID
+    location_id: UUID
+    name: str = Field(min_length=1, max_length=160)
+    idempotency_key: str = Field(min_length=1, max_length=128)
+
+
+class CycleCountRecord(InventorySchema):
+    item_id: UUID
+    counted_quantity: Decimal = Field(ge=0, max_digits=18, decimal_places=6)
+    counted_at: AwareDatetime
+    idempotency_key: str = Field(min_length=1, max_length=128)
+
+
+class CycleCountComplete(InventorySchema):
+    expected_version: int = Field(ge=1)
+
+
 class ItemResponse(InventorySchema):
     id: UUID
     company_id: UUID
@@ -134,6 +163,54 @@ class AllocationResponse(InventorySchema):
     partial_allowed: bool
     reservation_version: int
     allocated_at: datetime
+
+
+class AdjustmentResponse(InventorySchema):
+    id: UUID
+    company_id: UUID
+    branch_id: UUID
+    item_id: UUID
+    location_id: UUID
+    reason: str
+    quantity_delta: Decimal
+    stocking_unit: str
+    note: str
+    occurred_at: datetime
+    posted_at: datetime
+    actor_user_id: UUID
+    idempotency_key: str
+    movement_id: UUID
+    cycle_count_entry_id: UUID | None
+
+
+class CycleCountEntryResponse(InventorySchema):
+    id: UUID
+    company_id: UUID
+    session_id: UUID
+    item_id: UUID
+    expected_quantity: Decimal
+    counted_quantity: Decimal
+    variance: Decimal
+    stocking_unit: str
+    counted_at: datetime
+    counted_by_user_id: UUID
+    idempotency_key: str
+
+
+class CycleCountSessionResponse(InventorySchema):
+    id: UUID
+    company_id: UUID
+    branch_id: UUID
+    location_id: UUID
+    name: str
+    status: str
+    idempotency_key: str
+    version: int
+    started_by_user_id: UUID
+    completed_by_user_id: UUID | None
+    started_at: datetime
+    completed_at: datetime | None
+    entries: tuple[CycleCountEntryResponse, ...] = ()
 
 
 class InventoryOverview(InventorySchema):

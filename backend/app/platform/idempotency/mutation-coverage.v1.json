@@ -1131,6 +1131,66 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     },
     {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "purchasing",
+      "mechanism": "Company-scoped matching authority and canonical evidence digest",
+      "method": "POST",
+      "operation_id": "evaluate_match_api_v1_procurement_matching_matches_post",
+      "path": "/api/v1/procurement-matching/matches",
+      "reason": "Concurrent and repeated evaluation converges on one Vendor Bill matching authority.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "purchasing",
+      "mechanism": "Company-scoped durable resolution identity and canonical resolution digest",
+      "method": "POST",
+      "operation_id": "resolve_match_exception_api_v1_procurement_matching_matches__match_id__exceptions__exception_id__resolve_post",
+      "path": "/api/v1/procurement-matching/matches/{match_id}/exceptions/{exception_id}/resolve",
+      "reason": "Repeated exception disposition converges while contradictory reuse fails closed.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "inventory",
+      "mechanism": "Company-scoped adjustment identity and one linked stock movement",
+      "method": "POST",
+      "operation_id": "post_adjustment_api_v1_inventory_adjustments_post",
+      "path": "/api/v1/inventory/adjustments",
+      "reason": "Repeated adjustment evidence converges on one immutable adjustment and movement.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "inventory",
+      "mechanism": "Company-scoped durable cycle-count session identity",
+      "method": "POST",
+      "operation_id": "start_cycle_count_api_v1_inventory_cycle_counts_post",
+      "path": "/api/v1/inventory/cycle-counts",
+      "reason": "Repeated count-session creation converges on the same scoped authority.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "inventory",
+      "mechanism": "locked aggregate version and terminal completed state",
+      "method": "POST",
+      "operation_id": "complete_cycle_count_api_v1_inventory_cycle_counts__cycle_count_id__complete_post",
+      "path": "/api/v1/inventory/cycle-counts/{cycle_count_id}/complete",
+      "reason": "Completion applies each quantified variance once and converges on terminal state.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "inventory",
+      "mechanism": "Company-scoped count-entry identity and immutable observed quantity",
+      "method": "POST",
+      "operation_id": "record_cycle_count_api_v1_inventory_cycle_counts__cycle_count_id__entries_post",
+      "path": "/api/v1/inventory/cycle-counts/{cycle_count_id}/entries",
+      "reason": "Repeated observed-count evidence converges and contradictory reuse fails closed.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
       "classification": "IMMUTABLE_APPEND_ONLY",
       "domain": "engineering",
       "mechanism": "domain-owned deterministic evidence/receipt identity",
@@ -2406,6 +2466,6 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "45990f22dddef5acb56c48489c2378859076ba13168acd242791fd3df21b4b5c",
+  "fingerprint": "af8516ba5fe37693d8b3001c52e09a9540d00164798226a3c8b381c8131544ce",
   "schema_version": "1"
 }

@@ -18,6 +18,8 @@ class Settings(BaseSettings):
         "acp_development_password@postgres:5432/acp_enterprise"
     )
     redis_url: str = "redis://redis:6379/0"
+    redis_required_for_readiness: bool = True
+    alembic_config_path: str = "alembic.ini"
     repository_operation_root: str | None = None
     engineering_inspection_branches: list[str] = Field(default_factory=list)
     cors_allowed_origins: list[str] = Field(

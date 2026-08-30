@@ -1,6 +1,7 @@
 from unittest.mock import Mock
 
 import pytest
+
 from app.business_economics.profitability_persistence import (
     EconomicsProfitabilityPersistenceService,
     ProfitabilityPersistenceError,
@@ -19,4 +20,3 @@ async def test_profitability_persistence_requires_narrow_execution_permission() 
         await EconomicsProfitabilityPersistenceService().persist(
             Mock(), context=context, request=Mock(), result=Mock()
         )
-

@@ -9,6 +9,8 @@ from app.platform.idempotency.reliability import (
     MutationReconciliationRequired,
     MutationReliabilityError,
 )
+from app.platform.reliability.correlation import current_correlation_id
+from app.platform.reliability.failures import ClientRecovery, FailureCode, SafeFailure
 
 
 class MutationErrorClass(StrEnum):
@@ -32,7 +34,23 @@ class SafeMutationError:
     retryable: bool
 
     def detail(self) -> dict[str, object]:
-        return {"code": self.code.value, "message": self.message, "retryable": self.retryable}
+        recovery = (
+            ClientRecovery.RETRY_SAFE
+            if self.retryable
+            else ClientRecovery.USER_CORRECTION_REQUIRED
+        )
+        if self.code is MutationErrorClass.RECONCILIATION_REQUIRED:
+            recovery = ClientRecovery.RECONCILIATION_REQUIRED
+        code = FailureCode(self.code.value)
+        return {
+            **SafeFailure(
+                code,
+                self.message,
+                recovery,
+                current_correlation_id(),
+            ).detail(),
+            "retryable": self.retryable,
+        }
 
 
 def reliability_http_error(error: MutationReliabilityError) -> HTTPException:

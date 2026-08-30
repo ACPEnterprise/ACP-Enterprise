@@ -6,7 +6,9 @@ import * as api from "./api";
 export const administrationKeys = {
   access: ["administration", "access"] as const,
   roles: ["administration", "roles"] as const,
-  permissions: (roleId: string) => ["administration", "permissions", roleId] as const,
+  permissions: (roleId: string) =>
+    ["administration", "permissions", roleId] as const,
+  migration: ["administration", "migration-readiness"] as const,
 };
 
 export function useAdministrationAccess() {
@@ -18,8 +20,21 @@ export function useAdministrationAccess() {
   });
 }
 
+export function useMigrationReadiness() {
+  return useQuery({
+    queryKey: administrationKeys.migration,
+    queryFn: api.getMigrationReadiness,
+    retry: shouldRetryApiQuery,
+    staleTime: 60_000,
+  });
+}
+
 export function useRoles() {
-  return useQuery({ queryKey: administrationKeys.roles, queryFn: api.listRoles, retry: shouldRetryApiQuery });
+  return useQuery({
+    queryKey: administrationKeys.roles,
+    queryFn: api.listRoles,
+    retry: shouldRetryApiQuery,
+  });
 }
 
 export function useRolePermissions(roleId: string | null) {
@@ -33,8 +48,16 @@ export function useRolePermissions(roleId: string | null) {
 
 export function usePermissionMutation(action: "grant" | "remove") {
   return useMutation({
-    mutationFn: ({ roleId, permissionId }: { roleId: string; permissionId: string }) =>
-      action === "grant" ? api.grantPermission(roleId, permissionId) : api.removePermission(roleId, permissionId),
+    mutationFn: ({
+      roleId,
+      permissionId,
+    }: {
+      roleId: string;
+      permissionId: string;
+    }) =>
+      action === "grant"
+        ? api.grantPermission(roleId, permissionId)
+        : api.removePermission(roleId, permissionId),
     retry: false,
   });
 }

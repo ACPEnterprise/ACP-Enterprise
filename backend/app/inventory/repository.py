@@ -388,6 +388,65 @@ class InventoryRepository:
         await session.flush()
         return self._cycle_session_record(cycle)
 
+    async def list_cycle_counts(
+        self,
+        session: AsyncSession,
+        *,
+        company_id: UUID,
+        branch_ids: tuple[UUID, ...],
+    ) -> tuple[tuple[CycleCountSessionRecord, tuple[CycleCountEntryRecord, ...]], ...]:
+        cycles = tuple(
+            (
+                await session.scalars(
+                    select(CycleCountSession)
+                    .where(
+                        CycleCountSession.company_id == company_id,
+                        CycleCountSession.branch_id.in_(branch_ids),
+                    )
+                    .order_by(CycleCountSession.started_at.desc(), CycleCountSession.id)
+                )
+            ).all()
+        )
+        cycle_ids = tuple(row.id for row in cycles)
+        entries = (
+            tuple(
+                (
+                    await session.scalars(
+                        select(CycleCountEntry)
+                        .where(
+                            CycleCountEntry.company_id == company_id,
+                            CycleCountEntry.session_id.in_(cycle_ids),
+                        )
+                        .order_by(CycleCountEntry.counted_at, CycleCountEntry.id)
+                    )
+                ).all()
+            )
+            if cycle_ids
+            else ()
+        )
+        return tuple(
+            (
+                self._cycle_session_record(cycle),
+                tuple(
+                    self._cycle_entry_record(entry)
+                    for entry in entries
+                    if entry.session_id == cycle.id
+                ),
+            )
+            for cycle in cycles
+        )
+
+    async def get_cycle_count(
+        self, session: AsyncSession, *, company_id: UUID, session_id: UUID
+    ) -> CycleCountSessionRecord | None:
+        cycle = await session.scalar(
+            select(CycleCountSession).where(
+                CycleCountSession.company_id == company_id,
+                CycleCountSession.id == session_id,
+            )
+        )
+        return self._cycle_session_record(cycle) if cycle else None
+
     async def record_cycle_count(
         self, session: AsyncSession, *, spec: RecordCycleCount
     ) -> CycleCountEntryRecord:
@@ -458,10 +517,13 @@ class InventoryRepository:
         company_id: UUID,
         session_id: UUID,
         actor_user_id: UUID,
+        expected_version: int | None = None,
     ) -> CycleCountSessionRecord:
         cycle = await self._locked_cycle(session, company_id, session_id)
         if cycle.status == "completed":
             return self._cycle_session_record(cycle)
+        if expected_version is not None and cycle.version != expected_version:
+            raise InventoryConflict("Cycle count version changed")
         entries = (
             await session.scalars(
                 select(CycleCountEntry)
@@ -647,9 +709,7 @@ class InventoryRepository:
                 InventoryReservation.company_id == company_id,
                 InventoryReservation.branch_id.in_(branch_ids),
             )
-            .order_by(
-                InventoryReservation.created_at.desc(), InventoryReservation.id
-            )
+            .order_by(InventoryReservation.created_at.desc(), InventoryReservation.id)
         )
         return tuple(self._reservation_record(row) for row in rows.all())
 

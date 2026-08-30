@@ -1,6 +1,11 @@
 import { apiClient } from "./client";
 import type {
   InventoryAllocation,
+  CycleCountRecord,
+  CycleCountSession,
+  CycleCountStart,
+  InventoryAdjustment,
+  InventoryAdjustmentCreate,
   InventoryLocation,
   InventoryLocationCreate,
   InventoryOverview,
@@ -63,4 +68,50 @@ export async function releaseInventoryReservation(
     expected_version: version,
     idempotency_key: crypto.randomUUID(),
   });
+}
+
+export async function postInventoryAdjustment(
+  data: InventoryAdjustmentCreate,
+): Promise<InventoryAdjustment> {
+  return (
+    await apiClient.post<InventoryAdjustment>(`${ROOT}/adjustments`, data)
+  ).data;
+}
+
+export async function getCycleCounts(
+  branchId?: string,
+): Promise<readonly CycleCountSession[]> {
+  return (
+    await apiClient.get<readonly CycleCountSession[]>(`${ROOT}/cycle-counts`, {
+      params: { branch_id: branchId },
+    })
+  ).data;
+}
+
+export async function startCycleCount(
+  data: CycleCountStart,
+): Promise<CycleCountSession> {
+  return (await apiClient.post<CycleCountSession>(`${ROOT}/cycle-counts`, data))
+    .data;
+}
+
+export async function recordCycleCount(
+  id: string,
+  data: CycleCountRecord,
+): Promise<void> {
+  await apiClient.post(`${ROOT}/cycle-counts/${id}/entries`, data);
+}
+
+export async function completeCycleCount(
+  id: string,
+  version: number,
+): Promise<CycleCountSession> {
+  return (
+    await apiClient.post<CycleCountSession>(
+      `${ROOT}/cycle-counts/${id}/complete`,
+      {
+        expected_version: version,
+      },
+    )
+  ).data;
 }

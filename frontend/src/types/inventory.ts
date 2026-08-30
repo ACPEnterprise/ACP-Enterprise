@@ -100,3 +100,60 @@ export interface InventoryAllocation {
   reservation_version: number;
   allocated_at: string;
 }
+
+export interface InventoryAdjustmentCreate {
+  branch_id: string;
+  item_id: string;
+  location_id: string;
+  reason: string;
+  quantity_delta: string;
+  note: string;
+  occurred_at: string;
+  idempotency_key: string;
+}
+
+export interface InventoryAdjustment {
+  id: string;
+  item_id: string;
+  location_id: string;
+  reason: string;
+  quantity_delta: string;
+  note: string;
+  movement_id: string;
+  occurred_at: string;
+}
+
+export interface CycleCountEntry {
+  id: string;
+  item_id: string;
+  expected_quantity: string;
+  counted_quantity: string;
+  variance: string;
+  counted_at: string;
+}
+
+export interface CycleCountSession {
+  id: string;
+  branch_id: string;
+  location_id: string;
+  name: string;
+  status: string;
+  version: number;
+  started_at: string;
+  completed_at: string | null;
+  entries: readonly CycleCountEntry[];
+}
+
+export interface CycleCountStart {
+  branch_id: string;
+  location_id: string;
+  name: string;
+  idempotency_key: string;
+}
+
+export interface CycleCountRecord {
+  item_id: string;
+  counted_quantity: string;
+  counted_at: string;
+  idempotency_key: string;
+}
