@@ -9,11 +9,12 @@ import {
   type BeaconWorkflowAction,
 } from "../api/beacon";
 
-export function useBeaconSignals() {
+export function useBeaconSignals(enabled = true) {
   return useQuery({
     queryKey: ["beacon-signals"],
     queryFn: getBeaconSignals,
     refetchInterval: 60_000,
+    enabled,
   });
 }
 
