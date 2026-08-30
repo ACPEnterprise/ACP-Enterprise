@@ -521,8 +521,16 @@ class InvoiceService:
         )
 
     async def list(
-        self, session: AsyncSession, company_id: UUID, branches: frozenset[UUID]
+        self,
+        session: AsyncSession,
+        company_id: UUID,
+        branches: frozenset[UUID],
+        *,
+        limit: int = 100,
+        offset: int = 0,
     ) -> tuple[Invoice, ...]:
+        if not 1 <= limit <= 200 or offset < 0:
+            raise InvoiceValidation("Invoice page is invalid.")
         return tuple(
             (
                 await session.scalars(
@@ -531,7 +539,9 @@ class InvoiceService:
                         Invoice.company_id == company_id,
                         Invoice.branch_id.in_(branches),
                     )
-                    .order_by(Invoice.created_at.desc(), Invoice.id)
+                    .order_by(Invoice.created_at.desc(), Invoice.id.desc())
+                    .limit(limit)
+                    .offset(offset)
                 )
             ).all()
         )

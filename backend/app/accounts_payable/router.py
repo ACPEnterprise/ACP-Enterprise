@@ -202,5 +202,21 @@ async def reverse_disbursement(disbursement_id: UUID, payload: ReverseInput, con
 
 
 @router.get("/aging", response_model=list[AgingItem])
-async def aging(as_of: Annotated[date, Query()], context: ReportRead, session: Session) -> list[AgingItem]:
-    return [AgingItem.model_validate(row) for row in await accounts_payable_service.aging(session, context.company.id, as_of, context.authorized_branch_ids)]
+async def aging(
+    as_of: Annotated[date, Query()],
+    context: ReportRead,
+    session: Session,
+    limit: Annotated[int, Query(ge=1, le=200)] = 100,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> list[AgingItem]:
+    return [
+        AgingItem.model_validate(row)
+        for row in await accounts_payable_service.aging(
+            session,
+            context.company.id,
+            as_of,
+            context.authorized_branch_ids,
+            limit=limit,
+            offset=offset,
+        )
+    ]

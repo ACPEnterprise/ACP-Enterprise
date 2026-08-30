@@ -392,8 +392,10 @@ class AccountsPayableService:
                     bill.status = "posted"
         return receipt
 
-    async def aging(self, session: AsyncSession, company_id: UUID, as_of: date, branch_ids: frozenset[UUID]) -> list[dict[str, object]]:
-        rows = (await session.scalars(select(VendorBill).where(VendorBill.company_id == company_id, VendorBill.branch_id.in_(branch_ids), VendorBill.bill_date <= as_of, VendorBill.open_amount > 0).order_by(VendorBill.due_date, VendorBill.bill_number))).all()
+    async def aging(self, session: AsyncSession, company_id: UUID, as_of: date, branch_ids: frozenset[UUID], *, limit: int = 100, offset: int = 0) -> list[dict[str, object]]:
+        if not 1 <= limit <= 200 or offset < 0:
+            raise APValidation("AP aging page is invalid.")
+        rows = (await session.scalars(select(VendorBill).where(VendorBill.company_id == company_id, VendorBill.branch_id.in_(branch_ids), VendorBill.bill_date <= as_of, VendorBill.open_amount > 0).order_by(VendorBill.due_date, VendorBill.bill_number, VendorBill.id).limit(limit).offset(offset))).all()
         return [{"vendor_id": row.vendor_id, "bill_id": row.id, "bill_number": row.bill_number, "bill_date": row.bill_date, "due_date": row.due_date, "original_amount": row.total_amount, "open_amount": row.open_amount, "currency": row.currency, "days_past_due": max(0, (as_of - row.due_date).days), "status": row.status} for row in rows]
 
     async def _transition(self, session: AsyncSession, company_id: UUID, bill_id: UUID, actor_id: UUID, expected_version: int, expected: str, target: str, authorized_branch_ids: frozenset[UUID]) -> VendorBill:

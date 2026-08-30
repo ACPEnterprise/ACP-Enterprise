@@ -1,7 +1,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_database_session
@@ -62,9 +62,18 @@ def _branch(context: AuthorizationContext, branch_id: UUID) -> None:
 
 
 @router.get("", response_model=list[InvoiceItem])
-async def list_invoices(context: Read, session: Session) -> list[InvoiceItem]:
+async def list_invoices(
+    context: Read,
+    session: Session,
+    limit: Annotated[int, Query(ge=1, le=200)] = 100,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> list[InvoiceItem]:
     rows = await invoice_service.list(
-        session, context.company.id, context.authorized_branch_ids
+        session,
+        context.company.id,
+        context.authorized_branch_ids,
+        limit=limit,
+        offset=offset,
     )
     return [InvoiceItem.model_validate(row) for row in rows]
 
