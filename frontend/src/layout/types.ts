@@ -31,6 +31,7 @@ export type NavigationItemId =
   | "revenue-cycle"
   | "accounts-payable"
   | "financial-reports"
+  | "business-economics"
   | "payroll"
   | "inventory"
   | "purchasing"

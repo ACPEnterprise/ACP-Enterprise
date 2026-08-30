@@ -14,6 +14,7 @@ import {
   Scale,
   Headphones,
   Landmark,
+  TrendingUp,
   Megaphone,
   MonitorCog,
   ShieldCheck,
@@ -156,6 +157,14 @@ export const navigationCatalog = [
     icon: Scale,
     availability: "available",
     requiredPermission: "COMPANY_ACCOUNTING_REPORT_READ",
+  },
+  {
+    id: "business-economics",
+    label: "Business Economics",
+    path: "/business-economics",
+    icon: TrendingUp,
+    availability: "available",
+    requiredPermission: "COMPANY_ECONOMICS_MEASUREMENT_READ",
   },
   {
     id: "inventory",

@@ -11,6 +11,7 @@ from app.accounts_payable.router import router as accounts_payable_router
 from app.analytics.router import router as analytics_router
 from app.api.health import router as health_router
 from app.beacon.router import router as beacon_router
+from app.business_economics.router import router as business_economics_router
 from app.communications.router import router as communications_router
 from app.core.config import settings
 from app.customer_migration.native_location_review import (
@@ -158,6 +159,7 @@ app.include_router(analytics_router)
 app.include_router(accounting_router)
 app.include_router(financial_reporting_router)
 app.include_router(beacon_router)
+app.include_router(business_economics_router)
 app.include_router(customers_router)
 app.include_router(location_identity_router)
 app.include_router(auth_router)
