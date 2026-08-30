@@ -9,6 +9,13 @@ class AuditQuery:
     authorized_branch_ids: frozenset[UUID]
     has_all_branch_access: bool
     branch_id: UUID | None = None
+    actor_user_id: UUID | None = None
+    resource_type: str | None = None
+    action: str | None = None
+    outcome: str | None = None
+    correlation_id: UUID | None = None
+    occurred_before: datetime | None = None
+    before_id: UUID | None = None
     limit: int = 50
 
 
