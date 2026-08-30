@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.platform.auth.passwords import PasswordService
 from app.platform.bootstrap.config import BootstrapConfiguration
 from app.platform.bootstrap.repository import BootstrapRepository
-from app.platform.launch_controls import COMPANY_ADMINISTRATOR_OWNER_READ_PERMISSIONS
+from app.platform.launch_controls import LAUNCH_ROLE_MATRIX, LaunchRoleCode
 from app.platform.permissions.catalog import permission_catalog
 
 
@@ -88,17 +88,18 @@ class BootstrapService:
                 actor_user_id=administrator.id,
             )
             await session.flush()
-            administrator_role = roles["COMPANY_ADMINISTRATOR"]
-            self.repository.assign_permissions(
-                session,
-                role=administrator_role,
-                permissions=(
-                    permissions[code]
-                    for code in sorted(COMPANY_ADMINISTRATOR_OWNER_READ_PERMISSIONS)
-                ),
-                actor_user_id=administrator.id,
-                now=now,
-            )
+            for definition in LAUNCH_ROLE_MATRIX:
+                self.repository.assign_permissions(
+                    session,
+                    role=roles[definition.code.value],
+                    permissions=(
+                        permissions[code]
+                        for code in sorted(definition.permission_codes)
+                    ),
+                    actor_user_id=administrator.id,
+                    now=now,
+                )
+            administrator_role = roles[LaunchRoleCode.COMPANY_ADMINISTRATOR.value]
             self.repository.assign_role(
                 session,
                 company_id=company.id,
