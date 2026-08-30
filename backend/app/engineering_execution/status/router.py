@@ -8,6 +8,8 @@ from app.database.session import get_database_session
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import EngineeringCommandPermission
 from app.platform.permissions.dependencies import require_permission
+from app.platform.reliability.correlation import current_correlation_id
+from app.platform.reliability.failures import ClientRecovery, FailureCode, SafeFailure
 
 from .schemas import MobileExecutionStatus
 from .service import (
@@ -45,7 +47,13 @@ async def get_execution_status(
             session, context=context, command_id=command_id
         )
     except ExecutionStatusNotFoundError as error:
+        failure = SafeFailure(
+            FailureCode.NOT_FOUND,
+            "Engineering Command not found.",
+            ClientRecovery.TERMINAL_FAILURE,
+            current_correlation_id(),
+        )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Engineering Command not found.",
+            detail=failure.detail(),
         ) from error

@@ -14,6 +14,11 @@ const readiness: api.MigrationReadiness = {
   reconciliation_digest: "b".repeat(64),
   stale: false,
   safe_failure_code: null,
+  go_no_go: {
+    state: "external_auth_required",
+    activation_eligible: false,
+    blockers: ["real_hcp_final_delta_required"],
+  },
   historical_window: {
     starts_on: null,
     ends_on: "2026-08-30",
@@ -76,6 +81,26 @@ const readiness: api.MigrationReadiness = {
   owner_decisions: [
     { decision: "Chart of Accounts mapping", state: "owner_decision_required" },
   ],
+  decision_packets: [
+    {
+      decision_id: "HCP.CANCELED_BALANCE_JOBS",
+      question: "How should canceled balances be treated?",
+      current_evidence: "296 source Jobs remain held.",
+      options: ["retain_hold", "explicit_exception"],
+      recommended_default: "retain_hold",
+      risk: "False AR.",
+      unlocks: "Final Job disposition.",
+      state: "owner_decision_required",
+    },
+  ],
+  freeze_authority: {
+    state: "external_authorization_required",
+    required_authority: "owner_go_no_go_actor",
+    sources: ["HCP"],
+    evidence: "immutable_source_timestamps_and_manifest_digests",
+    late_change_behavior: "invalidate_delta_and_return_to_reconciliation",
+    reopen_behavior: "new_freeze_generation_required",
+  },
   run_history: [
     {
       run_id: "safe-run-id",
@@ -120,6 +145,8 @@ describe("MigrationWorkspace", () => {
       ),
     ).toBeInTheDocument();
     expect(screen.getByText("Chart of Accounts mapping")).toBeInTheDocument();
+    expect(screen.getByText("How should canceled balances be treated?")).toBeInTheDocument();
+    expect(screen.getByText("Real Hcp Final Delta Required")).toBeInTheDocument();
     expect(screen.getByText("Real overlap")).toBeInTheDocument();
     expect(screen.getByText("safe-run-id")).toBeInTheDocument();
     expect(screen.getByText("Start: Not selected")).toBeInTheDocument();

@@ -1,7 +1,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_database_session
@@ -58,13 +58,22 @@ def _error(error: InvoiceError) -> HTTPException:
 
 def _branch(context: AuthorizationContext, branch_id: UUID) -> None:
     if not context.can_access_branch(branch_id):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Invoice was not found.")
+        raise _error(InvoiceNotFound("Invoice was not found."))
 
 
 @router.get("", response_model=list[InvoiceItem])
-async def list_invoices(context: Read, session: Session) -> list[InvoiceItem]:
+async def list_invoices(
+    context: Read,
+    session: Session,
+    limit: Annotated[int, Query(ge=1, le=200)] = 100,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> list[InvoiceItem]:
     rows = await invoice_service.list(
-        session, context.company.id, context.authorized_branch_ids
+        session,
+        context.company.id,
+        context.authorized_branch_ids,
+        limit=limit,
+        offset=offset,
     )
     return [InvoiceItem.model_validate(row) for row in rows]
 
@@ -73,7 +82,7 @@ async def list_invoices(context: Read, session: Session) -> list[InvoiceItem]:
 async def get_invoice(invoice_id: UUID, context: Read, session: Session) -> InvoiceItem:
     row = await invoice_service.get(session, context.company.id, invoice_id)
     if row is None or not context.can_access_branch(row.branch_id):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Invoice was not found.")
+        raise _error(InvoiceNotFound("Invoice was not found."))
     return InvoiceItem.model_validate(row)
 
 

@@ -86,7 +86,7 @@ const requireReauthentication = vi.fn();
 const context: AuthenticationContextValue = {
   status: "authenticated",
   activeCompany: null,
-  permissionCodes: ["COMPANY_ADMINISTER"],
+  permissionCodes: ["COMPANY_ADMINISTER", "COMPANY_ROLE_READ", "COMPANY_PERMISSION_MANAGE"],
   user: {
     id: "owner",
     normalized_email: "owner@example.com",
@@ -127,6 +127,7 @@ function renderPage() {
 describe("AdministrationRoute", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    context.permissionCodes = ["COMPANY_ADMINISTER", "COMPANY_ROLE_READ", "COMPANY_PERMISSION_MANAGE"];
     vi.mocked(api.listRoles).mockResolvedValue([role]);
     vi.mocked(api.listPermissions).mockResolvedValue(permissions);
     vi.mocked(api.grantPermission).mockResolvedValue(undefined);
@@ -145,6 +146,11 @@ describe("AdministrationRoute", () => {
       reconciliation_digest: "b".repeat(64),
       stale: false,
       safe_failure_code: null,
+      go_no_go: {
+        state: "external_auth_required",
+        activation_eligible: false,
+        blockers: [],
+      },
       historical_window: {
         starts_on: null,
         ends_on: "2026-08-30",
@@ -156,6 +162,15 @@ describe("AdministrationRoute", () => {
       timeline: [],
       authority_states: [],
       owner_decisions: [],
+      decision_packets: [],
+      freeze_authority: {
+        state: "external_authorization_required",
+        required_authority: "owner_go_no_go_actor",
+        sources: [],
+        evidence: "immutable_source_timestamps_and_manifest_digests",
+        late_change_behavior: "invalidate_delta_and_return_to_reconciliation",
+        reopen_behavior: "new_freeze_generation_required",
+      },
       run_history: [],
       recovery_state: "completed_runs_replay_safe",
     });
@@ -312,5 +327,25 @@ describe("AdministrationRoute", () => {
       ),
     ).toBeInTheDocument();
     expect(requireReauthentication).not.toHaveBeenCalled();
+  });
+
+  it("keeps role evidence read-only without permission-manage authority", async () => {
+    context.permissionCodes = ["COMPANY_ROLE_READ"];
+    renderPage();
+
+    expect(await screen.findByText("COMPANY_DISPATCH_READ")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Grant" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Remove" })).not.toBeInTheDocument();
+  });
+
+  it("renders Company-admin subworkspaces without requesting unauthorized role evidence", async () => {
+    context.permissionCodes = ["COMPANY_ADMINISTER"];
+    renderPage();
+
+    expect(await screen.findByText("Role administration requires role-read permission.")).toBeInTheDocument();
+    expect(screen.getByText("QuickBooks Development sandbox")).toBeInTheDocument();
+    expect(screen.getByText("Migration readiness")).toBeInTheDocument();
+    expect(api.listRoles).not.toHaveBeenCalled();
+    expect(api.listPermissions).not.toHaveBeenCalled();
   });
 });

@@ -798,15 +798,23 @@ async def test_authorized_router_enforces_context_and_rejects_unknown_fields(
     app.dependency_overrides[get_authorization_context] = authorization_override
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-        response = await client.get("/api/v1/company-admin/memberships")
+        response = await client.get(
+            "/api/v1/company-admin/memberships",
+            params={"limit": 1, "offset": 0},
+        )
+        unbounded = await client.get(
+            "/api/v1/company-admin/memberships", params={"limit": 201}
+        )
         invalid = await client.post(
             "/api/v1/company-admin/roles",
             json={"code": "ROUTER", "name": "Router Role", "is_system": True},
         )
     assert response.status_code == 200
+    assert len(response.json()) == 1
     assert {record["company_id"] for record in response.json()} == {
         str(fixture.context.company.id)
     }
+    assert unbounded.status_code == 422
     assert invalid.status_code == 422
 
 

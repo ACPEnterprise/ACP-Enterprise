@@ -2,6 +2,7 @@ from app.operational_migration.module_readiness import (
     CutoverAuthority,
     CutoverPhase,
     EntityAccounting,
+    GoNoGoState,
     HistoricalWindow,
     SourceAuthority,
     qualify_cutover,
@@ -40,6 +41,7 @@ def test_module_is_non_production_ready_with_external_owner_gate() -> None:
     assert result.ready_for_non_production_rehearsal
     assert not result.ready_for_production_cutover
     assert result.blocker_codes == ("owner_policy_decisions_required",)
+    assert result.go_no_go_state is GoNoGoState.OWNER_DECISION_REQUIRED
 
 
 def test_unexplained_delta_blocks_rehearsal() -> None:
@@ -48,6 +50,7 @@ def test_unexplained_delta_blocks_rehearsal() -> None:
     )
     assert not result.ready_for_non_production_rehearsal
     assert "jobs_unexplained_delta" in result.blocker_codes
+    assert result.go_no_go_state is GoNoGoState.RECONCILIATION_REQUIRED
 
 
 def test_historical_truncation_requires_opening_evidence() -> None:
@@ -59,12 +62,14 @@ def test_historical_truncation_requires_opening_evidence() -> None:
         )
     )
     assert "historical_opening_evidence_required" in result.blocker_codes
+    assert result.go_no_go_state is GoNoGoState.OPENING_EVIDENCE_REQUIRED
 
 
 def test_final_delta_and_freeze_are_required_after_phase_transition() -> None:
     result = qualify_cutover(authority(phase=CutoverPhase.FINAL_DELTAS_ACQUIRED))
     assert "source_freeze_evidence_required" in result.blocker_codes
     assert "final_delta_evidence_required" in result.blocker_codes
+    assert result.go_no_go_state is GoNoGoState.EXTERNAL_AUTH_REQUIRED
 
 
 def test_identical_authority_is_deterministic() -> None:

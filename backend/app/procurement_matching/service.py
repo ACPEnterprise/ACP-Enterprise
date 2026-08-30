@@ -1,6 +1,6 @@
 import hashlib
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from uuid import UUID
 
@@ -49,6 +49,13 @@ def digest(value: object) -> str:
     return hashlib.sha256(
         json.dumps(value, sort_keys=True, separators=(",", ":"), default=str).encode()
     ).hexdigest()
+
+
+def decimal_days(value: timedelta) -> Decimal:
+    microseconds = (
+        (value.days * 86_400 + value.seconds) * 1_000_000 + value.microseconds
+    )
+    return Decimal(microseconds) / Decimal(86_400_000_000)
 
 
 class ProcurementMatchingService:
@@ -931,8 +938,7 @@ class ProcurementMatchingService:
                         if receipt.purchase_order_id == order.id
                     )
                     - order.issued_at
-                ).total_seconds()
-                / 86400
+                )
                 for order in vendor_orders
                 if order.issued_at is not None
                 and any(
@@ -970,9 +976,13 @@ class ProcurementMatchingService:
                     else None,
                     completed_lead_time_samples=len(lead_times),
                     average_lead_time_days=(
-                        Decimal(str(sum(lead_times) / len(lead_times))).quantize(
-                            Decimal("0.01")
-                        )
+                        (
+                            sum(
+                                (decimal_days(value) for value in lead_times),
+                                Decimal(0),
+                            )
+                            / Decimal(len(lead_times))
+                        ).quantize(Decimal("0.01"))
                         if lead_times
                         else None
                     ),

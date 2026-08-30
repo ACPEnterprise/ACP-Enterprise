@@ -4,6 +4,7 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
+from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.core.config import settings
@@ -12,6 +13,7 @@ from app.payroll.permissions import PayrollPermission
 from app.platform.audit.access_service import AuditAccessService
 from app.platform.audit.models import AuditRecord
 from app.platform.audit.repository import AuditReadRepository
+from app.platform.audit.router import audit_access_service, list_audit_records
 from app.platform.audit.service import AuditEntry, AuditService
 from app.platform.launch_controls import (
     COMPANY_ADMINISTRATOR_OWNER_READ_PERMISSIONS,
@@ -106,6 +108,8 @@ def test_audit_permission_fails_closed_without_explicit_grant() -> None:
         "session cookie",
         "private_key_pem",
         "nested_token_hash",
+        "social-security-number",
+        "taxpayer_identification_number",
         "worker_credential_id",
     ],
 )
@@ -197,6 +201,28 @@ async def test_explicit_unauthorized_audit_branch_fails_closed(audit_database) -
                 branch_id=denied_branch,
                 limit=50,
             )
+
+
+@pytest.mark.asyncio
+async def test_audit_branch_denial_has_owner_admin_recovery_contract(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def denied(*_args, **_kwargs):
+        raise TenantAccessDeniedError("protected branch identity")
+
+    monkeypatch.setattr(audit_access_service, "list_records", denied)
+
+    with pytest.raises(HTTPException) as raised:
+        await list_audit_records(
+            _context(uuid4(), {uuid4()}),  # type: ignore[arg-type]
+            object(),  # type: ignore[arg-type]
+            branch_id=uuid4(),
+        )
+
+    assert raised.value.status_code == 403
+    assert raised.value.detail["code"] == "forbidden"
+    assert raised.value.detail["recovery"] == "OWNER_ADMIN_ACTION_REQUIRED"
+    assert "protected branch identity" not in str(raised.value.detail)
 
 
 def test_audit_api_schema_excludes_support_sensitive_transport_metadata() -> None:

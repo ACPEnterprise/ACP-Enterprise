@@ -134,6 +134,26 @@ export function MigrationWorkspace() {
       </Card>
       <Card>
         <CardHeader>
+          <CardTitle>Deterministic go / no-go</CardTitle>
+          <CardDescription>
+            Activation is never inferred from a generic green status.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-ui-3">
+          <Badge variant={statusVariant(data.go_no_go.state)}>
+            {label(data.go_no_go.state)}
+          </Badge>
+          <ul className="grid gap-ui-2 sm:grid-cols-2">
+            {data.go_no_go.blockers.map((blocker) => (
+              <li key={blocker} className="rounded-lg border border-stroke p-ui-3 text-body-s">
+                {label(blocker)}
+              </li>
+            ))}
+          </ul>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
           <CardTitle>Disposition accounting</CardTitle>
           <CardDescription>
             Source = migrated + held + exception + non-applicable + deferred +
@@ -237,6 +257,21 @@ export function MigrationWorkspace() {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          <div className="mb-ui-4 grid gap-ui-3 lg:grid-cols-2">
+            {data.decision_packets.map((packet) => (
+              <article key={packet.decision_id} className="space-y-ui-2 rounded-lg border border-stroke p-ui-3">
+                <div className="flex flex-wrap items-start justify-between gap-ui-2">
+                  <strong>{packet.question}</strong>
+                  <Badge variant={statusVariant(packet.state)}>{label(packet.state)}</Badge>
+                </div>
+                <p className="text-body-s">{packet.current_evidence}</p>
+                <p className="text-body-xs text-content-muted"><strong>Options:</strong> {packet.options.map(label).join(" · ")}</p>
+                {packet.recommended_default && <p className="text-body-xs"><strong>Recommended:</strong> {label(packet.recommended_default)}</p>}
+                <p className="text-body-xs"><strong>Risk:</strong> {packet.risk}</p>
+                <p className="text-body-xs"><strong>Unlocks:</strong> {packet.unlocks}</p>
+              </article>
+            ))}
+          </div>
           <ul className="grid gap-ui-2 sm:grid-cols-2">
             {data.owner_decisions.map((item) => (
               <li

@@ -47,6 +47,15 @@ async def test_statement_is_deterministic_immutable_and_self_scoped(
         view = await service.own(session, context=own, statement_id=value.id)
         assert view.digest == value.statement_digest
         assert view.content["net_pay"] == str(value.content["net_pay"])
+        assert [item.id for item in await service.list_own(
+            session, context=own, limit=1, offset=0
+        )] == [value.id]
+        assert await service.list_own(session, context=own, limit=1, offset=1) == ()
+        statement_count, current = await service.own_summary(session, context=own)
+        assert statement_count == 1
+        assert current is not None and current.id == value.id
+        with pytest.raises(PayrollConflictError, match="pagination"):
+            await service.list_own(session, context=own, limit=201)
 
         unauthorized = FakeContext(values["company_id"], values["reviewer_id"], {PayrollPermission.STATEMENT_READ})
         with pytest.raises(PayrollAuthorizationError, match="permission"):

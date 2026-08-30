@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useParams } from "react-router";
 
 import { getOperatorApiError } from "../../api/errors";
+import { useHasPermission } from "../../auth";
 import {
   Alert,
   Badge,
@@ -93,9 +94,12 @@ function ReadableInstruction({ value }: { value: string }) {
 
 export function MobileEngineeringDetailPage() {
   const { commandId } = useParams();
-  const query = useMobileWorkstream(commandId);
+  const canRead = useHasPermission("COMPANY_ENGINEERING_COMMAND_READ");
+  const canManage = useHasPermission("COMPANY_ENGINEERING_COMMAND_MANAGE");
+  const canApprove = useHasPermission("COMPANY_ENGINEERING_COMMAND_APPROVE");
+  const query = useMobileWorkstream(commandId, canRead);
   const control = useControlMobileWorkstream(commandId ?? "");
-  const review = useMobileReview(commandId);
+  const review = useMobileReview(commandId, canRead);
   const approve = useApproveMobileReview(commandId ?? "");
   const cancelReview = useCancelMobileReview(commandId ?? "");
   const decideResult = useDecideEngineeringReview(
@@ -111,6 +115,7 @@ export function MobileEngineeringDetailPage() {
   >(null);
   const [acceptResult, setAcceptResult] = useState(false);
 
+  if (!canRead) return <Alert variant="danger">You are not authorized to view this Engineering workstream.</Alert>;
   if (query.isLoading)
     return (
       <div className="flex min-h-48 items-center justify-center">
@@ -242,38 +247,38 @@ export function MobileEngineeringDetailPage() {
           {getOperatorApiError(control.error, "Workstream action").message}
         </Alert>
       )}
-      {review.data?.can_approve && (
+      {review.data?.can_approve && (canApprove || canManage) && (
         <Alert variant="warning" title="Your decision is needed">
           <p>
             Review the requested outcome, destination, and change authority
             below.
           </p>
           <div className="mt-ui-3 flex flex-wrap gap-ui-2">
-            <Button
+            {canApprove && <Button
               className="min-h-11"
               disabled={approve.isPending}
               onClick={approveCommand}
             >
               {approve.isPending ? "Approving…" : "Approve"}
-            </Button>
-            <Button
+            </Button>}
+            {canManage && <Button
               className="min-h-11"
               variant="outline"
               onClick={() => setReviewDecision("revision")}
             >
               Request revision
-            </Button>
-            <Button
+            </Button>}
+            {canManage && <Button
               className="min-h-11"
               variant="destructive"
               onClick={() => setReviewDecision("reject")}
             >
               Reject
-            </Button>
+            </Button>}
           </div>
         </Alert>
       )}
-      {workstream.owner_review_action_available && (
+      {canApprove && workstream.owner_review_action_available && (
         <Alert variant="warning" title="Owner review prepared">
           <p>
             The published result and its immutable validation evidence are ready
@@ -524,7 +529,7 @@ export function MobileEngineeringDetailPage() {
         )}
       </Card>
 
-      <section
+      {canManage && <section
         className="fixed inset-x-0 bottom-0 z-20 border-t border-stroke bg-surface/95 p-ui-3 backdrop-blur sm:static sm:rounded-xl sm:border"
         aria-label="Owner actions"
       >
@@ -541,9 +546,9 @@ export function MobileEngineeringDetailPage() {
             </Button>
           ))}
         </div>
-      </section>
+      </section>}
 
-      {confirmation && (
+      {canManage && confirmation && (
         <ConfirmationDialog
           title={`${mobileEngineeringLabel(confirmation)} this workstream?`}
           confirmLabel={mobileEngineeringLabel(confirmation)}
@@ -562,7 +567,7 @@ export function MobileEngineeringDetailPage() {
           </p>
         </ConfirmationDialog>
       )}
-      {reviewDecision && (
+      {canManage && reviewDecision && (
         <ConfirmationDialog
           title={
             reviewDecision === "revision"
@@ -584,7 +589,7 @@ export function MobileEngineeringDetailPage() {
           </p>
         </ConfirmationDialog>
       )}
-      {acceptResult &&
+      {canApprove && acceptResult &&
         workstream.owner_review_digest &&
         workstream.owner_review_version && (
           <ConfirmationDialog

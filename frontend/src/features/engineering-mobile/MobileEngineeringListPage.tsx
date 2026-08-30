@@ -14,6 +14,7 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router";
 
 import { getOperatorApiError } from "../../api/errors";
+import { useHasPermission } from "../../auth";
 import { Alert, Badge, Button, Card, EmptyState, Spinner } from "../../ui";
 import {
   useAcknowledgeMissionNotification,
@@ -129,9 +130,11 @@ function WorkstreamCard({ item }: { item: MobileWorkstreamSummary }) {
 function NotificationRow({
   item,
   workstreamName,
+  canManage,
 }: {
   item: MissionNotificationItem;
   workstreamName: string;
+  canManage: boolean;
 }) {
   const acknowledge = useAcknowledgeMissionNotification();
   const transition = useTransitionMissionNotification();
@@ -160,7 +163,7 @@ function NotificationRow({
       <p className="mt-ui-1 text-sm text-content-muted">
         {mobileEngineeringTimestamp(item.created_at)}
       </p>
-      <div className="mt-ui-3 flex flex-wrap gap-ui-2">
+      {canManage && <div className="mt-ui-3 flex flex-wrap gap-ui-2">
         {item.status === "unread" && (
           <Button
             className="min-h-11"
@@ -204,19 +207,22 @@ function NotificationRow({
             Archive
           </Button>
         )}
-      </div>
+      </div>}
     </li>
   );
 }
 
 export function MobileEngineeringListPage() {
+  const canRead = useHasPermission("COMPANY_ENGINEERING_COMMAND_READ");
+  const canManage = useHasPermission("COMPANY_ENGINEERING_COMMAND_MANAGE");
+  const canReadCapacity = useHasPermission("COMPANY_ENGINEERING_CAPACITY_READ");
   const [view, setView] = useState<View>("overview");
   const [filter, setFilter] = useState<InboxFilter>("all");
   const [observedAt] = useState(() => Date.now());
-  const workstreams = useMobileWorkstreams({ page: 1, pageSize: 100 });
-  const notifications = useMissionNotifications();
-  const approvals = usePendingMobileReviews();
-  const roadmaps = useRoadmaps();
+  const workstreams = useMobileWorkstreams({ page: 1, pageSize: 100 }, canRead);
+  const notifications = useMissionNotifications(canRead);
+  const approvals = usePendingMobileReviews(canRead);
+  const roadmaps = useRoadmaps(canRead);
   const realtime = useEngineeringRealtime();
   const items = useMemo(
     () => workstreams.data?.items ?? [],
@@ -290,6 +296,7 @@ export function MobileEngineeringListPage() {
             tone: "text-rose-400",
           };
 
+  if (!canRead) return <Alert variant="danger">You are not authorized to view Engineering Control.</Alert>;
   if (workstreams.isLoading)
     return (
       <div className="flex min-h-64 items-center justify-center">
@@ -348,7 +355,7 @@ export function MobileEngineeringListPage() {
             ["briefing", Sparkles, "Briefing"],
             ["analytics", HeartPulse, "Analytics"],
           ] as const
-        ).map(([id, Icon, label]) => (
+        ).filter(([id]) => id !== "capacity" || canReadCapacity).map(([id, Icon, label]) => (
           <button
             key={id}
             type="button"
@@ -364,7 +371,7 @@ export function MobileEngineeringListPage() {
 
       {view === "roadmap" && <MissionRoadmapPanel />}
 
-      {view === "capacity" && <EngineeringCapacityPanel />}
+      {view === "capacity" && canReadCapacity && <EngineeringCapacityPanel />}
 
       {view === "overview" && (
         <>
@@ -555,6 +562,7 @@ export function MobileEngineeringListPage() {
               <NotificationRow
                 key={item.id}
                 item={item}
+                canManage={canManage}
                 workstreamName={
                   workstreamNames.get(item.command_id) ??
                   "Engineering workstream"

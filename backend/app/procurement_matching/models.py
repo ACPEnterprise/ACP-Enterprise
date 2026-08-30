@@ -148,6 +148,21 @@ class ProcurementMatchLine(Base):
             "state IN ('matched','partially_matched','quantity_variance','price_variance','unreceived_billing','overbilled','return_pending_credit','item_conflict','blocked','requires_review')",
             name="ck_procurement_match_line_state",
         ),
+        CheckConstraint(
+            "ordered_quantity > 0 AND received_quantity >= 0 "
+            "AND returned_quantity >= 0 AND returned_quantity <= received_quantity "
+            "AND billed_quantity > 0",
+            name="ck_procurement_match_line_quantities",
+        ),
+        CheckConstraint(
+            "net_accepted_quantity = received_quantity - returned_quantity",
+            name="ck_procurement_match_line_net_accepted",
+        ),
+        CheckConstraint(
+            "po_unit_cost >= 0 AND billed_unit_cost >= 0 "
+            "AND billed_net_amount >= 0 AND billed_tax_amount >= 0",
+            name="ck_procurement_match_line_amounts",
+        ),
         UniqueConstraint(
             "company_id",
             "match_id",

@@ -29,7 +29,7 @@ def test_communication_errors_use_safe_recovery_without_reflection() -> None:
         ),
         (
             CommunicationError(secret),
-            400,
+            500,
             "internal_failure",
             "OWNER_ADMIN_ACTION_REQUIRED",
         ),

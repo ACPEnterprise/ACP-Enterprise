@@ -12,6 +12,10 @@ import type { MobileReviewDetail, MobileWorkstreamSummary } from "./types";
 
 vi.mock("./hooks");
 vi.mock("./realtime", () => ({ useEngineeringRealtime: () => "live" }));
+const permissions = new Set<string>();
+vi.mock("../../auth", () => ({
+  useHasPermission: (code: string) => permissions.has(code),
+}));
 
 const review: MobileReviewDetail = {
   id: "3f68dc17-0be5-46d1-9666-1c7bb825be51",
@@ -123,6 +127,12 @@ function renderDetail() {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  permissions.clear();
+  permissions.add("COMPANY_ENGINEERING_COMMAND_READ");
+  permissions.add("COMPANY_ENGINEERING_COMMAND_MANAGE");
+  permissions.add("COMPANY_ENGINEERING_COMMAND_APPROVE");
+  permissions.add("COMPANY_ENGINEERING_CAPACITY_READ");
+  permissions.add("COMPANY_ENGINEERING_CAPACITY_MANAGE");
   vi.mocked(hooks.useApproveMobileReview).mockReturnValue(mutation());
   vi.mocked(hooks.useCancelMobileReview).mockReturnValue(mutation());
   vi.mocked(hooks.useDecideEngineeringReview).mockReturnValue(mutation());
@@ -518,10 +528,84 @@ describe("mobile Engineering Control", () => {
     expect(
       screen.getByRole("heading", { name: "Engineering analytics" }),
     ).toBeInTheDocument();
-    expect(hooks.useMobileWorkstreams).toHaveBeenLastCalledWith({
-      page: 1,
-      pageSize: 100,
-    });
+    expect(hooks.useMobileWorkstreams).toHaveBeenLastCalledWith(
+      { page: 1, pageSize: 100 },
+      true,
+    );
+  });
+
+  it("does not mount Engineering reads without command-read authority", () => {
+    permissions.clear();
+    vi.mocked(hooks.useMobileWorkstreams).mockReturnValue({
+      data: undefined, isLoading: false, isError: false,
+    } as never);
+
+    renderList();
+
+    expect(hooks.useMobileWorkstreams).toHaveBeenCalledWith(
+      { page: 1, pageSize: 100 }, false,
+    );
+    expect(hooks.useMissionNotifications).toHaveBeenCalledWith(false);
+    expect(hooks.usePendingMobileReviews).toHaveBeenCalledWith(false);
+    expect(hooks.useRoadmaps).toHaveBeenCalledWith(false);
+    expect(screen.getByText(/not authorized to view Engineering Control/i)).toBeInTheDocument();
+  });
+
+  it("does not mount direct Engineering object reads without command-read authority", () => {
+    permissions.clear();
+    vi.mocked(hooks.useMobileWorkstream).mockReturnValue({
+      data: undefined, isLoading: false, isError: false,
+    } as never);
+
+    renderDetail();
+
+    expect(hooks.useMobileWorkstream).toHaveBeenCalledWith(review.id, false);
+    expect(hooks.useMobileReview).toHaveBeenCalledWith(review.id, false);
+    expect(screen.getByText(/not authorized to view this Engineering workstream/i)).toBeInTheDocument();
+  });
+
+  it("keeps capacity evidence read-only without capacity-manage authority", async () => {
+    permissions.clear();
+    permissions.add("COMPANY_ENGINEERING_COMMAND_READ");
+    permissions.add("COMPANY_ENGINEERING_CAPACITY_READ");
+    vi.mocked(hooks.useMobileWorkstreams).mockReturnValue({
+      isLoading: false,
+      data: { items: [], connectivity: disconnected, page: 1, page_size: 100, total_count: 0, total_pages: 0 },
+    } as never);
+
+    renderList();
+    await userEvent.click(screen.getByRole("button", { name: /Capacity/ }));
+
+    expect(screen.getByText("Current capacity evidence is read-only.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Save capacity limits" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("spinbutton", { name: "Maximum concurrent workstreams" })).not.toBeInTheDocument();
+  });
+
+  it("shows notification evidence without manage actions to command readers", async () => {
+    permissions.clear();
+    permissions.add("COMPANY_ENGINEERING_COMMAND_READ");
+    vi.mocked(hooks.useMobileWorkstreams).mockReturnValue({
+      isLoading: false,
+      data: { items: [], connectivity: disconnected, page: 1, page_size: 100, total_count: 0, total_pages: 0 },
+    } as never);
+    vi.mocked(hooks.useMissionNotifications).mockReturnValue({
+      data: {
+        items: [{
+          id: "notification-1", command_id: review.id, kind: "waiting_for_owner",
+          severity: "warning", status: "unread", created_at: review.created_at,
+          escalated_at: null, acknowledged_at: null, read_at: null, archived_at: null, version: 1,
+        }],
+        unread_count: 1, escalated_count: 0, page: 1, page_size: 25, total_count: 1, total_pages: 1,
+      },
+    } as never);
+
+    renderList();
+    await userEvent.click(screen.getByRole("button", { name: /Inbox/ }));
+
+    expect(screen.getByText("Waiting For Owner")).toBeInTheDocument();
+    for (const name of ["Mark read", "Acknowledge", "Archive"]) {
+      expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
+    }
   });
 
   it("shows the pipeline and confirms owner control actions", async () => {
@@ -569,6 +653,35 @@ describe("mobile Engineering Control", () => {
       { action: "pause" },
       expect.any(Object),
     );
+  });
+
+  it("keeps Engineering evidence read-only without manage or approve authority", () => {
+    permissions.clear();
+    permissions.add("COMPANY_ENGINEERING_COMMAND_READ");
+    vi.mocked(hooks.useMobileWorkstream).mockReturnValue({
+      isLoading: false,
+      data: {
+        ...workstream,
+        owner_instruction: review.owner_instruction,
+        requested_code_changes: true,
+        created_at: review.created_at,
+        timeline: [],
+        available_actions: ["pause", "cancel"],
+        owner_review_action_available: true,
+        owner_review_digest: "d".repeat(64),
+        owner_review_version: 1,
+      },
+    } as never);
+    vi.mocked(hooks.useMobileReview).mockReturnValue({
+      data: { ...review, can_approve: true },
+    } as never);
+
+    renderDetail();
+
+    expect(screen.getByText(review.owner_instruction)).toBeInTheDocument();
+    for (const name of ["Pause", "Cancel", "Approve", "Request revision", "Reject", "Review and accept published result"]) {
+      expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
+    }
   });
 
   it("shows authoritative adopted-result review detail without stale pending stages", async () => {

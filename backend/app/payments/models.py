@@ -30,6 +30,18 @@ class PaymentIntent(Base):
     __tablename__ = "payment_intents"
     __table_args__ = (
         ForeignKeyConstraint(["company_id", "branch_id"], ["branches.company_id", "branches.id"], ondelete="RESTRICT"),
+        ForeignKeyConstraint(
+            ["company_id", "customer_id"],
+            ["customers.company_id", "customers.id"],
+            name="fk_payment_intents_customer_scope",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "branch_id", "invoice_id", "customer_id"],
+            ["invoices.company_id", "invoices.branch_id", "invoices.id", "invoices.customer_id"],
+            name="fk_payment_intents_invoice_scope",
+            ondelete="RESTRICT",
+        ),
         CheckConstraint(
             "amount > 0 AND currency ~ '^[A-Z]{3}$'",
             name="payment_intents_check",
@@ -46,7 +58,7 @@ class PaymentIntent(Base):
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
     company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("companies.id", ondelete="RESTRICT"), nullable=False)
     branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
-    customer_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("customers.id", ondelete="RESTRICT"), nullable=False)
+    customer_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     invoice_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
     amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
     currency: Mapped[str] = mapped_column(String(3), nullable=False)
@@ -112,7 +124,16 @@ class PaymentReceipt(Base):
 
 class ReceiptEvent(Base):
     __tablename__ = "payment_receipt_events"
-    __table_args__ = (ForeignKeyConstraint(["company_id", "receipt_id"], ["payment_receipts.company_id", "payment_receipts.id"], ondelete="RESTRICT"), UniqueConstraint("company_id", "receipt_id", "idempotency_key"),)
+    __table_args__ = (
+        ForeignKeyConstraint(["company_id", "receipt_id"], ["payment_receipts.company_id", "payment_receipts.id"], ondelete="RESTRICT"),
+        CheckConstraint(
+            "event_type <> 'dispute_recorded' OR "
+            "(provider_reference IS NOT NULL AND length(btrim(provider_reference)) > 0 "
+            "AND request_digest IS NOT NULL AND length(request_digest) = 64)",
+            name="ck_payment_receipt_events_dispute_evidence",
+        ),
+        UniqueConstraint("company_id", "receipt_id", "idempotency_key"),
+    )
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
     company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     receipt_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
@@ -120,8 +141,10 @@ class ReceiptEvent(Base):
     amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
     invoice_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
     external_identity: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    provider_reference: Mapped[str | None] = mapped_column(String(255))
     idempotency_key: Mapped[str] = mapped_column(String(120), nullable=False)
     evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    request_digest: Mapped[str | None] = mapped_column(String(64))
     occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
 
 

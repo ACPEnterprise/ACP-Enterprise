@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as invoicesApi from "../api/invoices";
@@ -24,6 +25,9 @@ vi.mock("../api/invoices", () => ({
   createInvoice: vi.fn(),
   issueInvoice: vi.fn(),
   getInvoice: vi.fn(),
+  creditInvoice: vi.fn(),
+  writeOffInvoice: vi.fn(),
+  voidInvoice: vi.fn(),
 }));
 
 function renderRoute() {
@@ -62,5 +66,12 @@ describe("InvoicesRoute", () => {
     expect(await screen.findByText("Create from accepted work")).toBeVisible();
     expect(screen.getByLabelText("Estimate ID")).toBeVisible();
     expect(screen.getByLabelText("Job ID")).toBeVisible();
+  });
+  it("filters the operational receivables queue without changing authority", async () => {
+    permissions = new Set(["COMPANY_INVOICE_READ"]);
+    renderRoute();
+    expect(await screen.findByText("INV-000001")).toBeVisible();
+    await userEvent.type(screen.getByLabelText("Search invoices"), "missing");
+    expect(screen.getByText("No invoices match these filters.")).toBeVisible();
   });
 });

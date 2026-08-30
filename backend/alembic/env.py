@@ -76,6 +76,7 @@ from app.price_book import models as price_book_models  # noqa: F401
 from app.procurement_matching import models as procurement_matching_models  # noqa: F401
 from app.purchasing import models as purchasing_models  # noqa: F401
 from app.scheduling import models as scheduling_models  # noqa: F401
+from app.service_agreements import models as service_agreement_models  # noqa: F401
 from app.tax_policy import models as tax_policy_models  # noqa: F401
 from app.timekeeping import models as timekeeping_models  # noqa: F401
 from app.worker_control import models as worker_control_models  # noqa: F401

@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight, Plus, Search, Star } from "lucide-react";
 import { Link, useNavigate } from "react-router";
 
 import { getOperatorApiError } from "../../api/errors";
+import { useHasPermission } from "../../auth";
 import { useCustomerList, useCustomerMutations } from "../../hooks/useCustomers";
 import { customerDetailPath } from "../../routing/paths";
 import {
@@ -20,6 +21,7 @@ function displayName(customer: { first_name: string | null; last_name: string | 
 }
 export function CustomerManagement() {
   const navigate = useNavigate();
+  const canManage = useHasPermission("COMPANY_CUSTOMER_MANAGE");
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [offset, setOffset] = useState(0);
@@ -38,10 +40,10 @@ export function CustomerManagement() {
     <div className="space-y-6">
       <section className="flex flex-col items-stretch gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0"><p className="text-sm font-medium text-action-primary">CRM</p><h2 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">Customers</h2><p className="mt-2 text-content-muted">Customer, service-property, contact, and internal service records.</p></div>
-        <Button type="button" onClick={() => { setDuplicateWarnings([]); setIsCreating(true); }} leadingIcon={<Plus size={18} />}>New customer</Button>
+        {canManage && <Button type="button" onClick={() => { setDuplicateWarnings([]); setIsCreating(true); }} leadingIcon={<Plus size={18} />}>New customer</Button>}
       </section>
 
-      {isCreating && (
+      {canManage && isCreating && (
         <Card className="p-ui-4 sm:p-ui-6">
           <h3 className="text-xl font-semibold">Create customer</h3><p className="mt-1 text-sm text-slate-400">Create the customer record first, then add service properties and contacts.</p>
           <div className="mt-6"><CustomerForm duplicateWarnings={duplicateWarnings} isSaving={mutations.create.isPending} isCheckingDuplicates={mutations.duplicateCheck.isPending} error={mutations.create.error ?? mutations.duplicateCheck.error} onCancel={() => setIsCreating(false)} onCheckDuplicates={(input) => mutations.duplicateCheck.mutate({ first_name: input.first_name, last_name: input.last_name, business_name: input.business_name, phone: input.primary_phone, email: input.email }, { onSuccess: setDuplicateWarnings })} onSubmit={(input: CustomerInput) => mutations.create.mutate(input, { onSuccess: (result) => { setDuplicateWarnings(result.duplicate_warnings); setIsCreating(false); navigate(customerDetailPath(result.customer.id)); } })} /></div>

@@ -8,6 +8,7 @@ from sqlalchemy import (
     Date,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     String,
     Text,
@@ -44,6 +45,18 @@ class LuminaryFindingRecord(Base):
             "company_id", "finding_identity", name="uq_luminary_finding_identity"
         ),
         UniqueConstraint("company_id", "id", name="uq_luminary_finding_company_id"),
+        ForeignKeyConstraint(
+            ["company_id", "branch_id"],
+            ["branches.company_id", "branches.id"],
+            name="fk_luminary_finding_company_branch",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "supersedes_finding_id"],
+            ["luminary_findings.company_id", "luminary_findings.id"],
+            name="fk_luminary_finding_company_supersedes",
+            ondelete="RESTRICT",
+        ),
         Index(
             "ix_luminary_finding_scope_period",
             "company_id",
@@ -61,7 +74,7 @@ class LuminaryFindingRecord(Base):
         nullable=False,
     )
     branch_id: Mapped[UUID | None] = mapped_column(
-        PGUUID(as_uuid=True), ForeignKey("branches.id", ondelete="RESTRICT")
+        PGUUID(as_uuid=True)
     )
     period_start: Mapped[date] = mapped_column(Date, nullable=False)
     period_end: Mapped[date] = mapped_column(Date, nullable=False)
@@ -86,7 +99,7 @@ class LuminaryFindingRecord(Base):
         String(20), nullable=False, default="accepted"
     )
     supersedes_finding_id: Mapped[UUID | None] = mapped_column(
-        PGUUID(as_uuid=True), ForeignKey("luminary_findings.id", ondelete="RESTRICT")
+        PGUUID(as_uuid=True)
     )
     generated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
@@ -114,6 +127,18 @@ class LuminaryBriefingRecord(Base):
             "company_id", "briefing_identity", name="uq_luminary_briefing_identity"
         ),
         UniqueConstraint("company_id", "id", name="uq_luminary_briefing_company_id"),
+        ForeignKeyConstraint(
+            ["company_id", "branch_id"],
+            ["branches.company_id", "branches.id"],
+            name="fk_luminary_briefing_company_branch",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "supersedes_briefing_id"],
+            ["luminary_briefings.company_id", "luminary_briefings.id"],
+            name="fk_luminary_briefing_company_supersedes",
+            ondelete="RESTRICT",
+        ),
         Index(
             "ix_luminary_briefing_scope_period",
             "company_id",
@@ -132,7 +157,7 @@ class LuminaryBriefingRecord(Base):
         nullable=False,
     )
     branch_id: Mapped[UUID | None] = mapped_column(
-        PGUUID(as_uuid=True), ForeignKey("branches.id", ondelete="RESTRICT")
+        PGUUID(as_uuid=True)
     )
     period_start: Mapped[date] = mapped_column(Date, nullable=False)
     period_end: Mapped[date] = mapped_column(Date, nullable=False)
@@ -147,7 +172,7 @@ class LuminaryBriefingRecord(Base):
     briefing_identity: Mapped[str] = mapped_column(String(100), nullable=False)
     briefing_digest: Mapped[str] = mapped_column(String(64), nullable=False)
     supersedes_briefing_id: Mapped[UUID | None] = mapped_column(
-        PGUUID(as_uuid=True), ForeignKey("luminary_briefings.id", ondelete="RESTRICT")
+        PGUUID(as_uuid=True)
     )
     generated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False

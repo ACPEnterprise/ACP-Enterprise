@@ -57,6 +57,11 @@ export interface MigrationReadiness {
   reconciliation_digest: string;
   stale: boolean;
   safe_failure_code: string | null;
+  go_no_go: {
+    state: string;
+    activation_eligible: boolean;
+    blockers: string[];
+  };
   historical_window: {
     starts_on: string | null;
     ends_on: string;
@@ -88,6 +93,24 @@ export interface MigrationReadiness {
   timeline: Array<{ phase: string; status: string }>;
   authority_states: Array<{ fact: string; state: string }>;
   owner_decisions: Array<{ decision: string; state: string }>;
+  decision_packets: Array<{
+    decision_id: string;
+    question: string;
+    current_evidence: string;
+    options: string[];
+    recommended_default: string | null;
+    risk: string;
+    unlocks: string;
+    state: string;
+  }>;
+  freeze_authority: {
+    state: string;
+    required_authority: string;
+    sources: string[];
+    evidence: string;
+    late_change_behavior: string;
+    reopen_behavior: string;
+  };
   run_history: Array<{
     run_id: string;
     source: string;

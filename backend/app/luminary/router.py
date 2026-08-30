@@ -9,6 +9,8 @@ from app.database.session import get_database_session
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import LuminaryPermission
 from app.platform.permissions.dependencies import require_permission
+from app.platform.reliability.correlation import current_correlation_id
+from app.platform.reliability.failures import ClientRecovery, FailureCode, SafeFailure
 
 from .service import LuminaryNotFoundError, luminary_service
 
@@ -20,6 +22,32 @@ Reader = Annotated[
 Analyst = Annotated[
     AuthorizationContext, Depends(require_permission(LuminaryPermission.ANALYZE))
 ]
+
+
+def _luminary_http_error(error: Exception) -> HTTPException:
+    if isinstance(error, LuminaryNotFoundError):
+        failure = SafeFailure(
+            FailureCode.NOT_FOUND,
+            "Luminary evidence was not found.",
+            ClientRecovery.TERMINAL_FAILURE,
+            current_correlation_id(),
+        )
+        return HTTPException(status.HTTP_404_NOT_FOUND, failure.detail())
+    if isinstance(error, ValueError):
+        failure = SafeFailure(
+            FailureCode.VALIDATION,
+            "Luminary request requires correction.",
+            ClientRecovery.USER_CORRECTION_REQUIRED,
+            current_correlation_id(),
+        )
+        return HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, failure.detail())
+    failure = SafeFailure(
+        FailureCode.INTERNAL_FAILURE,
+        "Luminary is temporarily unavailable.",
+        ClientRecovery.TEMPORARILY_UNAVAILABLE,
+        current_correlation_id(),
+    )
+    return HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, failure.detail())
 
 
 @router.post("/analyses", response_model=dict[str, object])
@@ -35,9 +63,9 @@ async def analyze(
         )
         await session.commit()
         return value
-    except ValueError as error:
+    except Exception as error:
         await session.rollback()
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(error)) from error
+        raise _luminary_http_error(error) from error
 
 
 @router.get("/briefing", response_model=dict[str, object])
@@ -53,11 +81,9 @@ async def briefing(
         )
         await session.commit()
         return value
-    except LuminaryNotFoundError as error:
-        raise HTTPException(
-            status.HTTP_404_NOT_FOUND,
-            "Luminary briefing has not been analyzed for this period.",
-        ) from error
+    except Exception as error:
+        await session.rollback()
+        raise _luminary_http_error(error) from error
 
 
 @router.get("/findings/{finding_id}", response_model=dict[str, object])
@@ -68,17 +94,18 @@ async def finding(
         return await luminary_service.finding(
             session, context=context, finding_id=finding_id
         )
-    except LuminaryNotFoundError as error:
-        raise HTTPException(
-            status.HTTP_404_NOT_FOUND, "Luminary finding was not found."
-        ) from error
+    except Exception as error:
+        raise _luminary_http_error(error) from error
 
 
 @router.get("/history", response_model=list[dict[str, object]])
 async def history(
     session: Session, context: Reader, limit: Annotated[int, Query(ge=1, le=100)] = 24
 ) -> list[dict[str, object]]:
-    return await luminary_service.history(session, context=context, limit=limit)
+    try:
+        return await luminary_service.history(session, context=context, limit=limit)
+    except Exception as error:
+        raise _luminary_http_error(error) from error
 
 
 @router.get("/source-readiness", response_model=dict[str, object])

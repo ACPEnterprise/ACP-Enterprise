@@ -1,7 +1,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_database_session
@@ -95,9 +95,11 @@ def translate_admin_error(error: AccessPolicyAdministrationError) -> HTTPExcepti
 async def list_memberships(
     context: MembershipReadContext,
     session: DatabaseSession,
+    limit: Annotated[int, Query(ge=1, le=200)] = 100,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[MembershipResponse]:
     records = await company_administration_service.list_memberships(
-        session, context=context
+        session, context=context, limit=limit, offset=offset
     )
     return [MembershipResponse.model_validate(record) for record in records]
 

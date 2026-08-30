@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { AlertTriangle, Search } from "lucide-react";
 
-import { getApiErrorMessage } from "../../api/errors";
+import { getOperatorApiError } from "../../api/errors";
 import {
   normalizeCustomerSource,
   type CustomerDetail,
@@ -274,7 +274,7 @@ export function CustomerForm({
 
       {(validationError || Boolean(error)) && (
         <div className="rounded-lg border border-red-900 bg-red-950/40 p-3 text-sm text-red-300">
-          {validationError ?? getApiErrorMessage(error)}
+          {validationError ?? getOperatorApiError(error, "Customer").message}
         </div>
       )}
 

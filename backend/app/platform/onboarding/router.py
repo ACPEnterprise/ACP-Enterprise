@@ -8,6 +8,8 @@ from app.database.session import get_database_session
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import AdministrationPermission
 from app.platform.permissions.dependencies import require_permission
+from app.platform.reliability.correlation import current_correlation_id
+from app.platform.reliability.failures import ClientRecovery, FailureCode, SafeFailure
 
 from .schemas import (
     OnboardingActivateRequest,
@@ -32,13 +34,20 @@ OnboardingAdmin = Annotated[
 
 def _safe_error(error: Exception) -> HTTPException:
     if isinstance(error, OnboardingAuthorizationError):
-        return HTTPException(
-            status.HTTP_403_FORBIDDEN, "Onboarding authority is required."
+        failure = SafeFailure(
+            FailureCode.FORBIDDEN,
+            "Onboarding authority is required.",
+            ClientRecovery.OWNER_ADMIN_ACTION_REQUIRED,
+            current_correlation_id(),
         )
-    return HTTPException(
-        status.HTTP_409_CONFLICT,
+        return HTTPException(status.HTTP_403_FORBIDDEN, failure.detail())
+    failure = SafeFailure(
+        FailureCode.RESOURCE_STATE_CONFLICT,
         "Onboarding operation conflicts with current authority.",
+        ClientRecovery.RETRY_AFTER_REFRESH,
+        current_correlation_id(),
     )
+    return HTTPException(status.HTTP_409_CONFLICT, failure.detail())
 
 
 @router.post("", response_model=OnboardingView, status_code=status.HTTP_201_CREATED)

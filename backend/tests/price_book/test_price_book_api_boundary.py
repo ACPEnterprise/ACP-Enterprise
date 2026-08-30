@@ -27,7 +27,7 @@ def test_price_book_errors_use_safe_recovery_envelopes_without_reflection() -> N
         ),
         (
             PriceBookError(secret),
-            400,
+            500,
             "internal_failure",
             "OWNER_ADMIN_ACTION_REQUIRED",
         ),

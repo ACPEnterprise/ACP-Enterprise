@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import { getOperatorApiError } from "../../api/errors";
+import { useHasPermission } from "../../auth";
 import { Alert, Badge, Button, Card, ConfirmationDialog, Spinner } from "../../ui";
 import * as mobileApi from "./api";
 import {
@@ -48,6 +49,7 @@ function ExistingWorkerSetupCard({
 }
 
 export function EngineeringCapacityPanel() {
+  const canManage = useHasPermission("COMPANY_ENGINEERING_CAPACITY_MANAGE");
   const query = useEngineeringCapacity();
   const policyMutation = useCapacityMutation(mobileApi.updateCapacityPolicy);
   const workerLimitMutation = useWorkerLimitMutation();
@@ -73,6 +75,28 @@ export function EngineeringCapacityPanel() {
   const effectiveWorkerLimit = workerLimit ?? data.policy?.maximum_per_worker ?? 1;
   const effectiveReserved = reserved ?? data.policy?.reserved_capacity ?? 0;
 
+  if (!canManage) {
+    return (
+      <section aria-labelledby="engineering-capacity-heading" className="space-y-ui-4">
+        <header>
+          <p className="text-sm font-semibold text-blue-400">Engineering capacity</p>
+          <h2 id="engineering-capacity-heading" className="mt-1 text-xl font-bold">Machines and assignments</h2>
+          <p className="mt-1 text-sm text-content-muted">Current capacity evidence is read-only.</p>
+        </header>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {[
+            ["Configured", data.configured_capacity],
+            ["In use", data.allocated_capacity],
+            ["Reserved", data.reserved_capacity],
+            ["Usable now", data.available_capacity],
+            ["Unallocated", data.numeric_available_capacity],
+          ].map(([label, value]) => <Card key={label}><p className="text-xs text-content-muted">{label}</p><p className="mt-1 text-2xl font-bold">{value}</p></Card>)}
+        </div>
+        <Alert variant="information" title="Read-only capacity access">Capacity changes require Engineering capacity manage permission.</Alert>
+      </section>
+    );
+  }
+
   return (
     <section aria-labelledby="engineering-capacity-heading" className="space-y-ui-4">
       <header>
@@ -95,11 +119,11 @@ export function EngineeringCapacityPanel() {
         <h3 className="font-semibold">Company limits</h3>
         {!data.policy && <Alert variant="warning" title="Capacity is not configured">Assignments fail closed until an authorized owner saves a policy.</Alert>}
         <div className="mt-3 grid gap-3 sm:grid-cols-3">
-          <label className="text-sm">Concurrent workstreams<input aria-label="Maximum concurrent workstreams" className="mt-1 min-h-11 w-full rounded-md border border-stroke bg-surface px-3" type="number" min={1} value={effectiveTotalLimit} onChange={(event) => setTotalLimit(Number(event.target.value))} /></label>
-          <label className="text-sm">Per machine<input aria-label="Maximum per worker" className="mt-1 min-h-11 w-full rounded-md border border-stroke bg-surface px-3" type="number" min={1} value={effectiveWorkerLimit} onChange={(event) => setWorkerLimit(Number(event.target.value))} /></label>
-          <label className="text-sm">Held in reserve<input aria-label="Reserved capacity" className="mt-1 min-h-11 w-full rounded-md border border-stroke bg-surface px-3" type="number" min={0} value={effectiveReserved} onChange={(event) => setReserved(Number(event.target.value))} /></label>
+          <label className="text-sm">Concurrent workstreams<input aria-label="Maximum concurrent workstreams" disabled={!canManage} className="mt-1 min-h-11 w-full rounded-md border border-stroke bg-surface px-3" type="number" min={1} value={effectiveTotalLimit} onChange={(event) => setTotalLimit(Number(event.target.value))} /></label>
+          <label className="text-sm">Per machine<input aria-label="Maximum per worker" disabled={!canManage} className="mt-1 min-h-11 w-full rounded-md border border-stroke bg-surface px-3" type="number" min={1} value={effectiveWorkerLimit} onChange={(event) => setWorkerLimit(Number(event.target.value))} /></label>
+          <label className="text-sm">Held in reserve<input aria-label="Reserved capacity" disabled={!canManage} className="mt-1 min-h-11 w-full rounded-md border border-stroke bg-surface px-3" type="number" min={0} value={effectiveReserved} onChange={(event) => setReserved(Number(event.target.value))} /></label>
         </div>
-        <Button className="mt-4 min-h-11 w-full sm:w-auto" disabled={policyMutation.isPending} onClick={() => policyMutation.mutate({ maximum_concurrent_workstreams: effectiveTotalLimit, maximum_per_worker: effectiveWorkerLimit, reserved_capacity: effectiveReserved, auto_allocate_released_capacity: false, expected_version: data.policy?.version ?? null })}>Save capacity limits</Button>
+        {canManage && <Button className="mt-4 min-h-11 w-full sm:w-auto" disabled={policyMutation.isPending} onClick={() => policyMutation.mutate({ maximum_concurrent_workstreams: effectiveTotalLimit, maximum_per_worker: effectiveWorkerLimit, reserved_capacity: effectiveReserved, auto_allocate_released_capacity: false, expected_version: data.policy?.version ?? null })}>Save capacity limits</Button>}
       </Card>
 
       <section aria-labelledby="permanent-capacity-heading" className="space-y-3">
@@ -115,13 +139,13 @@ export function EngineeringCapacityPanel() {
 
       <section aria-labelledby="capacity-workers-heading" className="space-y-3">
         <div><h3 id="capacity-workers-heading" className="font-semibold">Workers and machines</h3><p className="text-sm text-content-muted">Only previously enrolled, authenticated workers can be associated with an owner-visible machine label.</p></div>
-        {data.eligible_workers.filter((worker) => !worker.capacity_configured).map((worker) => <ExistingWorkerSetupCard key={worker.worker_id} worker={worker} maximum={Math.max(1, Math.min(effectiveTotalLimit, effectiveWorkerLimit))} />)}
+        {canManage && data.eligible_workers.filter((worker) => !worker.capacity_configured).map((worker) => <ExistingWorkerSetupCard key={worker.worker_id} worker={worker} maximum={Math.max(1, Math.min(effectiveTotalLimit, effectiveWorkerLimit))} />)}
         {data.workers.map((worker) => (
           <Card key={worker.id}>
             <div className="flex flex-wrap items-start justify-between gap-2"><div><h3 className="font-semibold">{worker.machine_label}</h3><p className="text-xs text-content-muted">{worker.allocated_capacity} running · {worker.reserved_capacity} reserved · {worker.available_capacity} available</p></div><div className="flex gap-2"><Badge>{mobileEngineeringLabel(worker.operational_state)}</Badge><Badge>{mobileEngineeringLabel(worker.health_state)}</Badge></div></div>
             <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-              <label className="flex-1 text-sm">Concurrency limit<input aria-label={`${worker.machine_label} concurrency limit`} className="mt-1 min-h-11 w-full rounded-md border border-stroke bg-surface px-3" type="number" min={1} defaultValue={worker.configured_limit} onBlur={(event) => { const limit = Number(event.target.value); if (limit !== worker.configured_limit) workerLimitMutation.mutate({ worker, limit }); }} /></label>
-              <Button className="min-h-11 self-end" variant="outline" onClick={() => workerStateMutation.mutate({ worker, action: worker.operational_state === "paused" ? "restore" : "pause" })}>{worker.operational_state === "paused" ? "Restore capacity" : "Pause capacity"}</Button>
+              <label className="flex-1 text-sm">Concurrency limit<input aria-label={`${worker.machine_label} concurrency limit`} disabled={!canManage} className="mt-1 min-h-11 w-full rounded-md border border-stroke bg-surface px-3" type="number" min={1} defaultValue={worker.configured_limit} onBlur={(event) => { const limit = Number(event.target.value); if (canManage && limit !== worker.configured_limit) workerLimitMutation.mutate({ worker, limit }); }} /></label>
+              {canManage && <Button className="min-h-11 self-end" variant="outline" onClick={() => workerStateMutation.mutate({ worker, action: worker.operational_state === "paused" ? "restore" : "pause" })}>{worker.operational_state === "paused" ? "Restore capacity" : "Pause capacity"}</Button>}
             </div>
           </Card>
         ))}

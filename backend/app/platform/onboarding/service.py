@@ -182,6 +182,8 @@ class IdentityOnboardingService:
             raise OnboardingConflictError(
                 "Exactly one login identity source is required."
             )
+        if not context.can_access_branch(command.branch_id):
+            raise OnboardingConflictError("Active Company Branch was not found.")
         email = normalize_email(command.login_email) if command.login_email else None
         facts: dict[str, object] = {
             "version": 1,
@@ -205,6 +207,10 @@ class IdentityOnboardingService:
         now = datetime.now(timezone.utc)
         try:
             async with session.begin():
+                company_lock = int.from_bytes(
+                    context.company.id.bytes[:8], "big", signed=True
+                )
+                await session.execute(select(func.pg_advisory_xact_lock(company_lock)))
                 existing = await session.scalar(
                     select(IdentityOnboardingRequest)
                     .where(
@@ -233,10 +239,6 @@ class IdentityOnboardingService:
                     raise OnboardingConflictError(
                         "Active Company Branch was not found."
                     )
-                company_lock = int.from_bytes(
-                    context.company.id.bytes[:8], "big", signed=True
-                )
-                await session.execute(select(func.pg_advisory_xact_lock(company_lock)))
                 policy = await session.scalar(
                     select(EmployeeNumberPolicy)
                     .where(EmployeeNumberPolicy.company_id == context.company.id)
@@ -648,7 +650,25 @@ class IdentityOnboardingService:
                 raise OnboardingConflictError(
                     "Protected delivery scope is unavailable."
                 )
-            envelope.status = "claimed"
+            if context is not None:
+                envelope.ciphertext = b""
+                envelope.nonce = b""
+                envelope.status = "delivered"
+                envelope.destroyed_at = now
+                audit_service.stage(
+                    session,
+                    AuditEntry(
+                        action="identity.onboarding_owner_claimed",
+                        resource_type="identity_onboarding",
+                        resource_id=request.id,
+                        actor_user_id=context.user.id,
+                        company_id=request.company_id,
+                        branch_id=request.branch_id,
+                        details={"invitation_id": str(invitation.id)},
+                    ),
+                )
+            else:
+                envelope.status = "claimed"
             return ProtectedInvitationDelivery(
                 invitation.id, user.normalized_email, secret
             )
@@ -705,7 +725,11 @@ class IdentityOnboardingService:
                 )
                 .with_for_update()
             )
-            if record is None or record.status == "activated":
+            if (
+                record is None
+                or not context.can_access_branch(record.branch_id)
+                or record.status == "activated"
+            ):
                 raise OnboardingConflictError("Pending onboarding was not found.")
             invitation = await session.scalar(
                 select(IdentityOnboardingInvitation)
@@ -742,6 +766,8 @@ class IdentityOnboardingService:
                 .with_for_update()
             )
             if record is None:
+                raise OnboardingConflictError("Pending onboarding was not found.")
+            if not context.can_access_branch(record.branch_id):
                 raise OnboardingConflictError("Pending onboarding was not found.")
             prior = await session.scalar(
                 select(IdentityOnboardingInvitation)
@@ -815,7 +841,7 @@ class IdentityOnboardingService:
                 IdentityOnboardingRequest.company_id == context.company.id,
             )
         )
-        if record is None:
+        if record is None or not context.can_access_branch(record.branch_id):
             raise OnboardingConflictError("Onboarding was not found.")
         return record
 

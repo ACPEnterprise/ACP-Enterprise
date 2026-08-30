@@ -47,6 +47,16 @@ class CutoverPhase(StrEnum):
     ACTIVATION_ELIGIBLE = "activation_eligible"
 
 
+class GoNoGoState(StrEnum):
+    READY = "ready"
+    OWNER_DECISION_REQUIRED = "owner_decision_required"
+    EXTERNAL_AUTH_REQUIRED = "external_auth_required"
+    SOURCE_CHANGED = "source_changed"
+    RECONCILIATION_REQUIRED = "reconciliation_required"
+    OPENING_EVIDENCE_REQUIRED = "opening_evidence_required"
+    BLOCKED = "blocked"
+
+
 @dataclass(frozen=True)
 class SourceAuthority:
     provider: str
@@ -106,6 +116,7 @@ class CutoverAuthority:
 @dataclass(frozen=True)
 class ReadinessResult:
     state: str
+    go_no_go_state: GoNoGoState
     ready_for_non_production_rehearsal: bool
     ready_for_production_cutover: bool
     blocker_codes: tuple[str, ...]
@@ -188,12 +199,37 @@ def qualify_cutover(authority: CutoverAuthority) -> ReadinessResult:
     ready_production = not blockers and authority.phase is CutoverPhase.ACTIVATION_ELIGIBLE
     return ReadinessResult(
         state="READY" if ready_non_production else "BLOCKED",
+        go_no_go_state=_go_no_go_state(tuple(sorted(set(blockers)))),
         ready_for_non_production_rehearsal=ready_non_production,
         ready_for_production_cutover=ready_production,
         blocker_codes=tuple(sorted(set(blockers))),
         authority_digest=authority_digest,
         reconciliation_digest=reconciliation_digest,
     )
+
+
+def _go_no_go_state(blockers: tuple[str, ...]) -> GoNoGoState:
+    if not blockers:
+        return GoNoGoState.READY
+    if any("opening_evidence" in item for item in blockers):
+        return GoNoGoState.OPENING_EVIDENCE_REQUIRED
+    if any("unexplained_delta" in item for item in blockers):
+        return GoNoGoState.RECONCILIATION_REQUIRED
+    if any("source_changed" in item for item in blockers):
+        return GoNoGoState.SOURCE_CHANGED
+    if any(
+        item.endswith("_production_source_gate")
+        or item in {
+            "production_execution_not_authorized",
+            "source_freeze_evidence_required",
+            "final_delta_evidence_required",
+        }
+        for item in blockers
+    ):
+        return GoNoGoState.EXTERNAL_AUTH_REQUIRED
+    if "owner_policy_decisions_required" in blockers:
+        return GoNoGoState.OWNER_DECISION_REQUIRED
+    return GoNoGoState.BLOCKED
 
 
 def _sha(value: str | None) -> bool:
