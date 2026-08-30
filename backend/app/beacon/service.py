@@ -83,6 +83,11 @@ class BeaconQueryService:
         signals = await self.evaluate_current(
             session,
             company_id=context.company.id,
+            branch_ids=(
+                frozenset({context.active_branch.id})
+                if context.active_branch is not None
+                else context.authorized_branch_ids
+            ),
             measured_at=evaluated_at,
         )
         latest = await self.lifecycle_repository.latest_for_conditions(
@@ -116,11 +121,13 @@ class BeaconQueryService:
         session: AsyncSession,
         *,
         company_id: UUID,
+        branch_ids: frozenset[UUID],
         measured_at: datetime,
     ) -> tuple[BeaconSignal, ...]:
         snapshot = await self.repository.load_snapshot(
             session,
             company_id=company_id,
+            branch_ids=branch_ids,
             measured_at=measured_at,
         )
         return self.evaluation_service.evaluate_signals(snapshot)

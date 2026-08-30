@@ -33,12 +33,18 @@ from app.platform.permissions.dependencies import get_authorization_context
 
 NOW = datetime(2026, 7, 28, 16, 0, tzinfo=timezone.utc)
 COMPANY_ID = UUID("f47ac10b-58cc-4372-a567-0e02b2c3d479")
+BRANCH_ID = UUID("f47ac10b-58cc-4372-a567-0e02b2c3d480")
 
 
 def context(*permissions: str) -> AuthorizationContext:
     value = object.__new__(AuthorizationContext)
     object.__setattr__(value, "company", SimpleNamespace(id=COMPANY_ID))
     object.__setattr__(value, "active_branch", None)
+    object.__setattr__(
+        value,
+        "authorized_branches",
+        (SimpleNamespace(id=BRANCH_ID),),
+    )
     object.__setattr__(value, "membership", SimpleNamespace(id=uuid4()))
     object.__setattr__(
         value,
@@ -91,8 +97,10 @@ class FakeRepository:
         _session: AsyncSession,
         *,
         company_id: UUID,
+        branch_ids: frozenset[UUID],
         measured_at: datetime,
     ) -> BeaconSnapshot:
+        assert branch_ids
         self.calls.append((company_id, measured_at))
         return self.value
 
