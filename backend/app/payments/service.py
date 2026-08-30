@@ -139,6 +139,19 @@ class PaymentService:
             raise PaymentConflict(str(exc)) from exc
         async with session.begin():
             receipt = await self._receipt(session, spec.company_id, spec.branch_id, spec.receipt_id, True)
+            prior = await session.scalar(
+                select(ReceiptEvent).where(
+                    ReceiptEvent.company_id == spec.company_id,
+                    ReceiptEvent.receipt_id == spec.receipt_id,
+                    ReceiptEvent.idempotency_key == spec.idempotency_key,
+                )
+            )
+            if prior:
+                if prior.evidence_digest != digest:
+                    raise PaymentConflict(
+                        "Idempotency key conflicts with the original application."
+                    )
+                return receipt
             receipt.available_amount -= amount
             receipt.applied_amount += amount
             receipt.status = "fully_applied" if receipt.available_amount == 0 else "partially_applied"

@@ -1,6 +1,7 @@
 import asyncio
 from dataclasses import replace
 from decimal import Decimal
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
@@ -12,11 +13,17 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from app.core.config import settings
 from app.customers.models import Customer
 from app.events.models import BusinessEvent
-from app.payments.contracts import CreateIntent, ProviderRequest, RequestRefund
+from app.payments.contracts import (
+    ApplyReceipt,
+    CreateIntent,
+    ProviderRequest,
+    RequestRefund,
+)
 from app.payments.errors import PaymentConflict, PaymentNotFound, PaymentValidation
 from app.payments.models import (
     PaymentIntent,
     PaymentReceipt,
+    ReceiptEvent,
     ReconciliationException,
     Refund,
 )
@@ -319,6 +326,85 @@ async def test_ambiguous_provider_outcome_is_reconciled_without_blind_retry(
                     ReconciliationException.entity_id == first.id,
                     ReconciliationException.reason_code
                     == "ambiguous_processor_outcome",
+                )
+            )
+            == 1
+        )
+
+
+@pytest.mark.asyncio
+async def test_concurrent_identical_application_changes_receipt_once(
+    payment_fixture, monkeypatch
+) -> None:
+    factory, company, branch, actor, customer = payment_fixture
+    service = PaymentService(CountingFakeProvider(), "synthetic-merchant")
+    async with factory() as session:
+        intent = await service.collect(
+            session,
+            CreateIntent(
+                company_id=company.id,
+                branch_id=branch.id,
+                customer_id=customer.id,
+                amount=Decimal("80.00"),
+                currency="USD",
+                opaque_payment_method="opaque_captured_test",
+                idempotency_key=f"apply-source-{uuid4()}",
+                actor_user_id=actor.id,
+            ),
+        )
+    async with factory() as session:
+        receipt = await session.scalar(
+            select(PaymentReceipt).where(PaymentReceipt.intent_id == intent.id)
+        )
+        assert receipt is not None
+
+    both_entered = asyncio.Event()
+    release = asyncio.Event()
+
+    class ConcurrentInvoiceService:
+        calls = 0
+
+        async def apply_payment(self, _session, fact):
+            self.calls += 1
+            if self.calls == 2:
+                both_entered.set()
+            await release.wait()
+            return SimpleNamespace(id=fact.invoice_id)
+
+    invoice_boundary = ConcurrentInvoiceService()
+    monkeypatch.setattr("app.payments.service.invoice_service", invoice_boundary)
+    command = ApplyReceipt(
+        company_id=company.id,
+        branch_id=branch.id,
+        receipt_id=receipt.id,
+        invoice_id=uuid4(),
+        amount=Decimal("30.00"),
+        expected_invoice_version=1,
+        idempotency_key=f"apply-{uuid4()}",
+        actor_user_id=actor.id,
+        occurred_at=receipt.captured_at,
+    )
+
+    async def apply_once() -> PaymentReceipt:
+        async with factory() as session:
+            return await service.apply(session, command)
+
+    tasks = (asyncio.create_task(apply_once()), asyncio.create_task(apply_once()))
+    await asyncio.wait_for(both_entered.wait(), timeout=2)
+    release.set()
+    first, replay = await asyncio.gather(*tasks)
+    assert first.id == replay.id == receipt.id
+
+    async with factory() as session:
+        stored = await session.get(PaymentReceipt, receipt.id)
+        assert stored is not None
+        assert stored.applied_amount == Decimal("30.00")
+        assert stored.available_amount == Decimal("50.00")
+        assert (
+            await session.scalar(
+                select(func.count(ReceiptEvent.id)).where(
+                    ReceiptEvent.receipt_id == receipt.id,
+                    ReceiptEvent.idempotency_key == command.idempotency_key,
                 )
             )
             == 1
