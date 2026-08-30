@@ -1,3 +1,4 @@
+from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,6 +21,13 @@ class AuditAccessService:
         *,
         context: AuthorizationContext,
         branch_id: UUID | None,
+        actor_user_id: UUID | None = None,
+        resource_type: str | None = None,
+        action: str | None = None,
+        outcome: str | None = None,
+        correlation_id: UUID | None = None,
+        occurred_before: datetime | None = None,
+        before_id: UUID | None = None,
         limit: int,
     ) -> tuple[AuditRecordView, ...]:
         if not 1 <= limit <= 100:
@@ -33,6 +41,13 @@ class AuditAccessService:
                 authorized_branch_ids=context.authorized_branch_ids,
                 has_all_branch_access=context.membership.has_all_branch_access,
                 branch_id=branch_id,
+                actor_user_id=actor_user_id,
+                resource_type=resource_type,
+                action=action,
+                outcome=outcome,
+                correlation_id=correlation_id,
+                occurred_before=occurred_before,
+                before_id=before_id,
                 limit=limit,
             ),
         )

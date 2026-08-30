@@ -8,6 +8,9 @@ import {
   financialReportsHandle,
   businessEconomicsHandle,
   administrationHandle,
+  auditHandle,
+  reportsHandle,
+  operatorGuideHandle,
   appointmentsHandle,
   commandCenterHandle,
   customerDetailHandle,
@@ -238,6 +241,21 @@ export const appRoutes: RouteObject[] = [
                 await import("../features/engineering-mobile/MobileEngineeringDetailPage")
               ).MobileEngineeringDetailPage,
             }),
+          },
+          {
+            path: "audit",
+            handle: auditHandle,
+            lazy: async () => ({ Component: (await import("../routes/AuditRoute")).AuditRoute }),
+          },
+          {
+            path: "reports",
+            handle: reportsHandle,
+            lazy: async () => ({ Component: (await import("../routes/ReportCenterRoute")).ReportCenterRoute }),
+          },
+          {
+            path: "operator-guide",
+            handle: operatorGuideHandle,
+            lazy: async () => ({ Component: (await import("../routes/OperatorGuideRoute")).OperatorGuideRoute }),
           },
           {
             path: "administration",

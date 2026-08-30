@@ -188,6 +188,18 @@ export const administrationHandle = {
   },
 } as const satisfies ShellRouteHandle;
 
+export const auditHandle = {
+  workspace: { pageTitle: "Audit history", breadcrumbs: [{ label: "Audit history" }], helpTopic: "audit-history" },
+} as const satisfies ShellRouteHandle;
+
+export const reportsHandle = {
+  workspace: { pageTitle: "Report Center", breadcrumbs: [{ label: "Report Center" }], helpTopic: "report-center" },
+} as const satisfies ShellRouteHandle;
+
+export const operatorGuideHandle = {
+  workspace: { pageTitle: "Operator guide", breadcrumbs: [{ label: "Operator guide" }], helpTopic: "operator-guide" },
+} as const satisfies ShellRouteHandle;
+
 export const notFoundHandle = {
   workspace: {
     pageTitle: "Page not found",

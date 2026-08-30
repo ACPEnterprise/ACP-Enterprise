@@ -22,6 +22,8 @@ import {
   MapPinned,
   LayoutDashboard,
   Settings,
+  BookOpen,
+  ScrollText,
   Users,
 } from "lucide-react";
 
@@ -190,6 +192,28 @@ export const navigationCatalog = [
     availability: "coming-soon",
   },
   {
+    id: "audit",
+    label: "Audit history",
+    path: "/audit",
+    icon: ScrollText,
+    availability: "available",
+    requiredPermission: "COMPANY_AUDIT_READ",
+  },
+  {
+    id: "reports",
+    label: "Report Center",
+    path: "/reports",
+    icon: FileChartColumn,
+    availability: "available",
+  },
+  {
+    id: "operator-guide",
+    label: "Operator guide",
+    path: "/operator-guide",
+    icon: BookOpen,
+    availability: "available",
+  },
+  {
     id: "administration",
     label: "Administration",
     path: "/administration",
@@ -282,6 +306,9 @@ export const navigationGroups = [
     items: [
       item("mission-control"),
       item("employees"),
+      item("reports"),
+      item("audit"),
+      item("operator-guide"),
       item("administration"),
       item("settings"),
     ],
