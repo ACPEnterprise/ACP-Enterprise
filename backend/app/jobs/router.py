@@ -59,6 +59,8 @@ from app.platform.idempotency.reliability import MutationReliabilityError
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import JobPermission
 from app.platform.permissions.dependencies import require_permission
+from app.platform.reliability.correlation import current_correlation_id
+from app.platform.reliability.failures import ClientRecovery, FailureCode, SafeFailure
 
 router = APIRouter(prefix="/api/v1/jobs", tags=["Jobs"])
 DatabaseSession = Annotated[AsyncSession, Depends(get_database_session)]
@@ -75,28 +77,57 @@ JobsExecuteContext = Annotated[
 
 def translate_job_error(error: JobError) -> HTTPException:
     if isinstance(error, (JobNotFoundError, JobReferenceNotFoundError)):
-        return HTTPException(status_code=404, detail="Job resource was not found.")
+        failure = SafeFailure(
+            FailureCode.NOT_FOUND,
+            "Job resource was not found.",
+            ClientRecovery.TERMINAL_FAILURE,
+            current_correlation_id(),
+        )
+        return HTTPException(status_code=404, detail=failure.detail())
+    if isinstance(error, JobVersionConflictError):
+        failure = SafeFailure(
+            FailureCode.STALE_VERSION,
+            "Job operation conflicts with the current version.",
+            ClientRecovery.RETRY_AFTER_REFRESH,
+            current_correlation_id(),
+        )
+        return HTTPException(status_code=409, detail=failure.detail())
     if isinstance(
         error,
         (
             AppointmentAlreadyLinkedError,
             JobInvalidTransitionError,
-            JobVersionConflictError,
             JobCompletionBlockedError,
             JobCancellationBlockedError,
             JobReopeningBlockedError,
         ),
     ):
+        failure = SafeFailure(
+            FailureCode.RESOURCE_STATE_CONFLICT,
+            "Job operation conflicts with the current state.",
+            ClientRecovery.RETRY_AFTER_REFRESH,
+            current_correlation_id(),
+        )
         return HTTPException(
-            status_code=409, detail="Job operation conflicts with the current state."
+            status_code=409, detail=failure.detail()
         )
     if isinstance(error, (JobValidationError, JobQueryValidationError)):
-        return HTTPException(
-            status_code=422, detail="Job request violates domain validation rules."
+        failure = SafeFailure(
+            FailureCode.VALIDATION,
+            "Job request violates domain validation rules.",
+            ClientRecovery.USER_CORRECTION_REQUIRED,
+            current_correlation_id(),
         )
-    return HTTPException(
-        status_code=400, detail="Job operation could not be completed."
+        return HTTPException(
+            status_code=422, detail=failure.detail()
+        )
+    failure = SafeFailure(
+        FailureCode.INTERNAL_FAILURE,
+        "Job operation could not be completed.",
+        ClientRecovery.TERMINAL_FAILURE,
+        current_correlation_id(),
     )
+    return HTTPException(status_code=400, detail=failure.detail())
 
 
 def _range(

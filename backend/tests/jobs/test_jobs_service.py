@@ -402,6 +402,44 @@ async def test_lifecycle_versions_retries_and_reopen_preserve_history(
 
 
 @pytest.mark.asyncio
+async def test_concurrent_lifecycle_transition_has_one_authoritative_winner(
+    service_fixture: ServiceFixture,
+) -> None:
+    fixture = service_fixture
+    service = JobService()
+    job = await create_job(fixture, service)
+    command = ActivateJob(job.id, expected_version=1)
+
+    async def activate():
+        async with fixture.factory() as session:
+            return await service.activate_job(
+                session, context=fixture.context, command=command
+            )
+
+    results = await asyncio.gather(activate(), activate(), return_exceptions=True)
+    winners = [result for result in results if isinstance(result, Job)]
+    conflicts = [
+        result for result in results if isinstance(result, JobVersionConflictError)
+    ]
+    assert len(winners) == len(conflicts) == 1
+    assert winners[0].status == JobStatus.READY.value
+    assert winners[0].concurrency_version == 2
+    async with fixture.factory() as session:
+        persisted = await session.get(Job, job.id)
+        event_count = await session.scalar(
+            select(func.count())
+            .select_from(BusinessEvent)
+            .where(
+                BusinessEvent.entity_id == job.id,
+                BusinessEvent.event_type == "job.activated",
+            )
+        )
+    assert persisted is not None
+    assert (persisted.status, persisted.concurrency_version) == ("ready", 2)
+    assert event_count == 1
+
+
+@pytest.mark.asyncio
 async def test_cancel_is_retriable_but_active_cancellation_is_rejected(
     service_fixture: ServiceFixture,
 ) -> None:
