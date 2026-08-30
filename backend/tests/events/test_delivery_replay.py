@@ -63,6 +63,26 @@ async def delivery_database(
     )
     engine = create_async_engine(settings.database_url)
     factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with engine.begin() as connection:
+        await connection.execute(
+            text(
+                "INSERT INTO companies "
+                "(id,name,code,status,timezone,created_at,updated_at) VALUES "
+                "(:company,'Event Delivery Qualification','EVENTDELIVERY','active',"
+                "'America/New_York',:now,:now) ON CONFLICT (id) DO NOTHING"
+            ),
+            {"company": COMPANY_A, "now": NOW},
+        )
+        await connection.execute(
+            text(
+                "INSERT INTO branches "
+                "(id,company_id,name,code,status,timezone,is_primary,created_at,updated_at) "
+                "VALUES (:branch,:company,'Event Delivery Qualification','EVENTDELIVERY',"
+                "'active','America/New_York',false,:now,:now) "
+                "ON CONFLICT (id) DO NOTHING"
+            ),
+            {"branch": BRANCH_A, "company": COMPANY_A, "now": NOW},
+        )
     await _truncate(engine)
     try:
         yield factory

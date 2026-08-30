@@ -1,8 +1,16 @@
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
-from sqlalchemy import CheckConstraint, DateTime, Index, String, Text
-from sqlalchemy.dialects.postgresql import JSONB, UUID as PGUUID
+from sqlalchemy import (
+    CheckConstraint,
+    DateTime,
+    ForeignKeyConstraint,
+    Index,
+    String,
+    Text,
+)
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -25,6 +33,16 @@ class AuditRecord(Base):
         CheckConstraint(
             "outcome IN ('success', 'failure', 'denied')",
             name="ck_audit_records_outcome",
+        ),
+        CheckConstraint(
+            "branch_id IS NULL OR company_id IS NOT NULL",
+            name="ck_audit_records_branch_requires_company",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "branch_id"],
+            ["branches.company_id", "branches.id"],
+            name="fk_audit_records_company_branch",
+            ondelete="RESTRICT",
         ),
         Index("ix_audit_records_occurred_at", "occurred_at"),
         Index(

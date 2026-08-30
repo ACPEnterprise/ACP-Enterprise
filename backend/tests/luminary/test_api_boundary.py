@@ -4,9 +4,10 @@ from uuid import uuid4
 
 import pytest
 from app.luminary.models import LuminaryBriefingRecord, LuminaryFindingRecord
-from app.luminary.router import _luminary_http_error
+from app.luminary.router import _luminary_http_error, require_luminary_analyst
 from app.luminary.service import LuminaryNotFoundError, LuminaryService
 from app.platform.reliability.correlation import request_correlation_id
+from fastapi import HTTPException
 from sqlalchemy import ForeignKeyConstraint
 
 
@@ -71,3 +72,28 @@ async def test_briefing_projection_fails_closed_for_missing_scoped_finding() -> 
 
     with pytest.raises(RuntimeError, match="authority is incomplete"):
         await LuminaryService()._projection(session, record)
+
+
+@pytest.mark.asyncio
+async def test_analyze_permission_does_not_imply_luminary_read() -> None:
+    context = SimpleNamespace(
+        has_permission=lambda code: code == "COMPANY_LUMINARY_ANALYZE",
+        user=SimpleNamespace(id=uuid4()),
+        company=SimpleNamespace(id=uuid4()),
+        active_branch=SimpleNamespace(id=uuid4()),
+    )
+
+    with pytest.raises(HTTPException) as denied:
+        await require_luminary_analyst(context)
+
+    assert denied.value.status_code == 403
+    assert denied.value.detail == "Permission denied."
+
+    authorized = SimpleNamespace(
+        **{
+            **context.__dict__,
+            "has_permission": lambda code: code
+            in {"COMPANY_LUMINARY_READ", "COMPANY_LUMINARY_ANALYZE"},
+        }
+    )
+    assert await require_luminary_analyst(authorized) is authorized
