@@ -1,0 +1,32 @@
+{
+  "authority_sha": "be7f6796c1ca74a6252f2aa5658ee70f1806f079",
+  "document": "docs/architecture/om2b-blocked-authority-owner-packet.md",
+  "mission_id": "OM2B.BLOCKED.AUTHORITY.PREPARATION.PORTFOLIO.1",
+  "production_touched": false,
+  "schema_version": 1,
+  "decisions": [
+    {"id":"ROLE-EMP-1","recommended":"OWN_DATA_ROLE","unlocks":["RESTRICTED_EMPLOYEE_ROLE","PHYSICAL_IPHONE_ACCEPTANCE"]},
+    {"id":"ROLE-CSR-1","recommended":"SERVICE_CSR","unlocks":["CSR_ROLE","CRM_PERSONA_ACCEPTANCE"]},
+    {"id":"CRM-1","recommended":"REVERSIBLE_CONSOLIDATION_LINK","unlocks":["BANK.CRM.001"]},
+    {"id":"WF-1","recommended":"VERSIONED_APPEND_ONLY_WORKFORCE_AUTHORITY","unlocks":["BANK.WF.001"]},
+    {"id":"NOTIFY-1","recommended":"EVENT_DERIVED_SEPARATE_INBOX","unlocks":["IN_PRODUCT_NOTIFICATION_CENTER"]},
+    {"id":"DOC-1","recommended":"FEDERATED_DOMAIN_AUTHORIZATION","unlocks":["DOCUMENT_CENTER"]},
+    {"id":"SEARCH-1","recommended":"FEDERATED_SEARCH_FIRST","unlocks":["ENTERPRISE_SEARCH"]},
+    {"id":"ACTION-1","recommended":"COMPOSITION_ONLY_FIRST","unlocks":["ACTION_CENTER"]},
+    {"id":"ASSET-1","recommended":"BANK_ORDERED_APPEND_ONLY_EVIDENCE","unlocks":["BANK.ASSET.001"]}
+  ],
+  "mechanically_startable_without_owner_decision": [
+    "CANONICAL_PERSONA_QUALIFICATION",
+    "INTEGRATED_POSTGRESQL_QUALIFICATION",
+    "OUTBOX_REGRESSION",
+    "PROTECTED_INTEGRATION_VERIFICATION",
+    "RESPONSIVE_ACCESSIBILITY_QUALIFICATION"
+  ],
+  "prohibitions": [
+    "BLOCKED_DOMAIN_AUTHORITY_IMPLEMENTATION",
+    "PRODUCTION_OPERATION",
+    "REAL_PROVIDER_ACTION",
+    "REAL_CUSTOMER_OR_EMPLOYEE_DATA",
+    "REAL_MONEY_PAYROLL_OR_TAX_ACTION"
+  ]
+}
