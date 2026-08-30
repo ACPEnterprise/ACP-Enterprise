@@ -77,7 +77,7 @@ def dispatch_http(error: DispatchError) -> HTTPException:
         current_correlation_id(),
     )
     return HTTPException(
-        status.HTTP_400_BAD_REQUEST, failure.detail()
+        status.HTTP_500_INTERNAL_SERVER_ERROR, failure.detail()
     )
 
 

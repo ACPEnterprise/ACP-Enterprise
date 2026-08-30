@@ -127,7 +127,7 @@ def translate_job_error(error: JobError) -> HTTPException:
         ClientRecovery.TERMINAL_FAILURE,
         current_correlation_id(),
     )
-    return HTTPException(status_code=400, detail=failure.detail())
+    return HTTPException(status_code=500, detail=failure.detail())
 
 
 def _range(

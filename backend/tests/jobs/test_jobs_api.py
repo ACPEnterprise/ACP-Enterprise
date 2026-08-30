@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from app.database.session import get_database_session
 from app.jobs.errors import (
+    JobError,
     JobInvalidTransitionError,
     JobNotFoundError,
     JobValidationError,
@@ -50,6 +51,12 @@ pytest_plugins = ("tests.jobs.test_jobs_persistence",)
             422,
             "validation",
             "USER_CORRECTION_REQUIRED",
+        ),
+        (
+            JobError("internal provider detail"),
+            500,
+            "internal_failure",
+            "TERMINAL_FAILURE",
         ),
     ],
 )

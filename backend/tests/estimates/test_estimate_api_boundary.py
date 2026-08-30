@@ -30,7 +30,7 @@ def test_estimate_errors_use_safe_recovery_envelopes_without_reflection() -> Non
         ),
         (
             EstimateError(secret),
-            400,
+            500,
             "internal_failure",
             "OWNER_ADMIN_ACTION_REQUIRED",
         ),

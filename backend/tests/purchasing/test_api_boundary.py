@@ -31,7 +31,7 @@ def test_purchasing_errors_use_safe_recovery_envelopes_without_reflection() -> N
         ),
         (
             PurchasingError(secret),
-            400,
+            500,
             "internal_failure",
             "OWNER_ADMIN_ACTION_REQUIRED",
         ),

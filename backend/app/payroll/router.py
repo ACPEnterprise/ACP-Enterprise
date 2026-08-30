@@ -206,7 +206,7 @@ def _error(error: Exception) -> HTTPException:
         ClientRecovery.OWNER_ADMIN_ACTION_REQUIRED,
         current_correlation_id(),
     )
-    return HTTPException(status.HTTP_400_BAD_REQUEST, failure.detail())
+    return HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, failure.detail())
 
 
 def _storage_unavailable() -> HTTPException:

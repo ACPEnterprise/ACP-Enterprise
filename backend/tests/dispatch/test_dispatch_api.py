@@ -4,7 +4,12 @@ import httpx
 import pytest
 from fastapi import HTTPException
 
-from app.dispatch.errors import DispatchConflict, DispatchNotFound, DispatchValidation
+from app.dispatch.errors import (
+    DispatchConflict,
+    DispatchError,
+    DispatchNotFound,
+    DispatchValidation,
+)
 from app.dispatch.router import dispatch_http, replace
 from app.dispatch.schemas import AssignPrimaryRequest
 from app.main import app
@@ -28,6 +33,12 @@ from app.platform.permissions.codes import DispatchPermission, JobPermission
             422,
             "validation",
             "USER_CORRECTION_REQUIRED",
+        ),
+        (
+            DispatchError("internal provider detail"),
+            500,
+            "internal_failure",
+            "TERMINAL_FAILURE",
         ),
     ],
 )
