@@ -36,5 +36,17 @@ export function useInvoiceMutations() {
       }) => api.issueInvoice(id, input),
       onSuccess: update,
     }),
+    credit: useMutation({
+      mutationFn: ({ id, input }: { id: string; input: Parameters<typeof api.creditInvoice>[1] }) => api.creditInvoice(id, input),
+      onSuccess: update,
+    }),
+    writeOff: useMutation({
+      mutationFn: ({ id, input }: { id: string; input: Parameters<typeof api.writeOffInvoice>[1] }) => api.writeOffInvoice(id, input),
+      onSuccess: update,
+    }),
+    void: useMutation({
+      mutationFn: ({ id, input }: { id: string; input: Parameters<typeof api.voidInvoice>[1] }) => api.voidInvoice(id, input),
+      onSuccess: update,
+    }),
   };
 }

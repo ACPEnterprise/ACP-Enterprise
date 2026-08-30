@@ -2,6 +2,9 @@ from enum import Enum
 
 
 class EventType(str, Enum):
+    SERVICE_AGREEMENT_CHANGED = "service_agreement.changed"
+    SERVICE_ENTITLEMENT_CHANGED = "service_agreement.entitlement_changed"
+    SERVICE_AGREEMENT_BILLING_READY = "service_agreement.billing_ready"
     # Beacon workflow
     BEACON_SIGNAL_ACKNOWLEDGED = "beacon.signal_acknowledged"
     BEACON_SIGNAL_CLAIMED = "beacon.signal_claimed"
