@@ -404,6 +404,8 @@ class InventoryRepository:
         *,
         company_id: UUID,
         branch_ids: tuple[UUID, ...],
+        limit: int,
+        offset: int,
     ) -> tuple[tuple[CycleCountSessionRecord, tuple[CycleCountEntryRecord, ...]], ...]:
         cycles = tuple(
             (
@@ -414,6 +416,8 @@ class InventoryRepository:
                         CycleCountSession.branch_id.in_(branch_ids),
                     )
                     .order_by(CycleCountSession.started_at.desc(), CycleCountSession.id)
+                    .offset(offset)
+                    .limit(limit)
                 )
             ).all()
         )
