@@ -163,9 +163,8 @@ async def replace(
     session: DatabaseSession,
 ) -> AssignmentItem:
     if request.expected_version is None:
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_CONTENT,
-            "Expected version is required for replacement.",
+        raise dispatch_http(
+            DispatchValidation("Expected version is required for replacement.")
         )
     try:
         return await dispatch_service.replace(
