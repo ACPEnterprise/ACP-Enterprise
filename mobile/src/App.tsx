@@ -19,6 +19,8 @@ import { safeLogger } from "./diagnostics/safeLogger";
 import { RestrictedStateScreen } from "./screens/RestrictedStateScreen";
 import type { AppEnvironment } from "./config/environment";
 import { PrivacyShield } from "./components/PrivacyShield";
+import { createPayrollService } from "./api/payroll";
+import { createFieldService } from "./api/fieldService";
 
 export default function App() {
   const [configuration] = useState<{ environment: AppEnvironment | null; error: boolean }>(() => { try { return { environment: readEnvironment(), error: false }; } catch { return { environment: null, error: true }; } });
@@ -34,6 +36,7 @@ function RuntimeApp({ environment }: { environment: AppEnvironment }) {
   const expire = useCallback(() => { setCapabilities([]); setState("anonymous"); }, []);
   const client = useMemo(() => new ApiClient(environment.apiBaseUrl, sessions, deviceNetworkMonitor, safeLogger, expire), [environment.apiBaseUrl, expire, sessions]);
   const timekeeping = useMemo(() => createTimekeepingService(client), [client]); const employeeOperations = useMemo(() => createEmployeeOperationsService(client), [client]);
+  const payroll = useMemo(() => createPayrollService(client), [client]); const fieldService = useMemo(() => createFieldService(client), [client]);
   const coordinator = useMemo(() => new AuthenticationCoordinator(client, sessions, async (allowed) => { if (allowed.includes("time.self.view")) await timekeeping.state(); else if (allowed.includes("my_day.view")) await employeeOperations.day(); }), [client, employeeOperations, sessions, timekeeping]);
   const apply = useCallback((result: EstablishedState | { kind: "anonymous" }) => { if (result.kind === "authenticated") { setCapabilities(result.capabilities); setState("authenticated"); } else { setCapabilities([]); setState(result.kind); } }, []);
   const restore = useCallback(async () => { setState("boot"); try { apply(await coordinator.restore()); } catch { setState("restore_error"); } }, [apply, coordinator]);
@@ -44,5 +47,5 @@ function RuntimeApp({ environment }: { environment: AppEnvironment }) {
   if (state === "boot") return <Screen><Text accessibilityLabel="Verifying protected ACP session">Verifying your ACP session…</Text></Screen>;
   if (state === "restore_error") return <Screen><Text accessibilityRole="alert">ACP could not verify this device session. Connect to the internet and try again.</Text><PrimaryButton label="Retry Session Verification" onPress={() => void restore()} /><PrimaryButton label="Clear Session and Sign In" onPress={() => void signOut()} /></Screen>;
   if (state === "onboarding_incomplete" || state === "access_limited") return <RestrictedStateScreen kind={state} onLogout={signOut} />;
-  return <ErrorBoundary><StatusBar style="auto" /><AppNavigator authenticated={state === "authenticated"} capabilities={capabilities} timekeeping={timekeeping} employeeOperations={employeeOperations} network={deviceNetworkMonitor} onSignIn={signIn} onActivate={activate} onLogout={signOut} /></ErrorBoundary>;
+  return <ErrorBoundary><StatusBar style="auto" /><AppNavigator authenticated={state === "authenticated"} capabilities={capabilities} timekeeping={timekeeping} employeeOperations={employeeOperations} payroll={payroll} fieldService={fieldService} network={deviceNetworkMonitor} onSignIn={signIn} onActivate={activate} onLogout={signOut} /></ErrorBoundary>;
 }
