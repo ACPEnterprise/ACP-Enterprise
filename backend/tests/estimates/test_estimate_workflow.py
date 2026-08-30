@@ -3,9 +3,7 @@ from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import select, update
-from sqlalchemy.exc import DBAPIError
-
+from app.estimates.artifact import render_estimate_artifact
 from app.estimates.contracts import (
     CreateEstimateRevisionSpec,
     EstimateDecisionSpec,
@@ -18,8 +16,11 @@ from app.estimates.errors import (
 )
 from app.estimates.models import EstimateCustomerDecision, EstimateLifecycleHistory
 from app.estimates.repository import EstimateRepository
+from app.estimates.schemas import EstimateItem
 from app.estimates.service import EstimateService
 from app.events.models import BusinessEvent
+from sqlalchemy import select, update
+from sqlalchemy.exc import DBAPIError
 from tests.estimates.test_estimate_foundation import make_spec
 
 pytest_plugins = ("tests.estimates.test_estimate_foundation",)
@@ -58,6 +59,27 @@ def decision(
         rejection_reason=rejection_reason,
         evidence_reference=evidence_reference,
     )
+
+
+@pytest.mark.asyncio
+async def test_estimate_artifact_is_deterministic_snapshot_bound_and_safe(
+    estimate_fixture,
+) -> None:
+    factory, company, branch, actor, customer, location, snapshot = estimate_fixture
+    service = EstimateService()
+    spec = make_spec(company, branch, actor, customer, location, snapshot)
+    spec = replace(spec, proposal_title="Safe <proposal>")
+    async with factory() as session:
+        record = await service.create(session, spec=spec)
+    first = render_estimate_artifact(EstimateItem.model_validate(record))
+    replay = render_estimate_artifact(EstimateItem.model_validate(record))
+    assert first == replay
+    assert len(first.artifact_digest) == 64
+    assert str(snapshot.id) not in first.content
+    assert "Safe &lt;proposal&gt;" in first.content
+    assert "DRAFT PREVIEW" in first.content
+    assert first.revision_id == record.current_revision.id
+    assert first.filename == f"{record.estimate_number}-r1.html"
 
 
 @pytest.mark.asyncio

@@ -90,3 +90,17 @@ export interface EstimateList {
   items: EstimateSummary[];
   total: number;
 }
+
+export interface EstimateArtifact {
+  schema_version: number;
+  template_version: string;
+  estimate_id: string;
+  estimate_version: number;
+  revision_id: string;
+  revision_number: number;
+  status: string;
+  artifact_digest: string;
+  filename: string;
+  media_type: "text/html";
+  content: string;
+}

@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_database_session
+from app.estimates.artifact import render_estimate_artifact
 from app.estimates.contracts import (
     CreateEstimateRevisionSpec,
     CreateEstimateSpec,
@@ -21,6 +22,7 @@ from app.estimates.errors import (
 )
 from app.estimates.schemas import (
     DecisionInput,
+    EstimateArtifact,
     EstimateItem,
     EstimateList,
     ProposalInput,
@@ -102,6 +104,20 @@ async def get_estimate(
     }:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Estimate was not found.")
     return EstimateItem.model_validate(result)
+
+
+@router.get("/{estimate_id}/artifact", response_model=EstimateArtifact)
+async def get_estimate_artifact(
+    estimate_id: UUID, context: ReadContext, session: DatabaseSession
+) -> EstimateArtifact:
+    result = await estimate_service.repository.get(
+        session, company_id=context.company.id, estimate_id=estimate_id
+    )
+    if result is None or result.branch_id not in {
+        branch.id for branch in context.authorized_branches
+    }:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Estimate was not found.")
+    return render_estimate_artifact(EstimateItem.model_validate(result))
 
 
 @router.post("", response_model=EstimateItem, status_code=status.HTTP_201_CREATED)

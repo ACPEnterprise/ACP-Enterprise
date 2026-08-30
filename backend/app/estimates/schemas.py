@@ -131,6 +131,20 @@ class EstimateList(EstimateSchema):
     total: int
 
 
+class EstimateArtifact(EstimateSchema):
+    schema_version: int
+    template_version: str
+    estimate_id: UUID
+    estimate_version: int
+    revision_id: UUID
+    revision_number: int
+    status: str
+    artifact_digest: str
+    filename: str
+    media_type: str
+    content: str
+
+
 class TaxPolicyItem(EstimateSchema):
     id: UUID
     company_id: UUID
