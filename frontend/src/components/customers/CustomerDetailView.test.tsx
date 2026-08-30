@@ -206,4 +206,25 @@ describe("CustomerDetailView", () => {
       expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
     }
   });
+
+  it("does not render protected backend details in Customer failure states", () => {
+    vi.mocked(customerHooks.useCustomerConsents).mockReturnValue({
+      isError: true,
+      isSuccess: false,
+      error: {
+        isAxiosError: true,
+        response: { status: 500, data: { detail: "sql://customer-secret-canary" } },
+      },
+    } as never);
+    vi.mocked(customerHooks.useCustomerMutations).mockReturnValue({
+      archive: mutation(), update: mutation(), addNote: mutation(),
+      recordConsent: mutation(), addProperty: mutation(), updateProperty: mutation(),
+      addContact: mutation(), updateContact: mutation(),
+    } as never);
+
+    render(<CustomerDetailView customerId={customer.id} onBack={vi.fn()} />);
+
+    expect(screen.getByText("The service could not be reached. Try again.")).toBeInTheDocument();
+    expect(screen.queryByText(/customer-secret-canary/)).not.toBeInTheDocument();
+  });
 });

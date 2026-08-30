@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { ArrowLeft, Edit3, MapPin, Plus, Star, UserRound } from "lucide-react";
 
-import { getApiErrorMessage, getOperatorApiError } from "../../api/errors";
+import { getOperatorApiError } from "../../api/errors";
 import { useHasPermission } from "../../auth";
 import { useCustomerConsents, useCustomerDetail, useCustomerMutations } from "../../hooks/useCustomers";
 import {
@@ -136,14 +136,14 @@ export function CustomerDetailView({ customerId, onBack }: CustomerDetailViewPro
             <Button type="button" variant="outline" disabled={mutations.recordConsent.isPending} onClick={() => mutations.recordConsent.mutate({ channel: consentChannel, decision: "withdrawn", source: "customer_request", reason: null })}>Record withdrawal</Button>
           </div>
         )}
-        {consents.isError && <Alert variant="danger" title="Consent history unavailable">{getApiErrorMessage(consents.error)}</Alert>}
+        {consents.isError && <Alert variant="danger" title="Consent history unavailable">{getOperatorApiError(consents.error, "Customer consent").message}</Alert>}
         <div className="mt-4 space-y-2">
           {(consents.data ?? []).map((consent) => <div key={consent.id} className="rounded-lg border border-stroke p-3 text-sm"><span className="font-medium uppercase">{consent.channel}</span> · {consent.decision.replaceAll("_", " ")}<p className="mt-1 text-xs text-content-muted">{new Date(consent.recorded_at).toLocaleString()} · {consent.source.replaceAll("_", " ")}</p></div>)}
           {consents.isSuccess && consents.data.length === 0 && <p className="text-sm text-content-muted">No consent decisions have been recorded.</p>}
         </div>
       </Card>
 
-      {Boolean(actionError) && <Alert variant="danger" title="Customer update failed">{getApiErrorMessage(actionError)}</Alert>}
+      {Boolean(actionError) && <Alert variant="danger" title="Customer update failed">{getOperatorApiError(actionError, "Customer").message}</Alert>}
 
       <Card className="p-ui-4 sm:p-ui-6">
         <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm text-action-primary">Service locations</p><h3 className="mt-1 text-xl font-semibold">Properties</h3></div>{canManage && !archived && <Button type="button" onClick={() => setEditingProperty("new")} leadingIcon={<Plus size={16} />}>Add property</Button>}</div>
