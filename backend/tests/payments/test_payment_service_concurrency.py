@@ -20,6 +20,7 @@ from app.payments.contracts import (
     PostingReceiptFact,
     ProviderRequest,
     RecordDispute,
+    RecordSettlement,
     RequestRefund,
 )
 from app.payments.errors import PaymentConflict, PaymentNotFound, PaymentValidation
@@ -516,3 +517,67 @@ async def test_dispute_replay_binds_amount_provider_and_evidence(payment_fixture
         assert event is not None
         assert event.provider_reference == command.provider_dispute_id
         assert event.request_digest is not None and len(event.request_digest) == 64
+
+
+@pytest.mark.asyncio
+async def test_settlement_replay_binds_complete_economic_evidence(
+    payment_fixture,
+) -> None:
+    factory, company, _, actor, _ = payment_fixture
+    service = PaymentService(CountingFakeProvider(), "synthetic-merchant")
+    command = RecordSettlement(
+        company_id=company.id,
+        provider="deterministic_fake",
+        merchant_account="synthetic-merchant",
+        provider_payout_id=f"payout-{uuid4()}",
+        currency="USD",
+        settlement_date=date(2026, 8, 30),
+        gross_amount=Decimal("100.00"),
+        refund_amount=Decimal("10.00"),
+        dispute_amount=Decimal("5.00"),
+        fee_amount=Decimal("2.00"),
+        adjustment_amount=Decimal("1.00"),
+        net_amount=Decimal("84.00"),
+        evidence_digest="d" * 64,
+        actor_user_id=actor.id,
+    )
+    async with factory() as session:
+        first = await service.record_settlement(session, command)
+    async with factory() as session:
+        replay = await service.record_settlement(session, command)
+    assert replay.id == first.id
+
+    contradictions = (
+        replace(command, currency="CAD"),
+        replace(command, settlement_date=date(2026, 8, 31)),
+        replace(
+            command,
+            gross_amount=Decimal("101.00"),
+            net_amount=Decimal("85.00"),
+        ),
+        replace(
+            command,
+            refund_amount=Decimal("11.00"),
+            net_amount=Decimal("83.00"),
+        ),
+        replace(
+            command,
+            dispute_amount=Decimal("6.00"),
+            net_amount=Decimal("83.00"),
+        ),
+        replace(
+            command,
+            fee_amount=Decimal("3.00"),
+            net_amount=Decimal("83.00"),
+        ),
+        replace(
+            command,
+            adjustment_amount=Decimal("2.00"),
+            net_amount=Decimal("85.00"),
+        ),
+        replace(command, evidence_digest="e" * 64),
+    )
+    for contradiction in contradictions:
+        async with factory() as session:
+            with pytest.raises(PaymentConflict, match="conflicts with replay"):
+                await service.record_settlement(session, contradiction)

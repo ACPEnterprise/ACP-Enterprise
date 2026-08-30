@@ -254,7 +254,19 @@ class PaymentService:
             )
             prior = await session.scalar(select(Settlement).where(Settlement.company_id == spec.company_id, Settlement.provider == spec.provider, Settlement.merchant_account == spec.merchant_account, Settlement.provider_payout_id == spec.provider_payout_id))
             if prior:
-                if prior.evidence_digest != spec.evidence_digest:
+                if any(
+                    (
+                        prior.currency != spec.currency,
+                        prior.settlement_date != spec.settlement_date,
+                        prior.gross_amount != spec.gross_amount,
+                        prior.refund_amount != spec.refund_amount,
+                        prior.dispute_amount != spec.dispute_amount,
+                        prior.fee_amount != spec.fee_amount,
+                        prior.adjustment_amount != spec.adjustment_amount,
+                        prior.net_amount != spec.net_amount,
+                        prior.evidence_digest != spec.evidence_digest,
+                    )
+                ):
                     raise PaymentConflict("Settlement evidence conflicts with replay.")
                 return prior
             if spec.merchant_account != self.merchant_account or spec.provider != self.provider.name or len(spec.evidence_digest) != 64:
