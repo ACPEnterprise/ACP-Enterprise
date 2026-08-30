@@ -8,6 +8,7 @@ from app.events.delivery_contracts import delivery_consumers, event_version
 from app.events.models import BusinessEvent, BusinessEventDelivery
 from app.events.schemas import BusinessEventCreate
 from app.platform.permissions.authorization import AuthorizationContext
+from app.platform.reliability.correlation import current_correlation_id
 from app.platform.security.safe_output import validate_no_sensitive_fields
 
 
@@ -33,7 +34,9 @@ class BusinessEventService:
             branch_id=event_data.branch_id,
             user_id=event_data.user_id,
             payload=event_data.payload,
-            correlation_id=event_data.correlation_id or uuid4(),
+            correlation_id=(
+                event_data.correlation_id or current_correlation_id() or uuid4()
+            ),
             occurred_at=now,
         )
         session.add(event)
