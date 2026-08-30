@@ -6,6 +6,7 @@ import { TechnicianRouteGuard } from "../features/technician/TechnicianRouteGuar
 import {
   accountsPayableHandle,
   financialReportsHandle,
+  businessEconomicsHandle,
   administrationHandle,
   appointmentsHandle,
   commandCenterHandle,
@@ -167,6 +168,11 @@ export const appRoutes: RouteObject[] = [
             path: "financial-reports",
             handle: financialReportsHandle,
             lazy: async () => ({ Component: (await import("../routes/FinancialReportsRoute")).FinancialReportsRoute }),
+          },
+          {
+            path: "business-economics",
+            handle: businessEconomicsHandle,
+            lazy: async () => ({ Component: (await import("../routes/BusinessEconomicsRoute")).BusinessEconomicsRoute }),
           },
           {
             path: "price-book",

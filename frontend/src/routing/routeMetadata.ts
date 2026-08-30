@@ -162,6 +162,10 @@ export const financialReportsHandle = {
   workspace: { pageTitle: "Financial Reports", breadcrumbs: [{ label: "Financial Reports" }], helpTopic: "financial-reporting", aiContext: "financial-reporting" },
 } as const satisfies ShellRouteHandle;
 
+export const businessEconomicsHandle = {
+  workspace: { pageTitle: "Business Economics", breadcrumbs: [{ label: "Business Economics" }], helpTopic: "business-economics", aiContext: "business-economics" },
+} as const satisfies ShellRouteHandle;
+
 export const payrollHandle = {
   workspace: { pageTitle: "Payroll Administration", breadcrumbs: [{ label: "Payroll" }], helpTopic: "payroll-administration", aiContext: "payroll-administration" },
 } as const satisfies ShellRouteHandle;
