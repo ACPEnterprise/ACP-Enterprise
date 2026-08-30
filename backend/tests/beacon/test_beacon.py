@@ -2,13 +2,11 @@ from dataclasses import FrozenInstanceError
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 from uuid import UUID, uuid4
 
 import httpx
 import pytest
-from fastapi import FastAPI
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.beacon.contracts import (
     BeaconCategory,
     BeaconEvidence,
@@ -30,6 +28,8 @@ from app.platform.permissions.authorization import (
 )
 from app.platform.permissions.codes import AnalyticsPermission
 from app.platform.permissions.dependencies import get_authorization_context
+from fastapi import FastAPI
+from sqlalchemy.ext.asyncio import AsyncSession
 
 NOW = datetime(2026, 7, 28, 16, 0, tzinfo=timezone.utc)
 COMPANY_ID = UUID("f47ac10b-58cc-4372-a567-0e02b2c3d479")
@@ -316,10 +316,11 @@ async def test_beacon_http_api_returns_bounded_company_scoped_signals(
         lifecycle_repository,
     )
 
-    async def no_workflow(*_args, **_kwargs):
-        return None
+    batch_workflows = AsyncMock(return_value={})
 
-    monkeypatch.setattr(beacon_workflow_service, "current", no_workflow)
+    monkeypatch.setattr(
+        beacon_workflow_service, "current_for_conditions", batch_workflows
+    )
     app = FastAPI()
     app.include_router(router)
 
@@ -338,6 +339,7 @@ async def test_beacon_http_api_returns_bounded_company_scoped_signals(
         operational_response = await client.get("/api/v1/beacon/operational-signals")
 
     assert response.status_code == 200
+    batch_workflows.assert_awaited_once()
     body = response.json()
     assert len(body["items"]) == 3
     assert body["items"][0]["supporting_facts"]

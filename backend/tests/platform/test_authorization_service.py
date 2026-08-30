@@ -47,6 +47,7 @@ from app.platform.permissions.models import (
 )
 from app.platform.permissions.router import router as authorization_router
 from app.platform.users.models import User, UserCredential
+from app.scheduling import models as scheduling_models  # noqa: F401
 
 
 @dataclass(frozen=True)
@@ -277,7 +278,7 @@ async def test_permission_resolution_and_company_branch_isolation(
         )
     )
     with pytest.raises(FrozenInstanceError):
-        setattr(context.user, "display_name", "Changed")
+        context.user.display_name = "Changed"
 
     async with factory() as session:
         with pytest.raises(TenantAccessDeniedError):

@@ -2,13 +2,13 @@ from dataclasses import FrozenInstanceError, replace
 from datetime import timedelta
 
 import pytest
-
 from app.beacon.contracts import BeaconSeverity
 from app.beacon.definitions import (
     BEACON_SIGNAL_DEFINITIONS,
     BeaconSignalDefinitionRegistry,
 )
 from app.beacon.evaluation import SignalEvaluationService
+
 from tests.beacon.test_beacon import NOW, snapshot
 
 

@@ -5,9 +5,6 @@ from uuid import uuid4
 import httpx
 import pytest
 import pytest_asyncio
-from fastapi import FastAPI
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
-
 from app.core.config import settings
 from app.database.session import (
     get_database_session,
@@ -16,6 +13,10 @@ from app.database.session import (
 from app.events.models import BusinessEvent
 from app.events.router import router
 from app.events.service import BusinessEventService
+from app.platform.branch.models import Branch
+from app.platform.company.models import Company
+from fastapi import FastAPI
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 
 
 @pytest_asyncio.fixture
@@ -61,6 +62,43 @@ async def test_event_reads_are_company_and_authorized_branch_scoped(
     allowed_branch = uuid4()
     denied_branch = uuid4()
     async with AsyncSession(event_database) as session, session.begin():
+        session.add_all(
+            [
+                Company(
+                    id=company_id,
+                    name="Event Scope Qualification",
+                    code=f"EV{str(company_id).replace('-', '')[:20].upper()}",
+                    status="active",
+                    timezone="America/New_York",
+                ),
+                Company(
+                    id=other_company_id,
+                    name="Foreign Event Scope Qualification",
+                    code=f"EV{str(other_company_id).replace('-', '')[:20].upper()}",
+                    status="active",
+                    timezone="America/New_York",
+                ),
+                Branch(
+                    id=allowed_branch,
+                    company_id=company_id,
+                    name="Allowed Event Branch",
+                    code="ALLOWED",
+                    status="active",
+                    timezone="America/New_York",
+                    is_primary=False,
+                ),
+                Branch(
+                    id=denied_branch,
+                    company_id=company_id,
+                    name="Denied Event Branch",
+                    code="DENIED",
+                    status="active",
+                    timezone="America/New_York",
+                    is_primary=False,
+                ),
+            ]
+        )
+        await session.flush()
         session.add_all(
             [
                 BusinessEvent(

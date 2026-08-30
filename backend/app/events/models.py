@@ -5,6 +5,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     String,
@@ -21,6 +22,18 @@ from app.core.database import Base
 class BusinessEvent(Base):
     __tablename__ = "business_events"
     __table_args__ = (
+        CheckConstraint(
+            "branch_id IS NULL OR company_id IS NOT NULL",
+            name="ck_business_events_branch_requires_company",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "branch_id"],
+            ["branches.company_id", "branches.id"],
+            name="fk_business_events_company_branch",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("company_id", "id", name="uq_business_events_company_id"),
+        UniqueConstraint("id", "branch_id", name="uq_business_events_id_branch"),
         Index(
             "ix_business_events_customer_timeline_entity",
             "company_id",
@@ -116,6 +129,32 @@ class BusinessEventDelivery(Base):
         ),
         CheckConstraint("attempt_count >= 0", name="ck_business_event_attempt_count"),
         CheckConstraint("replay_count >= 0", name="ck_business_event_replay_count"),
+        CheckConstraint(
+            "branch_id IS NULL OR company_id IS NOT NULL",
+            name="ck_business_event_delivery_branch_requires_company",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "event_id"],
+            ["business_events.company_id", "business_events.id"],
+            name="fk_business_event_delivery_company_event",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["event_id", "branch_id"],
+            ["business_events.id", "business_events.branch_id"],
+            name="fk_business_event_delivery_event_branch",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "company_id", "id", name="uq_business_event_delivery_company_id"
+        ),
+        UniqueConstraint("id", "event_id", name="uq_business_event_delivery_id_event"),
+        UniqueConstraint(
+            "id", "branch_id", name="uq_business_event_delivery_id_branch"
+        ),
+        UniqueConstraint(
+            "id", "consumer_name", name="uq_business_event_delivery_id_consumer"
+        ),
         UniqueConstraint(
             "event_id", "consumer_name", name="uq_business_event_delivery_consumer"
         ),
@@ -176,6 +215,34 @@ class BusinessEventDeliveryEvidence(Base):
             "outcome IN ('claimed','recovered','delivered','idempotent','retryable','terminal','replay_requested')",
             name="ck_business_event_delivery_evidence_outcome",
         ),
+        CheckConstraint(
+            "branch_id IS NULL OR company_id IS NOT NULL",
+            name="ck_business_event_evidence_branch_requires_company",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "delivery_id"],
+            ["business_event_deliveries.company_id", "business_event_deliveries.id"],
+            name="fk_business_event_evidence_company_delivery",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["delivery_id", "event_id"],
+            ["business_event_deliveries.id", "business_event_deliveries.event_id"],
+            name="fk_business_event_evidence_delivery_event",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["delivery_id", "branch_id"],
+            ["business_event_deliveries.id", "business_event_deliveries.branch_id"],
+            name="fk_business_event_evidence_delivery_branch",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["delivery_id", "consumer_name"],
+            ["business_event_deliveries.id", "business_event_deliveries.consumer_name"],
+            name="fk_business_event_evidence_delivery_consumer",
+            ondelete="RESTRICT",
+        ),
         UniqueConstraint(
             "delivery_id",
             "evidence_sequence",
@@ -222,6 +289,22 @@ class BusinessEventConsumerReceipt(Base):
         UniqueConstraint(
             "event_id", "consumer_name", name="uq_business_event_consumer_receipt"
         ),
+        CheckConstraint(
+            "branch_id IS NULL OR company_id IS NOT NULL",
+            name="ck_business_event_receipt_branch_requires_company",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "event_id"],
+            ["business_events.company_id", "business_events.id"],
+            name="fk_business_event_receipt_company_event",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["event_id", "branch_id"],
+            ["business_events.id", "business_events.branch_id"],
+            name="fk_business_event_receipt_event_branch",
+            ondelete="RESTRICT",
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(
@@ -251,6 +334,12 @@ class BusinessEventConsumerCursor(Base):
             "entity_type",
             "entity_id",
             name="uq_business_event_consumer_cursor",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "last_event_id"],
+            ["business_events.company_id", "business_events.id"],
+            name="fk_business_event_cursor_company_event",
+            ondelete="RESTRICT",
         ),
     )
 

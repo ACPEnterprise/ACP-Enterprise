@@ -1,7 +1,6 @@
 from dataclasses import replace
 
 import pytest
-
 from app.beacon.escalation import escalation_service
 from app.beacon.evaluation import SignalEvaluationService
 from app.beacon.intelligence import (
@@ -11,6 +10,7 @@ from app.beacon.intelligence import (
 from app.beacon.operational_prioritization import operational_signal_prioritizer
 from app.beacon.router import beacon_system_readiness
 from app.platform.permissions.codes import AnalyticsPermission, BeaconPermission
+
 from tests.beacon.test_beacon import BRANCH_ID, COMPANY_ID, NOW, context, snapshot
 
 

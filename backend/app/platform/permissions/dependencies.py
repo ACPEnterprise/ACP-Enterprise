@@ -117,6 +117,36 @@ def require_any_permission(
     return dependency
 
 
+def require_all_permissions(
+    *permission_codes: str,
+) -> Callable[[AuthorizationContext], Awaitable[AuthorizationContext]]:
+    if not permission_codes:
+        raise ValueError("At least one permission code is required.")
+
+    async def dependency(
+        context: ResolvedAuthorization,
+    ) -> AuthorizationContext:
+        missing = [code for code in permission_codes if not context.has_permission(code)]
+        if not missing:
+            return context
+        authorization_decision_logger.denied(
+            AuthorizationDenial(
+                reason="missing_all_permissions",
+                actor_user_id=context.user.id,
+                company_id=context.company.id,
+                branch_id=context.active_branch.id if context.active_branch else None,
+                permission_code="&".join(permission_codes),
+                resource="permission_dependency",
+            )
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Permission denied.",
+        )
+
+    return dependency
+
+
 def require_branch_access(
     branch_id: UUID,
 ) -> Callable[[AuthorizationContext], Awaitable[AuthorizationContext]]:

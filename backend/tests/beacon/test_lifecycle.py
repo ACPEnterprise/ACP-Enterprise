@@ -4,8 +4,6 @@ from types import SimpleNamespace
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.beacon.contracts import BeaconLifecycleAction
 from app.beacon.errors import (
     BeaconSignalNotFoundError,
@@ -23,6 +21,8 @@ from app.platform.permissions.authorization import (
     PermissionDeniedError,
 )
 from app.platform.permissions.codes import AnalyticsPermission, BeaconPermission
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from tests.beacon.test_beacon import (
     BRANCH_ID,
     COMPANY_ID,
