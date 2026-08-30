@@ -5,9 +5,9 @@ import type { Estimate } from "../../types/estimates";
 import { EstimateDecisionControls } from "./EstimateDecisionControls";
 
 const estimate = { id: "estimate-1", branch_id: "branch-1", status: "sent", version: 3 } as Estimate;
-const mutations = () => ({
-  transition: { mutate: vi.fn(), isPending: false, isError: false },
-  decide: { mutate: vi.fn(), isPending: false, isError: false },
+const mutations = (decisionError: unknown = null) => ({
+  transition: { mutate: vi.fn(), isPending: false, isError: false, error: null },
+  decide: { mutate: vi.fn(), isPending: false, isError: Boolean(decisionError), error: decisionError },
 });
 
 describe("EstimateDecisionControls", () => {
@@ -27,5 +27,15 @@ describe("EstimateDecisionControls", () => {
     fireEvent.click(screen.getByRole("button", { name: "Confirm rejection" }));
     expect(controls.decide.mutate).toHaveBeenCalledWith(expect.objectContaining({ action: "reject", input: expect.objectContaining({ customer_name: "Alex Customer", rejection_reason: "Scope declined" }) }));
     expect(screen.getByText(/do not send communications/)).toBeVisible();
+  });
+
+  it("announces governed recovery without reflecting backend details", () => {
+    const controls = mutations({
+      isAxiosError: true,
+      response: { data: { detail: { recovery: "RETRY_AFTER_REFRESH", message: "sql-provider-secret-canary" } } },
+    });
+    render(<EstimateDecisionControls estimate={estimate} mutations={controls as never} />);
+    expect(screen.getByRole("alert")).toHaveTextContent(/authority changed/i);
+    expect(screen.queryByText(/sql-provider-secret-canary/)).not.toBeInTheDocument();
   });
 });

@@ -28,7 +28,10 @@ from app.platform.company.membership_models import Membership
 from app.platform.company.models import Company
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.users.models import User
-from app.procurement_matching.errors import ProcurementMatchingConflict
+from app.procurement_matching.errors import (
+    ProcurementMatchingConflict,
+    ProcurementMatchingNotFound,
+)
 from app.procurement_matching.models import (
     ProcurementMatch,
     ProcurementMatchException,
@@ -377,6 +380,27 @@ async def test_exact_match_is_idempotent_current_and_has_zero_downstream_effects
     async with factory() as session:
         first = await service.evaluate(session, context=evaluator, payload=command)
         replay = await service.evaluate(session, context=evaluator, payload=command)
+        restricted = AuthorizationContext(
+            user=evaluator.user,
+            company=evaluator.company,
+            membership=evaluator.membership,
+            authorized_branches=(),
+            active_branch=None,
+            effective_roles=evaluator.effective_roles,
+            effective_permissions=evaluator.effective_permissions,
+            credential_version=evaluator.credential_version,
+            authorization_version=evaluator.authorization_version,
+        )
+        with pytest.raises(ProcurementMatchingNotFound):
+            await service.evaluate(session, context=restricted, payload=command)
+        with pytest.raises(ProcurementMatchingConflict):
+            await service.evaluate(
+                session,
+                context=evaluator,
+                payload=command.model_copy(
+                    update={"expected_purchase_order_version": order.version + 1}
+                ),
+            )
     async with factory() as session:
         after = tuple(
             [
@@ -637,6 +661,48 @@ async def test_concurrent_equivalent_evaluation_creates_one_authority(matching_f
                     idempotency_key=f"contradictory-{uuid4()}",
                 ),
             )
+
+
+@pytest.mark.asyncio
+async def test_approval_freshness_waits_for_competing_po_authority(
+    matching_fixture,
+) -> None:
+    factory, company, _, evaluator, _ = matching_fixture
+    order, bill = await seed_evidence(
+        factory, company, evaluator.active_branch, evaluator
+    )
+    service = ProcurementMatchingService()
+    async with factory() as session:
+        item = await service.evaluate(
+            session,
+            context=evaluator,
+            payload=EvaluateMatchCommand(
+                purchase_order_id=order.id,
+                vendor_bill_id=bill.id,
+                expected_purchase_order_version=order.version,
+                expected_bill_version=bill.version,
+                idempotency_key=f"approval-race-{uuid4()}",
+            ),
+        )
+
+    async def validate_after_lock() -> bool:
+        async with factory() as session:
+            match = await session.get(ProcurementMatch, item.id)
+            current_bill = await session.get(VendorBill, bill.id)
+            assert match is not None and current_bill is not None
+            return await is_current_eligible_match(
+                session, match, current_bill, lock_order=True
+            )
+
+    async with factory() as writer, writer.begin():
+        locked_order = await writer.get(PurchaseOrder, order.id, with_for_update=True)
+        assert locked_order is not None
+        validation = asyncio.create_task(validate_after_lock())
+        await asyncio.sleep(0.05)
+        assert not validation.done()
+        locked_order.version += 1
+
+    assert not await validation
 
 
 @pytest.mark.asyncio

@@ -29,8 +29,8 @@ from app.platform.auth.services import access_token_service, utc_now
 from app.platform.branch.models import Branch
 from app.platform.company.membership_models import Membership, MembershipBranchAccess
 from app.platform.company.models import Company
-from app.platform.permissions.codes import SchedulingPermission
 from app.platform.permissions.catalog_sync import PermissionCatalogSyncService
+from app.platform.permissions.codes import SchedulingPermission
 from app.platform.permissions.models import (
     MembershipRole,
     Permission,
@@ -38,6 +38,11 @@ from app.platform.permissions.models import (
     RolePermission,
 )
 from app.platform.users.models import User, UserCredential
+from app.scheduling.errors import (
+    SchedulingCapacityError,
+    SchedulingValidationError,
+    SchedulingVersionConflictError,
+)
 from app.scheduling.models import (
     Appointment,
     AppointmentCapacityReservation,
@@ -45,7 +50,7 @@ from app.scheduling.models import (
     BranchSchedulingException,
     BranchSchedulingWeeklyInterval,
 )
-from app.scheduling.router import router
+from app.scheduling.router import router, translate_scheduling_error
 
 
 @dataclass(frozen=True)
@@ -862,13 +867,43 @@ async def test_create_conceals_tenant_and_branch_references(
     assert concealed_customer.status_code == 404
     assert concealed_location.status_code == 404
     assert all(
-        response.json()["detail"] == "Scheduling resource was not found."
+        response.json()["detail"]["code"] == "not_found"
+        and response.json()["detail"]["recovery"] == "TERMINAL_FAILURE"
         for response in (
             unauthorized_branch,
             concealed_customer,
             concealed_location,
         )
     )
+
+
+@pytest.mark.parametrize(
+    ("error", "code", "recovery"),
+    [
+        (
+            SchedulingVersionConflictError("stale"),
+            "stale_version",
+            "RETRY_AFTER_REFRESH",
+        ),
+        (
+            SchedulingCapacityError("capacity"),
+            "concurrency_conflict",
+            "RETRY_AFTER_REFRESH",
+        ),
+        (
+            SchedulingValidationError("invalid"),
+            "validation",
+            "USER_CORRECTION_REQUIRED",
+        ),
+    ],
+)
+def test_scheduling_failures_use_safe_recovery_contract(
+    error, code: str, recovery: str
+) -> None:
+    detail = translate_scheduling_error(error).detail
+    assert detail["code"] == code
+    assert detail["recovery"] == recovery
+    assert detail["correlation_id"] is None
 
 
 @pytest.mark.asyncio

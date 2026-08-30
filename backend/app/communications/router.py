@@ -8,6 +8,8 @@ from app.database.session import get_database_session
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import CommunicationsPermission
 from app.platform.permissions.dependencies import require_permission
+from app.platform.reliability.correlation import current_correlation_id
+from app.platform.reliability.failures import ClientRecovery, FailureCode, SafeFailure
 
 from .contracts import CommunicationRequest
 from .errors import (
@@ -32,14 +34,44 @@ ManageContext = Annotated[
 
 def communication_http(error: CommunicationError) -> HTTPException:
     if isinstance(error, CommunicationAuthorizationError):
-        return HTTPException(status.HTTP_403_FORBIDDEN, str(error))
+        failure = SafeFailure(
+            FailureCode.FORBIDDEN,
+            "Communication is not authorized by current policy or consent authority.",
+            ClientRecovery.TERMINAL_FAILURE,
+            current_correlation_id(),
+        )
+        return HTTPException(status.HTTP_403_FORBIDDEN, failure.detail())
     if isinstance(error, CommunicationNotFoundError):
-        return HTTPException(status.HTTP_404_NOT_FOUND, str(error))
+        failure = SafeFailure(
+            FailureCode.NOT_FOUND,
+            "Communication source resource was not found.",
+            ClientRecovery.TERMINAL_FAILURE,
+            current_correlation_id(),
+        )
+        return HTTPException(status.HTTP_404_NOT_FOUND, failure.detail())
     if isinstance(error, CommunicationConflictError):
-        return HTTPException(status.HTTP_409_CONFLICT, str(error))
+        failure = SafeFailure(
+            FailureCode.RESOURCE_STATE_CONFLICT,
+            "Communication operation conflicts with current authority.",
+            ClientRecovery.RETRY_AFTER_REFRESH,
+            current_correlation_id(),
+        )
+        return HTTPException(status.HTTP_409_CONFLICT, failure.detail())
     if isinstance(error, CommunicationValidationError):
-        return HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(error))
-    return HTTPException(status.HTTP_400_BAD_REQUEST, "Communication operation failed.")
+        failure = SafeFailure(
+            FailureCode.VALIDATION,
+            "Communication request requires correction.",
+            ClientRecovery.USER_CORRECTION_REQUIRED,
+            current_correlation_id(),
+        )
+        return HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, failure.detail())
+    failure = SafeFailure(
+        FailureCode.INTERNAL_FAILURE,
+        "Communication operation failed safely.",
+        ClientRecovery.OWNER_ADMIN_ACTION_REQUIRED,
+        current_correlation_id(),
+    )
+    return HTTPException(status.HTTP_400_BAD_REQUEST, failure.detail())
 
 
 @router.post("/requests", response_model=CommunicationItem, status_code=201)

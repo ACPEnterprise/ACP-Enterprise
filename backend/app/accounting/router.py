@@ -33,6 +33,8 @@ from app.database.session import get_database_session
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import AccountingPermission
 from app.platform.permissions.dependencies import require_permission
+from app.platform.reliability.correlation import current_correlation_id
+from app.platform.reliability.failures import ClientRecovery, FailureCode, SafeFailure
 
 router = APIRouter(prefix="/api/v1/accounting", tags=["Accounting"])
 DatabaseSession = Annotated[AsyncSession, Depends(get_database_session)]
@@ -61,13 +63,39 @@ ReportContext = Annotated[
 
 def translate(error: Exception) -> HTTPException:
     if isinstance(error, AccountingNotFound):
-        return HTTPException(status_code=404, detail=str(error))
-    if isinstance(error, (AccountingConflict, AccountingPermissionDenied)):
-        return HTTPException(
-            status_code=409 if isinstance(error, AccountingConflict) else 403,
-            detail=str(error),
+        failure = SafeFailure(
+            FailureCode.NOT_FOUND,
+            "Accounting resource was not found.",
+            ClientRecovery.TERMINAL_FAILURE,
+            current_correlation_id(),
         )
-    return HTTPException(status_code=422, detail=str(error))
+        return HTTPException(status_code=404, detail=failure.detail())
+    if isinstance(error, AccountingConflict):
+        failure = SafeFailure(
+            FailureCode.RESOURCE_STATE_CONFLICT,
+            "Accounting operation conflicts with current authority.",
+            ClientRecovery.RETRY_AFTER_REFRESH,
+            current_correlation_id(),
+        )
+        return HTTPException(status_code=409, detail=failure.detail())
+    if isinstance(error, AccountingPermissionDenied):
+        failure = SafeFailure(
+            FailureCode.FORBIDDEN,
+            "Accounting operation is not authorized.",
+            ClientRecovery.OWNER_ADMIN_ACTION_REQUIRED,
+            current_correlation_id(),
+        )
+        return HTTPException(
+            status_code=403,
+            detail=failure.detail(),
+        )
+    failure = SafeFailure(
+        FailureCode.VALIDATION,
+        "Accounting request violates domain validation rules.",
+        ClientRecovery.USER_CORRECTION_REQUIRED,
+        current_correlation_id(),
+    )
+    return HTTPException(status_code=422, detail=failure.detail())
 
 
 def response(journal: object, lines: tuple[object, ...]) -> JournalResponse:

@@ -32,8 +32,9 @@ from app.platform.auth.services import (
     recovery_service,
     security_token_service,
 )
+from app.platform.reliability.correlation import current_correlation_id
+from app.platform.reliability.failures import ClientRecovery, FailureCode, SafeFailure
 from app.platform.security.metrics import security_metrics
-
 
 router = APIRouter(prefix="/api/v1/auth", tags=["Authentication"])
 DatabaseSession = Annotated[AsyncSession, Depends(get_database_session)]
@@ -245,7 +246,13 @@ async def confirm_password_reset(
             new_password=data.new_password,
         )
     except PasswordPolicyError as error:
-        raise HTTPException(status_code=422, detail=str(error)) from error
+        failure = SafeFailure(
+            FailureCode.VALIDATION,
+            "The new password does not satisfy the configured password policy.",
+            ClientRecovery.USER_CORRECTION_REQUIRED,
+            current_correlation_id(),
+        )
+        raise HTTPException(status_code=422, detail=failure.detail()) from error
     except AuthenticationError as error:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

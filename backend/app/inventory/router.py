@@ -33,6 +33,8 @@ from app.inventory.service import inventory_service
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import InventoryPermission
 from app.platform.permissions.dependencies import require_permission
+from app.platform.reliability.correlation import current_correlation_id
+from app.platform.reliability.failures import ClientRecovery, FailureCode, SafeFailure
 
 router = APIRouter(prefix="/api/v1/inventory", tags=["Inventory"])
 DatabaseSession = Annotated[AsyncSession, Depends(get_database_session)]
@@ -58,10 +60,28 @@ CountContext = Annotated[
 
 def translate(error: Exception) -> HTTPException:
     if isinstance(error, InventoryNotFound):
-        return HTTPException(status_code=404, detail=str(error))
+        failure = SafeFailure(
+            FailureCode.NOT_FOUND,
+            "Inventory resource was not found.",
+            ClientRecovery.TERMINAL_FAILURE,
+            current_correlation_id(),
+        )
+        return HTTPException(status_code=404, detail=failure.detail())
     if isinstance(error, InventoryConflict):
-        return HTTPException(status_code=409, detail=str(error))
-    return HTTPException(status_code=422, detail=str(error))
+        failure = SafeFailure(
+            FailureCode.RESOURCE_STATE_CONFLICT,
+            "Inventory operation conflicts with current authority.",
+            ClientRecovery.RETRY_AFTER_REFRESH,
+            current_correlation_id(),
+        )
+        return HTTPException(status_code=409, detail=failure.detail())
+    failure = SafeFailure(
+        FailureCode.VALIDATION,
+        "Inventory request requires correction.",
+        ClientRecovery.USER_CORRECTION_REQUIRED,
+        current_correlation_id(),
+    )
+    return HTTPException(status_code=422, detail=failure.detail())
 
 
 @router.get("/overview", response_model=InventoryOverview)

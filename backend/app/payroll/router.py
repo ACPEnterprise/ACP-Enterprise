@@ -14,6 +14,8 @@ from app.core.config import settings
 from app.database.session import get_database_session
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.dependencies import require_permission
+from app.platform.reliability.correlation import current_correlation_id
+from app.platform.reliability.failures import ClientRecovery, FailureCode, SafeFailure
 
 from .compliance import (
     DraftComplianceSchema,
@@ -178,8 +180,36 @@ def _report_metadata(value: PayrollReportingSnapshotRecord) -> PayrollReportingM
 
 def _error(error: Exception) -> HTTPException:
     if isinstance(error, PayrollAuthorizationError):
-        return HTTPException(status.HTTP_403_FORBIDDEN, "Pay statement access denied.")
-    return HTTPException(status.HTTP_409_CONFLICT, str(error))
+        failure = SafeFailure(
+            FailureCode.FORBIDDEN,
+            "Payroll access is denied.",
+            ClientRecovery.TERMINAL_FAILURE,
+            current_correlation_id(),
+        )
+        return HTTPException(status.HTTP_403_FORBIDDEN, failure.detail())
+    if isinstance(error, PayrollConflictError):
+        failure = SafeFailure(
+            FailureCode.RESOURCE_STATE_CONFLICT,
+            "Payroll operation conflicts with current authority.",
+            ClientRecovery.RETRY_AFTER_REFRESH,
+            current_correlation_id(),
+        )
+        return HTTPException(status.HTTP_409_CONFLICT, failure.detail())
+    if isinstance(error, ValueError):
+        failure = SafeFailure(
+            FailureCode.VALIDATION,
+            "Payroll request requires correction.",
+            ClientRecovery.USER_CORRECTION_REQUIRED,
+            current_correlation_id(),
+        )
+        return HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, failure.detail())
+    failure = SafeFailure(
+        FailureCode.INTERNAL_FAILURE,
+        "Payroll operation failed safely.",
+        ClientRecovery.OWNER_ADMIN_ACTION_REQUIRED,
+        current_correlation_id(),
+    )
+    return HTTPException(status.HTTP_400_BAD_REQUEST, failure.detail())
 
 
 @router.get("/reporting", response_model=list[PayrollReportingMetadata])

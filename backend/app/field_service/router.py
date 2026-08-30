@@ -23,6 +23,8 @@ from app.field_service.service import field_service
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import JobPermission
 from app.platform.permissions.dependencies import require_permission
+from app.platform.reliability.correlation import current_correlation_id
+from app.platform.reliability.failures import ClientRecovery, FailureCode, SafeFailure
 
 router = APIRouter(prefix="/api/v1/technician", tags=["Technician Field Service"])
 Session = Annotated[AsyncSession, Depends(get_database_session)]
@@ -37,10 +39,28 @@ Manage = Annotated[
 
 def field_error(error: FieldServiceError) -> HTTPException:
     if isinstance(error, FieldServiceNotFound):
-        return HTTPException(status.HTTP_404_NOT_FOUND, str(error))
+        failure = SafeFailure(
+            FailureCode.NOT_FOUND,
+            "Field Service resource was not found.",
+            ClientRecovery.TERMINAL_FAILURE,
+            current_correlation_id(),
+        )
+        return HTTPException(status.HTTP_404_NOT_FOUND, failure.detail())
     if isinstance(error, FieldServiceConflict):
-        return HTTPException(status.HTTP_409_CONFLICT, str(error))
-    return HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(error))
+        failure = SafeFailure(
+            FailureCode.RESOURCE_STATE_CONFLICT,
+            "Field Service operation conflicts with current authority.",
+            ClientRecovery.RETRY_AFTER_REFRESH,
+            current_correlation_id(),
+        )
+        return HTTPException(status.HTTP_409_CONFLICT, failure.detail())
+    failure = SafeFailure(
+        FailureCode.VALIDATION,
+        "Field Service request requires correction.",
+        ClientRecovery.USER_CORRECTION_REQUIRED,
+        current_correlation_id(),
+    )
+    return HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, failure.detail())
 
 
 @router.get("/itinerary", response_model=Itinerary)

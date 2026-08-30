@@ -8,6 +8,8 @@ from app.database.session import get_database_session
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import PriceBookPermission
 from app.platform.permissions.dependencies import require_permission
+from app.platform.reliability.correlation import current_correlation_id
+from app.platform.reliability.failures import ClientRecovery, FailureCode, SafeFailure
 
 from .errors import (
     PriceBookConflict,
@@ -53,12 +55,36 @@ ActivateContext = Annotated[
 
 def http_error(error: PriceBookError) -> HTTPException:
     if isinstance(error, PriceBookNotFound):
-        return HTTPException(status.HTTP_404_NOT_FOUND, str(error))
+        failure = SafeFailure(
+            FailureCode.NOT_FOUND,
+            "Price Book resource was not found.",
+            ClientRecovery.TERMINAL_FAILURE,
+            current_correlation_id(),
+        )
+        return HTTPException(status.HTTP_404_NOT_FOUND, failure.detail())
     if isinstance(error, PriceBookConflict):
-        return HTTPException(status.HTTP_409_CONFLICT, str(error))
+        failure = SafeFailure(
+            FailureCode.RESOURCE_STATE_CONFLICT,
+            "Price Book operation conflicts with current authority.",
+            ClientRecovery.RETRY_AFTER_REFRESH,
+            current_correlation_id(),
+        )
+        return HTTPException(status.HTTP_409_CONFLICT, failure.detail())
     if isinstance(error, PriceBookValidation):
-        return HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(error))
-    return HTTPException(status.HTTP_400_BAD_REQUEST, "Price Book operation failed.")
+        failure = SafeFailure(
+            FailureCode.VALIDATION,
+            "Price Book request requires correction.",
+            ClientRecovery.USER_CORRECTION_REQUIRED,
+            current_correlation_id(),
+        )
+        return HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, failure.detail())
+    failure = SafeFailure(
+        FailureCode.INTERNAL_FAILURE,
+        "Price Book operation failed safely.",
+        ClientRecovery.OWNER_ADMIN_ACTION_REQUIRED,
+        current_correlation_id(),
+    )
+    return HTTPException(status.HTTP_400_BAD_REQUEST, failure.detail())
 
 
 @router.get("", response_model=CatalogPage)

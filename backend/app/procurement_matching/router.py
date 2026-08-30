@@ -12,6 +12,8 @@ from app.platform.permissions.codes import (
     PurchasingPermission,
 )
 from app.platform.permissions.dependencies import require_permission
+from app.platform.reliability.correlation import current_correlation_id
+from app.platform.reliability.failures import ClientRecovery, FailureCode, SafeFailure
 
 from .errors import (
     ProcurementMatchingConflict,
@@ -43,10 +45,28 @@ PurchasingRead = Annotated[
 
 def http_error(error: ProcurementMatchingError) -> HTTPException:
     if isinstance(error, ProcurementMatchingNotFound):
-        return HTTPException(status.HTTP_404_NOT_FOUND, str(error))
+        failure = SafeFailure(
+            FailureCode.NOT_FOUND,
+            "Procurement matching resource was not found.",
+            ClientRecovery.TERMINAL_FAILURE,
+            current_correlation_id(),
+        )
+        return HTTPException(status.HTTP_404_NOT_FOUND, failure.detail())
     if isinstance(error, ProcurementMatchingConflict):
-        return HTTPException(status.HTTP_409_CONFLICT, str(error))
-    return HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(error))
+        failure = SafeFailure(
+            FailureCode.RESOURCE_STATE_CONFLICT,
+            "Procurement matching operation conflicts with current authority.",
+            ClientRecovery.RETRY_AFTER_REFRESH,
+            current_correlation_id(),
+        )
+        return HTTPException(status.HTTP_409_CONFLICT, failure.detail())
+    failure = SafeFailure(
+        FailureCode.VALIDATION,
+        "Procurement matching request requires correction.",
+        ClientRecovery.USER_CORRECTION_REQUIRED,
+        current_correlation_id(),
+    )
+    return HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, failure.detail())
 
 
 @router.get("/candidates", response_model=tuple[MatchCandidateItem, ...])

@@ -4,7 +4,10 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
 from app.core.config import settings
+from app.customers import models as customer_models  # noqa: F401
 from app.payroll.permissions import PayrollPermission
 from app.platform.audit.access_service import AuditAccessService
 from app.platform.audit.models import AuditRecord
@@ -26,7 +29,7 @@ from app.platform.permissions.codes import (
     EconomicsPolicyPermission,
     LaunchPlatformPermission,
 )
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from app.scheduling import models as scheduling_models  # noqa: F401
 
 
 @pytest_asyncio.fixture

@@ -6,7 +6,7 @@ from decimal import Decimal
 from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.events.schemas import BusinessEventCreate
@@ -59,6 +59,9 @@ class PaymentService:
         amount = spec.amount.quantize(CENT)
         request_digest = _digest({"operation": "collect", "branch_id": spec.branch_id, "customer_id": spec.customer_id, "invoice_id": spec.invoice_id, "amount": amount, "currency": spec.currency, "opaque_payment_method": spec.opaque_payment_method})
         async with session.begin():
+            await self._lock_command(
+                session, spec.company_id, "collect", spec.idempotency_key
+            )
             existing = await session.scalar(select(PaymentIntent).where(PaymentIntent.company_id == spec.company_id, PaymentIntent.idempotency_key == spec.idempotency_key).with_for_update())
             if existing:
                 if existing.request_digest != request_digest:
@@ -126,6 +129,9 @@ class PaymentService:
         amount = spec.amount.quantize(CENT)
         digest = _digest({"receipt_id": spec.receipt_id, "amount": amount, "reason": spec.reason.strip()})
         async with session.begin():
+            await self._lock_command(
+                session, spec.company_id, "refund", spec.idempotency_key
+            )
             prior = await session.scalar(select(Refund).where(Refund.company_id == spec.company_id, Refund.idempotency_key == spec.idempotency_key))
             if prior:
                 if prior.request_digest != digest:
@@ -162,6 +168,12 @@ class PaymentService:
 
     async def record_webhook(self, session: AsyncSession, company_id: UUID, provider: str, evidence: VerifiedWebhook) -> WebhookReceipt:
         async with session.begin():
+            await self._lock_command(
+                session,
+                company_id,
+                "webhook",
+                f"{provider}:{evidence.merchant_account}:{evidence.provider_event_id}",
+            )
             prior = await session.scalar(select(WebhookReceipt).where(WebhookReceipt.company_id == company_id, WebhookReceipt.provider == provider, WebhookReceipt.merchant_account == evidence.merchant_account, WebhookReceipt.provider_event_id == evidence.provider_event_id))
             if prior:
                 if prior.evidence_digest != evidence.evidence_digest:
@@ -176,6 +188,9 @@ class PaymentService:
     async def create_deposit(self, session: AsyncSession, spec: CreateDeposit) -> Deposit:
         digest = _digest({"receipt_ids": sorted(str(value) for value in spec.receipt_ids), "currency": spec.currency, "destination_reference": spec.destination_reference})
         async with session.begin():
+            await self._lock_command(
+                session, spec.company_id, "deposit", spec.idempotency_key
+            )
             prior = await session.scalar(select(Deposit).where(Deposit.company_id == spec.company_id, Deposit.idempotency_key == spec.idempotency_key))
             if prior:
                 if prior.evidence_digest != digest:
@@ -197,6 +212,12 @@ class PaymentService:
     async def record_settlement(self, session: AsyncSession, spec: RecordSettlement) -> Settlement:
         expected = spec.gross_amount - spec.refund_amount - spec.dispute_amount - spec.fee_amount + spec.adjustment_amount
         async with session.begin():
+            await self._lock_command(
+                session,
+                spec.company_id,
+                "settlement",
+                f"{spec.provider}:{spec.merchant_account}:{spec.provider_payout_id}",
+            )
             prior = await session.scalar(select(Settlement).where(Settlement.company_id == spec.company_id, Settlement.provider == spec.provider, Settlement.merchant_account == spec.merchant_account, Settlement.provider_payout_id == spec.provider_payout_id))
             if prior:
                 if prior.evidence_digest != spec.evidence_digest:
@@ -232,6 +253,9 @@ class PaymentService:
 
     async def record_posting_receipt(self, session: AsyncSession, fact: PostingReceiptFact) -> PaymentPostingReceipt:
         async with session.begin():
+            await self._lock_command(
+                session, fact.company_id, "posting", str(fact.source_event_id)
+            )
             prior = await session.scalar(select(PaymentPostingReceipt).where(PaymentPostingReceipt.company_id == fact.company_id, PaymentPostingReceipt.source_event_id == fact.source_event_id))
             if prior:
                 if prior.journal_id != fact.journal_id or prior.status != fact.status:
@@ -254,6 +278,17 @@ class PaymentService:
         if row is None:
             raise PaymentNotFound("Payment receipt was not found.")
         return row
+
+    @staticmethod
+    async def _lock_command(
+        session: AsyncSession, company_id: UUID, operation: str, key: str
+    ) -> None:
+        if session.get_bind().dialect.name != "postgresql":
+            return
+        await session.execute(
+            text("SELECT pg_advisory_xact_lock(hashtextextended(:identity, 0))"),
+            {"identity": f"payments:{company_id}:{operation}:{key}"},
+        )
 
     @staticmethod
     def _event(session: AsyncSession, entity: Any, event_type: EventType, actor: UUID) -> None:

@@ -1,23 +1,37 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { BusinessEconomicsRoute } from "./BusinessEconomicsRoute";
 
 let allowed = false;
+let workspaceEnabled: boolean | undefined;
+let detailEnabled: boolean | undefined;
+let workspaceMode: "success" | "error" | "pending" = "success";
+const refetch = vi.fn();
 vi.mock("../auth", () => ({ useHasPermission: () => allowed }));
 vi.mock("../hooks/useBusinessEconomics", () => ({
-  useEconomicsResult: () => ({ isPending: false, isError: false, data: null }),
-  useEconomicsWorkspace: () => ({ isPending: false, isError: false, data: {
+  useEconomicsResult: (_id: string | null, enabled: boolean) => {
+    detailEnabled = enabled;
+    return { isPending: false, isError: false, data: null };
+  },
+  useEconomicsWorkspace: (_start: string, _end: string, enabled: boolean) => {
+    workspaceEnabled = enabled;
+    if (workspaceMode === "pending") return { isPending: true, isError: false, data: null, refetch };
+    if (workspaceMode === "error") return { isPending: false, isError: true, data: null, refetch };
+    return { isPending: false, isError: false, refetch, data: {
     period: { start: "2027-01-01", end: "2027-01-31" }, prior_period: { start: "2026-12-01", end: "2026-12-31" },
     quality_state: "partial", currency: "USD", source_result_count: 2, excluded_job_count: 0, job_count: 2, complete_job_count: 1, unclassified_job_count: 1,
     totals: { revenue: 100000, labor: 30000, materials: 20000, equipment: 0, truck: 0, overhead: 0, gross_profit: 50000, net_profit: 50000 },
     jobs: [], service_categories: [], customers: [], branches: [], fully_allocated_available: false,
     explanation: "Incomplete Jobs remain visible.", comparison: { state: "unavailable", reason: "Prior evidence is incomplete." },
     readiness: { evidence: "partial", allocation_policy: "not_configured", attribution: "partial", policy_gaps: [] }, beacon_conditions: [{ kind: "incomplete_economic_evidence", state: "partial" }],
-  } }),
+    } };
+  },
 }));
 
 describe("BusinessEconomicsRoute", () => {
-  beforeEach(() => { allowed = false; });
-  it("fails closed without Economics read authority", () => { render(<BusinessEconomicsRoute/>); expect(screen.getByText(/not authorized/i)).toBeVisible(); });
+  beforeEach(() => { allowed = false; workspaceMode = "success"; workspaceEnabled = undefined; detailEnabled = undefined; refetch.mockReset(); });
+  it("fails closed without Economics read authority or issuing the query", () => { render(<BusinessEconomicsRoute/>); expect(screen.getByText(/not authorized/i)).toBeVisible(); expect(workspaceEnabled).toBe(false); expect(detailEnabled).toBe(false); });
   it("shows truthful partial and no-policy states", () => { allowed = true; render(<BusinessEconomicsRoute/>); expect(screen.getByText(/Evidence partial/i)).toBeVisible(); expect(screen.getAllByText(/fully allocated profitability is unavailable/i).length).toBeGreaterThan(0); expect(screen.getByText("$1,000.00")).toBeVisible(); });
+  it("offers a safe retry when Economics is temporarily unavailable", async () => { allowed = true; workspaceMode = "error"; render(<BusinessEconomicsRoute/>); expect(screen.getByText(/no value was inferred/i)).toBeVisible(); await userEvent.click(screen.getByRole("button", { name: /retry economics/i })); expect(refetch).toHaveBeenCalledOnce(); });
 });

@@ -33,6 +33,8 @@ from app.estimates.service import estimate_service
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import EstimatePermission
 from app.platform.permissions.dependencies import require_permission
+from app.platform.reliability.correlation import current_correlation_id
+from app.platform.reliability.failures import ClientRecovery, FailureCode, SafeFailure
 from app.tax_policy.models import OperationalTaxPolicy
 
 router = APIRouter(prefix="/api/v1/estimates", tags=["Estimates"])
@@ -47,12 +49,36 @@ ManageContext = Annotated[
 
 def _error(error: EstimateError) -> HTTPException:
     if isinstance(error, EstimateNotFoundError):
-        return HTTPException(status.HTTP_404_NOT_FOUND, str(error))
+        failure = SafeFailure(
+            FailureCode.NOT_FOUND,
+            "Estimate was not found.",
+            ClientRecovery.TERMINAL_FAILURE,
+            current_correlation_id(),
+        )
+        return HTTPException(status.HTTP_404_NOT_FOUND, failure.detail())
     if isinstance(error, EstimateConflictError):
-        return HTTPException(status.HTTP_409_CONFLICT, str(error))
+        failure = SafeFailure(
+            FailureCode.RESOURCE_STATE_CONFLICT,
+            "Estimate operation conflicts with current authority.",
+            ClientRecovery.RETRY_AFTER_REFRESH,
+            current_correlation_id(),
+        )
+        return HTTPException(status.HTTP_409_CONFLICT, failure.detail())
     if isinstance(error, EstimateValidationError):
-        return HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(error))
-    return HTTPException(status.HTTP_400_BAD_REQUEST, "Estimate operation failed.")
+        failure = SafeFailure(
+            FailureCode.VALIDATION,
+            "Estimate request requires correction.",
+            ClientRecovery.USER_CORRECTION_REQUIRED,
+            current_correlation_id(),
+        )
+        return HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, failure.detail())
+    failure = SafeFailure(
+        FailureCode.INTERNAL_FAILURE,
+        "Estimate operation failed safely.",
+        ClientRecovery.OWNER_ADMIN_ACTION_REQUIRED,
+        current_correlation_id(),
+    )
+    return HTTPException(status.HTTP_400_BAD_REQUEST, failure.detail())
 
 
 def _branch(context: AuthorizationContext, branch_id: UUID) -> None:

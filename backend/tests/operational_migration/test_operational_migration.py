@@ -52,6 +52,7 @@ from app.operational_migration.models import (
     InvoiceLineItemSourceIdentity,
     InvoiceSourceIdentity,
     JobSourceIdentity,
+    OperationalMigrationException,
     OperationalMigrationProgress,
     OperationalMigrationRun,
     PaymentSourceIdentity,
@@ -866,6 +867,30 @@ async def test_financial_dry_run_import_rerun_and_reconciliation(
         )
         assert len(progress) == 3
         assert all(item.source_count == item.processed_count == 3 for item in progress)
+        migration_exceptions = list(
+            (
+                await session.scalars(
+                    select(OperationalMigrationException).where(
+                        OperationalMigrationException.run_id == imported.run_id
+                    )
+                )
+            ).all()
+        )
+        assert all(
+            item.detail == "Required parent authority could not be resolved."
+            for item in migration_exceptions
+            if item.reason_code == "missing_parent"
+        )
+        assert all(
+            item.detail == "Financial migration record failed validation."
+            for item in migration_exceptions
+            if item.reason_code == "validation_failed"
+        )
+        assert all(
+            "missing-" not in item.detail
+            and "synthetic-reference" not in item.detail
+            for item in migration_exceptions
+        )
         assert (
             await session.scalar(
                 select(func.count())
