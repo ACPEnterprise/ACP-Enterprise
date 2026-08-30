@@ -8,8 +8,13 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.customers.models import Customer, ServiceLocation
+from app.events.schemas import BusinessEventCreate
+from app.events.service import BusinessEventService
+from app.events.types import EventType
 from app.service_agreements.models import (
+    AgreementBillingOccurrence,
     AgreementCoverage,
+    AgreementLifecycleEvidence,
     AgreementPlan,
     ServiceAgreement,
     ServiceEntitlement,
@@ -39,6 +44,77 @@ def add_months(value: date, months: int) -> date:
 
 
 class AgreementService:
+    async def _evidence(
+        self,
+        s,
+        company,
+        key,
+        action,
+        request,
+        row,
+        actor,
+        prior,
+        resulting,
+        entitlement=None,
+        payload=None,
+    ):
+        request_digest = digest(request)
+        existing = await s.scalar(
+            select(AgreementLifecycleEvidence).where(
+                AgreementLifecycleEvidence.company_id == company,
+                AgreementLifecycleEvidence.idempotency_key == key,
+            )
+        )
+        if existing:
+            if existing.action != action or existing.request_digest != request_digest:
+                raise AgreementConflict(
+                    "Idempotency key conflicts with prior lifecycle evidence."
+                )
+            return existing
+        evidence = AgreementLifecycleEvidence(
+            company_id=company,
+            branch_id=row.branch_id,
+            agreement_id=row.id,
+            entitlement_id=entitlement.id if entitlement else None,
+            action=action,
+            prior_status=prior,
+            resulting_status=resulting,
+            request_digest=request_digest,
+            evidence_digest=digest(
+                {
+                    "request": request_digest,
+                    "agreement": row.evidence_digest,
+                    "result": resulting,
+                }
+            ),
+            idempotency_key=key,
+            actor_user_id=actor,
+            payload=payload or {},
+        )
+        s.add(evidence)
+        BusinessEventService.stage(
+            s,
+            BusinessEventCreate(
+                event_type=EventType.SERVICE_ENTITLEMENT_CHANGED
+                if entitlement
+                else EventType.SERVICE_AGREEMENT_CHANGED,
+                entity_type="service_entitlement"
+                if entitlement
+                else "service_agreement",
+                entity_id=entitlement.id if entitlement else row.id,
+                company_id=company,
+                branch_id=row.branch_id,
+                user_id=actor,
+                payload={
+                    "schema_version": "1.0",
+                    "action": action,
+                    "evidence_digest": evidence.evidence_digest,
+                    "agreement_id": str(row.id),
+                },
+            ),
+        )
+        return None
+
     async def create_plan(
         self, s: AsyncSession, company: UUID, actor: UUID, p: PlanCreate
     ):
@@ -81,6 +157,21 @@ class AgreementService:
             return row
         if row.status != "draft":
             raise AgreementConflict("Only a draft plan can be activated.")
+        active = list(
+            (
+                await s.scalars(
+                    select(AgreementPlan)
+                    .where(
+                        AgreementPlan.company_id == company,
+                        AgreementPlan.code == row.code,
+                        AgreementPlan.status == "active",
+                    )
+                    .with_for_update()
+                )
+            ).all()
+        )
+        for predecessor in active:
+            predecessor.status = "superseded"
         row.status = "active"
         row.activated_at = datetime.now(timezone.utc)
         await s.commit()
@@ -208,7 +299,17 @@ class AgreementService:
         await s.refresh(row)
         return row
 
-    async def transition(self, s, company, agreement_id, expected, status, reason=None):
+    async def transition(
+        self,
+        s,
+        company,
+        agreement_id,
+        expected,
+        status,
+        reason=None,
+        key=None,
+        actor=None,
+    ):
         row = await s.scalar(
             select(ServiceAgreement)
             .where(
@@ -219,6 +320,27 @@ class AgreementService:
         )
         if not row:
             raise AgreementError("Agreement was not found.")
+        action = {
+            "active": "activate",
+            "renewal_pending": "renewal_review",
+            "renewed": "renew",
+            "cancelled": "cancel",
+            "expired": "expire",
+        }[status]
+        replay = await self._evidence(
+            s,
+            company,
+            key or f"legacy:{agreement_id}:{expected}:{status}",
+            action,
+            {"agreement_id": agreement_id, "status": status, "reason": reason},
+            row,
+            actor or row.created_by_user_id,
+            row.status,
+            status,
+            payload={"reason": reason, "version": expected + 1},
+        )
+        if replay:
+            return row
         if row.version != expected:
             raise AgreementConflict("Agreement version is stale.")
         allowed = {
@@ -242,6 +364,162 @@ class AgreementService:
                 )
                 .values(status="cancelled" if status == "cancelled" else "expired")
             )
+        await s.commit()
+        await s.refresh(row)
+        return row
+
+    async def mutate_entitlement(
+        self,
+        s,
+        company,
+        actor,
+        entitlement_id,
+        action,
+        key,
+        appointment_id=None,
+        job_id=None,
+        evidence_reference=None,
+    ):
+        item = await s.scalar(
+            select(ServiceEntitlement)
+            .where(
+                ServiceEntitlement.company_id == company,
+                ServiceEntitlement.id == entitlement_id,
+            )
+            .with_for_update()
+        )
+        if not item:
+            raise AgreementError("Entitlement was not found.")
+        agreement = await s.scalar(
+            select(ServiceAgreement).where(
+                ServiceAgreement.company_id == company,
+                ServiceAgreement.id == item.agreement_id,
+            )
+        )
+        if not agreement:
+            raise AgreementError("Agreement was not found.")
+        resulting = {
+            "schedule_link": "scheduled",
+            "job_link": "scheduled",
+            "consume": "completed",
+            "reverse_consumption": "scheduled",
+        }[action]
+        replay = await self._evidence(
+            s,
+            company,
+            key,
+            action,
+            {
+                "entitlement": entitlement_id,
+                "appointment": appointment_id,
+                "job": job_id,
+                "reference": evidence_reference,
+            },
+            agreement,
+            actor,
+            item.status,
+            resulting,
+            item,
+            {
+                "appointment_id": str(appointment_id) if appointment_id else None,
+                "job_id": str(job_id) if job_id else None,
+                "evidence_reference": evidence_reference,
+            },
+        )
+        if replay:
+            return item
+        if action == "schedule_link" and (item.status != "due" or not appointment_id):
+            raise AgreementConflict("Entitlement cannot be linked to that Appointment.")
+        if action == "job_link" and (
+            item.status not in {"due", "scheduled"} or not job_id
+        ):
+            raise AgreementConflict("Entitlement cannot be linked to that Job.")
+        if action == "consume" and (
+            item.status != "scheduled" or not item.job_id or not evidence_reference
+        ):
+            raise AgreementConflict(
+                "Authoritative Job completion evidence is required."
+            )
+        if action == "reverse_consumption" and (
+            item.status != "completed" or not evidence_reference
+        ):
+            raise AgreementConflict("Authoritative correction evidence is required.")
+        if appointment_id:
+            item.appointment_id = appointment_id
+        if job_id:
+            item.job_id = job_id
+        item.status = resulting
+        await s.commit()
+        await s.refresh(item)
+        return item
+
+    async def billing_ready(
+        self, s, company, actor, agreement_id, period_start, period_end, key
+    ):
+        replay = await s.scalar(
+            select(AgreementBillingOccurrence).where(
+                AgreementBillingOccurrence.company_id == company,
+                AgreementBillingOccurrence.idempotency_key == key,
+            )
+        )
+        if replay:
+            return replay
+        agreement = await s.scalar(
+            select(ServiceAgreement)
+            .where(
+                ServiceAgreement.company_id == company,
+                ServiceAgreement.id == agreement_id,
+            )
+            .with_for_update()
+        )
+        if not agreement or agreement.status not in {"active", "renewal_pending"}:
+            raise AgreementConflict("Agreement is not eligible for billing readiness.")
+        cadence = agreement.plan_snapshot.get("billing_cadence")
+        amount = agreement.plan_snapshot.get("price_amount")
+        currency = str(agreement.plan_snapshot.get("currency", "USD"))
+        status = (
+            "ready"
+            if cadence != "unconfigured" and amount is not None
+            else "unconfigured"
+        )
+        row = AgreementBillingOccurrence(
+            company_id=company,
+            branch_id=agreement.branch_id,
+            agreement_id=agreement.id,
+            period_start=period_start,
+            period_end=period_end,
+            amount=amount,
+            currency=currency,
+            status=status,
+            evidence_digest=digest(
+                {
+                    "agreement": agreement.evidence_digest,
+                    "period_start": period_start,
+                    "period_end": period_end,
+                    "cadence": cadence,
+                    "amount": amount,
+                }
+            ),
+            idempotency_key=key,
+        )
+        s.add(row)
+        BusinessEventService.stage(
+            s,
+            BusinessEventCreate(
+                event_type=EventType.SERVICE_AGREEMENT_BILLING_READY,
+                entity_type="service_agreement_billing_occurrence",
+                entity_id=row.id,
+                company_id=company,
+                branch_id=agreement.branch_id,
+                user_id=actor,
+                payload={
+                    "schema_version": "1.0",
+                    "agreement_id": str(agreement.id),
+                    "status": status,
+                    "evidence_digest": row.evidence_digest,
+                },
+            ),
+        )
         await s.commit()
         await s.refresh(row)
         return row

@@ -10,7 +10,10 @@ from app.platform.permissions.codes import ServiceAgreementPermission
 from app.platform.permissions.dependencies import require_permission
 from app.service_agreements.schemas import (
     AgreementOut,
+    BillingCreate,
+    BillingOut,
     EnrollmentCreate,
+    EntitlementMutation,
     EntitlementOut,
     PlanCreate,
     PlanOut,
@@ -104,7 +107,13 @@ async def activate(agreement_id: UUID, p: Transition, c: Manage, s: Session):
     try:
         return AgreementOut.model_validate(
             await agreement_service.transition(
-                s, c.company.id, agreement_id, p.expected_version, "active"
+                s,
+                c.company.id,
+                agreement_id,
+                p.expected_version,
+                "active",
+                key=p.idempotency_key,
+                actor=c.user.id,
             )
         )
     except AgreementError as e:
@@ -116,7 +125,14 @@ async def cancel(agreement_id: UUID, p: Transition, c: Manage, s: Session):
     try:
         return AgreementOut.model_validate(
             await agreement_service.transition(
-                s, c.company.id, agreement_id, p.expected_version, "cancelled", p.reason
+                s,
+                c.company.id,
+                agreement_id,
+                p.expected_version,
+                "cancelled",
+                p.reason,
+                p.idempotency_key,
+                c.user.id,
             )
         )
     except AgreementError as e:
@@ -128,7 +144,13 @@ async def renewal_review(agreement_id: UUID, p: Transition, c: Manage, s: Sessio
     try:
         return AgreementOut.model_validate(
             await agreement_service.transition(
-                s, c.company.id, agreement_id, p.expected_version, "renewal_pending"
+                s,
+                c.company.id,
+                agreement_id,
+                p.expected_version,
+                "renewal_pending",
+                key=p.idempotency_key,
+                actor=c.user.id,
             )
         )
     except AgreementError as e:
@@ -142,5 +164,47 @@ async def generate(agreement_id: UUID, c: Manage, s: Session):
             EntitlementOut.model_validate(x)
             for x in await agreement_service.generate(s, c.company.id, agreement_id)
         ]
+    except AgreementError as e:
+        fail(e)
+
+
+@router.post("/entitlements/{entitlement_id}/{action}", response_model=EntitlementOut)
+async def mutate_entitlement(
+    entitlement_id: UUID, action: str, p: EntitlementMutation, c: Manage, s: Session
+):
+    if action not in {"schedule_link", "job_link", "consume", "reverse_consumption"}:
+        raise HTTPException(404, "Action was not found.")
+    try:
+        return EntitlementOut.model_validate(
+            await agreement_service.mutate_entitlement(
+                s,
+                c.company.id,
+                c.user.id,
+                entitlement_id,
+                action,
+                p.idempotency_key,
+                p.appointment_id,
+                p.job_id,
+                p.evidence_reference,
+            )
+        )
+    except AgreementError as e:
+        fail(e)
+
+
+@router.post("/{agreement_id}/billing-occurrences", response_model=BillingOut)
+async def billing(agreement_id: UUID, p: BillingCreate, c: Manage, s: Session):
+    try:
+        return BillingOut.model_validate(
+            await agreement_service.billing_ready(
+                s,
+                c.company.id,
+                c.user.id,
+                agreement_id,
+                p.period_start,
+                p.period_end,
+                p.idempotency_key,
+            )
+        )
     except AgreementError as e:
         fail(e)

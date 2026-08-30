@@ -67,6 +67,35 @@ class Transition(Schema):
     reason: str | None = Field(default=None, max_length=2000)
 
 
+class EntitlementMutation(Schema):
+    idempotency_key: str = Field(min_length=1, max_length=160)
+    appointment_id: UUID | None = None
+    job_id: UUID | None = None
+    evidence_reference: str | None = Field(default=None, max_length=200)
+
+
+class BillingCreate(Schema):
+    period_start: date
+    period_end: date
+    idempotency_key: str = Field(min_length=1, max_length=160)
+
+
+class BillingOut(Schema):
+    id: UUID
+    company_id: UUID
+    branch_id: UUID
+    agreement_id: UUID
+    period_start: date
+    period_end: date
+    amount: Decimal | None
+    currency: str
+    status: str
+    invoice_id: UUID | None
+    payment_state: str
+    evidence_digest: str
+    created_at: datetime
+
+
 class EntitlementOut(Schema):
     id: UUID
     company_id: UUID

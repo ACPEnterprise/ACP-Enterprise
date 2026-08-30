@@ -231,3 +231,98 @@ class ServiceEntitlement(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
     )
+
+
+class AgreementLifecycleEvidence(Base):
+    __tablename__ = "service_agreement_lifecycle_evidence"
+    __table_args__ = (
+        CheckConstraint(
+            "action IN ('activate','renewal_review','renew','cancel','expire','generate_entitlements','schedule_link','job_link','consume','reverse_consumption','billing_ready')",
+            name="ck_agreement_evidence_action",
+        ),
+        UniqueConstraint(
+            "company_id", "idempotency_key", name="uq_agreement_evidence_idempotency"
+        ),
+    )
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    agreement_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("service_agreements.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    entitlement_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("service_agreement_entitlements.id", ondelete="RESTRICT"),
+    )
+    action: Mapped[str] = mapped_column(String(40), nullable=False)
+    prior_status: Mapped[str] = mapped_column(String(24), nullable=False)
+    resulting_status: Mapped[str] = mapped_column(String(24), nullable=False)
+    request_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(160), nullable=False)
+    actor_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    payload: Mapped[dict[str, object]] = mapped_column(
+        JSON, nullable=False, default=dict
+    )
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
+class AgreementBillingOccurrence(Base):
+    __tablename__ = "service_agreement_billing_occurrences"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('unconfigured','ready','invoiced','cancelled','reconciliation_required')",
+            name="ck_agreement_billing_status",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "agreement_id",
+            "period_start",
+            name="uq_agreement_billing_period",
+        ),
+        UniqueConstraint(
+            "company_id", "idempotency_key", name="uq_agreement_billing_idempotency"
+        ),
+    )
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    agreement_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("service_agreements.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    period_start: Mapped[date] = mapped_column(Date, nullable=False)
+    period_end: Mapped[date] = mapped_column(Date, nullable=False)
+    amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
+    currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    invoice_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    payment_state: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="not_initiated"
+    )
+    evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(160), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
