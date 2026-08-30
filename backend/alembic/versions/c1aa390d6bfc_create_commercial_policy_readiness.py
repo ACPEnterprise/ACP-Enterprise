@@ -1,7 +1,7 @@
 """create commercial policy readiness
 
 Revision ID: c1aa390d6bfc
-Revises: b0ff279c5aeb
+Revises: 19i4k89084j8
 """
 
 from collections.abc import Sequence
@@ -11,7 +11,7 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision: str = "c1aa390d6bfc"
-down_revision: str | Sequence[str] | None = "b0ff279c5aeb"
+down_revision: str | Sequence[str] | None = "19i4k89084j8"
 branch_labels = None
 depends_on = None
 
