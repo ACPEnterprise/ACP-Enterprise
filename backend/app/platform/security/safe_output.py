@@ -117,6 +117,11 @@ _PRIVATE_KEY = re.compile(
     r"-----END (?:RSA |EC |OPENSSH )?PRIVATE KEY-----",
     re.DOTALL,
 )
+_SECRET_ASSIGNMENT = re.compile(
+    r"(?i)\b(?P<name>api[_-]?key|access[_-]?token|refresh[_-]?token|"
+    r"client[_-]?secret|password|secret|token)\s*[:=]\s*"
+    r"(?:\"[^\"\r\n]*\"|'[^'\r\n]*'|[^\s,;&]+)"
+)
 _LOG_RECORD_FIELDS = frozenset(logging.makeLogRecord({}).__dict__)
 
 
@@ -149,7 +154,11 @@ def _redaction(classification: SensitiveClassification) -> str:
 def sanitize_text(value: str) -> str:
     sanitized = _PRIVATE_KEY.sub(f"{REDACTED}:secret", value)
     sanitized = _BEARER.sub(f"Bearer {REDACTED}:secret", sanitized)
-    return _CREDENTIAL_URL.sub(rf"\g<scheme>{REDACTED}:secret@", sanitized)
+    sanitized = _CREDENTIAL_URL.sub(rf"\g<scheme>{REDACTED}:secret@", sanitized)
+    return _SECRET_ASSIGNMENT.sub(
+        rf"\g<name>={REDACTED}:secret",
+        sanitized,
+    )
 
 
 def sanitize(value: object, *, field_name: str | None = None) -> object:
