@@ -371,6 +371,12 @@ class PayrollGrossCalculationResultRecord(Base):
         UniqueConstraint(
             "supersedes_result_id", name="uq_payroll_gross_result_single_successor"
         ),
+        ForeignKeyConstraint(
+            ["company_id", "employee_id", "pay_period_id", "supersedes_result_id"],
+            ["payroll_gross_calculation_results.company_id", "payroll_gross_calculation_results.employee_id", "payroll_gross_calculation_results.pay_period_id", "payroll_gross_calculation_results.id"],
+            name="fk_payroll_gross_result_predecessor_scope",
+            ondelete="RESTRICT",
+        ),
         Index(
             "uq_payroll_gross_result_active_subject_period",
             "company_id",
@@ -420,10 +426,7 @@ class PayrollGrossCalculationResultRecord(Base):
     )
     lifecycle: Mapped[str] = mapped_column(String(24), nullable=False)
     review_state: Mapped[str] = mapped_column(String(24), nullable=False)
-    supersedes_result_id: Mapped[UUID | None] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("payroll_gross_calculation_results.id", ondelete="RESTRICT"),
-    )
+    supersedes_result_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
     )
@@ -510,6 +513,12 @@ class PayrollTaxDeductionResultRecord(Base):
         UniqueConstraint("company_id", "result_identity", name="uq_payroll_tax_result_identity"),
         UniqueConstraint("company_id", "calculation_digest", name="uq_payroll_tax_result_digest"),
         UniqueConstraint("supersedes_result_id", name="uq_payroll_tax_result_successor"),
+        ForeignKeyConstraint(
+            ["company_id", "employee_id", "pay_period_id", "supersedes_result_id"],
+            ["payroll_tax_deduction_results.company_id", "payroll_tax_deduction_results.employee_id", "payroll_tax_deduction_results.pay_period_id", "payroll_tax_deduction_results.id"],
+            name="fk_payroll_tax_result_predecessor_scope",
+            ondelete="RESTRICT",
+        ),
         Index(
             "uq_payroll_tax_result_active_subject",
             "company_id", "employee_id", "pay_period_id",
@@ -541,9 +550,7 @@ class PayrollTaxDeductionResultRecord(Base):
     created_by_user_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
     lifecycle: Mapped[str] = mapped_column(String(24), nullable=False)
     review_state: Mapped[str] = mapped_column(String(24), nullable=False)
-    supersedes_result_id: Mapped[UUID | None] = mapped_column(
-        PGUUID(as_uuid=True), ForeignKey("payroll_tax_deduction_results.id", ondelete="RESTRICT")
-    )
+    supersedes_result_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
 
 
@@ -1379,6 +1386,12 @@ class PayrollAdjustmentAuthorityRecord(Base):
         UniqueConstraint("company_id", "adjustment_identity", name="uq_payroll_adjustment_identity"),
         UniqueConstraint("company_id", "adjustment_digest", name="uq_payroll_adjustment_digest"),
         UniqueConstraint("supersedes_adjustment_id", name="uq_payroll_adjustment_successor"),
+        ForeignKeyConstraint(
+            ["company_id", "supersedes_adjustment_id"],
+            ["payroll_adjustment_authorities.company_id", "payroll_adjustment_authorities.id"],
+            name="fk_payroll_adjustment_predecessor_scope",
+            ondelete="RESTRICT",
+        ),
         Index("uq_payroll_adjustment_active_subject", "company_id", "source_type", "source_id", "classification", unique=True, postgresql_where=text("lifecycle IN ('draft','under_review','approved')")),
     )
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
@@ -1403,7 +1416,7 @@ class PayrollAdjustmentAuthorityRecord(Base):
     created_by_user_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
     approved_by_user_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"))
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    supersedes_adjustment_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), ForeignKey("payroll_adjustment_authorities.id", ondelete="RESTRICT"))
+    supersedes_adjustment_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
 
 
@@ -1443,6 +1456,12 @@ class PayrollAdjustmentResultRecord(Base):
         UniqueConstraint("company_id", "result_identity", name="uq_payroll_adjustment_result_identity"),
         UniqueConstraint("company_id", "calculation_digest", name="uq_payroll_adjustment_result_digest"),
         UniqueConstraint("supersedes_result_id", name="uq_payroll_adjustment_result_successor"),
+        ForeignKeyConstraint(
+            ["company_id", "supersedes_result_id"],
+            ["payroll_adjustment_results.company_id", "payroll_adjustment_results.id"],
+            name="fk_payroll_adjustment_result_predecessor_scope",
+            ondelete="RESTRICT",
+        ),
         Index("uq_payroll_adjustment_result_active", "company_id", "adjustment_id", unique=True, postgresql_where=text("lifecycle IN ('calculated','under_review','approved')")),
     )
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
@@ -1467,7 +1486,7 @@ class PayrollAdjustmentResultRecord(Base):
     lifecycle: Mapped[str] = mapped_column(String(40), nullable=False)
     approved_by_user_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"))
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    supersedes_result_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), ForeignKey("payroll_adjustment_results.id", ondelete="RESTRICT"))
+    supersedes_result_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
 
 
