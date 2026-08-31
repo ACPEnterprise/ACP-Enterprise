@@ -6,8 +6,8 @@ import httpx
 import jwt
 import pytest
 from fastapi import FastAPI, Response
-from sqlalchemy import select, update
-from sqlalchemy.exc import DBAPIError
+from sqlalchemy import delete, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 from app.core.config import Settings
@@ -69,11 +69,16 @@ async def test_audit_generation_rejects_secrets_and_is_database_immutable() -> N
             )
             assert stored is not None
             assert stored.resource_id == record_id
-            with pytest.raises(DBAPIError):
+            with pytest.raises(IntegrityError):
                 await session.execute(
                     update(AuditRecord)
                     .where(AuditRecord.id == audit_id)
                     .values(outcome="failure")
+                )
+        async with AsyncSession(engine) as session:
+            with pytest.raises(IntegrityError):
+                await session.execute(
+                    delete(AuditRecord).where(AuditRecord.id == audit_id)
                 )
     finally:
         await engine.dispose()
