@@ -8,6 +8,8 @@ from app.database.session import get_database_session
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import ServiceAgreementPermission
 from app.platform.permissions.dependencies import require_permission
+from app.platform.reliability.correlation import current_correlation_id
+from app.platform.reliability.failures import ClientRecovery, FailureCode, SafeFailure
 from app.service_agreements.schemas import (
     AgreementOut,
     BillingCreate,
@@ -24,6 +26,7 @@ from app.service_agreements.schemas import (
 from app.service_agreements.service import (
     AgreementConflict,
     AgreementError,
+    AgreementNotFound,
     agreement_service,
 )
 
@@ -42,16 +45,38 @@ Admin = Annotated[
 
 
 def fail(error: AgreementError):
-    raise HTTPException(
-        409 if isinstance(error, AgreementConflict) else 422, str(error)
+    if isinstance(error, AgreementNotFound):
+        failure = SafeFailure(
+            FailureCode.NOT_FOUND,
+            "Service Agreement resource was not found.",
+            ClientRecovery.TERMINAL_FAILURE,
+            current_correlation_id(),
+        )
+        raise HTTPException(404, failure.detail())
+    if isinstance(error, AgreementConflict):
+        failure = SafeFailure(
+            FailureCode.RESOURCE_STATE_CONFLICT,
+            "Service Agreement operation conflicts with current authority.",
+            ClientRecovery.RETRY_AFTER_REFRESH,
+            current_correlation_id(),
+        )
+        raise HTTPException(409, failure.detail())
+    failure = SafeFailure(
+        FailureCode.VALIDATION,
+        "Service Agreement evidence is invalid or incomplete.",
+        ClientRecovery.USER_CORRECTION_REQUIRED,
+        current_correlation_id(),
     )
+    raise HTTPException(422, failure.detail())
 
 
 @router.get("/plans", response_model=list[PlanOut])
 async def plans(c: Read, s: Session):
     return [
         PlanOut.model_validate(x)
-        for x in await agreement_service.list_plans(s, c.company.id)
+        for x in await agreement_service.list_plans(
+            s, c.company.id, c.authorized_branch_ids
+        )
     ]
 
 
@@ -68,7 +93,9 @@ async def create_plan(p: PlanCreate, c: Admin, s: Session):
 async def activate_plan(plan_id: UUID, c: Admin, s: Session):
     try:
         return PlanOut.model_validate(
-            await agreement_service.activate_plan(s, c.company.id, plan_id)
+            await agreement_service.activate_plan(
+                s, c.company.id, plan_id, c.authorized_branch_ids
+            )
         )
     except AgreementError as e:
         fail(e)
@@ -111,6 +138,7 @@ async def activate(agreement_id: UUID, p: Transition, c: Manage, s: Session):
                 s,
                 c.company.id,
                 agreement_id,
+                c.authorized_branch_ids,
                 p.expected_version,
                 "active",
                 key=p.idempotency_key,
@@ -129,6 +157,7 @@ async def cancel(agreement_id: UUID, p: Transition, c: Manage, s: Session):
                 s,
                 c.company.id,
                 agreement_id,
+                c.authorized_branch_ids,
                 p.expected_version,
                 "cancelled",
                 p.reason,
@@ -148,6 +177,7 @@ async def renewal_review(agreement_id: UUID, p: Transition, c: Manage, s: Sessio
                 s,
                 c.company.id,
                 agreement_id,
+                c.authorized_branch_ids,
                 p.expected_version,
                 "renewal_pending",
                 key=p.idempotency_key,
@@ -163,7 +193,9 @@ async def generate(agreement_id: UUID, c: Manage, s: Session):
     try:
         return [
             EntitlementOut.model_validate(x)
-            for x in await agreement_service.generate(s, c.company.id, agreement_id)
+            for x in await agreement_service.generate(
+                s, c.company.id, agreement_id, c.authorized_branch_ids
+            )
         ]
     except AgreementError as e:
         fail(e)
@@ -182,6 +214,7 @@ async def mutate_entitlement(
                 c.company.id,
                 c.user.id,
                 entitlement_id,
+                c.authorized_branch_ids,
                 action,
                 p.idempotency_key,
                 p.appointment_id,
@@ -202,6 +235,7 @@ async def billing(agreement_id: UUID, p: BillingCreate, c: Manage, s: Session):
                 c.company.id,
                 c.user.id,
                 agreement_id,
+                c.authorized_branch_ids,
                 p.period_start,
                 p.period_end,
                 p.idempotency_key,
@@ -220,6 +254,7 @@ async def renew(agreement_id: UUID, p: RenewalCreate, c: Manage, s: Session):
                 c.company.id,
                 c.user.id,
                 agreement_id,
+                c.authorized_branch_ids,
                 p.successor_plan_id,
                 p.start_date,
                 p.end_date,

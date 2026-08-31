@@ -4,13 +4,14 @@ from calendar import monthrange
 from datetime import date, datetime, timezone
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.customers.models import Customer, ServiceLocation
 from app.events.schemas import BusinessEventCreate
 from app.events.service import BusinessEventService
 from app.events.types import EventType
+from app.platform.branch.models import Branch
 from app.service_agreements.models import (
     AgreementBillingOccurrence,
     AgreementCoverage,
@@ -27,6 +28,10 @@ class AgreementError(Exception):
 
 
 class AgreementConflict(AgreementError):
+    pass
+
+
+class AgreementNotFound(AgreementError):
     pass
 
 
@@ -118,6 +123,12 @@ class AgreementService:
     async def create_plan(
         self, s: AsyncSession, company: UUID, actor: UUID, p: PlanCreate
     ):
+        if p.branch_id is not None and not await s.scalar(
+            select(Branch.id).where(
+                Branch.company_id == company, Branch.id == p.branch_id
+            )
+        ):
+            raise AgreementNotFound("Branch was not found.")
         raw = p.model_dump()
         replay = await s.scalar(
             select(AgreementPlan).where(
@@ -168,14 +179,23 @@ class AgreementService:
         await s.refresh(row)
         return row
 
-    async def activate_plan(self, s: AsyncSession, company: UUID, plan_id: UUID):
+    async def activate_plan(
+        self, s: AsyncSession, company: UUID, plan_id: UUID, branches
+    ):
         row = await s.scalar(
             select(AgreementPlan)
-            .where(AgreementPlan.company_id == company, AgreementPlan.id == plan_id)
+            .where(
+                AgreementPlan.company_id == company,
+                AgreementPlan.id == plan_id,
+                or_(
+                    AgreementPlan.branch_id.is_(None),
+                    AgreementPlan.branch_id.in_(branches),
+                ),
+            )
             .with_for_update()
         )
         if not row:
-            raise AgreementError("Plan was not found.")
+            raise AgreementNotFound("Plan was not found.")
         if row.status == "active":
             return row
         if row.status != "draft":
@@ -188,6 +208,7 @@ class AgreementService:
                         AgreementPlan.company_id == company,
                         AgreementPlan.code == row.code,
                         AgreementPlan.status == "active",
+                        AgreementPlan.branch_id.is_not_distinct_from(row.branch_id),
                     )
                     .with_for_update()
                 )
@@ -201,12 +222,18 @@ class AgreementService:
         await s.refresh(row)
         return row
 
-    async def list_plans(self, s, company):
+    async def list_plans(self, s, company, branches):
         return list(
             (
                 await s.scalars(
                     select(AgreementPlan)
-                    .where(AgreementPlan.company_id == company)
+                    .where(
+                        AgreementPlan.company_id == company,
+                        or_(
+                            AgreementPlan.branch_id.is_(None),
+                            AgreementPlan.branch_id.in_(branches),
+                        ),
+                    )
                     .order_by(AgreementPlan.code, AgreementPlan.version.desc())
                 )
             ).all()
@@ -215,6 +242,12 @@ class AgreementService:
     async def enroll(
         self, s: AsyncSession, company: UUID, actor: UUID, p: EnrollmentCreate
     ):
+        if not await s.scalar(
+            select(Branch.id).where(
+                Branch.company_id == company, Branch.id == p.branch_id
+            )
+        ):
+            raise AgreementNotFound("Branch was not found.")
         replay = await s.scalar(
             select(ServiceAgreement).where(
                 ServiceAgreement.company_id == company,
@@ -222,7 +255,11 @@ class AgreementService:
             )
         )
         if replay:
-            if replay.customer_id != p.customer_id or replay.plan_id != p.plan_id:
+            if (
+                replay.branch_id != p.branch_id
+                or replay.customer_id != p.customer_id
+                or replay.plan_id != p.plan_id
+            ):
                 raise AgreementConflict(
                     "Idempotency key conflicts with prior enrollment."
                 )
@@ -232,6 +269,10 @@ class AgreementService:
                 AgreementPlan.company_id == company,
                 AgreementPlan.id == p.plan_id,
                 AgreementPlan.status == "active",
+                or_(
+                    AgreementPlan.branch_id.is_(None),
+                    AgreementPlan.branch_id == p.branch_id,
+                ),
             )
         )
         customer = await s.scalar(
@@ -327,6 +368,7 @@ class AgreementService:
         s,
         company,
         agreement_id,
+        branches,
         expected,
         status,
         reason=None,
@@ -338,11 +380,12 @@ class AgreementService:
             .where(
                 ServiceAgreement.company_id == company,
                 ServiceAgreement.id == agreement_id,
+                ServiceAgreement.branch_id.in_(branches),
             )
             .with_for_update()
         )
         if not row:
-            raise AgreementError("Agreement was not found.")
+            raise AgreementNotFound("Agreement was not found.")
         action = {
             "active": "activate",
             "renewal_pending": "renewal_review",
@@ -397,6 +440,7 @@ class AgreementService:
         company,
         actor,
         entitlement_id,
+        branches,
         action,
         key,
         appointment_id=None,
@@ -408,11 +452,12 @@ class AgreementService:
             .where(
                 ServiceEntitlement.company_id == company,
                 ServiceEntitlement.id == entitlement_id,
+                ServiceEntitlement.branch_id.in_(branches),
             )
             .with_for_update()
         )
         if not item:
-            raise AgreementError("Entitlement was not found.")
+            raise AgreementNotFound("Entitlement was not found.")
         agreement = await s.scalar(
             select(ServiceAgreement).where(
                 ServiceAgreement.company_id == company,
@@ -420,7 +465,7 @@ class AgreementService:
             )
         )
         if not agreement:
-            raise AgreementError("Agreement was not found.")
+            raise AgreementNotFound("Agreement was not found.")
         resulting = {
             "schedule_link": "scheduled",
             "job_link": "scheduled",
@@ -477,7 +522,7 @@ class AgreementService:
         return item
 
     async def billing_ready(
-        self, s, company, actor, agreement_id, period_start, period_end, key
+        self, s, company, actor, agreement_id, branches, period_start, period_end, key
     ):
         replay = await s.scalar(
             select(AgreementBillingOccurrence).where(
@@ -486,12 +531,15 @@ class AgreementService:
             )
         )
         if replay:
+            if replay.branch_id not in branches:
+                raise AgreementNotFound("Agreement was not found.")
             return replay
         agreement = await s.scalar(
             select(ServiceAgreement)
             .where(
                 ServiceAgreement.company_id == company,
                 ServiceAgreement.id == agreement_id,
+                ServiceAgreement.branch_id.in_(branches),
             )
             .with_for_update()
         )
@@ -553,6 +601,7 @@ class AgreementService:
         company: UUID,
         actor: UUID,
         agreement_id: UUID,
+        branches,
         successor_plan_id: UUID,
         start_date: date,
         end_date: date,
@@ -564,6 +613,7 @@ class AgreementService:
             .where(
                 ServiceAgreement.company_id == company,
                 ServiceAgreement.id == agreement_id,
+                ServiceAgreement.branch_id.in_(branches),
             )
             .with_for_update()
         )
@@ -595,6 +645,10 @@ class AgreementService:
                 AgreementPlan.company_id == company,
                 AgreementPlan.id == successor_plan_id,
                 AgreementPlan.status == "active",
+                or_(
+                    AgreementPlan.branch_id.is_(None),
+                    AgreementPlan.branch_id == predecessor.branch_id,
+                ),
             )
         )
         coverage = list(
@@ -689,12 +743,15 @@ class AgreementService:
         await s.refresh(successor)
         return successor
 
-    async def generate(self, s: AsyncSession, company: UUID, agreement_id: UUID):
+    async def generate(
+        self, s: AsyncSession, company: UUID, agreement_id: UUID, branches
+    ):
         agreement = await s.scalar(
             select(ServiceAgreement)
             .where(
                 ServiceAgreement.company_id == company,
                 ServiceAgreement.id == agreement_id,
+                ServiceAgreement.branch_id.in_(branches),
             )
             .with_for_update()
         )

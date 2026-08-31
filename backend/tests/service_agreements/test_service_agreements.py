@@ -2,8 +2,17 @@ from datetime import date
 from decimal import Decimal
 from uuid import uuid4
 
+import pytest
+import pytest_asyncio
+from fastapi import HTTPException
 from sqlalchemy import ForeignKeyConstraint, UniqueConstraint
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from app.core.config import settings
+from app.customers.models import Customer, ServiceLocation
+from app.platform.branch.models import Branch
+from app.platform.company.models import Company
+from app.platform.users.models import User
 from app.service_agreements.models import (
     AgreementBillingOccurrence,
     AgreementCoverage,
@@ -12,8 +21,109 @@ from app.service_agreements.models import (
     ServiceAgreement,
     ServiceEntitlement,
 )
-from app.service_agreements.schemas import PlanOut, Transition
-from app.service_agreements.service import add_months, digest
+from app.service_agreements.router import fail
+from app.service_agreements.schemas import (
+    EnrollmentCreate,
+    PlanCreate,
+    PlanOut,
+    Transition,
+)
+from app.service_agreements.service import (
+    AgreementConflict,
+    AgreementError,
+    AgreementNotFound,
+    AgreementService,
+    add_months,
+    digest,
+)
+
+
+@pytest_asyncio.fixture
+async def agreement_branch_fixture():
+    engine = create_async_engine(settings.database_url)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with factory() as session, session.begin():
+        company = Company(
+            name="Agreement branch authority",
+            code=f"SAA{uuid4().hex[:7].upper()}",
+            status="active",
+            timezone="America/New_York",
+        )
+        branch_a = Branch(
+            company=company,
+            name="Agreement A",
+            code=f"A{uuid4().hex[:7].upper()}",
+            status="active",
+            timezone="America/New_York",
+            is_primary=True,
+        )
+        branch_b = Branch(
+            company=company,
+            name="Agreement B",
+            code=f"B{uuid4().hex[:7].upper()}",
+            status="active",
+            timezone="America/New_York",
+            is_primary=False,
+        )
+        foreign_company = Company(
+            name="Foreign agreement authority",
+            code=f"SAF{uuid4().hex[:7].upper()}",
+            status="active",
+            timezone="America/New_York",
+        )
+        foreign_branch = Branch(
+            company=foreign_company,
+            name="Foreign",
+            code=f"F{uuid4().hex[:7].upper()}",
+            status="active",
+            timezone="America/New_York",
+            is_primary=True,
+        )
+        actor = User(
+            normalized_email=f"agreement-{uuid4().hex}@example.test",
+            first_name="Agreement",
+            last_name="Operator",
+            display_name="Agreement Operator",
+            status="active",
+        )
+        customer = Customer(
+            company=company,
+            customer_number=f"CUS-{uuid4().int % 1000000:06d}",
+            status="active",
+            customer_type="residential",
+            display_name="Agreement Customer",
+            preferred_contact_method="email",
+            normalized_name=f"agreement customer {uuid4().hex}",
+        )
+        location = ServiceLocation(
+            customer=customer,
+            nickname="Agreement location",
+            address="100 Qualification Way",
+            city="Testville",
+            state="NY",
+            postal_code="10001",
+            country="US",
+            normalized_address="100 qualification way testville ny 10001",
+            active=True,
+            is_primary=True,
+        )
+        session.add_all(
+            [
+                company,
+                branch_a,
+                branch_b,
+                foreign_company,
+                foreign_branch,
+                actor,
+                customer,
+                location,
+            ]
+        )
+        await session.flush()
+    try:
+        yield factory, company, branch_a, branch_b, foreign_branch, actor, customer, location
+    finally:
+        await engine.dispose()
 
 
 def test_agreement_root_identities_are_company_bound() -> None:
@@ -119,3 +229,148 @@ def test_plan_response_does_not_expose_command_idempotency_identity():
     )
 
     assert "idempotency_key" not in plan.model_dump()
+
+
+@pytest.mark.parametrize(
+    ("error", "status", "code", "recovery"),
+    [
+        (
+            AgreementNotFound("foreign resource /private/path"),
+            404,
+            "not_found",
+            "TERMINAL_FAILURE",
+        ),
+        (
+            AgreementConflict("constraint secret_token=canary"),
+            409,
+            "resource_state_conflict",
+            "RETRY_AFTER_REFRESH",
+        ),
+        (
+            AgreementError("SQL enrollment payload canary"),
+            422,
+            "validation",
+            "USER_CORRECTION_REQUIRED",
+        ),
+    ],
+)
+def test_service_agreement_failures_are_safe_and_classified(
+    error, status, code, recovery
+) -> None:
+    with pytest.raises(HTTPException) as raised:
+        fail(error)
+    assert raised.value.status_code == status
+    assert raised.value.detail["code"] == code
+    assert raised.value.detail["recovery"] == recovery
+    rendered = str(raised.value.detail).lower()
+    assert "canary" not in rendered
+    assert "private/path" not in rendered
+
+
+@pytest.mark.asyncio
+async def test_branch_specific_plan_and_agreement_mutations_are_isolated(
+    agreement_branch_fixture,
+) -> None:
+    factory, company, branch_a, branch_b, foreign_branch, actor, customer, location = (
+        agreement_branch_fixture
+    )
+    service = AgreementService()
+
+    def plan(branch_id, key):
+        return PlanCreate(
+            branch_id=branch_id,
+            code="QUALIFIED",
+            name="Qualified branch plan",
+            currency="USD",
+            price_amount=Decimal("29.00"),
+            billing_cadence="monthly",
+            duration_months=12,
+            included_visits=1,
+            idempotency_key=key,
+        )
+
+    async with factory() as session:
+        with pytest.raises(AgreementError, match="Branch was not found"):
+            await service.create_plan(
+                session,
+                company.id,
+                actor.id,
+                plan(foreign_branch.id, f"foreign-plan-{uuid4()}"),
+            )
+    async with factory() as session:
+        branch_plan = await service.create_plan(
+            session,
+            company.id,
+            actor.id,
+            plan(branch_a.id, f"branch-plan-{uuid4()}"),
+        )
+    async with factory() as session:
+        branch_plan = await service.activate_plan(
+            session, company.id, branch_plan.id, frozenset({branch_a.id})
+        )
+    async with factory() as session:
+        other_branch_plan = await service.create_plan(
+            session,
+            company.id,
+            actor.id,
+            plan(branch_b.id, f"other-branch-plan-{uuid4()}"),
+        )
+    async with factory() as session:
+        other_branch_plan = await service.activate_plan(
+            session, company.id, other_branch_plan.id, frozenset({branch_b.id})
+        )
+    async with factory() as session:
+        refreshed_branch_plan = await session.get(AgreementPlan, branch_plan.id)
+        assert refreshed_branch_plan is not None
+        assert refreshed_branch_plan.status == other_branch_plan.status == "active"
+
+    async with factory() as session:
+        assert branch_plan.id not in {
+            item.id
+            for item in await service.list_plans(
+                session, company.id, frozenset({branch_b.id})
+            )
+        }
+    async with factory() as session:
+        with pytest.raises(AgreementError, match="Plan was not found"):
+            await service.activate_plan(
+                session, company.id, branch_plan.id, frozenset({branch_b.id})
+            )
+
+    enrollment = EnrollmentCreate(
+        branch_id=branch_b.id,
+        customer_id=customer.id,
+        plan_id=branch_plan.id,
+        service_location_ids=[location.id],
+        start_date=date(2026, 9, 1),
+        end_date=date(2027, 8, 31),
+        idempotency_key=f"cross-branch-enrollment-{uuid4()}",
+    )
+    async with factory() as session:
+        with pytest.raises(AgreementError, match="invalid or incomplete"):
+            await service.enroll(session, company.id, actor.id, enrollment)
+
+    async with factory() as session:
+        agreement = await service.enroll(
+            session,
+            company.id,
+            actor.id,
+            enrollment.model_copy(
+                update={
+                    "branch_id": branch_a.id,
+                    "idempotency_key": f"valid-enrollment-{uuid4()}",
+                }
+            ),
+        )
+    async with factory() as session:
+        with pytest.raises(AgreementError, match="Agreement was not found"):
+            await service.transition(
+                session,
+                company.id,
+                agreement.id,
+                frozenset({branch_b.id}),
+                agreement.version,
+                "active",
+                key=f"foreign-transition-{uuid4()}",
+                actor=actor.id,
+            )

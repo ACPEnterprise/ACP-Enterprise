@@ -28,6 +28,12 @@ def utc_now() -> datetime:
 class AgreementPlan(Base):
     __tablename__ = "service_agreement_plans"
     __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "branch_id"],
+            ["branches.company_id", "branches.id"],
+            name="fk_agreement_plans_branch_scope",
+            ondelete="RESTRICT",
+        ),
         CheckConstraint(
             "status IN ('draft','active','superseded','inactive')",
             name="ck_agreement_plans_status",
