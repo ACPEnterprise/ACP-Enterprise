@@ -107,6 +107,10 @@ export const workdayHandle = {
   },
 } as const satisfies ShellRouteHandle;
 
+export const workforceHandle = {
+  workspace: { pageTitle: "Workforce", breadcrumbs: [{ label: "Workforce" }], helpTopic: "workforce-operations", aiContext: "workforce-operations" },
+} as const satisfies ShellRouteHandle;
+
 export const inventoryHandle = {
   workspace: {
     pageTitle: "Inventory",
