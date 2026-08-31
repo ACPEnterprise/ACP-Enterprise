@@ -27,9 +27,36 @@ class ControlledExecutionOfferModel(Base):
     __tablename__ = "engineering_controlled_execution_offers"
     __table_args__ = (
         ForeignKeyConstraint(
+            ["company_id", "command_id"],
+            ["engineering_commands.company_id", "engineering_commands.id"],
+            name="fk_controlled_offers_command",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
             ["company_id", "execution_id"],
             ["engineering_executions.company_id", "engineering_executions.id"],
             name="fk_controlled_offers_execution",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "lease_id"],
+            ["engineering_worker_leases.company_id", "engineering_worker_leases.id"],
+            name="fk_controlled_offers_lease",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "worker_id"],
+            ["engineering_workers.company_id", "engineering_workers.id"],
+            name="fk_controlled_offers_worker",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "session_id"],
+            [
+                "engineering_worker_transport_sessions.company_id",
+                "engineering_worker_transport_sessions.id",
+            ],
+            name="fk_controlled_offers_session",
             ondelete="RESTRICT",
         ),
         CheckConstraint(
@@ -80,11 +107,7 @@ class ControlledExecutionOfferModel(Base):
         ForeignKey("companies.id", ondelete="RESTRICT"),
         nullable=False,
     )
-    command_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("engineering_commands.id", ondelete="RESTRICT"),
-        nullable=False,
-    )
+    command_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     execution_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     correlation_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     workspace_id: Mapped[str] = mapped_column(String(100), nullable=False)

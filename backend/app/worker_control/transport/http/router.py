@@ -3,6 +3,7 @@ from typing import Annotated, Literal, cast
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_database_session
@@ -213,7 +214,12 @@ async def acquire_controlled_offer(
         raise transport_http_error(
             TransportMessageError("Acquired offer was not found.")
         )
-    lease = await database.get(WorkerLease, offer.lease_id)
+    lease = await database.scalar(
+        select(WorkerLease).where(
+            WorkerLease.company_id == identity.context.company_id,
+            WorkerLease.id == offer.lease_id,
+        )
+    )
     if lease is None:
         raise transport_http_error(
             TransportMessageError("Acquired lease was not found.")
