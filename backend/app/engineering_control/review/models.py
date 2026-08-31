@@ -43,6 +43,54 @@ class EngineeringExecutionReview(Base):
             "AND attempt_id IS NULL AND result_id IS NULL)",
             name="ck_engineering_execution_reviews_evidence_source",
         ),
+        ForeignKeyConstraint(
+            ["company_id", "command_id"],
+            ["engineering_commands.company_id", "engineering_commands.id"],
+            name="fk_engineering_reviews_command_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "execution_id"],
+            ["engineering_executions.company_id", "engineering_executions.id"],
+            name="fk_engineering_reviews_execution_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "composition_id"],
+            [
+                "engineering_execution_compositions.company_id",
+                "engineering_execution_compositions.id",
+            ],
+            name="fk_engineering_reviews_composition_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "attempt_id"],
+            [
+                "engineering_provider_execution_attempts.company_id",
+                "engineering_provider_execution_attempts.id",
+            ],
+            name="fk_engineering_reviews_attempt_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "result_id"],
+            [
+                "engineering_normalized_provider_results.company_id",
+                "engineering_normalized_provider_results.id",
+            ],
+            name="fk_engineering_reviews_result_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "controlled_result_id"],
+            [
+                "engineering_controlled_execution_results.company_id",
+                "engineering_controlled_execution_results.id",
+            ],
+            name="fk_engineering_reviews_controlled_result_company",
+            ondelete="RESTRICT",
+        ),
         UniqueConstraint(
             "company_id",
             "result_id",
@@ -84,33 +132,23 @@ class EngineeringExecutionReview(Base):
     )
     command_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
-        ForeignKey("engineering_commands.id", ondelete="RESTRICT"),
         nullable=False,
     )
     execution_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
-        ForeignKey("engineering_executions.id", ondelete="RESTRICT"),
         nullable=False,
     )
     composition_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
-        ForeignKey("engineering_execution_compositions.id", ondelete="RESTRICT"),
     )
     attempt_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
-        ForeignKey("engineering_provider_execution_attempts.id", ondelete="RESTRICT"),
     )
     result_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
-        ForeignKey("engineering_normalized_provider_results.id", ondelete="RESTRICT"),
     )
     controlled_result_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
-        ForeignKey(
-            "engineering_controlled_execution_results.id",
-            name="fk_engineering_execution_reviews_controlled_result",
-            ondelete="RESTRICT",
-        ),
     )
     provider_identifier: Mapped[str] = mapped_column(String(100), nullable=False)
     instruction_digest: Mapped[str] = mapped_column(String(128), nullable=False)
@@ -158,6 +196,11 @@ class EngineeringExecutionReviewDecision(Base):
             "company_id",
             "review_id",
             name="uq_engineering_review_decisions_review",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "id",
+            name="uq_engineering_review_decisions_company_id",
         ),
         Index(
             "ix_engineering_review_decisions_company_decided",

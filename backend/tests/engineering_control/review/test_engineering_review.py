@@ -6,6 +6,7 @@ import pytest
 import pytest_asyncio
 from fastapi import FastAPI
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
@@ -191,6 +192,41 @@ async def test_review_fails_closed_for_stale_evidence_and_other_company(
             )
 
 
+@pytest.mark.asyncio
+async def test_review_storage_rejects_foreign_company_evidence_chain(
+    review_database: ServiceFixture,
+) -> None:
+    fixture = review_database
+    command = await completed_command(fixture)
+    async with fixture.factory() as session:
+        package = await EngineeringReviewService().prepare(
+            session,
+            context=owner_context(fixture),
+            command_id=command.id,
+        )
+    async with fixture.factory() as session, session.begin():
+        valid = await session.get(EngineeringExecutionReview, package.review.id)
+        assert valid is not None
+        session.add(
+            EngineeringExecutionReview(
+                company_id=fixture.other_context.company.id,
+                command_id=valid.command_id,
+                execution_id=valid.execution_id,
+                composition_id=valid.composition_id,
+                attempt_id=valid.attempt_id,
+                result_id=valid.result_id,
+                controlled_result_id=valid.controlled_result_id,
+                provider_identifier=valid.provider_identifier,
+                instruction_digest=valid.instruction_digest,
+                request_digest=valid.request_digest,
+                composition_digest=valid.composition_digest,
+                review_digest=valid.review_digest,
+                state="pending",
+                version=1,
+            )
+        )
+        with pytest.raises(IntegrityError):
+            await session.flush()
 @pytest.mark.asyncio
 async def test_review_projection_and_bounded_http_api(
     review_database: ServiceFixture,

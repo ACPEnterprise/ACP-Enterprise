@@ -12,7 +12,8 @@ from sqlalchemy import (
     String,
     UniqueConstraint,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID as PGUUID
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -321,6 +322,9 @@ class ProviderProgressEvent(Base):
 class NormalizedProviderResult(Base):
     __tablename__ = "engineering_normalized_provider_results"
     __table_args__ = (
+        UniqueConstraint(
+            "company_id", "id", name="uq_normalized_results_company_id"
+        ),
         ForeignKeyConstraint(
             ["company_id", "attempt_id"],
             [

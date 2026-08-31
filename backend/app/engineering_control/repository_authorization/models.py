@@ -40,6 +40,36 @@ class EngineeringRepositoryAuthorization(Base):
             name="fk_repository_authorizations_membership",
             ondelete="RESTRICT",
         ),
+        ForeignKeyConstraint(
+            ["company_id", "command_id"],
+            ["engineering_commands.company_id", "engineering_commands.id"],
+            name="fk_repository_authorizations_command_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "execution_id"],
+            ["engineering_executions.company_id", "engineering_executions.id"],
+            name="fk_repository_authorizations_execution_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "result_id"],
+            [
+                "engineering_normalized_provider_results.company_id",
+                "engineering_normalized_provider_results.id",
+            ],
+            name="fk_repository_authorizations_result_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "review_decision_id"],
+            [
+                "engineering_execution_review_decisions.company_id",
+                "engineering_execution_review_decisions.id",
+            ],
+            name="fk_repository_authorizations_decision_company",
+            ondelete="RESTRICT",
+        ),
         CheckConstraint(
             "operation_type IN ('create_commit')",
             name="ck_repository_authorizations_operation",
@@ -130,23 +160,19 @@ class EngineeringRepositoryAuthorization(Base):
     )
     command_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
-        ForeignKey("engineering_commands.id", ondelete="RESTRICT"),
         nullable=False,
     )
     execution_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
-        ForeignKey("engineering_executions.id", ondelete="RESTRICT"),
         nullable=False,
     )
     result_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
-        ForeignKey("engineering_normalized_provider_results.id", ondelete="RESTRICT"),
         nullable=False,
     )
     review_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     review_decision_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
-        ForeignKey("engineering_execution_review_decisions.id", ondelete="RESTRICT"),
         nullable=False,
     )
     authorized_by_user_id: Mapped[UUID] = mapped_column(
