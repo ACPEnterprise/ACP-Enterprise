@@ -73,37 +73,81 @@ class PaymentService:
             if existing:
                 if existing.request_digest != request_digest:
                     raise PaymentConflict("Idempotency key conflicts with the original request.")
-                return existing
-            if amount <= 0 or len(spec.currency) != 3 or not spec.opaque_payment_method.startswith("opaque_"):
-                raise PaymentValidation("Positive amount, ISO currency, and provider-safe opaque identity are required.")
-            customer = await session.scalar(
-                select(Customer.id).where(
-                    Customer.company_id == spec.company_id,
-                    Customer.id == spec.customer_id,
-                )
-            )
-            if customer is None:
-                raise PaymentNotFound("Payment Customer was not found.")
-            if spec.invoice_id is not None:
-                invoice = await session.scalar(
-                    select(Invoice.id).where(
-                        Invoice.company_id == spec.company_id,
-                        Invoice.branch_id == spec.branch_id,
-                        Invoice.customer_id == spec.customer_id,
-                        Invoice.id == spec.invoice_id,
+                if existing.status != "created":
+                    return existing
+                intent = existing
+            else:
+                if amount <= 0 or len(spec.currency) != 3 or not spec.opaque_payment_method.startswith("opaque_"):
+                    raise PaymentValidation("Positive amount, ISO currency, and provider-safe opaque identity are required.")
+                customer = await session.scalar(
+                    select(Customer.id).where(
+                        Customer.company_id == spec.company_id,
+                        Customer.id == spec.customer_id,
                     )
                 )
-                if invoice is None:
-                    raise PaymentNotFound("Payment Invoice was not found.")
-            intent = PaymentIntent(company_id=spec.company_id, branch_id=spec.branch_id, customer_id=spec.customer_id, invoice_id=spec.invoice_id, amount=amount, currency=spec.currency.upper(), provider=self.provider.name, merchant_account=self.merchant_account, opaque_payment_method=spec.opaque_payment_method, idempotency_key=spec.idempotency_key, request_digest=request_digest, provider_idempotency_key=f"pay_{uuid4().hex}", created_by_user_id=spec.actor_user_id)
-            session.add(intent)
-            await session.flush()
-            self._event(session, intent, EventType.PAYMENT_INTENT_CREATED, spec.actor_user_id)
+                if customer is None:
+                    raise PaymentNotFound("Payment Customer was not found.")
+                if spec.invoice_id is not None:
+                    invoice = await session.scalar(
+                        select(Invoice.id).where(
+                            Invoice.company_id == spec.company_id,
+                            Invoice.branch_id == spec.branch_id,
+                            Invoice.customer_id == spec.customer_id,
+                            Invoice.id == spec.invoice_id,
+                        )
+                    )
+                    if invoice is None:
+                        raise PaymentNotFound("Payment Invoice was not found.")
+                intent = PaymentIntent(company_id=spec.company_id, branch_id=spec.branch_id, customer_id=spec.customer_id, invoice_id=spec.invoice_id, amount=amount, currency=spec.currency.upper(), provider=self.provider.name, merchant_account=self.merchant_account, opaque_payment_method=spec.opaque_payment_method, idempotency_key=spec.idempotency_key, request_digest=request_digest, provider_idempotency_key=f"pay_{uuid4().hex}", created_by_user_id=spec.actor_user_id)
+                session.add(intent)
+                await session.flush()
+                self._event(session, intent, EventType.PAYMENT_INTENT_CREATED, spec.actor_user_id)
 
-        result = await self.provider.collect(ProviderRequest(intent.id, intent.provider_idempotency_key, self.merchant_account, amount, intent.currency, spec.opaque_payment_method))
+        try:
+            result = await self.provider.collect(ProviderRequest(intent.id, intent.provider_idempotency_key, self.merchant_account, amount, intent.currency, spec.opaque_payment_method))
+        except (PaymentError, TimeoutError, OSError):
+            evidence_digest = _digest(
+                {
+                    "intent_id": intent.id,
+                    "provider_key": intent.provider_idempotency_key,
+                    "outcome": "uncertain",
+                }
+            )
+            async with session.begin():
+                locked_intent = await session.scalar(
+                    select(PaymentIntent)
+                    .where(
+                        PaymentIntent.company_id == spec.company_id,
+                        PaymentIntent.id == intent.id,
+                    )
+                    .with_for_update()
+                    .execution_options(populate_existing=True)
+                )
+                assert locked_intent is not None
+                if locked_intent.status == "created":
+                    locked_intent.status = "reconciliation_required"
+                    locked_intent.version += 1
+                    locked_intent.updated_at = datetime.now(timezone.utc)
+                    self._exception(
+                        session,
+                        locked_intent,
+                        "uncertain_collection_submission",
+                        evidence_digest,
+                        spec.actor_user_id,
+                    )
+                intent = locked_intent
+            return intent
         receipt: PaymentReceipt | None = None
         async with session.begin():
-            locked_intent = await session.scalar(select(PaymentIntent).where(PaymentIntent.company_id == spec.company_id, PaymentIntent.id == intent.id).with_for_update())
+            locked_intent = await session.scalar(
+                select(PaymentIntent)
+                .where(
+                    PaymentIntent.company_id == spec.company_id,
+                    PaymentIntent.id == intent.id,
+                )
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
             assert locked_intent is not None
             intent = locked_intent
             if intent.status != "created":

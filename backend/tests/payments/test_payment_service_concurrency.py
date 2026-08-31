@@ -48,11 +48,13 @@ class CountingFakeProvider(DeterministicFakeProvider):
     def __init__(self) -> None:
         super().__init__()
         self.collect_calls = 0
+        self.collect_keys: list[str] = []
         self.refund_calls = 0
         self.refund_keys: list[str] = []
 
     async def collect(self, request: ProviderRequest):
         self.collect_calls += 1
+        self.collect_keys.append(request.provider_idempotency_key)
         return await super().collect(request)
 
     async def refund(self, request: ProviderRequest):
@@ -159,7 +161,8 @@ async def test_concurrent_collection_and_refund_replay_have_one_economic_authori
 
     first, replay = await asyncio.gather(collect_once(), collect_once())
     assert first.id == replay.id
-    assert provider.collect_calls == 1
+    assert first.provider_operation_id == replay.provider_operation_id
+    assert len(set(provider.collect_keys)) == 1
     async with factory() as session:
         intent = await session.get(PaymentIntent, first.id)
         receipt = await session.scalar(
@@ -226,6 +229,111 @@ async def test_concurrent_collection_and_refund_replay_have_one_economic_authori
                 session,
                 replace(collect, amount=Decimal("126.25")),
             )
+
+
+@pytest.mark.asyncio
+async def test_collection_replay_resumes_after_process_loss_before_provider_call(
+    payment_fixture,
+) -> None:
+    factory, company, branch, actor, customer = payment_fixture
+
+    class SimulatedProcessLoss(BaseException):
+        pass
+
+    class ProcessLossProvider(CountingFakeProvider):
+        async def collect(self, _request):
+            raise SimulatedProcessLoss
+
+    service = PaymentService(ProcessLossProvider(), "synthetic-merchant")
+    command = CreateIntent(
+        company_id=company.id,
+        branch_id=branch.id,
+        customer_id=customer.id,
+        amount=Decimal("65.00"),
+        currency="USD",
+        opaque_payment_method="opaque_captured_test",
+        idempotency_key=f"collection-loss-{uuid4()}",
+        actor_user_id=actor.id,
+    )
+
+    async with factory() as session:
+        with pytest.raises(SimulatedProcessLoss):
+            await service.collect(session, command)
+    async with factory() as session:
+        pending = await session.scalar(
+            select(PaymentIntent).where(
+                PaymentIntent.idempotency_key == command.idempotency_key
+            )
+        )
+        assert pending is not None and pending.status == "created"
+
+    recovery_provider = CountingFakeProvider()
+    service.provider = recovery_provider
+    async with factory() as session:
+        recovered = await service.collect(session, command)
+    assert recovered.status == "captured"
+    assert recovery_provider.collect_calls == 1
+    async with factory() as session:
+        assert (
+            await session.scalar(
+                select(func.count(PaymentReceipt.id)).where(
+                    PaymentReceipt.intent_id == recovered.id
+                )
+            )
+            == 1
+        )
+
+
+@pytest.mark.asyncio
+async def test_collection_transport_uncertainty_reconciles_without_retry(
+    payment_fixture,
+) -> None:
+    factory, company, branch, actor, customer = payment_fixture
+
+    class UncertainProvider(CountingFakeProvider):
+        async def collect(self, _request):
+            self.collect_calls += 1
+            raise TimeoutError("synthetic possible collection acceptance")
+
+    provider = UncertainProvider()
+    service = PaymentService(provider, "synthetic-merchant")
+    command = CreateIntent(
+        company_id=company.id,
+        branch_id=branch.id,
+        customer_id=customer.id,
+        amount=Decimal("70.00"),
+        currency="USD",
+        opaque_payment_method="opaque_captured_test",
+        idempotency_key=f"collection-uncertain-{uuid4()}",
+        actor_user_id=actor.id,
+    )
+
+    async with factory() as session:
+        uncertain = await service.collect(session, command)
+    async with factory() as session:
+        replay = await service.collect(session, command)
+    assert uncertain.id == replay.id
+    assert replay.status == "reconciliation_required"
+    assert provider.collect_calls == 1
+    async with factory() as session:
+        assert (
+            await session.scalar(
+                select(func.count(PaymentReceipt.id)).where(
+                    PaymentReceipt.intent_id == uncertain.id
+                )
+            )
+            == 0
+        )
+        assert (
+            await session.scalar(
+                select(func.count(ReconciliationException.id)).where(
+                    ReconciliationException.entity_id == uncertain.id,
+                    ReconciliationException.reason_code
+                    == "uncertain_collection_submission",
+                )
+            )
+            == 1
+        )
 
 
 @pytest.mark.asyncio
