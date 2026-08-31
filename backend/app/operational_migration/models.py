@@ -352,6 +352,22 @@ class OperationalMigrationRun(Base):
             name="fk_operational_run_master_scope",
             ondelete="RESTRICT",
         ),
+        ForeignKeyConstraint(
+            ["company_id", "branch_id"],
+            ["branches.company_id", "branches.id"],
+            name="fk_operational_run_branch_scope",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["repair_of_run_id", "company_id", "branch_id"],
+            [
+                "operational_migration_runs.id",
+                "operational_migration_runs.company_id",
+                "operational_migration_runs.branch_id",
+            ],
+            name="fk_operational_repair_original_scope",
+            ondelete="RESTRICT",
+        ),
         UniqueConstraint(
             "master_run_id",
             "master_domain",
@@ -361,6 +377,7 @@ class OperationalMigrationRun(Base):
         UniqueConstraint(
             "id", "company_id", "branch_id", name="uq_operational_run_scope"
         ),
+        UniqueConstraint("id", "company_id", name="uq_operational_run_company"),
     )
 
     id: Mapped[UUID] = mapped_column(
@@ -372,9 +389,7 @@ class OperationalMigrationRun(Base):
         nullable=False,
     )
     branch_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("branches.id", ondelete="RESTRICT"),
-        nullable=False,
+        PGUUID(as_uuid=True), nullable=False
     )
     initiated_by_user_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
@@ -385,7 +400,6 @@ class OperationalMigrationRun(Base):
     master_domain: Mapped[str | None] = mapped_column(String(20))
     repair_of_run_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
-        ForeignKey("operational_migration_runs.id", ondelete="RESTRICT"),
     )
     repair_generation: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     source_system: Mapped[str] = mapped_column(String(80), nullable=False)
@@ -857,6 +871,16 @@ class JobSourceIdentity(Base):
     __tablename__ = "operational_migration_job_source_identities"
     __table_args__ = (
         ForeignKeyConstraint(
+            ["first_run_id", "company_id", "branch_id"],
+            [
+                "operational_migration_runs.id",
+                "operational_migration_runs.company_id",
+                "operational_migration_runs.branch_id",
+            ],
+            name="fk_job_source_identity_first_run_scope",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
             ["company_id", "branch_id", "job_id"],
             ["jobs.company_id", "jobs.branch_id", "jobs.id"],
             name="fk_job_source_identity_job_scope",
@@ -935,9 +959,7 @@ class JobSourceIdentity(Base):
         JSONB, nullable=False, default=dict
     )
     first_run_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("operational_migration_runs.id", ondelete="RESTRICT"),
-        nullable=False,
+        PGUUID(as_uuid=True), nullable=False
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
@@ -947,6 +969,16 @@ class JobSourceIdentity(Base):
 class AppointmentSourceIdentity(Base):
     __tablename__ = "operational_migration_appointment_source_identities"
     __table_args__ = (
+        ForeignKeyConstraint(
+            ["first_run_id", "company_id", "branch_id"],
+            [
+                "operational_migration_runs.id",
+                "operational_migration_runs.company_id",
+                "operational_migration_runs.branch_id",
+            ],
+            name="fk_appointment_source_identity_first_run_scope",
+            ondelete="RESTRICT",
+        ),
         ForeignKeyConstraint(
             ["company_id", "branch_id", "appointment_id"],
             ["appointments.company_id", "appointments.branch_id", "appointments.id"],
@@ -1011,9 +1043,7 @@ class AppointmentSourceIdentity(Base):
         JSONB, nullable=False, default=dict
     )
     first_run_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("operational_migration_runs.id", ondelete="RESTRICT"),
-        nullable=False,
+        PGUUID(as_uuid=True), nullable=False
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
@@ -1023,6 +1053,16 @@ class AppointmentSourceIdentity(Base):
 class EstimateSourceIdentity(Base):
     __tablename__ = "operational_migration_estimate_source_identities"
     __table_args__ = (
+        ForeignKeyConstraint(
+            ["first_run_id", "company_id", "branch_id"],
+            [
+                "operational_migration_runs.id",
+                "operational_migration_runs.company_id",
+                "operational_migration_runs.branch_id",
+            ],
+            name="fk_estimate_source_identity_first_run_scope",
+            ondelete="RESTRICT",
+        ),
         ForeignKeyConstraint(
             [
                 "company_id",
@@ -1099,9 +1139,7 @@ class EstimateSourceIdentity(Base):
         JSONB, nullable=False, default=dict
     )
     first_run_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("operational_migration_runs.id", ondelete="RESTRICT"),
-        nullable=False,
+        PGUUID(as_uuid=True), nullable=False
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
@@ -1111,6 +1149,12 @@ class EstimateSourceIdentity(Base):
 class EstimateLineItemSourceIdentity(Base):
     __tablename__ = "operational_migration_estimate_line_item_source_identities"
     __table_args__ = (
+        ForeignKeyConstraint(
+            ["first_run_id", "company_id"],
+            ["operational_migration_runs.id", "operational_migration_runs.company_id"],
+            name="fk_estimate_item_source_first_run_scope",
+            ondelete="RESTRICT",
+        ),
         ForeignKeyConstraint(
             ["estimate_source_identity_id", "company_id", "estimate_id"],
             [
@@ -1159,9 +1203,7 @@ class EstimateLineItemSourceIdentity(Base):
     source_system: Mapped[str] = mapped_column(String(80), nullable=False)
     source_line_item_id: Mapped[str] = mapped_column(String(191), nullable=False)
     first_run_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("operational_migration_runs.id", ondelete="RESTRICT"),
-        nullable=False,
+        PGUUID(as_uuid=True), nullable=False
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
@@ -1171,6 +1213,16 @@ class EstimateLineItemSourceIdentity(Base):
 class InvoiceSourceIdentity(Base):
     __tablename__ = "operational_migration_invoice_source_identities"
     __table_args__ = (
+        ForeignKeyConstraint(
+            ["first_run_id", "company_id", "branch_id"],
+            [
+                "operational_migration_runs.id",
+                "operational_migration_runs.company_id",
+                "operational_migration_runs.branch_id",
+            ],
+            name="fk_invoice_source_identity_first_run_scope",
+            ondelete="RESTRICT",
+        ),
         ForeignKeyConstraint(
             [
                 "company_id",
@@ -1255,9 +1307,7 @@ class InvoiceSourceIdentity(Base):
         JSONB, nullable=False, default=dict
     )
     first_run_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("operational_migration_runs.id", ondelete="RESTRICT"),
-        nullable=False,
+        PGUUID(as_uuid=True), nullable=False
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
@@ -1267,6 +1317,12 @@ class InvoiceSourceIdentity(Base):
 class InvoiceLineItemSourceIdentity(Base):
     __tablename__ = "operational_migration_invoice_line_item_source_identities"
     __table_args__ = (
+        ForeignKeyConstraint(
+            ["first_run_id", "company_id"],
+            ["operational_migration_runs.id", "operational_migration_runs.company_id"],
+            name="fk_invoice_item_source_first_run_scope",
+            ondelete="RESTRICT",
+        ),
         ForeignKeyConstraint(
             ["invoice_source_identity_id", "company_id", "invoice_id"],
             [
@@ -1315,9 +1371,7 @@ class InvoiceLineItemSourceIdentity(Base):
     source_system: Mapped[str] = mapped_column(String(80), nullable=False)
     source_line_item_id: Mapped[str] = mapped_column(String(191), nullable=False)
     first_run_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("operational_migration_runs.id", ondelete="RESTRICT"),
-        nullable=False,
+        PGUUID(as_uuid=True), nullable=False
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
@@ -1327,6 +1381,16 @@ class InvoiceLineItemSourceIdentity(Base):
 class PaymentSourceIdentity(Base):
     __tablename__ = "operational_migration_payment_source_identities"
     __table_args__ = (
+        ForeignKeyConstraint(
+            ["first_run_id", "company_id", "branch_id"],
+            [
+                "operational_migration_runs.id",
+                "operational_migration_runs.company_id",
+                "operational_migration_runs.branch_id",
+            ],
+            name="fk_payment_source_identity_first_run_scope",
+            ondelete="RESTRICT",
+        ),
         ForeignKeyConstraint(
             ["company_id", "branch_id", "payment_id", "invoice_id", "customer_id"],
             [
@@ -1386,9 +1450,7 @@ class PaymentSourceIdentity(Base):
         JSONB, nullable=False, default=dict
     )
     first_run_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("operational_migration_runs.id", ondelete="RESTRICT"),
-        nullable=False,
+        PGUUID(as_uuid=True), nullable=False
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now

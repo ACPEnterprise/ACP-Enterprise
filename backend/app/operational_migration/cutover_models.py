@@ -39,6 +39,16 @@ class MigrationHistoryEntry(Base):
             ondelete="RESTRICT",
         ),
         ForeignKeyConstraint(
+            ["first_run_id", "company_id", "branch_id"],
+            [
+                "operational_migration_runs.id",
+                "operational_migration_runs.company_id",
+                "operational_migration_runs.branch_id",
+            ],
+            name="fk_migration_history_first_run_scope",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
             ["company_id", "employee_id"],
             ["employees.company_id", "employees.id"],
             name="fk_migration_history_employee_scope",
@@ -102,9 +112,7 @@ class MigrationHistoryEntry(Base):
         JSONB, nullable=False, default=dict
     )
     first_run_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("operational_migration_runs.id", ondelete="RESTRICT"),
-        nullable=False,
+        PGUUID(as_uuid=True), nullable=False
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
@@ -118,6 +126,16 @@ class MigrationArtifact(Base):
             ["company_id", "branch_id"],
             ["branches.company_id", "branches.id"],
             name="fk_migration_artifacts_branch_scope",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["first_run_id", "company_id", "branch_id"],
+            [
+                "operational_migration_runs.id",
+                "operational_migration_runs.company_id",
+                "operational_migration_runs.branch_id",
+            ],
+            name="fk_migration_artifact_first_run_scope",
             ondelete="RESTRICT",
         ),
         CheckConstraint(
@@ -199,9 +217,7 @@ class MigrationArtifact(Base):
         JSONB, nullable=False, default=dict
     )
     first_run_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("operational_migration_runs.id", ondelete="RESTRICT"),
-        nullable=False,
+        PGUUID(as_uuid=True), nullable=False
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
@@ -293,6 +309,16 @@ class MigrationPhaseCompletion(Base):
             name="fk_migration_phase_completion_branch_scope",
             ondelete="RESTRICT",
         ),
+        ForeignKeyConstraint(
+            ["supporting_run_id", "company_id", "branch_id"],
+            [
+                "operational_migration_runs.id",
+                "operational_migration_runs.company_id",
+                "operational_migration_runs.branch_id",
+            ],
+            name="fk_migration_phase_supporting_run_scope",
+            ondelete="RESTRICT",
+        ),
         UniqueConstraint(
             "company_id",
             "branch_id",
@@ -312,9 +338,7 @@ class MigrationPhaseCompletion(Base):
     import_completed: Mapped[bool] = mapped_column(Boolean, nullable=False)
     idempotent_rerun_validated: Mapped[bool] = mapped_column(Boolean, nullable=False)
     supporting_run_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("operational_migration_runs.id", ondelete="RESTRICT"),
-        nullable=False,
+        PGUUID(as_uuid=True), nullable=False
     )
     completed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
