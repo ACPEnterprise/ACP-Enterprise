@@ -90,6 +90,16 @@ class ControlledExecutionOfferModel(Base):
             "company_id", "execution_id", name="uq_controlled_offers_execution"
         ),
         UniqueConstraint("company_id", "id", name="uq_controlled_offers_company_id"),
+        UniqueConstraint(
+            "company_id",
+            "id",
+            "command_id",
+            "execution_id",
+            "lease_id",
+            "worker_id",
+            "session_id",
+            name="uq_controlled_offers_result_binding",
+        ),
         Index(
             "ix_controlled_offers_company_state_expiry",
             "company_id",
@@ -137,10 +147,23 @@ class ControlledExecutionResultModel(Base):
     __tablename__ = "engineering_controlled_execution_results"
     __table_args__ = (
         ForeignKeyConstraint(
-            ["company_id", "offer_id"],
+            [
+                "company_id",
+                "offer_id",
+                "command_id",
+                "execution_id",
+                "lease_id",
+                "worker_id",
+                "session_id",
+            ],
             [
                 "engineering_controlled_execution_offers.company_id",
                 "engineering_controlled_execution_offers.id",
+                "engineering_controlled_execution_offers.command_id",
+                "engineering_controlled_execution_offers.execution_id",
+                "engineering_controlled_execution_offers.lease_id",
+                "engineering_controlled_execution_offers.worker_id",
+                "engineering_controlled_execution_offers.session_id",
             ],
             name="fk_controlled_results_offer",
             ondelete="RESTRICT",
