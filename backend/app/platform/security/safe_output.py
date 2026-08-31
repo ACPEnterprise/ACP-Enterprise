@@ -224,6 +224,8 @@ def validate_no_sensitive_fields(
         ):
             for child in item:
                 visit(child, path)
+        elif isinstance(item, str) and sanitize_text(item) != item:
+            raise ValueError(f"Sensitive values are prohibited in {boundary}.")
 
     visit(value)
 

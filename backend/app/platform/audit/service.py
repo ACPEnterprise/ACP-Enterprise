@@ -7,7 +7,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.platform.audit.models import AuditRecord
 from app.platform.reliability.correlation import current_correlation_id
 from app.platform.security.metrics import security_metrics
-from app.platform.security.safe_output import validate_no_sensitive_fields
+from app.platform.security.safe_output import (
+    sanitize_text,
+    validate_no_sensitive_fields,
+)
 
 
 @dataclass(frozen=True)
@@ -56,6 +59,15 @@ class AuditService:
             raise ValueError("Audit action and resource type are required")
         if entry.outcome not in {"success", "failure", "denied"}:
             raise ValueError("Audit outcome is invalid")
+
+        for value in (
+            entry.action,
+            entry.resource_type,
+            entry.reason_code,
+            entry.user_agent,
+        ):
+            if value is not None and sanitize_text(value) != value:
+                raise ValueError("Sensitive values are prohibited in audit metadata.")
 
         validate_no_sensitive_fields(entry.details, boundary="audit details")
 

@@ -87,6 +87,25 @@ async def test_audit_generation_rejects_secrets_and_is_database_immutable() -> N
                 details={"refresh_token": "prohibited"},
             ),
         )
+    for entry in (
+        AuditEntry(
+            action="authentication.login",
+            resource_type="user",
+            details={"message": "Bearer audit-canary.secret"},
+        ),
+        AuditEntry(
+            action="authentication.login",
+            resource_type="user",
+            user_agent="client token=audit-canary",
+        ),
+        AuditEntry(
+            action="authentication.login",
+            resource_type="user",
+            reason_code="postgresql://user:audit-canary@example.invalid/acp",
+        ),
+    ):
+        with pytest.raises(ValueError, match="Sensitive values"):
+            AuditService.stage(object(), entry)  # type: ignore[arg-type]
 
 
 def test_security_metrics_are_centralized_and_failure_tolerant() -> None:

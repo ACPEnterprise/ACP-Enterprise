@@ -271,6 +271,22 @@ def test_connection_strings_bearer_tokens_and_private_keys_are_sanitized() -> No
     assert text.count(REDACTED) == 3
 
 
+@pytest.mark.parametrize(
+    "value",
+    [
+        "Bearer nested-canary.secret",
+        "postgresql://user:nested-canary@example.invalid/acp",
+        "password=nested-canary",
+        "-----BEGIN PRIVATE KEY-----nested-canary-----END PRIVATE KEY-----",
+    ],
+)
+def test_sensitive_string_values_are_rejected_under_innocent_keys(value: str) -> None:
+    with pytest.raises(ValueError, match="Sensitive values"):
+        validate_no_sensitive_fields(
+            {"message": value}, boundary="synthetic protected output"
+        )
+
+
 def test_catalog_fingerprint_and_validation_are_deterministic() -> None:
     assert catalog_fingerprint() == (
         "bf261fe8ad8a819791a4a22fa122f7d0a6c148faf37111f51175faa4ddffb7af"
