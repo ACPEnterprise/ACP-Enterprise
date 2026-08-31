@@ -364,6 +364,12 @@ class MigrationCutoverAssessment(Base):
             "branch_id",
             "evaluated_at",
         ),
+        UniqueConstraint(
+            "id",
+            "company_id",
+            "branch_id",
+            name="uq_migration_cutover_assessment_scope",
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(
@@ -398,6 +404,16 @@ class MigrationAuditSummary(Base):
             name="fk_migration_audit_summary_branch_scope",
             ondelete="RESTRICT",
         ),
+        ForeignKeyConstraint(
+            ["assessment_id", "company_id", "branch_id"],
+            [
+                "operational_migration_cutover_assessments.id",
+                "operational_migration_cutover_assessments.company_id",
+                "operational_migration_cutover_assessments.branch_id",
+            ],
+            name="fk_migration_audit_summary_assessment_scope",
+            ondelete="RESTRICT",
+        ),
         CheckConstraint(
             "completion_status IN ('completed','completed_with_exceptions','incomplete')",
             name="ck_migration_audit_summary_status",
@@ -410,9 +426,7 @@ class MigrationAuditSummary(Base):
     company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     assessment_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("operational_migration_cutover_assessments.id", ondelete="RESTRICT"),
-        nullable=False,
+        PGUUID(as_uuid=True), nullable=False
     )
     source_descriptor_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
     completion_status: Mapped[str] = mapped_column(String(40), nullable=False)
