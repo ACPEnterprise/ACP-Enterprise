@@ -257,7 +257,7 @@ describe("CustomerDetailView", () => {
     permissions.add("COMPANY_CUSTOMER_READ");
     vi.mocked(customerHooks.useCustomerMutations).mockReturnValue({
       archive: mutation(), update: mutation(), addNote: mutation(),
-      recordConsent: mutation(), addProperty: mutation(), updateProperty: mutation(),
+      recordConsent: mutation(), duplicateCheck: mutation(), addProperty: mutation(), updateProperty: mutation(),
       addContact: mutation(), updateContact: mutation(),
     } as never);
 
@@ -280,7 +280,7 @@ describe("CustomerDetailView", () => {
     } as never);
     vi.mocked(customerHooks.useCustomerMutations).mockReturnValue({
       archive: mutation(), update: mutation(), addNote: mutation(),
-      recordConsent: mutation(), addProperty: mutation(), updateProperty: mutation(),
+      recordConsent: mutation(), duplicateCheck: mutation(), addProperty: mutation(), updateProperty: mutation(),
       addContact: mutation(), updateContact: mutation(),
     } as never);
 
