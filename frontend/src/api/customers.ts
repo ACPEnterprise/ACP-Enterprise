@@ -12,6 +12,7 @@ import type {
   CustomerProperty,
   CustomerPropertyInput,
   CustomerSummary,
+  CustomerTimelineResponse,
   DuplicateCheckInput,
   DuplicateMatch,
 } from "../types/customers";
@@ -289,6 +290,22 @@ export async function updateCustomer(
 
 export async function archiveCustomer(customerId: string): Promise<void> {
   await apiClient.post(`/api/v1/customers/${customerId}/archive`);
+}
+
+export async function restoreCustomer(customerId: string): Promise<void> {
+  await apiClient.post(`/api/v1/customers/${customerId}/restore`);
+}
+
+export async function getCustomerTimeline(
+  customerId: string,
+  page = 1,
+  pageSize = 50,
+): Promise<CustomerTimelineResponse> {
+  const response = await apiClient.get<CustomerTimelineResponse>(
+    `/api/v1/customers/${customerId}/timeline`,
+    { params: { page, page_size: pageSize } },
+  );
+  return response.data;
 }
 
 export async function checkCustomerDuplicates(
