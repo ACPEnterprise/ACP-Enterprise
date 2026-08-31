@@ -1,9 +1,9 @@
+import asyncio
 from collections.abc import AsyncIterator
 from dataclasses import FrozenInstanceError, dataclass
 from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
-import asyncio
 import pytest
 import pytest_asyncio
 from sqlalchemy import delete
@@ -12,10 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 import app.platform.permissions.models  # noqa: F401
 from app.core.config import settings
-from app.engineering_control.models import (
-    EngineeringCommand,
-    EngineeringCommandEvent,
-)
+from app.engineering_control.models import EngineeringCommand
 from app.engineering_control.records import (
     AppendEngineeringCommandEvent,
     CreateEngineeringCommand,
@@ -106,30 +103,6 @@ async def engineering_database() -> AsyncIterator[EngineeringFixture]:
     try:
         yield fixture
     finally:
-        async with factory() as session, session.begin():
-            await session.execute(
-                delete(EngineeringCommandEvent).where(
-                    EngineeringCommandEvent.company_id.in_(
-                        (company_id, other_company_id)
-                    )
-                )
-            )
-            await session.execute(
-                delete(EngineeringCommand).where(
-                    EngineeringCommand.company_id.in_((company_id, other_company_id))
-                )
-            )
-            await session.execute(
-                delete(Membership).where(
-                    Membership.company_id.in_((company_id, other_company_id))
-                )
-            )
-            await session.execute(
-                delete(User).where(User.id.in_((user_id, other_user_id)))
-            )
-            await session.execute(
-                delete(Company).where(Company.id.in_((company_id, other_company_id)))
-            )
         await engine.dispose()
 
 
