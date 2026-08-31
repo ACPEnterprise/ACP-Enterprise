@@ -264,6 +264,14 @@ class JobAppointmentLink(Base):
         UniqueConstraint(
             "job_id", "visit_sequence", name="uq_job_appointment_links_job_visit"
         ),
+        UniqueConstraint(
+            "id",
+            "company_id",
+            "branch_id",
+            "job_id",
+            "appointment_id",
+            name="uq_job_appointment_link_correction_scope",
+        ),
         Index(
             "ix_job_appointment_links_company_branch",
             "company_id",

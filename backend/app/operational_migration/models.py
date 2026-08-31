@@ -567,6 +567,47 @@ class HcpMigrationChildRepair(Base):
             name="fk_hcp_child_repair_original_scope",
             ondelete="RESTRICT",
         ),
+        ForeignKeyConstraint(
+            ["repair_child_run_id", "company_id", "branch_id"],
+            [
+                "operational_migration_runs.id",
+                "operational_migration_runs.company_id",
+                "operational_migration_runs.branch_id",
+            ],
+            name="fk_hcp_child_repair_child_scope",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["failed_child_run_id", "company_id", "branch_id"],
+            [
+                "operational_migration_runs.id",
+                "operational_migration_runs.company_id",
+                "operational_migration_runs.branch_id",
+            ],
+            name="fk_hcp_child_repair_failed_scope",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["parent_repair_id", "company_id", "branch_id"],
+            [
+                "hcp_migration_child_repairs.id",
+                "hcp_migration_child_repairs.company_id",
+                "hcp_migration_child_repairs.branch_id",
+            ],
+            name="fk_hcp_child_repair_parent_scope",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["sequence_plan_id", "company_id", "branch_id"],
+            [
+                "hcp_appointment_sequence_plans.id",
+                "hcp_appointment_sequence_plans.company_id",
+                "hcp_appointment_sequence_plans.branch_id",
+            ],
+            name="fk_hcp_child_repair_sequence_plan_scope",
+            ondelete="RESTRICT",
+            use_alter=True,
+        ),
         UniqueConstraint(
             "master_run_id",
             "domain",
@@ -593,24 +634,15 @@ class HcpMigrationChildRepair(Base):
     )
     repair_child_run_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
-        ForeignKey("operational_migration_runs.id", ondelete="RESTRICT"),
     )
     parent_repair_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
-        ForeignKey("hcp_migration_child_repairs.id", ondelete="RESTRICT"),
     )
     failed_child_run_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
-        ForeignKey("operational_migration_runs.id", ondelete="RESTRICT"),
     )
     sequence_plan_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
-        ForeignKey(
-            "hcp_appointment_sequence_plans.id",
-            name="fk_hcp_child_repair_sequence_plan",
-            ondelete="RESTRICT",
-            use_alter=True,
-        ),
     )
     repair_generation: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     domain: Mapped[str] = mapped_column(String(20), nullable=False)
@@ -724,6 +756,34 @@ class HcpAppointmentSequenceCorrection(Base):
             name="fk_hcp_appointment_correction_plan_scope",
             ondelete="RESTRICT",
         ),
+        ForeignKeyConstraint(
+            [
+                "appointment_link_id",
+                "company_id",
+                "branch_id",
+                "job_id",
+                "appointment_id",
+            ],
+            [
+                "job_appointment_links.id",
+                "job_appointment_links.company_id",
+                "job_appointment_links.branch_id",
+                "job_appointment_links.job_id",
+                "job_appointment_links.appointment_id",
+            ],
+            name="fk_hcp_appointment_correction_link_scope",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["failed_child_run_id", "company_id", "branch_id"],
+            [
+                "operational_migration_runs.id",
+                "operational_migration_runs.company_id",
+                "operational_migration_runs.branch_id",
+            ],
+            name="fk_hcp_appointment_correction_failed_run_scope",
+            ondelete="RESTRICT",
+        ),
         UniqueConstraint(
             "sequence_plan_id",
             "appointment_link_id",
@@ -741,9 +801,7 @@ class HcpAppointmentSequenceCorrection(Base):
     branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     sequence_plan_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     appointment_link_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("job_appointment_links.id", ondelete="RESTRICT"),
-        nullable=False,
+        PGUUID(as_uuid=True), nullable=False
     )
     job_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     appointment_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
