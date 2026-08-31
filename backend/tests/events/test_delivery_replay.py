@@ -21,6 +21,7 @@ from app.events.delivery import BusinessEventDeliveryService, DeliveryConflict
 from app.events.delivery_contracts import ConsumerDefinition, ConsumerMode
 from app.events.models import (
     BusinessEvent,
+    BusinessEventConsumerCursor,
     BusinessEventConsumerReceipt,
     BusinessEventDelivery,
     BusinessEventDeliveryEvidence,
@@ -535,3 +536,71 @@ async def test_delivery_scope_parity_and_registered_receipt_are_database_enforce
                 )
             )
             await session.flush()
+
+
+@pytest.mark.asyncio
+async def test_ordered_cursor_and_receipt_evidence_are_database_bound(
+    delivery_database: async_sessionmaker[AsyncSession],
+) -> None:
+    event_id, delivery_id = await _delivery(
+        delivery_database, consumer=ORDERED, sequence=1
+    )
+    async with delivery_database() as session:
+        event = await session.get(BusinessEvent, event_id)
+        assert event is not None and event.entity_id is not None
+        entity_id = event.entity_id
+
+    forged_cursors = (
+        {"entity_id": uuid4(), "last_sequence": 1},
+        {"entity_id": entity_id, "last_sequence": 2},
+        {
+            "entity_id": entity_id,
+            "last_sequence": 1,
+            "consumer_name": REPLAY_SAFE,
+        },
+    )
+    for values in forged_cursors:
+        with pytest.raises(DBAPIError):
+            async with delivery_database() as session, session.begin():
+                session.add(
+                    BusinessEventConsumerCursor(
+                        consumer_name=str(values.get("consumer_name", ORDERED)),
+                        company_id=COMPANY_A,
+                        entity_type="test",
+                        entity_id=values["entity_id"],
+                        last_sequence=int(values["last_sequence"]),
+                        last_event_id=event_id,
+                        updated_at=NOW,
+                    )
+                )
+                await session.flush()
+
+    with pytest.raises(DBAPIError):
+        async with delivery_database() as session, session.begin():
+            session.add(
+                BusinessEventConsumerReceipt(
+                    event_id=event_id,
+                    consumer_name=ORDERED,
+                    company_id=COMPANY_A,
+                    branch_id=BRANCH_A,
+                    outcome_digest="short",
+                    aggregate_sequence=1,
+                    created_at=NOW,
+                )
+            )
+            await session.flush()
+
+    async with delivery_database() as session, session.begin():
+        session.add(
+            BusinessEventConsumerCursor(
+                consumer_name=ORDERED,
+                company_id=COMPANY_A,
+                entity_type="test",
+                entity_id=entity_id,
+                last_sequence=1,
+                last_event_id=event_id,
+                updated_at=NOW,
+            )
+        )
+        await session.flush()
+        assert await session.get(BusinessEventDelivery, delivery_id) is not None

@@ -293,6 +293,14 @@ class BusinessEventConsumerReceipt(Base):
             "branch_id IS NULL OR company_id IS NOT NULL",
             name="ck_business_event_receipt_branch_requires_company",
         ),
+        CheckConstraint(
+            "length(outcome_digest) = 64",
+            name="ck_business_event_receipt_outcome_digest",
+        ),
+        CheckConstraint(
+            "aggregate_sequence IS NULL OR aggregate_sequence >= 1",
+            name="ck_business_event_receipt_aggregate_sequence",
+        ),
         ForeignKeyConstraint(
             ["company_id", "event_id"],
             ["business_events.company_id", "business_events.id"],
@@ -343,6 +351,18 @@ class BusinessEventConsumerCursor(Base):
             "entity_type",
             "entity_id",
             name="uq_business_event_consumer_cursor",
+        ),
+        CheckConstraint(
+            "length(btrim(consumer_name)) > 0",
+            name="ck_business_event_cursor_consumer_not_blank",
+        ),
+        CheckConstraint(
+            "length(btrim(entity_type)) > 0",
+            name="ck_business_event_cursor_entity_type_not_blank",
+        ),
+        CheckConstraint(
+            "last_sequence >= 1",
+            name="ck_business_event_cursor_last_sequence",
         ),
         ForeignKeyConstraint(
             ["company_id", "last_event_id"],
