@@ -43,6 +43,15 @@ class CompanyFinancePolicyVersion(Base):
             name="ck_eco_policy_interval",
         ),
         CheckConstraint("branch_id IS NULL", name="ck_eco_policy_company_scope_v1"),
+        ForeignKeyConstraint(
+            ["company_id", "supersedes_policy_id"],
+            [
+                "economics_company_policy_versions.company_id",
+                "economics_company_policy_versions.id",
+            ],
+            name="fk_eco_policy_predecessor_scope",
+            ondelete="RESTRICT",
+        ),
         UniqueConstraint(
             "company_id",
             "family_key",
@@ -86,7 +95,6 @@ class CompanyFinancePolicyVersion(Base):
     policy_digest: Mapped[str] = mapped_column(String(64), nullable=False)
     supersedes_policy_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
-        ForeignKey("economics_company_policy_versions.id", ondelete="RESTRICT"),
     )
     drafted_by_user_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
@@ -213,6 +221,7 @@ class CompanyFinancePolicyGap(Base):
             "effective_start",
             name="uq_eco_policy_gap_identity",
         ),
+        UniqueConstraint("company_id", "id", name="uq_eco_policy_gap_company"),
         Index("ix_eco_policy_gap_open", "company_id", "family_key", "state"),
     )
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True)
@@ -319,6 +328,15 @@ class PolicyGapClosureRecord(Base):
             "state IN ('open','satisfied','conflicting','superseded')",
             name="ck_eco_gap_closure_state",
         ),
+        ForeignKeyConstraint(
+            ["company_id", "gap_id"],
+            [
+                "economics_company_policy_gaps.company_id",
+                "economics_company_policy_gaps.id",
+            ],
+            name="fk_eco_gap_closure_gap_scope",
+            ondelete="RESTRICT",
+        ),
         UniqueConstraint(
             "company_id", "closure_digest", name="uq_eco_gap_closure_digest"
         ),
@@ -340,9 +358,7 @@ class PolicyGapClosureRecord(Base):
     )
     branch_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
     gap_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("economics_company_policy_gaps.id", ondelete="RESTRICT"),
-        nullable=False,
+        PGUUID(as_uuid=True), nullable=False
     )
     subject_id: Mapped[str] = mapped_column(String(200), nullable=False)
     reconciliation_key: Mapped[str] = mapped_column(String(240), nullable=False)

@@ -134,6 +134,16 @@ class WorkdayTimeEntryRevision(Base):
             ["branches.company_id", "branches.id"],
             ondelete="RESTRICT",
         ),
+        ForeignKeyConstraint(
+            ["company_id", "entry_id", "supersedes_revision_id"],
+            [
+                "timekeeping_entry_revisions.company_id",
+                "timekeeping_entry_revisions.entry_id",
+                "timekeeping_entry_revisions.id",
+            ],
+            name="fk_time_entry_revision_predecessor_scope",
+            ondelete="RESTRICT",
+        ),
         CheckConstraint(
             "provenance IN ('employee_punch','authorized_manual_entry')",
             name="ck_time_entry_provenance",
@@ -161,6 +171,12 @@ class WorkdayTimeEntryRevision(Base):
             "company_id", "entry_id", "revision_number", name="uq_time_entry_revision"
         ),
         UniqueConstraint("company_id", "id", name="uq_time_entry_revision_company"),
+        UniqueConstraint(
+            "company_id",
+            "entry_id",
+            "id",
+            name="uq_time_entry_revision_predecessor_scope",
+        ),
         Index(
             "ix_time_entry_employee_date",
             "company_id",
@@ -185,7 +201,6 @@ class WorkdayTimeEntryRevision(Base):
     revision_number: Mapped[int] = mapped_column(Integer, nullable=False)
     supersedes_revision_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
-        ForeignKey("timekeeping_entry_revisions.id", ondelete="RESTRICT"),
     )
     lineage_revision_ids: Mapped[list[str]] = mapped_column(
         JSONB, nullable=False, default=list
