@@ -29,6 +29,18 @@ class Estimate(Base):
     __tablename__ = "estimates"
     __table_args__ = (
         ForeignKeyConstraint(
+            ["company_id", "customer_id"],
+            ["customers.company_id", "customers.id"],
+            name="fk_legacy_estimates_customer_scope",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["service_location_id", "customer_id"],
+            ["service_locations.id", "service_locations.customer_id"],
+            name="fk_legacy_estimates_location_customer",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
             ["company_id", "branch_id", "job_id"],
             ["jobs.company_id", "jobs.branch_id", "jobs.id"],
             name="fk_estimates_job_scope",
@@ -61,16 +73,8 @@ class Estimate(Base):
     company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     job_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
-    customer_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("customers.id", ondelete="RESTRICT"),
-        nullable=False,
-    )
-    service_location_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("service_locations.id", ondelete="RESTRICT"),
-        nullable=False,
-    )
+    customer_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    service_location_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     estimate_number: Mapped[str] = mapped_column(String(40), nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False)
     currency: Mapped[str] = mapped_column(String(3), nullable=False)

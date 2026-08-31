@@ -52,6 +52,12 @@ class Estimate(Base):
             ondelete="RESTRICT",
         ),
         ForeignKeyConstraint(
+            ["company_id", "customer_id"],
+            ["customers.company_id", "customers.id"],
+            name="fk_estimate_proposals_customer_scope",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
             ["service_location_id", "customer_id"],
             ["service_locations.id", "service_locations.customer_id"],
             name="fk_estimates_customer_location",
@@ -95,11 +101,7 @@ class Estimate(Base):
         nullable=False,
     )
     branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
-    customer_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("customers.id", ondelete="RESTRICT"),
-        nullable=False,
-    )
+    customer_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     service_location_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
     estimate_number: Mapped[str] = mapped_column(String(24), nullable=False)
     status: Mapped[str] = mapped_column(String(24), nullable=False, default="draft")
