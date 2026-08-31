@@ -84,3 +84,29 @@ class AssignmentResponse(StrictAdminSchema):
 
 class MutationResponse(StrictAdminSchema):
     changed: bool
+
+
+class CanonicalRoleSyncApplyRequest(StrictAdminSchema):
+    expected_plan_digest: str = Field(min_length=64, max_length=64)
+
+
+class CanonicalRoleSyncItemResponse(StrictAdminSchema):
+    code: str
+    classification: str
+    missing_permissions: tuple[str, ...]
+    metadata_update_required: bool
+
+
+class CanonicalRoleSyncPlanResponse(StrictAdminSchema):
+    company_id: UUID
+    plan_digest: str
+    safe_to_apply: bool
+    items: tuple[CanonicalRoleSyncItemResponse, ...]
+
+
+class CanonicalRoleSyncResultResponse(StrictAdminSchema):
+    plan: CanonicalRoleSyncPlanResponse
+    roles_created: tuple[str, ...]
+    permissions_added: tuple[str, ...]
+    metadata_restored: tuple[str, ...]
+    authorization_users_advanced: int

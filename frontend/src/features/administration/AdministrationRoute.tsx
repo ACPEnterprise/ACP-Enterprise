@@ -23,7 +23,13 @@ import {
   getQuickBooksSandboxConnection,
   launchQuickBooksSandbox,
 } from "./api";
-import { usePermissionMutation, useRolePermissions, useRoles } from "./hooks";
+import {
+  useCanonicalRoleSync,
+  useCanonicalRoleSyncPlan,
+  usePermissionMutation,
+  useRolePermissions,
+  useRoles,
+} from "./hooks";
 import { MigrationWorkspace } from "./MigrationWorkspace";
 
 type PendingChange = {
@@ -41,6 +47,9 @@ export function AdministrationRoute() {
   const canAdminister = permissionCodes.includes("COMPANY_ADMINISTER");
   const canReadRoles = permissionCodes.includes("COMPANY_ROLE_READ");
   const canManagePermissions = permissionCodes.includes("COMPANY_PERMISSION_MANAGE");
+  const canManageRoles = permissionCodes.includes("COMPANY_ROLE_MANAGE");
+  const canonicalRoles = useCanonicalRoleSyncPlan(canReadRoles);
+  const canonicalRoleSync = useCanonicalRoleSync();
   const roles = useRoles(canReadRoles);
   const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null);
   const selectedRole =
@@ -59,6 +68,16 @@ export function AdministrationRoute() {
     QboSandboxConnectionState | "loading"
   >("loading");
   const mutation = usePermissionMutation(pending?.action ?? "grant");
+
+  const applyCanonicalRoles = async () => {
+    if (!canonicalRoles.data?.safe_to_apply) return;
+    await canonicalRoleSync.mutateAsync(canonicalRoles.data.plan_digest);
+    requireReauthentication();
+    await navigate("/login", {
+      replace: true,
+      state: { from: "/administration", authorizationChanged: true },
+    });
+  };
 
   useEffect(() => {
     if (!canAdminister) return;
@@ -254,6 +273,73 @@ export function AdministrationRoute() {
         </Card>
       )}
       {canAdminister && <MigrationWorkspace />}
+      {canReadRoles && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Canonical role readiness</CardTitle>
+            <CardDescription>
+              Preview and safely reconcile accepted system roles. Tenant-created
+              roles and Membership assignments are never changed.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-ui-3">
+            {canonicalRoles.isPending && <Spinner label="Checking canonical roles" />}
+            {canonicalRoles.isError && (
+              <Alert variant="danger">Canonical role readiness is unavailable.</Alert>
+            )}
+            {canonicalRoles.data && (
+              <>
+                <ul className="grid gap-ui-2 sm:grid-cols-2">
+                  {canonicalRoles.data.items.map((item) => (
+                    <li key={item.code} className="rounded-lg border border-stroke p-ui-3">
+                      <div className="flex flex-wrap items-center justify-between gap-ui-2">
+                        <strong>{item.code}</strong>
+                        <Badge
+                          variant={
+                            item.classification === "ALREADY_CONFORMING"
+                              ? "success"
+                              : item.classification.includes("CONFLICT") ||
+                                  item.classification.includes("UNSAFE")
+                                ? "danger"
+                                : "warning"
+                          }
+                        >
+                          {item.classification.replaceAll("_", " ")}
+                        </Badge>
+                      </div>
+                      {item.missing_permissions.length > 0 && (
+                        <p className="mt-ui-2 text-body-xs text-content-muted">
+                          {item.missing_permissions.length} accepted permission(s) missing
+                        </p>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+                {canonicalRoleSync.isError && (
+                  <Alert variant="danger">
+                    Reconciliation was not applied. Refresh the preview and review conflicts.
+                  </Alert>
+                )}
+                {canManageRoles && canManagePermissions && (
+                  <Button
+                    disabled={!canonicalRoles.data.safe_to_apply}
+                    loading={canonicalRoleSync.isPending}
+                    loadingLabel="Reconciling canonical roles"
+                    onClick={() => void applyCanonicalRoles()}
+                  >
+                    Apply safe reconciliation
+                  </Button>
+                )}
+                {!canonicalRoles.data.safe_to_apply && (
+                  <Alert variant="warning">
+                    A role identity conflict requires review. No changes can be applied.
+                  </Alert>
+                )}
+              </>
+            )}
+          </CardContent>
+        </Card>
+      )}
       {!canReadRoles && <Alert variant="information">Role administration requires role-read permission.</Alert>}
       {canReadRoles && <Card>
         <CardHeader>

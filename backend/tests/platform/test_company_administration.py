@@ -7,18 +7,10 @@ from uuid import UUID, uuid4
 import httpx
 import pytest
 import pytest_asyncio
-from fastapi import FastAPI
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import (
-    AsyncEngine,
-    AsyncSession,
-    async_sessionmaker,
-    create_async_engine,
-)
-
 from app.core.config import settings
 from app.database.session import get_database_session
 from app.events.models import BusinessEvent
+from app.platform.audit.models import AuditRecord
 from app.platform.auth.access_tokens import AccessTokenClaims
 from app.platform.auth.models import AuthenticationSession
 from app.platform.auth.services import AuthenticatedContext, utc_now
@@ -37,6 +29,7 @@ from app.platform.permissions.authorization import (
     AuthorizationService,
     TenantAccessDeniedError,
 )
+from app.platform.permissions.canonical_roles import CANONICAL_ROLE_DEFINITIONS
 from app.platform.permissions.catalog_sync import PermissionCatalogSyncService
 from app.platform.permissions.codes import (
     AdministrationPermission,
@@ -52,7 +45,20 @@ from app.platform.permissions.models import (
     Role,
     RolePermission,
 )
+from app.platform.permissions.role_sync import (
+    CanonicalRoleSyncConflict,
+    CanonicalRoleSyncService,
+    RoleSyncClassification,
+)
 from app.platform.users.models import User, UserCredential
+from fastapi import FastAPI
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 
 @dataclass(frozen=True)
@@ -293,7 +299,271 @@ async def user_version(factory: async_sessionmaker[AsyncSession], user_id: UUID)
             select(User.authorization_version).where(User.id == user_id)
         )
         assert value is not None
-        return value
+    return value
+
+
+async def synchronize_permission_catalog(
+    factory: async_sessionmaker[AsyncSession],
+) -> None:
+    async with factory() as session:
+        await PermissionCatalogSyncService().synchronize(session)
+
+
+@pytest.mark.asyncio
+async def test_canonical_role_sync_preserves_custom_roles_and_exact_replay(
+    admin_database: tuple[AsyncEngine, async_sessionmaker[AsyncSession]],
+) -> None:
+    _, factory = admin_database
+    fixture = await seed_admin_fixture(factory, "ROLESYNCA")
+    await synchronize_permission_catalog(factory)
+    service = CanonicalRoleSyncService()
+    async with factory() as session:
+        plan = await service.plan(session, company_id=fixture.context.company.id)
+    assert plan.safe_to_apply
+    assert all(
+        item.classification is RoleSyncClassification.MISSING_CANONICAL_ROLE
+        for item in plan.items
+    )
+
+    async with factory() as session:
+        first = await service.apply(
+            session,
+            context=fixture.context,
+            expected_plan_digest=plan.digest,
+        )
+    assert set(first.roles_created) == {
+        item.code for item in CANONICAL_ROLE_DEFINITIONS
+    }
+
+    async with factory() as session:
+        replay = await service.apply(
+            session,
+            context=fixture.context,
+            expected_plan_digest=plan.digest,
+        )
+        custom = await session.get(Role, fixture.company_role_id)
+        other_tenant_roles = tuple(
+            await session.scalars(
+                select(Role).where(Role.company_id == fixture.other_company_id)
+            )
+        )
+        audit = await session.scalar(
+            select(AuditRecord)
+            .where(
+                AuditRecord.company_id == fixture.context.company.id,
+                AuditRecord.action == "company.canonical_roles_reconciled",
+            )
+            .order_by(AuditRecord.occurred_at.desc())
+        )
+    assert replay.roles_created == ()
+    assert replay.permissions_added == ()
+    assert custom is not None and not custom.is_system
+    assert {role.id for role in other_tenant_roles} == {fixture.other_role_id}
+    assert audit is not None
+
+
+@pytest.mark.asyncio
+async def test_canonical_role_sync_adds_only_missing_grant_and_advances_user(
+    admin_database: tuple[AsyncEngine, async_sessionmaker[AsyncSession]],
+) -> None:
+    _, factory = admin_database
+    fixture = await seed_admin_fixture(factory, "ROLESYNCB")
+    await synchronize_permission_catalog(factory)
+    service = CanonicalRoleSyncService()
+    async with factory() as session:
+        initial = await service.plan(session, company_id=fixture.context.company.id)
+    async with factory() as session:
+        await service.apply(
+            session,
+            context=fixture.context,
+            expected_plan_digest=initial.digest,
+        )
+    async with factory() as session, session.begin():
+        role = await session.scalar(
+            select(Role).where(
+                Role.company_id == fixture.context.company.id,
+                Role.code == "SERVICE_CSR",
+            )
+        )
+        assert role is not None
+        assignment = MembershipRole(
+            company_id=fixture.context.company.id,
+            membership_id=fixture.target_membership_id,
+            role_id=role.id,
+            assigned_at=utc_now(),
+        )
+        session.add(assignment)
+        permission_id = await session.scalar(
+            select(Permission.id).where(
+                Permission.code == "COMPANY_CUSTOMER_READ"
+            )
+        )
+        assert permission_id is not None
+        grant = await session.scalar(
+            select(RolePermission).where(
+                RolePermission.role_id == role.id,
+                RolePermission.permission_id == permission_id,
+            )
+        )
+        assert grant is not None
+        await session.delete(grant)
+    before = await user_version(factory, fixture.target_user_id)
+    async with factory() as session:
+        plan = await service.plan(session, company_id=fixture.context.company.id)
+        item = next(value for value in plan.items if value.code == "SERVICE_CSR")
+        assert item.classification is RoleSyncClassification.MISSING_CANONICAL_PERMISSION
+    async with factory() as session:
+        result = await service.apply(
+            session,
+            context=fixture.context,
+            expected_plan_digest=plan.digest,
+        )
+    assert result.permissions_added == ("SERVICE_CSR:COMPANY_CUSTOMER_READ",)
+    assert result.authorization_users_advanced == 1
+    assert await user_version(factory, fixture.target_user_id) == before + 1
+
+
+@pytest.mark.asyncio
+async def test_canonical_role_sync_rejects_custom_code_collision_without_mutation(
+    admin_database: tuple[AsyncEngine, async_sessionmaker[AsyncSession]],
+) -> None:
+    _, factory = admin_database
+    fixture = await seed_admin_fixture(factory, "ROLESYNCC")
+    await synchronize_permission_catalog(factory)
+    async with factory() as session, session.begin():
+        session.add(
+            Role(
+                company_id=fixture.context.company.id,
+                code="SERVICE_CSR",
+                name="Tenant Service CSR",
+                status="active",
+                is_system=False,
+            )
+        )
+    service = CanonicalRoleSyncService()
+    async with factory() as session:
+        plan = await service.plan(session, company_id=fixture.context.company.id)
+        collision = next(value for value in plan.items if value.code == "SERVICE_CSR")
+        assert collision.classification is RoleSyncClassification.UNSAFE_IDENTITY_COLLISION
+    async with factory() as session:
+        with pytest.raises(CanonicalRoleSyncConflict, match="require review"):
+            await service.apply(
+                session,
+                context=fixture.context,
+                expected_plan_digest=plan.digest,
+            )
+    async with factory() as session:
+        system_count = await session.scalar(
+            select(func.count())
+            .select_from(Role)
+            .where(
+                Role.company_id == fixture.context.company.id,
+                Role.is_system.is_(True),
+                Role.code.in_(item.code for item in CANONICAL_ROLE_DEFINITIONS),
+            )
+        )
+    assert system_count == 0
+
+
+@pytest.mark.asyncio
+async def test_concurrent_canonical_role_apply_converges(
+    admin_database: tuple[AsyncEngine, async_sessionmaker[AsyncSession]],
+) -> None:
+    _, factory = admin_database
+    fixture = await seed_admin_fixture(factory, "ROLESYNCD")
+    await synchronize_permission_catalog(factory)
+    service = CanonicalRoleSyncService()
+    async with factory() as session:
+        plan = await service.plan(session, company_id=fixture.context.company.id)
+
+    async def apply_once():
+        async with factory() as session:
+            return await service.apply(
+                session,
+                context=fixture.context,
+                expected_plan_digest=plan.digest,
+            )
+
+    results = await asyncio.gather(apply_once(), apply_once())
+    assert sum(len(result.roles_created) for result in results) == len(
+        CANONICAL_ROLE_DEFINITIONS
+    )
+    async with factory() as session:
+        roles = tuple(
+            await session.scalars(
+                select(Role).where(
+                    Role.company_id == fixture.context.company.id,
+                    Role.is_system.is_(True),
+                    Role.code.in_(item.code for item in CANONICAL_ROLE_DEFINITIONS),
+                )
+            )
+        )
+    assert len(roles) == len(CANONICAL_ROLE_DEFINITIONS)
+
+
+@pytest.mark.asyncio
+async def test_canonical_role_sync_rejects_changed_plan(
+    admin_database: tuple[AsyncEngine, async_sessionmaker[AsyncSession]],
+) -> None:
+    _, factory = admin_database
+    fixture = await seed_admin_fixture(factory, "ROLESYNCE")
+    await synchronize_permission_catalog(factory)
+    service = CanonicalRoleSyncService()
+    async with factory() as session:
+        plan = await service.plan(session, company_id=fixture.context.company.id)
+    async with factory() as session, session.begin():
+        session.add(
+            Role(
+                company_id=fixture.context.company.id,
+                code="SERVICE_CSR",
+                name="Tenant Service CSR",
+                status="active",
+                is_system=False,
+            )
+        )
+    async with factory() as session:
+        with pytest.raises(CanonicalRoleSyncConflict, match="changed before apply"):
+            await service.apply(
+                session,
+                context=fixture.context,
+                expected_plan_digest=plan.digest,
+            )
+
+
+@pytest.mark.asyncio
+async def test_canonical_role_sync_rolls_back_all_changes_on_failure(
+    admin_database: tuple[AsyncEngine, async_sessionmaker[AsyncSession]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _, factory = admin_database
+    fixture = await seed_admin_fixture(factory, "ROLESYNCF")
+    await synchronize_permission_catalog(factory)
+    service = CanonicalRoleSyncService()
+    async with factory() as session:
+        plan = await service.plan(session, company_id=fixture.context.company.id)
+
+    def fail_audit(*_args: object, **_kwargs: object) -> None:
+        raise RuntimeError("injected audit failure")
+
+    monkeypatch.setattr("app.platform.permissions.role_sync.audit_service.stage", fail_audit)
+    async with factory() as session:
+        with pytest.raises(RuntimeError, match="injected audit failure"):
+            await service.apply(
+                session,
+                context=fixture.context,
+                expected_plan_digest=plan.digest,
+            )
+    async with factory() as session:
+        system_count = await session.scalar(
+            select(func.count())
+            .select_from(Role)
+            .where(
+                Role.company_id == fixture.context.company.id,
+                Role.is_system.is_(True),
+                Role.code.in_(item.code for item in CANONICAL_ROLE_DEFINITIONS),
+            )
+        )
+    assert system_count == 0
 
 
 @pytest.mark.asyncio
