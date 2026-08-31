@@ -4,7 +4,14 @@ from uuid import uuid4
 
 from sqlalchemy import ForeignKeyConstraint, UniqueConstraint
 
-from app.service_agreements.models import AgreementPlan, ServiceAgreement
+from app.service_agreements.models import (
+    AgreementBillingOccurrence,
+    AgreementCoverage,
+    AgreementLifecycleEvidence,
+    AgreementPlan,
+    ServiceAgreement,
+    ServiceEntitlement,
+)
 from app.service_agreements.schemas import PlanOut, Transition
 from app.service_agreements.service import add_months, digest
 
@@ -40,6 +47,38 @@ def test_agreement_root_identities_are_company_bound() -> None:
         isinstance(constraint, UniqueConstraint)
         and constraint.name == "uq_service_agreements_company_id"
         for constraint in ServiceAgreement.__table__.constraints
+    )
+
+
+def test_agreement_children_bind_tenant_branch_and_exact_parent() -> None:
+    expected = {
+        AgreementCoverage: {"fk_agreement_coverage_agreement"},
+        ServiceEntitlement: {
+            "fk_agreement_entitlements_agreement",
+            "fk_agreement_entitlements_appointment",
+            "fk_agreement_entitlements_job",
+        },
+        AgreementLifecycleEvidence: {
+            "fk_agreement_evidence_agreement",
+            "fk_agreement_evidence_entitlement",
+        },
+        AgreementBillingOccurrence: {
+            "fk_agreement_billing_agreement",
+            "fk_agreement_billing_invoice",
+        },
+    }
+
+    for model, names in expected.items():
+        constraints = {
+            constraint.name
+            for constraint in model.__table__.constraints
+            if isinstance(constraint, ForeignKeyConstraint)
+        }
+        assert names <= constraints
+    assert any(
+        isinstance(constraint, UniqueConstraint)
+        and constraint.name == "uq_agreement_entitlements_evidence_binding"
+        for constraint in ServiceEntitlement.__table__.constraints
     )
 
 

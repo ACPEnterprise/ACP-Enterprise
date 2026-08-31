@@ -136,6 +136,12 @@ class ServiceAgreement(Base):
         UniqueConstraint(
             "company_id", "id", name="uq_service_agreements_company_id"
         ),
+        UniqueConstraint(
+            "company_id",
+            "branch_id",
+            "id",
+            name="uq_service_agreements_company_branch_id",
+        ),
     )
     id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), primary_key=True, default=uuid4
@@ -176,6 +182,12 @@ class ServiceAgreement(Base):
 class AgreementCoverage(Base):
     __tablename__ = "service_agreement_coverage"
     __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "agreement_id"],
+            ["service_agreements.company_id", "service_agreements.id"],
+            name="fk_agreement_coverage_agreement",
+            ondelete="RESTRICT",
+        ),
         UniqueConstraint(
             "company_id",
             "agreement_id",
@@ -191,11 +203,7 @@ class AgreementCoverage(Base):
         ForeignKey("companies.id", ondelete="RESTRICT"),
         nullable=False,
     )
-    agreement_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("service_agreements.id", ondelete="RESTRICT"),
-        nullable=False,
-    )
+    agreement_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     service_location_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("service_locations.id", ondelete="RESTRICT"),
@@ -208,6 +216,28 @@ class AgreementCoverage(Base):
 class ServiceEntitlement(Base):
     __tablename__ = "service_agreement_entitlements"
     __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "branch_id", "agreement_id"],
+            [
+                "service_agreements.company_id",
+                "service_agreements.branch_id",
+                "service_agreements.id",
+            ],
+            name="fk_agreement_entitlements_agreement",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "branch_id", "appointment_id"],
+            ["appointments.company_id", "appointments.branch_id", "appointments.id"],
+            name="fk_agreement_entitlements_appointment",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "branch_id", "job_id"],
+            ["jobs.company_id", "jobs.branch_id", "jobs.id"],
+            name="fk_agreement_entitlements_job",
+            ondelete="RESTRICT",
+        ),
         CheckConstraint(
             "status IN ('due','scheduled','completed','expired','cancelled','blocked')",
             name="ck_agreement_entitlements_status",
@@ -219,6 +249,13 @@ class ServiceEntitlement(Base):
             "sequence",
             name="uq_agreement_entitlement_sequence",
         ),
+        UniqueConstraint(
+            "company_id",
+            "branch_id",
+            "id",
+            "agreement_id",
+            name="uq_agreement_entitlements_evidence_binding",
+        ),
     )
     id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), primary_key=True, default=uuid4
@@ -229,11 +266,7 @@ class ServiceEntitlement(Base):
         nullable=False,
     )
     branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
-    agreement_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("service_agreements.id", ondelete="RESTRICT"),
-        nullable=False,
-    )
+    agreement_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     service_location_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("service_locations.id", ondelete="RESTRICT"),
@@ -257,6 +290,27 @@ class ServiceEntitlement(Base):
 class AgreementLifecycleEvidence(Base):
     __tablename__ = "service_agreement_lifecycle_evidence"
     __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "branch_id", "agreement_id"],
+            [
+                "service_agreements.company_id",
+                "service_agreements.branch_id",
+                "service_agreements.id",
+            ],
+            name="fk_agreement_evidence_agreement",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "branch_id", "entitlement_id", "agreement_id"],
+            [
+                "service_agreement_entitlements.company_id",
+                "service_agreement_entitlements.branch_id",
+                "service_agreement_entitlements.id",
+                "service_agreement_entitlements.agreement_id",
+            ],
+            name="fk_agreement_evidence_entitlement",
+            ondelete="RESTRICT",
+        ),
         CheckConstraint(
             "action IN ('activate','renewal_review','renew','cancel','expire','generate_entitlements','schedule_link','job_link','consume','reverse_consumption','billing_ready')",
             name="ck_agreement_evidence_action",
@@ -274,15 +328,8 @@ class AgreementLifecycleEvidence(Base):
         nullable=False,
     )
     branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
-    agreement_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("service_agreements.id", ondelete="RESTRICT"),
-        nullable=False,
-    )
-    entitlement_id: Mapped[UUID | None] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("service_agreement_entitlements.id", ondelete="RESTRICT"),
-    )
+    agreement_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    entitlement_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
     action: Mapped[str] = mapped_column(String(40), nullable=False)
     prior_status: Mapped[str] = mapped_column(String(24), nullable=False)
     resulting_status: Mapped[str] = mapped_column(String(24), nullable=False)
@@ -305,6 +352,22 @@ class AgreementLifecycleEvidence(Base):
 class AgreementBillingOccurrence(Base):
     __tablename__ = "service_agreement_billing_occurrences"
     __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "branch_id", "agreement_id"],
+            [
+                "service_agreements.company_id",
+                "service_agreements.branch_id",
+                "service_agreements.id",
+            ],
+            name="fk_agreement_billing_agreement",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "invoice_id"],
+            ["invoices.company_id", "invoices.id"],
+            name="fk_agreement_billing_invoice",
+            ondelete="RESTRICT",
+        ),
         CheckConstraint(
             "status IN ('unconfigured','ready','invoiced','cancelled','reconciliation_required')",
             name="ck_agreement_billing_status",
@@ -328,11 +391,7 @@ class AgreementBillingOccurrence(Base):
         nullable=False,
     )
     branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
-    agreement_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("service_agreements.id", ondelete="RESTRICT"),
-        nullable=False,
-    )
+    agreement_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     period_start: Mapped[date] = mapped_column(Date, nullable=False)
     period_end: Mapped[date] = mapped_column(Date, nullable=False)
     amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
