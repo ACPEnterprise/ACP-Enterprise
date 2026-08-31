@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from app.core.config import settings
+from app.events.models import BusinessEvent  # noqa: F401
 from app.platform.branch.models import Branch  # noqa: F401
 from app.platform.company.membership_models import Membership  # noqa: F401
 from app.platform.company.models import Company  # noqa: F401
@@ -36,15 +37,14 @@ def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-async def persist_scope(
-    session: AsyncSession, company_id: UUID, branch_id: UUID
-) -> None:
+async def persist_company(session: AsyncSession, company_id: UUID) -> None:
     now = utc_now()
     await session.execute(
         text(
             "INSERT INTO companies "
             "(id, name, code, status, timezone, created_at, updated_at) "
-            "VALUES (:id, :name, :code, 'active', 'UTC', :now, :now)"
+            "VALUES (:id, :name, :code, 'active', 'UTC', :now, :now) "
+            "ON CONFLICT (id) DO NOTHING"
         ),
         {
             "id": company_id,
@@ -53,6 +53,13 @@ async def persist_scope(
             "now": now,
         },
     )
+
+
+async def persist_scope(
+    session: AsyncSession, company_id: UUID, branch_id: UUID
+) -> None:
+    now = utc_now()
+    await persist_company(session, company_id)
     await session.execute(
         text(
             "INSERT INTO branches "
@@ -66,6 +73,46 @@ async def persist_scope(
             "company_id": company_id,
             "name": f"Notification branch {branch_id}",
             "code": f"N{branch_id.hex.upper()}",
+            "now": now,
+        },
+    )
+
+
+async def persist_user(session: AsyncSession, user_id: UUID) -> None:
+    now = utc_now()
+    await session.execute(
+        text(
+            "INSERT INTO users "
+            "(id, normalized_email, first_name, last_name, display_name, status, "
+            "authorization_version, created_at, updated_at) "
+            "VALUES (:id, :email, 'Notification', 'Actor', 'Notification Actor', "
+            "'active', 1, :now, :now)"
+        ),
+        {"id": user_id, "email": f"{user_id}@example.invalid", "now": now},
+    )
+
+
+async def persist_event(
+    session: AsyncSession,
+    event_id: UUID,
+    *,
+    company_id: UUID | None,
+    branch_id: UUID | None,
+) -> None:
+    now = utc_now()
+    await session.execute(
+        text(
+            "INSERT INTO business_events "
+            "(id, event_type, entity_type, company_id, branch_id, payload, "
+            "correlation_id, occurred_at, created_at) "
+            "VALUES (:id, 'test.notification_source', 'test', :company_id, "
+            ":branch_id, '{}'::jsonb, :correlation_id, :now, :now)"
+        ),
+        {
+            "id": event_id,
+            "company_id": company_id,
+            "branch_id": branch_id,
+            "correlation_id": uuid4(),
             "now": now,
         },
     )
@@ -101,7 +148,9 @@ async def enqueue_fixture(
     company_id: UUID | None = None,
 ) -> NotificationOutbox:
     now = utc_now()
+    scoped_company_id = company_id or uuid4()
     async with factory() as session, session.begin():
+        await persist_company(session, scoped_company_id)
         record, created = await NotificationOutboxRepository.enqueue(
             session,
             notification_type="identity.email_change_verification",
@@ -112,7 +161,7 @@ async def enqueue_fixture(
             idempotency_key=key or f"test:{uuid4()}",
             scheduled_at=scheduled_at or now,
             now=now,
-            company_id=company_id or uuid4(),
+            company_id=scoped_company_id,
         )
         assert created
         return record
@@ -130,6 +179,7 @@ async def test_enqueue_is_hash_free_structured_and_idempotent(
     correlation_id = uuid4()
     company_id = uuid4()
     async with factory() as session, session.begin():
+        await persist_company(session, company_id)
         first, first_created = await NotificationOutboxRepository.enqueue(
             session,
             notification_type="identity.email_change_verification",
@@ -368,6 +418,7 @@ async def test_contradictory_intent_replay_fails_closed(
     correlation_id = uuid4()
     company_id = uuid4()
     async with factory() as session, session.begin():
+        await persist_company(session, company_id)
         await NotificationOutboxRepository.enqueue(
             session,
             notification_type="customer.notice",
@@ -581,6 +632,8 @@ async def test_same_key_is_isolated_by_company_and_replays_per_tenant(
     key = f"shared-provider-identity:{uuid4()}"
 
     async with factory() as session, session.begin():
+        await persist_company(session, company_a)
+        await persist_company(session, company_b)
         first_a, created_a = await NotificationOutboxRepository.enqueue(
             session,
             notification_type="customer.notice",
@@ -688,6 +741,9 @@ async def test_concurrent_same_key_creation_is_independent_across_companies(
             return record
 
     company_a, company_b = uuid4(), uuid4()
+    async with factory() as session, session.begin():
+        await persist_company(session, company_a)
+        await persist_company(session, company_b)
     first, second = await asyncio.gather(create(company_a), create(company_b))
     assert first.id != second.id
     assert {first.company_id, second.company_id} == {company_a, company_b}
@@ -703,6 +759,9 @@ async def test_concurrent_same_company_replay_creates_one_intent(
     key = f"concurrent-same-tenant:{uuid4()}"
     correlation_id = uuid4()
     payload: dict[str, object] = {"safe_subject_id": str(uuid4())}
+
+    async with factory() as session, session.begin():
+        await persist_company(session, company_id)
 
     async def create() -> tuple[NotificationOutbox, bool]:
         async with factory() as session, session.begin():
@@ -779,6 +838,7 @@ async def test_outbox_rejects_branch_without_company_or_from_another_company(
     _, factory = outbox_database
     company_a, company_b, branch_b = uuid4(), uuid4(), uuid4()
     async with factory() as session, session.begin():
+        await persist_company(session, company_a)
         await persist_scope(session, company_b, branch_b)
         for company_id in (None, company_a):
             with pytest.raises(IntegrityError):
@@ -796,3 +856,64 @@ async def test_outbox_rejects_branch_without_company_or_from_another_company(
                         company_id=company_id,
                         branch_id=branch_b,
                     )
+
+
+@pytest.mark.asyncio
+async def test_outbox_rejects_forged_company_actor_and_source_event_scope(
+    outbox_database: tuple[AsyncEngine, async_sessionmaker[AsyncSession]],
+) -> None:
+    _, factory = outbox_database
+    company_a, company_b = uuid4(), uuid4()
+    branch_a, branch_b = uuid4(), uuid4()
+    actor_id, event_b = uuid4(), uuid4()
+    now = utc_now()
+    async with factory() as session, session.begin():
+        await persist_scope(session, company_a, branch_a)
+        await persist_scope(session, company_b, branch_b)
+        await persist_user(session, actor_id)
+        await persist_event(
+            session, event_b, company_id=company_b, branch_id=branch_b
+        )
+
+        invalid_scopes = (
+            {"company_id": uuid4()},
+            {"company_id": company_a, "actor_user_id": uuid4()},
+            {
+                "company_id": company_a,
+                "branch_id": branch_a,
+                "source_event_id": event_b,
+            },
+        )
+        for index, scope in enumerate(invalid_scopes):
+            with pytest.raises(IntegrityError):
+                async with session.begin_nested():
+                    await NotificationOutboxRepository.enqueue(
+                        session,
+                        notification_type="customer.notice",
+                        template_identifier="notice-v1",
+                        recipient="authority-test@example.invalid",
+                        payload={"safe_subject_id": str(uuid4())},
+                        correlation_id=uuid4(),
+                        idempotency_key=f"forged-authority:{index}:{uuid4()}",
+                        scheduled_at=now,
+                        now=now,
+                        **scope,
+                    )
+
+        accepted, created = await NotificationOutboxRepository.enqueue(
+            session,
+            notification_type="customer.notice",
+            template_identifier="notice-v1",
+            recipient="authority-test@example.invalid",
+            payload={"safe_subject_id": str(uuid4())},
+            correlation_id=uuid4(),
+            idempotency_key=f"exact-authority:{uuid4()}",
+            scheduled_at=now,
+            now=now,
+            company_id=company_b,
+            branch_id=branch_b,
+            actor_user_id=actor_id,
+            source_event_id=event_b,
+        )
+        assert created
+        assert accepted.source_event_id == event_b

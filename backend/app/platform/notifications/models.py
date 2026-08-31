@@ -151,14 +151,24 @@ class NotificationOutbox(Base):
     )
     idempotency_key: Mapped[str] = mapped_column(String(200), nullable=False)
     intent_digest: Mapped[str | None] = mapped_column(String(64))
-    company_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), index=True)
+    company_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        index=True,
+    )
     branch_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), index=True)
     channel: Mapped[str | None] = mapped_column(String(40))
     recipient_reference: Mapped[str | None] = mapped_column(String(160))
-    source_event_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    source_event_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("business_events.id", ondelete="RESTRICT"),
+    )
     source_action: Mapped[str | None] = mapped_column(String(120))
     template_version: Mapped[str | None] = mapped_column(String(150))
-    actor_user_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    actor_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+    )
     status: Mapped[str] = mapped_column(String(24), nullable=False, default="pending")
     retry_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     terminal_failure: Mapped[bool] = mapped_column(
