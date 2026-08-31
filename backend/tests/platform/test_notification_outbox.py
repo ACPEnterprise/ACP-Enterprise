@@ -5,7 +5,7 @@ from uuid import UUID, uuid4
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import func, select, text
+from sqlalchemy import delete, func, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -642,6 +642,22 @@ async def test_authorized_suppression_is_terminal_and_auditable(
         assert evidence.outcome == "suppressed"
         assert evidence.actor_user_id == actor
         assert evidence.reason_digest == reason_digest
+        evidence_id = evidence.id
+
+    async with factory() as session:
+        with pytest.raises(IntegrityError):
+            await session.execute(
+                update(NotificationDeliveryEvidence)
+                .where(NotificationDeliveryEvidence.id == evidence_id)
+                .values(outcome="cancelled")
+            )
+    async with factory() as session:
+        with pytest.raises(IntegrityError):
+            await session.execute(
+                delete(NotificationDeliveryEvidence).where(
+                    NotificationDeliveryEvidence.id == evidence_id
+                )
+            )
 
 
 @pytest.mark.asyncio

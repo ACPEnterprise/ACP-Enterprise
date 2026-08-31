@@ -7,7 +7,7 @@ from uuid import UUID, uuid4
 import pytest
 import pytest_asyncio
 from sqlalchemy import select, text, update
-from sqlalchemy.exc import DBAPIError
+from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -484,7 +484,7 @@ async def test_delivery_evidence_and_receipts_are_database_immutable(
     await _claim(delivery_database, delivery_id)
     async with delivery_database() as session, session.begin():
         evidence_id = await session.scalar(select(BusinessEventDeliveryEvidence.id))
-        with pytest.raises(DBAPIError):
+        with pytest.raises(IntegrityError):
             await session.execute(
                 update(BusinessEventDeliveryEvidence)
                 .where(BusinessEventDeliveryEvidence.id == evidence_id)
