@@ -48,10 +48,17 @@ class CountingFakeProvider(DeterministicFakeProvider):
     def __init__(self) -> None:
         super().__init__()
         self.collect_calls = 0
+        self.refund_calls = 0
+        self.refund_keys: list[str] = []
 
     async def collect(self, request: ProviderRequest):
         self.collect_calls += 1
         return await super().collect(request)
+
+    async def refund(self, request: ProviderRequest):
+        self.refund_calls += 1
+        self.refund_keys.append(request.provider_idempotency_key)
+        return await super().refund(request)
 
 
 @pytest.mark.parametrize(
@@ -196,6 +203,8 @@ async def test_concurrent_collection_and_refund_replay_have_one_economic_authori
 
     first_refund, refund_replay = await asyncio.gather(refund_once(), refund_once())
     assert first_refund.id == refund_replay.id
+    assert first_refund.provider_operation_id == refund_replay.provider_operation_id
+    assert len(set(provider.refund_keys)) == 1
     async with factory() as session:
         stored_receipt = await session.get(PaymentReceipt, receipt.id)
         assert stored_receipt is not None
@@ -217,6 +226,135 @@ async def test_concurrent_collection_and_refund_replay_have_one_economic_authori
                 session,
                 replace(collect, amount=Decimal("126.25")),
             )
+
+
+@pytest.mark.asyncio
+async def test_refund_replay_resumes_after_process_loss_before_provider_call(
+    payment_fixture,
+) -> None:
+    factory, company, branch, actor, customer = payment_fixture
+
+    class SimulatedProcessLoss(BaseException):
+        pass
+
+    class ProcessLossProvider(CountingFakeProvider):
+        async def refund(self, _request):
+            raise SimulatedProcessLoss
+
+    service = PaymentService(ProcessLossProvider(), "synthetic-merchant")
+    async with factory() as session:
+        intent = await service.collect(
+            session,
+            CreateIntent(
+                company_id=company.id,
+                branch_id=branch.id,
+                customer_id=customer.id,
+                amount=Decimal("45.00"),
+                currency="USD",
+                opaque_payment_method="opaque_captured_test",
+                idempotency_key=f"loss-source-{uuid4()}",
+                actor_user_id=actor.id,
+            ),
+        )
+    async with factory() as session:
+        receipt = await session.scalar(
+            select(PaymentReceipt).where(PaymentReceipt.intent_id == intent.id)
+        )
+        assert receipt is not None
+    command = RequestRefund(
+        company_id=company.id,
+        branch_id=branch.id,
+        receipt_id=receipt.id,
+        amount=Decimal("15.00"),
+        reason="Synthetic process-loss recovery",
+        idempotency_key=f"loss-refund-{uuid4()}",
+        actor_user_id=actor.id,
+        expected_version=receipt.version,
+    )
+
+    async with factory() as session:
+        with pytest.raises(SimulatedProcessLoss):
+            await service.request_refund(session, command)
+    async with factory() as session:
+        pending = await session.scalar(
+            select(Refund).where(Refund.idempotency_key == command.idempotency_key)
+        )
+        assert pending is not None and pending.status == "requested"
+
+    recovery_provider = CountingFakeProvider()
+    service.provider = recovery_provider
+    async with factory() as session:
+        recovered = await service.request_refund(session, command)
+    assert recovered.status == "succeeded"
+    assert recovery_provider.refund_calls == 1
+    async with factory() as session:
+        stored_receipt = await session.get(PaymentReceipt, receipt.id)
+        assert stored_receipt is not None
+        assert stored_receipt.available_amount == Decimal("30.00")
+        assert stored_receipt.refunded_amount == Decimal("15.00")
+
+
+@pytest.mark.asyncio
+async def test_refund_transport_uncertainty_requires_reconciliation_without_retry(
+    payment_fixture,
+) -> None:
+    factory, company, branch, actor, customer = payment_fixture
+
+    class UncertainProvider(CountingFakeProvider):
+        async def refund(self, _request):
+            self.refund_calls += 1
+            raise TimeoutError("synthetic possible acceptance")
+
+    provider = UncertainProvider()
+    service = PaymentService(provider, "synthetic-merchant")
+    async with factory() as session:
+        intent = await service.collect(
+            session,
+            CreateIntent(
+                company_id=company.id,
+                branch_id=branch.id,
+                customer_id=customer.id,
+                amount=Decimal("55.00"),
+                currency="USD",
+                opaque_payment_method="opaque_captured_test",
+                idempotency_key=f"uncertain-source-{uuid4()}",
+                actor_user_id=actor.id,
+            ),
+        )
+    async with factory() as session:
+        receipt = await session.scalar(
+            select(PaymentReceipt).where(PaymentReceipt.intent_id == intent.id)
+        )
+        assert receipt is not None
+    command = RequestRefund(
+        company_id=company.id,
+        branch_id=branch.id,
+        receipt_id=receipt.id,
+        amount=Decimal("10.00"),
+        reason="Synthetic uncertain refund",
+        idempotency_key=f"uncertain-refund-{uuid4()}",
+        actor_user_id=actor.id,
+        expected_version=receipt.version,
+    )
+
+    async with factory() as session:
+        uncertain = await service.request_refund(session, command)
+    async with factory() as session:
+        replay = await service.request_refund(session, command)
+    assert uncertain.id == replay.id
+    assert replay.status == "reconciliation_required"
+    assert provider.refund_calls == 1
+    async with factory() as session:
+        assert (
+            await session.scalar(
+                select(func.count(ReconciliationException.id)).where(
+                    ReconciliationException.entity_id == uncertain.id,
+                    ReconciliationException.reason_code
+                    == "uncertain_refund_submission",
+                )
+            )
+            == 1
+        )
 
 
 @pytest.mark.asyncio

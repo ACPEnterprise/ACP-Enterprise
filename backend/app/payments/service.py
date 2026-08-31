@@ -29,7 +29,12 @@ from app.payments.contracts import (
     RequestRefund,
     VerifiedWebhook,
 )
-from app.payments.errors import PaymentConflict, PaymentNotFound, PaymentValidation
+from app.payments.errors import (
+    PaymentConflict,
+    PaymentError,
+    PaymentNotFound,
+    PaymentValidation,
+)
 from app.payments.models import (
     Deposit,
     DepositReceipt,
@@ -158,20 +163,62 @@ class PaymentService:
             if prior:
                 if prior.request_digest != digest:
                     raise PaymentConflict("Idempotency key conflicts with the original refund.")
-                return prior
-            receipt = await self._receipt(session, spec.company_id, spec.branch_id, spec.receipt_id, True)
-            if receipt.version != spec.expected_version or amount <= 0 or amount > receipt.available_amount or not spec.reason.strip():
-                raise PaymentConflict("Refund is stale or exceeds unapplied refundable balance.")
-            refund = Refund(company_id=spec.company_id, branch_id=spec.branch_id, receipt_id=receipt.id, amount=amount, currency=receipt.currency, reason=spec.reason.strip(), idempotency_key=spec.idempotency_key, request_digest=digest, requested_by_user_id=spec.actor_user_id)
-            session.add(refund)
-            await session.flush()
-            self._event(session, refund, EventType.PAYMENT_REFUND_REQUESTED, spec.actor_user_id)
-        result = await self.provider.refund(ProviderRequest(refund.id, f"refund_{refund.id.hex}", self.merchant_account, amount, refund.currency, "opaque_refund"))
+                if prior.status != "requested":
+                    return prior
+                refund = prior
+            else:
+                receipt = await self._receipt(session, spec.company_id, spec.branch_id, spec.receipt_id, True)
+                if receipt.version != spec.expected_version or amount <= 0 or amount > receipt.available_amount or not spec.reason.strip():
+                    raise PaymentConflict("Refund is stale or exceeds unapplied refundable balance.")
+                refund = Refund(company_id=spec.company_id, branch_id=spec.branch_id, receipt_id=receipt.id, amount=amount, currency=receipt.currency, reason=spec.reason.strip(), idempotency_key=spec.idempotency_key, request_digest=digest, requested_by_user_id=spec.actor_user_id)
+                session.add(refund)
+                await session.flush()
+                self._event(session, refund, EventType.PAYMENT_REFUND_REQUESTED, spec.actor_user_id)
+        provider_key = f"refund_{refund.id.hex}"
+        try:
+            result = await self.provider.refund(ProviderRequest(refund.id, provider_key, self.merchant_account, amount, refund.currency, "opaque_refund"))
+        except (PaymentError, TimeoutError, OSError):
+            evidence_digest = _digest(
+                {"refund_id": refund.id, "provider_key": provider_key, "outcome": "uncertain"}
+            )
+            async with session.begin():
+                locked_refund = await session.scalar(
+                    select(Refund)
+                    .where(
+                        Refund.company_id == spec.company_id,
+                        Refund.id == refund.id,
+                    )
+                    .with_for_update()
+                    .execution_options(populate_existing=True)
+                )
+                assert locked_refund is not None
+                if locked_refund.status == "requested":
+                    locked_refund.status = "reconciliation_required"
+                    locked_refund.evidence_digest = evidence_digest
+                    self._exception(
+                        session,
+                        locked_refund,
+                        "uncertain_refund_submission",
+                        evidence_digest,
+                        spec.actor_user_id,
+                    )
+                refund = locked_refund
+            return refund
         async with session.begin():
-            locked_refund = await session.scalar(select(Refund).where(Refund.company_id == spec.company_id, Refund.id == refund.id).with_for_update())
-            receipt = await self._receipt(session, spec.company_id, spec.branch_id, spec.receipt_id, True)
+            locked_refund = await session.scalar(
+                select(Refund)
+                .where(
+                    Refund.company_id == spec.company_id,
+                    Refund.id == refund.id,
+                )
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
             assert locked_refund is not None
             refund = locked_refund
+            if refund.status != "requested":
+                return refund
+            receipt = await self._receipt(session, spec.company_id, spec.branch_id, spec.receipt_id, True)
             refund.provider_operation_id = result.provider_operation_id
             refund.evidence_digest = result.evidence_digest
             refund.status = "reconciliation_required" if result.outcome == "ambiguous" else ("succeeded" if result.outcome == "captured" else "failed")
