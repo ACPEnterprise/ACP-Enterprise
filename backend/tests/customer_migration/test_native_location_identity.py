@@ -486,6 +486,39 @@ async def test_postgres_evidence_is_company_scoped_and_replay_safe() -> None:
             assert replay_rehearsal_created is False
             assert replay_rehearsal.id == first_rehearsal.id
 
+            immutable_attacks = (
+                update(CustomerMigrationCutoverPlanEvidence)
+                .where(CustomerMigrationCutoverPlanEvidence.id == first_plan.id)
+                .values(evidence_digest="0" * 64),
+                delete(CustomerMigrationCutoverPlanEvidence).where(
+                    CustomerMigrationCutoverPlanEvidence.id == first_plan.id
+                ),
+                update(CustomerMigrationCutoverRehearsalEvidence)
+                .where(
+                    CustomerMigrationCutoverRehearsalEvidence.id
+                    == first_rehearsal.id
+                )
+                .values(evidence_digest="0" * 64),
+                delete(CustomerMigrationCutoverRehearsalEvidence).where(
+                    CustomerMigrationCutoverRehearsalEvidence.id
+                    == first_rehearsal.id
+                ),
+                update(CustomerMigrationCutoverRehearsalStepEvidence)
+                .where(
+                    CustomerMigrationCutoverRehearsalStepEvidence.rehearsal_id
+                    == first_rehearsal.id
+                )
+                .values(evidence_digest="0" * 64),
+                delete(CustomerMigrationCutoverRehearsalStepEvidence).where(
+                    CustomerMigrationCutoverRehearsalStepEvidence.rehearsal_id
+                    == first_rehearsal.id
+                ),
+            )
+            for attack in immutable_attacks:
+                with pytest.raises(IntegrityError):
+                    async with session.begin_nested():
+                        await session.execute(attack)
+
         concurrent_inputs = dict(plan_inputs)
         concurrent_inputs.update(
             created_at=datetime(2026, 8, 5, 1, tzinfo=timezone.utc),
