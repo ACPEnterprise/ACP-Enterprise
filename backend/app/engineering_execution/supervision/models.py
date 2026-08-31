@@ -38,6 +38,12 @@ class LiveClientSupervisorModel(Base):
         UniqueConstraint(
             "company_id", "id", name="uq_live_client_supervisors_company_id"
         ),
+        UniqueConstraint(
+            "company_id",
+            "id",
+            "worker_id",
+            name="uq_live_client_supervisors_session_authority",
+        ),
         Index(
             "ix_live_client_supervisors_company_state",
             "company_id",
@@ -71,27 +77,33 @@ class ProviderSessionModel(Base):
     __tablename__ = "engineering_provider_sessions"
     __table_args__ = (
         ForeignKeyConstraint(
-            ["company_id", "supervisor_id"],
+            ["company_id", "supervisor_id", "worker_id"],
             [
                 "engineering_live_client_supervisors.company_id",
                 "engineering_live_client_supervisors.id",
+                "engineering_live_client_supervisors.worker_id",
             ],
+            name="fk_provider_sessions_exact_supervisor",
             ondelete="RESTRICT",
         ),
         ForeignKeyConstraint(
-            ["company_id", "composition_id"],
             [
-                "engineering_execution_compositions.company_id",
-                "engineering_execution_compositions.id",
+                "company_id",
+                "attempt_id",
+                "composition_id",
+                "worker_id",
+                "lease_id",
+                "provider_identifier",
             ],
-            ondelete="RESTRICT",
-        ),
-        ForeignKeyConstraint(
-            ["company_id", "attempt_id"],
             [
                 "engineering_provider_execution_attempts.company_id",
                 "engineering_provider_execution_attempts.id",
+                "engineering_provider_execution_attempts.composition_id",
+                "engineering_provider_execution_attempts.worker_id",
+                "engineering_provider_execution_attempts.lease_id",
+                "engineering_provider_execution_attempts.provider_identifier",
             ],
+            name="fk_provider_sessions_exact_attempt",
             ondelete="RESTRICT",
         ),
         CheckConstraint(

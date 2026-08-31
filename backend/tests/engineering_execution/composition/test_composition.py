@@ -41,6 +41,10 @@ from app.engineering_execution.composition.service import (
     composition_digest,
 )
 from app.engineering_execution.service import EngineeringExecutionService
+from app.engineering_execution.supervision.models import (
+    LiveClientSupervisorModel,
+    ProviderSessionModel,
+)
 from app.execution_providers.contracts import ProviderCapability
 from app.execution_providers.registry import ExecutionProviderRegistry
 from app.worker_control.contracts import WorkerCapability
@@ -631,3 +635,56 @@ def test_provider_neutral_architecture_has_no_provider_or_network_calls() -> Non
     assert "httpx" not in composition_source
     assert "requests." not in composition_source
     assert "subprocess" not in composition_source
+
+
+def test_provider_evidence_models_bind_exact_parent_lineage() -> None:
+    receipt_fk = next(
+        constraint
+        for constraint in CompositionReceipt.__table__.foreign_key_constraints
+        if constraint.name == "fk_composition_receipts_exact_composition"
+    )
+    assert tuple(receipt_fk.column_keys) == (
+        "company_id",
+        "composition_id",
+        "execution_id",
+        "worker_id",
+        "lease_id",
+        "provider_identifier",
+        "instruction_digest",
+        "request_digest",
+        "composition_digest",
+        "expires_at",
+    )
+    attempt_fk = next(
+        constraint
+        for constraint in ProviderExecutionAttempt.__table__.foreign_key_constraints
+        if constraint.name == "fk_provider_attempts_exact_composition"
+    )
+    assert tuple(attempt_fk.column_keys) == (
+        "company_id",
+        "composition_id",
+        "worker_id",
+        "lease_id",
+        "provider_identifier",
+    )
+    session_constraints = {
+        constraint.name: tuple(constraint.column_keys)
+        for constraint in ProviderSessionModel.__table__.foreign_key_constraints
+    }
+    assert session_constraints["fk_provider_sessions_exact_attempt"] == (
+        "company_id",
+        "attempt_id",
+        "composition_id",
+        "worker_id",
+        "lease_id",
+        "provider_identifier",
+    )
+    assert session_constraints["fk_provider_sessions_exact_supervisor"] == (
+        "company_id",
+        "supervisor_id",
+        "worker_id",
+    )
+    assert any(
+        tuple(constraint.columns.keys()) == ("company_id", "id", "worker_id")
+        for constraint in LiveClientSupervisorModel.__table__.constraints
+    )

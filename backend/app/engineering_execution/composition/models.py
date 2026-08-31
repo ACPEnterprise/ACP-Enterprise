@@ -78,6 +78,27 @@ class ExecutionComposition(Base):
         UniqueConstraint(
             "company_id", "id", name="uq_execution_compositions_company_id"
         ),
+        UniqueConstraint(
+            "company_id",
+            "id",
+            "worker_id",
+            "lease_id",
+            "provider_identifier",
+            name="uq_execution_compositions_attempt_authority",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "id",
+            "execution_id",
+            "worker_id",
+            "lease_id",
+            "provider_identifier",
+            "instruction_digest",
+            "request_digest",
+            "composition_digest",
+            "expires_at",
+            name="uq_execution_compositions_receipt_authority",
+        ),
         Index(
             "ix_execution_compositions_company_state",
             "company_id",
@@ -136,12 +157,31 @@ class CompositionReceipt(Base):
     __tablename__ = "engineering_composition_receipts"
     __table_args__ = (
         ForeignKeyConstraint(
-            ["company_id", "composition_id"],
+            [
+                "company_id",
+                "composition_id",
+                "execution_id",
+                "worker_id",
+                "lease_id",
+                "provider_identifier",
+                "instruction_digest",
+                "request_digest",
+                "composition_digest",
+                "expires_at",
+            ],
             [
                 "engineering_execution_compositions.company_id",
                 "engineering_execution_compositions.id",
+                "engineering_execution_compositions.execution_id",
+                "engineering_execution_compositions.worker_id",
+                "engineering_execution_compositions.lease_id",
+                "engineering_execution_compositions.provider_identifier",
+                "engineering_execution_compositions.instruction_digest",
+                "engineering_execution_compositions.request_digest",
+                "engineering_execution_compositions.composition_digest",
+                "engineering_execution_compositions.expires_at",
             ],
-            name="fk_composition_receipts_composition",
+            name="fk_composition_receipts_exact_composition",
             ondelete="RESTRICT",
         ),
         CheckConstraint("status = 'accepted'", name="ck_composition_receipts_status"),
@@ -196,12 +236,21 @@ class ProviderExecutionAttempt(Base):
     __tablename__ = "engineering_provider_execution_attempts"
     __table_args__ = (
         ForeignKeyConstraint(
-            ["company_id", "composition_id"],
+            [
+                "company_id",
+                "composition_id",
+                "worker_id",
+                "lease_id",
+                "provider_identifier",
+            ],
             [
                 "engineering_execution_compositions.company_id",
                 "engineering_execution_compositions.id",
+                "engineering_execution_compositions.worker_id",
+                "engineering_execution_compositions.lease_id",
+                "engineering_execution_compositions.provider_identifier",
             ],
-            name="fk_provider_attempts_composition",
+            name="fk_provider_attempts_exact_composition",
             ondelete="RESTRICT",
         ),
         CheckConstraint(
@@ -223,6 +272,15 @@ class ProviderExecutionAttempt(Base):
             name="uq_provider_attempts_idempotency",
         ),
         UniqueConstraint("company_id", "id", name="uq_provider_attempts_company_id"),
+        UniqueConstraint(
+            "company_id",
+            "id",
+            "composition_id",
+            "worker_id",
+            "lease_id",
+            "provider_identifier",
+            name="uq_provider_attempts_session_authority",
+        ),
         Index(
             "ix_provider_attempts_company_state",
             "company_id",
