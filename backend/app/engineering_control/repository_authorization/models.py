@@ -131,6 +131,14 @@ class EngineeringRepositoryAuthorization(Base):
             "id",
             name="uq_repository_authorizations_company_id",
         ),
+        UniqueConstraint(
+            "company_id",
+            "id",
+            "command_id",
+            "execution_id",
+            "review_decision_id",
+            name="uq_repository_authorizations_operation_scope",
+        ),
         Index(
             "ix_repository_authorizations_company_state",
             "company_id",

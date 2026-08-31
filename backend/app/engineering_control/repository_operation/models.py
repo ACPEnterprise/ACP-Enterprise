@@ -31,12 +31,21 @@ class EngineeringRepositoryOperation(Base):
     __tablename__ = "engineering_repository_operations"
     __table_args__ = (
         ForeignKeyConstraint(
-            ["company_id", "authorization_id"],
+            [
+                "company_id",
+                "authorization_id",
+                "command_id",
+                "execution_id",
+                "review_decision_id",
+            ],
             [
                 "engineering_repository_authorizations.company_id",
                 "engineering_repository_authorizations.id",
+                "engineering_repository_authorizations.command_id",
+                "engineering_repository_authorizations.execution_id",
+                "engineering_repository_authorizations.review_decision_id",
             ],
-            name="fk_repository_operations_authorization",
+            name="fk_repository_operations_authorization_scope",
             ondelete="RESTRICT",
         ),
         ForeignKeyConstraint(
@@ -131,17 +140,14 @@ class EngineeringRepositoryOperation(Base):
     authorization_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     command_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
-        ForeignKey("engineering_commands.id", ondelete="RESTRICT"),
         nullable=False,
     )
     execution_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
-        ForeignKey("engineering_executions.id", ondelete="RESTRICT"),
         nullable=False,
     )
     review_decision_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
-        ForeignKey("engineering_execution_review_decisions.id", ondelete="RESTRICT"),
         nullable=False,
     )
     requested_by_user_id: Mapped[UUID] = mapped_column(
