@@ -20,7 +20,7 @@ The output preserves BANK priority, collision domain, gate metadata, historical 
 
 The packaged snapshot explicitly maps `BANK.PUR.001` to accepted `PUR.1` authority at `88285c7c0879d8df7b42659a9d25c64e5b58a27b` and `BANK.DF.001` to its accepted ingestion contract at `9940a4cfa3bdfa81ef45c1dff320dc1c4a29b8ce`. Thus the historical Purchasing READY record is now COMPLETE, not executable. Its completion releases dependency evaluation for `BANK.PLAT.001`. `BANK.BEA.001` remains independently evaluated and is not dispatched.
 
-Accounting, Economics, Migration, operations, and other BANK records marked ACTIVE_OWNED remain unavailable until authoritative ownership release evidence exists. Their older scheduler/product identities are not silently equated with BANK identities. A later reviewed authority snapshot may add unambiguous mappings or gate releases without modifying BANK.2.
+`ACTIVE_OWNED` in immutable BANK.2 remains historical planning evidence. Current ownership comes only from the authority snapshot's explicit `active_ownership` records, so an old worktree or planning reservation cannot live forever. Removing a current reservation does not resolve owner, Finance, external, dependency, collision, deferred, or ambiguous-identity gates; each remains fail-closed. Older scheduler/product identities are not silently equated with BANK identities. A later reviewed authority snapshot may add unambiguous mappings, current ownership, or gate releases without modifying BANK.2.
 
 ## Successor
 

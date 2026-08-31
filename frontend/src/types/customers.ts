@@ -127,6 +127,28 @@ export interface CustomerConsentInput {
   reason: string | null;
 }
 
+export interface CustomerTimelineEntry {
+  id: string;
+  timestamp: string;
+  event_type: string;
+  actor: { id: string; display_name: string } | null;
+  entity: { type: string; id: string | null };
+  summary: string;
+  metadata: Record<string, unknown>;
+  branch_id: string | null;
+  company_id: string;
+  customer_id: string;
+  correlation_id: string;
+}
+
+export interface CustomerTimelineResponse {
+  items: CustomerTimelineEntry[];
+  page: number;
+  page_size: number;
+  total_count: number;
+  total_pages: number;
+}
+
 export interface CustomerDetail extends CustomerSummary {
   properties: CustomerProperty[];
   contacts: CustomerContact[];

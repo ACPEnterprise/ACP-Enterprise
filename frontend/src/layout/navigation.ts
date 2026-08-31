@@ -215,7 +215,8 @@ export const navigationCatalog = [
     label: "Employees",
     path: "/employees",
     icon: Users,
-    availability: "coming-soon",
+    availability: "available",
+    requiredPermission: "COMPANY_WORKFORCE_READ",
   },
   {
     id: "owner-operations",

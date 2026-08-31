@@ -319,7 +319,7 @@ def _evaluate_record(
         state = "COMPLETE"
         if item.readiness_state == "READY":
             reasons.append("bank_ready_but_authoritatively_complete")
-    elif item.milestone_id in ownership or item.ownership_state == "ACTIVE_OWNED":
+    elif item.milestone_id in ownership:
         state = "ACTIVE_OWNED"
         reasons.append("active_ownership")
     else:

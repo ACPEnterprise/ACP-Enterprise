@@ -1,13 +1,14 @@
 import { useState, type FormEvent } from "react";
-import { ArrowLeft, Edit3, MapPin, Plus, Star, UserRound } from "lucide-react";
+import { ArrowLeft, Clock3, Edit3, MapPin, Plus, RotateCcw, Star, UserRound } from "lucide-react";
 
-import { getOperatorApiError } from "../../api/errors";
+import { getApiErrorMessage, getOperatorApiError } from "../../api/errors";
 import { useHasPermission } from "../../auth";
-import { useCustomerConsents, useCustomerDetail, useCustomerMutations } from "../../hooks/useCustomers";
+import { useCustomerConsents, useCustomerDetail, useCustomerMutations, useCustomerTimeline } from "../../hooks/useCustomers";
 import {
   formatCustomerSource,
   type CustomerContact,
   type CustomerProperty,
+  type DuplicateMatch,
 } from "../../types/customers";
 import {
   Alert,
@@ -17,6 +18,7 @@ import {
   Textarea,
 } from "../../ui";
 import { ContactForm } from "./ContactForm";
+import { CustomerCommunicationHistory } from "./CustomerCommunicationHistory";
 import { CustomerOperationsPanel } from "./CustomerOperationsPanel";
 import { CustomerForm } from "./CustomerForm";
 import { PropertyForm } from "./PropertyForm";
@@ -39,6 +41,8 @@ export function CustomerDetailView({ customerId, onBack }: CustomerDetailViewPro
   const detail = useCustomerDetail(customerId);
   const mutations = useCustomerMutations(customerId);
   const consents = useCustomerConsents(customerId);
+  const timeline = useCustomerTimeline(customerId);
+  const canReadCommunications = useHasPermission("COMPANY_COMMUNICATIONS_READ");
   const [isEditingCustomer, setIsEditingCustomer] = useState(false);
   const [editingProperty, setEditingProperty] = useState<CustomerProperty | "new" | null>(null);
   const [editingContact, setEditingContact] = useState<CustomerContact | "new" | null>(null);
@@ -46,6 +50,7 @@ export function CustomerDetailView({ customerId, onBack }: CustomerDetailViewPro
   const [actionError, setActionError] = useState<unknown>(null);
   const [confirmArchive, setConfirmArchive] = useState(false);
   const [consentChannel, setConsentChannel] = useState<"sms" | "email">("sms");
+  const [duplicateMatches, setDuplicateMatches] = useState<DuplicateMatch[] | null>(null);
 
   if (detail.isLoading) {
     return <Card className="p-ui-5 text-content-muted">Loading customer…</Card>;
@@ -66,6 +71,12 @@ export function CustomerDetailView({ customerId, onBack }: CustomerDetailViewPro
 
   const customer = detail.data;
   const archived = Boolean(customer.archived_at);
+  const latestConsent = (channel: "sms" | "email") =>
+    [...(consents.data ?? [])]
+      .filter((item) => item.channel === channel)
+      .sort((a, b) => b.recorded_at.localeCompare(a.recorded_at))[0];
+  const smsConsent = latestConsent("sms");
+  const emailConsent = latestConsent("email");
 
   const addNote = (event: FormEvent) => {
     event.preventDefault();
@@ -95,7 +106,7 @@ export function CustomerDetailView({ customerId, onBack }: CustomerDetailViewPro
               <span className="rounded-full bg-blue-950 px-3 py-1 text-blue-300">Source: {formatCustomerSource(customer.source)}</span>
             </div>
           </div>
-          {canManage && !archived && (
+          {canManage && (!archived ? (
             <div className="grid w-full gap-3 sm:flex sm:w-auto">
               <Button type="button" variant="outline" onClick={() => setIsEditingCustomer(true)} leadingIcon={<Edit3 size={16} />}>Edit</Button>
               <Button
@@ -105,7 +116,15 @@ export function CustomerDetailView({ customerId, onBack }: CustomerDetailViewPro
                 onClick={() => setConfirmArchive(true)}
               >Archive</Button>
             </div>
-          )}
+          ) : (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={mutations.restore.isPending}
+              onClick={() => mutations.restore.mutate(undefined, { onError: setActionError })}
+              leadingIcon={<RotateCcw size={16} />}
+            >Restore customer</Button>
+          ))}
         </div>
         {customer.internal_notes && <div className="mt-5 rounded-xl border border-slate-800 bg-slate-950/60 p-4 text-sm text-content-secondary"><p className="mb-1 text-xs font-semibold uppercase tracking-wide text-content-muted">Internal context</p>{customer.internal_notes}</div>}
         {isEditingCustomer && (
@@ -123,10 +142,85 @@ export function CustomerDetailView({ customerId, onBack }: CustomerDetailViewPro
       </Card>
 
       <CustomerOperationsPanel customerId={customerId} />
+      {canReadCommunications && <CustomerCommunicationHistory customerId={customerId} />}
+
+      <Card className="p-ui-4 sm:p-ui-6">
+        <p className="text-sm text-action-primary">Identity quality</p>
+        <h3 className="mt-1 text-xl font-semibold">Duplicate review</h3>
+        <p className="mt-2 text-sm text-content-muted">Compare normalized identity evidence. A match is a review candidate, never an automatic merge.</p>
+        <Button
+          type="button"
+          variant="outline"
+          className="mt-4"
+          disabled={mutations.duplicateCheck.isPending}
+          onClick={() => {
+            const primaryProperty = customer.properties.find((item) => item.is_primary) ?? customer.properties[0];
+            mutations.duplicateCheck.mutate({
+              first_name: customer.first_name,
+              last_name: customer.last_name,
+              business_name: customer.business_name,
+              phone: customer.primary_phone,
+              email: customer.email,
+              address_line_1: primaryProperty?.address_line_1,
+              address_line_2: primaryProperty?.address_line_2,
+              city: primaryProperty?.city,
+              state: primaryProperty?.state,
+              postal_code: primaryProperty?.postal_code,
+            }, {
+              onSuccess: (matches) => setDuplicateMatches(matches.filter((match) => match.id !== customer.id)),
+              onError: setActionError,
+            });
+          }}
+        >{mutations.duplicateCheck.isPending ? "Checking…" : "Check for possible duplicates"}</Button>
+        {duplicateMatches !== null && duplicateMatches.length === 0 && <p className="mt-4 text-sm text-content-muted">No other candidate records matched the accepted comparison evidence.</p>}
+        <div className="mt-4 space-y-3">
+          {(duplicateMatches ?? []).map((match) => (
+            <article key={match.id} className="rounded-xl border border-status-warning/40 bg-status-warning/5 p-4">
+              <p className="font-medium">{displayName(match)}</p>
+              <p className="mt-1 text-sm text-content-muted">{match.primary_phone}{match.email ? ` · ${match.email}` : ""}</p>
+              <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-content-muted">
+                {match.reasons.map((reason) => <li key={reason}>{reason.replaceAll("_", " ")}</li>)}
+              </ul>
+              <p className="mt-3 text-xs font-medium text-status-warning">Native consolidation authority is not available; review only.</p>
+            </article>
+          ))}
+        </div>
+      </Card>
+
+      <Card className="p-ui-4 sm:p-ui-6">
+        <p className="text-sm text-action-primary">Customer history</p>
+        <h3 className="mt-1 text-xl font-semibold">Authoritative timeline</h3>
+        {timeline.isError && <Alert variant="danger" title="Timeline unavailable">{getApiErrorMessage(timeline.error)}</Alert>}
+        {timeline.isLoading && <p className="mt-4 text-sm text-content-muted">Loading customer history…</p>}
+        <ol className="mt-5 space-y-3" aria-label="Customer timeline">
+          {(timeline.data?.items ?? []).map((entry) => (
+            <li key={entry.id} className="flex gap-3 rounded-xl border border-stroke bg-surface-subtle p-4">
+              <Clock3 size={17} className="mt-0.5 shrink-0 text-action-primary" aria-hidden="true" />
+              <div className="min-w-0">
+                <p className="font-medium text-content">{entry.summary}</p>
+                <p className="mt-1 text-xs text-content-muted">
+                  {new Date(entry.timestamp).toLocaleString()} · {entry.actor?.display_name ?? "System"}
+                </p>
+              </div>
+            </li>
+          ))}
+        </ol>
+        {timeline.isSuccess && timeline.data.items.length === 0 && <p className="mt-4 text-sm text-content-muted">No authoritative customer events are available.</p>}
+      </Card>
 
       <Card className="p-ui-4 sm:p-ui-6">
         <p className="text-sm text-action-primary">Communication consent</p>
         <h3 className="mt-1 text-xl font-semibold">Consent-safe history</h3>
+        <div className="mt-4 grid gap-3 md:grid-cols-2" aria-label="Communication readiness">
+          <div className="rounded-xl border border-stroke p-4">
+            <p className="font-medium">Email readiness</p>
+            <p className="mt-1 text-sm text-content-muted">{!customer.email ? "Missing recipient" : emailConsent?.decision === "granted" ? "Recipient and recorded preference available" : emailConsent?.decision === "withdrawn" ? "Recorded preference unavailable" : "Preference not established"}</p>
+          </div>
+          <div className="rounded-xl border border-stroke p-4">
+            <p className="font-medium">SMS readiness</p>
+            <p className="mt-1 text-sm text-content-muted">{!customer.primary_phone ? "Missing recipient" : smsConsent?.decision === "granted" ? "Recipient and recorded preference available" : smsConsent?.decision === "withdrawn" ? "Recorded preference unavailable" : "Preference not established"}</p>
+          </div>
+        </div>
         {canManage && !archived && (
           <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto_auto]">
             <select className="min-h-11 rounded-lg border border-stroke-strong bg-surface px-3" value={consentChannel} onChange={(event) => setConsentChannel(event.target.value as "sms" | "email")} aria-label="Consent channel">
