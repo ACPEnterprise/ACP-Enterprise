@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.core.config import settings
@@ -33,6 +34,7 @@ from app.customer_migration.cutover_rehearsal import (
     CutoverRehearsalEvidence,
     CutoverRehearsalService,
 )
+from app.customer_migration.models import ServiceLocationIdentityEvidence
 from app.customer_migration.native_customer_consolidation import (
     NativeCustomerObservation,
     consolidate_native_customers,
@@ -297,10 +299,33 @@ async def test_postgres_evidence_is_company_scoped_and_replay_safe() -> None:
                 "c" * 64,
                 result,
             )
-            _, other_created = await native_location_evidence_repository.record(
+            other, other_created = await native_location_evidence_repository.record(
                 session, evidence=other_write
             )
             assert other_created is True
+            forged_successor = ServiceLocationIdentityEvidence(
+                company_id=company.id,
+                branch_id=branch.id,
+                customer_source_identity_id=None,
+                prior_evidence_id=other.id,
+                recorded_by_user_id=user.id,
+                source_system=first.source_system,
+                source_entity_type=first.source_entity_type,
+                observation_sha256=first.observation_sha256,
+                source_location_id_sha256=first.source_location_id_sha256,
+                source_customer_id_sha256=first.source_customer_id_sha256,
+                source_artifact_sha256=first.source_artifact_sha256,
+                source_record_sha256=first.source_record_sha256,
+                address_evidence_sha256=first.address_evidence_sha256,
+                classification=first.classification,
+                readiness=first.readiness,
+                evidence_digest="d" * 64,
+                evidence_version=2,
+            )
+            with pytest.raises(IntegrityError):
+                async with session.begin_nested():
+                    session.add(forged_successor)
+                    await session.flush()
             projection = await list_location_identity_evidence(
                 SimpleNamespace(company=company, active_branch=branch),
                 session,

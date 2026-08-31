@@ -6,6 +6,7 @@ from uuid import UUID, uuid4
 import pytest
 import pytest_asyncio
 from sqlalchemy import func, select, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -674,3 +675,49 @@ async def test_concurrent_same_company_replay_creates_one_intent(
     first, second = await asyncio.gather(create(), create())
     assert first[0].id == second[0].id
     assert sorted((first[1], second[1])) == [False, True]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("parent_company", "parent_branch", "evidence_company", "evidence_branch"),
+    [
+        (uuid4(), uuid4(), uuid4(), uuid4()),
+        (uuid4(), uuid4(), None, None),
+        (None, None, uuid4(), uuid4()),
+    ],
+)
+async def test_delivery_evidence_rejects_forged_or_null_bypassed_scope(
+    outbox_database: tuple[AsyncEngine, async_sessionmaker[AsyncSession]],
+    parent_company: UUID | None,
+    parent_branch: UUID | None,
+    evidence_company: UUID | None,
+    evidence_branch: UUID | None,
+) -> None:
+    _, factory = outbox_database
+    now = utc_now()
+    async with factory() as session, session.begin():
+        parent, _ = await NotificationOutboxRepository.enqueue(
+            session,
+            notification_type="customer.notice",
+            template_identifier="notice-v1",
+            recipient="scope-test@example.invalid",
+            payload={"safe_subject_id": str(uuid4())},
+            correlation_id=uuid4(),
+            idempotency_key=f"scope:{uuid4()}",
+            scheduled_at=now,
+            now=now,
+            company_id=parent_company,
+            branch_id=parent_branch,
+        )
+        session.add(
+            NotificationDeliveryEvidence(
+                outbox_id=parent.id,
+                sequence=1,
+                outcome="claimed",
+                company_id=evidence_company,
+                branch_id=evidence_branch,
+                recorded_at=now,
+            )
+        )
+        with pytest.raises(IntegrityError):
+            await session.flush()

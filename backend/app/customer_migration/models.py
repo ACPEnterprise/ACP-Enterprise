@@ -768,6 +768,16 @@ class ServiceLocationIdentityEvidence(Base):
             name="fk_location_identity_evidence_branch_company",
             ondelete="RESTRICT",
         ),
+        ForeignKeyConstraint(
+            ["prior_evidence_id", "company_id"],
+            [
+                "service_location_identity_evidence.id",
+                "service_location_identity_evidence.company_id",
+            ],
+            name="fk_location_identity_evidence_prior_company",
+            ondelete="RESTRICT",
+            use_alter=True,
+        ),
         UniqueConstraint(
             "company_id",
             "source_system",
@@ -807,7 +817,6 @@ class ServiceLocationIdentityEvidence(Base):
     )
     prior_evidence_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
-        ForeignKey("service_location_identity_evidence.id", ondelete="RESTRICT"),
     )
     recorded_by_user_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
@@ -876,6 +885,7 @@ class ServiceLocationReconciliationEvidence(Base):
             ["service_locations.id", "service_locations.customer_id"],
             name="fk_location_reconciliation_target_customer",
             ondelete="RESTRICT",
+            use_alter=True,
         ),
         UniqueConstraint(
             "company_id",
