@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 import { Bot, ChevronDown, ShieldCheck, Sparkles } from "lucide-react";
 
 import {
@@ -114,6 +114,17 @@ function Answer({ result }: { result: LiaResponse }) {
 
 export function LiaRoute() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const contextDomain = searchParams.get("contextDomain");
+  const contextId = searchParams.get("contextId");
+  const context =
+    (contextDomain === "customers" || contextDomain === "jobs") &&
+    contextId &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      contextId,
+    )
+      ? { domain: contextDomain, entity_id: contextId }
+      : undefined;
   const readiness = useLiaReadiness();
   const foundation = useLiaFoundationReadiness();
   const briefing = useOwnerBriefing();
@@ -125,14 +136,14 @@ export function LiaRoute() {
     const value = question.trim();
     if (!value) return;
     ask.mutate(
-      { question: value, conversation_id: conversationId },
+      { question: value, conversation_id: conversationId, context },
       { onSuccess: (result) => setConversationId(result.conversation_id) },
     );
   };
   const askPrompt = (value: string) => {
     setQuestion(value);
     ask.mutate(
-      { question: value, conversation_id: conversationId },
+      { question: value, conversation_id: conversationId, context },
       { onSuccess: (result) => setConversationId(result.conversation_id) },
     );
   };
@@ -197,6 +208,13 @@ export function LiaRoute() {
           </p>
         </Alert>
       )}
+      {context ? (
+        <Alert variant="success" title="Entity context ready">
+          LIA will retrieve only the server-authorized minimum-necessary{" "}
+          {context.domain === "customers" ? "Customer" : "Job"} context. The
+          entity identifier does not grant access.
+        </Alert>
+      ) : null}
       {foundation.data ? (
         <Card>
           <CardHeader>

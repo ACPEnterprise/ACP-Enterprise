@@ -9,6 +9,7 @@ const state = vi.hoisted(() => ({
   briefingError: false,
   readinessRefetch: vi.fn(),
   briefingRefetch: vi.fn(),
+  askMutate: vi.fn(),
 }));
 
 vi.mock("../hooks/useLia", () => ({
@@ -84,7 +85,7 @@ vi.mock("../hooks/useLia", () => ({
         },
   }),
   useAskLia: () => ({
-    mutate: vi.fn(),
+    mutate: state.askMutate,
     isPending: false,
     isError: false,
     data: undefined,
@@ -127,5 +128,31 @@ describe("LIA workspace", () => {
     expect(state.briefingRefetch).toHaveBeenCalledOnce();
     state.readinessError = false;
     state.briefingError = false;
+  });
+
+  it("passes only opaque Customer context for server-side authorization", () => {
+    const customerId = "11111111-1111-4111-8111-111111111111";
+    render(
+      <MemoryRouter
+        initialEntries={[
+          `/lia?contextDomain=customers&contextId=${customerId}`,
+        ]}
+      >
+        <LiaRoute />
+      </MemoryRouter>,
+    );
+    expect(screen.getByText(/minimum-necessary Customer context/i)).toBeVisible();
+    fireEvent.change(screen.getByRole("textbox", { name: "Ask LIA a question" }), {
+      target: { value: "What open work exists?" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Ask" }));
+    expect(state.askMutate).toHaveBeenCalledWith(
+      {
+        question: "What open work exists?",
+        conversation_id: undefined,
+        context: { domain: "customers", entity_id: customerId },
+      },
+      expect.any(Object),
+    );
   });
 });

@@ -37,6 +37,7 @@ describe("Customer route authorization", () => {
 
   it("mounts authorized customer surfaces", () => {
     permissions.add("COMPANY_CUSTOMER_READ");
+    permissions.add("COMPANY_JOB_READ");
     const { unmount } = render(<MemoryRouter><CustomersRoute /></MemoryRouter>);
     expect(screen.getByText("Protected customer list")).toBeInTheDocument();
     unmount();
@@ -46,5 +47,8 @@ describe("Customer route authorization", () => {
       </MemoryRouter>,
     );
     expect(screen.getByText("Protected customer detail")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Ask LIA about this Customer" }),
+    ).toBeVisible();
   });
 });
