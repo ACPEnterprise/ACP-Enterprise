@@ -345,6 +345,13 @@ class PayrollGrossCalculationResultRecord(Base):
             "company_id", "calculation_digest", name="uq_payroll_gross_result_digest"
         ),
         UniqueConstraint("company_id", "id", name="uq_payroll_gross_result_company_id"),
+        UniqueConstraint(
+            "company_id",
+            "employee_id",
+            "pay_period_id",
+            "id",
+            name="uq_payroll_gross_result_statement_scope",
+        ),
         ForeignKeyConstraint(
             ["company_id", "policy_id"],
             ["payroll_company_policy_versions.company_id", "payroll_company_policy_versions.id"],
@@ -476,11 +483,24 @@ class PayrollTaxDeductionResultRecord(Base):
             name="ck_payroll_tax_result_review_state",
         ),
         ForeignKeyConstraint(
-            ["company_id", "gross_result_id"],
-            ["payroll_gross_calculation_results.company_id", "payroll_gross_calculation_results.id"],
+            ["company_id", "employee_id", "pay_period_id", "gross_result_id"],
+            [
+                "payroll_gross_calculation_results.company_id",
+                "payroll_gross_calculation_results.employee_id",
+                "payroll_gross_calculation_results.pay_period_id",
+                "payroll_gross_calculation_results.id",
+            ],
+            name="fk_payroll_tax_result_gross_scope",
             ondelete="RESTRICT",
         ),
         UniqueConstraint("company_id", "id", name="uq_payroll_tax_result_company_id"),
+        UniqueConstraint(
+            "company_id",
+            "employee_id",
+            "pay_period_id",
+            "id",
+            name="uq_payroll_tax_result_statement_scope",
+        ),
         UniqueConstraint("company_id", "result_identity", name="uq_payroll_tax_result_identity"),
         UniqueConstraint("company_id", "calculation_digest", name="uq_payroll_tax_result_digest"),
         UniqueConstraint("supersedes_result_id", name="uq_payroll_tax_result_successor"),
@@ -570,6 +590,12 @@ class PayrollRunRecord(Base):
             name="ck_payroll_run_review_state",
         ),
         UniqueConstraint("company_id", "id", name="uq_payroll_run_company_id"),
+        UniqueConstraint(
+            "company_id",
+            "pay_period_id",
+            "id",
+            name="uq_payroll_run_statement_scope",
+        ),
         UniqueConstraint("company_id", "run_identity", name="uq_payroll_run_identity"),
         UniqueConstraint("company_id", "run_digest", name="uq_payroll_run_digest"),
         UniqueConstraint("supersedes_run_id", name="uq_payroll_run_successor"),
@@ -996,12 +1022,52 @@ class PayrollPayStatementRecord(Base):
     __table_args__ = (
         CheckConstraint("lifecycle IN ('created','issued','superseded','voided')", name="ck_payroll_pay_statement_lifecycle"),
         CheckConstraint("payment_status IN ('not_available','pending','acknowledged','partially_settled','settled','failed','unresolved')", name="ck_payroll_pay_statement_payment_status"),
-        ForeignKeyConstraint(["company_id", "run_id"], ["payroll_runs.company_id", "payroll_runs.id"], ondelete="RESTRICT"),
+        ForeignKeyConstraint(
+            ["company_id", "pay_period_id", "run_id"],
+            ["payroll_runs.company_id", "payroll_runs.pay_period_id", "payroll_runs.id"],
+            name="fk_payroll_pay_statement_run_scope",
+            ondelete="RESTRICT",
+        ),
         ForeignKeyConstraint(["company_id", "employee_id"], ["employees.company_id", "employees.id"], ondelete="RESTRICT"),
-        ForeignKeyConstraint(["company_id", "gross_result_id"], ["payroll_gross_calculation_results.company_id", "payroll_gross_calculation_results.id"], ondelete="RESTRICT"),
-        ForeignKeyConstraint(["company_id", "tax_result_id"], ["payroll_tax_deduction_results.company_id", "payroll_tax_deduction_results.id"], ondelete="RESTRICT"),
+        ForeignKeyConstraint(
+            ["company_id", "employee_id", "pay_period_id", "gross_result_id"],
+            ["payroll_gross_calculation_results.company_id", "payroll_gross_calculation_results.employee_id", "payroll_gross_calculation_results.pay_period_id", "payroll_gross_calculation_results.id"],
+            name="fk_payroll_pay_statement_gross_scope",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "employee_id", "pay_period_id", "tax_result_id"],
+            ["payroll_tax_deduction_results.company_id", "payroll_tax_deduction_results.employee_id", "payroll_tax_deduction_results.pay_period_id", "payroll_tax_deduction_results.id"],
+            name="fk_payroll_pay_statement_tax_scope",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "employee_id", "adjustment_result_id"],
+            ["payroll_adjustment_results.company_id", "payroll_adjustment_results.employee_id", "payroll_adjustment_results.id"],
+            name="fk_payroll_pay_statement_adjustment_scope",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "employee_id", "reporting_snapshot_id"],
+            ["payroll_reporting_snapshots.company_id", "payroll_reporting_snapshots.employee_id", "payroll_reporting_snapshots.id"],
+            name="fk_payroll_pay_statement_reporting_scope",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "employee_id", "pay_period_id", "supersedes_statement_id"],
+            ["payroll_pay_statements.company_id", "payroll_pay_statements.employee_id", "payroll_pay_statements.pay_period_id", "payroll_pay_statements.id"],
+            name="fk_payroll_pay_statement_predecessor_scope",
+            ondelete="RESTRICT",
+        ),
         UniqueConstraint("company_id", "statement_identity", name="uq_payroll_pay_statement_identity"),
         UniqueConstraint("company_id", "id", name="uq_payroll_pay_statement_company_id"),
+        UniqueConstraint(
+            "company_id",
+            "employee_id",
+            "pay_period_id",
+            "id",
+            name="uq_payroll_pay_statement_predecessor_scope",
+        ),
         UniqueConstraint("company_id", "statement_digest", name="uq_payroll_pay_statement_digest"),
         UniqueConstraint("supersedes_statement_id", name="uq_payroll_pay_statement_successor"),
         Index("ix_payroll_pay_statement_employee_period", "company_id", "employee_id", "pay_period_id", "created_at"),
@@ -1016,9 +1082,9 @@ class PayrollPayStatementRecord(Base):
     gross_result_digest: Mapped[str] = mapped_column(String(64), nullable=False)
     tax_result_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     tax_result_digest: Mapped[str] = mapped_column(String(64), nullable=False)
-    adjustment_result_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), ForeignKey("payroll_adjustment_results.id", ondelete="RESTRICT"))
+    adjustment_result_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
     adjustment_digest: Mapped[str | None] = mapped_column(String(64))
-    reporting_snapshot_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), ForeignKey("payroll_reporting_snapshots.id", ondelete="RESTRICT"))
+    reporting_snapshot_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
     reporting_digest: Mapped[str | None] = mapped_column(String(64))
     statement_version: Mapped[int] = mapped_column(Integer, nullable=False)
     definition_version: Mapped[str] = mapped_column(String(80), nullable=False)
@@ -1030,7 +1096,7 @@ class PayrollPayStatementRecord(Base):
     statement_identity: Mapped[str] = mapped_column(String(128), nullable=False)
     statement_digest: Mapped[str] = mapped_column(String(64), nullable=False)
     lifecycle: Mapped[str] = mapped_column(String(16), nullable=False)
-    supersedes_statement_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), ForeignKey("payroll_pay_statements.id", ondelete="RESTRICT"))
+    supersedes_statement_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
     issued_by_user_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"))
     issued_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_by_user_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
@@ -1126,6 +1192,12 @@ class PayrollReportingSnapshotRecord(Base):
         CheckConstraint("period_kind IN ('pay_period','quarter','year')", name="ck_payroll_reporting_period_kind"),
         CheckConstraint("state IN ('authoritative','partial','unavailable','conflicting')", name="ck_payroll_reporting_state"),
         UniqueConstraint("company_id", "report_identity", name="uq_payroll_reporting_identity"),
+        UniqueConstraint(
+            "company_id",
+            "employee_id",
+            "id",
+            name="uq_payroll_reporting_statement_scope",
+        ),
         Index("ix_payroll_reporting_period", "company_id", "period_start", "period_end", "employee_id"),
     )
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
@@ -1298,6 +1370,12 @@ class PayrollAdjustmentResultRecord(Base):
         CheckConstraint("lifecycle IN ('calculated','under_review','approved','applied_to_successor_authority','rejected','superseded','voided')", name="ck_payroll_adjustment_result_lifecycle"),
         ForeignKeyConstraint(["company_id", "adjustment_id"], ["payroll_adjustment_authorities.company_id", "payroll_adjustment_authorities.id"], ondelete="RESTRICT"),
         UniqueConstraint("company_id", "id", name="uq_payroll_adjustment_result_company_id"),
+        UniqueConstraint(
+            "company_id",
+            "employee_id",
+            "id",
+            name="uq_payroll_adjustment_result_statement_scope",
+        ),
         UniqueConstraint("company_id", "result_identity", name="uq_payroll_adjustment_result_identity"),
         UniqueConstraint("company_id", "calculation_digest", name="uq_payroll_adjustment_result_digest"),
         UniqueConstraint("supersedes_result_id", name="uq_payroll_adjustment_result_successor"),
