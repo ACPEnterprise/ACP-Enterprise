@@ -5,6 +5,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     String,
@@ -24,11 +25,18 @@ def utc_now() -> datetime:
 class EngineeringExecutionNode(Base):
     __tablename__ = "engineering_execution_nodes"
     __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "worker_id"],
+            ["engineering_workers.company_id", "engineering_workers.id"],
+            name="fk_execution_nodes_worker_company",
+            ondelete="RESTRICT",
+        ),
         CheckConstraint(
             "status IN ('active','revoked','expired')", name="ck_execution_nodes_status"
         ),
         CheckConstraint("version >= 1", name="ck_execution_nodes_version"),
         UniqueConstraint("company_id", "worker_id", name="uq_execution_nodes_worker"),
+        UniqueConstraint("company_id", "id", name="uq_execution_nodes_company_id"),
         UniqueConstraint(
             "company_id", "credential_fingerprint", name="uq_execution_nodes_credential"
         ),
@@ -44,7 +52,6 @@ class EngineeringExecutionNode(Base):
     )
     worker_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
-        ForeignKey("engineering_workers.id", ondelete="RESTRICT"),
         nullable=False,
     )
     name: Mapped[str] = mapped_column(String(120), nullable=False)
@@ -68,6 +75,28 @@ class EngineeringExecutionNode(Base):
 class ProviderExecutionTransition(Base):
     __tablename__ = "engineering_provider_execution_transitions"
     __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "execution_id", "command_id"],
+            [
+                "engineering_executions.company_id",
+                "engineering_executions.id",
+                "engineering_executions.command_id",
+            ],
+            name="fk_provider_transitions_execution_command",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "node_id"],
+            ["engineering_execution_nodes.company_id", "engineering_execution_nodes.id"],
+            name="fk_provider_transitions_node_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "lease_id"],
+            ["engineering_worker_leases.company_id", "engineering_worker_leases.id"],
+            name="fk_provider_transitions_lease_company",
+            ondelete="RESTRICT",
+        ),
         CheckConstraint(
             "phase IN ('queued','composed','workspace_ready','executing','validating',"
             "'commit_ready','publishing_result','completed','failed','cancelled','reconciliation_required')",
@@ -96,22 +125,18 @@ class ProviderExecutionTransition(Base):
     )
     node_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
-        ForeignKey("engineering_execution_nodes.id", ondelete="RESTRICT"),
         nullable=False,
     )
     command_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
-        ForeignKey("engineering_commands.id", ondelete="RESTRICT"),
         nullable=False,
     )
     execution_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
-        ForeignKey("engineering_executions.id", ondelete="RESTRICT"),
         nullable=False,
     )
     lease_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
-        ForeignKey("engineering_worker_leases.id", ondelete="RESTRICT"),
         nullable=False,
     )
     sequence: Mapped[int] = mapped_column(Integer, nullable=False)
