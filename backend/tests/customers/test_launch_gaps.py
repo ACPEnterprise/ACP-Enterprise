@@ -6,7 +6,8 @@ from uuid import UUID, uuid4
 import httpx
 import pytest
 import pytest_asyncio
-from sqlalchemy import select
+from sqlalchemy import delete, select, update
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.core.config import settings
@@ -185,6 +186,25 @@ async def test_launch_intake_duplicate_note_consent_and_location_workflow(
     assert len(notes) == 1
     assert sum(event.event_type == "customer.consent_recorded" for event in events) == 2
     assert all(event.company_id == fixture.context.company.id for event in events)
+
+    for mutation in (
+        update(CustomerNote).where(CustomerNote.id == notes[0].id).values(body="forged"),
+        delete(CustomerNote).where(CustomerNote.id == notes[0].id),
+    ):
+        with pytest.raises(DBAPIError):
+            async with factory() as session, session.begin():
+                await session.execute(mutation)
+
+    with pytest.raises(DBAPIError):
+        async with factory() as session, session.begin():
+            session.add(
+                CustomerNote(
+                    customer_id=UUID(customer["id"]),
+                    author_user_id=uuid4(),
+                    body="Forged author evidence",
+                )
+            )
+            await session.flush()
 
 
 @pytest.mark.asyncio

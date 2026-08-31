@@ -418,6 +418,12 @@ class CustomerBillingAddress(Base):
 
 class CustomerNote(Base):
     __tablename__ = "customer_notes"
+    __table_args__ = (
+        CheckConstraint(
+            "length(btrim(body)) BETWEEN 1 AND 4000",
+            name="ck_customer_notes_body_length",
+        ),
+    )
 
     id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), primary_key=True, default=uuid4
@@ -429,7 +435,9 @@ class CustomerNote(Base):
         index=True,
     )
     author_user_id: Mapped[UUID | None] = mapped_column(
-        PGUUID(as_uuid=True), index=True
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        index=True,
     )
     body: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
