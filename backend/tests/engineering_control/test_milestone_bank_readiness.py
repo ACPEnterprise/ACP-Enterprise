@@ -5,7 +5,6 @@ import json
 from importlib.resources import files
 
 import pytest
-
 from app.engineering_control.scheduler.bank import load_milestone_bank
 from app.engineering_control.scheduler.readiness import (
     ReadinessEvaluationError,
@@ -658,11 +657,29 @@ def test_unresolved_gates_block(milestone_id: str, expected: str) -> None:
     assert milestone.current_state == expected
 
 
-def test_active_ownership_blocks_duplicate_selection() -> None:
+def test_historical_bank_ownership_does_not_override_current_authority() -> None:
     projection = load_current_readiness_projection()
     milestone = _by_id(projection)["BANK.CRM.001"]
-    assert milestone.current_state == "ACTIVE_OWNED"
+    assert milestone.current_state == "BLOCKED_OWNER_DECISION"
     assert milestone.milestone_id not in projection.executable_milestone_ids
+
+
+def test_current_authority_ownership_blocks_duplicate_selection() -> None:
+    bank = load_milestone_bank()
+    raw = _authority_raw()
+    raw["active_ownership"] = [
+        {
+            "bank_milestone_id": "BANK.CRM.001",
+            "owner_reference": "current-authority:customer-experience",
+            "collision_domain": "customer_identity_timeline",
+        }
+    ]
+    authority = ingest_authority_snapshot(_resign(raw), bank)
+    milestone = _by_id(evaluate_readiness(bank, authority))["BANK.CRM.001"]
+    assert milestone.current_state == "ACTIVE_OWNED"
+    assert milestone.milestone_id not in evaluate_readiness(
+        bank, authority
+    ).executable_milestone_ids
 
 
 def test_packaged_ambiguous_historical_identities_fail_closed_per_record() -> None:

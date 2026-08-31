@@ -3,7 +3,7 @@
   "authority_id": "BANK.DF.002.AUTHORITY",
   "bank_id": "BANK.2",
   "bank_fingerprint": "f0af5713c967b92588ed1a82d36f5adc864fc4b235064dad0c5f5d11b158d4b3",
-  "authoritative_repository_sha": "a4bbc539db61742f88b63bf8be036468aed3f5e8",
+  "authoritative_repository_sha": "23dea55713e09c97fbbb8a92fa28c8dc3159b39b",
   "repository_ref": "origin/customer-management-v1",
   "completion_inventory_scope": "ALL_BANK_MILESTONES",
   "completion_evidence": [
@@ -175,6 +175,12 @@
     }
   ],
   "gate_resolutions": [],
-  "active_ownership": [],
-  "fingerprint": "612117f75b08d34f7865abda55aeb31e277cd10f80acfc4e85e4e6ffdf9d9c70"
+  "active_ownership": [
+    {
+      "bank_milestone_id": "BANK.ECO.007",
+      "owner_reference": "ECO/Laptop1-B:work/eco-overhead-allocation-evidence-completion-1",
+      "collision_domain": "business_economics"
+    }
+  ],
+  "fingerprint": "6b38c0da1c114cefb1c159ad8e1b94e70dc981e73a38779eee53a0e231db148f"
 }
