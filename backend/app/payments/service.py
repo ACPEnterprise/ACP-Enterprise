@@ -133,25 +133,13 @@ class PaymentService:
                 return receipt
             if amount <= 0 or amount > receipt.available_amount:
                 raise PaymentConflict("Application exceeds receipt availability.")
-        try:
-            invoice = await invoice_service.apply_payment(session, PaymentApplication(company_id=spec.company_id, branch_id=spec.branch_id, invoice_id=spec.invoice_id, receipt_id=spec.receipt_id, amount=amount, expected_version=spec.expected_invoice_version, actor_user_id=spec.actor_user_id, idempotency_key=spec.idempotency_key, occurred_at=spec.occurred_at))
-        except InvoiceError as exc:
-            raise PaymentConflict(str(exc)) from exc
-        async with session.begin():
-            receipt = await self._receipt(session, spec.company_id, spec.branch_id, spec.receipt_id, True)
-            prior = await session.scalar(
-                select(ReceiptEvent).where(
-                    ReceiptEvent.company_id == spec.company_id,
-                    ReceiptEvent.receipt_id == spec.receipt_id,
-                    ReceiptEvent.idempotency_key == spec.idempotency_key,
+            try:
+                invoice = await invoice_service.apply_payment_in_transaction(
+                    session,
+                    PaymentApplication(company_id=spec.company_id, branch_id=spec.branch_id, invoice_id=spec.invoice_id, receipt_id=spec.receipt_id, amount=amount, expected_version=spec.expected_invoice_version, actor_user_id=spec.actor_user_id, idempotency_key=spec.idempotency_key, occurred_at=spec.occurred_at),
                 )
-            )
-            if prior:
-                if prior.evidence_digest != digest:
-                    raise PaymentConflict(
-                        "Idempotency key conflicts with the original application."
-                    )
-                return receipt
+            except InvoiceError as exc:
+                raise PaymentConflict(str(exc)) from exc
             receipt.available_amount -= amount
             receipt.applied_amount += amount
             receipt.status = "fully_applied" if receipt.available_amount == 0 else "partially_applied"

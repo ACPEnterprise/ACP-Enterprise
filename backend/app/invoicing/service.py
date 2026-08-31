@@ -347,48 +347,52 @@ class InvoiceService:
         self, session: AsyncSession, spec: PaymentApplication
     ) -> Invoice:
         async with session.begin():
-            invoice = await self._required(session, spec, lock=True)
-            if await self._mutation_replay(session, invoice, spec, "apply_payment"):
-                return invoice
-            self._version(invoice, spec.expected_version)
-            receipt = await session.scalar(
-                select(PaymentReceiptEvidence)
-                .where(
-                    PaymentReceiptEvidence.company_id == spec.company_id,
-                    PaymentReceiptEvidence.branch_id == spec.branch_id,
-                    PaymentReceiptEvidence.customer_id == invoice.customer_id,
-                    PaymentReceiptEvidence.receipt_id == spec.receipt_id,
-                    PaymentReceiptEvidence.currency == invoice.currency,
-                )
-                .with_for_update()
-            )
-            if receipt is None:
-                raise InvoiceNotFound("Verified payment receipt was not found.")
-            amount = spec.amount.quantize(CENT)
-            if (
-                amount <= 0
-                or amount > receipt.available_amount
-                or amount > invoice.open_amount
-            ):
-                raise InvoiceConflict(
-                    "Payment application exceeds an available balance."
-                )
-            receipt.available_amount -= amount
-            invoice.open_amount -= amount
-            invoice.status = "paid" if invoice.open_amount == 0 else "partially_paid"
-            self._advance(invoice, spec.actor_user_id)
-            self._ar(
-                session,
-                invoice,
-                "payment_application",
-                -amount,
-                spec,
-                source_id=receipt.receipt_id,
-            )
-            self._event(
-                session, invoice, EventType.INVOICE_PAYMENT_APPLIED, spec.actor_user_id
-            )
+            return await self.apply_payment_in_transaction(session, spec)
+
+    async def apply_payment_in_transaction(
+        self, session: AsyncSession, spec: PaymentApplication
+    ) -> Invoice:
+        """Apply verified receipt evidence inside the caller's active transaction."""
+        invoice = await self._required(session, spec, lock=True)
+        if await self._mutation_replay(session, invoice, spec, "apply_payment"):
             return invoice
+        self._version(invoice, spec.expected_version)
+        receipt = await session.scalar(
+            select(PaymentReceiptEvidence)
+            .where(
+                PaymentReceiptEvidence.company_id == spec.company_id,
+                PaymentReceiptEvidence.branch_id == spec.branch_id,
+                PaymentReceiptEvidence.customer_id == invoice.customer_id,
+                PaymentReceiptEvidence.receipt_id == spec.receipt_id,
+                PaymentReceiptEvidence.currency == invoice.currency,
+            )
+            .with_for_update()
+        )
+        if receipt is None:
+            raise InvoiceNotFound("Verified payment receipt was not found.")
+        amount = spec.amount.quantize(CENT)
+        if (
+            amount <= 0
+            or amount > receipt.available_amount
+            or amount > invoice.open_amount
+        ):
+            raise InvoiceConflict("Payment application exceeds an available balance.")
+        receipt.available_amount -= amount
+        invoice.open_amount -= amount
+        invoice.status = "paid" if invoice.open_amount == 0 else "partially_paid"
+        self._advance(invoice, spec.actor_user_id)
+        self._ar(
+            session,
+            invoice,
+            "payment_application",
+            -amount,
+            spec,
+            source_id=receipt.receipt_id,
+        )
+        self._event(
+            session, invoice, EventType.INVOICE_PAYMENT_APPLIED, spec.actor_user_id
+        )
+        return invoice
 
     async def reverse_payment_application(
         self, session: AsyncSession, spec: PaymentApplication
