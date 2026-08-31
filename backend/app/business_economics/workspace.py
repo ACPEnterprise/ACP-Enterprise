@@ -18,6 +18,7 @@ from app.platform.permissions.authorization import AuthorizationContext
 
 from .models import (
     CompanyFinancePolicyGap,
+    CompanyFinancePolicyVersion,
     EconomicsProfitabilityResultRecord,
     EconomicsProfitabilityResultSupersessionRecord,
 )
@@ -62,6 +63,39 @@ class EconomicsWorkspaceService:
                 )
             )
         ).all()
+        allocation_policies = tuple(
+            (
+                await session.scalars(
+                    select(CompanyFinancePolicyVersion).where(
+                        CompanyFinancePolicyVersion.company_id == context.company.id,
+                        CompanyFinancePolicyVersion.family_key.in_(
+                            ("overhead_pool_definitions", "overhead_allocation")
+                        ),
+                        CompanyFinancePolicyVersion.lifecycle == "approved",
+                        CompanyFinancePolicyVersion.effective_start <= period_start,
+                        (
+                            CompanyFinancePolicyVersion.effective_end.is_(None)
+                            | (CompanyFinancePolicyVersion.effective_end >= period_end)
+                        ),
+                    )
+                )
+            ).all()
+        )
+        allocation_by_family = {
+            family: tuple(
+                item for item in allocation_policies if item.family_key == family
+            )
+            for family in ("overhead_pool_definitions", "overhead_allocation")
+        }
+        allocation_state = (
+            "conflicting"
+            if any(len(values) > 1 for values in allocation_by_family.values())
+            else (
+                "configured"
+                if all(len(values) == 1 for values in allocation_by_family.values())
+                else "policy_required"
+            )
+        )
         current_projection = self._project(current, identities)
         prior_projection = self._project(prior, identities)
         comparison = self._comparison(current_projection, prior_projection)
@@ -81,8 +115,46 @@ class EconomicsWorkspaceService:
                 "allocation_policy": (
                     "ready"
                     if current_projection["fully_allocated_available"]
-                    else "not_configured"
+                    else allocation_state
                 ),
+                "allocation_authority": {
+                    "state": (
+                        "ready"
+                        if current_projection["fully_allocated_available"]
+                        else allocation_state
+                    ),
+                    "pool_policy": "configured"
+                    if len(allocation_by_family["overhead_pool_definitions"]) == 1
+                    else (
+                        "conflicting"
+                        if len(allocation_by_family["overhead_pool_definitions"]) > 1
+                        else "unconfigured"
+                    ),
+                    "basis_policy": "configured"
+                    if len(allocation_by_family["overhead_allocation"]) == 1
+                    else (
+                        "conflicting"
+                        if len(allocation_by_family["overhead_allocation"]) > 1
+                        else "unconfigured"
+                    ),
+                    "source_evidence": "ready"
+                    if current_projection["fully_allocated_available"]
+                    else "insufficient_source",
+                    "supported_basis_types": [
+                        "labor_hours",
+                        "direct_labor_cost",
+                        "revenue",
+                        "job_count",
+                        "service_category_measure",
+                        "explicit_reference",
+                    ],
+                    "owner_decision": (
+                        "Select approved cost pools, source evidence, and an allocation basis; no default is applied."
+                        if not current_projection["fully_allocated_available"]
+                        else None
+                    ),
+                    "callback_economics": "external_gate",
+                },
                 "attribution": (
                     "partial"
                     if current_projection["unclassified_job_count"]

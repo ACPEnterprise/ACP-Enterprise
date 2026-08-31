@@ -38,7 +38,7 @@ vi.mock("../hooks/useBusinessEconomics", () => ({
     totals: { revenue: 100000, labor: 30000, materials: 20000, equipment: 0, truck: 0, overhead: 0, gross_profit: 50000, net_profit: 50000 },
     jobs: [], service_categories: [], customers: [], branches: [], fully_allocated_available: false,
     explanation: "Incomplete Jobs remain visible.", comparison: { state: "unavailable", reason: "Prior evidence is incomplete." },
-    readiness: { evidence: "partial", allocation_policy: "not_configured", attribution: "partial", policy_gaps: [] }, beacon_conditions: [{ kind: "incomplete_economic_evidence", state: "partial" }],
+    readiness: { evidence: "partial", allocation_policy: "policy_required", attribution: "partial", allocation_authority: { state: "policy_required", pool_policy: "unconfigured", basis_policy: "unconfigured", source_evidence: "insufficient_source", supported_basis_types: ["labor_hours", "revenue"], owner_decision: "Select approved cost pools, source evidence, and an allocation basis; no default is applied.", callback_economics: "external_gate" }, policy_gaps: [] }, beacon_conditions: [{ kind: "incomplete_economic_evidence", state: "partial" }],
     } };
   },
 }));
@@ -46,6 +46,6 @@ vi.mock("../hooks/useBusinessEconomics", () => ({
 describe("BusinessEconomicsRoute", () => {
   beforeEach(() => { allowed = false; workspaceMode = "success"; workspaceEnabled = undefined; detailEnabled = undefined; refetch.mockReset(); });
   it("fails closed without Economics read authority or issuing the query", () => { render(<BusinessEconomicsRoute/>); expect(screen.getByText(/not authorized/i)).toBeVisible(); expect(workspaceEnabled).toBe(false); expect(detailEnabled).toBe(false); });
-  it("shows truthful partial and no-policy states", () => { allowed = true; render(<BusinessEconomicsRoute/>); expect(screen.getByText(/Evidence partial/i)).toBeVisible(); expect(screen.getAllByText(/fully allocated profitability is unavailable/i).length).toBeGreaterThan(0); expect(screen.getByText("$1,000.00")).toBeVisible(); });
+  it("shows truthful partial and no-policy states", () => { allowed = true; render(<BusinessEconomicsRoute/>); expect(screen.getByText(/Evidence partial/i)).toBeVisible(); expect(screen.getAllByText(/fully allocated profitability is unavailable/i).length).toBeGreaterThan(0); expect(screen.getByText(/no default is applied/i)).toBeVisible(); expect(screen.getByText("$1,000.00")).toBeVisible(); });
   it("offers a safe retry when Economics is temporarily unavailable", async () => { allowed = true; workspaceMode = "error"; render(<BusinessEconomicsRoute/>); expect(screen.getByText(/no value was inferred/i)).toBeVisible(); await userEvent.click(screen.getByRole("button", { name: /retry economics/i })); expect(refetch).toHaveBeenCalledOnce(); });
 });
