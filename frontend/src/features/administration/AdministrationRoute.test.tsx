@@ -164,6 +164,7 @@ describe("AdministrationRoute", () => {
       authorization_users_advanced: 0,
     });
     vi.mocked(api.launchQuickBooksSandbox).mockResolvedValue(undefined);
+    vi.mocked(api.launchQuickBooksProduction).mockResolvedValue(undefined);
     vi.mocked(api.getQuickBooksSandboxConnection).mockResolvedValue(
       "not_connected",
     );
@@ -245,6 +246,18 @@ describe("AdministrationRoute", () => {
       await screen.findByRole("button", { name: "Connect QuickBooks Sandbox" }),
     );
     expect(api.launchQuickBooksSandbox).toHaveBeenCalledOnce();
+  });
+
+  it("separates the real read-only QuickBooks action from Development sandbox", async () => {
+    renderPage();
+    expect(
+      await screen.findByText("QuickBooks REAL company — read-only migration source"),
+    ).toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Connect REAL QuickBooks — Read Only" }),
+    );
+    expect(api.launchQuickBooksProduction).toHaveBeenCalledOnce();
+    expect(api.launchQuickBooksSandbox).not.toHaveBeenCalled();
   });
 
   it("requires explicit confirmation before disconnect and restores connect action", async () => {

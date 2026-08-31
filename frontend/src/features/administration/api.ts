@@ -68,6 +68,8 @@ const ADMIN_PATH = "/api/v1/company-admin";
 const QBO_SANDBOX_AUTHORIZE_PATH = "/api/v1/integrations/qbo/oauth/authorize";
 const QBO_SANDBOX_CONNECTION_PATH = "/api/v1/integrations/qbo/connection";
 const QBO_SANDBOX_DISCONNECT_PATH = "/api/v1/integrations/qbo/oauth/disconnect";
+const QBO_PRODUCTION_AUTHORIZE_PATH =
+  "/api/v1/integrations/qbo/production/oauth/authorize";
 const MIGRATION_READINESS_PATH = "/api/v1/migration/readiness";
 
 export interface MigrationReadiness {
@@ -161,13 +163,16 @@ interface QboSandboxConnectionResponse {
 }
 
 interface QboSandboxAuthorizationResponse {
-  status: "sandbox_oauth_initiation";
+  status: "sandbox_oauth_initiation" | "qbo_production_oauth_initiation";
   authorization_url: string;
 }
 
-function validatedIntuitAuthorizationUrl(value: string): string {
+function validatedIntuitAuthorizationUrl(
+  value: string,
+  callbackPath = "/api/v1/integrations/qbo/oauth/callback",
+): string {
   const url = new URL(value);
-  const expectedCallback = `${window.location.origin}/api/v1/integrations/qbo/oauth/callback`;
+  const expectedCallback = `${window.location.origin}${callbackPath}`;
   if (
     url.protocol !== "https:" ||
     url.hostname !== "appcenter.intuit.com" ||
@@ -192,6 +197,20 @@ export async function launchQuickBooksSandbox(
     QBO_SANDBOX_AUTHORIZE_PATH,
   );
   navigate(validatedIntuitAuthorizationUrl(response.data.authorization_url));
+}
+
+export async function launchQuickBooksProduction(
+  navigate: (url: string) => void = (url) => window.location.assign(url),
+): Promise<void> {
+  const response = await apiClient.post<QboSandboxAuthorizationResponse>(
+    QBO_PRODUCTION_AUTHORIZE_PATH,
+  );
+  navigate(
+    validatedIntuitAuthorizationUrl(
+      response.data.authorization_url,
+      "/api/v1/integrations/qbo/production/oauth/callback",
+    ),
+  );
 }
 
 export async function getQuickBooksSandboxConnection(): Promise<QboSandboxConnectionState> {
