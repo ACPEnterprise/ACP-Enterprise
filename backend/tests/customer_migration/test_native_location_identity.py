@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
+from sqlalchemy import delete, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
@@ -34,7 +35,12 @@ from app.customer_migration.cutover_rehearsal import (
     CutoverRehearsalEvidence,
     CutoverRehearsalService,
 )
-from app.customer_migration.models import ServiceLocationIdentityEvidence
+from app.customer_migration.models import (
+    CustomerMigrationCutoverPlanEvidence,
+    CustomerMigrationCutoverRehearsalEvidence,
+    CustomerMigrationCutoverRehearsalStepEvidence,
+    ServiceLocationIdentityEvidence,
+)
 from app.customer_migration.native_customer_consolidation import (
     NativeCustomerObservation,
     consolidate_native_customers,
@@ -510,6 +516,39 @@ async def test_postgres_evidence_is_company_scoped_and_replay_safe() -> None:
             assert rehearsal_created is True
             assert replay_rehearsal_created is False
             assert replay_rehearsal.id == first_rehearsal.id
+
+            immutable_attacks = (
+                update(CustomerMigrationCutoverPlanEvidence)
+                .where(CustomerMigrationCutoverPlanEvidence.id == first_plan.id)
+                .values(evidence_digest="0" * 64),
+                delete(CustomerMigrationCutoverPlanEvidence).where(
+                    CustomerMigrationCutoverPlanEvidence.id == first_plan.id
+                ),
+                update(CustomerMigrationCutoverRehearsalEvidence)
+                .where(
+                    CustomerMigrationCutoverRehearsalEvidence.id
+                    == first_rehearsal.id
+                )
+                .values(evidence_digest="0" * 64),
+                delete(CustomerMigrationCutoverRehearsalEvidence).where(
+                    CustomerMigrationCutoverRehearsalEvidence.id
+                    == first_rehearsal.id
+                ),
+                update(CustomerMigrationCutoverRehearsalStepEvidence)
+                .where(
+                    CustomerMigrationCutoverRehearsalStepEvidence.rehearsal_id
+                    == first_rehearsal.id
+                )
+                .values(evidence_digest="0" * 64),
+                delete(CustomerMigrationCutoverRehearsalStepEvidence).where(
+                    CustomerMigrationCutoverRehearsalStepEvidence.rehearsal_id
+                    == first_rehearsal.id
+                ),
+            )
+            for attack in immutable_attacks:
+                with pytest.raises(IntegrityError):
+                    async with session.begin_nested():
+                        await session.execute(attack)
 
         concurrent_inputs = dict(plan_inputs)
         concurrent_inputs.update(
