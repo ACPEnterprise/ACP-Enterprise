@@ -5,6 +5,10 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
+from sqlalchemy import select, update
+from sqlalchemy.exc import DBAPIError
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
 from app.core.config import settings
 from app.customers.models import Customer, ServiceLocation
 from app.estimates.contracts import CreateEstimateSpec, EstimateLineSpec
@@ -26,9 +30,6 @@ from app.price_book.models import (
     PriceBookTaxClassification,
 )
 from app.tax_policy.models import OperationalTaxPolicy
-from sqlalchemy import select, update
-from sqlalchemy.exc import DBAPIError
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 
 @pytest_asyncio.fixture
@@ -220,14 +221,29 @@ async def test_discount_captures_operational_tax_policy_evidence(
                 )
             )
         assert classification_id is not None
-        snapshot.snapshot_data = {
-            "customer_description": "Customer service",
-            "tax_classification": {
-                "id": str(classification_id),
-                "taxable": True,
+        tax_snapshot = PriceBookCommercialSnapshot(
+            company_id=snapshot.company_id,
+            branch_id=snapshot.branch_id,
+            service_item_id=snapshot.service_item_id,
+            price_version_id=snapshot.price_version_id,
+            quantity=snapshot.quantity,
+            unit_price=snapshot.unit_price,
+            extended_amount=snapshot.extended_amount,
+            currency=snapshot.currency,
+            effective_at=snapshot.effective_at,
+            snapshot_data={
+                "customer_description": "Customer service",
+                "tax_classification": {
+                    "id": str(classification_id),
+                    "taxable": True,
+                },
             },
-        }
-        session.add(snapshot)
+            digest="b" * 64,
+            idempotency_key=f"estimate-tax-{uuid4()}",
+            created_by_user_id=snapshot.created_by_user_id,
+            created_at=snapshot.created_at,
+        )
+        session.add(tax_snapshot)
         policy = OperationalTaxPolicy(
             company_id=company.id,
             branch_id=branch.id,
@@ -243,7 +259,7 @@ async def test_discount_captures_operational_tax_policy_evidence(
         record = await EstimateService().create(
             session,
             spec=replace(
-                make_spec(company, branch, actor, customer, location, snapshot),
+                make_spec(company, branch, actor, customer, location, tax_snapshot),
                 discount_type="percentage",
                 discount_value=Decimal(10),
             ),
