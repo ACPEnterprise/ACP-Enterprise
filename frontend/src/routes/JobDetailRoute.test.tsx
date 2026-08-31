@@ -43,5 +43,12 @@ describe("JobDetailRoute", () => {
     renderRoute();
     expect(screen.getByRole("heading", { name: "JOB-000001" })).toBeVisible();
     expect(screen.queryByText("Lifecycle controls")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Ask LIA/ })).not.toBeInTheDocument();
+  });
+  it("shows contextual LIA only with Customer and Job read authority", () => {
+    permissions = new Set(["COMPANY_JOB_READ", "COMPANY_CUSTOMER_READ"]);
+    vi.mocked(useJob).mockReturnValue({ isLoading: false, isError: false, data: job } as never);
+    renderRoute();
+    expect(screen.getByRole("button", { name: "Ask LIA about this Job" })).toBeVisible();
   });
 });
