@@ -65,6 +65,12 @@ class Invoice(Base):
             ondelete="RESTRICT",
         ),
         ForeignKeyConstraint(
+            ["company_id", "customer_id"],
+            ["customers.company_id", "customers.id"],
+            name="fk_invoices_customer_scope",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
             ["service_location_id", "customer_id"],
             ["service_locations.id", "service_locations.customer_id"],
             name="fk_invoices_location_customer",
@@ -142,11 +148,7 @@ class Invoice(Base):
         nullable=False,
     )
     branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
-    customer_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("customers.id", ondelete="RESTRICT"),
-        nullable=False,
-    )
+    customer_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     service_location_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), nullable=False
     )
@@ -256,9 +258,14 @@ class ARLedgerEntry(Base):
     __tablename__ = "ar_ledger_entries"
     __table_args__ = (
         ForeignKeyConstraint(
-            ["company_id", "invoice_id"],
-            ["invoices.company_id", "invoices.id"],
-            name="fk_ar_entries_invoice",
+            ["company_id", "branch_id", "invoice_id", "customer_id"],
+            [
+                "invoices.company_id",
+                "invoices.branch_id",
+                "invoices.id",
+                "invoices.customer_id",
+            ],
+            name="fk_ar_entries_invoice_scope",
             ondelete="RESTRICT",
         ),
         ForeignKeyConstraint(
@@ -292,11 +299,7 @@ class ARLedgerEntry(Base):
         nullable=False,
     )
     branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
-    customer_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("customers.id", ondelete="RESTRICT"),
-        nullable=False,
-    )
+    customer_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     invoice_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     entry_type: Mapped[str] = mapped_column(String(32), nullable=False)
     amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
@@ -321,6 +324,12 @@ class ARLedgerEntry(Base):
 class InvoiceIdempotency(Base):
     __tablename__ = "invoice_idempotency"
     __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "invoice_id"],
+            ["invoices.company_id", "invoices.id"],
+            name="fk_invoice_idempotency_invoice_scope",
+            ondelete="RESTRICT",
+        ),
         UniqueConstraint(
             "company_id", "idempotency_key", name="uq_invoice_idempotency_key"
         ),
@@ -336,11 +345,7 @@ class InvoiceIdempotency(Base):
     idempotency_key: Mapped[str] = mapped_column(String(160), nullable=False)
     operation: Mapped[str] = mapped_column(String(64), nullable=False)
     request_digest: Mapped[str] = mapped_column(String(64), nullable=False)
-    invoice_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("invoices.id", ondelete="RESTRICT"),
-        nullable=False,
-    )
+    invoice_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
     )
@@ -353,6 +358,12 @@ class PaymentReceiptEvidence(Base):
             ["company_id", "branch_id"],
             ["branches.company_id", "branches.id"],
             name="fk_invoice_receipts_branch",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "customer_id"],
+            ["customers.company_id", "customers.id"],
+            name="fk_invoice_receipts_customer_scope",
             ondelete="RESTRICT",
         ),
         CheckConstraint(
@@ -370,11 +381,7 @@ class PaymentReceiptEvidence(Base):
         nullable=False,
     )
     branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
-    customer_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("customers.id", ondelete="RESTRICT"),
-        nullable=False,
-    )
+    customer_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     receipt_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     currency: Mapped[str] = mapped_column(String(3), nullable=False)
     verified_amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
