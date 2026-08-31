@@ -27,9 +27,13 @@ class ExecutionComposition(Base):
     __tablename__ = "engineering_execution_compositions"
     __table_args__ = (
         ForeignKeyConstraint(
-            ["company_id", "execution_id"],
-            ["engineering_executions.company_id", "engineering_executions.id"],
-            name="fk_execution_compositions_execution",
+            ["company_id", "execution_id", "command_id"],
+            [
+                "engineering_executions.company_id",
+                "engineering_executions.id",
+                "engineering_executions.command_id",
+            ],
+            name="fk_execution_compositions_execution_command",
             ondelete="RESTRICT",
         ),
         ForeignKeyConstraint(
@@ -100,7 +104,6 @@ class ExecutionComposition(Base):
     )
     command_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
-        ForeignKey("engineering_commands.id", ondelete="RESTRICT"),
         nullable=False,
     )
     execution_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)

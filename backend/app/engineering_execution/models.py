@@ -80,6 +80,12 @@ class EngineeringExecution(Base):
         UniqueConstraint(
             "company_id", "id", name="uq_engineering_executions_company_id"
         ),
+        UniqueConstraint(
+            "company_id",
+            "id",
+            "command_id",
+            name="uq_engineering_executions_command_scope",
+        ),
         Index(
             "ix_engineering_executions_company_created",
             "company_id",
