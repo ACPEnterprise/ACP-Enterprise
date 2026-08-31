@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import delete, func, select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
@@ -23,7 +23,7 @@ from app.events.models import BusinessEvent
 from app.events.schemas import BusinessEventCreate
 from app.events.service import BusinessEventService
 from app.jobs.commands import ActivateJob, CancelJob, ReopenJob
-from app.jobs.models import Job, JobAppointmentLink, JobNumberSequence
+from app.jobs.models import JobAppointmentLink
 from app.jobs.service import JobService
 from app.jobs.types import JobCancellationReason, JobPriority, JobReopeningReason
 from app.operations.service import OperationsService
@@ -42,7 +42,6 @@ from app.scheduling.errors import (
 from app.scheduling.models import (
     Appointment,
     AppointmentCapacityReservation,
-    AppointmentNumberSequence,
     BranchSchedulingCalendar,
     BranchSchedulingException,
     BranchSchedulingWeeklyInterval,
@@ -200,71 +199,6 @@ async def service_database() -> AsyncIterator[
     try:
         yield factory, fixture
     finally:
-        async with factory() as session, session.begin():
-            company_ids = (company.id, other_company.id)
-            appointment_ids = select(Appointment.id).where(
-                Appointment.company_id.in_(company_ids)
-            )
-            await session.execute(
-                delete(BusinessEvent).where(BusinessEvent.company_id.in_(company_ids))
-            )
-            await session.execute(
-                delete(JobAppointmentLink).where(
-                    JobAppointmentLink.company_id.in_(company_ids)
-                )
-            )
-            await session.execute(delete(Job).where(Job.company_id.in_(company_ids)))
-            await session.execute(
-                delete(JobNumberSequence).where(
-                    JobNumberSequence.company_id.in_(company_ids)
-                )
-            )
-            await session.execute(
-                delete(AppointmentCapacityReservation).where(
-                    AppointmentCapacityReservation.appointment_id.in_(appointment_ids)
-                )
-            )
-            calendar_ids = select(BranchSchedulingCalendar.id).where(
-                BranchSchedulingCalendar.company_id.in_(company_ids)
-            )
-            await session.execute(
-                delete(BranchSchedulingException).where(
-                    BranchSchedulingException.calendar_id.in_(calendar_ids)
-                )
-            )
-            await session.execute(
-                delete(BranchSchedulingWeeklyInterval).where(
-                    BranchSchedulingWeeklyInterval.calendar_id.in_(calendar_ids)
-                )
-            )
-            await session.execute(
-                delete(BranchSchedulingCalendar).where(
-                    BranchSchedulingCalendar.company_id.in_(company_ids)
-                )
-            )
-            await session.execute(
-                delete(Appointment).where(Appointment.company_id.in_(company_ids))
-            )
-            await session.execute(
-                delete(AppointmentNumberSequence).where(
-                    AppointmentNumberSequence.company_id.in_(company_ids)
-                )
-            )
-            await session.execute(
-                delete(ServiceLocation).where(
-                    ServiceLocation.customer_id.in_(
-                        select(Customer.id).where(Customer.company_id.in_(company_ids))
-                    )
-                )
-            )
-            await session.execute(
-                delete(Customer).where(Customer.company_id.in_(company_ids))
-            )
-            await session.execute(
-                delete(Branch).where(Branch.company_id.in_(company_ids))
-            )
-            await session.execute(delete(Company).where(Company.id.in_(company_ids)))
-            await session.execute(delete(User).where(User.id == actor.id))
         await engine.dispose()
 
 

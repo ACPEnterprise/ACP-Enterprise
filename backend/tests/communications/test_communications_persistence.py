@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import delete, func, select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.communications.contracts import CommunicationRequest
@@ -148,18 +148,4 @@ async def test_persisted_request_replay_and_scoped_history() -> None:
         assert count == 1
         assert requested_events == 1
     finally:
-        async with factory() as session, session.begin():
-            await session.execute(
-                delete(NotificationOutbox).where(
-                    NotificationOutbox.payload["company_id"].astext == str(company.id)
-                )
-            )
-            await session.execute(
-                delete(BusinessEvent).where(BusinessEvent.company_id == company.id)
-            )
-            await session.delete(contact)
-            await session.delete(customer)
-            await session.delete(branch)
-            await session.delete(actor)
-            await session.delete(company)
         await engine.dispose()
