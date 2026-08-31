@@ -62,7 +62,7 @@ from app.scheduling.types import (
 BUSINESS_TIMEZONE = ZoneInfo("America/New_York")
 BUSINESS_TODAY = datetime.now(timezone.utc).astimezone(BUSINESS_TIMEZONE).date()
 FIXED_NOW = datetime.combine(
-    BUSINESS_TODAY, time(hour=8), tzinfo=BUSINESS_TIMEZONE
+    BUSINESS_TODAY, time.min, tzinfo=BUSINESS_TIMEZONE
 ).astimezone(timezone.utc)
 FIRST_START = datetime.combine(
     BUSINESS_TODAY + timedelta(days=1),
