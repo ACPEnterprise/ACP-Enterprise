@@ -2,6 +2,7 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
+from sqlalchemy import delete, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
@@ -14,9 +15,11 @@ from app.platform.idempotency.reliability import (
     AuthoritativeOutcome,
     IdempotencyConflict,
     MutationDisposition,
+    MutationReconciliationRequired,
     MutationReliabilityService,
     RetentionClass,
 )
+from app.platform.permissions import models as permission_models  # noqa: F401
 from app.platform.users.models import User
 
 
@@ -129,6 +132,72 @@ async def test_exact_replay_requires_immutable_branch_authority(
             )
     assert mutation_calls == 1
     assert recovery_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_missing_replay_result_durably_requires_reconciliation_and_identity_is_immutable(
+    mutation_reliability_fixture,
+) -> None:
+    factory, company, branch, _, actor = mutation_reliability_fixture
+    service = MutationReliabilityService()
+    result_id = uuid4()
+    identity = IdempotencyIdentity(
+        company.id, "synthetic.reconciliation", f"mutation-{uuid4()}", branch.id
+    )
+
+    async def mutate():
+        return AuthoritativeOutcome("created", "synthetic", result_id, 201)
+
+    async def recover(_identity):
+        return None
+
+    async with factory() as session:
+        executed = await service.execute(
+            session,
+            identity=identity,
+            actor_user_id=actor.id,
+            request_digest="c" * 64,
+            retention_class=RetentionClass.FINANCIAL_AUDIT,
+            mutate=mutate,
+            recover=recover,
+        )
+    async with factory() as session:
+        with pytest.raises(MutationReconciliationRequired):
+            await service.execute(
+                session,
+                identity=identity,
+                actor_user_id=actor.id,
+                request_digest="c" * 64,
+                retention_class=RetentionClass.FINANCIAL_AUDIT,
+                mutate=mutate,
+                recover=recover,
+            )
+    async with factory() as session:
+        receipt = await session.scalar(
+            select(MutationReceipt).where(MutationReceipt.id == executed.receipt_id)
+        )
+        assert receipt is not None
+        assert receipt.state == "reconciliation_required"
+        receipt_id = receipt.id
+
+    async with factory() as session, session.begin():
+        for values in (
+            {"request_digest": "d" * 64},
+            {"operation": "forged.operation"},
+            {"result_id": uuid4()},
+        ):
+            with pytest.raises(IntegrityError):
+                async with session.begin_nested():
+                    await session.execute(
+                        update(MutationReceipt)
+                        .where(MutationReceipt.id == receipt_id)
+                        .values(**values)
+                    )
+        with pytest.raises(IntegrityError):
+            async with session.begin_nested():
+                await session.execute(
+                    delete(MutationReceipt).where(MutationReceipt.id == receipt_id)
+                )
 
 
 @pytest.mark.asyncio

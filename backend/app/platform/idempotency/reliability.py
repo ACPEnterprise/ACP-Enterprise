@@ -89,6 +89,7 @@ class MutationReliabilityService:
         lock_key = int.from_bytes(
             hashlib.sha256(lock_identity.encode()).digest()[:8], "big", signed=True
         )
+        reconciliation_required = False
         async with session.begin():
             await session.execute(
                 text("SELECT pg_advisory_xact_lock(:lock_key)"), {"lock_key": lock_key}
@@ -120,34 +121,40 @@ class MutationReliabilityService:
                 value = await recover(receipt.result_id)
                 if value is None:
                     receipt.state = "reconciliation_required"
-                    raise MutationReconciliationRequired(
-                        "authoritative result referenced by receipt is unavailable"
+                    reconciliation_required = True
+                else:
+                    return MutationResult(
+                        value, MutationDisposition.REPLAYED, receipt.id
                     )
-                return MutationResult(value, MutationDisposition.REPLAYED, receipt.id)
-
-            receipt = MutationReceipt(
-                company_id=identity.company_id,
-                branch_id=identity.branch_id,
-                actor_user_id=actor_user_id,
-                operation=identity.operation,
-                idempotency_key=identity.idempotency_key,
-                request_digest=request_digest,
-                state="in_progress",
-                retention_class=retention_class.value,
-                expires_at=expires_at,
+            else:
+                receipt = MutationReceipt(
+                    company_id=identity.company_id,
+                    branch_id=identity.branch_id,
+                    actor_user_id=actor_user_id,
+                    operation=identity.operation,
+                    idempotency_key=identity.idempotency_key,
+                    request_digest=request_digest,
+                    state="in_progress",
+                    retention_class=retention_class.value,
+                    expires_at=expires_at,
+                )
+                session.add(receipt)
+                await session.flush()
+                outcome = await mutate()
+                receipt.state = "completed"
+                receipt.result_type = outcome.result_type
+                receipt.result_id = outcome.result_id
+                receipt.response_status = outcome.response_status
+                receipt.completed_at = datetime.now(timezone.utc)
+                await session.flush()
+                return MutationResult(
+                    outcome.value, MutationDisposition.EXECUTED, receipt.id
+                )
+        if reconciliation_required:
+            raise MutationReconciliationRequired(
+                "authoritative result referenced by receipt is unavailable"
             )
-            session.add(receipt)
-            await session.flush()
-            outcome = await mutate()
-            receipt.state = "completed"
-            receipt.result_type = outcome.result_type
-            receipt.result_id = outcome.result_id
-            receipt.response_status = outcome.response_status
-            receipt.completed_at = datetime.now(timezone.utc)
-            await session.flush()
-            return MutationResult(
-                outcome.value, MutationDisposition.EXECUTED, receipt.id
-            )
+        raise AssertionError("mutation reliability execution produced no disposition")
 
 
 mutation_reliability_service = MutationReliabilityService()
