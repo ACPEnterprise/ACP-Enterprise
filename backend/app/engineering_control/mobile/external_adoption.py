@@ -9,6 +9,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     String,
@@ -76,8 +77,21 @@ def utc_now() -> datetime:
 class ExternalMilestoneAdoption(Base):
     __tablename__ = "engineering_external_milestone_adoptions"
     __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "roadmap_id", "milestone_id"],
+            [
+                "engineering_milestones.company_id",
+                "engineering_milestones.roadmap_id",
+                "engineering_milestones.id",
+            ],
+            name="fk_external_adoptions_milestone_scope",
+            ondelete="RESTRICT",
+        ),
         UniqueConstraint(
             "company_id", "milestone_id", name="uq_external_adoption_milestone"
+        ),
+        UniqueConstraint(
+            "company_id", "id", name="uq_external_adoptions_company_id"
         ),
         CheckConstraint("version >= 1", name="ck_external_adoption_version"),
         CheckConstraint(
@@ -103,10 +117,10 @@ class ExternalMilestoneAdoption(Base):
         PGUUID(as_uuid=True), ForeignKey("companies.id"), nullable=False
     )
     roadmap_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), ForeignKey("engineering_roadmaps.id"), nullable=False
+        PGUUID(as_uuid=True), nullable=False
     )
     milestone_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), ForeignKey("engineering_milestones.id"), nullable=False
+        PGUUID(as_uuid=True), nullable=False
     )
     repository_key: Mapped[str] = mapped_column(String(100), nullable=False)
     branch: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -146,6 +160,15 @@ class ExternalMilestoneAdoption(Base):
 class ExternalMilestoneEvidence(Base):
     __tablename__ = "engineering_external_milestone_evidence"
     __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "adoption_id"],
+            [
+                "engineering_external_milestone_adoptions.company_id",
+                "engineering_external_milestone_adoptions.id",
+            ],
+            name="fk_external_evidence_adoption_company",
+            ondelete="RESTRICT",
+        ),
         UniqueConstraint(
             "company_id",
             "adoption_id",
@@ -169,7 +192,6 @@ class ExternalMilestoneEvidence(Base):
     )
     adoption_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
-        ForeignKey("engineering_external_milestone_adoptions.id"),
         nullable=False,
     )
     expected_adoption_version: Mapped[int] = mapped_column(Integer, nullable=False)

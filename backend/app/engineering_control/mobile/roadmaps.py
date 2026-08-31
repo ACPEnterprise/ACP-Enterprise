@@ -8,6 +8,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     String,
@@ -74,6 +75,9 @@ def validate_candidate_execution_head(
 class EngineeringRoadmap(Base):
     __tablename__ = "engineering_roadmaps"
     __table_args__ = (
+        UniqueConstraint(
+            "company_id", "id", name="uq_engineering_roadmaps_company_id"
+        ),
         CheckConstraint(
             "status IN ('active','completed','archived')",
             name="ck_engineering_roadmap_status",
@@ -115,11 +119,32 @@ class EngineeringRoadmap(Base):
 class EngineeringMilestone(Base):
     __tablename__ = "engineering_milestones"
     __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "roadmap_id"],
+            ["engineering_roadmaps.company_id", "engineering_roadmaps.id"],
+            name="fk_engineering_milestones_roadmap_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "command_id"],
+            ["engineering_commands.company_id", "engineering_commands.id"],
+            name="fk_engineering_milestones_command_company",
+            ondelete="RESTRICT",
+        ),
         UniqueConstraint(
             "roadmap_id", "position", name="uq_engineering_milestone_position"
         ),
         UniqueConstraint(
             "company_id", "milestone_code", name="uq_engineering_milestone_code"
+        ),
+        UniqueConstraint(
+            "company_id",
+            "roadmap_id",
+            "id",
+            name="uq_engineering_milestones_roadmap_scope",
+        ),
+        UniqueConstraint(
+            "company_id", "id", name="uq_engineering_milestones_company_id"
         ),
         CheckConstraint("position >= 1", name="ck_engineering_milestone_position"),
         CheckConstraint("version >= 1", name="ck_engineering_milestone_version"),
@@ -149,7 +174,6 @@ class EngineeringMilestone(Base):
     )
     roadmap_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
-        ForeignKey("engineering_roadmaps.id", ondelete="RESTRICT"),
         nullable=False,
     )
     position: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -199,7 +223,7 @@ class EngineeringMilestone(Base):
     )
     external_evidence: Mapped[str | None] = mapped_column(Text)
     command_id: Mapped[UUID | None] = mapped_column(
-        PGUUID(as_uuid=True), ForeignKey("engineering_commands.id", ondelete="RESTRICT")
+        PGUUID(as_uuid=True)
     )
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -216,6 +240,16 @@ class EngineeringMilestone(Base):
 class EngineeringMilestoneEvent(Base):
     __tablename__ = "engineering_milestone_events"
     __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "roadmap_id", "milestone_id"],
+            [
+                "engineering_milestones.company_id",
+                "engineering_milestones.roadmap_id",
+                "engineering_milestones.id",
+            ],
+            name="fk_engineering_milestone_events_scope",
+            ondelete="RESTRICT",
+        ),
         Index(
             "ix_engineering_milestone_event_order",
             "company_id",
@@ -234,12 +268,10 @@ class EngineeringMilestoneEvent(Base):
     )
     roadmap_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
-        ForeignKey("engineering_roadmaps.id", ondelete="RESTRICT"),
         nullable=False,
     )
     milestone_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
-        ForeignKey("engineering_milestones.id", ondelete="RESTRICT"),
         nullable=False,
     )
     event_type: Mapped[str] = mapped_column(String(40), nullable=False)
