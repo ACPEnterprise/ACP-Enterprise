@@ -179,6 +179,14 @@ export const navigationCatalog = [
     requiredPermission: "COMPANY_ECONOMICS_MEASUREMENT_READ",
   },
   {
+    id: "economics-administration",
+    label: "Economics Administration",
+    path: "/business-economics/administration",
+    icon: Settings,
+    availability: "available",
+    requiredPermission: "COMPANY_ECONOMICS_POLICY_READ",
+  },
+  {
     id: "luminary",
     label: "Luminary",
     path: "/luminary",

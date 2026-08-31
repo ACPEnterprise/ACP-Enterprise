@@ -34,6 +34,7 @@ export type NavigationItemId =
   | "accounts-payable"
   | "financial-reports"
   | "business-economics"
+  | "economics-administration"
   | "luminary"
   | "payroll"
   | "inventory"
