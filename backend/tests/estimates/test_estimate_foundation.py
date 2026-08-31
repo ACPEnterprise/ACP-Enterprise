@@ -6,7 +6,7 @@ from uuid import uuid4
 import pytest
 import pytest_asyncio
 from sqlalchemy import select, update
-from sqlalchemy.exc import DBAPIError
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.core.config import settings
@@ -291,7 +291,7 @@ async def test_revision_and_lifecycle_evidence_are_database_immutable(
             session,
             spec=make_spec(company, branch, actor, customer, location, snapshot),
         )
-        with pytest.raises(DBAPIError, match="immutable"):
+        with pytest.raises(IntegrityError, match="immutable"):
             await session.execute(
                 update(EstimateRevision)
                 .where(EstimateRevision.id == record.current_revision.id)

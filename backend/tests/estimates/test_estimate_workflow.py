@@ -4,7 +4,7 @@ from uuid import uuid4
 
 import pytest
 from sqlalchemy import select, update
-from sqlalchemy.exc import DBAPIError
+from sqlalchemy.exc import IntegrityError
 
 from app.estimates.contracts import (
     CreateEstimateRevisionSpec,
@@ -210,7 +210,7 @@ async def test_customer_decision_is_database_immutable(estimate_fixture) -> None
         approved = await service.approve(session, spec=decision_spec)
     assert approved.customer_decision is not None
     async with factory() as session:
-        with pytest.raises(DBAPIError, match="immutable"):
+        with pytest.raises(IntegrityError, match="immutable"):
             await session.execute(
                 update(EstimateCustomerDecision)
                 .where(EstimateCustomerDecision.id == approved.customer_decision.id)

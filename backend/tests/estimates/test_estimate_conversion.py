@@ -4,7 +4,7 @@ from uuid import uuid4
 
 import pytest
 from sqlalchemy import func, select, update
-from sqlalchemy.exc import DBAPIError
+from sqlalchemy.exc import IntegrityError
 
 from app.estimates.contracts import (
     ConvertEstimateToJobSpec,
@@ -242,7 +242,7 @@ async def test_conversion_evidence_is_database_immutable(estimate_fixture):
             session, spec=conversion_spec(record, branch, actor)
         )
     async with factory() as session:
-        with pytest.raises(DBAPIError, match="immutable"):
+        with pytest.raises(IntegrityError, match="immutable"):
             await session.execute(
                 update(EstimateJobConversion)
                 .where(EstimateJobConversion.id == conversion.id)
