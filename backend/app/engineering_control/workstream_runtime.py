@@ -45,6 +45,16 @@ class EngineeringWorkstreamRuntime(Base):
     __tablename__ = "engineering_workstream_runtimes"
     __table_args__ = (
         ForeignKeyConstraint(
+            ["company_id", "control_id", "command_id"],
+            [
+                "engineering_workstream_controls.company_id",
+                "engineering_workstream_controls.id",
+                "engineering_workstream_controls.command_id",
+            ],
+            name="fk_workstream_runtime_control_scope",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
             ["company_id", "worker_id"],
             ["engineering_workers.company_id", "engineering_workers.id"],
             name="fk_workstream_runtime_worker",
@@ -76,7 +86,6 @@ class EngineeringWorkstreamRuntime(Base):
     )
     command_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
-        ForeignKey("engineering_commands.id", ondelete="RESTRICT"),
         nullable=False,
     )
     control_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
@@ -109,8 +118,30 @@ class EngineeringWorkstreamRuntime(Base):
 class EngineeringWorkstreamEvent(Base):
     __tablename__ = "engineering_workstream_events"
     __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "control_id", "command_id"],
+            [
+                "engineering_workstream_controls.company_id",
+                "engineering_workstream_controls.id",
+                "engineering_workstream_controls.command_id",
+            ],
+            name="fk_workstream_events_control_scope",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "worker_id"],
+            ["engineering_workers.company_id", "engineering_workers.id"],
+            name="fk_workstream_events_worker_company",
+            ondelete="RESTRICT",
+        ),
         UniqueConstraint(
             "company_id", "idempotency_key", name="uq_workstream_event_idempotency"
+        ),
+        UniqueConstraint(
+            "company_id",
+            "id",
+            "command_id",
+            name="uq_workstream_events_notification_scope",
         ),
         Index(
             "ix_workstream_events_company_order",
@@ -131,7 +162,6 @@ class EngineeringWorkstreamEvent(Base):
     )
     command_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
-        ForeignKey("engineering_commands.id", ondelete="RESTRICT"),
         nullable=False,
     )
     control_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)

@@ -31,6 +31,12 @@ class EngineeringWorkstreamControl(Base):
             name="fk_workstream_controls_actor_membership",
             ondelete="RESTRICT",
         ),
+        ForeignKeyConstraint(
+            ["company_id", "command_id"],
+            ["engineering_commands.company_id", "engineering_commands.id"],
+            name="fk_workstream_controls_command_company",
+            ondelete="RESTRICT",
+        ),
         CheckConstraint(
             "desired_state IN ('active','paused','cancelled')",
             name="ck_workstream_controls_desired_state",
@@ -42,6 +48,12 @@ class EngineeringWorkstreamControl(Base):
         CheckConstraint("version >= 1", name="ck_workstream_controls_version"),
         UniqueConstraint(
             "company_id", "command_id", name="uq_workstream_controls_command"
+        ),
+        UniqueConstraint(
+            "company_id",
+            "id",
+            "command_id",
+            name="uq_workstream_controls_runtime_scope",
         ),
     )
 
@@ -57,11 +69,6 @@ class EngineeringWorkstreamControl(Base):
     )
     command_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
-        ForeignKey(
-            "engineering_commands.id",
-            name="fk_workstream_controls_command",
-            ondelete="RESTRICT",
-        ),
         nullable=False,
     )
     desired_state: Mapped[str] = mapped_column(String(16), nullable=False)

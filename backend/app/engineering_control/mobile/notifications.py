@@ -5,6 +5,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     String,
@@ -24,6 +25,16 @@ from app.platform.permissions.authorization import AuthorizationContext
 class EngineeringMissionNotification(Base):
     __tablename__ = "engineering_mission_notifications"
     __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "event_id", "command_id"],
+            [
+                "engineering_workstream_events.company_id",
+                "engineering_workstream_events.id",
+                "engineering_workstream_events.command_id",
+            ],
+            name="fk_mission_notifications_event_scope",
+            ondelete="RESTRICT",
+        ),
         CheckConstraint(
             "kind IN ('waiting_for_owner','completed','failed','recovering',"
             "'heartbeat_expired','worker_disconnected','deployment_completed',"
@@ -61,7 +72,6 @@ class EngineeringMissionNotification(Base):
     )
     event_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
-        ForeignKey("engineering_workstream_events.id", ondelete="RESTRICT"),
         nullable=False,
     )
     command_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
