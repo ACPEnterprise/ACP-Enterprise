@@ -8,6 +8,10 @@ from app.database.session import get_database_session
 from app.platform.company.admin_schemas import (
     AllBranchAccessRequest,
     AssignmentResponse,
+    CanonicalRoleSyncApplyRequest,
+    CanonicalRoleSyncItemResponse,
+    CanonicalRoleSyncPlanResponse,
+    CanonicalRoleSyncResultResponse,
     MembershipCreateRequest,
     MembershipResponse,
     MutationResponse,
@@ -25,6 +29,11 @@ from app.platform.company.admin_service import (
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import AdministrationPermission
 from app.platform.permissions.dependencies import require_permission
+from app.platform.permissions.role_sync import (
+    CanonicalRoleSyncConflict,
+    RoleSyncPlan,
+    canonical_role_sync_service,
+)
 from app.platform.reliability.correlation import current_correlation_id
 from app.platform.reliability.failures import ClientRecovery, FailureCode, SafeFailure
 
@@ -54,6 +63,23 @@ PermissionManageContext = Annotated[
     AuthorizationContext,
     Depends(require_permission(AdministrationPermission.PERMISSION_MANAGE)),
 ]
+
+
+def canonical_role_plan_response(plan: RoleSyncPlan) -> CanonicalRoleSyncPlanResponse:
+    return CanonicalRoleSyncPlanResponse(
+        company_id=plan.company_id,
+        plan_digest=plan.digest,
+        safe_to_apply=plan.safe_to_apply,
+        items=tuple(
+            CanonicalRoleSyncItemResponse(
+                code=item.code,
+                classification=item.classification.value,
+                missing_permissions=item.missing_permissions,
+                metadata_update_required=item.metadata_update_required,
+            )
+            for item in plan.items
+        ),
+    )
 
 
 def translate_admin_error(error: AccessPolicyAdministrationError) -> HTTPException:
@@ -223,6 +249,49 @@ async def list_roles(
 ) -> list[RoleResponse]:
     records = await company_administration_service.list_roles(session, context=context)
     return [RoleResponse.model_validate(record) for record in records]
+
+
+@router.get(
+    "/canonical-roles/reconciliation",
+    response_model=CanonicalRoleSyncPlanResponse,
+)
+async def preview_canonical_role_reconciliation(
+    context: RoleReadContext,
+    session: DatabaseSession,
+) -> CanonicalRoleSyncPlanResponse:
+    plan = await canonical_role_sync_service.plan(
+        session, company_id=context.company.id
+    )
+    return canonical_role_plan_response(plan)
+
+
+@router.post(
+    "/canonical-roles/reconciliation/apply",
+    response_model=CanonicalRoleSyncResultResponse,
+)
+async def apply_canonical_role_reconciliation(
+    data: CanonicalRoleSyncApplyRequest,
+    context: RoleManageContext,
+    session: DatabaseSession,
+) -> CanonicalRoleSyncResultResponse:
+    try:
+        result = await canonical_role_sync_service.apply(
+            session,
+            context=context,
+            expected_plan_digest=data.expected_plan_digest,
+        )
+    except CanonicalRoleSyncConflict as error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(error),
+        ) from error
+    return CanonicalRoleSyncResultResponse(
+        plan=canonical_role_plan_response(result.plan),
+        roles_created=result.roles_created,
+        permissions_added=result.permissions_added,
+        metadata_restored=result.metadata_restored,
+        authorization_users_advanced=result.authorization_users_advanced,
+    )
 
 
 @router.get("/permissions", response_model=list[PermissionCatalogResponse])

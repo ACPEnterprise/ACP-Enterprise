@@ -9,6 +9,7 @@ export const administrationKeys = {
   permissions: (roleId: string) =>
     ["administration", "permissions", roleId] as const,
   migration: ["administration", "migration-readiness"] as const,
+  canonicalRoles: ["administration", "canonical-roles"] as const,
 };
 
 export function useAdministrationAccess() {
@@ -17,6 +18,22 @@ export function useAdministrationAccess() {
     queryFn: () => api.listPermissions(),
     retry: false,
     staleTime: 60_000,
+  });
+}
+
+export function useCanonicalRoleSyncPlan(enabled = true) {
+  return useQuery({
+    queryKey: administrationKeys.canonicalRoles,
+    queryFn: api.getCanonicalRoleSyncPlan,
+    enabled,
+    retry: shouldRetryApiQuery,
+  });
+}
+
+export function useCanonicalRoleSync() {
+  return useMutation({
+    mutationFn: api.applyCanonicalRoleSync,
+    retry: false,
   });
 }
 

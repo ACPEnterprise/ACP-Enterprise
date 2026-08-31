@@ -86,7 +86,7 @@ const requireReauthentication = vi.fn();
 const context: AuthenticationContextValue = {
   status: "authenticated",
   activeCompany: null,
-  permissionCodes: ["COMPANY_ADMINISTER", "COMPANY_ROLE_READ", "COMPANY_PERMISSION_MANAGE"],
+  permissionCodes: ["COMPANY_ADMINISTER", "COMPANY_ROLE_READ", "COMPANY_ROLE_MANAGE", "COMPANY_PERMISSION_MANAGE"],
   user: {
     id: "owner",
     normalized_email: "owner@example.com",
@@ -127,11 +127,42 @@ function renderPage() {
 describe("AdministrationRoute", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    context.permissionCodes = ["COMPANY_ADMINISTER", "COMPANY_ROLE_READ", "COMPANY_PERMISSION_MANAGE"];
+    context.permissionCodes = ["COMPANY_ADMINISTER", "COMPANY_ROLE_READ", "COMPANY_ROLE_MANAGE", "COMPANY_PERMISSION_MANAGE"];
     vi.mocked(api.listRoles).mockResolvedValue([role]);
     vi.mocked(api.listPermissions).mockResolvedValue(permissions);
     vi.mocked(api.grantPermission).mockResolvedValue(undefined);
     vi.mocked(api.removePermission).mockResolvedValue(undefined);
+    vi.mocked(api.getCanonicalRoleSyncPlan).mockResolvedValue({
+      company_id: "company-1",
+      plan_digest: "a".repeat(64),
+      safe_to_apply: true,
+      items: [
+        {
+          code: "SERVICE_CSR",
+          classification: "MISSING_CANONICAL_ROLE",
+          missing_permissions: ["COMPANY_CUSTOMER_READ"],
+          metadata_update_required: false,
+        },
+        {
+          code: "OWN_DATA_ROLE",
+          classification: "ALREADY_CONFORMING",
+          missing_permissions: [],
+          metadata_update_required: false,
+        },
+      ],
+    });
+    vi.mocked(api.applyCanonicalRoleSync).mockResolvedValue({
+      plan: {
+        company_id: "company-1",
+        plan_digest: "a".repeat(64),
+        safe_to_apply: true,
+        items: [],
+      },
+      roles_created: ["SERVICE_CSR"],
+      permissions_added: [],
+      metadata_restored: [],
+      authorization_users_advanced: 0,
+    });
     vi.mocked(api.launchQuickBooksSandbox).mockResolvedValue(undefined);
     vi.mocked(api.getQuickBooksSandboxConnection).mockResolvedValue(
       "not_connected",
@@ -174,6 +205,19 @@ describe("AdministrationRoute", () => {
       run_history: [],
       recovery_state: "completed_runs_replay_safe",
     });
+  });
+
+  it("previews and applies only a safe canonical role plan", async () => {
+    const user = userEvent.setup();
+    const router = renderPage();
+    expect(await screen.findByText("Canonical role readiness")).toBeInTheDocument();
+    expect(screen.getByText("MISSING CANONICAL ROLE")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Apply safe reconciliation" }));
+    expect(vi.mocked(api.applyCanonicalRoleSync).mock.calls[0]?.[0]).toBe(
+      "a".repeat(64),
+    );
+    expect(requireReauthentication).toHaveBeenCalled();
+    expect(router.state.location.pathname).toBe("/login");
   });
 
   it("renders assigned and unassigned permissions in a phone-safe single column", async () => {

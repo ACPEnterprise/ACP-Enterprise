@@ -22,6 +22,26 @@ export interface PermissionDefinition {
   reconciliation_required: boolean;
 }
 
+export interface CanonicalRoleSyncPlan {
+  company_id: string;
+  plan_digest: string;
+  safe_to_apply: boolean;
+  items: Array<{
+    code: string;
+    classification: string;
+    missing_permissions: string[];
+    metadata_update_required: boolean;
+  }>;
+}
+
+export interface CanonicalRoleSyncResult {
+  plan: CanonicalRoleSyncPlan;
+  roles_created: string[];
+  permissions_added: string[];
+  metadata_restored: string[];
+  authorization_users_advanced: number;
+}
+
 export interface IdentityOnboardingView {
   id: string;
   employee_id: string;
@@ -192,6 +212,25 @@ export async function disconnectQuickBooksSandbox(): Promise<QboSandboxConnectio
 
 export async function listRoles(): Promise<CompanyRole[]> {
   return (await apiClient.get<CompanyRole[]>(`${ADMIN_PATH}/roles`)).data;
+}
+
+export async function getCanonicalRoleSyncPlan(): Promise<CanonicalRoleSyncPlan> {
+  return (
+    await apiClient.get<CanonicalRoleSyncPlan>(
+      `${ADMIN_PATH}/canonical-roles/reconciliation`,
+    )
+  ).data;
+}
+
+export async function applyCanonicalRoleSync(
+  expectedPlanDigest: string,
+): Promise<CanonicalRoleSyncResult> {
+  return (
+    await apiClient.post<CanonicalRoleSyncResult>(
+      `${ADMIN_PATH}/canonical-roles/reconciliation/apply`,
+      { expected_plan_digest: expectedPlanDigest },
+    )
+  ).data;
 }
 
 export async function listPermissions(
