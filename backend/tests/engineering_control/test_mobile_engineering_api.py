@@ -503,10 +503,16 @@ async def test_roadmap_dispatch_and_safe_progression_owner_workflow(
     async with mobile_api.factory() as session, session.begin():
         second_milestone = await session.scalar(
             select(EngineeringMilestone).where(
-                EngineeringMilestone.title == "Milestone two"
+                EngineeringMilestone.company_id
+                == mobile_api.service_fixture.context.company.id,
+                EngineeringMilestone.title == "Milestone two",
             )
         )
         assert second_milestone is not None
+        assert (
+            second_milestone.company_id
+            == mobile_api.service_fixture.context.company.id
+        )
         original_status = second_milestone.status
         second_milestone.command_id = dispatched_command.id
         second_milestone.status = "running"
@@ -514,7 +520,9 @@ async def test_roadmap_dispatch_and_safe_progression_owner_workflow(
         linked_milestones = (
             await session.scalars(
                 select(EngineeringMilestone).where(
-                    EngineeringMilestone.command_id == dispatched_command.id
+                    EngineeringMilestone.company_id
+                    == mobile_api.service_fixture.context.company.id,
+                    EngineeringMilestone.command_id == dispatched_command.id,
                 )
             )
         ).all()
@@ -530,7 +538,9 @@ async def test_roadmap_dispatch_and_safe_progression_owner_workflow(
     async with mobile_api.factory() as session, session.begin():
         second_milestone = await session.scalar(
             select(EngineeringMilestone).where(
-                EngineeringMilestone.title == "Milestone two"
+                EngineeringMilestone.company_id
+                == mobile_api.service_fixture.context.company.id,
+                EngineeringMilestone.title == "Milestone two",
             )
         )
         assert second_milestone is not None
