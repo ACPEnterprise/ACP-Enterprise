@@ -421,6 +421,21 @@ async def test_postgres_evidence_is_company_scoped_and_replay_safe() -> None:
             assert readiness_created is True
             assert replay_readiness_created is False
             assert replay_readiness.id == first_readiness.id
+            for attack in (
+                update(CustomerMigrationCutoverReadinessEvidence)
+                .where(
+                    CustomerMigrationCutoverReadinessEvidence.id
+                    == first_readiness.id
+                )
+                .values(evidence_digest="0" * 64),
+                delete(CustomerMigrationCutoverReadinessEvidence).where(
+                    CustomerMigrationCutoverReadinessEvidence.id
+                    == first_readiness.id
+                ),
+            ):
+                with pytest.raises(IntegrityError):
+                    async with session.begin_nested():
+                        await session.execute(attack)
 
             plan_inputs = compiler_inputs()
             steps = plan_inputs["steps"]
