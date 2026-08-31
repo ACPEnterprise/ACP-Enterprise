@@ -3,13 +3,47 @@ from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
+from sqlalchemy import ForeignKeyConstraint
 
+from app.engineering_execution.controlled.models import ControlledExecutionOfferModel
+from app.worker_control.models import WorkerRecoveryAcknowledgement
 from app.worker_control.recovery_acknowledgement import (
     RecoveryAcknowledgementError,
     RecoveryAcknowledgementRequest,
     RecoveryAcknowledgementService,
     recovery_acknowledgement_failure,
 )
+
+
+def test_recovery_acknowledgement_is_bound_to_exact_offer_lineage() -> None:
+    constraint = next(
+        value
+        for value in WorkerRecoveryAcknowledgement.__table__.constraints
+        if isinstance(value, ForeignKeyConstraint)
+        and value.name == "fk_worker_recovery_ack_offer_lineage"
+    )
+    expected = (
+        "company_id",
+        "offer_id",
+        "command_id",
+        "execution_id",
+        "lease_id",
+        "worker_id",
+    )
+
+    assert tuple(column.name for column in constraint.columns) == expected
+    assert tuple(element.target_fullname for element in constraint.elements) == (
+        "engineering_controlled_execution_offers.company_id",
+        "engineering_controlled_execution_offers.id",
+        "engineering_controlled_execution_offers.command_id",
+        "engineering_controlled_execution_offers.execution_id",
+        "engineering_controlled_execution_offers.lease_id",
+        "engineering_controlled_execution_offers.worker_id",
+    )
+    assert any(
+        value.name == "uq_controlled_offers_recovery_binding"
+        for value in ControlledExecutionOfferModel.__table__.constraints
+    )
 
 
 def test_recovery_api_failure_is_classified_and_non_reflective() -> None:

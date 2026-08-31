@@ -280,18 +280,23 @@ class WorkerRecoveryAcknowledgement(Base):
     __tablename__ = "engineering_worker_recovery_acknowledgements"
     __table_args__ = (
         ForeignKeyConstraint(
-            ["company_id", "worker_id"],
-            ["engineering_workers.company_id", "engineering_workers.id"],
-            ondelete="RESTRICT",
-        ),
-        ForeignKeyConstraint(
-            ["company_id", "lease_id"],
-            ["engineering_worker_leases.company_id", "engineering_worker_leases.id"],
-            ondelete="RESTRICT",
-        ),
-        ForeignKeyConstraint(
-            ["company_id", "execution_id"],
-            ["engineering_executions.company_id", "engineering_executions.id"],
+            [
+                "company_id",
+                "offer_id",
+                "command_id",
+                "execution_id",
+                "lease_id",
+                "worker_id",
+            ],
+            [
+                "engineering_controlled_execution_offers.company_id",
+                "engineering_controlled_execution_offers.id",
+                "engineering_controlled_execution_offers.command_id",
+                "engineering_controlled_execution_offers.execution_id",
+                "engineering_controlled_execution_offers.lease_id",
+                "engineering_controlled_execution_offers.worker_id",
+            ],
+            name="fk_worker_recovery_ack_offer_lineage",
             ondelete="RESTRICT",
         ),
         CheckConstraint(
@@ -326,17 +331,9 @@ class WorkerRecoveryAcknowledgement(Base):
         nullable=False,
     )
     worker_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
-    command_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("engineering_commands.id", ondelete="RESTRICT"),
-        nullable=False,
-    )
+    command_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     execution_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
-    offer_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("engineering_controlled_execution_offers.id", ondelete="RESTRICT"),
-        nullable=False,
-    )
+    offer_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     lease_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     journal_digest: Mapped[str] = mapped_column(String(64), nullable=False)
     reconciliation_reason: Mapped[str] = mapped_column(String(200), nullable=False)

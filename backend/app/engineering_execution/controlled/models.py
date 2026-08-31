@@ -100,6 +100,15 @@ class ControlledExecutionOfferModel(Base):
             "session_id",
             name="uq_controlled_offers_result_binding",
         ),
+        UniqueConstraint(
+            "company_id",
+            "id",
+            "command_id",
+            "execution_id",
+            "lease_id",
+            "worker_id",
+            name="uq_controlled_offers_recovery_binding",
+        ),
         Index(
             "ix_controlled_offers_company_state_expiry",
             "company_id",
