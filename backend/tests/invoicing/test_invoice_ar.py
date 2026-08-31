@@ -6,7 +6,8 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.core.config import settings
@@ -141,6 +142,30 @@ async def test_accepted_work_creates_and_issues_one_exact_receivable(invoice_fix
     assert len(entries) == 1
     assert entries[0].entry_type == "obligation"
     assert entries[0].amount == issued.total_amount
+    async with factory() as session:
+        idempotency_id = await session.scalar(
+            select(InvoiceIdempotency.id).where(
+                InvoiceIdempotency.invoice_id == invoice.id
+            )
+        )
+    assert idempotency_id is not None
+    async with factory() as session, session.begin():
+        for model, evidence_id in (
+            (ARLedgerEntry, entries[0].id),
+            (InvoiceIdempotency, idempotency_id),
+        ):
+            with pytest.raises(IntegrityError):
+                async with session.begin_nested():
+                    await session.execute(
+                        update(model)
+                        .where(model.id == evidence_id)
+                        .values(id=evidence_id)
+                    )
+            with pytest.raises(IntegrityError):
+                async with session.begin_nested():
+                    await session.execute(
+                        delete(model).where(model.id == evidence_id)
+                    )
 
 
 @pytest.mark.asyncio
@@ -284,9 +309,27 @@ async def test_verified_receipt_application_and_accounting_receipt_seams(
         replay = await service.record_posting_receipt(session, posting)
         assert replay.id == posted.id
     async with factory() as session:
-        assert (
-            await session.scalar(select(func.count(AccountingPostingReceipt.id))) == 1
+        receipt_id = await session.scalar(
+            select(AccountingPostingReceipt.id).where(
+                AccountingPostingReceipt.invoice_id == posted.id
+            )
         )
+        assert receipt_id is not None
+    async with factory() as session, session.begin():
+        with pytest.raises(IntegrityError):
+            async with session.begin_nested():
+                await session.execute(
+                    update(AccountingPostingReceipt)
+                    .where(AccountingPostingReceipt.id == receipt_id)
+                    .values(id=receipt_id)
+                )
+        with pytest.raises(IntegrityError):
+            async with session.begin_nested():
+                await session.execute(
+                    delete(AccountingPostingReceipt).where(
+                        AccountingPostingReceipt.id == receipt_id
+                    )
+                )
     async with factory() as session:
         with pytest.raises(InvoiceConflict):
             await service.record_posting_receipt(
