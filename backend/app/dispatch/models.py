@@ -74,6 +74,13 @@ class DispatchAssignment(Base):
             name="uq_dispatch_assignments_appointment",
         ),
         UniqueConstraint("company_id", "id", name="uq_dispatch_assignments_company_id"),
+        UniqueConstraint(
+            "company_id",
+            "branch_id",
+            "job_id",
+            "id",
+            name="uq_dispatch_assignments_field_scope",
+        ),
         Index(
             "ix_dispatch_assignments_board",
             "company_id",

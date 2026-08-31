@@ -33,6 +33,17 @@ class FieldWorkNote(Base):
             name="fk_field_notes_job",
             ondelete="RESTRICT",
         ),
+        ForeignKeyConstraint(
+            ["company_id", "branch_id", "job_id", "assignment_id"],
+            [
+                "dispatch_assignments.company_id",
+                "dispatch_assignments.branch_id",
+                "dispatch_assignments.job_id",
+                "dispatch_assignments.id",
+            ],
+            name="fk_field_notes_assignment_scope",
+            ondelete="RESTRICT",
+        ),
         CheckConstraint(
             "note_type IN ('work_performed','internal','customer_visible')",
             name="ck_field_notes_type",
@@ -53,11 +64,7 @@ class FieldWorkNote(Base):
     )
     branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     job_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
-    assignment_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("dispatch_assignments.id", ondelete="RESTRICT"),
-        nullable=False,
-    )
+    assignment_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     note_type: Mapped[str] = mapped_column(String(32), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
@@ -78,6 +85,17 @@ class FieldCustomerApproval(Base):
             ["company_id", "branch_id", "job_id"],
             ["jobs.company_id", "jobs.branch_id", "jobs.id"],
             name="fk_field_approvals_job",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "branch_id", "job_id", "assignment_id"],
+            [
+                "dispatch_assignments.company_id",
+                "dispatch_assignments.branch_id",
+                "dispatch_assignments.job_id",
+                "dispatch_assignments.id",
+            ],
+            name="fk_field_approvals_assignment_scope",
             ondelete="RESTRICT",
         ),
         CheckConstraint(
@@ -103,11 +121,7 @@ class FieldCustomerApproval(Base):
     )
     branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     job_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
-    assignment_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("dispatch_assignments.id", ondelete="RESTRICT"),
-        nullable=False,
-    )
+    assignment_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     disposition: Mapped[str] = mapped_column(String(24), nullable=False)
     customer_name: Mapped[str | None] = mapped_column(String(200))
     reason: Mapped[str | None] = mapped_column(Text)
@@ -131,6 +145,28 @@ class FieldInvoiceHandoff(Base):
             name="fk_field_handoffs_job",
             ondelete="RESTRICT",
         ),
+        ForeignKeyConstraint(
+            ["company_id", "branch_id", "job_id", "assignment_id"],
+            [
+                "dispatch_assignments.company_id",
+                "dispatch_assignments.branch_id",
+                "dispatch_assignments.job_id",
+                "dispatch_assignments.id",
+            ],
+            name="fk_field_handoffs_assignment_scope",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "branch_id", "job_id", "invoice_id"],
+            [
+                "invoices.company_id",
+                "invoices.branch_id",
+                "invoices.job_id",
+                "invoices.id",
+            ],
+            name="fk_field_handoffs_invoice_scope",
+            ondelete="RESTRICT",
+        ),
         CheckConstraint(
             "status IN ('pending','completed','reconciliation_required')",
             name="ck_field_handoffs_status",
@@ -150,14 +186,8 @@ class FieldInvoiceHandoff(Base):
     )
     branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     job_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
-    assignment_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("dispatch_assignments.id", ondelete="RESTRICT"),
-        nullable=False,
-    )
-    invoice_id: Mapped[UUID | None] = mapped_column(
-        PGUUID(as_uuid=True), ForeignKey("invoices.id", ondelete="RESTRICT")
-    )
+    assignment_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    invoice_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
     idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
     requested_by_user_id: Mapped[UUID] = mapped_column(
@@ -182,6 +212,17 @@ class FieldCompletionRequirementSnapshot(Base):
             name="fk_field_requirement_snapshots_job",
             ondelete="RESTRICT",
         ),
+        ForeignKeyConstraint(
+            ["company_id", "branch_id", "job_id", "assignment_id"],
+            [
+                "dispatch_assignments.company_id",
+                "dispatch_assignments.branch_id",
+                "dispatch_assignments.job_id",
+                "dispatch_assignments.id",
+            ],
+            name="fk_field_requirement_snapshots_assignment_scope",
+            ondelete="RESTRICT",
+        ),
         CheckConstraint("version >= 1", name="ck_field_requirement_snapshot_version"),
         CheckConstraint(
             "requirements_fingerprint ~ '^[0-9a-f]{64}$'",
@@ -196,6 +237,13 @@ class FieldCompletionRequirementSnapshot(Base):
         UniqueConstraint(
             "company_id", "job_id", name="uq_field_requirement_snapshot_job"
         ),
+        UniqueConstraint(
+            "company_id",
+            "branch_id",
+            "job_id",
+            "id",
+            name="uq_field_requirement_snapshots_evidence_scope",
+        ),
     )
     id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), primary_key=True, default=uuid4
@@ -207,11 +255,7 @@ class FieldCompletionRequirementSnapshot(Base):
     )
     branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     job_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
-    assignment_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("dispatch_assignments.id", ondelete="RESTRICT"),
-        nullable=False,
-    )
+    assignment_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     requirements: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
     requirements_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -234,6 +278,17 @@ class FieldCompletionEvidence(Base):
             name="fk_field_completion_evidence_job",
             ondelete="RESTRICT",
         ),
+        ForeignKeyConstraint(
+            ["company_id", "branch_id", "job_id", "snapshot_id"],
+            [
+                "field_completion_requirement_snapshots.company_id",
+                "field_completion_requirement_snapshots.branch_id",
+                "field_completion_requirement_snapshots.job_id",
+                "field_completion_requirement_snapshots.id",
+            ],
+            name="fk_field_completion_evidence_snapshot_scope",
+            ondelete="RESTRICT",
+        ),
         UniqueConstraint(
             "company_id",
             "snapshot_id",
@@ -251,11 +306,7 @@ class FieldCompletionEvidence(Base):
     )
     branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     job_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
-    snapshot_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("field_completion_requirement_snapshots.id", ondelete="RESTRICT"),
-        nullable=False,
-    )
+    snapshot_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     requirement_code: Mapped[str] = mapped_column(String(64), nullable=False)
     source_type: Mapped[str] = mapped_column(String(64), nullable=False)
     source_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
@@ -278,6 +329,17 @@ class FieldNonBillableDisposition(Base):
             name="fk_field_non_billable_job",
             ondelete="RESTRICT",
         ),
+        ForeignKeyConstraint(
+            ["company_id", "branch_id", "job_id", "assignment_id"],
+            [
+                "dispatch_assignments.company_id",
+                "dispatch_assignments.branch_id",
+                "dispatch_assignments.job_id",
+                "dispatch_assignments.id",
+            ],
+            name="fk_field_non_billable_assignment_scope",
+            ondelete="RESTRICT",
+        ),
         CheckConstraint(
             "length(btrim(reason)) > 0", name="ck_field_non_billable_reason"
         ),
@@ -296,11 +358,7 @@ class FieldNonBillableDisposition(Base):
     )
     branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     job_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
-    assignment_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("dispatch_assignments.id", ondelete="RESTRICT"),
-        nullable=False,
-    )
+    assignment_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     reason: Mapped[str] = mapped_column(Text, nullable=False)
     idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
     authorized_by_user_id: Mapped[UUID] = mapped_column(

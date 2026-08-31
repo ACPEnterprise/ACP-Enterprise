@@ -112,6 +112,13 @@ class Invoice(Base):
         ),
         UniqueConstraint("company_id", "id", name="uq_invoices_company_id"),
         UniqueConstraint(
+            "company_id",
+            "branch_id",
+            "job_id",
+            "id",
+            name="uq_invoices_field_scope",
+        ),
+        UniqueConstraint(
             "company_id", "estimate_revision_id", name="uq_invoices_estimate_revision"
         ),
         Index(
