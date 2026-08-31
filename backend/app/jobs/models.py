@@ -56,6 +56,18 @@ class Job(Base):
             name="fk_jobs_company_branch",
             ondelete="RESTRICT",
         ),
+        ForeignKeyConstraint(
+            ["company_id", "customer_id"],
+            ["customers.company_id", "customers.id"],
+            name="fk_jobs_customer_scope",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["service_location_id", "customer_id"],
+            ["service_locations.id", "service_locations.customer_id"],
+            name="fk_jobs_location_customer",
+            ondelete="RESTRICT",
+        ),
         CheckConstraint("job_number ~ '^JOB-[0-9]{6,}$'", name="ck_jobs_number_format"),
         CheckConstraint(
             "status IN ('draft', 'ready', 'in_progress', 'paused', "
@@ -177,22 +189,8 @@ class Job(Base):
     )
     branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     job_number: Mapped[str] = mapped_column(String(24), nullable=False)
-    customer_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey(
-            "customers.id", name="fk_jobs_customer_id_customers", ondelete="RESTRICT"
-        ),
-        nullable=False,
-    )
-    service_location_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey(
-            "service_locations.id",
-            name="fk_jobs_service_location_id_service_locations",
-            ondelete="RESTRICT",
-        ),
-        nullable=False,
-    )
+    customer_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    service_location_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     status: Mapped[str] = mapped_column(String(24), nullable=False, default="draft")
     job_type_code: Mapped[str | None] = mapped_column(String(64))
     priority: Mapped[str] = mapped_column(String(20), nullable=False, default="normal")
