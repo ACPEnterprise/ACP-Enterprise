@@ -7,7 +7,7 @@ from uuid import UUID, uuid4
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
@@ -17,6 +17,7 @@ from app.events.models import BusinessEvent
 from app.invoicing.errors import InvoiceError
 from app.payments.contracts import (
     ApplyReceipt,
+    CreateDeposit,
     CreateIntent,
     PostingReceiptFact,
     ProviderRequest,
@@ -27,6 +28,8 @@ from app.payments.contracts import (
 )
 from app.payments.errors import PaymentConflict, PaymentNotFound, PaymentValidation
 from app.payments.models import (
+    Deposit,
+    DepositReceipt,
     PaymentIntent,
     PaymentReceipt,
     ReceiptEvent,
@@ -129,6 +132,85 @@ async def test_reconciliation_exception_authority_fails_closed(
     async with factory() as session:
         session.add(ReconciliationException(**values))
         with pytest.raises(IntegrityError):
+            await session.commit()
+
+
+@pytest.mark.asyncio
+async def test_payment_receipt_refund_and_deposit_lineage_fails_closed(
+    payment_fixture,
+) -> None:
+    factory, company, branch, actor, customer = payment_fixture
+    service = PaymentService(CountingFakeProvider(), "synthetic-merchant")
+    async with factory() as session:
+        intent = await service.collect(
+            session,
+            CreateIntent(
+                company_id=company.id,
+                branch_id=branch.id,
+                customer_id=customer.id,
+                amount=Decimal("90.00"),
+                currency="USD",
+                opaque_payment_method="opaque_captured_test",
+                idempotency_key=f"lineage-source-{uuid4()}",
+                actor_user_id=actor.id,
+            ),
+        )
+    async with factory() as session:
+        receipt = await session.scalar(
+            select(PaymentReceipt).where(PaymentReceipt.intent_id == intent.id)
+        )
+        assert receipt is not None
+    async with factory() as session:
+        refund = await service.request_refund(
+            session,
+            RequestRefund(
+                company_id=company.id,
+                branch_id=branch.id,
+                receipt_id=receipt.id,
+                amount=Decimal("10.00"),
+                reason="Synthetic lineage qualification",
+                idempotency_key=f"lineage-refund-{uuid4()}",
+                actor_user_id=actor.id,
+                expected_version=receipt.version,
+            ),
+        )
+    async with factory() as session:
+        deposit = await service.create_deposit(
+            session,
+            CreateDeposit(
+                company_id=company.id,
+                branch_id=branch.id,
+                receipt_ids=(receipt.id,),
+                currency="USD",
+                destination_reference="synthetic-clearing",
+                idempotency_key=f"lineage-deposit-{uuid4()}",
+                actor_user_id=actor.id,
+            ),
+        )
+
+    for model, identity, changes in (
+        (PaymentReceipt, receipt.id, {"branch_id": uuid4()}),
+        (Refund, refund.id, {"branch_id": uuid4()}),
+        (Deposit, deposit.id, {"branch_id": uuid4()}),
+    ):
+        async with factory() as session:
+            with pytest.raises(IntegrityError):
+                await session.execute(
+                    update(model).where(model.id == identity).values(**changes)
+                )
+                await session.commit()
+
+    async with factory() as session:
+        membership = await session.scalar(
+            select(DepositReceipt).where(DepositReceipt.deposit_id == deposit.id)
+        )
+        assert membership is not None
+        with pytest.raises(IntegrityError):
+            await session.execute(
+                update(DepositReceipt)
+                .where(DepositReceipt.id == membership.id)
+                .values(currency="EUR")
+            )
             await session.commit()
 
 

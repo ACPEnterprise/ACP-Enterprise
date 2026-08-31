@@ -339,7 +339,7 @@ class PaymentService:
             session.add(deposit)
             await session.flush()
             for row in rows:
-                session.add(DepositReceipt(company_id=spec.company_id, deposit_id=deposit.id, receipt_id=row.id, amount=row.captured_amount))
+                session.add(DepositReceipt(company_id=spec.company_id, branch_id=spec.branch_id, deposit_id=deposit.id, receipt_id=row.id, currency=spec.currency, amount=row.captured_amount))
             self._event(session, deposit, EventType.PAYMENT_DEPOSIT_SUBMITTED, spec.actor_user_id)
             return deposit
 

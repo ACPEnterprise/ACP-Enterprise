@@ -53,6 +53,14 @@ class PaymentIntent(Base):
         UniqueConstraint("company_id", "idempotency_key"),
         UniqueConstraint("company_id", "provider_idempotency_key"),
         UniqueConstraint("company_id", "id"),
+        UniqueConstraint(
+            "company_id",
+            "id",
+            "branch_id",
+            "customer_id",
+            "currency",
+            name="uq_payment_intents_receipt_scope",
+        ),
         Index("ix_payment_intents_scope", "company_id", "branch_id", "customer_id", "status"),
     )
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
@@ -94,7 +102,18 @@ class PaymentAttempt(Base):
 class PaymentReceipt(Base):
     __tablename__ = "payment_receipts"
     __table_args__ = (
-        ForeignKeyConstraint(["company_id", "intent_id"], ["payment_intents.company_id", "payment_intents.id"], ondelete="RESTRICT"),
+        ForeignKeyConstraint(
+            ["company_id", "intent_id", "branch_id", "customer_id", "currency"],
+            [
+                "payment_intents.company_id",
+                "payment_intents.id",
+                "payment_intents.branch_id",
+                "payment_intents.customer_id",
+                "payment_intents.currency",
+            ],
+            name="fk_payment_receipts_intent_scope",
+            ondelete="RESTRICT",
+        ),
         CheckConstraint(
             "captured_amount >= 0 AND available_amount >= 0 AND applied_amount >= 0 AND refunded_amount >= 0 AND disputed_amount >= 0",
             name="payment_receipts_check",
@@ -103,7 +122,15 @@ class PaymentReceipt(Base):
             "captured_amount = available_amount + applied_amount + refunded_amount + disputed_amount",
             name="payment_receipts_check1",
         ),
-        UniqueConstraint("company_id", "intent_id"), UniqueConstraint("company_id", "id"),
+        UniqueConstraint("company_id", "intent_id"),
+        UniqueConstraint("company_id", "id"),
+        UniqueConstraint(
+            "company_id",
+            "id",
+            "branch_id",
+            "currency",
+            name="uq_payment_receipts_child_scope",
+        ),
     )
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
     company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
@@ -150,7 +177,22 @@ class ReceiptEvent(Base):
 
 class Refund(Base):
     __tablename__ = "payment_refunds"
-    __table_args__ = (ForeignKeyConstraint(["company_id", "receipt_id"], ["payment_receipts.company_id", "payment_receipts.id"], ondelete="RESTRICT"), CheckConstraint("amount > 0", name="payment_refunds_amount_check"), UniqueConstraint("company_id", "idempotency_key"), UniqueConstraint("company_id", "id"),)
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "receipt_id", "branch_id", "currency"],
+            [
+                "payment_receipts.company_id",
+                "payment_receipts.id",
+                "payment_receipts.branch_id",
+                "payment_receipts.currency",
+            ],
+            name="fk_payment_refunds_receipt_scope",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint("amount > 0", name="payment_refunds_amount_check"),
+        UniqueConstraint("company_id", "idempotency_key"),
+        UniqueConstraint("company_id", "id"),
+    )
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
     company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
@@ -163,15 +205,40 @@ class Refund(Base):
     request_digest: Mapped[str] = mapped_column(String(64), nullable=False)
     provider_operation_id: Mapped[str | None] = mapped_column(String(255))
     evidence_digest: Mapped[str | None] = mapped_column(String(64))
-    requested_by_user_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
-    approved_by_user_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    requested_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    approved_by_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT")
+    )
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
 
 
 class Deposit(Base):
     __tablename__ = "payment_deposits"
-    __table_args__ = (CheckConstraint("gross_amount >= 0", name="payment_deposits_gross_amount_check"), UniqueConstraint("company_id", "idempotency_key"), UniqueConstraint("company_id", "id"),)
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "branch_id"],
+            ["branches.company_id", "branches.id"],
+            name="fk_payment_deposits_branch_scope",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "gross_amount >= 0", name="payment_deposits_gross_amount_check"
+        ),
+        UniqueConstraint("company_id", "idempotency_key"),
+        UniqueConstraint("company_id", "id"),
+        UniqueConstraint(
+            "company_id",
+            "id",
+            "branch_id",
+            "currency",
+            name="uq_payment_deposits_receipt_scope",
+        ),
+    )
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
     company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("companies.id", ondelete="RESTRICT"), nullable=False)
     branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
@@ -181,18 +248,50 @@ class Deposit(Base):
     destination_reference: Mapped[str] = mapped_column(String(120), nullable=False)
     idempotency_key: Mapped[str] = mapped_column(String(120), nullable=False)
     evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
-    prepared_by_user_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
-    approved_by_user_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    prepared_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    approved_by_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT")
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
 
 
 class DepositReceipt(Base):
     __tablename__ = "payment_deposit_receipts"
-    __table_args__ = (ForeignKeyConstraint(["company_id", "deposit_id"], ["payment_deposits.company_id", "payment_deposits.id"], ondelete="RESTRICT"), ForeignKeyConstraint(["company_id", "receipt_id"], ["payment_receipts.company_id", "payment_receipts.id"], ondelete="RESTRICT"), UniqueConstraint("company_id", "receipt_id"),)
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "deposit_id", "branch_id", "currency"],
+            [
+                "payment_deposits.company_id",
+                "payment_deposits.id",
+                "payment_deposits.branch_id",
+                "payment_deposits.currency",
+            ],
+            name="fk_payment_deposit_receipts_deposit_scope",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "receipt_id", "branch_id", "currency"],
+            [
+                "payment_receipts.company_id",
+                "payment_receipts.id",
+                "payment_receipts.branch_id",
+                "payment_receipts.currency",
+            ],
+            name="fk_payment_deposit_receipts_receipt_scope",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("company_id", "receipt_id"),
+    )
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
     company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     deposit_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     receipt_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False)
     amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
 
 
