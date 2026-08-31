@@ -219,7 +219,28 @@ class Settlement(Base):
 
 class ReconciliationException(Base):
     __tablename__ = "payment_reconciliation_exceptions"
-    __table_args__ = (UniqueConstraint("company_id", "idempotency_key"),)
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "branch_id"],
+            ["branches.company_id", "branches.id"],
+            name="fk_payment_reconciliation_exceptions_branch_scope",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "status IN ('open','resolved')",
+            name="ck_payment_reconciliation_exceptions_status",
+        ),
+        CheckConstraint(
+            "length(evidence_digest) = 64",
+            name="ck_payment_reconciliation_exceptions_digest",
+        ),
+        CheckConstraint(
+            "(status = 'open' AND resolved_by_user_id IS NULL AND resolved_at IS NULL) OR "
+            "(status = 'resolved' AND resolved_by_user_id IS NOT NULL AND resolved_at IS NOT NULL)",
+            name="ck_payment_reconciliation_exceptions_resolution",
+        ),
+        UniqueConstraint("company_id", "idempotency_key"),
+    )
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
     company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("companies.id", ondelete="RESTRICT"), nullable=False)
     branch_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
@@ -229,8 +250,12 @@ class ReconciliationException(Base):
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="open")
     idempotency_key: Mapped[str] = mapped_column(String(120), nullable=False)
     evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
-    opened_by_user_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
-    resolved_by_user_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    opened_by_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT")
+    )
+    resolved_by_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT")
+    )
     opened_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 

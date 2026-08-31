@@ -94,6 +94,44 @@ def test_payment_failures_use_safe_non_reflective_recovery_contract(
     assert "provider payload" not in message
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "invalid_fields",
+    [
+        {"branch_id": uuid4()},
+        {"opened_by_user_id": uuid4()},
+        {"status": "invented"},
+        {"status": "resolved"},
+        {
+            "status": "open",
+            "resolved_by_user_id": uuid4(),
+            "resolved_at": datetime.now(timezone.utc),
+        },
+        {"evidence_digest": "short"},
+    ],
+)
+async def test_reconciliation_exception_authority_fails_closed(
+    payment_fixture, invalid_fields
+) -> None:
+    factory, company, branch, actor, _ = payment_fixture
+    values = {
+        "company_id": company.id,
+        "branch_id": branch.id,
+        "entity_type": "paymentintent",
+        "entity_id": uuid4(),
+        "reason_code": "synthetic_authority_test",
+        "status": "open",
+        "idempotency_key": f"authority-{uuid4()}",
+        "evidence_digest": "a" * 64,
+        "opened_by_user_id": actor.id,
+        **invalid_fields,
+    }
+    async with factory() as session:
+        session.add(ReconciliationException(**values))
+        with pytest.raises(IntegrityError):
+            await session.commit()
+
+
 @pytest_asyncio.fixture
 async def payment_fixture():
     engine = create_async_engine(settings.database_url)
