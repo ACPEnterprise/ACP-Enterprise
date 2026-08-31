@@ -549,6 +549,18 @@ class PayrollTaxDeductionReviewRecord(Base):
 class PayrollRunRecord(Base):
     __tablename__ = "payroll_runs"
     __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "pay_period_id"],
+            ["timekeeping_pay_periods.company_id", "timekeeping_pay_periods.id"],
+            name="fk_payroll_runs_pay_period_scope",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "supersedes_run_id"],
+            ["payroll_runs.company_id", "payroll_runs.id"],
+            name="fk_payroll_runs_predecessor_scope",
+            ondelete="RESTRICT",
+        ),
         CheckConstraint(
             "lifecycle IN ('assembled','under_review','reviewed','approved','rejected','superseded','voided')",
             name="ck_payroll_run_lifecycle",
@@ -577,9 +589,7 @@ class PayrollRunRecord(Base):
     company_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("companies.id", ondelete="RESTRICT"), nullable=False
     )
-    pay_period_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), ForeignKey("timekeeping_pay_periods.id", ondelete="RESTRICT"), nullable=False
-    )
+    pay_period_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     schedule_definition_id: Mapped[str] = mapped_column(String(120), nullable=False)
     schedule_version: Mapped[str] = mapped_column(String(80), nullable=False)
     assembly_version: Mapped[str] = mapped_column(String(80), nullable=False)
@@ -599,9 +609,7 @@ class PayrollRunRecord(Base):
     assembled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     lifecycle: Mapped[str] = mapped_column(String(24), nullable=False)
     review_state: Mapped[str] = mapped_column(String(24), nullable=False)
-    supersedes_run_id: Mapped[UUID | None] = mapped_column(
-        PGUUID(as_uuid=True), ForeignKey("payroll_runs.id", ondelete="RESTRICT")
-    )
+    supersedes_run_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
     consumed_by_payment_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
