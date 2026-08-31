@@ -49,6 +49,12 @@ class CustomerMigrationRun(Base):
             name="ck_customer_source4_master_required",
         ),
         ForeignKeyConstraint(
+            ["company_id", "branch_id"],
+            ["branches.company_id", "branches.id"],
+            name="fk_customer_migration_runs_branch_scope",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
             ["master_run_id", "company_id", "branch_id", "initiated_by_user_id"],
             [
                 "hcp_migration_master_runs.id",
@@ -60,6 +66,15 @@ class CustomerMigrationRun(Base):
             ondelete="RESTRICT",
         ),
         UniqueConstraint("master_run_id", name="uq_customer_master_run"),
+        UniqueConstraint(
+            "company_id", "id", name="uq_customer_migration_runs_company_id"
+        ),
+        UniqueConstraint(
+            "company_id",
+            "branch_id",
+            "id",
+            name="uq_customer_migration_runs_branch_id",
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(
@@ -70,11 +85,7 @@ class CustomerMigrationRun(Base):
         ForeignKey("companies.id", ondelete="RESTRICT"),
         nullable=False,
     )
-    branch_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("branches.id", ondelete="RESTRICT"),
-        nullable=False,
-    )
+    branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     initiated_by_user_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("users.id", ondelete="RESTRICT"),
@@ -99,6 +110,28 @@ class CustomerMigrationRun(Base):
 class CustomerSourceIdentity(Base):
     __tablename__ = "customer_source_identities"
     __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "branch_id"],
+            ["branches.company_id", "branches.id"],
+            name="fk_customer_source_identity_branch_scope",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "customer_id"],
+            ["customers.company_id", "customers.id"],
+            name="fk_customer_source_identity_customer_scope",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "branch_id", "first_run_id"],
+            [
+                "customer_migration_runs.company_id",
+                "customer_migration_runs.branch_id",
+                "customer_migration_runs.id",
+            ],
+            name="fk_customer_source_identity_first_run_scope",
+            ondelete="RESTRICT",
+        ),
         UniqueConstraint(
             "company_id",
             "source_system",
@@ -137,23 +170,11 @@ class CustomerSourceIdentity(Base):
         ForeignKey("companies.id", ondelete="RESTRICT"),
         nullable=False,
     )
-    branch_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("branches.id", ondelete="RESTRICT"),
-        nullable=False,
-    )
-    customer_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("customers.id", ondelete="RESTRICT"),
-        nullable=False,
-    )
+    branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    customer_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     source_system: Mapped[str] = mapped_column(String(50), nullable=False)
     source_customer_id: Mapped[str] = mapped_column(String(191), nullable=False)
-    first_run_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("customer_migration_runs.id", ondelete="RESTRICT"),
-        nullable=False,
-    )
+    first_run_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
     )
@@ -560,6 +581,12 @@ class CustomerContactSourceIdentity(Base):
     __tablename__ = "customer_contact_source_identities"
     __table_args__ = (
         ForeignKeyConstraint(
+            ["company_id", "first_run_id"],
+            ["customer_migration_runs.company_id", "customer_migration_runs.id"],
+            name="fk_contact_source_identity_first_run_scope",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
             ["customer_source_identity_id", "company_id", "customer_id"],
             [
                 "customer_source_identities.id",
@@ -611,11 +638,7 @@ class CustomerContactSourceIdentity(Base):
     )
     source_system: Mapped[str] = mapped_column(String(50), nullable=False)
     source_contact_id: Mapped[str] = mapped_column(String(191), nullable=False)
-    first_run_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("customer_migration_runs.id", ondelete="RESTRICT"),
-        nullable=False,
-    )
+    first_run_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
     )
@@ -624,6 +647,12 @@ class CustomerContactSourceIdentity(Base):
 class ServiceLocationSourceIdentity(Base):
     __tablename__ = "service_location_source_identities"
     __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "first_run_id"],
+            ["customer_migration_runs.company_id", "customer_migration_runs.id"],
+            name="fk_location_source_identity_first_run_scope",
+            ondelete="RESTRICT",
+        ),
         ForeignKeyConstraint(
             ["customer_source_identity_id", "company_id", "customer_id"],
             [
@@ -707,11 +736,7 @@ class ServiceLocationSourceIdentity(Base):
     transformation_version: Mapped[str | None] = mapped_column(String(100))
     transformation_digest: Mapped[str | None] = mapped_column(String(64))
     source_context: Mapped[dict[str, object] | None] = mapped_column(JSONB)
-    first_run_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("customer_migration_runs.id", ondelete="RESTRICT"),
-        nullable=False,
-    )
+    first_run_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
     )
