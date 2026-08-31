@@ -1045,6 +1045,12 @@ class PayrollAccountingConsumptionRecord(Base):
 
     __tablename__ = "payroll_accounting_consumptions"
     __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "journal_id"],
+            ["accounting_journals.company_id", "accounting_journals.id"],
+            name="fk_payroll_accounting_consumption_journal_scope",
+            ondelete="RESTRICT",
+        ),
         CheckConstraint(
             "lifecycle IN ('prepared','posted','reconciliation_required','superseded','reversed')",
             name="ck_payroll_accounting_consumption_lifecycle",
@@ -1066,7 +1072,7 @@ class PayrollAccountingConsumptionRecord(Base):
     amount: Mapped[Decimal] = mapped_column(Numeric(20, 4), nullable=False)
     currency: Mapped[str] = mapped_column(String(3), nullable=False)
     lifecycle: Mapped[str] = mapped_column(String(32), nullable=False)
-    journal_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), ForeignKey("accounting_journals.id", ondelete="RESTRICT"))
+    journal_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
     journal_version: Mapped[int | None] = mapped_column(Integer)
     prepared_by_user_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
     posted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -1511,6 +1517,7 @@ class PayrollRemittancePolicyRecord(Base):
         CheckConstraint("lifecycle IN ('draft','approved','superseded','retired')", name="ck_payroll_remittance_policy_lifecycle"),
         UniqueConstraint("company_id", "classification", "version", name="uq_payroll_remittance_policy_version"),
         UniqueConstraint("company_id", "policy_digest", name="uq_payroll_remittance_policy_digest"),
+        UniqueConstraint("company_id", "id", name="uq_payroll_remittance_policy_company_id"),
         Index("ix_payroll_remittance_policy_resolve", "company_id", "classification", "lifecycle", "effective_start", "effective_end"),
     )
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
@@ -1538,6 +1545,7 @@ class PayrollRemittanceDestinationRecord(Base):
     __table_args__ = (
         CheckConstraint("lifecycle IN ('draft','approved','superseded','revoked','expired')", name="ck_payroll_remittance_destination_lifecycle"),
         UniqueConstraint("company_id", "destination_identity", name="uq_payroll_remittance_destination_identity"),
+        UniqueConstraint("company_id", "id", name="uq_payroll_remittance_destination_company_id"),
     )
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
     company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("companies.id", ondelete="RESTRICT"), nullable=False)
@@ -1560,8 +1568,38 @@ class PayrollRemittanceObligationRecord(Base):
     __tablename__ = "payroll_remittance_obligations"
     __table_args__ = (
         CheckConstraint("lifecycle IN ('identified','ready_for_review','under_review','approved_for_remittance','instruction_prepared','submission_pending','submitted','provider_acknowledged','settlement_pending','partially_settled','settled','blocked','rejected','failed','uncertain','superseded','voided','returned','reversed')", name="ck_payroll_remittance_obligation_lifecycle"),
-        ForeignKeyConstraint(["company_id", "payroll_run_id"], ["payroll_runs.company_id", "payroll_runs.id"], ondelete="RESTRICT"),
+        ForeignKeyConstraint(
+            ["company_id", "pay_period_id", "payroll_run_id"],
+            ["payroll_runs.company_id", "payroll_runs.pay_period_id", "payroll_runs.id"],
+            name="fk_payroll_remittance_obligation_run_scope",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "policy_id"],
+            ["payroll_remittance_policies.company_id", "payroll_remittance_policies.id"],
+            name="fk_payroll_remittance_obligation_policy_scope",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "destination_id"],
+            ["payroll_remittance_destinations.company_id", "payroll_remittance_destinations.id"],
+            name="fk_payroll_remittance_obligation_destination_scope",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "payroll_run_id", "classification", "supersedes_obligation_id"],
+            ["payroll_remittance_obligations.company_id", "payroll_remittance_obligations.payroll_run_id", "payroll_remittance_obligations.classification", "payroll_remittance_obligations.id"],
+            name="fk_payroll_remittance_obligation_predecessor_scope",
+            ondelete="RESTRICT",
+        ),
         UniqueConstraint("company_id", "id", name="uq_payroll_remittance_obligation_company_id"),
+        UniqueConstraint(
+            "company_id",
+            "payroll_run_id",
+            "classification",
+            "id",
+            name="uq_payroll_remittance_obligation_predecessor_scope",
+        ),
         UniqueConstraint("company_id", "obligation_identity", name="uq_payroll_remittance_obligation_identity"),
         UniqueConstraint("company_id", "obligation_digest", name="uq_payroll_remittance_obligation_digest"),
         UniqueConstraint("supersedes_obligation_id", name="uq_payroll_remittance_obligation_successor"),
@@ -1574,9 +1612,9 @@ class PayrollRemittanceObligationRecord(Base):
     classification: Mapped[str] = mapped_column(String(48), nullable=False)
     source_digest: Mapped[str] = mapped_column(String(64), nullable=False)
     contribution_evidence: Mapped[list[dict[str, object]]] = mapped_column(JSONB, nullable=False)
-    policy_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("payroll_remittance_policies.id", ondelete="RESTRICT"), nullable=False)
+    policy_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     policy_digest: Mapped[str] = mapped_column(String(64), nullable=False)
-    destination_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), ForeignKey("payroll_remittance_destinations.id", ondelete="RESTRICT"))
+    destination_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
     destination_digest: Mapped[str | None] = mapped_column(String(64))
     obligation_start: Mapped[date] = mapped_column(Date, nullable=False)
     obligation_end: Mapped[date] = mapped_column(Date, nullable=False)
@@ -1588,7 +1626,7 @@ class PayrollRemittanceObligationRecord(Base):
     obligation_identity: Mapped[str] = mapped_column(String(128), nullable=False)
     obligation_digest: Mapped[str] = mapped_column(String(64), nullable=False)
     created_by_user_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
-    supersedes_obligation_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), ForeignKey("payroll_remittance_obligations.id", ondelete="RESTRICT"))
+    supersedes_obligation_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
 
 
@@ -1610,11 +1648,22 @@ class PayrollRemittanceReviewRecord(Base):
 
 class PayrollRemittanceInstructionRecord(Base):
     __tablename__ = "payroll_remittance_instructions"
-    __table_args__ = (ForeignKeyConstraint(["company_id", "obligation_id"], ["payroll_remittance_obligations.company_id", "payroll_remittance_obligations.id"], ondelete="RESTRICT"), UniqueConstraint("company_id", "id", name="uq_payroll_remittance_instruction_company_id"), UniqueConstraint("obligation_id", name="uq_payroll_remittance_instruction_obligation"), UniqueConstraint("instruction_digest", name="uq_payroll_remittance_instruction_digest"))
+    __table_args__ = (
+        ForeignKeyConstraint(["company_id", "obligation_id"], ["payroll_remittance_obligations.company_id", "payroll_remittance_obligations.id"], ondelete="RESTRICT"),
+        ForeignKeyConstraint(
+            ["company_id", "destination_id"],
+            ["payroll_remittance_destinations.company_id", "payroll_remittance_destinations.id"],
+            name="fk_payroll_remittance_instruction_destination_scope",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("company_id", "id", name="uq_payroll_remittance_instruction_company_id"),
+        UniqueConstraint("obligation_id", name="uq_payroll_remittance_instruction_obligation"),
+        UniqueConstraint("instruction_digest", name="uq_payroll_remittance_instruction_digest"),
+    )
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
     company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     obligation_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
-    destination_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("payroll_remittance_destinations.id", ondelete="RESTRICT"), nullable=False)
+    destination_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
     currency: Mapped[str] = mapped_column(String(3), nullable=False)
     provider_identity: Mapped[str] = mapped_column(String(80), nullable=False)
