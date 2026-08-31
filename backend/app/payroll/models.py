@@ -497,6 +497,12 @@ class PayrollTaxDeductionResultRecord(Base):
         UniqueConstraint(
             "company_id",
             "employee_id",
+            "id",
+            name="uq_payroll_tax_result_instruction_scope",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "employee_id",
             "pay_period_id",
             "id",
             name="uq_payroll_tax_result_statement_scope",
@@ -745,6 +751,18 @@ class PayrollPaymentDestinationVersion(Base):
             ondelete="RESTRICT",
         ),
         UniqueConstraint("company_id", "id", name="uq_payroll_payment_destination_company_id"),
+        UniqueConstraint(
+            "company_id",
+            "employee_id",
+            "id",
+            name="uq_payroll_payment_destination_instruction_scope",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "employee_id", "supersedes_destination_id"],
+            ["payroll_payment_destination_versions.company_id", "payroll_payment_destination_versions.employee_id", "payroll_payment_destination_versions.id"],
+            name="fk_payroll_payment_destination_predecessor_scope",
+            ondelete="RESTRICT",
+        ),
         UniqueConstraint("company_id", "employee_id", "destination_version", name="uq_payroll_payment_destination_version"),
         Index("ix_payroll_payment_destination_resolution", "company_id", "employee_id", "lifecycle", "effective_start", "effective_end"),
     )
@@ -762,7 +780,7 @@ class PayrollPaymentDestinationVersion(Base):
     effective_end: Mapped[date | None] = mapped_column(Date)
     lifecycle: Mapped[str] = mapped_column(String(20), nullable=False)
     authority_digest: Mapped[str] = mapped_column(String(64), nullable=False)
-    supersedes_destination_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), ForeignKey("payroll_payment_destination_versions.id", ondelete="RESTRICT"))
+    supersedes_destination_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
     created_by_user_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
     approved_by_user_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"))
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -775,8 +793,25 @@ class PayrollPaymentReleaseRecord(Base):
     __table_args__ = (
         CheckConstraint("lifecycle IN ('draft','under_review','approved_for_release','rejected','superseded','voided')", name="ck_payroll_payment_release_lifecycle"),
         CheckConstraint("review_state IN ('not_started','under_review','accepted','rejected')", name="ck_payroll_payment_release_review_state"),
-        ForeignKeyConstraint(["company_id", "payroll_run_id"], ["payroll_runs.company_id", "payroll_runs.id"], ondelete="RESTRICT"),
+        ForeignKeyConstraint(
+            ["company_id", "pay_period_id", "payroll_run_id"],
+            ["payroll_runs.company_id", "payroll_runs.pay_period_id", "payroll_runs.id"],
+            name="fk_payroll_payment_release_run_scope",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "payroll_run_id", "supersedes_release_id"],
+            ["payroll_payment_releases.company_id", "payroll_payment_releases.payroll_run_id", "payroll_payment_releases.id"],
+            name="fk_payroll_payment_release_predecessor_scope",
+            ondelete="RESTRICT",
+        ),
         UniqueConstraint("company_id", "id", name="uq_payroll_payment_release_company_id"),
+        UniqueConstraint(
+            "company_id",
+            "payroll_run_id",
+            "id",
+            name="uq_payroll_payment_release_execution_scope",
+        ),
         UniqueConstraint("company_id", "package_identity", name="uq_payroll_payment_release_identity"),
         UniqueConstraint("company_id", "package_digest", name="uq_payroll_payment_release_digest"),
         UniqueConstraint("supersedes_release_id", name="uq_payroll_payment_release_successor"),
@@ -796,7 +831,7 @@ class PayrollPaymentReleaseRecord(Base):
     assembled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     lifecycle: Mapped[str] = mapped_column(String(28), nullable=False)
     review_state: Mapped[str] = mapped_column(String(24), nullable=False)
-    supersedes_release_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), ForeignKey("payroll_payment_releases.id", ondelete="RESTRICT"))
+    supersedes_release_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
     execution_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
 
@@ -807,8 +842,21 @@ class PayrollPaymentInstructionRecord(Base):
         CheckConstraint("disposition IN ('ready','blocked','excluded','not_applicable')", name="ck_payroll_payment_instruction_disposition"),
         ForeignKeyConstraint(["company_id", "release_id"], ["payroll_payment_releases.company_id", "payroll_payment_releases.id"], ondelete="RESTRICT"),
         ForeignKeyConstraint(["company_id", "employee_id"], ["employees.company_id", "employees.id"], ondelete="RESTRICT"),
+        ForeignKeyConstraint(
+            ["company_id", "employee_id", "tax_result_id"],
+            ["payroll_tax_deduction_results.company_id", "payroll_tax_deduction_results.employee_id", "payroll_tax_deduction_results.id"],
+            name="fk_payroll_payment_instruction_tax_scope",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "employee_id", "destination_id"],
+            ["payroll_payment_destination_versions.company_id", "payroll_payment_destination_versions.employee_id", "payroll_payment_destination_versions.id"],
+            name="fk_payroll_payment_instruction_destination_scope",
+            ondelete="RESTRICT",
+        ),
         UniqueConstraint("release_id", "employee_id", name="uq_payroll_payment_instruction_employee"),
         UniqueConstraint("company_id", "instruction_identity", name="uq_payroll_payment_instruction_identity"),
+        UniqueConstraint("company_id", "id", name="uq_payroll_payment_instruction_company_id"),
     )
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
     company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
@@ -818,7 +866,7 @@ class PayrollPaymentInstructionRecord(Base):
     run_member_digest: Mapped[str] = mapped_column(String(64), nullable=False)
     tax_result_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
     tax_result_digest: Mapped[str | None] = mapped_column(String(64))
-    destination_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), ForeignKey("payroll_payment_destination_versions.id", ondelete="RESTRICT"))
+    destination_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
     destination_digest: Mapped[str | None] = mapped_column(String(64))
     method_type: Mapped[str | None] = mapped_column(String(32))
     protected_destination_reference: Mapped[str | None] = mapped_column(String(120))
@@ -854,7 +902,12 @@ class PayrollPaymentExecutionRecord(Base):
     __tablename__ = "payroll_payment_executions"
     __table_args__ = (
         CheckConstraint("lifecycle IN ('authorized','submission_pending','submitted','provider_acknowledged','settlement_pending','partially_settled','settled','rejected','failed','canceled','uncertain')", name="ck_payroll_payment_execution_lifecycle"),
-        ForeignKeyConstraint(["company_id", "release_id"], ["payroll_payment_releases.company_id", "payroll_payment_releases.id"], ondelete="RESTRICT"),
+        ForeignKeyConstraint(
+            ["company_id", "payroll_run_id", "release_id"],
+            ["payroll_payment_releases.company_id", "payroll_payment_releases.payroll_run_id", "payroll_payment_releases.id"],
+            name="fk_payroll_payment_execution_release_scope",
+            ondelete="RESTRICT",
+        ),
         UniqueConstraint("company_id", "id", name="uq_payroll_payment_execution_company_id"),
         UniqueConstraint("company_id", "execution_identity", name="uq_payroll_payment_execution_identity"),
         UniqueConstraint("company_id", "execution_digest", name="uq_payroll_payment_execution_digest"),
@@ -887,7 +940,12 @@ class PayrollPaymentExecutionItemRecord(Base):
     __table_args__ = (
         CheckConstraint("lifecycle IN ('authorized','submitted','acknowledged','settlement_pending','settled','rejected','failed','unresolved')", name="ck_payroll_payment_execution_item_lifecycle"),
         ForeignKeyConstraint(["company_id", "execution_id"], ["payroll_payment_executions.company_id", "payroll_payment_executions.id"], ondelete="RESTRICT"),
-        ForeignKeyConstraint(["instruction_id"], ["payroll_payment_instructions.id"], ondelete="RESTRICT"),
+        ForeignKeyConstraint(
+            ["company_id", "instruction_id"],
+            ["payroll_payment_instructions.company_id", "payroll_payment_instructions.id"],
+            name="fk_payroll_payment_execution_item_instruction_scope",
+            ondelete="RESTRICT",
+        ),
         UniqueConstraint("execution_id", "instruction_id", name="uq_payroll_payment_execution_item_instruction"),
     )
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
