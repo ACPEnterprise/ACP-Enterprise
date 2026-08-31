@@ -5,14 +5,21 @@ from unittest.mock import AsyncMock
 
 import pytest
 import pytest_asyncio
+from sqlalchemy import func, select, update
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
 from app.core.config import settings
 from app.engineering_control.mobile.external_adoption import (
     ExternalAdoptionError,
     ExternalAdoptionService,
+    ExternalMilestoneAdoption,
     ExternalMilestoneEvidence,
 )
+from app.engineering_control.mobile.notifications import EngineeringMissionNotification
 from app.engineering_control.mobile.roadmaps import (
     EngineeringMilestone,
+    EngineeringMilestoneEvent,
     EngineeringRoadmap,
     roadmap_service,
 )
@@ -24,9 +31,6 @@ from app.platform.permissions.codes import (
     EngineeringCommandPermission,
     EngineeringExecutionPermission,
 )
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from tests.engineering_control.test_engineering_command_service import (
     ServiceFixture,
     context_with_permissions,
@@ -353,3 +357,71 @@ async def test_external_adoption_rejects_ineligible_conflicts_and_stale_evidence
                 adoption_id=adoption.id,
                 payload=stale,
             )
+
+
+@pytest.mark.asyncio
+async def test_engineering_action_actors_require_company_membership(
+    database_factory,
+) -> None:
+    fixture, milestone = await seed_adoptable(database_factory)
+    foreign = await seed_service_fixture(database_factory)
+    service = ExternalAdoptionService()
+    async with database_factory() as session:
+        adoption = await service.adopt(
+            session,
+            context=fixture.context,
+            milestone_id=milestone.id,
+            payload=adoption_payload(),
+        )
+    async with database_factory() as session:
+        evidence = await service.handoff(
+            session,
+            context=fixture.context,
+            adoption_id=adoption.id,
+            payload=evidence_payload(
+                version=adoption.version,
+                occurred_at=datetime.now(timezone.utc),
+                status="externally_running",
+                progress=25,
+                idempotency_key=f"membership-scope-{adoption.id}",
+            ),
+        )
+    async with database_factory() as session, session.begin():
+        event = EngineeringMilestoneEvent(
+            company_id=fixture.context.company.id,
+            roadmap_id=milestone.roadmap_id,
+            milestone_id=milestone.id,
+            event_type="owner_reviewed",
+            prior_status="planned",
+            new_status="planned",
+            actor_user_id=fixture.context.user.id,
+            reason="synthetic membership qualification",
+            occurred_at=datetime.now(timezone.utc),
+        )
+        session.add(event)
+        await session.flush()
+        event_id = event.id
+
+    attacks = (
+        update(ExternalMilestoneAdoption)
+        .where(ExternalMilestoneAdoption.id == adoption.id)
+        .values(adopted_by_user_id=foreign.context.user.id),
+        update(ExternalMilestoneAdoption)
+        .where(ExternalMilestoneAdoption.id == adoption.id)
+        .values(approval_by_user_id=foreign.context.user.id),
+        update(ExternalMilestoneEvidence)
+        .where(ExternalMilestoneEvidence.id == evidence.id)
+        .values(submitted_by_user_id=foreign.context.user.id),
+        update(EngineeringMilestoneEvent)
+        .where(EngineeringMilestoneEvent.id == event_id)
+        .values(actor_user_id=foreign.context.user.id),
+    )
+    for attack in attacks:
+        with pytest.raises(IntegrityError):
+            async with database_factory() as session, session.begin():
+                await session.execute(attack)
+
+    constraint_names = {
+        constraint.name for constraint in EngineeringMissionNotification.__table__.constraints
+    }
+    assert "fk_mission_notifications_ack_membership" in constraint_names

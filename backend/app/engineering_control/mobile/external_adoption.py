@@ -87,6 +87,18 @@ class ExternalMilestoneAdoption(Base):
             name="fk_external_adoptions_milestone_scope",
             ondelete="RESTRICT",
         ),
+        ForeignKeyConstraint(
+            ["adopted_by_user_id", "company_id"],
+            ["memberships.user_id", "memberships.company_id"],
+            name="fk_external_adoptions_adopter_membership",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["approval_by_user_id", "company_id"],
+            ["memberships.user_id", "memberships.company_id"],
+            name="fk_external_adoptions_approver_membership",
+            ondelete="RESTRICT",
+        ),
         UniqueConstraint(
             "company_id", "milestone_id", name="uq_external_adoption_milestone"
         ),
@@ -167,6 +179,12 @@ class ExternalMilestoneEvidence(Base):
                 "engineering_external_milestone_adoptions.id",
             ],
             name="fk_external_evidence_adoption_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["submitted_by_user_id", "company_id"],
+            ["memberships.user_id", "memberships.company_id"],
+            name="fk_external_evidence_submitter_membership",
             ondelete="RESTRICT",
         ),
         UniqueConstraint(

@@ -35,6 +35,12 @@ class EngineeringMissionNotification(Base):
             name="fk_mission_notifications_event_scope",
             ondelete="RESTRICT",
         ),
+        ForeignKeyConstraint(
+            ["acknowledged_by_user_id", "company_id"],
+            ["memberships.user_id", "memberships.company_id"],
+            name="fk_mission_notifications_ack_membership",
+            ondelete="RESTRICT",
+        ),
         CheckConstraint(
             "kind IN ('waiting_for_owner','completed','failed','recovering',"
             "'heartbeat_expired','worker_disconnected','deployment_completed',"

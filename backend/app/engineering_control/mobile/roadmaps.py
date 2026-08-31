@@ -250,6 +250,12 @@ class EngineeringMilestoneEvent(Base):
             name="fk_engineering_milestone_events_scope",
             ondelete="RESTRICT",
         ),
+        ForeignKeyConstraint(
+            ["actor_user_id", "company_id"],
+            ["memberships.user_id", "memberships.company_id"],
+            name="fk_engineering_milestone_events_actor_membership",
+            ondelete="RESTRICT",
+        ),
         Index(
             "ix_engineering_milestone_event_order",
             "company_id",
