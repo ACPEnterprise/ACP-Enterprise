@@ -103,6 +103,10 @@ class MutationReliabilityService:
                 .with_for_update()
             )
             if receipt is not None:
+                if receipt.branch_id != identity.branch_id:
+                    raise IdempotencyConflict(
+                        "idempotency identity conflicts with Branch authority"
+                    )
                 if receipt.request_digest != request_digest:
                     raise IdempotencyConflict(
                         "idempotency identity conflicts with the original request"
