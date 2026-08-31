@@ -204,6 +204,12 @@ class NotificationOutbox(Base):
 class NotificationDeliveryEvidence(Base):
     __tablename__ = "notification_delivery_evidence"
     __table_args__ = (
+        ForeignKeyConstraint(
+            ["actor_user_id", "company_id"],
+            ["memberships.user_id", "memberships.company_id"],
+            name="fk_notification_delivery_evidence_actor_membership",
+            ondelete="RESTRICT",
+        ),
         CheckConstraint(
             "outcome IN ('claimed','submitted','delivered','retryable','failed','ambiguous','recovered','canceled','suppressed')",
             name="ck_notification_delivery_evidence_outcome",
@@ -231,7 +237,10 @@ class NotificationDeliveryEvidence(Base):
     provider_reference: Mapped[str | None] = mapped_column(String(200))
     error_code: Mapped[str | None] = mapped_column(String(80))
     error_category: Mapped[str | None] = mapped_column(String(80))
-    actor_user_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    actor_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+    )
     reason_digest: Mapped[str | None] = mapped_column(String(64))
     recorded_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False

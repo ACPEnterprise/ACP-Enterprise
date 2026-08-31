@@ -92,6 +92,27 @@ async def persist_user(session: AsyncSession, user_id: UUID) -> None:
     )
 
 
+async def persist_membership(
+    session: AsyncSession, user_id: UUID, company_id: UUID
+) -> None:
+    now = utc_now()
+    await persist_user(session, user_id)
+    await session.execute(
+        text(
+            "INSERT INTO memberships "
+            "(id, user_id, company_id, status, has_all_branch_access, "
+            "created_at, updated_at) "
+            "VALUES (:id, :user_id, :company_id, 'active', true, :now, :now)"
+        ),
+        {
+            "id": uuid4(),
+            "user_id": user_id,
+            "company_id": company_id,
+            "now": now,
+        },
+    )
+
+
 async def persist_event(
     session: AsyncSession,
     event_id: UUID,
@@ -586,6 +607,7 @@ async def test_authorized_suppression_is_terminal_and_auditable(
     actor = uuid4()
     reason_digest = "a" * 64
     async with factory() as session, session.begin():
+        await persist_membership(session, actor, company_id)
         assert not await NotificationOutboxRepository.suppress_or_cancel(
             session,
             notification_id=record.id,
@@ -620,6 +642,34 @@ async def test_authorized_suppression_is_terminal_and_auditable(
         assert evidence.outcome == "suppressed"
         assert evidence.actor_user_id == actor
         assert evidence.reason_digest == reason_digest
+
+
+@pytest.mark.asyncio
+async def test_delivery_evidence_rejects_missing_or_foreign_company_actor(
+    outbox_database: tuple[AsyncEngine, async_sessionmaker[AsyncSession]],
+) -> None:
+    _, factory = outbox_database
+    company_id, foreign_company_id = uuid4(), uuid4()
+    record = await enqueue_fixture(factory, company_id=company_id)
+    foreign_actor = uuid4()
+    async with factory() as session, session.begin():
+        await persist_company(session, foreign_company_id)
+        await persist_membership(session, foreign_actor, foreign_company_id)
+        for actor_user_id in (uuid4(), foreign_actor):
+            with pytest.raises(IntegrityError):
+                async with session.begin_nested():
+                    session.add(
+                        NotificationDeliveryEvidence(
+                            outbox_id=record.id,
+                            sequence=1,
+                            outcome="suppressed",
+                            company_id=company_id,
+                            actor_user_id=actor_user_id,
+                            reason_digest="a" * 64,
+                            recorded_at=utc_now(),
+                        )
+                    )
+                    await session.flush()
 
 
 @pytest.mark.asyncio
