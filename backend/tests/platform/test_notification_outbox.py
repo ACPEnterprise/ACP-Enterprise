@@ -15,15 +15,60 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from app.core.config import settings
+from app.platform.branch.models import Branch  # noqa: F401
+from app.platform.company.membership_models import Membership  # noqa: F401
+from app.platform.company.models import Company  # noqa: F401
 from app.platform.notifications.models import (
     NotificationDeliveryEvidence,
     NotificationOutbox,
 )
 from app.platform.notifications.repository import NotificationOutboxRepository
+from app.platform.permissions.models import (  # noqa: F401
+    MembershipRole,
+    Permission,
+    Role,
+    RolePermission,
+)
+from app.platform.users.models import User, UserCredential  # noqa: F401
 
 
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+async def persist_scope(
+    session: AsyncSession, company_id: UUID, branch_id: UUID
+) -> None:
+    now = utc_now()
+    await session.execute(
+        text(
+            "INSERT INTO companies "
+            "(id, name, code, status, timezone, created_at, updated_at) "
+            "VALUES (:id, :name, :code, 'active', 'UTC', :now, :now)"
+        ),
+        {
+            "id": company_id,
+            "name": f"Notification test {company_id}",
+            "code": f"N{company_id.hex.upper()}",
+            "now": now,
+        },
+    )
+    await session.execute(
+        text(
+            "INSERT INTO branches "
+            "(id, company_id, name, code, status, timezone, is_primary, "
+            "created_at, updated_at) "
+            "VALUES (:id, :company_id, :name, :code, 'active', 'UTC', false, "
+            ":now, :now)"
+        ),
+        {
+            "id": branch_id,
+            "company_id": company_id,
+            "name": f"Notification branch {branch_id}",
+            "code": f"N{branch_id.hex.upper()}",
+            "now": now,
+        },
+    )
 
 
 @pytest_asyncio.fixture
@@ -448,6 +493,8 @@ async def test_company_and_branch_scoped_acquisition_does_not_cross_tenants(
     now = utc_now()
     company_a, company_b, branch_a, branch_b = (uuid4() for _ in range(4))
     async with factory() as session, session.begin():
+        await persist_scope(session, company_a, branch_a)
+        await persist_scope(session, company_b, branch_b)
         for company_id, branch_id in ((company_a, branch_a), (company_b, branch_b)):
             await NotificationOutboxRepository.enqueue(
                 session,
@@ -696,6 +743,8 @@ async def test_delivery_evidence_rejects_forged_or_null_bypassed_scope(
     _, factory = outbox_database
     now = utc_now()
     async with factory() as session, session.begin():
+        if parent_company is not None and parent_branch is not None:
+            await persist_scope(session, parent_company, parent_branch)
         parent, _ = await NotificationOutboxRepository.enqueue(
             session,
             notification_type="customer.notice",
@@ -721,3 +770,29 @@ async def test_delivery_evidence_rejects_forged_or_null_bypassed_scope(
         )
         with pytest.raises(IntegrityError):
             await session.flush()
+
+
+@pytest.mark.asyncio
+async def test_outbox_rejects_branch_without_company_or_from_another_company(
+    outbox_database: tuple[AsyncEngine, async_sessionmaker[AsyncSession]],
+) -> None:
+    _, factory = outbox_database
+    company_a, company_b, branch_b = uuid4(), uuid4(), uuid4()
+    async with factory() as session, session.begin():
+        await persist_scope(session, company_b, branch_b)
+        for company_id in (None, company_a):
+            with pytest.raises(IntegrityError):
+                async with session.begin_nested():
+                    await NotificationOutboxRepository.enqueue(
+                        session,
+                        notification_type="customer.notice",
+                        template_identifier="notice-v1",
+                        recipient="scope-test@example.invalid",
+                        payload={"safe_subject_id": str(uuid4())},
+                        correlation_id=uuid4(),
+                        idempotency_key=f"forged-scope:{uuid4()}",
+                        scheduled_at=utc_now(),
+                        now=utc_now(),
+                        company_id=company_id,
+                        branch_id=branch_b,
+                    )

@@ -6,6 +6,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     String,
@@ -28,6 +29,16 @@ class NotificationOutbox(Base):
 
     __tablename__ = "notification_outbox"
     __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "branch_id"],
+            ["branches.company_id", "branches.id"],
+            name="fk_notification_outbox_branch_scope",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "branch_id IS NULL OR company_id IS NOT NULL",
+            name="ck_notification_outbox_branch_requires_company",
+        ),
         CheckConstraint(
             "length(btrim(notification_type)) > 0",
             name="ck_notification_outbox_type_not_blank",
