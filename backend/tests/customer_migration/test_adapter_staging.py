@@ -7,6 +7,7 @@ from uuid import uuid4
 import pytest
 import pytest_asyncio
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -135,6 +136,32 @@ def accepted_row() -> dict[str, str]:
         "Address_4 Street Line 1": "4 Synthetic Way",
         "Address_4 State": "EX",
     }
+
+
+@pytest.mark.asyncio
+async def test_source_artifact_rejects_foreign_company_branch(
+    staging_database: tuple[AsyncEngine, async_sessionmaker[AsyncSession]],
+) -> None:
+    _, factory = staging_database
+    first = await seed_context(factory)
+    second = await seed_context(factory)
+    assert first.active_branch is not None
+    assert second.active_branch is not None
+    async with factory() as session, session.begin():
+        session.add(
+            CustomerMigrationSourceArtifact(
+                company_id=first.company.id,
+                branch_id=second.active_branch.id,
+                source_system="synthetic",
+                source_sha256="a" * 64,
+                schema_version="synthetic-v1",
+                transformation_sha256="b" * 64,
+                byte_size=1,
+                row_count=1,
+            )
+        )
+        with pytest.raises(IntegrityError):
+            await session.flush()
 
 
 @pytest.mark.asyncio

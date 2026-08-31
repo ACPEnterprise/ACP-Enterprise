@@ -64,6 +64,7 @@ class CustomerMigrationRun(Base):
             ],
             name="fk_customer_run_master_scope",
             ondelete="RESTRICT",
+            use_alter=True,
         ),
         UniqueConstraint("master_run_id", name="uq_customer_master_run"),
         UniqueConstraint(
@@ -691,6 +692,7 @@ class ServiceLocationSourceIdentity(Base):
             ],
             name="fk_service_location_source_master_scope",
             ondelete="RESTRICT",
+            use_alter=True,
         ),
         UniqueConstraint(
             "company_id",
@@ -999,6 +1001,13 @@ class CustomerMigrationSourceArtifact(Base):
             ],
             name="fk_customer_source_artifact_master_scope",
             ondelete="RESTRICT",
+            use_alter=True,
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "branch_id"],
+            ["branches.company_id", "branches.id"],
+            name="fk_customer_source_artifact_branch_scope",
+            ondelete="RESTRICT",
         ),
     )
 
@@ -1012,7 +1021,6 @@ class CustomerMigrationSourceArtifact(Base):
     )
     branch_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
-        ForeignKey("branches.id", ondelete="RESTRICT"),
         nullable=False,
     )
     source_system: Mapped[str] = mapped_column(String(50), nullable=False)
