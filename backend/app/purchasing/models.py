@@ -625,6 +625,12 @@ class PurchaseOrderChangeOrder(Base):
             "company_id", "change_identity", name="uq_purchasing_change_identity"
         ),
         UniqueConstraint("company_id", "id", name="uq_purchasing_change_company"),
+        UniqueConstraint(
+            "company_id",
+            "purchase_order_id",
+            "id",
+            name="uq_purchasing_change_revision_scope",
+        ),
     )
     id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), primary_key=True, default=uuid4
@@ -669,6 +675,16 @@ class PurchaseOrderRevision(Base):
             name="fk_purchasing_revision_po",
             ondelete="RESTRICT",
         ),
+        ForeignKeyConstraint(
+            ["company_id", "purchase_order_id", "change_order_id"],
+            [
+                "purchasing_po_change_orders.company_id",
+                "purchasing_po_change_orders.purchase_order_id",
+                "purchasing_po_change_orders.id",
+            ],
+            name="fk_purchasing_revision_change_scope",
+            ondelete="RESTRICT",
+        ),
         UniqueConstraint(
             "company_id",
             "purchase_order_id",
@@ -688,7 +704,6 @@ class PurchaseOrderRevision(Base):
     predecessor_revision: Mapped[int | None] = mapped_column(Integer)
     change_order_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
-        ForeignKey("purchasing_po_change_orders.id", ondelete="RESTRICT"),
     )
     effective_snapshot: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
     evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
