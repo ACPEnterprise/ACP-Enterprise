@@ -113,6 +113,22 @@ class HcpCustomerSourceLineage(Base):
             name="fk_hcp_customer_lineage_branch_scope",
             ondelete="RESTRICT",
         ),
+        ForeignKeyConstraint(
+            ["master_run_id", "company_id", "branch_id"],
+            [
+                "hcp_migration_master_runs.id",
+                "hcp_migration_master_runs.company_id",
+                "hcp_migration_master_runs.branch_id",
+            ],
+            name="fk_hcp_customer_lineage_master_scope",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["customer_source_identity_id", "company_id"],
+            ["customer_source_identities.id", "customer_source_identities.company_id"],
+            name="fk_hcp_customer_lineage_source_scope",
+            ondelete="RESTRICT",
+        ),
         UniqueConstraint(
             "company_id", "native_customer_id", name="uq_hcp_customer_lineage_native"
         ),
@@ -127,13 +143,10 @@ class HcpCustomerSourceLineage(Base):
     company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     master_run_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("hcp_migration_master_runs.id", ondelete="RESTRICT"),
-        nullable=False,
+        PGUUID(as_uuid=True), nullable=False
     )
     customer_source_identity_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
-        ForeignKey("customer_source_identities.id", ondelete="RESTRICT"),
     )
     native_customer_id: Mapped[str] = mapped_column(String(191), nullable=False)
     package_digest: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -167,6 +180,28 @@ class HcpEmployeeSourceCrosswalk(Base):
             name="fk_hcp_employee_crosswalk_branch_scope",
             ondelete="RESTRICT",
         ),
+        ForeignKeyConstraint(
+            ["master_run_id", "company_id", "branch_id"],
+            [
+                "hcp_migration_master_runs.id",
+                "hcp_migration_master_runs.company_id",
+                "hcp_migration_master_runs.branch_id",
+            ],
+            name="fk_hcp_employee_crosswalk_master_scope",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["employee_id", "company_id"],
+            ["employees.id", "employees.company_id"],
+            name="fk_hcp_employee_crosswalk_target_scope",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["prior_evidence_id", "company_id"],
+            ["hcp_employee_source_crosswalks.id", "hcp_employee_source_crosswalks.company_id"],
+            name="fk_hcp_employee_crosswalk_prior_scope",
+            ondelete="RESTRICT",
+        ),
         UniqueConstraint(
             "company_id",
             "native_employee_id",
@@ -175,6 +210,9 @@ class HcpEmployeeSourceCrosswalk(Base):
         ),
         UniqueConstraint(
             "company_id", "evidence_digest", name="uq_hcp_employee_crosswalk_replay"
+        ),
+        UniqueConstraint(
+            "id", "company_id", name="uq_hcp_employee_crosswalk_company"
         ),
         Index(
             "uq_hcp_employee_crosswalk_target",
@@ -191,13 +229,13 @@ class HcpEmployeeSourceCrosswalk(Base):
     company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     master_run_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), ForeignKey("hcp_migration_master_runs.id"), nullable=False
+        PGUUID(as_uuid=True), nullable=False
     )
     prior_evidence_id: Mapped[UUID | None] = mapped_column(
-        PGUUID(as_uuid=True), ForeignKey("hcp_employee_source_crosswalks.id")
+        PGUUID(as_uuid=True)
     )
     employee_id: Mapped[UUID | None] = mapped_column(
-        PGUUID(as_uuid=True), ForeignKey("employees.id", ondelete="RESTRICT")
+        PGUUID(as_uuid=True)
     )
     native_employee_id: Mapped[str] = mapped_column(String(191), nullable=False)
     disposition: Mapped[str] = mapped_column(String(100), nullable=False)
@@ -225,6 +263,22 @@ class HcpMigrationHold(Base):
             name="fk_hcp_hold_branch_scope",
             ondelete="RESTRICT",
         ),
+        ForeignKeyConstraint(
+            ["master_run_id", "company_id", "branch_id"],
+            [
+                "hcp_migration_master_runs.id",
+                "hcp_migration_master_runs.company_id",
+                "hcp_migration_master_runs.branch_id",
+            ],
+            name="fk_hcp_hold_master_scope",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["prior_hold_id", "company_id"],
+            ["hcp_migration_holds.id", "hcp_migration_holds.company_id"],
+            name="fk_hcp_hold_prior_scope",
+            ondelete="RESTRICT",
+        ),
         UniqueConstraint(
             "company_id",
             "master_run_id",
@@ -233,6 +287,7 @@ class HcpMigrationHold(Base):
             name="uq_hcp_hold_native_run",
         ),
         UniqueConstraint("company_id", "hold_digest", name="uq_hcp_hold_replay"),
+        UniqueConstraint("id", "company_id", name="uq_hcp_hold_company"),
     )
 
     id: Mapped[UUID] = mapped_column(
@@ -241,10 +296,10 @@ class HcpMigrationHold(Base):
     company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     master_run_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), ForeignKey("hcp_migration_master_runs.id"), nullable=False
+        PGUUID(as_uuid=True), nullable=False
     )
     prior_hold_id: Mapped[UUID | None] = mapped_column(
-        PGUUID(as_uuid=True), ForeignKey("hcp_migration_holds.id")
+        PGUUID(as_uuid=True)
     )
     entity_kind: Mapped[str] = mapped_column(String(40), nullable=False)
     native_id: Mapped[str] = mapped_column(String(191), nullable=False)
