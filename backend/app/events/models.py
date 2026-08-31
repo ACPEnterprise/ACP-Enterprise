@@ -77,6 +77,7 @@ class BusinessEvent(Base):
 
     company_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
         nullable=True,
         index=True,
     )
@@ -89,6 +90,7 @@ class BusinessEvent(Base):
 
     user_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
         nullable=True,
         index=True,
     )
@@ -273,7 +275,10 @@ class BusinessEventDeliveryEvidence(Base):
     outcome: Mapped[str] = mapped_column(String(24), nullable=False)
     worker_id: Mapped[str | None] = mapped_column(String(120))
     claim_token: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
-    actor_user_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    actor_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+    )
     request_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
     error_code: Mapped[str | None] = mapped_column(String(100))
     error_category: Mapped[str | None] = mapped_column(String(40))

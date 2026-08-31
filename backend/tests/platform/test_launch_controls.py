@@ -5,6 +5,7 @@ from uuid import uuid4
 import pytest
 import pytest_asyncio
 from fastapi import HTTPException
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.core.config import settings
@@ -333,6 +334,44 @@ async def test_explicit_unauthorized_audit_branch_fails_closed(audit_database) -
                 branch_id=denied_branch,
                 limit=50,
             )
+
+
+@pytest.mark.asyncio
+async def test_audit_root_company_and_actor_are_database_bound(audit_database) -> None:
+    factory = audit_database
+    now = datetime.now(timezone.utc)
+    company_id = uuid4()
+    async with factory() as session, session.begin():
+        session.add(
+            Company(
+                id=company_id,
+                name="Audit authority test",
+                code=f"AUD{company_id.hex[:8].upper()}",
+                timezone="UTC",
+            )
+        )
+        await session.flush()
+        invalid_scopes = (
+            {"company_id": uuid4(), "actor_user_id": None},
+            {"company_id": company_id, "actor_user_id": uuid4()},
+        )
+        for scope in invalid_scopes:
+            with pytest.raises(IntegrityError):
+                async with session.begin_nested():
+                    session.add(
+                        AuditRecord(
+                            action="authority.attacked",
+                            outcome="denied",
+                            company_id=scope["company_id"],
+                            actor_user_id=scope["actor_user_id"],
+                            resource_type="audit_test",
+                            details={},
+                            correlation_id=uuid4(),
+                            occurred_at=now,
+                            recorded_at=now,
+                        )
+                    )
+                    await session.flush()
 
 
 @pytest.mark.asyncio

@@ -34,6 +34,7 @@ NOW = datetime(2026, 8, 28, 12, tzinfo=timezone.utc)
 COMPANY_A = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
 COMPANY_B = UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
 BRANCH_A = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa01")
+ACTOR = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa02")
 REPLAY_SAFE = "test.replay_safe"
 ORDERED = "test.ordered"
 
@@ -83,6 +84,16 @@ async def delivery_database(
                 "ON CONFLICT (id) DO NOTHING"
             ),
             {"branch": BRANCH_A, "company": COMPANY_A, "now": NOW},
+        )
+        await connection.execute(
+            text(
+                "INSERT INTO users "
+                "(id,normalized_email,first_name,last_name,display_name,status,"
+                "authorization_version,created_at,updated_at) VALUES "
+                "(:id,'event-delivery@example.invalid','Event','Delivery',"
+                "'Event Delivery','active',1,:now,:now) ON CONFLICT (id) DO NOTHING"
+            ),
+            {"id": ACTOR, "now": NOW},
         )
     await _truncate(engine)
     try:
@@ -342,7 +353,7 @@ async def test_terminal_failure_and_authorized_replay_preserve_original_event(
         )
         assert failed.status == "terminal"
     async with delivery_database() as session, session.begin():
-        actor_id = uuid4()
+        actor_id = ACTOR
         request_id = uuid4()
         with pytest.raises(DeliveryConflict, match="authority"):
             await BusinessEventDeliveryService.request_replay(
@@ -513,6 +524,25 @@ async def test_delivery_scope_parity_and_registered_receipt_are_database_enforce
                     delivery_id=delivery_id,
                     event_id=event_id,
                     consumer_name=REPLAY_SAFE,
+                    company_id=COMPANY_A,
+                    branch_id=BRANCH_A,
+                    evidence_sequence=1,
+                    attempt_number=0,
+                    outcome="replay_requested",
+                    actor_user_id=uuid4(),
+                    request_id=uuid4(),
+                    recorded_at=NOW,
+                )
+            )
+            await session.flush()
+
+    with pytest.raises(DBAPIError):
+        async with delivery_database() as session, session.begin():
+            session.add(
+                BusinessEventDeliveryEvidence(
+                    delivery_id=delivery_id,
+                    event_id=event_id,
+                    consumer_name=REPLAY_SAFE,
                     company_id=None,
                     branch_id=None,
                     evidence_sequence=1,
@@ -537,6 +567,50 @@ async def test_delivery_scope_parity_and_registered_receipt_are_database_enforce
             )
             await session.flush()
 
+
+@pytest.mark.asyncio
+async def test_business_event_root_company_and_user_are_database_bound(
+    delivery_database: async_sessionmaker[AsyncSession],
+) -> None:
+    invalid_roots = (
+        {"company_id": uuid4(), "user_id": None},
+        {"company_id": COMPANY_A, "user_id": uuid4()},
+    )
+    for scope in invalid_roots:
+        with pytest.raises(DBAPIError):
+            async with delivery_database() as session, session.begin():
+                session.add(
+                    BusinessEvent(
+                        event_type="test.root",
+                        entity_type="test",
+                        entity_id=uuid4(),
+                        company_id=scope["company_id"],
+                        branch_id=None,
+                        user_id=scope["user_id"],
+                        payload={},
+                        correlation_id=uuid4(),
+                        occurred_at=NOW,
+                        created_at=NOW,
+                    )
+                )
+                await session.flush()
+
+    async with delivery_database() as session, session.begin():
+        event = BusinessEvent(
+            event_type="test.root",
+            entity_type="test",
+            entity_id=uuid4(),
+            company_id=COMPANY_A,
+            branch_id=None,
+            user_id=ACTOR,
+            payload={},
+            correlation_id=uuid4(),
+            occurred_at=NOW,
+            created_at=NOW,
+        )
+        session.add(event)
+        await session.flush()
+        assert event.id is not None
 
 @pytest.mark.asyncio
 async def test_ordered_cursor_and_receipt_evidence_are_database_bound(

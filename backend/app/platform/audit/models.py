@@ -4,6 +4,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import (
     CheckConstraint,
     DateTime,
+    ForeignKey,
     ForeignKeyConstraint,
     Index,
     String,
@@ -58,8 +59,12 @@ class AuditRecord(Base):
     )
     action: Mapped[str] = mapped_column(String(100), nullable=False)
     outcome: Mapped[str] = mapped_column(String(20), nullable=False)
-    actor_user_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
-    company_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    actor_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT")
+    )
+    company_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("companies.id", ondelete="RESTRICT")
+    )
     branch_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
     resource_type: Mapped[str] = mapped_column(String(100), nullable=False)
     resource_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
