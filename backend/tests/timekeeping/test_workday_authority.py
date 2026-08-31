@@ -7,6 +7,8 @@ from uuid import UUID, uuid4
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import delete, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -41,6 +43,12 @@ from app.timekeeping.contracts import (
     seal_payroll_time_input,
 )
 from app.timekeeping.economics_adapter import to_economics_workday_time
+from app.timekeeping.models import (
+    PayPeriod,
+    PayrollTimeInputRecord,
+    WorkdayPunchEvent,
+    WorkdayTimeEntryRevision,
+)
 from app.timekeeping.permissions import TimekeepingPermission
 from app.timekeeping.service import WorkdayTimeService
 
@@ -367,7 +375,7 @@ async def test_mixed_manual_and_punch_time_approval_correction_and_snapshot(
                     timezone="America/New_York",
                 ),
             )
-        _, punch_revision = await service.record_punch(
+        clock_out_event, punch_revision = await service.record_punch(
             session,
             context=employee_context,  # type: ignore[arg-type]
             command=RecordPunch(
@@ -481,6 +489,31 @@ async def test_mixed_manual_and_punch_time_approval_correction_and_snapshot(
         assert changed.snapshot_digest != first.snapshot_digest
         assert changed.total_approved_minutes == 780
         assert approved_manual.id in changed.approved_entries[0].correction_lineage
+
+        immutable_attacks = (
+            update(PayPeriod).where(PayPeriod.id == period.id).values(timezone="UTC"),
+            delete(PayPeriod).where(PayPeriod.id == period.id),
+            update(WorkdayPunchEvent)
+            .where(WorkdayPunchEvent.id == clock_out_event.id)
+            .values(event_digest="0" * 64),
+            delete(WorkdayPunchEvent).where(WorkdayPunchEvent.id == clock_out_event.id),
+            update(WorkdayTimeEntryRevision)
+            .where(WorkdayTimeEntryRevision.id == approved_manual.id)
+            .values(evidence_digest="0" * 64),
+            delete(WorkdayTimeEntryRevision).where(
+                WorkdayTimeEntryRevision.id == approved_manual.id
+            ),
+            update(PayrollTimeInputRecord)
+            .where(PayrollTimeInputRecord.snapshot_digest == first.snapshot_digest)
+            .values(snapshot_digest="0" * 64),
+            delete(PayrollTimeInputRecord).where(
+                PayrollTimeInputRecord.snapshot_digest == first.snapshot_digest
+            ),
+        )
+        for attack in immutable_attacks:
+            with pytest.raises(IntegrityError):
+                async with session.begin_nested():
+                    await session.execute(attack)
 
 
 @pytest.mark.asyncio
