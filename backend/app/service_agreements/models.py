@@ -46,6 +46,9 @@ class AgreementPlan(Base):
         UniqueConstraint(
             "company_id", "idempotency_key", name="uq_agreement_plans_idempotency"
         ),
+        UniqueConstraint(
+            "company_id", "id", name="uq_agreement_plans_company_id"
+        ),
     )
     id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), primary_key=True, default=uuid4
@@ -98,6 +101,24 @@ class ServiceAgreement(Base):
             name="fk_service_agreements_branch",
             ondelete="RESTRICT",
         ),
+        ForeignKeyConstraint(
+            ["company_id", "customer_id"],
+            ["customers.company_id", "customers.id"],
+            name="fk_service_agreements_customer",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "plan_id"],
+            ["service_agreement_plans.company_id", "service_agreement_plans.id"],
+            name="fk_service_agreements_plan",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "predecessor_agreement_id"],
+            ["service_agreements.company_id", "service_agreements.id"],
+            name="fk_service_agreements_predecessor",
+            ondelete="RESTRICT",
+        ),
         CheckConstraint(
             "status IN ('draft','pending_activation','active','renewal_pending','renewed','cancelled','expired','suspended')",
             name="ck_service_agreements_status",
@@ -112,6 +133,9 @@ class ServiceAgreement(Base):
         UniqueConstraint(
             "company_id", "idempotency_key", name="uq_service_agreements_idempotency"
         ),
+        UniqueConstraint(
+            "company_id", "id", name="uq_service_agreements_company_id"
+        ),
     )
     id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), primary_key=True, default=uuid4
@@ -122,19 +146,9 @@ class ServiceAgreement(Base):
         nullable=False,
     )
     branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
-    customer_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("customers.id", ondelete="RESTRICT"),
-        nullable=False,
-    )
-    plan_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("service_agreement_plans.id", ondelete="RESTRICT"),
-        nullable=False,
-    )
-    predecessor_agreement_id: Mapped[UUID | None] = mapped_column(
-        PGUUID(as_uuid=True), ForeignKey("service_agreements.id", ondelete="RESTRICT")
-    )
+    customer_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    plan_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    predecessor_agreement_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
     agreement_number: Mapped[str] = mapped_column(String(40), nullable=False)
     status: Mapped[str] = mapped_column(
         String(24), nullable=False, default="pending_activation"

@@ -2,8 +2,45 @@ from datetime import date
 from decimal import Decimal
 from uuid import uuid4
 
+from sqlalchemy import ForeignKeyConstraint, UniqueConstraint
+
+from app.service_agreements.models import AgreementPlan, ServiceAgreement
 from app.service_agreements.schemas import PlanOut, Transition
 from app.service_agreements.service import add_months, digest
+
+
+def test_agreement_root_identities_are_company_bound() -> None:
+    bindings = {
+        (
+            tuple(column.name for column in constraint.columns),
+            tuple(element.target_fullname for element in constraint.elements),
+        )
+        for constraint in ServiceAgreement.__table__.constraints
+        if isinstance(constraint, ForeignKeyConstraint)
+    }
+
+    assert (
+        ("company_id", "customer_id"),
+        ("customers.company_id", "customers.id"),
+    ) in bindings
+    assert (
+        ("company_id", "plan_id"),
+        ("service_agreement_plans.company_id", "service_agreement_plans.id"),
+    ) in bindings
+    assert (
+        ("company_id", "predecessor_agreement_id"),
+        ("service_agreements.company_id", "service_agreements.id"),
+    ) in bindings
+    assert any(
+        isinstance(constraint, UniqueConstraint)
+        and constraint.name == "uq_agreement_plans_company_id"
+        for constraint in AgreementPlan.__table__.constraints
+    )
+    assert any(
+        isinstance(constraint, UniqueConstraint)
+        and constraint.name == "uq_service_agreements_company_id"
+        for constraint in ServiceAgreement.__table__.constraints
+    )
 
 
 def test_agreement_evidence_digest_is_deterministic_and_order_independent():
