@@ -478,3 +478,60 @@ async def test_delivery_evidence_and_receipts_are_database_immutable(
                 .where(BusinessEventDeliveryEvidence.id == evidence_id)
                 .values(outcome="terminal")
             )
+
+
+@pytest.mark.asyncio
+async def test_delivery_scope_parity_and_registered_receipt_are_database_enforced(
+    delivery_database: async_sessionmaker[AsyncSession],
+) -> None:
+    event_id, delivery_id = await _delivery(delivery_database)
+
+    with pytest.raises(DBAPIError):
+        async with delivery_database() as session, session.begin():
+            session.add(
+                BusinessEventDelivery(
+                    event_id=event_id,
+                    consumer_name=ORDERED,
+                    event_version="1.0",
+                    company_id=None,
+                    branch_id=None,
+                    status="pending",
+                    attempt_count=0,
+                    replay_count=0,
+                    next_attempt_at=NOW,
+                    created_at=NOW,
+                    updated_at=NOW,
+                )
+            )
+            await session.flush()
+
+    with pytest.raises(DBAPIError):
+        async with delivery_database() as session, session.begin():
+            session.add(
+                BusinessEventDeliveryEvidence(
+                    delivery_id=delivery_id,
+                    event_id=event_id,
+                    consumer_name=REPLAY_SAFE,
+                    company_id=None,
+                    branch_id=None,
+                    evidence_sequence=1,
+                    attempt_number=0,
+                    outcome="claimed",
+                    recorded_at=NOW,
+                )
+            )
+            await session.flush()
+
+    with pytest.raises(DBAPIError):
+        async with delivery_database() as session, session.begin():
+            session.add(
+                BusinessEventConsumerReceipt(
+                    event_id=event_id,
+                    consumer_name=ORDERED,
+                    company_id=COMPANY_A,
+                    branch_id=BRANCH_A,
+                    outcome_digest="a" * 64,
+                    created_at=NOW,
+                )
+            )
+            await session.flush()

@@ -305,6 +305,15 @@ class BusinessEventConsumerReceipt(Base):
             name="fk_business_event_receipt_event_branch",
             ondelete="RESTRICT",
         ),
+        ForeignKeyConstraint(
+            ["event_id", "consumer_name"],
+            [
+                "business_event_deliveries.event_id",
+                "business_event_deliveries.consumer_name",
+            ],
+            name="fk_business_event_receipt_registered_delivery",
+            ondelete="RESTRICT",
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(
