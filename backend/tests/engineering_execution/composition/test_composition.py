@@ -667,6 +667,16 @@ def test_provider_evidence_models_bind_exact_parent_lineage() -> None:
         "lease_id",
         "provider_identifier",
     )
+    result_fk = next(
+        constraint
+        for constraint in NormalizedProviderResult.__table__.foreign_key_constraints
+        if constraint.name == "fk_normalized_results_exact_attempt"
+    )
+    assert tuple(result_fk.column_keys) == (
+        "company_id",
+        "attempt_id",
+        "composition_id",
+    )
     session_constraints = {
         constraint.name: tuple(constraint.column_keys)
         for constraint in ProviderSessionModel.__table__.foreign_key_constraints

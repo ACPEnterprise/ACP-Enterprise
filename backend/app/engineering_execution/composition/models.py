@@ -276,6 +276,12 @@ class ProviderExecutionAttempt(Base):
             "company_id",
             "id",
             "composition_id",
+            name="uq_provider_attempts_result_authority",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "id",
+            "composition_id",
             "worker_id",
             "lease_id",
             "provider_identifier",
@@ -387,21 +393,13 @@ class NormalizedProviderResult(Base):
             "company_id", "id", name="uq_normalized_results_company_id"
         ),
         ForeignKeyConstraint(
-            ["company_id", "attempt_id"],
+            ["company_id", "attempt_id", "composition_id"],
             [
                 "engineering_provider_execution_attempts.company_id",
                 "engineering_provider_execution_attempts.id",
+                "engineering_provider_execution_attempts.composition_id",
             ],
-            name="fk_normalized_results_attempt",
-            ondelete="RESTRICT",
-        ),
-        ForeignKeyConstraint(
-            ["company_id", "composition_id"],
-            [
-                "engineering_execution_compositions.company_id",
-                "engineering_execution_compositions.id",
-            ],
-            name="fk_normalized_results_composition",
+            name="fk_normalized_results_exact_attempt",
             ondelete="RESTRICT",
         ),
         CheckConstraint(
