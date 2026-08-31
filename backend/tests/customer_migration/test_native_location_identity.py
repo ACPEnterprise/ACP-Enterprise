@@ -384,6 +384,34 @@ async def test_postgres_evidence_is_company_scoped_and_replay_safe() -> None:
             assert customer_created is True
             assert replay_customer_created is False
             assert replay_customer.id == first_customer.id
+            native_identity_attacks = (
+                update(ServiceLocationIdentityEvidence)
+                .where(ServiceLocationIdentityEvidence.id == first.id)
+                .values(evidence_digest="0" * 64),
+                delete(ServiceLocationIdentityEvidence).where(
+                    ServiceLocationIdentityEvidence.id == first.id
+                ),
+                update(ServiceLocationReconciliationEvidence)
+                .where(
+                    ServiceLocationReconciliationEvidence.id
+                    == first_reconciliation.id
+                )
+                .values(evidence_digest="0" * 64),
+                delete(ServiceLocationReconciliationEvidence).where(
+                    ServiceLocationReconciliationEvidence.id
+                    == first_reconciliation.id
+                ),
+                update(CustomerIdentityConsolidationEvidence)
+                .where(CustomerIdentityConsolidationEvidence.id == first_customer.id)
+                .values(evidence_digest="0" * 64),
+                delete(CustomerIdentityConsolidationEvidence).where(
+                    CustomerIdentityConsolidationEvidence.id == first_customer.id
+                ),
+            )
+            for attack in native_identity_attacks:
+                with pytest.raises(IntegrityError):
+                    async with session.begin_nested():
+                        await session.execute(attack)
             readiness = assess_cutover_readiness(
                 CutoverEvidenceSnapshot(
                     company_id=company.id,
