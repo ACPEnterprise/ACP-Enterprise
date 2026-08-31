@@ -26,12 +26,23 @@ class EngineeringRepositoryAuthorization(Base):
     __tablename__ = "engineering_repository_authorizations"
     __table_args__ = (
         ForeignKeyConstraint(
-            ["company_id", "review_id"],
+            [
+                "company_id",
+                "review_id",
+                "command_id",
+                "execution_id",
+                "result_id",
+                "review_digest",
+            ],
             [
                 "engineering_execution_reviews.company_id",
                 "engineering_execution_reviews.id",
+                "engineering_execution_reviews.command_id",
+                "engineering_execution_reviews.execution_id",
+                "engineering_execution_reviews.result_id",
+                "engineering_execution_reviews.review_digest",
             ],
-            name="fk_repository_authorizations_review",
+            name="fk_repository_authorizations_exact_review",
             ondelete="RESTRICT",
         ),
         ForeignKeyConstraint(
@@ -41,33 +52,14 @@ class EngineeringRepositoryAuthorization(Base):
             ondelete="RESTRICT",
         ),
         ForeignKeyConstraint(
-            ["company_id", "command_id"],
-            ["engineering_commands.company_id", "engineering_commands.id"],
-            name="fk_repository_authorizations_command_company",
-            ondelete="RESTRICT",
-        ),
-        ForeignKeyConstraint(
-            ["company_id", "execution_id"],
-            ["engineering_executions.company_id", "engineering_executions.id"],
-            name="fk_repository_authorizations_execution_company",
-            ondelete="RESTRICT",
-        ),
-        ForeignKeyConstraint(
-            ["company_id", "result_id"],
-            [
-                "engineering_normalized_provider_results.company_id",
-                "engineering_normalized_provider_results.id",
-            ],
-            name="fk_repository_authorizations_result_company",
-            ondelete="RESTRICT",
-        ),
-        ForeignKeyConstraint(
-            ["company_id", "review_decision_id"],
+            ["company_id", "review_decision_id", "review_id", "review_digest"],
             [
                 "engineering_execution_review_decisions.company_id",
                 "engineering_execution_review_decisions.id",
+                "engineering_execution_review_decisions.review_id",
+                "engineering_execution_review_decisions.review_digest",
             ],
-            name="fk_repository_authorizations_decision_company",
+            name="fk_repository_authorizations_exact_decision",
             ondelete="RESTRICT",
         ),
         CheckConstraint(

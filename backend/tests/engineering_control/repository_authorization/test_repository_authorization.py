@@ -40,6 +40,7 @@ from app.engineering_control.repository_authorization.service import (
     EngineeringRepositoryAuthorizationService,
 )
 from app.engineering_control.review.contracts import EngineeringReviewDecision
+from app.engineering_control.review.models import EngineeringExecutionReviewDecision
 from app.engineering_control.review.records import DecideEngineeringReview
 from app.engineering_control.review.service import EngineeringReviewService
 from app.engineering_execution.composition.contracts import (
@@ -482,3 +483,34 @@ async def test_bounded_authorization_http_api(
             )
             == 3
         )
+
+
+def test_authorization_models_bind_exact_review_and_decision() -> None:
+    decision_fk = next(
+        constraint
+        for constraint in EngineeringExecutionReviewDecision.__table__.foreign_key_constraints
+        if constraint.name == "fk_engineering_review_decisions_exact_review"
+    )
+    assert tuple(decision_fk.column_keys) == (
+        "company_id",
+        "review_id",
+        "review_digest",
+    )
+    constraints = {
+        constraint.name: tuple(constraint.column_keys)
+        for constraint in EngineeringRepositoryAuthorization.__table__.foreign_key_constraints
+    }
+    assert constraints["fk_repository_authorizations_exact_review"] == (
+        "company_id",
+        "review_id",
+        "command_id",
+        "execution_id",
+        "result_id",
+        "review_digest",
+    )
+    assert constraints["fk_repository_authorizations_exact_decision"] == (
+        "company_id",
+        "review_decision_id",
+        "review_id",
+        "review_digest",
+    )

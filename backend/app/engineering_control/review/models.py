@@ -117,6 +117,21 @@ class EngineeringExecutionReview(Base):
             "id",
             name="uq_engineering_execution_reviews_company_id",
         ),
+        UniqueConstraint(
+            "company_id",
+            "id",
+            "command_id",
+            "execution_id",
+            "result_id",
+            "review_digest",
+            name="uq_engineering_reviews_authorization_authority",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "id",
+            "review_digest",
+            name="uq_engineering_reviews_decision_authority",
+        ),
         Index(
             "ix_engineering_execution_reviews_company_state",
             "company_id",
@@ -181,12 +196,13 @@ class EngineeringExecutionReviewDecision(Base):
     __tablename__ = "engineering_execution_review_decisions"
     __table_args__ = (
         ForeignKeyConstraint(
-            ["company_id", "review_id"],
+            ["company_id", "review_id", "review_digest"],
             [
                 "engineering_execution_reviews.company_id",
                 "engineering_execution_reviews.id",
+                "engineering_execution_reviews.review_digest",
             ],
-            name="fk_engineering_review_decisions_review",
+            name="fk_engineering_review_decisions_exact_review",
             ondelete="RESTRICT",
         ),
         ForeignKeyConstraint(
@@ -212,6 +228,13 @@ class EngineeringExecutionReviewDecision(Base):
             "company_id",
             "id",
             name="uq_engineering_review_decisions_company_id",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "id",
+            "review_id",
+            "review_digest",
+            name="uq_engineering_review_decisions_authorization_authority",
         ),
         Index(
             "ix_engineering_review_decisions_company_decided",
