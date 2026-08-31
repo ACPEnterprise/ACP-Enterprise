@@ -358,6 +358,39 @@ class EngineeringCapacityAllocation(Base):
 class EngineeringCapacityEvent(Base):
     __tablename__ = "engineering_capacity_events"
     __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "policy_id"],
+            ["engineering_capacity_policies.company_id", "engineering_capacity_policies.id"],
+            name="fk_capacity_events_policy_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "worker_capacity_id"],
+            [
+                "engineering_worker_capacities.company_id",
+                "engineering_worker_capacities.id",
+            ],
+            name="fk_capacity_events_worker_capacity_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "reservation_id"],
+            [
+                "engineering_capacity_reservations.company_id",
+                "engineering_capacity_reservations.id",
+            ],
+            name="fk_capacity_events_reservation_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "allocation_id"],
+            [
+                "engineering_capacity_allocations.company_id",
+                "engineering_capacity_allocations.id",
+            ],
+            name="fk_capacity_events_allocation_company",
+            ondelete="RESTRICT",
+        ),
         CheckConstraint("length(btrim(event_type)) > 0", name="ck_capacity_event_type"),
         UniqueConstraint(
             "company_id", "idempotency_key", name="uq_capacity_event_idempotency"
@@ -379,19 +412,15 @@ class EngineeringCapacityEvent(Base):
     )
     policy_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
-        ForeignKey("engineering_capacity_policies.id", ondelete="RESTRICT"),
     )
     worker_capacity_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
-        ForeignKey("engineering_worker_capacities.id", ondelete="RESTRICT"),
     )
     reservation_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
-        ForeignKey("engineering_capacity_reservations.id", ondelete="RESTRICT"),
     )
     allocation_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
-        ForeignKey("engineering_capacity_allocations.id", ondelete="RESTRICT"),
     )
     transition_source: Mapped[str] = mapped_column(String(20), nullable=False)
     idempotency_key: Mapped[str] = mapped_column(String(160), nullable=False)
