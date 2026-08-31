@@ -90,6 +90,13 @@ class ExecutionComposition(Base):
             "company_id",
             "id",
             "execution_id",
+            "command_id",
+            name="uq_execution_compositions_review_authority",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "id",
+            "execution_id",
             "worker_id",
             "lease_id",
             "provider_identifier",
@@ -391,6 +398,13 @@ class NormalizedProviderResult(Base):
     __table_args__ = (
         UniqueConstraint(
             "company_id", "id", name="uq_normalized_results_company_id"
+        ),
+        UniqueConstraint(
+            "company_id",
+            "id",
+            "attempt_id",
+            "composition_id",
+            name="uq_normalized_results_review_authority",
         ),
         ForeignKeyConstraint(
             ["company_id", "attempt_id", "composition_id"],

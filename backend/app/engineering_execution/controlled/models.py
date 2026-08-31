@@ -190,6 +190,13 @@ class ControlledExecutionResultModel(Base):
         ),
         UniqueConstraint("company_id", "offer_id", name="uq_controlled_results_offer"),
         UniqueConstraint("company_id", "id", name="uq_controlled_results_company_id"),
+        UniqueConstraint(
+            "company_id",
+            "id",
+            "execution_id",
+            "command_id",
+            name="uq_controlled_results_review_authority",
+        ),
         Index(
             "ix_controlled_results_company_execution",
             "company_id",

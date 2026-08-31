@@ -283,3 +283,38 @@ async def test_review_projection_and_bounded_http_api(
             )
             == 1
         )
+
+
+def test_review_model_binds_exact_evidence_lineage() -> None:
+    constraints = {
+        constraint.name: tuple(constraint.column_keys)
+        for constraint in EngineeringExecutionReview.__table__.foreign_key_constraints
+    }
+    assert constraints["fk_engineering_reviews_exact_execution"] == (
+        "company_id",
+        "execution_id",
+        "command_id",
+    )
+    assert constraints["fk_engineering_reviews_exact_composition"] == (
+        "company_id",
+        "composition_id",
+        "execution_id",
+        "command_id",
+    )
+    assert constraints["fk_engineering_reviews_exact_attempt"] == (
+        "company_id",
+        "attempt_id",
+        "composition_id",
+    )
+    assert constraints["fk_engineering_reviews_exact_result"] == (
+        "company_id",
+        "result_id",
+        "attempt_id",
+        "composition_id",
+    )
+    assert constraints["fk_engineering_reviews_exact_controlled_result"] == (
+        "company_id",
+        "controlled_result_id",
+        "execution_id",
+        "command_id",
+    )
