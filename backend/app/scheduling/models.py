@@ -281,6 +281,18 @@ class Appointment(Base):
             name="fk_appointments_company_branch",
             ondelete="RESTRICT",
         ),
+        ForeignKeyConstraint(
+            ["company_id", "customer_id"],
+            ["customers.company_id", "customers.id"],
+            name="fk_appointments_customer_scope",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["service_location_id", "customer_id"],
+            ["service_locations.id", "service_locations.customer_id"],
+            name="fk_appointments_location_customer",
+            ondelete="RESTRICT",
+        ),
         CheckConstraint(
             "appointment_number ~ '^APT-[0-9]{6,}$'",
             name="ck_appointments_number_format",
@@ -385,22 +397,10 @@ class Appointment(Base):
     branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     appointment_number: Mapped[str] = mapped_column(String(24), nullable=False)
     customer_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey(
-            "customers.id",
-            name="fk_appointments_customer_id_customers",
-            ondelete="RESTRICT",
-        ),
-        nullable=False,
+        PGUUID(as_uuid=True), nullable=False
     )
     service_location_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey(
-            "service_locations.id",
-            name="fk_appointments_service_location_id_service_locations",
-            ondelete="RESTRICT",
-        ),
-        nullable=False,
+        PGUUID(as_uuid=True), nullable=False
     )
     status: Mapped[str] = mapped_column(String(24), nullable=False, default="draft")
     arrival_window_start_at: Mapped[datetime | None] = mapped_column(
