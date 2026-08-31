@@ -21,6 +21,7 @@ import type { PermissionDefinition, QboSandboxConnectionState } from "./api";
 import {
   disconnectQuickBooksSandbox,
   getQuickBooksSandboxConnection,
+  launchQuickBooksProduction,
   launchQuickBooksSandbox,
 } from "./api";
 import {
@@ -62,6 +63,8 @@ export function AdministrationRoute() {
   const [mutationError, setMutationError] = useState<string | null>(null);
   const [qboPending, setQboPending] = useState(false);
   const [qboError, setQboError] = useState(false);
+  const [qboProductionPending, setQboProductionPending] = useState(false);
+  const [qboProductionError, setQboProductionError] = useState(false);
   const [qboDisconnectConfirmation, setQboDisconnectConfirmation] =
     useState(false);
   const [qboState, setQboState] = useState<
@@ -158,6 +161,17 @@ export function AdministrationRoute() {
     }
   };
 
+  const connectQuickBooksProduction = async () => {
+    setQboProductionError(false);
+    setQboProductionPending(true);
+    try {
+      await launchQuickBooksProduction();
+    } catch {
+      setQboProductionError(true);
+      setQboProductionPending(false);
+    }
+  };
+
   const disconnectSandbox = async () => {
     setQboDisconnectConfirmation(false);
     setQboError(false);
@@ -206,6 +220,35 @@ export function AdministrationRoute() {
             >
               Open Identity Onboarding
             </Link>
+          </CardContent>
+        </Card>
+      )}
+      {canAdminister && (
+        <Card className="border-warning/50">
+          <CardHeader>
+            <CardTitle>QuickBooks REAL company — read-only migration source</CardTitle>
+            <CardDescription>
+              Connect the real QuickBooks company for verified GET-only migration
+              acquisition. This does not authorize QuickBooks changes, payments,
+              Accounting posting, or ACP Production.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-ui-3">
+            <Badge variant="warning">REAL / PRODUCTION QUICKBOOKS</Badge>
+            {qboProductionError && (
+              <Alert variant="danger" announcement="assertive">
+                Real QuickBooks authorization could not be started. No company was
+                connected.
+              </Alert>
+            )}
+            <Button
+              loading={qboProductionPending}
+              loadingLabel="Opening real QuickBooks authorization"
+              disabled={qboProductionPending}
+              onClick={() => void connectQuickBooksProduction()}
+            >
+              Connect REAL QuickBooks — Read Only
+            </Button>
           </CardContent>
         </Card>
       )}

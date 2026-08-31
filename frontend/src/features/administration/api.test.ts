@@ -2,7 +2,7 @@ import { AxiosHeaders } from "axios";
 import { describe, expect, it, vi } from "vitest";
 
 import { apiClient } from "../../api/client";
-import { disconnectQuickBooksSandbox, getQuickBooksSandboxConnection, launchQuickBooksSandbox } from "./api";
+import { disconnectQuickBooksSandbox, getQuickBooksSandboxConnection, launchQuickBooksProduction, launchQuickBooksSandbox } from "./api";
 
 describe("QuickBooks sandbox administration API", () => {
   it("reads and disconnects through authenticated API paths", async () => {
@@ -52,5 +52,27 @@ describe("QuickBooks sandbox administration API", () => {
 
     await expect(launchQuickBooksSandbox(navigate)).rejects.toThrow("Unexpected QuickBooks authorization destination.");
     expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it("launches Production only with the exact Production callback", async () => {
+    const callback = encodeURIComponent(
+      `${window.location.origin}/api/v1/integrations/qbo/production/oauth/callback`,
+    );
+    const post = vi.spyOn(apiClient, "post").mockResolvedValue({
+      data: {
+        status: "qbo_production_oauth_initiation",
+        authorization_url:
+          `https://appcenter.intuit.com/connect/oauth2?client_id=synthetic&redirect_uri=${callback}` +
+          "&response_type=code&scope=com.intuit.quickbooks.accounting&state=synthetic-state",
+      },
+    });
+    const navigate = vi.fn();
+
+    await launchQuickBooksProduction(navigate);
+
+    expect(post).toHaveBeenCalledWith(
+      "/api/v1/integrations/qbo/production/oauth/authorize",
+    );
+    expect(navigate).toHaveBeenCalledOnce();
   });
 });
