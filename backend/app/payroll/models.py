@@ -1263,6 +1263,7 @@ class PayrollReportingSnapshotRecord(Base):
         CheckConstraint("period_kind IN ('pay_period','quarter','year')", name="ck_payroll_reporting_period_kind"),
         CheckConstraint("state IN ('authoritative','partial','unavailable','conflicting')", name="ck_payroll_reporting_state"),
         UniqueConstraint("company_id", "report_identity", name="uq_payroll_reporting_identity"),
+        UniqueConstraint("company_id", "id", name="uq_payroll_reporting_company_id"),
         UniqueConstraint(
             "company_id",
             "employee_id",
@@ -1298,12 +1299,31 @@ class PayrollFilingPackageRecord(Base):
     __tablename__ = "payroll_filing_packages"
     __table_args__ = (
         CheckConstraint("state IN ('prepared_not_submitted','superseded','voided')", name="ck_payroll_filing_package_state"),
+        ForeignKeyConstraint(
+            ["company_id", "reporting_snapshot_id"],
+            ["payroll_reporting_snapshots.company_id", "payroll_reporting_snapshots.id"],
+            name="fk_payroll_filing_package_reporting_scope",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "compliance_schema_id"],
+            ["payroll_compliance_schemas.company_id", "payroll_compliance_schemas.id"],
+            name="fk_payroll_filing_package_schema_scope",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "supersedes_package_id"],
+            ["payroll_filing_packages.company_id", "payroll_filing_packages.id"],
+            name="fk_payroll_filing_package_predecessor_scope",
+            ondelete="RESTRICT",
+        ),
         UniqueConstraint("company_id", "package_identity", name="uq_payroll_filing_package_identity"),
+        UniqueConstraint("company_id", "id", name="uq_payroll_filing_package_company_id"),
     )
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
     company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("companies.id", ondelete="RESTRICT"), nullable=False)
-    reporting_snapshot_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("payroll_reporting_snapshots.id", ondelete="RESTRICT"), nullable=False)
-    compliance_schema_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), ForeignKey("payroll_compliance_schemas.id", ondelete="RESTRICT"))
+    reporting_snapshot_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    compliance_schema_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
     reporting_digest: Mapped[str] = mapped_column(String(64), nullable=False)
     configuration_id: Mapped[str] = mapped_column(String(128), nullable=False)
     configuration_digest: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -1314,7 +1334,7 @@ class PayrollFilingPackageRecord(Base):
     package_identity: Mapped[str] = mapped_column(String(128), nullable=False)
     package_digest: Mapped[str] = mapped_column(String(64), nullable=False)
     state: Mapped[str] = mapped_column(String(32), nullable=False)
-    supersedes_package_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), ForeignKey("payroll_filing_packages.id", ondelete="RESTRICT"))
+    supersedes_package_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
     amendment_evidence_digest: Mapped[str | None] = mapped_column(String(64))
     created_by_user_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
@@ -1328,6 +1348,7 @@ class PayrollComplianceSchemaRecord(Base):
         CheckConstraint("quarter IS NULL OR quarter BETWEEN 1 AND 4", name="ck_payroll_compliance_schema_quarter"),
         CheckConstraint("effective_end IS NULL OR effective_end >= effective_start", name="ck_payroll_compliance_schema_interval"),
         UniqueConstraint("company_id", "schema_identity", name="uq_payroll_compliance_schema_identity"),
+        UniqueConstraint("company_id", "id", name="uq_payroll_compliance_schema_company_id"),
         Index("ix_payroll_compliance_schema_resolution", "company_id", "jurisdiction_reference", "package_family", "tax_year", "quarter", "lifecycle"),
     )
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
