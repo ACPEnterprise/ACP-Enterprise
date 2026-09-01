@@ -47,6 +47,7 @@ from app.invoicing.router import router as invoicing_router
 from app.jobs.router import router as jobs_router
 from app.lia.router import router as lia_router
 from app.luminary.router import router as luminary_router
+from app.operational_assets.router import router as operational_assets_router
 from app.operational_migration.product_router import router as migration_product_router
 from app.operations.router import router as operations_router
 from app.payments.router import router as payments_router
@@ -182,6 +183,7 @@ app.include_router(timekeeping_router)
 app.include_router(jobs_router)
 app.include_router(lia_router)
 app.include_router(inventory_router)
+app.include_router(operational_assets_router)
 app.include_router(purchasing_router)
 app.include_router(procurement_matching_router)
 app.include_router(operations_router)

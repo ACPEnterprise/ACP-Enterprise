@@ -2584,8 +2584,68 @@
         "tests/luminary/test_engine.py"
       ],
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "operational_assets",
+      "mechanism": "Company-scoped command identity, canonical request digest, and stable Asset identity",
+      "method": "POST",
+      "operation_id": "create_asset_api_v1_assets_post",
+      "path": "/api/v1/assets",
+      "reason": "Asset creation replay must return one identity and contradictory reuse must fail closed.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "operational_assets",
+      "mechanism": "Company-scoped command identity, canonical evidence digest, and immutable evidence row",
+      "method": "POST",
+      "operation_id": "record_evidence_api_v1_assets__asset_id__evidence_post",
+      "path": "/api/v1/assets/{asset_id}/evidence",
+      "reason": "Evidence replay cannot create duplicate inspection, maintenance, warranty, or identity facts.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "operational_assets",
+      "mechanism": "Company-scoped command identity, canonical relationship digest, and effective-period conflict checks",
+      "method": "POST",
+      "operation_id": "record_relationship_api_v1_assets__asset_id__relationships_post",
+      "path": "/api/v1/assets/{asset_id}/relationships",
+      "reason": "Custody and assignment replay must converge while incompatible active relationships fail closed.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "operational_assets",
+      "mechanism": "Company-scoped lifecycle evidence, canonical request digest, row lock, and optimistic version",
+      "method": "POST",
+      "operation_id": "change_lifecycle_api_v1_assets__asset_id__lifecycle_post",
+      "path": "/api/v1/assets/{asset_id}/lifecycle",
+      "reason": "Lifecycle replay preserves one transition and stale or contradictory commands fail closed.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "company_administration",
+      "mechanism": "Expected deterministic plan digest, canonical role identities, and transactional reconciliation",
+      "method": "POST",
+      "operation_id": "apply_canonical_role_reconciliation_api_v1_company_admin_canonical_roles_reconciliation_apply_post",
+      "path": "/api/v1/company-admin/canonical-roles/reconciliation/apply",
+      "reason": "Applying the same current canonical-role plan converges without duplicating role authority.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NON_MUTATING_READ_ONLY",
+      "domain": "workforce",
+      "mechanism": "Read-only Company and Branch scoped eligibility projection",
+      "method": "POST",
+      "operation_id": "eligibility_api_v1_workforce_eligibility_post",
+      "path": "/api/v1/workforce/eligibility",
+      "reason": "POST carries a structured eligibility query but persists no Workforce authority.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "ebff8a3c63750ee57041fc8d38e4c8df85a13b47db671ed3d38baff8fa6cc56a",
+  "fingerprint": "8f29166df8b301f6bf6d17b08d778825688e2cffd43b354573547f4a97c59b2d",
   "schema_version": "1"
 }

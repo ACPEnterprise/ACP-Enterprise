@@ -55,6 +55,7 @@ from app.invoicing import models as invoicing_models  # noqa: F401
 from app.jobs import models as job_models  # noqa: F401
 from app.luminary import models as luminary_models  # noqa: F401
 from app.operational_migration import cutover_models  # noqa: F401
+from app.operational_assets import models as operational_asset_models  # noqa: F401
 from app.operational_migration import (
     models as operational_migration_models,  # noqa: F401
 )
