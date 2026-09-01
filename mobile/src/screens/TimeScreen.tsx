@@ -1,4 +1,4 @@
-import { RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { FlatList, RefreshControl, StyleSheet, Text, View } from "react-native";
 import type { PunchAction, PunchState, TimeEntry, TimekeepingService } from "../api/timekeeping";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { colors, spacing } from "../design/tokens";
@@ -13,7 +13,7 @@ function Actions({ state, disabled, onPunch }: { state: PunchState["state"]; dis
 
 export function TimeScreen({ service, network, canPunch }: { service: TimekeepingService; network: NetworkMonitor; canPunch: boolean }) {
   const clock = useTimeclock(service, network); const stale = clock.status === "offline" || clock.status === "error";
-  return <ScrollView testID="time-scroll" style={styles.safe} contentContainerStyle={styles.body} refreshControl={<RefreshControl refreshing={clock.status === "loading" || clock.status === "recovering"} onRefresh={() => void clock.refresh()} accessibilityLabel="Refresh authoritative time status" />}>
+  return <FlatList testID="time-scroll" style={styles.safe} contentContainerStyle={styles.body} data={clock.timecard?.entries ?? []} initialNumToRender={20} maxToRenderPerBatch={20} windowSize={7} keyExtractor={(entry) => entry.revision_id} renderItem={({ item }) => <Entry entry={item} />} refreshControl={<RefreshControl refreshing={clock.status === "loading" || clock.status === "recovering"} onRefresh={() => void clock.refresh()} accessibilityLabel="Refresh authoritative time status" />} ListHeaderComponent={<>
     <Text accessibilityRole="header" style={styles.title}>My Time</Text>
     {clock.message && <Text accessibilityRole="alert" style={styles.message}>{clock.message}</Text>}
     {!clock.punchState && clock.status === "loading" && <Text accessibilityLabel="Loading authoritative time status">Loading time status…</Text>}
@@ -23,7 +23,6 @@ export function TimeScreen({ service, network, canPunch }: { service: Timekeepin
     <Text accessibilityRole="header" style={styles.sectionTitle}>Current period</Text>
     {clock.timecard?.pay_period && <Text>{clock.timecard.pay_period.period_start} through {clock.timecard.pay_period.period_end} · {clock.timecard.pay_period.timezone}</Text>}
     {clock.timecard?.entries.length === 0 && <Text>No authoritative time entries are available for this period.</Text>}
-    {clock.timecard?.entries.map((entry) => <Entry key={entry.revision_id} entry={entry} />)}
-  </ScrollView>;
+  </>} />;
 }
 const styles = StyleSheet.create({ safe: { flex: 1, backgroundColor: colors.canvas }, body: { padding: spacing.lg, gap: spacing.md }, title: { fontSize: 30, fontWeight: "800", color: colors.text }, sectionTitle: { fontSize: 22, fontWeight: "700", color: colors.text, marginTop: spacing.md }, status: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 14, padding: spacing.lg, gap: spacing.sm }, kicker: { fontSize: 13, fontWeight: "700", color: colors.muted }, state: { fontSize: 28, fontWeight: "800", color: colors.text }, message: { fontSize: 16, color: colors.text }, actions: { gap: spacing.md }, entry: { backgroundColor: colors.surface, borderRadius: 12, padding: spacing.md, gap: spacing.xs, borderLeftWidth: 5, borderLeftColor: colors.brand }, entryTitle: { fontSize: 18, fontWeight: "700", color: colors.text } });
