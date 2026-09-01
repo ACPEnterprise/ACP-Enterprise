@@ -5,7 +5,6 @@ from datetime import date
 from pathlib import Path
 
 import pytest
-
 from app.qbo_source.control_report_registration import (
     RegisterControlReport,
     register_control_report,
@@ -96,3 +95,26 @@ def test_replay_is_idempotent_and_conflict_fails(tmp_path: Path) -> None:
     source.chmod(0o600)
     with pytest.raises(EvidenceStoreError, match="immutable_content_conflict"):
         register_control_report(**kwargs)
+
+
+def test_registers_audit_log_csv_without_disclosing_content(tmp_path: Path) -> None:
+    repository = tmp_path / "repository"
+    repository.mkdir()
+    source = tmp_path / "audit-log.csv"
+    source.write_text("Date Changed,User,Event\nFeb 19 2024,System,Import\n")
+    source.chmod(0o600)
+    result = register_control_report(
+        command=RegisterControlReport(
+            source_file=source,
+            control_id="qbo-current-environment-audit-log-v1",
+            kind=ControlReportKind.AUDIT_LOG,
+            basis="operational",
+            start_date=date(2024, 2, 19),
+            end_date=date(2024, 3, 1),
+        ),
+        evidence_root=tmp_path / "protected",
+        repository_root=repository,
+    )
+    assert result["kind"] == "audit_log"
+    assert result["source_mutated"] is False
+    assert tuple((tmp_path / "protected/controls/raw").glob("*.csv"))

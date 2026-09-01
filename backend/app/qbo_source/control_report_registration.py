@@ -38,6 +38,11 @@ def register_control_report(
     evidence_root: Path,
     repository_root: Path,
 ) -> dict[str, object]:
+    if command.kind is ControlReportKind.AUDIT_LOG:
+        if command.basis != "operational":
+            raise EvidenceStoreError("audit_control_basis_invalid")
+    elif command.basis not in {"cash", "accrual"}:
+        raise EvidenceStoreError("control_basis_invalid")
     source = command.source_file.expanduser()
     if source.is_symlink() or not source.is_file():
         raise EvidenceStoreError("control_source_must_be_regular_file")
@@ -52,10 +57,15 @@ def register_control_report(
         raise EvidenceStoreError("control_source_permissions_too_open")
     if source_stat.st_size < 1 or source_stat.st_size > MAX_CONTROL_BYTES:
         raise EvidenceStoreError("control_source_size_invalid")
-    if resolved.suffix.lower() != ".xlsx":
+    suffix = resolved.suffix.lower()
+    expected_suffix = ".csv" if command.kind is ControlReportKind.AUDIT_LOG else ".xlsx"
+    if suffix != expected_suffix:
         raise EvidenceStoreError("control_source_format_invalid")
     with resolved.open("rb") as source_handle:
-        if source_handle.read(4) != b"PK\x03\x04":
+        prefix = source_handle.read(4)
+        if expected_suffix == ".xlsx" and prefix != b"PK\x03\x04":
+            raise EvidenceStoreError("control_source_format_invalid")
+        if expected_suffix == ".csv" and b"\x00" in prefix:
             raise EvidenceStoreError("control_source_format_invalid")
         source_handle.seek(0)
         content = source_handle.read()
@@ -67,7 +77,7 @@ def register_control_report(
     raw_root = store.root / "controls" / "raw"
     raw_root.mkdir(mode=0o700, exist_ok=True)
     os.chmod(raw_root, 0o700)
-    target = raw_root / f"{digest}.xlsx"
+    target = raw_root / f"{digest}{expected_suffix}"
     store._store_named_immutable(target, content)
     registration_digest = ControlEvidenceRegistry(store).register(
         ControlEvidenceRegistration(
@@ -75,7 +85,7 @@ def register_control_report(
             kind=command.kind,
             raw_sha256=digest,
             byte_size=len(content),
-            storage_reference=f"evidence://controls/raw/{digest}.xlsx",
+            storage_reference=f"evidence://controls/raw/{digest}{expected_suffix}",
             report_end_date=command.end_date,
             accounting_basis=command.basis,
             generated_at=None,
@@ -110,7 +120,9 @@ def main() -> None:
     parser.add_argument("--repository-root", required=True, type=Path)
     parser.add_argument("--control-id", required=True)
     parser.add_argument("--kind", required=True, choices=tuple(ControlReportKind))
-    parser.add_argument("--basis", required=True, choices=("cash", "accrual"))
+    parser.add_argument(
+        "--basis", required=True, choices=("cash", "accrual", "operational")
+    )
     parser.add_argument("--start-date", required=True, type=date.fromisoformat)
     parser.add_argument("--end-date", required=True, type=date.fromisoformat)
     args = parser.parse_args()
