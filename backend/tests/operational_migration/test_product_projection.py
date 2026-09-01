@@ -111,6 +111,7 @@ def test_owner_decisions_history_and_opening_gate_remain_visible() -> None:
         result["accounting_admission"]["historical_window_decision"]
         == "resolved_full_available_history"
     )
+    assert result["accounting_admission"]["historical_reporting_basis"] == "cash"
     assert result["run_history"][0]["run_id"] == HCP_MASTER_ID
     assert result["run_history"][0]["replay"] == "verified"
     assert result["run_history"][0]["exceptions"] == sum(

@@ -187,6 +187,28 @@ def test_control_registry_supports_account_and_inventory_controls() -> None:
     )
 
 
+def test_control_registry_accepts_cash_and_operational_basis(tmp_path: Path) -> None:
+    repository = tmp_path / "repository"
+    repository.mkdir()
+    store = evidence_store(tmp_path / "protected", repository)
+    registry = ControlEvidenceRegistry(store)
+    for basis in ("Cash", "operational"):
+        digest = registry.register(
+            ControlEvidenceRegistration(
+                control_id=f"control-{basis.lower()}",
+                kind=ControlReportKind.BALANCE_SHEET,
+                raw_sha256="a" * 64,
+                byte_size=1,
+                storage_reference=f"evidence://controls/{basis.lower()}",
+                report_end_date=date(2026, 8, 31),
+                accounting_basis=basis,
+                generated_at=None,
+                safe_report_parameters={"end_date": "2026-08-31"},
+            )
+        )
+        assert len(digest) == 64
+
+
 @pytest.mark.asyncio
 async def test_completed_run_replay_does_not_reacquire(tmp_path: Path) -> None:
     class Provider:

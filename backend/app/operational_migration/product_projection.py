@@ -297,12 +297,16 @@ def build_migration_product_projection(
         ),
         "accounting_admission": {
             "state": "control_evidence_required",
+            "historical_reporting_basis": "cash",
+            "operational_obligation_basis": "source_obligation_not_reporting_basis",
+            "economics_basis": "accepted_economic_evidence",
             "historical_window_decision": "resolved_full_available_history",
             "chart_of_accounts": "owner_finance_review_required",
             "ar": "control_report_required",
             "ap": "control_report_required",
             "cash_bank": "control_report_required",
             "post_cutoff_invoice_correction": "owner_finance_decision_required",
+            "opening_boundary": "ledger_first_activity_control_required",
         },
         "decision_packets": decision_packets,
         "freeze_authority": {
