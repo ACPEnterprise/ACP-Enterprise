@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Protocol
 
 from .contracts import QboSourceEnvelope, SnapshotIdentity, _json_domain
-from .intuit import PageEvidence, PageObserver
+from .intuit import CatalogDispositionEvidence, PageEvidence, PageObserver
 
 
 class EvidenceStoreError(RuntimeError):
@@ -178,6 +178,7 @@ class ProtectedFilesystemEvidenceStore(EvidenceStore):
             "failure_code": None,
             "entities": {},
             "pages": [],
+            "catalog_dispositions": [],
         }
         self._replace_json(state_path, state)
         return AcquisitionRun(
@@ -268,6 +269,26 @@ class ProtectedFilesystemEvidenceStore(EvidenceStore):
             pages.append(record)
         self._replace_json(state_path, state)
 
+    def record_catalog_disposition(
+        self, *, run_id: str, evidence: CatalogDispositionEvidence
+    ) -> None:
+        state_path = self._state_path(run_id)
+        state = self._read_json(state_path)
+        if state["state"] != RunState.IN_PROGRESS.value:
+            raise EvidenceStoreError("run_not_writable")
+        dispositions = state.get("catalog_dispositions")
+        if not isinstance(dispositions, list):
+            raise EvidenceStoreError("run_state_invalid")
+        record = asdict(evidence)
+        matching = [
+            item for item in dispositions if item.get("entity_kind") == evidence.entity_kind
+        ]
+        if matching and matching[0] != record:
+            raise EvidenceStoreError("catalog_disposition_conflict")
+        if not matching:
+            dispositions.append(record)
+        self._replace_json(state_path, state)
+
     def finish_run(
         self,
         *,
@@ -292,8 +313,10 @@ class ProtectedFilesystemEvidenceStore(EvidenceStore):
         )
         entities = document.pop("entities")
         pages = document.pop("pages")
+        catalog_dispositions = document.pop("catalog_dispositions", [])
         assert isinstance(entities, dict)
         assert isinstance(pages, list)
+        assert isinstance(catalog_dispositions, list)
         entity_records = sorted(
             entities.values(), key=lambda row: (row["entity_kind"], row["native_id"])
         )
@@ -314,6 +337,9 @@ class ProtectedFilesystemEvidenceStore(EvidenceStore):
             "entity_counts": dict(sorted(counts.items())),
             "entities": entity_records,
             "pages": page_records,
+            "catalog_dispositions": sorted(
+                catalog_dispositions, key=lambda row: row["entity_kind"]
+            ),
         }
         manifest_bytes = _canonical_json(manifest)
         self._store_named_immutable(
@@ -379,6 +405,11 @@ class RunPageObserver(PageObserver):
 
     async def record_page(self, evidence: PageEvidence, raw_body: bytes) -> None:
         self.store.record_page(run_id=self.run_id, evidence=evidence, raw_body=raw_body)
+
+    async def record_catalog_disposition(
+        self, evidence: CatalogDispositionEvidence
+    ) -> None:
+        self.store.record_catalog_disposition(run_id=self.run_id, evidence=evidence)
 
 
 class ControlReportKind(str, Enum):

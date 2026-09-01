@@ -20,7 +20,12 @@ from .intuit import (
     RealmBinding,
     SerializedTokenManager,
 )
-from .runner import AcquisitionResult, AcquisitionRunner
+from .runner import (
+    CATALOG_VERSION,
+    OPTIONAL_PROVIDER_DEPENDENT,
+    AcquisitionResult,
+    AcquisitionRunner,
+)
 from .runtime import (
     ProtectedSandboxCompanyBinding,
     SandboxConnectionRegistry,
@@ -87,6 +92,10 @@ async def execute_production_acquisition(
         ),
         transport=transport,
         page_observer=RunPageObserver(store=store, run_id=command.run_id),
+        optional_provider_dependent=frozenset(
+            EntityKind(value) for value in OPTIONAL_PROVIDER_DEPENDENT
+        ),
+        catalog_version=CATALOG_VERSION,
     )
     snapshot = SnapshotIdentity(
         snapshot_id=command.run_id,
