@@ -2,13 +2,14 @@ from datetime import date
 from uuid import uuid4
 
 import pytest
-from fastapi import HTTPException
-
 from app.business_economics.router import (
+    CashOperationalEconomicsService,
     EconomicsWorkspaceService,
+    cash_operational_economics,
     economics_result,
     economics_workspace,
 )
+from fastapi import HTTPException
 
 
 @pytest.mark.asyncio
@@ -32,6 +33,17 @@ async def test_economics_errors_do_not_reflect_protected_details(
     assert response.status_code == 422
     assert response.detail["recovery"] == "USER_CORRECTION_REQUIRED"
     assert protected not in str(response.detail)
+
+    monkeypatch.setattr(CashOperationalEconomicsService, "overview", invalid)
+    with pytest.raises(HTTPException) as captured:
+        await cash_operational_economics(
+            session=object(),
+            context=object(),
+            start=date(2026, 8, 1),
+            end=date(2026, 8, 31),
+        )
+    assert captured.value.status_code == 422
+    assert protected not in str(captured.value.detail)
 
     async def missing(*_args, **_kwargs):
         raise LookupError(protected)

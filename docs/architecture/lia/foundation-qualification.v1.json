@@ -11,9 +11,9 @@
   "autonomous_mutation_enabled": false,
   "production_touched": false,
   "fingerprint_algorithm": "sha256(sorted path=sha256(file) lines with LF)",
-  "qualification_fingerprint": "9d48ad16b7a0f664bce36d38cbdb0734fc23de724ae0e9aade67b61a9dfe6214",
+  "qualification_fingerprint": "06f0f2f17626fb42ba28bf9c2096019e9c8fb33b2b944c96e0dc204f92ea1068",
   "inputs": {
-    "backend/app/lia/adapters.py": "df1e439f5b9b0b578e68543d7bbb044d2f48a59f138394046820ec5546a5f25e",
+    "backend/app/lia/adapters.py": "a923aa1a492b5b8a5e0aeaca9853d1733514521ca73b9970d3e32b1e842bfb9b",
     "backend/app/lia/evaluation.py": "f06adc789b3cd610a9a26195b04e52d8fbbf1c576bd13b77f0c3b90252d18a41",
     "backend/app/lia/foundation.py": "b5366bcb8b819ae573ec88997f10d0677b75600d95eff4226ca68e6d9ec4e902",
     "backend/app/lia/safety.py": "9b41b550577a964409023926f76c786b567d91ad88b6db7be2f1e701b03fbdd0",

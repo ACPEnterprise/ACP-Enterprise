@@ -1,45 +1,817 @@
 import { useMemo, useState } from "react";
 import { useHasPermission } from "../auth";
-import type { EconomicsJob, EconomicsRollup, OwnerQuestion, QualityState } from "../api/businessEconomics";
-import { useEconomicsResult, useEconomicsWorkspace, useOwnerIntelligence } from "../hooks/useBusinessEconomics";
-import { Alert, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, Select, Spinner } from "../ui";
+import type {
+  EconomicsJob,
+  EconomicsRollup,
+  OwnerQuestion,
+  QualityState,
+} from "../api/businessEconomics";
+import {
+  useCashOperationalEconomics,
+  useEconomicsResult,
+  useEconomicsWorkspace,
+  useOwnerIntelligence,
+} from "../hooks/useBusinessEconomics";
+import {
+  Alert,
+  Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  Input,
+  Select,
+  Spinner,
+} from "../ui";
 
 const today = new Date().toISOString().slice(0, 10);
 const monthStart = `${today.slice(0, 7)}-01`;
-const money = (minor: number | null | undefined, currency = "USD") => minor == null ? "Unavailable" : new Intl.NumberFormat(undefined, { style: "currency", currency }).format(minor / 100);
+const money = (minor: number | null | undefined, currency = "USD") =>
+  minor == null
+    ? "Unavailable"
+    : new Intl.NumberFormat(undefined, { style: "currency", currency }).format(
+        minor / 100,
+      );
 const qualityLabel = (value: string) => value.replaceAll("_", " ");
-const qualityTone = (value: QualityState) => value === "complete" ? "text-status-success" : value === "unavailable" || value === "conflicting" ? "text-status-danger" : "text-status-warning";
+const qualityTone = (value: QualityState) =>
+  value === "complete"
+    ? "text-status-success"
+    : value === "unavailable" || value === "conflicting"
+      ? "text-status-danger"
+      : "text-status-warning";
 
-function RollupTable({ title, rows, currency }: { title: string; rows: EconomicsRollup[]; currency: string }) {
-  return <Card><CardHeader><CardTitle>{title}</CardTitle><CardDescription>Admitted complete Jobs reconcile to these totals; incomplete Jobs remain counted.</CardDescription></CardHeader><CardContent>{rows.length ? <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="text-left"><th>Group</th><th>Jobs</th><th>Revenue</th><th>Contribution</th><th>Evidence</th></tr></thead><tbody>{rows.map((row) => <tr className="border-b border-stroke" key={row.label}><td className="py-3 font-medium">{row.label}</td><td>{row.complete_jobs}/{row.jobs}</td><td>{money(row.revenue_minor, currency)}</td><td className={row.contribution_minor < 0 ? "text-status-danger" : ""}>{money(row.contribution_minor, currency)}</td><td className={`capitalize ${qualityTone(row.quality_state)}`}>{qualityLabel(row.quality_state)}</td></tr>)}</tbody></table></div> : <p className="text-content-muted">No classified admitted Jobs for this view.</p>}</CardContent></Card>;
+function RollupTable({
+  title,
+  rows,
+  currency,
+}: {
+  title: string;
+  rows: EconomicsRollup[];
+  currency: string;
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{title}</CardTitle>
+        <CardDescription>
+          Admitted complete Jobs reconcile to these totals; incomplete Jobs
+          remain counted.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {rows.length ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left">
+                  <th>Group</th>
+                  <th>Jobs</th>
+                  <th>Revenue</th>
+                  <th>Contribution</th>
+                  <th>Evidence</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => (
+                  <tr className="border-b border-stroke" key={row.label}>
+                    <td className="py-3 font-medium">{row.label}</td>
+                    <td>
+                      {row.complete_jobs}/{row.jobs}
+                    </td>
+                    <td>{money(row.revenue_minor, currency)}</td>
+                    <td
+                      className={
+                        row.contribution_minor < 0 ? "text-status-danger" : ""
+                      }
+                    >
+                      {money(row.contribution_minor, currency)}
+                    </td>
+                    <td
+                      className={`capitalize ${qualityTone(row.quality_state)}`}
+                    >
+                      {qualityLabel(row.quality_state)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="text-content-muted">
+            No classified admitted Jobs for this view.
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  );
 }
 
-function JobTable({ jobs, currency, onSelect }: { jobs: EconomicsJob[]; currency: string; onSelect: (id: string) => void }) {
-  return <Card><CardHeader><CardTitle>Where are we making—or losing—money?</CardTitle><CardDescription>Job contribution uses economic recognition evidence, not cash collection. Select a Job to inspect why.</CardDescription></CardHeader><CardContent>{jobs.length ? <div className="overflow-x-auto"><table className="w-full min-w-[760px] text-sm"><thead><tr className="text-left"><th>Job</th><th>Customer</th><th>Service</th><th>Revenue</th><th>Labor</th><th>Materials</th><th>Contribution</th><th>Confidence</th></tr></thead><tbody>{jobs.map((job) => <tr className="border-b border-stroke" key={job.result_id}><td className="py-3"><Button variant="ghost" onClick={() => onSelect(job.result_id)}>{job.job_number}</Button><div className="text-xs capitalize text-content-muted">{qualityLabel(job.job_status)}</div></td><td>{job.customer_name}</td><td>{job.service_category ?? "Unclassified"}</td><td>{money(job.revenue_minor, currency)}</td><td>{money(job.labor_minor, currency)}</td><td>{money(job.materials_minor, currency)}</td><td className={job.contribution_minor != null && job.contribution_minor < 0 ? "font-semibold text-status-danger" : "font-semibold"}>{money(job.contribution_minor, currency)}</td><td><span className={`capitalize ${qualityTone(job.quality_state)}`}>{qualityLabel(job.quality_state)}</span><div>{job.confidence_percent}%</div></td></tr>)}</tbody></table></div> : <p className="text-content-muted">No admitted Job profitability exists for this period.</p>}</CardContent></Card>;
+function JobTable({
+  jobs,
+  currency,
+  onSelect,
+}: {
+  jobs: EconomicsJob[];
+  currency: string;
+  onSelect: (id: string) => void;
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Where are we making—or losing—money?</CardTitle>
+        <CardDescription>
+          Job contribution uses economic recognition evidence, not cash
+          collection. Select a Job to inspect why.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {jobs.length ? (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[760px] text-sm">
+              <thead>
+                <tr className="text-left">
+                  <th>Job</th>
+                  <th>Customer</th>
+                  <th>Service</th>
+                  <th>Revenue</th>
+                  <th>Labor</th>
+                  <th>Materials</th>
+                  <th>Contribution</th>
+                  <th>Confidence</th>
+                </tr>
+              </thead>
+              <tbody>
+                {jobs.map((job) => (
+                  <tr className="border-b border-stroke" key={job.result_id}>
+                    <td className="py-3">
+                      <Button
+                        variant="ghost"
+                        onClick={() => onSelect(job.result_id)}
+                      >
+                        {job.job_number}
+                      </Button>
+                      <div className="text-xs capitalize text-content-muted">
+                        {qualityLabel(job.job_status)}
+                      </div>
+                    </td>
+                    <td>{job.customer_name}</td>
+                    <td>{job.service_category ?? "Unclassified"}</td>
+                    <td>{money(job.revenue_minor, currency)}</td>
+                    <td>{money(job.labor_minor, currency)}</td>
+                    <td>{money(job.materials_minor, currency)}</td>
+                    <td
+                      className={
+                        job.contribution_minor != null &&
+                        job.contribution_minor < 0
+                          ? "font-semibold text-status-danger"
+                          : "font-semibold"
+                      }
+                    >
+                      {money(job.contribution_minor, currency)}
+                    </td>
+                    <td>
+                      <span
+                        className={`capitalize ${qualityTone(job.quality_state)}`}
+                      >
+                        {qualityLabel(job.quality_state)}
+                      </span>
+                      <div>{job.confidence_percent}%</div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="text-content-muted">
+            No admitted Job profitability exists for this period.
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  );
 }
 
 export function BusinessEconomicsRoute() {
   const canRead = useHasPermission("COMPANY_ECONOMICS_MEASUREMENT_READ");
-  const [start, setStart] = useState(monthStart); const [end, setEnd] = useState(today);
-  const [scope, setScope] = useState({ start: monthStart, end: today }); const [selected, setSelected] = useState<string | null>(null);
+  const canReadInvoices = useHasPermission("COMPANY_INVOICE_READ");
+  const canReadPayments = useHasPermission("COMPANY_PAYMENT_READ");
+  const canReadPayables = useHasPermission(
+    "COMPANY_ACCOUNTS_PAYABLE_REPORT_READ",
+  );
+  const canReadAccounting = useHasPermission("COMPANY_ACCOUNTING_REPORT_READ");
+  const canReadCashOperational =
+    canRead &&
+    canReadInvoices &&
+    canReadPayments &&
+    canReadPayables &&
+    canReadAccounting;
+  const [start, setStart] = useState(monthStart);
+  const [end, setEnd] = useState(today);
+  const [scope, setScope] = useState({ start: monthStart, end: today });
+  const [selected, setSelected] = useState<string | null>(null);
   const [question, setQuestion] = useState<OwnerQuestion>("what_changed");
-  const workspace = useEconomicsWorkspace(scope.start, scope.end, canRead); const detail = useEconomicsResult(selected, canRead);
-  const intelligence = useOwnerIntelligence(question, scope.start, scope.end, canRead);
-  const sortedLosses = useMemo(() => workspace.data?.jobs.filter((job) => job.contribution_minor != null && job.contribution_minor < 0) ?? [], [workspace.data]);
-  if (!canRead) return <Alert variant="danger">You are not authorized to view Business Economics.</Alert>;
-  if (workspace.isPending) return <Spinner label="Loading Business Economics" />;
-  if (workspace.isError || !workspace.data) return <Alert variant="danger" title="Economics temporarily unavailable"><div className="space-y-3"><p>Accepted profitability evidence could not be loaded. No value was inferred.</p><Button onClick={() => void workspace.refetch()} type="button" variant="secondary">Retry Economics</Button></div></Alert>;
-  const value = workspace.data; const currency = value.currency ?? "USD"; const directCost = value.totals ? value.totals.labor + value.totals.materials + value.totals.equipment + value.totals.truck : null;
-  return <div className="mx-auto max-w-7xl space-y-6 pb-12"><header><p className="text-sm font-semibold text-action-primary">Owner Intelligence</p><h1 className="mt-1 text-2xl font-bold sm:text-3xl">Business Economics</h1><p className="mt-2 max-w-3xl text-content-muted">Authoritative profitability from admitted Jobs, revenue, labor, materials, and approved allocation evidence—with missing evidence kept visible.</p></header>
-    <Card><CardContent className="pt-6"><form className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]" onSubmit={(event) => { event.preventDefault(); setScope({ start, end }); setSelected(null); }}><Input aria-label="Start date" type="date" value={start} onChange={(event) => setStart(event.target.value)} /><Input aria-label="End date" type="date" value={end} onChange={(event) => setEnd(event.target.value)} /><Button type="submit">Compare period</Button></form></CardContent></Card>
-    <Alert variant={value.quality_state === "complete" ? "success" : value.quality_state === "unavailable" || value.quality_state === "conflicting" ? "danger" : "warning"} title={`Evidence ${qualityLabel(value.quality_state)}`}>{value.explanation} {value.fully_allocated_available ? "Fully allocated profitability is available." : "Fully allocated profitability is unavailable until an approved indirect-cost policy is configured."}</Alert>
-    <section aria-label="How are we doing?" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"><Card><CardHeader><CardTitle>Revenue</CardTitle><CardDescription>Economically recognized</CardDescription></CardHeader><CardContent className="text-2xl font-bold">{money(value.totals?.revenue, currency)}</CardContent></Card><Card><CardHeader><CardTitle>Direct cost</CardTitle><CardDescription>Labor, material, equipment, truck</CardDescription></CardHeader><CardContent className="text-2xl font-bold">{money(directCost, currency)}</CardContent></Card><Card><CardHeader><CardTitle>Contribution</CardTitle><CardDescription>Before unavailable indirect allocation</CardDescription></CardHeader><CardContent className={`text-2xl font-bold ${(value.totals?.gross_profit ?? 0) < 0 ? "text-status-danger" : ""}`}>{money(value.totals?.gross_profit, currency)}</CardContent></Card><Card><CardHeader><CardTitle>Evidence coverage</CardTitle><CardDescription>Complete admitted Jobs</CardDescription></CardHeader><CardContent className="text-2xl font-bold">{value.complete_job_count}/{value.job_count}</CardContent></Card></section>
-    <Card><CardHeader><CardTitle>What changed?</CardTitle><CardDescription>{value.prior_period.start} through {value.prior_period.end}</CardDescription></CardHeader><CardContent>{value.comparison.state === "available" ? <div className="grid gap-3 sm:grid-cols-4"><p>Revenue <strong className="block">{money(value.comparison.revenue_change_minor, currency)}</strong></p><p>Contribution <strong className="block">{money(value.comparison.contribution_change_minor, currency)}</strong></p><p>Labor <strong className="block">{money(value.comparison.labor_change_minor, currency)}</strong></p><p>Materials <strong className="block">{money(value.comparison.materials_change_minor, currency)}</strong></p><p className="sm:col-span-4 text-sm text-content-muted">{value.comparison.explanation}</p></div> : <p className="text-content-muted">{value.comparison.reason}</p>}</CardContent></Card>
-    <Card><CardHeader><CardTitle>Owner question library</CardTitle><CardDescription>Deterministic, read-only answers over admitted Economics evidence. This is not generative AI.</CardDescription></CardHeader><CardContent className="space-y-4"><Select aria-label="Owner question" value={question} onChange={(event) => setQuestion(event.target.value as OwnerQuestion)}><option value="what_changed">What changed?</option><option value="least_profitable_jobs">Which Jobs contributed least?</option><option value="most_profitable_jobs">Which Jobs contributed most?</option><option value="service_contribution">Which services contributed most?</option><option value="branch_contribution">How do Branches compare?</option><option value="labor_cost_movement">Where are labor costs moving?</option><option value="material_cost_movement">Where are material costs moving?</option><option value="full_profitability_blockers">What prevents full profitability?</option><option value="owner_decisions_required">What needs my decision?</option><option value="inspect_first">What should I inspect first?</option><option value="incomplete_measurements">Which measurements are incomplete?</option><option value="margin_leakage">Which findings indicate possible margin leakage?</option></Select>{intelligence.isPending ? <Spinner label="Preparing owner evidence" /> : intelligence.isError || !intelligence.data ? <Alert variant="danger">Owner evidence could not be verified.</Alert> : <div className="space-y-3"><p><strong>Classification:</strong> {intelligence.data.context_packet.classification} · <strong>Completeness:</strong> {qualityLabel(intelligence.data.context_packet.completeness)}</p>{intelligence.data.context_packet.limitations.length ? <Alert variant="warning">{intelligence.data.context_packet.limitations.map(qualityLabel).join("; ")}</Alert> : <Alert variant="success">No evidence limitation is present for this answer.</Alert>}<p className="text-sm text-content-muted">{intelligence.data.answer.kind.replaceAll("_", " ")} · {intelligence.data.context_packet.source_references.length} citable Economics result(s) · read-only</p><p className="break-all text-xs text-content-muted">Evidence digest {intelligence.data.context_packet.evidence_digest}</p></div>}</CardContent></Card>
-    <JobTable jobs={value.jobs} currency={currency} onSelect={setSelected} />
-    {sortedLosses.length ? <Alert variant="warning" title={`${sortedLosses.length} admitted Job(s) have negative contribution`}>This is an observed economic condition, not a causal diagnosis. Open each Job for evidence lineage.</Alert> : null}
-    <section className="grid gap-4 xl:grid-cols-3"><RollupTable title="Service/category profitability" rows={value.service_categories} currency={currency}/><RollupTable title="Customer profitability" rows={value.customers} currency={currency}/><RollupTable title="Branch profitability" rows={value.branches} currency={currency}/></section>
-    <section className="grid gap-4 lg:grid-cols-2"><Card><CardHeader><CardTitle>Allocation readiness</CardTitle><CardDescription>Configuration status only. ACP never substitutes zero overhead or a default driver.</CardDescription></CardHeader><CardContent><dl className="grid gap-2 text-sm"><div className="flex justify-between"><dt>Evidence</dt><dd className="capitalize">{qualityLabel(value.readiness.evidence)}</dd></div><div className="flex justify-between"><dt>Cost-pool policy</dt><dd className="capitalize">{qualityLabel(value.readiness.allocation_authority.pool_policy)}</dd></div><div className="flex justify-between"><dt>Allocation-basis policy</dt><dd className="capitalize">{qualityLabel(value.readiness.allocation_authority.basis_policy)}</dd></div><div className="flex justify-between"><dt>Source evidence</dt><dd className="capitalize">{qualityLabel(value.readiness.allocation_authority.source_evidence)}</dd></div><div className="flex justify-between"><dt>Job attribution</dt><dd className="capitalize">{qualityLabel(value.readiness.attribution)}</dd></div></dl>{value.readiness.allocation_authority.owner_decision ? <Alert className="mt-4" variant="warning" title="Policy required">{value.readiness.allocation_authority.owner_decision}</Alert> : null}<p className="mt-3 text-xs text-content-muted">Supported evidence bases: {value.readiness.allocation_authority.supported_basis_types.map(qualityLabel).join(", ")}. Callback/warranty allocation remains {qualityLabel(value.readiness.allocation_authority.callback_economics)} until authoritative Job/Asset relationship evidence exists.</p>{value.readiness.policy_gaps.map((gap) => <p className="mt-3 text-sm" key={gap.gap_key}><strong>{qualityLabel(gap.gap_key)}:</strong> {gap.requirement}</p>)}</CardContent></Card><Card><CardHeader><CardTitle>Beacon-ready conditions</CardTitle><CardDescription>Safe findings only; Economics creates no workflow mutation.</CardDescription></CardHeader><CardContent>{value.beacon_conditions.length ? <ul className="list-disc space-y-2 pl-5">{value.beacon_conditions.map((condition) => <li key={condition.kind}>{qualityLabel(condition.kind)} · {condition.state}</li>)}</ul> : <p className="text-content-muted">No deterministic condition is present for this scope.</p>}</CardContent></Card></section>
-    {selected ? <Card><CardHeader><CardTitle>Why does this number exist?</CardTitle><CardDescription>Accepted calculation, evidence, confidence, limitation, and digest lineage.</CardDescription></CardHeader><CardContent>{detail.isPending ? <Spinner label="Loading explanation"/> : detail.isError || !detail.data ? <Alert variant="danger">The result explanation could not be verified.</Alert> : <div className="space-y-4">{detail.data.authority_state === "historical" ? <Alert variant="warning">This is immutable historical evidence. A successor is current.</Alert> : <Alert variant="success">This is the current immutable result.</Alert>}<p>{detail.data.explanation?.answer ?? "Legacy result detail is unavailable; no explanation was fabricated."}</p>{Object.entries(detail.data.components ?? {}).map(([name, component]) => <section className="border-t border-stroke pt-3" key={name}><h3 className="font-semibold capitalize">{qualityLabel(name)} · {money(component.amount_minor, detail.data!.currency)}</h3><p className="text-sm text-content-muted">{component.explanation}</p><p className="mt-1 text-xs">{component.evidence.length} source record(s) · {component.confidence_percent}% confidence</p></section>)}<div className="flex flex-wrap gap-2">{detail.data.lineage.predecessor_result_id ? <Button variant="secondary" onClick={() => setSelected(detail.data!.lineage.predecessor_result_id)}>View prior result</Button> : null}{detail.data.lineage.successor_result_id ? <Button variant="secondary" onClick={() => setSelected(detail.data!.lineage.successor_result_id)}>View current successor</Button> : null}</div><p className="break-all text-xs text-content-muted">Result digest {detail.data.lineage.result_digest}</p></div>}</CardContent></Card> : null}
-  </div>;
+  const workspace = useEconomicsWorkspace(scope.start, scope.end, canRead);
+  const detail = useEconomicsResult(selected, canRead);
+  const cashOperational = useCashOperationalEconomics(
+    scope.start,
+    scope.end,
+    canReadCashOperational,
+  );
+  const intelligence = useOwnerIntelligence(
+    question,
+    scope.start,
+    scope.end,
+    canRead,
+  );
+  const sortedLosses = useMemo(
+    () =>
+      workspace.data?.jobs.filter(
+        (job) => job.contribution_minor != null && job.contribution_minor < 0,
+      ) ?? [],
+    [workspace.data],
+  );
+  if (!canRead)
+    return (
+      <Alert variant="danger">
+        You are not authorized to view Business Economics.
+      </Alert>
+    );
+  if (workspace.isPending)
+    return <Spinner label="Loading Business Economics" />;
+  if (workspace.isError || !workspace.data)
+    return (
+      <Alert variant="danger" title="Economics temporarily unavailable">
+        <div className="space-y-3">
+          <p>
+            Accepted profitability evidence could not be loaded. No value was
+            inferred.
+          </p>
+          <Button
+            onClick={() => void workspace.refetch()}
+            type="button"
+            variant="secondary"
+          >
+            Retry Economics
+          </Button>
+        </div>
+      </Alert>
+    );
+  const value = workspace.data;
+  const currency = value.currency ?? "USD";
+  const directCost = value.totals
+    ? value.totals.labor +
+      value.totals.materials +
+      value.totals.equipment +
+      value.totals.truck
+    : null;
+  return (
+    <div className="mx-auto max-w-7xl space-y-6 pb-12">
+      <header>
+        <p className="text-sm font-semibold text-action-primary">
+          Owner Intelligence
+        </p>
+        <h1 className="mt-1 text-2xl font-bold sm:text-3xl">
+          Business Economics
+        </h1>
+        <p className="mt-2 max-w-3xl text-content-muted">
+          Authoritative profitability from admitted Jobs, revenue, labor,
+          materials, and approved allocation evidence—with missing evidence kept
+          visible.
+        </p>
+      </header>
+      <Card>
+        <CardContent className="pt-6">
+          <form
+            className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]"
+            onSubmit={(event) => {
+              event.preventDefault();
+              setScope({ start, end });
+              setSelected(null);
+            }}
+          >
+            <Input
+              aria-label="Start date"
+              type="date"
+              value={start}
+              onChange={(event) => setStart(event.target.value)}
+            />
+            <Input
+              aria-label="End date"
+              type="date"
+              value={end}
+              onChange={(event) => setEnd(event.target.value)}
+            />
+            <Button type="submit">Compare period</Button>
+          </form>
+        </CardContent>
+      </Card>
+      <Alert
+        variant={
+          value.quality_state === "complete"
+            ? "success"
+            : value.quality_state === "unavailable" ||
+                value.quality_state === "conflicting"
+              ? "danger"
+              : "warning"
+        }
+        title={`Evidence ${qualityLabel(value.quality_state)}`}
+      >
+        {value.explanation}{" "}
+        {value.fully_allocated_available
+          ? "Fully allocated profitability is available."
+          : "Fully allocated profitability is unavailable until an approved indirect-cost policy is configured."}
+      </Alert>
+      <section
+        aria-label="Work, obligations, and cash are separate"
+        className="space-y-3"
+      >
+        <div>
+          <h2 className="text-xl font-semibold">
+            Three related truths—kept separate
+          </h2>
+          <p className="text-sm text-content-muted">
+            Work can be profitable before a Customer pays. An Invoice, payment
+            receipt, settlement, or deposit does not automatically become
+            cash-basis Accounting income.
+          </p>
+        </div>
+        {!canReadCashOperational ? (
+          <Alert variant="warning">
+            Operational AR/AP and cash-basis Accounting comparison requires each
+            domain&apos;s explicit report-read authority. Profitability remains
+            available under Economics authority.
+          </Alert>
+        ) : cashOperational.isPending ? (
+          <Spinner label="Loading cash and obligation readiness" />
+        ) : cashOperational.isError || !cashOperational.data ? (
+          <Alert variant="warning">
+            Cash and obligation readiness is unavailable. ACP did not infer
+            values.
+          </Alert>
+        ) : (
+          <div className="grid gap-4 lg:grid-cols-3">
+            <Card>
+              <CardHeader>
+                <CardTitle>Work performed</CardTitle>
+                <CardDescription>
+                  Business Economics · work period
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p className="text-2xl font-bold">
+                  {money(
+                    cashOperational.data.work_period.earned_revenue_minor,
+                    cashOperational.data.work_period.currency ?? currency,
+                  )}
+                </p>
+                <p className="mt-2 text-sm text-content-muted">
+                  {cashOperational.data.work_period.limitation}
+                </p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>Still owed</CardTitle>
+                <CardDescription>
+                  Operational AR/AP · current obligation state
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <p>
+                  <strong>
+                    {money(
+                      cashOperational.data.operational_current_state
+                        .completed_work_open_commercial_balance_minor,
+                      cashOperational.data.operational_current_state.currency ??
+                        currency,
+                    )}
+                  </strong>{" "}
+                  completed-work commercial balance
+                </p>
+                <p>
+                  <strong>
+                    {money(
+                      cashOperational.data.operational_current_state
+                        .open_vendor_obligation_minor,
+                      cashOperational.data.operational_current_state.currency ??
+                        currency,
+                    )}
+                  </strong>{" "}
+                  open Vendor obligations
+                </p>
+                <p className="text-sm text-content-muted">
+                  Neither value is collected cash or automatic Accounting
+                  recognition.
+                </p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>Cash-basis Accounting</CardTitle>
+                <CardDescription>
+                  Accounting authority · reporting period
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p className="text-2xl font-bold">
+                  {money(
+                    cashOperational.data.cash_accounting_period
+                      .recognized_income_minor,
+                    cashOperational.data.cash_accounting_period.currency ??
+                      currency,
+                  )}
+                </p>
+                <p className="mt-2 text-sm capitalize">
+                  {qualityLabel(
+                    cashOperational.data.cash_accounting_period.state,
+                  )}
+                </p>
+                <p className="mt-2 text-sm text-content-muted">
+                  {cashOperational.data.cash_accounting_period.limitation}
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+      </section>
+      <section
+        aria-label="How are we doing?"
+        className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"
+      >
+        <Card>
+          <CardHeader>
+            <CardTitle>Revenue</CardTitle>
+            <CardDescription>Economically recognized</CardDescription>
+          </CardHeader>
+          <CardContent className="text-2xl font-bold">
+            {money(value.totals?.revenue, currency)}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Direct cost</CardTitle>
+            <CardDescription>Labor, material, equipment, truck</CardDescription>
+          </CardHeader>
+          <CardContent className="text-2xl font-bold">
+            {money(directCost, currency)}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Contribution</CardTitle>
+            <CardDescription>
+              Before unavailable indirect allocation
+            </CardDescription>
+          </CardHeader>
+          <CardContent
+            className={`text-2xl font-bold ${(value.totals?.gross_profit ?? 0) < 0 ? "text-status-danger" : ""}`}
+          >
+            {money(value.totals?.gross_profit, currency)}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Evidence coverage</CardTitle>
+            <CardDescription>Complete admitted Jobs</CardDescription>
+          </CardHeader>
+          <CardContent className="text-2xl font-bold">
+            {value.complete_job_count}/{value.job_count}
+          </CardContent>
+        </Card>
+      </section>
+      <Card>
+        <CardHeader>
+          <CardTitle>What changed?</CardTitle>
+          <CardDescription>
+            {value.prior_period.start} through {value.prior_period.end}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {value.comparison.state === "available" ? (
+            <div className="grid gap-3 sm:grid-cols-4">
+              <p>
+                Revenue{" "}
+                <strong className="block">
+                  {money(value.comparison.revenue_change_minor, currency)}
+                </strong>
+              </p>
+              <p>
+                Contribution{" "}
+                <strong className="block">
+                  {money(value.comparison.contribution_change_minor, currency)}
+                </strong>
+              </p>
+              <p>
+                Labor{" "}
+                <strong className="block">
+                  {money(value.comparison.labor_change_minor, currency)}
+                </strong>
+              </p>
+              <p>
+                Materials{" "}
+                <strong className="block">
+                  {money(value.comparison.materials_change_minor, currency)}
+                </strong>
+              </p>
+              <p className="sm:col-span-4 text-sm text-content-muted">
+                {value.comparison.explanation}
+              </p>
+            </div>
+          ) : (
+            <p className="text-content-muted">{value.comparison.reason}</p>
+          )}
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>Owner question library</CardTitle>
+          <CardDescription>
+            Deterministic, read-only answers over admitted Economics evidence.
+            This is not generative AI.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <Select
+            aria-label="Owner question"
+            value={question}
+            onChange={(event) =>
+              setQuestion(event.target.value as OwnerQuestion)
+            }
+          >
+            <option value="what_changed">What changed?</option>
+            <option value="least_profitable_jobs">
+              Which Jobs contributed least?
+            </option>
+            <option value="most_profitable_jobs">
+              Which Jobs contributed most?
+            </option>
+            <option value="service_contribution">
+              Which services contributed most?
+            </option>
+            <option value="branch_contribution">
+              How do Branches compare?
+            </option>
+            <option value="labor_cost_movement">
+              Where are labor costs moving?
+            </option>
+            <option value="material_cost_movement">
+              Where are material costs moving?
+            </option>
+            <option value="full_profitability_blockers">
+              What prevents full profitability?
+            </option>
+            <option value="owner_decisions_required">
+              What needs my decision?
+            </option>
+            <option value="inspect_first">What should I inspect first?</option>
+            <option value="incomplete_measurements">
+              Which measurements are incomplete?
+            </option>
+            <option value="margin_leakage">
+              Which findings indicate possible margin leakage?
+            </option>
+          </Select>
+          {intelligence.isPending ? (
+            <Spinner label="Preparing owner evidence" />
+          ) : intelligence.isError || !intelligence.data ? (
+            <Alert variant="danger">
+              Owner evidence could not be verified.
+            </Alert>
+          ) : (
+            <div className="space-y-3">
+              <p>
+                <strong>Classification:</strong>{" "}
+                {intelligence.data.context_packet.classification} ·{" "}
+                <strong>Completeness:</strong>{" "}
+                {qualityLabel(intelligence.data.context_packet.completeness)}
+              </p>
+              {intelligence.data.context_packet.limitations.length ? (
+                <Alert variant="warning">
+                  {intelligence.data.context_packet.limitations
+                    .map(qualityLabel)
+                    .join("; ")}
+                </Alert>
+              ) : (
+                <Alert variant="success">
+                  No evidence limitation is present for this answer.
+                </Alert>
+              )}
+              <p className="text-sm text-content-muted">
+                {intelligence.data.answer.kind.replaceAll("_", " ")} ·{" "}
+                {intelligence.data.context_packet.source_references.length}{" "}
+                citable Economics result(s) · read-only
+              </p>
+              <p className="break-all text-xs text-content-muted">
+                Evidence digest{" "}
+                {intelligence.data.context_packet.evidence_digest}
+              </p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+      <JobTable jobs={value.jobs} currency={currency} onSelect={setSelected} />
+      {sortedLosses.length ? (
+        <Alert
+          variant="warning"
+          title={`${sortedLosses.length} admitted Job(s) have negative contribution`}
+        >
+          This is an observed economic condition, not a causal diagnosis. Open
+          each Job for evidence lineage.
+        </Alert>
+      ) : null}
+      <section className="grid gap-4 xl:grid-cols-3">
+        <RollupTable
+          title="Service/category profitability"
+          rows={value.service_categories}
+          currency={currency}
+        />
+        <RollupTable
+          title="Customer profitability"
+          rows={value.customers}
+          currency={currency}
+        />
+        <RollupTable
+          title="Branch profitability"
+          rows={value.branches}
+          currency={currency}
+        />
+      </section>
+      <section className="grid gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Allocation readiness</CardTitle>
+            <CardDescription>
+              Configuration status only. ACP never substitutes zero overhead or
+              a default driver.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <dl className="grid gap-2 text-sm">
+              <div className="flex justify-between">
+                <dt>Evidence</dt>
+                <dd className="capitalize">
+                  {qualityLabel(value.readiness.evidence)}
+                </dd>
+              </div>
+              <div className="flex justify-between">
+                <dt>Cost-pool policy</dt>
+                <dd className="capitalize">
+                  {qualityLabel(
+                    value.readiness.allocation_authority.pool_policy,
+                  )}
+                </dd>
+              </div>
+              <div className="flex justify-between">
+                <dt>Allocation-basis policy</dt>
+                <dd className="capitalize">
+                  {qualityLabel(
+                    value.readiness.allocation_authority.basis_policy,
+                  )}
+                </dd>
+              </div>
+              <div className="flex justify-between">
+                <dt>Source evidence</dt>
+                <dd className="capitalize">
+                  {qualityLabel(
+                    value.readiness.allocation_authority.source_evidence,
+                  )}
+                </dd>
+              </div>
+              <div className="flex justify-between">
+                <dt>Job attribution</dt>
+                <dd className="capitalize">
+                  {qualityLabel(value.readiness.attribution)}
+                </dd>
+              </div>
+            </dl>
+            {value.readiness.allocation_authority.owner_decision ? (
+              <Alert className="mt-4" variant="warning" title="Policy required">
+                {value.readiness.allocation_authority.owner_decision}
+              </Alert>
+            ) : null}
+            <p className="mt-3 text-xs text-content-muted">
+              Supported evidence bases:{" "}
+              {value.readiness.allocation_authority.supported_basis_types
+                .map(qualityLabel)
+                .join(", ")}
+              . Callback/warranty allocation remains{" "}
+              {qualityLabel(
+                value.readiness.allocation_authority.callback_economics,
+              )}{" "}
+              until authoritative Job/Asset relationship evidence exists.
+            </p>
+            {value.readiness.policy_gaps.map((gap) => (
+              <p className="mt-3 text-sm" key={gap.gap_key}>
+                <strong>{qualityLabel(gap.gap_key)}:</strong> {gap.requirement}
+              </p>
+            ))}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Beacon-ready conditions</CardTitle>
+            <CardDescription>
+              Safe findings only; Economics creates no workflow mutation.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {value.beacon_conditions.length ? (
+              <ul className="list-disc space-y-2 pl-5">
+                {value.beacon_conditions.map((condition) => (
+                  <li key={condition.kind}>
+                    {qualityLabel(condition.kind)} · {condition.state}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-content-muted">
+                No deterministic condition is present for this scope.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      </section>
+      {selected ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Why does this number exist?</CardTitle>
+            <CardDescription>
+              Accepted calculation, evidence, confidence, limitation, and digest
+              lineage.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {detail.isPending ? (
+              <Spinner label="Loading explanation" />
+            ) : detail.isError || !detail.data ? (
+              <Alert variant="danger">
+                The result explanation could not be verified.
+              </Alert>
+            ) : (
+              <div className="space-y-4">
+                {detail.data.authority_state === "historical" ? (
+                  <Alert variant="warning">
+                    This is immutable historical evidence. A successor is
+                    current.
+                  </Alert>
+                ) : (
+                  <Alert variant="success">
+                    This is the current immutable result.
+                  </Alert>
+                )}
+                <p>
+                  {detail.data.explanation?.answer ??
+                    "Legacy result detail is unavailable; no explanation was fabricated."}
+                </p>
+                {Object.entries(detail.data.components ?? {}).map(
+                  ([name, component]) => (
+                    <section className="border-t border-stroke pt-3" key={name}>
+                      <h3 className="font-semibold capitalize">
+                        {qualityLabel(name)} ·{" "}
+                        {money(component.amount_minor, detail.data!.currency)}
+                      </h3>
+                      <p className="text-sm text-content-muted">
+                        {component.explanation}
+                      </p>
+                      <p className="mt-1 text-xs">
+                        {component.evidence.length} source record(s) ·{" "}
+                        {component.confidence_percent}% confidence
+                      </p>
+                    </section>
+                  ),
+                )}
+                <div className="flex flex-wrap gap-2">
+                  {detail.data.lineage.predecessor_result_id ? (
+                    <Button
+                      variant="secondary"
+                      onClick={() =>
+                        setSelected(detail.data!.lineage.predecessor_result_id)
+                      }
+                    >
+                      View prior result
+                    </Button>
+                  ) : null}
+                  {detail.data.lineage.successor_result_id ? (
+                    <Button
+                      variant="secondary"
+                      onClick={() =>
+                        setSelected(detail.data!.lineage.successor_result_id)
+                      }
+                    >
+                      View current successor
+                    </Button>
+                  ) : null}
+                </div>
+                <p className="break-all text-xs text-content-muted">
+                  Result digest {detail.data.lineage.result_digest}
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      ) : null}
+    </div>
+  );
 }
