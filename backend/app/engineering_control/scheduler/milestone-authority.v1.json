@@ -167,6 +167,13 @@
       "evidence_kind": "AUTHORITATIVE_INTEGRATION_ACCEPTANCE",
       "authoritative_commit_sha": "d72dcc6570996def05c4e68a1c2ebd55cc991ae8",
       "evidence_reference": "owner-approved ECO overhead allocation evidence authority integrated through protected PR 101; provider-neutral pools and bases, immutable evidence binding, fail-closed readiness, and external callback gate preserved without configuring Company allocation values"
+    },
+    {
+      "bank_milestone_id": "BANK.ASSET.001",
+      "canonical_milestone_id": "BANK.ASSET.001",
+      "evidence_kind": "AUTHORITATIVE_INTEGRATION_ACCEPTANCE",
+      "authoritative_commit_sha": "519d00d3be6ecf8126bfc51d4d5fcac8786cb243",
+      "evidence_reference": "owner-approved Operational Asset identity foundation integrated through protected PR 114 with typed Asset classes and vehicle powertrain, immutable evidence and lifecycle history, fail-closed readiness, tenant-scoped relationships, idempotency, safe Events, and responsive Assets workspace"
     }
   ],
   "identity_reconciliation_required": [
@@ -183,5 +190,5 @@
   ],
   "gate_resolutions": [],
   "active_ownership": [],
-  "fingerprint": "9e3706f71a6224cfd4a8402a8740d83d5488b43e1bf80911f40530ddc4566b5a"
+  "fingerprint": "272e7dbb8c38fb2a5baa023d2984cbe51f9f0e83a3003648eacacb0769fb8c09"
 }
