@@ -2573,6 +2573,26 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     },
     {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "company_admin",
+      "mechanism": "Company row lock, deterministic plan digest, and convergent canonical role and permission grants",
+      "method": "POST",
+      "operation_id": "apply_canonical_role_reconciliation_api_v1_company_admin_canonical_roles_reconciliation_apply_post",
+      "path": "/api/v1/company-admin/canonical-roles/reconciliation/apply",
+      "reason": "Exact and concurrent replay converge on the canonical role authority while changed plans fail closed.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NON_MUTATING_READ_ONLY",
+      "domain": "workforce",
+      "mechanism": "read-only eligibility projection with no persistence mutation port",
+      "method": "POST",
+      "operation_id": "eligibility_api_v1_workforce_eligibility_post",
+      "path": "/api/v1/workforce/eligibility",
+      "reason": "POST carries a structured query body but computes only an authorized Workforce projection.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
       "classification": "IMMUTABLE_APPEND_ONLY",
       "domain": "luminary",
       "mechanism": "deterministic evidence digest, UUIDv5 identity, Company advisory lock, and unique persisted identity",
@@ -2586,6 +2606,6 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "ebff8a3c63750ee57041fc8d38e4c8df85a13b47db671ed3d38baff8fa6cc56a",
+  "fingerprint": "f5277548b18cafcbecf9d8a1a0e014c17884b83728909356817575e2cfac3f4d",
   "schema_version": "1"
 }

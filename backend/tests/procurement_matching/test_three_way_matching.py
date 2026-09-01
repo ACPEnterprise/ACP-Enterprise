@@ -5,10 +5,6 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import CheckConstraint, func, select, update
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from app.accounting.models import Account, ChartVersion, Journal
 from app.accounts_payable.models import (
     AccountingVendor,
@@ -55,6 +51,9 @@ from app.purchasing.models import (
     PurchaseOrderReceiptLine,
     PurchaseReturn,
 )
+from sqlalchemy import CheckConstraint, func, select, update
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 
 def test_match_line_database_constraints_protect_derived_quantity_truth() -> None:
@@ -781,7 +780,7 @@ async def test_vendor_performance_is_deterministic_evidence_not_a_vendor_score(
                 idempotency_key=f"performance-{uuid4()}",
             ),
         )
-        evaluated_at = datetime(2026, 8, 31, tzinfo=timezone.utc)
+        evaluated_at = datetime.now(timezone.utc)
         first = await service.vendor_performance(
             session,
             context=evaluator,

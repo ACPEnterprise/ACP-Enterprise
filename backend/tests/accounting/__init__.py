@@ -1,0 +1,1 @@
+"""Accounting qualification tests."""
