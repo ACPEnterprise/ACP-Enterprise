@@ -1,0 +1,4 @@
+export type Asset = { id:string; company_id:string; branch_id:string; asset_number:string; asset_class:"customer_equipment"|"vehicle"|"tool"|"equipment"|"other_supported_asset"; display_name:string; lifecycle:string; predecessor_asset_id:string|null; provenance:Record<string,unknown>; identity_digest:string; version:number; created_at:string; updated_at:string };
+export type AssetEvidence = { id:string; asset_id:string; evidence_type:string; state:string; value:Record<string,unknown>; source_reference:string|null; protected_document_id:string|null; occurred_at:string; evidence_digest:string; created_at:string };
+export type AssetRelationship = { id:string; asset_id:string; relationship_type:string; related_entity_id:string; valid_from:string; valid_to:string|null; evidence_digest:string; created_at:string };
+export type AssetDetail = { asset:Asset; evidence:AssetEvidence[]; relationships:AssetRelationship[]; readiness:string; readiness_reasons:string[] };

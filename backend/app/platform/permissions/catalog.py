@@ -9,6 +9,7 @@ from app.platform.permissions.codes import (
     AccountsPayablePermission,
     AdministrationPermission,
     AnalyticsPermission,
+    AssetPermission,
     BeaconPermission,
     CommunicationsPermission,
     CustomerPermission,
@@ -136,6 +137,11 @@ CUSTOMER_DEFINITIONS = tuple(
         scope=PermissionScope.COMPANY,
     )
     for code in sorted(CustomerPermission.ALL)
+)
+
+ASSET_DEFINITIONS = tuple(
+    PermissionDefinition(code=code, name=code.replace("_", " ").title(), resource="operational_asset", action=code.removeprefix("COMPANY_ASSET_").lower(), scope=PermissionScope.COMPANY)
+    for code in sorted(AssetPermission.ALL)
 )
 
 ANALYTICS_DEFINITIONS = tuple(
@@ -455,6 +461,7 @@ permission_catalog = PermissionCatalog(
     ADMINISTRATION_DEFINITIONS
     + LAUNCH_PLATFORM_DEFINITIONS
     + CUSTOMER_DEFINITIONS
+    + ASSET_DEFINITIONS
     + ANALYTICS_DEFINITIONS
     + LUMINARY_DEFINITIONS
     + BEACON_DEFINITIONS
