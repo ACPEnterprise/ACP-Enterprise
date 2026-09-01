@@ -15,7 +15,12 @@ from app.platform.auth.access_tokens import AccessTokenClaims
 from app.platform.auth.models import AuthenticationSession
 from app.platform.auth.services import AuthenticatedContext, utc_now
 from app.platform.branch.models import Branch
-from app.platform.company.admin_router import router as admin_router
+from app.platform.company.admin_router import (
+    router as admin_router,
+)
+from app.platform.company.admin_router import (
+    translate_canonical_role_sync_error,
+)
 from app.platform.company.admin_service import (
     AccessPolicyConflictError,
     AccessPolicyNotFoundError,
@@ -463,6 +468,15 @@ async def test_canonical_role_sync_rejects_custom_code_collision_without_mutatio
             )
         )
     assert system_count == 0
+
+
+def test_canonical_role_sync_failure_is_classified_and_non_reflective() -> None:
+    canary = "postgresql://owner:secret@protected-db/internal"
+    response = translate_canonical_role_sync_error(CanonicalRoleSyncConflict(canary))
+    assert response.status_code == 409
+    assert response.detail["recovery"] == "RETRY_AFTER_REFRESH"
+    assert response.detail["code"] == "resource_state_conflict"
+    assert canary not in str(response.detail)
 
 
 @pytest.mark.asyncio
