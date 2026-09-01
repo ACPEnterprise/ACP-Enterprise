@@ -566,12 +566,33 @@ class PageEvidence:
     request_id: str | None
 
 
+@dataclass(frozen=True)
+class CatalogDispositionEvidence:
+    entity_kind: str
+    catalog_version: str
+    requirement: str
+    disposition: str
+    provider_status_classification: str
+    error_classification: str
+    page: int
+    observed_at: str
+
+
 class PageObserver(Protocol):
     async def record_page(self, evidence: PageEvidence, raw_body: bytes) -> None: ...
+
+    async def record_catalog_disposition(
+        self, evidence: CatalogDispositionEvidence
+    ) -> None: ...
 
 
 class NullPageObserver:
     async def record_page(self, evidence: PageEvidence, raw_body: bytes) -> None:
+        return None
+
+    async def record_catalog_disposition(
+        self, evidence: CatalogDispositionEvidence
+    ) -> None:
         return None
 
 
@@ -586,6 +607,8 @@ class IntuitReadOnlyAdapter(SourceAcquisitionProvider):
         page_observer: PageObserver | None = None,
         max_attempts: int = 4,
         max_backoff_seconds: int = 30,
+        optional_provider_dependent: frozenset[EntityKind] = frozenset(),
+        catalog_version: str = "qbo-acquisition-catalog/v1",
     ) -> None:
         if max_attempts < 1 or max_backoff_seconds < 1:
             raise ValueError("bounded retry configuration is required")
@@ -596,6 +619,8 @@ class IntuitReadOnlyAdapter(SourceAcquisitionProvider):
         self.page_observer = page_observer or NullPageObserver()
         self.max_attempts = max_attempts
         self.max_backoff_seconds = max_backoff_seconds
+        self.optional_provider_dependent = optional_provider_dependent
+        self.catalog_version = catalog_version
         self.endpoints = ENDPOINTS[binding.environment]
 
     async def acquire(
@@ -619,12 +644,28 @@ class IntuitReadOnlyAdapter(SourceAcquisitionProvider):
             native_type = ENTITY_QUERY_NAMES.get(kind)
             if native_type is None:
                 raise IntuitProtocolError("unsupported_entity_kind")
-            async for payload in self._query_pages(request, kind, native_type):
-                yield self._envelope(
-                    request=request,
-                    kind=kind,
-                    native_type=native_type,
-                    payload=payload,
+            try:
+                async for payload in self._query_pages(request, kind, native_type):
+                    yield self._envelope(
+                        request=request,
+                        kind=kind,
+                        native_type=native_type,
+                        payload=payload,
+                    )
+            except PartialAcquisitionError as error:
+                if not self._is_provider_unavailable_optional(kind, error):
+                    raise
+                await self.page_observer.record_catalog_disposition(
+                    CatalogDispositionEvidence(
+                        entity_kind=kind.value,
+                        catalog_version=self.catalog_version,
+                        requirement="OPTIONAL_PROVIDER_DEPENDENT",
+                        disposition="PROVIDER_FAMILY_UNAVAILABLE",
+                        provider_status_classification="client_rejection",
+                        error_classification="UNSUPPORTED_PROVIDER_QUERY",
+                        page=error.page,
+                        observed_at=self.clock.now().isoformat(),
+                    )
                 )
 
     async def _verify_company(self, request: AcquisitionRequest) -> dict[str, object]:
@@ -640,6 +681,16 @@ class IntuitReadOnlyAdapter(SourceAcquisitionProvider):
         if company.get("CompanyName") != self.binding.expected_company_name:
             raise IntuitAuthenticationError("company_identity_mismatch")
         return company
+
+    def _is_provider_unavailable_optional(
+        self, kind: EntityKind, error: PartialAcquisitionError
+    ) -> bool:
+        return (
+            kind in self.optional_provider_dependent
+            and error.code == "api_request_rejected"
+            and error.provider_status in {400, 404}
+            and error.page == 1
+        )
 
     async def _query_pages(
         self, request: AcquisitionRequest, kind: EntityKind, native_type: str

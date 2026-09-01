@@ -29,6 +29,17 @@ from app.qbo_source.intuit import (
 )
 
 
+class CatalogObserver:
+    def __init__(self) -> None:
+        self.dispositions: list[object] = []
+
+    async def record_page(self, evidence, raw_body):  # type: ignore[no-untyped-def]
+        del evidence, raw_body
+
+    async def record_catalog_disposition(self, evidence):  # type: ignore[no-untyped-def]
+        self.dispositions.append(evidence)
+
+
 class FakeClock:
     def __init__(self) -> None:
         self.current = datetime(2026, 8, 26, 12, tzinfo=timezone.utc)
@@ -628,6 +639,62 @@ async def test_company_mismatch_fails_before_entity_query() -> None:
             )
         ]
     assert len(transport.requests) == 1
+
+
+@pytest.mark.asyncio
+async def test_optional_provider_family_rejection_is_durably_dispositioned() -> None:
+    clock = FakeClock()
+    secrets = FakeSecrets(token(clock))
+    observer = CatalogObserver()
+    transport = SequenceTransport(
+        [
+            response(
+                200,
+                {
+                    "CompanyInfo": {
+                        "Id": "synthetic-realm",
+                        "CompanyName": "Synthetic Plumbing Sandbox",
+                    }
+                },
+            ),
+            response(400, {"Fault": {"type": "ValidationFault"}}),
+            response(200, {"QueryResponse": {"TaxAgency": []}}),
+        ]
+    )
+    oauth = IntuitOAuthClient(
+        environment=IntuitEnvironment.SANDBOX,
+        transport=transport,
+        secrets=secrets,
+        credential_reference="secret://synthetic/client",
+        clock=clock,
+    )
+    adapter = IntuitReadOnlyAdapter(
+        binding=binding(),
+        token_manager=SerializedTokenManager(
+            oauth=oauth, secrets=secrets, binding=binding(), clock=clock
+        ),
+        transport=transport,
+        clock=clock,
+        page_observer=observer,
+        optional_provider_dependent=frozenset({EntityKind.TAX_PAYMENT}),
+        catalog_version="catalog/v2",
+    )
+
+    acquired = [
+        item
+        async for item in adapter.acquire(
+            AcquisitionRequest(
+                snapshot(), (EntityKind.TAX_PAYMENT, EntityKind.TAX_AGENCY)
+            )
+        )
+    ]
+
+    assert acquired == []
+    assert len(observer.dispositions) == 1
+    disposition = observer.dispositions[0]
+    assert disposition.entity_kind == "tax_payment"
+    assert disposition.disposition == "PROVIDER_FAMILY_UNAVAILABLE"
+    assert disposition.error_classification == "UNSUPPORTED_PROVIDER_QUERY"
 
 
 @pytest.mark.asyncio
