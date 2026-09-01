@@ -1,14 +1,14 @@
 """Add truthful provider acceptance evidence.
 
 Revision ID: j6k4m72c9p5q
-Revises: i5h3g51b8z4x
+Revises: h6f7d04c2a8b
 """
 
 import sqlalchemy as sa
 from alembic import op
 
 revision = "j6k4m72c9p5q"
-down_revision = "i5h3g51b8z4x"
+down_revision = "h6f7d04c2a8b"
 branch_labels = None
 depends_on = None
 
