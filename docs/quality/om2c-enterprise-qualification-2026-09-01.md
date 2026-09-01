@@ -2,7 +2,7 @@
 
 ## Authority, boundary, and classification
 
-- Starting and final protected authority: `a86daa79bd5700f028849546a12fa867a05f5fd7` (`origin/customer-management-v1`). A final fetch found no divergence.
+- Starting protected authority: `a86daa79bd5700f028849546a12fa867a05f5fd7`; final reconciled protected authority: `5987fffc390f54748a23675e13ab9f8e7ac42c8c` (`origin/customer-management-v1`). The late bounded-QBO snapshot advance was merged without collision.
 - Isolated worktree: `/Users/michaelfouse/Development/ACP-Enterprise-OM2C2`.
 - Qualification branch: `work/om2c-quality-security-program-2`.
 - Candidate schema head: `i5h3g51b8z4x`.
@@ -32,7 +32,7 @@
 
 ## Regression, migration, and static evidence
 
-- Backend release run on freshly created PostgreSQL database `acp_om2c2_r3`: **2,373 passed, 7 skipped, 1 deselected** in 231.38 seconds. The sole deselection requires Redis and independently fails closed with `RateLimitUnavailableError` because the repository-standard `redis:6379` service is unavailable locally.
+- Final backend release run after authority reconciliation on freshly created PostgreSQL database `acp_om2c2_r4`: **2,375 passed, 7 skipped, 1 deselected** in 228.64 seconds. The sole deselection requires Redis and independently fails closed with `RateLimitUnavailableError` because the repository-standard `redis:6379` service is unavailable locally.
 - The discovery run before repairs produced 2,372 passes, 7 skips, two failures and six teardown errors. Both actionable failures and all teardown errors were repaired. A deliberate second run on its already-populated database exposed 34 repeat-run fixture collisions; a third entirely fresh database passed, proving those collisions are test-isolation debt rather than product-authority failures.
 - Frontend: **104 files / 340 tests passed**; repository ESLint passed; `tsc -b` and Vite production build passed.
 - Mobile: **9 suites / 93 tests passed**; ESLint and `tsc --noEmit` passed.
@@ -52,7 +52,7 @@
 8. **Audit, log and API failure safety:** sensitive-output, event/audit scope, structured/plain log redaction, correlation, safe headers and recovery-envelope suites passed. Canonical-role reconciliation no longer reflects its internal exception; it returns fixed `resource_state_conflict` / `RETRY_AFTER_REFRESH` evidence.
 9. **Readiness and degradation:** health/live/ready and dependency classification suites passed. Authentication rate limiting fails closed without Redis; integrated healthy-Redis execution remains pending rather than falsely passed.
 10. **Domain integrity:** Timekeeping immutable intervals, Payroll boundaries, balanced Accounting journals, Payment distinction, procurement/Inventory quantity truth, Customer/CRM identity, Estimate stale revision, Service Agreement successor lineage, Economics non-double-counting, Luminary non-fabrication, Beacon lifecycle, LIA protected retrieval and synthetic Migration succession all passed in the broad run.
-11. **QBO GET-only:** synthetic adapter enforcement passed; business writes remain rejected and environment roots/token access remain separated. No token value or protected source evidence was read.
+11. **QBO GET-only:** all 115 synthetic QBO tests passed after reconciling Enterprise's bounded accounting-snapshot authority; business writes remain rejected and environment roots/token access remain separated. No token value or protected source evidence was read.
 12. **Artifacts and retention:** Pay Statement, Estimate, purchasing document and Migration artifact authorization/digest/path tests passed. No automatic destructive deletion was enabled; unconfigured retention defaults to preservation.
 13. **Performance and query paths:** existing deterministic pagination, bounded-list and N+1 regression suites passed. The complete backend run was 231.38 seconds on the local non-production host with zero host-throttled pages; this is a gross regression baseline, not a Production SLO or load test.
 14. **Responsive/accessibility/frontend recovery:** representative authorization, loading, empty, validation, stale, forbidden and safe error states passed automated component coverage. Physical viewport/device and comprehensive contrast acceptance remain external/manual gates.
@@ -67,6 +67,7 @@
 4. `TEST_ARCHITECTURE`: packaged Accounting and Luminary test directories so duplicate `test_api_boundary.py` basenames cannot poison broad collection.
 5. `TEST_ISOLATION / EVENT_INTEGRITY`: Jobs teardown now removes its own Business Events before tenant authority, respecting the protected Company/Branch FK.
 6. `STALE_FIXTURE`: procurement vendor-performance evidence no longer uses a hard-coded evaluation date that moved behind newly created evidence on 2026-09-01.
+7. `STATIC_QUALIFICATION`: mechanically corrected import ordering in Enterprise's newly integrated QBO snapshot-policy test; its 115-test synthetic boundary and final broad suite remain green.
 
 ## Dependency and secret security
 

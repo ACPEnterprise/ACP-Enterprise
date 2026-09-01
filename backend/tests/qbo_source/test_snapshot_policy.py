@@ -6,6 +6,7 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 
 import pytest
+
 from app.qbo_source.contracts import (
     AcquisitionRequest,
     EntityKind,
