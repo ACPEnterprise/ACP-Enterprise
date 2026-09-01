@@ -69,7 +69,7 @@ async def execute_production_acquisition(
         raise SandboxRuntimeError("production_realm_not_verified")
     evidence_root = Path(str(configuration.qbo_production_evidence_root)).resolve()
     store = ProtectedFilesystemEvidenceStore(
-        root=evidence_root, repository_root=repository
+        root=evidence_root, repository_root=repository, bounded_snapshot=True
     )
     transport = IntuitHttpTransport()
     oauth = IntuitOAuthClient(
@@ -148,6 +148,7 @@ def main() -> None:
                 "envelope_count": result.envelope_count,
                 "manifest_sha256": result.manifest_sha256,
                 "failure_code": result.failure_code,
+                "bounded_snapshot": result.bounded_snapshot,
             },
             sort_keys=True,
         )
