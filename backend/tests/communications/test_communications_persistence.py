@@ -80,7 +80,11 @@ async def test_persisted_request_replay_and_scoped_history() -> None:
             company_id=company.id,
             branch_id=branch.id,
             user_id=actor.id,
-            payload={"customer_id": str(customer.id), "channel": "sms", "decision": "granted"},
+            payload={
+                "customer_id": str(customer.id),
+                "channel": "sms",
+                "decision": "granted",
+            },
         )
         session.add_all([source, consent])
         await session.flush()

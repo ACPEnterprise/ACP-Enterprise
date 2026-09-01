@@ -1,3 +1,4 @@
+from datetime import datetime
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
@@ -46,5 +47,22 @@ class OnboardingOwnerClaimView(BaseModel):
     """One-time non-Production handoff to an authorized onboarding owner."""
 
     activation_token: str = Field(min_length=20, max_length=1024)
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class OnboardingDeliveryView(BaseModel):
+    request_id: UUID
+    invitation_id: UUID
+    message_id: UUID | None
+    invitation_status: str
+    delivery_status: str
+    template_version: str | None
+    retry_count: int
+    provider_reference_present: bool
+    last_error_code: str | None
+    created_at: datetime | None
+    submitted_at: datetime | None
+    delivered_at: datetime | None
 
     model_config = ConfigDict(extra="forbid")

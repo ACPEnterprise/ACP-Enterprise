@@ -7,7 +7,20 @@ export interface CommunicationHistoryItem {
   customer_id: string;
   contact_id: string;
   recipient: string;
-  state: "pending" | "claimed" | "retry_scheduled" | "sent" | "failed";
+  state:
+    | "prepared"
+    | "pending"
+    | "claimed"
+    | "retry_scheduled"
+    | "accepted"
+    | "delivered"
+    | "deferred"
+    | "bounced"
+    | "rejected"
+    | "failed"
+    | "uncertain"
+    | "canceled"
+    | "suppressed";
   retry_count: number;
   terminal_failure: boolean;
   scheduled_at: string;

@@ -102,11 +102,7 @@ class IdentityOnboardingService:
     def _delivery_cipher(self) -> tuple[str, AESGCM]:
         key_id = self.configuration.identity_onboarding_active_delivery_kid
         keyring = self._delivery_keyring()
-        encoded = (
-            keyring.get(key_id)
-            if key_id
-            else None
-        )
+        encoded = keyring.get(key_id) if key_id else None
         if not key_id or not encoded:
             raise OnboardingConflictError(
                 "Protected invitation delivery is not configured."
@@ -637,8 +633,7 @@ class IdentityOnboardingService:
             if request is None:
                 request = await session.scalar(
                     select(IdentityOnboardingRequest).where(
-                        IdentityOnboardingRequest.id
-                        == invitation.onboarding_request_id
+                        IdentityOnboardingRequest.id == invitation.onboarding_request_id
                     )
                 )
             user = (
@@ -915,6 +910,10 @@ class IdentityOnboardingService:
             now=now,
             company_id=company_id,
             branch_id=branch_id,
+            channel="email",
+            recipient_reference=f"invitation:{invitation_id}",
+            source_action="identity.invitation.issued",
+            template_version="identity-onboarding-invitation-v1",
         )
 
     @staticmethod
