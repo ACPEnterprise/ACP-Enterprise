@@ -18,6 +18,18 @@ export const liaHandle = {
   },
 } as const satisfies ShellRouteHandle;
 
+export const economicsAdministrationHandle = {
+  workspace: {
+    pageTitle: "Economics Administration",
+    breadcrumbs: [
+      { label: "Business Economics", path: "/business-economics" },
+      { label: "Administration" },
+    ],
+    helpTopic: "business-economics",
+    aiContext: "business-economics-administration",
+  },
+} as const satisfies ShellRouteHandle;
+
 export const missionControlHandle = {
   workspace: {
     pageTitle: "Mission Control",
