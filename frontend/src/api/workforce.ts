@@ -50,6 +50,33 @@ export interface WorkforceEligibilityItem {
   eligible: boolean;
 }
 
+export interface EmployeePermissionExplanation {
+  code: string;
+  name: string;
+  business_area: string;
+  authority: "ROLE_DERIVED" | "OWN_DATA_ONLY" | "DENIED";
+  role_codes: string[];
+  branch_scoped: boolean;
+}
+
+export interface EmployeeAdministrationSummary extends WorkforceEmployeeSummary {
+  membership_id: string | null;
+  membership_status: string | null;
+  user_status: string | null;
+  authorization_version: number | null;
+  branch_ids: string[];
+  role_codes: string[];
+  onboarding_status: string | null;
+  masked_login: string | null;
+  mobile_readiness: "READY" | "BLOCKED" | "NOT_LINKED";
+  mobile_readiness_blockers: string[];
+}
+
+export interface EmployeeAdministrationDetail extends EmployeeAdministrationSummary {
+  permissions: EmployeePermissionExplanation[];
+  workforce: WorkforceEmployeeDetail;
+}
+
 export async function listWorkforceEmployees(): Promise<WorkforceEmployeeSummary[]> {
   const response = await apiClient.get<{ items: WorkforceEmployeeSummary[] }>("/api/v1/workforce/employees");
   return response.data.items;
@@ -63,4 +90,43 @@ export async function getWorkforceEmployee(employeeId: string): Promise<Workforc
 export async function evaluateWorkforceEligibility(payload: WorkforceEligibilityRequest): Promise<WorkforceEligibilityItem[]> {
   const response = await apiClient.post<{ items: WorkforceEligibilityItem[] }>("/api/v1/workforce/eligibility", payload);
   return response.data.items;
+}
+
+export async function getEmployeeAdministration(
+  employeeId: string,
+): Promise<EmployeeAdministrationDetail> {
+  return (
+    await apiClient.get<EmployeeAdministrationDetail>(
+      `/api/v1/workforce/administration/employees/${employeeId}`,
+    )
+  ).data;
+}
+
+export async function setEmployeeMembershipStatus(
+  membershipId: string,
+  status: "active" | "suspended" | "revoked",
+): Promise<void> {
+  await apiClient.patch(`/api/v1/company-admin/memberships/${membershipId}/status`, {
+    status,
+  });
+}
+
+export async function setEmployeeBranchGrant(
+  membershipId: string,
+  branchId: string,
+  enabled: boolean,
+): Promise<void> {
+  const path = `/api/v1/company-admin/memberships/${membershipId}/branches/${branchId}`;
+  if (enabled) await apiClient.put(path);
+  else await apiClient.delete(path);
+}
+
+export async function setEmployeeRole(
+  membershipId: string,
+  roleId: string,
+  enabled: boolean,
+): Promise<void> {
+  const path = `/api/v1/company-admin/memberships/${membershipId}/roles/${roleId}`;
+  if (enabled) await apiClient.put(path);
+  else await apiClient.delete(path);
 }
