@@ -24,7 +24,7 @@ export function PrivacyShield({ children }: { children: ReactNode }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  shield: { ...StyleSheet.absoluteFillObject, alignItems: "center", backgroundColor: colors.brandDark, justifyContent: "center", padding: spacing.lg, zIndex: 1000 },
+  shield: { ...StyleSheet.absoluteFill, alignItems: "center", backgroundColor: colors.brandDark, justifyContent: "center", padding: spacing.lg, zIndex: 1000 },
   title: { color: colors.surface, fontSize: 28, fontWeight: "700" },
   message: { color: colors.surface, fontSize: 16, marginTop: spacing.sm, textAlign: "center" },
 });

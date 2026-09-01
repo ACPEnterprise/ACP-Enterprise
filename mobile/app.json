@@ -3,39 +3,64 @@
     "name": "ACP Employee",
     "slug": "acp-employee",
     "scheme": "acpemployee",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "ios": {
       "supportsTablet": false,
-      "buildNumber": "1",
+      "buildNumber": "2",
       "bundleIdentifier": "com.acpenterprise.employee",
-      "associatedDomains": ["applinks:employee.acpenterprise.com"]
+      "associatedDomains": [
+        "applinks:employee.acpenterprise.com"
+      ]
     },
     "android": {
-      "versionCode": 1,
+      "versionCode": 2,
       "package": "com.acpenterprise.employee",
       "blockedPermissions": [
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.WRITE_EXTERNAL_STORAGE",
         "android.permission.SYSTEM_ALERT_WINDOW"
       ],
-      "intentFilters": [{
-        "action": "VIEW",
-        "autoVerify": true,
-        "data": [{"scheme": "https", "host": "employee.acpenterprise.com", "pathPrefix": "/activate"}],
-        "category": ["BROWSABLE", "DEFAULT"]
-      }]
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "employee.acpenterprise.com",
+              "pathPrefix": "/activate"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        }
+      ]
     },
-    "plugins": [["expo-secure-store", {"configureAndroidBackup": true, "faceIDPermission": false}]],
+    "plugins": [
+      [
+        "expo-secure-store",
+        {
+          "configureAndroidBackup": true,
+          "faceIDPermission": false
+        }
+      ],
+      "expo-status-bar"
+    ],
     "extra": {
       "environment": "development",
       "apiBaseUrl": "http://localhost:8000",
       "compatibilityVersion": "2026-08-01",
       "productionActivated": false
     },
-    "runtimeVersion": {"policy": "appVersion"},
-    "updates": {"enabled": false}
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "enabled": false
+    }
   }
 }
