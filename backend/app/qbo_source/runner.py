@@ -39,7 +39,15 @@ def _failure_evidence(run_id: str, error: Exception) -> AcquisitionFailureEviden
         classification, retryable = "RATE_LIMITED", True
     elif code == "api_retry_exhausted":
         classification, retryable = "TEMPORARY_PROVIDER_FAILURE", True
-    elif code in {"query_response_missing", "query_rows_invalid"}:
+    elif code in {
+        "query_response_missing",
+        "query_rows_invalid",
+        "authoritative_transaction_date_invalid",
+        "authoritative_transaction_date_missing",
+        "source_blob_unavailable",
+        "source_blob_invalid",
+        "source_envelope_unavailable",
+    }:
         classification, retryable = "DATA_VALIDATION_FAILURE", False
     elif code in {"duplicate_native_id", "native_id_missing"}:
         classification, retryable = "PAGINATION_FAILURE", False
@@ -86,6 +94,7 @@ class AcquisitionResult:
     envelope_count: int
     manifest_sha256: str
     failure_code: str | None
+    bounded_snapshot: dict[str, object] | None = None
 
 
 class AcquisitionRunner:
@@ -105,9 +114,31 @@ class AcquisitionRunner:
         request: AcquisitionRequest,
         company_name: str,
     ) -> AcquisitionResult:
-        self.evidence_store.begin_run(
+        acquisition_run = self.evidence_store.begin_run(
             run_id=run_id, snapshot=request.snapshot, company_name=company_name
         )
+        if acquisition_run.state is not RunState.IN_PROGRESS:
+            existing = self.evidence_store.terminal_run_summary(run_id=run_id)
+            existing_state = existing["state"]
+            if not isinstance(existing_state, RunState):
+                raise TypeError("stored run state is invalid")
+            existing_count = existing["envelope_count"]
+            if not isinstance(existing_count, int):
+                raise TypeError("stored envelope count is invalid")
+            return AcquisitionResult(
+                run_id=run_id,
+                state=existing_state,
+                envelope_count=existing_count,
+                manifest_sha256=str(existing["manifest_sha256"]),
+                failure_code=(
+                    str(existing["failure_code"])
+                    if existing["failure_code"] is not None
+                    else None
+                ),
+                bounded_snapshot=self.evidence_store.bounded_snapshot_summary(
+                    run_id=run_id
+                ),
+            )
         count = 0
         try:
             async for envelope in self.provider.acquire(request):
@@ -130,15 +161,35 @@ class AcquisitionRunner:
                 manifest_sha256=digest,
                 failure_code=str(code),
             )
-        digest = self.evidence_store.finish_run(
-            run_id=run_id,
-            state=RunState.COMPLETE,
-            ended_at=datetime.now(timezone.utc),
-        )
+        try:
+            digest = self.evidence_store.finish_run(
+                run_id=run_id,
+                state=RunState.COMPLETE,
+                ended_at=datetime.now(timezone.utc),
+            )
+        except Exception as error:  # noqa: BLE001 - seals projection failures
+            code = getattr(error, "code", "acquisition_finalization_failed")
+            digest = self.evidence_store.finish_run(
+                run_id=run_id,
+                state=RunState.PARTIAL,
+                ended_at=datetime.now(timezone.utc),
+                failure_code=str(code),
+                failure_evidence=_failure_evidence(run_id, error),
+            )
+            return AcquisitionResult(
+                run_id=run_id,
+                state=RunState.PARTIAL,
+                envelope_count=count,
+                manifest_sha256=digest,
+                failure_code=str(code),
+            )
         return AcquisitionResult(
             run_id=run_id,
             state=RunState.COMPLETE,
             envelope_count=count,
             manifest_sha256=digest,
             failure_code=None,
+            bounded_snapshot=self.evidence_store.bounded_snapshot_summary(
+                run_id=run_id
+            ),
         )

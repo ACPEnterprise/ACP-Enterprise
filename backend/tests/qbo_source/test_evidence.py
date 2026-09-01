@@ -8,7 +8,6 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 
 import pytest
-
 from app.qbo_source.contracts import (
     AcquisitionRequest,
     EntityKind,
@@ -178,6 +177,32 @@ def test_control_registration_contains_metadata_not_raw_report(tmp_path: Path) -
     assert hashlib.sha256(registration).hexdigest() == digest
     assert b"raw_sha256" in registration
     assert b"financial rows" not in registration
+
+
+@pytest.mark.asyncio
+async def test_completed_run_replay_does_not_reacquire(tmp_path: Path) -> None:
+    class Provider:
+        calls = 0
+
+        async def acquire(self, request):  # type: ignore[no-untyped-def]
+            self.calls += 1
+            yield envelope("first")
+
+    repository = tmp_path / "repository"
+    repository.mkdir()
+    store = evidence_store(tmp_path / "protected", repository)
+    provider = Provider()
+    runner = AcquisitionRunner(provider=provider, evidence_store=store)
+    request = AcquisitionRequest(snapshot(), (EntityKind.INVOICE,))
+    first = await runner.run(
+        run_id="completed-replay", request=request, company_name="Synthetic"
+    )
+    replay = await runner.run(
+        run_id="completed-replay", request=request, company_name="Synthetic"
+    )
+    assert provider.calls == 1
+    assert replay == first
+    assert store.stored_snapshot(run_id="completed-replay") == snapshot()
 
 
 @pytest.mark.asyncio
