@@ -1,0 +1,58 @@
+{
+  "authority_sha": "a86daa79bd5700f028849546a12fa867a05f5fd7",
+  "contract": "LIA.CONTEXT.v1",
+  "context_sources": {
+    "assets": "SOURCE_REQUIRED_ACTIVE_OWNER",
+    "beacon": "AUTHORITATIVE",
+    "customer": "AUTHORITATIVE",
+    "economics": "AUTHORITATIVE",
+    "estimate": "AUTHORITATIVE_BOUNDED_ADAPTER",
+    "inventory": "AUTHORITATIVE_BOUNDED_ADAPTER",
+    "invoice": "AUTHORITATIVE_BOUNDED_ADAPTER_AND_UI",
+    "job": "AUTHORITATIVE_JOB_LIA_CONTEXT_V1",
+    "luminary": "AUTHORITATIVE",
+    "migration": "AUTHORITATIVE_METADATA_ONLY",
+    "payroll_admin": "AUTHORITATIVE_METADATA_ONLY",
+    "payroll_own": "PARTIAL_FOUNDATION_REGISTRY_REQUALIFICATION_REQUIRED",
+    "purchasing": "AUTHORITATIVE_BOUNDED_ADAPTER",
+    "scheduling": "AUTHORITATIVE_BOUNDED_ADAPTER",
+    "service_agreements": "AUTHORITATIVE_CUSTOMER_COMPOSITION",
+    "workforce": "ACTIVE_OWNER_COLLISION"
+  },
+  "hard_boundaries": {
+    "ai_provider_called": false,
+    "autonomous_mutation_enabled": false,
+    "client_company_or_branch_trusted": false,
+    "hidden_reasoning_persisted": false,
+    "preview_touched": false,
+    "production_touched": false,
+    "raw_notes_projected": false,
+    "transcript_retention_policy_invented": false
+  },
+  "qualification": {
+    "alembic_drift": 0,
+    "alembic_head": "i5h3g51b8z4x",
+    "alembic_head_count": 1,
+    "broad_backend_passed": 1026,
+    "broad_backend_skipped": 7,
+    "broad_baseline_teardown_or_environment_errors": 7,
+    "frontend_focused_passed": 12,
+    "lia_passed": 59,
+    "mypy_errors": 0,
+    "ruff_errors": 0,
+    "typescript_build": "PASS"
+  },
+  "safety_results": {
+    "authorization_revalidated": true,
+    "branch_isolation": true,
+    "company_isolation": true,
+    "conflict_preserved": true,
+    "foreign_uuid_fails_closed": true,
+    "high_impact_action_unavailable": true,
+    "membership_employee_server_resolution": true,
+    "missing_evidence_not_zero": true,
+    "prompt_injection_is_data": true,
+    "secret_exfiltration_denied": true
+  },
+  "qualification_fingerprint": "f01015d3de4310f737b4fad4c8a421cfa0a698287896be325f65e966cafd7eaf"
+}

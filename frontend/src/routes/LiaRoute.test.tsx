@@ -155,4 +155,29 @@ describe("LIA workspace", () => {
       expect.any(Object),
     );
   });
+
+  it("passes only opaque Invoice context for server-side authorization", () => {
+    const invoiceId = "7dc24d7f-94cc-4a25-a9b6-5a5e8aa36947";
+    render(
+      <MemoryRouter
+        initialEntries={[
+          `/lia?contextDomain=invoicing&contextId=${invoiceId}`,
+        ]}
+      >
+        <LiaRoute />
+      </MemoryRouter>,
+    );
+    fireEvent.change(screen.getByRole("textbox", { name: "Ask LIA a question" }), {
+      target: { value: "What is the Invoice state?" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Ask" }));
+    expect(state.askMutate).toHaveBeenCalledWith(
+      {
+        question: "What is the Invoice state?",
+        conversation_id: undefined,
+        context: { domain: "invoicing", entity_id: invoiceId },
+      },
+      expect.any(Object),
+    );
+  });
 });
