@@ -125,6 +125,38 @@ async def test_authorized_adapter_receives_only_selected_domain() -> None:
 
 
 @pytest.mark.asyncio
+async def test_entity_context_is_opaque_and_server_retrieval_remains_authority() -> (
+    None
+):
+    entity_id = uuid4()
+    retrieval = AsyncMock(spec=GovernedRetrievalService)
+    retrieval.retrieve.return_value = (
+        EvidenceReference(
+            domain="customers",
+            label="Minimum-necessary Customer operational context",
+            authority="CUSTOMER.LIA_CONTEXT.v1",
+            observed_at=datetime(2026, 8, 31, tzinfo=timezone.utc),
+            freshness="CURRENT_QUERY",
+            entity_id=entity_id,
+            evidence_digest="c" * 64,
+            count=1,
+            state="Customer context available",
+        ),
+    )
+    result = await LiaService(retrieval=retrieval).ask(
+        AsyncMock(),
+        context=authorization_context("COMPANY_CUSTOMER_READ"),
+        request=LiaRequest(
+            question="What is happening with this Customer?",
+            context={"domain": "customers", "entity_id": entity_id},
+        ),
+    )
+    assert retrieval.retrieve.await_args.kwargs["domains"] == {"customers"}
+    assert retrieval.retrieve.await_args.kwargs["entity_id"] == entity_id
+    assert result.navigation[0].internal_path == f"/customers/{entity_id}"
+
+
+@pytest.mark.asyncio
 async def test_generic_today_briefing_uses_all_authorized_domains() -> None:
     retrieval = AsyncMock(spec=GovernedRetrievalService)
     retrieval.retrieve.return_value = ()

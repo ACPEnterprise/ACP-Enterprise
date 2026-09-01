@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.platform.permissions.authorization import AuthorizationContext
 
 from .contracts import (
+    EvidenceReference,
     LiaRequest,
     LiaResponse,
     NavigationSuggestion,
@@ -211,7 +212,8 @@ class LiaService:
                 ),
                 navigation=tuple(
                     NavigationSuggestion(
-                        label=f"Open {item.label}", internal_path=ROUTES[item.domain]
+                        label=f"Open {item.label}",
+                        internal_path=_evidence_route(item),
                     )
                     for item in evidence
                     if item.domain in ROUTES
@@ -232,7 +234,7 @@ class LiaService:
         )
         navigation = tuple(
             NavigationSuggestion(
-                label=f"Open {item.label}", internal_path=ROUTES[item.domain]
+                label=f"Open {item.label}", internal_path=_evidence_route(item)
             )
             for item in evidence
             if item.domain in ROUTES
@@ -309,6 +311,13 @@ class LiaService:
             response.evidence_digest,
         )
         return response
+
+
+def _evidence_route(item: EvidenceReference) -> str:
+    base = ROUTES[item.domain]
+    if item.entity_id is not None and item.domain in {"customers", "jobs"}:
+        return f"{base}/{item.entity_id}"
+    return base
 
 
 lia_service = LiaService()

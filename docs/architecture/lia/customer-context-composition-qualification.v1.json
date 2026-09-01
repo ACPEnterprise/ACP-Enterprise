@@ -1,0 +1,50 @@
+{
+  "schema_version": "1.0",
+  "qualification_contract": "LIA.CUSTOMER.CONTEXT.COMPOSITION.1",
+  "projection_contract": "CUSTOMER.LIA_CONTEXT.v1",
+  "authoritative_base": "a976fa1a18246f546140faf288e094cd10f9ddd0",
+  "reconciled_authority": "ee79e0ddede0e686172481b055fca3a26ca74571",
+  "classification": "QUALIFIED_AWAITING_PROTECTED_INTEGRATION",
+  "qualification_fingerprint": "b97f14a52dd75813c2ed516533225b89ee577db3627a126e16020e104e66a838",
+  "included": [
+    "customer identity/display label/lifecycle",
+    "authorized service-location identity/safe nickname",
+    "bounded authorized job identity/number/state/branch",
+    "permission-gated estimate/invoice/agreement state counts",
+    "authorization version and deterministic evidence digest"
+  ],
+  "excluded": [
+    "contact details and postal addresses",
+    "raw customer/job notes and attachment content",
+    "gate/access information",
+    "payment instruments and payroll detail",
+    "credentials, secrets, and protected source payloads"
+  ],
+  "security": {
+    "server_side_scope_resolution": true,
+    "company_and_branch_predicates_before_retrieval": true,
+    "unauthorized_existence_concealed": true,
+    "untrusted_source_text_is_data": true,
+    "autonomous_mutation_enabled": false,
+    "ai_provider_called": false,
+    "production_touched": false
+  },
+  "bounds": {
+    "service_locations": 10,
+    "jobs": 10,
+    "relationship_loading": "FIXED_BOUNDED_GROUPED_QUERIES_NO_N_PLUS_ONE"
+  },
+  "validation": {
+    "backend_focused": 130,
+    "frontend_tests": 333,
+    "frontend_test_files": 103,
+    "ruff": "PASS",
+    "mypy": "PASS",
+    "eslint": "PASS",
+    "typescript_vite_build": "PASS",
+    "alembic_head": "n2l1j60i7g3e",
+    "alembic_head_count": 1,
+    "fresh_postgresql_upgrade": "PASS",
+    "alembic_drift": "ZERO"
+  }
+}

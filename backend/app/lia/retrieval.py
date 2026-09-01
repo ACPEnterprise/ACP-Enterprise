@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.beacon.service import beacon_query_service
 from app.business_economics.models import EconomicsProfitabilityResultRecord
+from app.customers.lia_context import customer_lia_context_service
 from app.customers.models import Customer
 from app.estimates.models import Estimate
 from app.inventory.models import InventoryItem
@@ -107,15 +108,43 @@ class GovernedRetrievalService:
         domains: set[str] | None = None,
         entity_id: Any | None = None,
     ) -> tuple[EvidenceReference, ...]:
+        contextual_domains = ({"customers", "jobs"} & domains) if domains else set()
+        contextual_reference: EvidenceReference | None = None
+        if entity_id is not None and len(contextual_domains) == 1:
+            domain = next(iter(contextual_domains))
+            projection = (
+                await customer_lia_context_service.for_customer(
+                    session, context=context, customer_id=entity_id
+                )
+                if domain == "customers"
+                else await customer_lia_context_service.for_job(
+                    session, context=context, job_id=entity_id
+                )
+            )
+            if projection is not None:
+                contextual_reference = EvidenceReference(
+                    domain=domain,
+                    label="Minimum-necessary Customer operational context",
+                    authority=projection.contract_version,
+                    observed_at=projection.observed_at,
+                    freshness="CURRENT_QUERY",
+                    entity_id=projection.entity_id,
+                    evidence_digest=projection.evidence_digest,
+                    count=len(projection.jobs),
+                    state=projection.safe_summary(),
+                )
         # Permission checks select adapters before any protected query is executed.
         permitted = tuple(
             adapter
             for adapter in ADAPTERS
             if context.has_permission(adapter.permission)
             and (domains is None or adapter.domain in domains)
+            and not (entity_id is not None and adapter.domain in contextual_domains)
         )
         observed_at = datetime.now(timezone.utc)
-        evidence: list[EvidenceReference] = []
+        evidence: list[EvidenceReference] = (
+            [contextual_reference] if contextual_reference is not None else []
+        )
         for adapter in permitted:
             predicates = [adapter.model.company_id == context.company.id]
             if hasattr(adapter.model, "branch_id"):

@@ -11,11 +11,11 @@
   "autonomous_mutation_enabled": false,
   "production_touched": false,
   "fingerprint_algorithm": "sha256(sorted path=sha256(file) lines with LF)",
-  "qualification_fingerprint": "7163bee303fe99fbc4b405d0e13153e1db0f1e3952634505a54bae9e0d5dd5f8",
+  "qualification_fingerprint": "9d48ad16b7a0f664bce36d38cbdb0734fc23de724ae0e9aade67b61a9dfe6214",
   "inputs": {
     "backend/app/lia/adapters.py": "df1e439f5b9b0b578e68543d7bbb044d2f48a59f138394046820ec5546a5f25e",
     "backend/app/lia/evaluation.py": "f06adc789b3cd610a9a26195b04e52d8fbbf1c576bd13b77f0c3b90252d18a41",
-    "backend/app/lia/foundation.py": "61ece4b09be2161d02d48ac1d07baaec4cc842db0343bb58979b1cb27442dc55",
+    "backend/app/lia/foundation.py": "b5366bcb8b819ae573ec88997f10d0677b75600d95eff4226ca68e6d9ec4e902",
     "backend/app/lia/safety.py": "9b41b550577a964409023926f76c786b567d91ad88b6db7be2f1e701b03fbdd0",
     "backend/tests/lia/test_foundation_safety.py": "6722c19e7de4ec68b79d0492de35efa41f120f77c90f2d63aaf708a63b8a89bc",
     "docs/architecture/lia/foundation-readiness-v1.md": "f8b6a1287c2d3deb85ce09ffef10e27ca51c9eb147719a5c8bc980f3418d1ae7",
@@ -41,7 +41,6 @@
   "explicit_gates": [
     "AI provider selection, credentials, configuration, and admission require separate owner approval.",
     "Payroll own-statement context remains blocked until server-side Membership-to-Employee resolution is admitted.",
-    "Customer context remains partial until a minimum-necessary role-scoped projection is accepted.",
     "Conversation transcript retention is not configured; hidden reasoning persistence is prohibited.",
     "Preview role-matrix acceptance remains pending Enterprise integration and deployment.",
     "Production autonomous mutation is disabled."
