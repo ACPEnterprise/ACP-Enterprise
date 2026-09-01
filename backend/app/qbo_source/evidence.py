@@ -574,8 +574,9 @@ class ControlEvidenceRegistry:
         parameter_end = registration.safe_report_parameters.get("end_date")
         if parameter_end != registration.report_end_date.isoformat():
             raise ValueError("control report cutoff must match safe parameters")
-        if registration.accounting_basis.lower() != "accrual":
-            raise ValueError("accrual report basis is required")
+        basis = registration.accounting_basis.lower()
+        if basis not in {"cash", "accrual", "operational"}:
+            raise ValueError("cash, accrual, or operational report basis is required")
         document = {
             "schema_version": "qbo-control-registration/v1",
             "control_id": registration.control_id,
