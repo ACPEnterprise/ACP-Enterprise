@@ -210,7 +210,7 @@ def provision_admission_packet(
         authority_id="qbo-g5-coa-mapping-v1", document=coa
     )
     control_digest = registry.register_authority_document(
-        authority_id="qbo-g5-accounting-controls-v1", document=controls
+        authority_id="qbo-g5-accounting-controls-v2", document=controls
     )
     return {
         "state": "ACCOUNTING_ADMISSION_CONTROL_PACKET_READY",
