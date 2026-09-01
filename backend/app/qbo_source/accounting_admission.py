@@ -112,6 +112,14 @@ def accounting_control_matrix(cutoff: str) -> tuple[dict[str, object], ...]:
             "prove cutoff open items and control-account tie-out",
         ),
         _control(
+            "opening_balance_sheet",
+            "CONTROL_REPORT_REQUIRED",
+            "Balance Sheet; Trial Balance",
+            "2021-07-06",
+            "prove balance-sheet opening authority immediately before the earliest "
+            "reliable transaction family",
+        ),
+        _control(
             "AP", "CONTROL_REPORT_REQUIRED",
             "A/P Aging Detail; Unpaid Bills; Trial Balance", cutoff,
             "prove zero or open AP independently of empty API families",
@@ -186,6 +194,8 @@ def provision_admission_packet(
         "schema_version": ADMISSION_VERSION,
         "cutoff": authority.cutoff,
         "basis": "Accrual",
+        "full_history_start": "2021-07-07",
+        "opening_control_as_of": "2021-07-06",
         "matrix": accounting_control_matrix(authority.cutoff),
         "observations_not_admitted": {
             "invoice_gross": "1736216.15",

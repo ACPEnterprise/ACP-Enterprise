@@ -179,6 +179,14 @@ def test_control_registration_contains_metadata_not_raw_report(tmp_path: Path) -
     assert b"financial rows" not in registration
 
 
+def test_control_registry_supports_account_and_inventory_controls() -> None:
+    assert ControlReportKind.ACCOUNT_QUICK_REPORT.value == "account_quick_report"
+    assert (
+        ControlReportKind.INVENTORY_VALUATION_SUMMARY.value
+        == "inventory_valuation_summary"
+    )
+
+
 @pytest.mark.asyncio
 async def test_completed_run_replay_does_not_reacquire(tmp_path: Path) -> None:
     class Provider:

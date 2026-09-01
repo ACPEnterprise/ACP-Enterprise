@@ -72,3 +72,4 @@ def test_control_matrix_requires_independent_ar_ap_and_cash_controls() -> None:
     assert "A/R Aging Detail" in matrix["AR"]["reports"]
     assert matrix["AP"]["state"] == "CONTROL_REPORT_REQUIRED"
     assert matrix["cash_bank"]["state"] == "CONTROL_REPORT_REQUIRED"
+    assert matrix["opening_balance_sheet"]["as_of"] == "2021-07-06"
