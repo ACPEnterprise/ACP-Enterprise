@@ -1,13 +1,13 @@
 """Classify immutable cutover evidence mutations as integrity violations.
 
 Revision ID: f2e0d28y5w1u
-Revises: e1d9c27x4v0t
+Revises: n2l1j60i7g3e
 """
 
 from alembic import op
 
 revision = "f2e0d28y5w1u"
-down_revision = "e1d9c27x4v0t"
+down_revision = "n2l1j60i7g3e"
 branch_labels = None
 depends_on = None
 
