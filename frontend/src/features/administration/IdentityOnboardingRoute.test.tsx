@@ -37,6 +37,10 @@ const requiredPermissions = [
   assignable: true,
   assigned: true,
   reconciliation_required: false,
+  category: code.includes("TIMEKEEPING") ? "Timekeeping" : "Jobs",
+  access_nature: code.includes("READ") ? "READ_ONLY" as const : "MUTATION" as const,
+  own_data: code.includes("_OWN_"),
+  high_impact: false,
 }));
 
 const context: AuthenticationContextValue = {

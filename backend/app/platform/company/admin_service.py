@@ -108,9 +108,51 @@ class CompanyAdministrationService:
                 "assignable": assignable and permission.code in definitions,
                 "assigned": permission.id in assigned_ids,
                 "reconciliation_required": permission.code not in definitions,
+                "category": self._permission_category(permission.code),
+                "access_nature": self._permission_nature(permission.action),
+                "own_data": "_OWN_" in permission.code,
+                "high_impact": self._permission_high_impact(permission.code),
             }
             for permission in permissions
         ]
+
+    @staticmethod
+    def _permission_category(code: str) -> str:
+        categories = (
+            ("CUSTOMER", "Customers, Contacts & Locations"),
+            ("ESTIMATE", "Estimates"), ("SCHEDULING", "Scheduling"),
+            ("JOB", "Jobs"), ("DISPATCH", "Dispatch"),
+            ("INVOICE", "Invoices"), ("PAYMENT", "Payments"),
+            ("COMMUNICATION", "Communications"),
+            ("SERVICE_AGREEMENT", "Service Agreements"),
+            ("ASSET", "Assets & Fleet"), ("PURCHASING", "Purchasing"),
+            ("INVENTORY", "Inventory"), ("WORKFORCE", "Workforce"),
+            ("TIMEKEEPING", "Timekeeping"), ("PAYROLL", "Payroll"),
+            ("ACCOUNTING", "Accounting"), ("ECONOMICS", "Business Economics"),
+            ("LUMINARY", "Luminary"), ("BEACON", "Beacon"), ("LIA", "LIA"),
+            ("REPORT", "Reports"), ("AUDIT", "Audit"),
+            ("MIGRATION", "Migration"), ("OWNER", "Owner Operations"),
+        )
+        return next((label for token, label in categories if f"_{token}_" in code), "Administration")
+
+    @staticmethod
+    def _permission_nature(action: str) -> str:
+        if action in {"read", "list", "view", "own_read"}:
+            return "READ_ONLY"
+        if action in {"manage", "admin", "execute", "post", "approve", "adjust"}:
+            return "ADMIN_OR_MUTATION"
+        return "MUTATION"
+
+    @staticmethod
+    def _permission_high_impact(code: str) -> bool:
+        return any(
+            token in code
+            for token in (
+                "PAYROLL_ADMIN", "ACCOUNTING_POST", "PAYMENT_", "ROLE_MANAGE",
+                "PERMISSION_MANAGE", "MIGRATION_EXECUTE", "PURCHASING_APPROVE",
+                "INVENTORY_ADJUST", "COMPANY_ADMIN",
+            )
+        )
 
     async def list_memberships(
         self,
