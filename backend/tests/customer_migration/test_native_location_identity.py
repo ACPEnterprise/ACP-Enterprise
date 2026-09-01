@@ -6,8 +6,6 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from app.core.config import settings
 from app.customer_migration.cutover_plan import (
     CUTOVER_PLAN_VERSION,
@@ -32,6 +30,15 @@ from app.customer_migration.cutover_readiness_repository import (
 from app.customer_migration.cutover_rehearsal import (
     CutoverRehearsalEvidence,
     CutoverRehearsalService,
+)
+from app.customer_migration.models import (
+    CustomerIdentityConsolidationEvidence,
+    CustomerMigrationCutoverPlanEvidence,
+    CustomerMigrationCutoverReadinessEvidence,
+    CustomerMigrationCutoverRehearsalEvidence,
+    CustomerMigrationCutoverRehearsalStepEvidence,
+    ServiceLocationIdentityEvidence,
+    ServiceLocationReconciliationEvidence,
 )
 from app.customer_migration.native_customer_consolidation import (
     NativeCustomerObservation,
@@ -68,6 +75,10 @@ from app.customer_migration.native_location_review import (
 from app.platform.branch.models import Branch
 from app.platform.company.models import Company
 from app.platform.users.models import User
+from sqlalchemy import delete, update
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
 from tests.customer_migration.test_cutover_plan import compiler_inputs
 
 
