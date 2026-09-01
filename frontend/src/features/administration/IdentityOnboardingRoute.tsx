@@ -16,8 +16,10 @@ import {
 } from "../../ui";
 import {
   initiateEmployeeBetaOnboarding,
+  listPermissions,
   listRoles,
   type CompanyRole,
+  type PermissionDefinition,
 } from "./api";
 
 const ONBOARDING_PERMISSION = "COMPANY_IDENTITY_ONBOARDING_MANAGE";
@@ -53,6 +55,10 @@ export function IdentityOnboardingRoute() {
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<"success" | "error" | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
+  const [permissions, setPermissions] = useState<PermissionDefinition[]>([]);
+  const [additionalPermissionIds, setAdditionalPermissionIds] = useState<string[]>([]);
+  const [permissionSearch, setPermissionSearch] = useState("");
+  const [highImpactOnly, setHighImpactOnly] = useState(false);
 
   useEffect(() => {
     if (!authorized) return;
@@ -83,6 +89,34 @@ export function IdentityOnboardingRoute() {
     };
   }, [authorized, readinessAttempt]);
 
+  useEffect(() => {
+    if (!authorized || !roleId) {
+      return;
+    }
+    let current = true;
+    void Promise.all([listPermissions(roleId), listPermissions()])
+      .then(([roleItems, allItems]) => {
+        if (!current) return;
+        const defaults = new Set(roleItems.filter((item) => item.assigned).map((item) => item.id));
+        setPermissions(allItems.map((item) => ({ ...item, assigned: defaults.has(item.id) })));
+        setAdditionalPermissionIds([]);
+      })
+      .catch(() => { if (current) setPermissions([]); });
+    return () => { current = false; };
+  }, [authorized, roleId]);
+
+  const visiblePermissions = useMemo(() => {
+    const query = permissionSearch.trim().toLowerCase();
+    return permissions.filter((permission) =>
+      (!highImpactOnly || permission.high_impact) &&
+      (!query || [permission.name, permission.description ?? "", permission.category ?? "Other", permission.code].some((value) => value.toLowerCase().includes(query)))
+    );
+  }, [permissions, permissionSearch, highImpactOnly]);
+  const permissionGroups = useMemo(() => visiblePermissions.reduce<Record<string, PermissionDefinition[]>>((groups, permission) => {
+    (groups[permission.category ?? "Other"] ??= []).push(permission);
+    return groups;
+  }, {}), [visiblePermissions]);
+
   if (!authorized) {
     return (
       <Alert variant="danger" announcement="assertive">
@@ -108,6 +142,7 @@ export function IdentityOnboardingRoute() {
         employee_number_prefix: "EMP-",
         employee_number_width: 4,
         role_ids: [roleId],
+        additional_permission_ids: additionalPermissionIds,
         login_email: loginAddress.trim(),
       });
       setLoginAddress("");
@@ -201,6 +236,19 @@ export function IdentityOnboardingRoute() {
                 </select>
                 <span className="text-body-xs text-content-muted">The role is a starting bundle. Effective authority remains permission- and Branch-scoped.</span>
               </label>
+              <fieldset className="space-y-ui-3 rounded-lg border border-stroke p-ui-4">
+                <legend className="px-ui-2 font-semibold">Effective permission preview</legend>
+                <p className="text-body-xs text-content-muted">Role defaults and explicit additive Employee permissions are shown before onboarding. Branch scope is <strong>{branches.find((branch) => branch.id === branchId)?.name ?? "not selected"}</strong>. Removing a role default requires choosing a narrower baseline role; hidden deny semantics are not invented.</p>
+                <div className="grid gap-ui-3 sm:grid-cols-[1fr_auto]">
+                  <label><span className="sr-only">Search permissions</span><Input value={permissionSearch} onChange={(event) => setPermissionSearch(event.target.value)} placeholder="Search permission, category, or capability" /></label>
+                  <label className="flex min-h-11 items-center gap-ui-2"><input type="checkbox" checked={highImpactOnly} onChange={(event) => setHighImpactOnly(event.target.checked)} /> High-impact only</label>
+                </div>
+                <div className="max-h-80 space-y-ui-3 overflow-y-auto" aria-live="polite">
+                  {Object.entries(permissionGroups).map(([category, items]) => <section key={category} className="rounded-md bg-surface-subtle p-ui-3"><h3 className="font-semibold">{category}</h3><ul className="mt-ui-2 space-y-ui-2">{items?.map((permission) => <li key={permission.id} className="text-body-s"><label className="flex items-start gap-ui-2"><input type="checkbox" className="mt-1" checked={permission.assigned || additionalPermissionIds.includes(permission.id)} disabled={permission.assigned || !permission.assignable} onChange={(event) => setAdditionalPermissionIds((current) => event.target.checked ? [...current, permission.id] : current.filter((id) => id !== permission.id))} /><span><span className="font-medium">{permission.name}</span>{permission.assigned && <span className="ml-ui-2 text-body-xs text-content-muted">Role default</span>}{permission.high_impact && <span className="ml-ui-2 rounded bg-status-warning/15 px-ui-2 py-0.5 text-body-xs">High impact</span>}<span className="block text-body-xs text-content-muted">{permission.own_data ? "Own data only" : (permission.access_nature ?? "MUTATION").replaceAll("_", " ")} · {permission.description ?? permission.code}</span></span></label></li>)}</ul></section>)}
+                  {visiblePermissions.length === 0 && <p className="text-body-s text-content-muted">No role-default permission matches this filter.</p>}
+                </div>
+              </fieldset>
+              {additionalPermissionIds.length > 0 && <Alert variant="warning">Change summary: {additionalPermissionIds.length} explicit Employee permission{additionalPermissionIds.length === 1 ? "" : "s"} will be added beyond the selected role defaults. This advances effective authority when the account activates.</Alert>}
               <label className="block space-y-ui-2">
                 <span className="text-body-s font-semibold">
                   Employee login address

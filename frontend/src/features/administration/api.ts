@@ -20,6 +20,10 @@ export interface PermissionDefinition {
   assignable: boolean;
   assigned: boolean;
   reconciliation_required: boolean;
+  category?: string;
+  access_nature?: "READ_ONLY" | "MUTATION" | "ADMIN_OR_MUTATION";
+  own_data?: boolean;
+  high_impact?: boolean;
 }
 
 export interface CanonicalRoleSyncPlan {
@@ -61,6 +65,7 @@ export interface IdentityOnboardingInitiateRequest {
   employee_number_prefix: string;
   employee_number_width: number;
   role_ids: string[];
+  additional_permission_ids: string[];
   login_email: string;
 }
 
