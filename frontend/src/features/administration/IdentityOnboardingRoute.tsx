@@ -16,8 +16,13 @@ import {
 } from "../../ui";
 import {
   initiateEmployeeBetaOnboarding,
+  getIdentityOnboardingDelivery,
   listPermissions,
   listRoles,
+  reissueIdentityOnboarding,
+  revokeIdentityOnboarding,
+  type IdentityOnboardingDeliveryView,
+  type IdentityOnboardingView,
   type CompanyRole,
 } from "./api";
 
@@ -48,15 +53,26 @@ function submissionMessage(error: unknown): string {
 export function IdentityOnboardingRoute() {
   const { activeCompany, permissionCodes = [] } = useAuth();
   const authorized = permissionCodes.includes(ONBOARDING_PERMISSION);
-  const branches = useMemo(() => activeCompany?.branches ?? [], [activeCompany]);
-  const initialBranchId = activeCompany?.default_branch_id ?? branches[0]?.id ?? "";
+  const branches = useMemo(
+    () => activeCompany?.branches ?? [],
+    [activeCompany],
+  );
+  const initialBranchId =
+    activeCompany?.default_branch_id ?? branches[0]?.id ?? "";
   const [branchId, setBranchId] = useState(initialBranchId);
   const [loginAddress, setLoginAddress] = useState("");
-  const [preparation, setPreparation] = useState<Preparation>({ state: "loading" });
+  const [preparation, setPreparation] = useState<Preparation>({
+    state: "loading",
+  });
   const [readinessAttempt, setReadinessAttempt] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<"success" | "error" | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
+  const [onboarding, setOnboarding] = useState<IdentityOnboardingView | null>(
+    null,
+  );
+  const [delivery, setDelivery] =
+    useState<IdentityOnboardingDeliveryView | null>(null);
 
   useEffect(() => {
     if (!authorized) return;
@@ -65,7 +81,8 @@ export function IdentityOnboardingRoute() {
       .then(async (roles) => {
         const role = roles.find(
           (candidate) =>
-            candidate.code === EMPLOYEE_ROLE_CODE && candidate.status === "active",
+            candidate.code === EMPLOYEE_ROLE_CODE &&
+            candidate.status === "active",
         );
         if (!role) return { role: null, permissions: [] };
         return { role, permissions: await listPermissions(role.id) };
@@ -119,12 +136,13 @@ export function IdentityOnboardingRoute() {
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    if (preparation.state !== "ready" || !branchId || !loginAddress.trim()) return;
+    if (preparation.state !== "ready" || !branchId || !loginAddress.trim())
+      return;
     setSubmitting(true);
     setResult(null);
     setErrorMessage("");
     try {
-      await initiateEmployeeBetaOnboarding({
+      const created = await initiateEmployeeBetaOnboarding({
         request_key: "acp-employee-beta-v1",
         branch_id: branchId,
         first_name: "ACP Employee",
@@ -136,7 +154,51 @@ export function IdentityOnboardingRoute() {
         role_ids: [preparation.role.id],
         login_email: loginAddress.trim(),
       });
+      setOnboarding(created);
+      setDelivery(await getIdentityOnboardingDelivery(created.id));
       setLoginAddress("");
+      setResult("success");
+    } catch (error) {
+      setErrorMessage(submissionMessage(error));
+      setResult("error");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const refreshDelivery = async () => {
+    if (!onboarding) return;
+    try {
+      setDelivery(await getIdentityOnboardingDelivery(onboarding.id));
+    } catch {
+      setErrorMessage("Delivery history could not be refreshed safely.");
+      setResult("error");
+    }
+  };
+
+  const reissue = async () => {
+    if (!onboarding) return;
+    setSubmitting(true);
+    try {
+      const next = await reissueIdentityOnboarding(onboarding.id);
+      setOnboarding(next);
+      setDelivery(await getIdentityOnboardingDelivery(next.id));
+      setResult("success");
+    } catch (error) {
+      setErrorMessage(submissionMessage(error));
+      setResult("error");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const revoke = async () => {
+    if (!onboarding) return;
+    setSubmitting(true);
+    try {
+      const next = await revokeIdentityOnboarding(onboarding.id);
+      setOnboarding(next);
+      setDelivery(await getIdentityOnboardingDelivery(next.id));
       setResult("success");
     } catch (error) {
       setErrorMessage(submissionMessage(error));
@@ -157,7 +219,8 @@ export function IdentityOnboardingRoute() {
       </header>
       {result === "success" && (
         <Alert variant="success" announcement="polite">
-          Onboarding was created. Continue with the protected owner activation claim.
+          Onboarding was created. Continue with the protected owner activation
+          claim.
         </Alert>
       )}
       {result === "error" && (
@@ -169,8 +232,8 @@ export function IdentityOnboardingRoute() {
         <CardHeader>
           <CardTitle>ACP Employee beta</CardTitle>
           <CardDescription>
-            Identity key: acp-employee-beta-v1. Activation material is never shown by
-            this form.
+            Identity key: acp-employee-beta-v1. Activation material is never
+            shown by this form.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -192,9 +255,14 @@ export function IdentityOnboardingRoute() {
               </div>
             </Alert>
           ) : (
-            <form className="space-y-ui-4" onSubmit={(event) => void submit(event)}>
+            <form
+              className="space-y-ui-4"
+              onSubmit={(event) => void submit(event)}
+            >
               <label className="block space-y-ui-2">
-                <span className="text-body-s font-semibold">Preview Branch</span>
+                <span className="text-body-s font-semibold">
+                  Preview Branch
+                </span>
                 <select
                   className="min-h-11 w-full rounded-md border border-stroke bg-surface px-ui-3"
                   value={branchId}
@@ -235,6 +303,77 @@ export function IdentityOnboardingRoute() {
           )}
         </CardContent>
       </Card>
+      {onboarding && delivery && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Invitation delivery</CardTitle>
+            <CardDescription>
+              Truthful provider-neutral state for {onboarding.masked_login}.
+              Provider acceptance is not proof of delivery.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-ui-4">
+            <dl
+              className="grid gap-ui-3 sm:grid-cols-2"
+              aria-label="Invitation delivery state"
+            >
+              <div>
+                <dt className="text-body-s text-content-muted">Invitation</dt>
+                <dd className="font-semibold uppercase">
+                  {delivery.invitation_status}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-body-s text-content-muted">Delivery</dt>
+                <dd className="font-semibold uppercase">
+                  {delivery.delivery_status}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-body-s text-content-muted">Template</dt>
+                <dd>{delivery.template_version ?? "Not prepared"}</dd>
+              </div>
+              <div>
+                <dt className="text-body-s text-content-muted">Attempts</dt>
+                <dd>{delivery.retry_count}</dd>
+              </div>
+            </dl>
+            {delivery.last_error_code && (
+              <Alert variant="warning">
+                Delivery requires review: {delivery.last_error_code}
+              </Alert>
+            )}
+            {delivery.delivery_status === "pending" && (
+              <Alert variant="warning">
+                Transactional email provider is not configured. The invitation
+                remains durable and unsent.
+              </Alert>
+            )}
+            <div className="flex flex-col gap-ui-3 sm:flex-row">
+              <Button
+                variant="secondary"
+                onClick={() => void refreshDelivery()}
+              >
+                Refresh delivery
+              </Button>
+              <Button
+                variant="secondary"
+                disabled={submitting || onboarding.status !== "invited"}
+                onClick={() => void reissue()}
+              >
+                Reissue invitation
+              </Button>
+              <Button
+                variant="destructive"
+                disabled={submitting || onboarding.status !== "invited"}
+                onClick={() => void revoke()}
+              >
+                Revoke invitation
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
       <Link className="text-link" to="/administration">
         Back to Administration
       </Link>

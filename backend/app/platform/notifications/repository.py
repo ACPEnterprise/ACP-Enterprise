@@ -259,6 +259,104 @@ class NotificationOutboxRepository:
         return True
 
     @staticmethod
+    async def mark_accepted(
+        session: AsyncSession,
+        *,
+        notification_id: UUID,
+        claim_token: UUID,
+        at: datetime,
+    ) -> bool:
+        record = await NotificationOutboxRepository._claimed(
+            session, notification_id, claim_token
+        )
+        if (
+            record is None
+            or record.submitted_at is None
+            or not record.provider_reference
+        ):
+            return False
+        await NotificationOutboxRepository._evidence(
+            session,
+            record,
+            "accepted",
+            at,
+            worker_id=record.claimed_by,
+            claim_token=claim_token,
+            provider_reference=record.provider_reference,
+        )
+        record.status = "accepted"
+        record.claimed_at = None
+        record.claim_expires_at = None
+        record.claimed_by = None
+        record.claim_token = None
+        record.updated_at = at
+        await session.flush()
+        return True
+
+    @staticmethod
+    async def apply_provider_event(
+        session: AsyncSession,
+        *,
+        company_id: UUID,
+        provider_reference: str,
+        provider_event_key: str,
+        outcome: str,
+        at: datetime,
+        error_code: str | None = None,
+    ) -> bool:
+        if outcome not in {"delivered", "deferred", "bounced", "rejected", "complaint"}:
+            raise ValueError("Unsupported provider delivery outcome.")
+        if not provider_event_key.strip():
+            raise ValueError("Provider event identity is required.")
+        record = await session.scalar(
+            select(NotificationOutbox)
+            .where(
+                NotificationOutbox.company_id == company_id,
+                NotificationOutbox.provider_reference == provider_reference,
+            )
+            .with_for_update()
+        )
+        if record is None:
+            return False
+        duplicate = await session.scalar(
+            select(NotificationDeliveryEvidence.id).where(
+                NotificationDeliveryEvidence.outbox_id == record.id,
+                NotificationDeliveryEvidence.provider_event_key == provider_event_key,
+            )
+        )
+        if duplicate is not None:
+            return True
+        if record.status in {"sent", "failed", "canceled", "suppressed"}:
+            return False
+        await NotificationOutboxRepository._evidence(
+            session,
+            record,
+            outcome,
+            at,
+            provider_reference=provider_reference,
+            provider_event_key=provider_event_key,
+            error_code=error_code,
+            error_category="provider_event" if error_code else None,
+        )
+        if outcome == "delivered":
+            record.status = "sent"
+            record.sent_at = at
+            record.failed_at = None
+        elif outcome == "deferred":
+            record.status = "accepted"
+            record.last_error_code = error_code or "provider_deferred"
+            record.last_error_category = "transient"
+        else:
+            record.status = "failed"
+            record.failed_at = at
+            record.terminal_failure = True
+            record.last_error_code = error_code or outcome
+            record.last_error_category = "permanent"
+        record.updated_at = at
+        await session.flush()
+        return True
+
+    @staticmethod
     async def record_provider_submission(
         session: AsyncSession,
         *,
@@ -559,6 +657,7 @@ class NotificationOutboxRepository:
         error_category: str | None = None,
         actor_user_id: UUID | None = None,
         reason_digest: str | None = None,
+        provider_event_key: str | None = None,
     ) -> None:
         sequence = await session.scalar(
             select(
@@ -575,6 +674,7 @@ class NotificationOutboxRepository:
                 worker_id=worker_id,
                 claim_token=claim_token,
                 provider_reference=provider_reference,
+                provider_event_key=provider_event_key,
                 error_code=error_code,
                 error_category=error_category,
                 actor_user_id=actor_user_id,

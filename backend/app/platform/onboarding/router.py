@@ -2,17 +2,21 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_database_session
+from app.platform.notifications.models import NotificationOutbox
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import AdministrationPermission
 from app.platform.permissions.dependencies import require_permission
 from app.platform.reliability.correlation import current_correlation_id
 from app.platform.reliability.failures import ClientRecovery, FailureCode, SafeFailure
 
+from .models import IdentityOnboardingInvitation
 from .schemas import (
     OnboardingActivateRequest,
+    OnboardingDeliveryView,
     OnboardingInitiateRequest,
     OnboardingOwnerClaimView,
     OnboardingView,
@@ -153,3 +157,56 @@ async def get_state(
     except (OnboardingAuthorizationError, OnboardingConflictError) as error:
         raise _safe_error(error) from error
     return OnboardingView.model_validate(record)
+
+
+@router.get("/{request_id}/delivery", response_model=OnboardingDeliveryView)
+async def delivery_state(
+    request_id: UUID, context: OnboardingAdmin, session: Session
+) -> OnboardingDeliveryView:
+    try:
+        record = await identity_onboarding_service.get(
+            session, context=context, request_id=request_id
+        )
+        invitation = await session.scalar(
+            select(IdentityOnboardingInvitation)
+            .where(IdentityOnboardingInvitation.onboarding_request_id == record.id)
+            .order_by(IdentityOnboardingInvitation.created_at.desc())
+            .limit(1)
+        )
+        if invitation is None:
+            raise OnboardingConflictError("Invitation delivery is unavailable.")
+        message = await session.scalar(
+            select(NotificationOutbox)
+            .where(
+                NotificationOutbox.company_id == context.company.id,
+                NotificationOutbox.branch_id == record.branch_id,
+                NotificationOutbox.recipient_reference == f"invitation:{invitation.id}",
+            )
+            .order_by(NotificationOutbox.created_at.desc())
+            .limit(1)
+        )
+    except (OnboardingAuthorizationError, OnboardingConflictError) as error:
+        raise _safe_error(error) from error
+    status_value = (
+        "delivered"
+        if message is not None and message.status == "sent"
+        else "uncertain"
+        if message is not None and message.status == "ambiguous"
+        else message.status
+        if message is not None
+        else "not_prepared"
+    )
+    return OnboardingDeliveryView(
+        request_id=record.id,
+        invitation_id=invitation.id,
+        message_id=message.id if message else None,
+        invitation_status=invitation.status,
+        delivery_status=status_value,
+        template_version=message.template_version if message else None,
+        retry_count=message.retry_count if message else 0,
+        provider_reference_present=bool(message and message.provider_reference),
+        last_error_code=message.last_error_code if message else None,
+        created_at=message.created_at if message else None,
+        submitted_at=message.submitted_at if message else None,
+        delivered_at=message.sent_at if message else None,
+    )

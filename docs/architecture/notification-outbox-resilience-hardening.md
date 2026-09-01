@@ -24,7 +24,12 @@ replayable only when their original stored facts match exactly.
 
 The lifecycle is:
 
-`pending -> claimed -> sent | retry_scheduled | failed | ambiguous`
+`pending -> claimed -> accepted -> sent | retry_scheduled | failed | ambiguous`
+
+`accepted` means the provider acknowledged submission and returned a stable
+reference. It is not proof of recipient delivery. The Communications projection
+labels the historical `sent` terminal state as `delivered`; authenticated,
+idempotent provider events establish that transition.
 
 An unsubmitted expired claim returns to `pending` or `retry_scheduled`. An
 expired claim after provider submission becomes `ambiguous` unless provider
