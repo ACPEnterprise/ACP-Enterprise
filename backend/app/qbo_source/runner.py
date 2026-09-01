@@ -114,9 +114,31 @@ class AcquisitionRunner:
         request: AcquisitionRequest,
         company_name: str,
     ) -> AcquisitionResult:
-        self.evidence_store.begin_run(
+        acquisition_run = self.evidence_store.begin_run(
             run_id=run_id, snapshot=request.snapshot, company_name=company_name
         )
+        if acquisition_run.state is not RunState.IN_PROGRESS:
+            existing = self.evidence_store.terminal_run_summary(run_id=run_id)
+            existing_state = existing["state"]
+            if not isinstance(existing_state, RunState):
+                raise TypeError("stored run state is invalid")
+            existing_count = existing["envelope_count"]
+            if not isinstance(existing_count, int):
+                raise TypeError("stored envelope count is invalid")
+            return AcquisitionResult(
+                run_id=run_id,
+                state=existing_state,
+                envelope_count=existing_count,
+                manifest_sha256=str(existing["manifest_sha256"]),
+                failure_code=(
+                    str(existing["failure_code"])
+                    if existing["failure_code"] is not None
+                    else None
+                ),
+                bounded_snapshot=self.evidence_store.bounded_snapshot_summary(
+                    run_id=run_id
+                ),
+            )
         count = 0
         try:
             async for envelope in self.provider.acquire(request):

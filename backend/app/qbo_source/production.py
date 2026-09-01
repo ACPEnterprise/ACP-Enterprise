@@ -97,7 +97,7 @@ async def execute_production_acquisition(
         ),
         catalog_version=CATALOG_VERSION,
     )
-    snapshot = SnapshotIdentity(
+    requested_snapshot = SnapshotIdentity(
         snapshot_id=command.run_id,
         realm_id=realm_id,
         environment="production",
@@ -108,6 +108,21 @@ async def execute_production_acquisition(
         ),
         api_minor_version=configuration.qbo_production_api_minor_version,
     )
+    stored_snapshot = store.stored_snapshot(run_id=command.run_id)
+    if stored_snapshot is not None:
+        if (
+            stored_snapshot.snapshot_id != requested_snapshot.snapshot_id
+            or stored_snapshot.realm_id != requested_snapshot.realm_id
+            or stored_snapshot.environment != requested_snapshot.environment
+            or stored_snapshot.accounting_date_cutoff
+            != requested_snapshot.accounting_date_cutoff
+            or stored_snapshot.cutoff_timezone != requested_snapshot.cutoff_timezone
+            or stored_snapshot.api_minor_version != requested_snapshot.api_minor_version
+        ):
+            raise SandboxRuntimeError("production_acquisition_resume_conflict")
+        snapshot = stored_snapshot
+    else:
+        snapshot = requested_snapshot
     request = AcquisitionRequest(
         snapshot=snapshot,
         entity_kinds=PRODUCTION_ACQUISITION_SCOPE,

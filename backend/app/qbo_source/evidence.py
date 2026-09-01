@@ -394,6 +394,44 @@ class ProtectedFilesystemEvidenceStore(EvidenceStore):
             ),
         }
 
+    def stored_snapshot(self, *, run_id: str) -> SnapshotIdentity | None:
+        _safe_identity(run_id)
+        path = self.root / "runs" / run_id / "state.json"
+        if not path.is_file():
+            return None
+        document = self._read_json(path)
+        snapshot = document.get("snapshot")
+        if not isinstance(snapshot, dict):
+            raise EvidenceStoreError("run_state_invalid")
+        return SnapshotIdentity(
+            snapshot_id=str(snapshot["snapshot_id"]),
+            realm_id=str(snapshot["realm_id"]),
+            environment=str(snapshot["environment"]),
+            accounting_date_cutoff=date.fromisoformat(
+                str(snapshot["accounting_date_cutoff"])
+            ),
+            cutoff_timezone=str(snapshot["cutoff_timezone"]),
+            started_at=datetime.fromisoformat(str(snapshot["started_at"])),
+            api_minor_version=int(snapshot["api_minor_version"]),
+        )
+
+    def terminal_run_summary(self, *, run_id: str) -> dict[str, object]:
+        state_path = self._state_path(run_id)
+        document = self._read_json(state_path)
+        state = RunState(str(document["state"]))
+        if state is RunState.IN_PROGRESS:
+            raise EvidenceStoreError("run_not_terminal")
+        manifest_path = self.root / "runs" / run_id / "manifest.json"
+        entities = document.get("entities")
+        if not isinstance(entities, list):
+            raise EvidenceStoreError("run_state_invalid")
+        return {
+            "state": state,
+            "envelope_count": len(entities),
+            "manifest_sha256": hashlib.sha256(manifest_path.read_bytes()).hexdigest(),
+            "failure_code": document.get("failure_code"),
+        }
+
     def _store_blob(self, digest: str, content: bytes) -> None:
         if hashlib.sha256(content).hexdigest() != digest:
             raise EvidenceStoreError("blob_digest_conflict")
