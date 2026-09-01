@@ -6,6 +6,10 @@ import * as workforceHooks from "../hooks/useWorkforce";
 import { WorkforceRoute } from "./WorkforceRoute";
 
 vi.mock("../hooks/useWorkforce");
+vi.mock("../features/administration/hooks", () => ({
+  useRoles: () => ({ data: [], isLoading: false, isError: false }),
+}));
+vi.mock("../auth", () => ({ useAuth: () => ({ permissionCodes: [] }) }));
 
 const summary = {
   employee_id: "employee-1", employee_number: "EMP-1", display_name: "Marisol Rivera",
@@ -21,6 +25,16 @@ describe("WorkforceRoute", () => {
       isPending: false,
       isError: false,
       data: undefined,
+      mutate: vi.fn(),
+    } as never);
+    vi.mocked(workforceHooks.useEmployeeAdministration).mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: undefined,
+    } as never);
+    vi.mocked(workforceHooks.useEmployeeAccessMutation).mockReturnValue({
+      isPending: false,
+      isError: false,
       mutate: vi.fn(),
     } as never);
   }

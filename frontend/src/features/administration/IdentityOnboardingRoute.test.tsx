@@ -87,7 +87,7 @@ describe("IdentityOnboardingRoute", () => {
     });
   });
 
-  it("submits the protected address in a POST body bound to the beta identity", async () => {
+  it("prepares a protected Employee identity with an explicit Branch and role", async () => {
     const user = userEvent.setup();
     renderPage();
 
@@ -95,20 +95,22 @@ describe("IdentityOnboardingRoute", () => {
       await screen.findByLabelText("Employee login address"),
       "synthetic@example.invalid",
     );
-    await user.click(screen.getByRole("button", { name: "Create beta onboarding" }));
+    await user.type(screen.getByLabelText("First name"), "Synthetic");
+    await user.type(screen.getByLabelText("Last name"), "Technician");
+    await user.click(screen.getByRole("button", { name: "Prepare Employee onboarding" }));
 
-    expect(api.initiateEmployeeBetaOnboarding).toHaveBeenCalledWith({
-      request_key: "acp-employee-beta-v1",
+    expect(api.initiateEmployeeBetaOnboarding).toHaveBeenCalledWith(expect.objectContaining({
       branch_id: "branch-1",
-      first_name: "ACP Employee",
-      last_name: "Beta",
-      display_name: "ACP Employee Beta",
+      first_name: "Synthetic",
+      last_name: "Technician",
+      display_name: "Synthetic Technician",
       employee_type: "employee",
       employee_number_prefix: "EMP-",
       employee_number_width: 4,
       role_ids: ["employee-role"],
       login_email: "synthetic@example.invalid",
-    });
+    }));
+    expect(vi.mocked(api.initiateEmployeeBetaOnboarding).mock.calls[0]?.[0].request_key).toMatch(/^employee-admin-/);
     expect(await screen.findByText(/Onboarding was created/)).toBeInTheDocument();
     expect(screen.queryByDisplayValue("synthetic@example.invalid")).not.toBeInTheDocument();
   });
@@ -121,12 +123,12 @@ describe("IdentityOnboardingRoute", () => {
     expect(api.listRoles).not.toHaveBeenCalled();
   });
 
-  it("does not permit onboarding through an unqualified Employee role", async () => {
-    vi.mocked(api.listPermissions).mockResolvedValue(requiredPermissions.slice(0, 3));
+  it("does not permit onboarding without an active canonical role", async () => {
+    vi.mocked(api.listRoles).mockResolvedValue([]);
     renderPage();
     expect(
       await screen.findByText(
-        "The canonical Company Employee role is not ready for ACP Employee onboarding.",
+        "Canonical Employee roles are unavailable.",
       ),
     ).toBeInTheDocument();
     expect(screen.queryByLabelText("Employee login address")).not.toBeInTheDocument();

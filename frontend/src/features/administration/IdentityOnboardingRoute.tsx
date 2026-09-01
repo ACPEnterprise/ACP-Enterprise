@@ -16,23 +16,14 @@ import {
 } from "../../ui";
 import {
   initiateEmployeeBetaOnboarding,
-  listPermissions,
   listRoles,
   type CompanyRole,
 } from "./api";
 
 const ONBOARDING_PERMISSION = "COMPANY_IDENTITY_ONBOARDING_MANAGE";
-const EMPLOYEE_ROLE_CODE = "COMPANY_USER";
-const REQUIRED_EMPLOYEE_PERMISSIONS = new Set([
-  "COMPANY_TIMEKEEPING_OWN_READ",
-  "COMPANY_TIMEKEEPING_OWN_PUNCH",
-  "COMPANY_EMPLOYEE_OPERATIONS_OWN_DAY_READ",
-  "COMPANY_JOB_READ",
-]);
-
 type Preparation =
   | { state: "loading" }
-  | { state: "ready"; role: CompanyRole }
+  | { state: "ready"; roles: CompanyRole[] }
   | { state: "blocked"; message: string };
 
 function submissionMessage(error: unknown): string {
@@ -51,7 +42,12 @@ export function IdentityOnboardingRoute() {
   const branches = useMemo(() => activeCompany?.branches ?? [], [activeCompany]);
   const initialBranchId = activeCompany?.default_branch_id ?? branches[0]?.id ?? "";
   const [branchId, setBranchId] = useState(initialBranchId);
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [roleId, setRoleId] = useState("");
   const [loginAddress, setLoginAddress] = useState("");
+  const [requestKey, setRequestKey] = useState(() => `employee-admin-${crypto.randomUUID()}`);
   const [preparation, setPreparation] = useState<Preparation>({ state: "loading" });
   const [readinessAttempt, setReadinessAttempt] = useState(0);
   const [submitting, setSubmitting] = useState(false);
@@ -61,40 +57,18 @@ export function IdentityOnboardingRoute() {
   useEffect(() => {
     if (!authorized) return;
     let current = true;
-    void listRoles()
-      .then(async (roles) => {
-        const role = roles.find(
-          (candidate) =>
-            candidate.code === EMPLOYEE_ROLE_CODE && candidate.status === "active",
-        );
-        if (!role) return { role: null, permissions: [] };
-        return { role, permissions: await listPermissions(role.id) };
-      })
-      .then(({ role, permissions }) => {
+    void listRoles().then((roles) => {
         if (!current) return;
-        if (!role) {
+        const available = roles.filter((role) => role.status === "active" && role.is_system);
+        if (available.length === 0) {
           setPreparation({
             state: "blocked",
-            message: "The canonical Company Employee role is unavailable.",
+            message: "Canonical Employee roles are unavailable.",
           });
           return;
         }
-        const assigned = new Set(
-          permissions
-            .filter((permission) => permission.assigned)
-            .map((permission) => permission.code),
-        );
-        if (
-          [...REQUIRED_EMPLOYEE_PERMISSIONS].some((code) => !assigned.has(code))
-        ) {
-          setPreparation({
-            state: "blocked",
-            message:
-              "The canonical Company Employee role is not ready for ACP Employee onboarding.",
-          });
-          return;
-        }
-        setPreparation({ state: "ready", role });
+        setRoleId((currentRole) => currentRole || available[0].id);
+        setPreparation({ state: "ready", roles: available });
       })
       .catch(() => {
         if (current) {
@@ -119,24 +93,28 @@ export function IdentityOnboardingRoute() {
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    if (preparation.state !== "ready" || !branchId || !loginAddress.trim()) return;
+    if (preparation.state !== "ready" || !branchId || !roleId || !loginAddress.trim() || !firstName.trim() || !lastName.trim()) return;
     setSubmitting(true);
     setResult(null);
     setErrorMessage("");
     try {
       await initiateEmployeeBetaOnboarding({
-        request_key: "acp-employee-beta-v1",
+        request_key: requestKey,
         branch_id: branchId,
-        first_name: "ACP Employee",
-        last_name: "Beta",
-        display_name: "ACP Employee Beta",
+        first_name: firstName.trim(),
+        last_name: lastName.trim(),
+        display_name: displayName.trim() || `${firstName.trim()} ${lastName.trim()}`,
         employee_type: "employee",
         employee_number_prefix: "EMP-",
         employee_number_width: 4,
-        role_ids: [preparation.role.id],
+        role_ids: [roleId],
         login_email: loginAddress.trim(),
       });
       setLoginAddress("");
+      setFirstName("");
+      setLastName("");
+      setDisplayName("");
+      setRequestKey(`employee-admin-${crypto.randomUUID()}`);
       setResult("success");
     } catch (error) {
       setErrorMessage(submissionMessage(error));
@@ -151,8 +129,8 @@ export function IdentityOnboardingRoute() {
       <header>
         <h1 className="text-heading-m">Identity Onboarding</h1>
         <p className="mt-ui-2 text-body-s text-content-muted">
-          Create the fixed Preview ACP Employee beta identity through canonical
-          Company onboarding.
+          Prepare a Company-scoped User, Membership, Employee, Branch grant, role,
+          and protected invitation through canonical onboarding.
         </p>
       </header>
       {result === "success" && (
@@ -167,10 +145,10 @@ export function IdentityOnboardingRoute() {
       )}
       <Card>
         <CardHeader>
-          <CardTitle>ACP Employee beta</CardTitle>
+          <CardTitle>Add Employee</CardTitle>
           <CardDescription>
-            Identity key: acp-employee-beta-v1. Activation material is never shown by
-            this form.
+            Duplicate identity and replay checks are enforced server-side. Activation
+            material is never shown by this form.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -193,6 +171,11 @@ export function IdentityOnboardingRoute() {
             </Alert>
           ) : (
             <form className="space-y-ui-4" onSubmit={(event) => void submit(event)}>
+              <div className="grid gap-ui-3 sm:grid-cols-2">
+                <label className="block space-y-ui-2"><span className="text-body-s font-semibold">First name</span><Input value={firstName} onChange={(event) => setFirstName(event.target.value)} required /></label>
+                <label className="block space-y-ui-2"><span className="text-body-s font-semibold">Last name</span><Input value={lastName} onChange={(event) => setLastName(event.target.value)} required /></label>
+              </div>
+              <label className="block space-y-ui-2"><span className="text-body-s font-semibold">Display name</span><Input value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder={`${firstName} ${lastName}`.trim()} /></label>
               <label className="block space-y-ui-2">
                 <span className="text-body-s font-semibold">Preview Branch</span>
                 <select
@@ -212,6 +195,13 @@ export function IdentityOnboardingRoute() {
                 </select>
               </label>
               <label className="block space-y-ui-2">
+                <span className="text-body-s font-semibold">Baseline role</span>
+                <select className="min-h-11 w-full rounded-md border border-stroke bg-surface px-ui-3" value={roleId} onChange={(event) => setRoleId(event.target.value)} required>
+                  {preparation.roles.map((role) => <option key={role.id} value={role.id}>{role.name} — {role.description ?? role.code}</option>)}
+                </select>
+                <span className="text-body-xs text-content-muted">The role is a starting bundle. Effective authority remains permission- and Branch-scoped.</span>
+              </label>
+              <label className="block space-y-ui-2">
                 <span className="text-body-s font-semibold">
                   Employee login address
                 </span>
@@ -227,9 +217,9 @@ export function IdentityOnboardingRoute() {
                 type="submit"
                 loading={submitting}
                 loadingLabel="Creating onboarding"
-                disabled={submitting || !branchId || !loginAddress.trim()}
+                disabled={submitting || !branchId || !roleId || !firstName.trim() || !lastName.trim() || !loginAddress.trim()}
               >
-                Create beta onboarding
+                Prepare Employee onboarding
               </Button>
             </form>
           )}
