@@ -7,6 +7,7 @@ HCP_MASTER_ID = "63273602-8619-5c0b-8b49-8537338b04b5"
 HCP_DIGEST = "74b9b902a95fd9890881d2df478ac79190622f54abc33fa5f7a83a198bc86d5f"
 QBO_FIXTURE_DIGEST = "788eb41cf475022c258505a109bf0e1845f0ade37a7c965c34c3ddda3551efb1"
 QBO_DIGEST = "c14919b06cc1f9dfa5d93db430ca82b20afd3f28d0554f1d49d804f7b2288d75"
+FULL_HISTORY_DECISION_ID = "full-available-history-g5-v1"
 
 
 @dataclass(frozen=True)
@@ -97,7 +98,6 @@ def build_migration_product_projection(
     )
     decisions = (
         "Chart of Accounts mapping",
-        "Historical acquisition start",
         "Opening evidence",
         "Customer overlap",
         "Invoice overlap",
@@ -172,7 +172,7 @@ def build_migration_product_projection(
     blockers = [
         "real_hcp_final_delta_required",
         "source_freeze_evidence_required",
-        "opening_evidence_required",
+        "accounting_control_evidence_required",
         "owner_policy_decisions_required",
     ]
     blockers.insert(
@@ -197,14 +197,25 @@ def build_migration_product_projection(
             "blockers": tuple(blockers),
         },
         "historical_window": {
-            "starts_on": None,
+            "starts_on": "2021-07-07",
             "ends_on": (
                 qbo_production_snapshot.get("accounting_date_cutoff")
                 if qbo_bounded and qbo_production_snapshot is not None
                 else "2026-08-30"
             ),
-            "opening_evidence_state": "owner_decision_required",
-            "completeness": "configuration_required",
+            "decision": "full_available_history",
+            "decision_id": FULL_HISTORY_DECISION_ID,
+            "opening_evidence_state": "control_evidence_required_by_family",
+            "completeness": "family_specific_available_coverage",
+            "family_windows": {
+                "Invoices": ("2021-07-07", "2026-08-31"),
+                "Deposits": ("2022-01-03", "2026-08-31"),
+                "Purchases": ("2022-01-03", "2026-08-05"),
+                "Journal Entries": ("2022-12-31", "2026-08-17"),
+                "Payments": ("2024-12-03", "2026-08-31"),
+                "Refund Receipts": ("2025-02-06", "2026-08-14"),
+                "Transfers": ("2022-01-01", "2023-12-31"),
+            },
         },
         "sources": (
             {
@@ -284,6 +295,15 @@ def build_migration_product_projection(
             {"decision": decision, "state": "owner_decision_required"}
             for decision in decisions
         ),
+        "accounting_admission": {
+            "state": "control_evidence_required",
+            "historical_window_decision": "resolved_full_available_history",
+            "chart_of_accounts": "owner_finance_review_required",
+            "ar": "control_report_required",
+            "ap": "control_report_required",
+            "cash_bank": "control_report_required",
+            "post_cutoff_invoice_correction": "owner_finance_decision_required",
+        },
         "decision_packets": decision_packets,
         "freeze_authority": {
             "state": "external_authorization_required",
