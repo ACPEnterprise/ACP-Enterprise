@@ -6,7 +6,6 @@ from uuid import UUID, uuid4
 
 import httpx
 import pytest
-
 from app.communications.contracts import CommunicationRequest
 from app.communications.errors import (
     CommunicationAuthorizationError,

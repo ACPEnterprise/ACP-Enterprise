@@ -2,9 +2,6 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import delete, func, select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from app.communications.contracts import CommunicationRequest
 from app.communications.service import communication_service
 from app.communications.types import CommunicationChannel, CommunicationType
@@ -17,6 +14,8 @@ from app.platform.company.models import Company
 from app.platform.notifications.models import NotificationOutbox
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.users.models import User
+from sqlalchemy import delete, func, select
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 
 @pytest.mark.asyncio
