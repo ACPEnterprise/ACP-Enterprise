@@ -569,8 +569,9 @@ class ControlEvidenceRegistry:
             or registration.byte_size < 1
         ):
             raise ValueError("valid raw control digest and size are required")
-        if registration.report_end_date != date(2026, 8, 25):
-            raise ValueError("August 25, 2026 report cutoff is required")
+        parameter_end = registration.safe_report_parameters.get("end_date")
+        if parameter_end != registration.report_end_date.isoformat():
+            raise ValueError("control report cutoff must match safe parameters")
         if registration.accounting_basis.lower() != "accrual":
             raise ValueError("accrual report basis is required")
         document = {
@@ -595,6 +596,18 @@ class ControlEvidenceRegistry:
         digest = hashlib.sha256(content).hexdigest()
         self.store._store_named_immutable(
             self.store.root / "controls" / f"{registration.control_id}.json", content
+        )
+        return digest
+
+    def register_authority_document(
+        self, *, authority_id: str, document: Mapping[str, object]
+    ) -> str:
+        """Seal a safe decision/control authority without replacing prior evidence."""
+        _safe_identity(authority_id)
+        content = _canonical_json(document)
+        digest = hashlib.sha256(content).hexdigest()
+        self.store._store_named_immutable(
+            self.store.root / "controls" / f"{authority_id}.json", content
         )
         return digest
 

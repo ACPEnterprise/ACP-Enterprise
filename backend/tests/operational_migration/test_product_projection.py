@@ -101,10 +101,15 @@ def test_owner_decisions_history_and_opening_gate_remain_visible() -> None:
     decisions = {item["decision"] for item in result["owner_decisions"]}
     assert "Chart of Accounts mapping" in decisions
     assert "Final go/no-go" in decisions
-    assert result["historical_window"]["starts_on"] is None
+    assert result["historical_window"]["starts_on"] == "2021-07-07"
     assert (
         result["historical_window"]["opening_evidence_state"]
-        == "owner_decision_required"
+        == "control_evidence_required_by_family"
+    )
+    assert result["historical_window"]["decision"] == "full_available_history"
+    assert (
+        result["accounting_admission"]["historical_window_decision"]
+        == "resolved_full_available_history"
     )
     assert result["run_history"][0]["run_id"] == HCP_MASTER_ID
     assert result["run_history"][0]["replay"] == "verified"
