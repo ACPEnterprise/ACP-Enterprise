@@ -54,6 +54,11 @@ def _safe_error(error: Exception) -> HTTPException:
 async def initiate(
     data: OnboardingInitiateRequest, context: OnboardingAdmin, session: Session
 ) -> OnboardingView:
+    if (
+        data.additional_permission_ids
+        and AdministrationPermission.PERMISSION_MANAGE not in context.permission_codes
+    ):
+        raise _safe_error(OnboardingAuthorizationError())
     try:
         record = await identity_onboarding_service.initiate(
             session,
@@ -68,6 +73,7 @@ async def initiate(
                 employee_number_prefix=data.employee_number_prefix,
                 employee_number_width=data.employee_number_width,
                 role_ids=data.role_ids,
+                additional_permission_ids=data.additional_permission_ids,
                 login_email=(
                     data.login_email.get_secret_value() if data.login_email else None
                 ),

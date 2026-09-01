@@ -26,7 +26,12 @@ from app.platform.employees.models import Employee
 from app.platform.notifications.repository import NotificationOutboxRepository
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import AdministrationPermission
-from app.platform.permissions.models import MembershipRole, Role
+from app.platform.permissions.models import (
+    MembershipRole,
+    Permission,
+    Role,
+    RolePermission,
+)
 from app.platform.users.models import User, UserCredential
 
 from .models import (
@@ -60,6 +65,7 @@ class OnboardingCommand:
     employee_number_prefix: str
     employee_number_width: int
     role_ids: tuple[UUID, ...] = ()
+    additional_permission_ids: tuple[UUID, ...] = ()
     login_email: str | None = field(default=None, repr=False)
     existing_user_id: UUID | None = None
 
@@ -196,6 +202,9 @@ class IdentityOnboardingService:
             "prefix": command.employee_number_prefix,
             "width": command.employee_number_width,
             "role_ids": tuple(sorted(str(value) for value in command.role_ids)),
+            "additional_permission_ids": tuple(
+                sorted(str(value) for value in command.additional_permission_ids)
+            ),
             "login_digest": hashlib.sha256(email.encode()).hexdigest()
             if email
             else None,
@@ -383,6 +392,50 @@ class IdentityOnboardingService:
                                 assigned_by_user_id=context.user.id,
                             )
                         )
+                if command.additional_permission_ids:
+                    permission_ids = tuple(sorted(set(command.additional_permission_ids), key=str))
+                    permissions = tuple(
+                        await session.scalars(
+                            select(Permission).where(
+                                Permission.id.in_(permission_ids),
+                                Permission.status == "active",
+                                Permission.retired_at.is_(None),
+                            )
+                        )
+                    )
+                    if {item.id for item in permissions} != set(permission_ids):
+                        raise OnboardingConflictError(
+                            "Approved Company permission was not found."
+                        )
+                    profile_role = Role(
+                        company_id=context.company.id,
+                        code=f"EMPLOYEE_PROFILE_{request_digest[:20].upper()}",
+                        name=f"Employee permission profile {employee.employee_number}",
+                        description="Explicit additive Employee permission profile.",
+                        status="active",
+                        is_system=False,
+                        created_by_user_id=context.user.id,
+                        updated_by_user_id=context.user.id,
+                    )
+                    session.add(profile_role)
+                    await session.flush()
+                    session.add_all(
+                        RolePermission(
+                            role_id=profile_role.id,
+                            permission_id=permission.id,
+                            assigned_by_user_id=context.user.id,
+                        )
+                        for permission in permissions
+                    )
+                    session.add(
+                        MembershipRole(
+                            company_id=context.company.id,
+                            membership_id=membership.id,
+                            role_id=profile_role.id,
+                            assigned_by_user_id=context.user.id,
+                        )
+                    )
+                    user.authorization_version += 1
                 record = IdentityOnboardingRequest(
                     company_id=context.company.id,
                     branch_id=branch.id,

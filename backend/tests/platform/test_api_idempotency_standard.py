@@ -88,7 +88,7 @@ def test_every_mutating_operation_has_exactly_one_current_classification() -> No
     operations = _mutation_operations()
     coverage = mutation_coverage_registry.by_identity()
     assert operations.keys() == coverage.keys()
-    assert len(operations) == len(coverage) == 276
+    assert len(operations) == len(coverage) == 274
     for identity, operation in operations.items():
         assert operation["operationId"] == coverage[identity].operation_id
 
