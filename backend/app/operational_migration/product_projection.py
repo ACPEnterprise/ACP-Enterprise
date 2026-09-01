@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 
 HCP_MASTER_ID = "63273602-8619-5c0b-8b49-8537338b04b5"
@@ -34,9 +35,14 @@ class DomainCount:
 
 
 def build_migration_product_projection(
-    *, company_id: str, branch_id: str | None, qbo_sandbox_connected: bool
+    *,
+    company_id: str,
+    branch_id: str | None,
+    qbo_sandbox_connected: bool,
+    qbo_production_connected: bool = False,
+    qbo_production_snapshot: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
-    counts = (
+    counts: tuple[DomainCount, ...] = (
         DomainCount("Customers", 5296, 5296),
         DomainCount("Contacts", 4148, 4148),
         DomainCount("Locations", 5633, 5339, exception=294),
@@ -63,6 +69,21 @@ def build_migration_product_projection(
         DomainCount("QBO Bills/AP", 2, 2),
         DomainCount("QBO Journals", 2, 2),
     )
+    production_counts = (
+        qbo_production_snapshot.get("included_counts", {})
+        if qbo_production_snapshot is not None
+        else {}
+    )
+    if isinstance(production_counts, Mapping):
+        counts += tuple(
+            DomainCount(
+                f"Real QBO {str(family).replace('_', ' ').title()}",
+                int(source_count),
+                deferred=int(source_count),
+            )
+            for family, source_count in sorted(production_counts.items())
+            if isinstance(source_count, int) and source_count > 0
+        )
     timeline = (
         "Preflight",
         "Pre-cutover acquisition",
@@ -93,7 +114,11 @@ def build_migration_product_projection(
             "decision_id": "HCP.FINAL.EMPLOYEE_CROSSWALK",
             "question": "Do all final-delta technician identities retain an approved ACP Employee mapping?",
             "current_evidence": "Seven sealed source identities; six accepted employee candidates carry 1,825 relevant historical assignments.",
-            "options": ("confirm_existing_mapping", "authorize_candidate", "hold_assignments"),
+            "options": (
+                "confirm_existing_mapping",
+                "authorize_candidate",
+                "hold_assignments",
+            ),
             "recommended_default": None,
             "risk": "An unresolved identity blocks affected assignments and open-work admission.",
             "unlocks": "Employee and technician-bound final-delta reconciliation.",
@@ -113,7 +138,11 @@ def build_migration_product_projection(
             "decision_id": "HCP.CANCELED_BALANCE_JOBS",
             "question": "How should canceled Jobs with source-reported balances be treated after HCP/QBO reconciliation?",
             "current_evidence": "296 source Jobs are preserved on HOLD with nonzero balance assertions.",
-            "options": ("retain_hold", "admit_after_accounting_reconciliation", "explicit_exception"),
+            "options": (
+                "retain_hold",
+                "admit_after_accounting_reconciliation",
+                "explicit_exception",
+            ),
             "recommended_default": "retain_hold",
             "risk": "Treating disputed balances as ACP economic truth may create false AR or work.",
             "unlocks": "Final disposition of the Job and related financial evidence.",
@@ -123,7 +152,11 @@ def build_migration_product_projection(
             "decision_id": "HCP.UNLINKED_ESTIMATES",
             "question": "How should Day-1 Estimate evidence without an authoritative Job relationship be carried?",
             "current_evidence": "Twenty-four accepted unlinked Estimate evidence rows are preserved without a fabricated Job link.",
-            "options": ("retain_evidence_only", "link_with_authoritative_job_evidence", "explicit_exception"),
+            "options": (
+                "retain_evidence_only",
+                "link_with_authoritative_job_evidence",
+                "explicit_exception",
+            ),
             "recommended_default": "retain_evidence_only",
             "risk": "A guessed Job link would corrupt operational and profitability lineage.",
             "unlocks": "Final Estimate disposition without weakening the native Job relationship.",
@@ -131,6 +164,23 @@ def build_migration_product_projection(
         },
     )
     hcp_exception_count = sum(item.exception for item in counts)
+    qbo_bounded = (
+        qbo_production_connected
+        and qbo_production_snapshot is not None
+        and qbo_production_snapshot.get("state") == "BOUNDED_COMPLETE"
+    )
+    blockers = [
+        "real_hcp_final_delta_required",
+        "source_freeze_evidence_required",
+        "opening_evidence_required",
+        "owner_policy_decisions_required",
+    ]
+    blockers.insert(
+        0,
+        "real_qbo_reconciliation_required"
+        if qbo_bounded
+        else "real_qbo_authorization_required",
+    )
     return {
         "company_id": company_id,
         "branch_id": branch_id,
@@ -144,17 +194,15 @@ def build_migration_product_projection(
         "go_no_go": {
             "state": "external_auth_required",
             "activation_eligible": False,
-            "blockers": (
-                "real_qbo_authorization_required",
-                "real_hcp_final_delta_required",
-                "source_freeze_evidence_required",
-                "opening_evidence_required",
-                "owner_policy_decisions_required",
-            ),
+            "blockers": tuple(blockers),
         },
         "historical_window": {
             "starts_on": None,
-            "ends_on": "2026-08-30",
+            "ends_on": (
+                qbo_production_snapshot.get("accounting_date_cutoff")
+                if qbo_bounded and qbo_production_snapshot is not None
+                else "2026-08-30"
+            ),
             "opening_evidence_state": "owner_decision_required",
             "completeness": "configuration_required",
         },
@@ -185,14 +233,40 @@ def build_migration_product_projection(
             },
             {
                 "source": "QBO Production",
-                "environment": "production_disabled",
-                "status": "external_owner_gate",
-                "connection_state": "external_authorization_required",
-                "acquisition_state": "not_started",
-                "manifest_state": "not_available",
+                "environment": (
+                    "production_read_only"
+                    if qbo_production_connected
+                    else "production_disabled"
+                ),
+                "status": "incomplete" if qbo_bounded else "external_owner_gate",
+                "connection_state": (
+                    "active_verified"
+                    if qbo_production_connected
+                    else "external_authorization_required"
+                ),
+                "acquisition_state": (
+                    "bounded_complete" if qbo_bounded else "not_started"
+                ),
+                "manifest_state": (
+                    "sealed_bounded_snapshot" if qbo_bounded else "not_available"
+                ),
                 "delta_state": "not_started",
                 "freeze_state": "not_frozen",
-                "authority_digest": QBO_DIGEST,
+                "authority_digest": (
+                    qbo_production_snapshot.get("bounded_snapshot_sha256")
+                    if qbo_bounded and qbo_production_snapshot is not None
+                    else QBO_DIGEST
+                ),
+                "cutoff": (
+                    qbo_production_snapshot.get("accounting_date_cutoff")
+                    if qbo_bounded and qbo_production_snapshot is not None
+                    else None
+                ),
+                "post_cutoff_exclusions": (
+                    qbo_production_snapshot.get("excluded_post_cutoff_counts", {})
+                    if qbo_bounded and qbo_production_snapshot is not None
+                    else {}
+                ),
             },
         ),
         "counts": tuple({**asdict(item), "delta": item.delta} for item in counts),

@@ -101,6 +101,22 @@ export function MigrationWorkspace() {
                 <dd>{label(source.delta_state)}</dd>
                 <dt>Freeze</dt>
                 <dd>{label(source.freeze_state)}</dd>
+                {source.cutoff && (
+                  <>
+                    <dt>Accounting cutoff</dt>
+                    <dd>{source.cutoff}</dd>
+                  </>
+                )}
+                {source.post_cutoff_exclusions && (
+                  <>
+                    <dt>Post-cutoff excluded</dt>
+                    <dd>
+                      {Object.values(source.post_cutoff_exclusions)
+                        .reduce((total, count) => total + count, 0)
+                        .toLocaleString()}
+                    </dd>
+                  </>
+                )}
               </dl>
             </CardContent>
           </Card>

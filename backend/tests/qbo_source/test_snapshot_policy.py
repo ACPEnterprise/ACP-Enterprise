@@ -98,6 +98,13 @@ def test_bounded_snapshot_preserves_raw_and_excludes_post_cutoff(
         "excluded_post_cutoff_counts": {"deposit": 1},
         "maximum_included_transaction_dates": {"invoice": "2026-08-31"},
     }
+    latest = store.latest_bounded_snapshot_summary()
+    assert latest is not None
+    assert latest["run_id"] == "bounded-generation"
+    assert (
+        latest["bounded_snapshot_sha256"] == hashlib.sha256(bounded_bytes).hexdigest()
+    )
+    assert latest["included_counts"] == {"customer": 1, "invoice": 2}
     assert bounded["included_counts"] == {"customer": 1, "invoice": 2}
     assert bounded["state"] == "BOUNDED_COMPLETE"
     assert bounded["excluded_post_cutoff_counts"] == {"deposit": 1}

@@ -432,6 +432,44 @@ class ProtectedFilesystemEvidenceStore(EvidenceStore):
             "failure_code": document.get("failure_code"),
         }
 
+    def latest_bounded_snapshot_summary(self) -> dict[str, object] | None:
+        candidates: list[tuple[datetime, dict[str, object], bytes]] = []
+        for run_dir in (self.root / "runs").iterdir():
+            bounded_path = run_dir / "bounded-manifest.json"
+            state_path = run_dir / "state.json"
+            if not bounded_path.is_file() or not state_path.is_file():
+                continue
+            state = self._read_json(state_path)
+            bounded = self._read_json(bounded_path)
+            ended_at = state.get("ended_at")
+            if (
+                state.get("state") != RunState.COMPLETE.value
+                or bounded.get("state") != "BOUNDED_COMPLETE"
+                or not isinstance(ended_at, str)
+            ):
+                continue
+            candidates.append(
+                (datetime.fromisoformat(ended_at), bounded, bounded_path.read_bytes())
+            )
+        if not candidates:
+            return None
+        _, bounded, bounded_bytes = max(candidates, key=lambda item: item[0])
+        return {
+            "run_id": bounded.get("source_run_id"),
+            "state": bounded.get("state"),
+            "accounting_date_cutoff": bounded.get("accounting_date_cutoff"),
+            "snapshot_policy_version": bounded.get("snapshot_policy_version"),
+            "bounded_snapshot_sha256": hashlib.sha256(bounded_bytes).hexdigest(),
+            "post_cutoff_exclusion_sha256": bounded.get("exclusion_digest"),
+            "included_counts": bounded.get("included_counts", {}),
+            "excluded_post_cutoff_counts": bounded.get(
+                "excluded_post_cutoff_counts", {}
+            ),
+            "maximum_included_transaction_dates": bounded.get(
+                "maximum_included_transaction_dates", {}
+            ),
+        }
+
     def _store_blob(self, digest: str, content: bytes) -> None:
         if hashlib.sha256(content).hexdigest() != digest:
             raise EvidenceStoreError("blob_digest_conflict")

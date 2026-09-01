@@ -50,14 +50,16 @@ const readiness: api.MigrationReadiness = {
     },
     {
       source: "QBO Production",
-      environment: "production_disabled",
-      status: "external_owner_gate",
-      connection_state: "external_authorization_required",
-      acquisition_state: "not_started",
-      manifest_state: "not_available",
+      environment: "production_read_only",
+      status: "incomplete",
+      connection_state: "active_verified",
+      acquisition_state: "bounded_complete",
+      manifest_state: "sealed_bounded_snapshot",
       delta_state: "not_started",
       freeze_state: "not_frozen",
       authority_digest: "c".repeat(64),
+      cutoff: "2026-08-31",
+      post_cutoff_exclusions: { deposit: 1 },
     },
   ],
   counts: [
@@ -139,6 +141,9 @@ describe("MigrationWorkspace", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("QBO Development")).toBeInTheDocument();
     expect(screen.getByText("QBO Production")).toBeInTheDocument();
+    expect(screen.getByText("Accounting cutoff")).toBeInTheDocument();
+    expect(screen.getByText("2026-08-31")).toBeInTheDocument();
+    expect(screen.getByText("Post-cutoff excluded")).toBeInTheDocument();
     expect(
       screen.getByText(
         "Source = migrated + held + exception + non-applicable + deferred + unresolved.",
