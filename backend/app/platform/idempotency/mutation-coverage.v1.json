@@ -1228,6 +1228,76 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     },
     {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "platform",
+      "mechanism": "Company row lock, deterministic plan digest, and convergent additive canonical-role reconciliation",
+      "method": "POST",
+      "operation_id": "apply_canonical_role_reconciliation_api_v1_company_admin_canonical_roles_reconciliation_apply_post",
+      "path": "/api/v1/company-admin/canonical-roles/reconciliation/apply",
+      "reason": "Exact replay converges while changed plans and tenant role collisions fail closed.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NON_MUTATING_READ_ONLY",
+      "domain": "workforce",
+      "mechanism": "Read-only Company and authorized-Branch eligibility projection",
+      "method": "POST",
+      "operation_id": "eligibility_api_v1_workforce_eligibility_post",
+      "path": "/api/v1/workforce/eligibility",
+      "reason": "POST carries a bounded query envelope and creates no authority or evidence.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "workforce",
+      "mechanism": "Company-scoped Employee/profile uniqueness and row locking",
+      "method": "PUT",
+      "operation_id": "ensure_profile_api_v1_workforce_administration_employees__employee_id__profile_put",
+      "path": "/api/v1/workforce/administration/employees/{employee_id}/profile",
+      "reason": "Repeated profile creation converges on the one Company/Employee profile.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "workforce",
+      "mechanism": "Unique profile/capability evidence and contradictory-replay rejection",
+      "method": "PUT",
+      "operation_id": "record_capability_api_v1_workforce_administration_employees__employee_id__capabilities_put",
+      "path": "/api/v1/workforce/administration/employees/{employee_id}/capabilities",
+      "reason": "Exact evidence replay returns the existing row; a different proficiency fails closed.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "workforce",
+      "mechanism": "Unique profile/certification/credential identity and contradictory-replay rejection",
+      "method": "PUT",
+      "operation_id": "record_certification_api_v1_workforce_administration_employees__employee_id__certifications_put",
+      "path": "/api/v1/workforce/administration/employees/{employee_id}/certifications",
+      "reason": "Credential evidence replay converges while changed dates or lifecycle state fail closed.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "workforce",
+      "mechanism": "Unique profile/language evidence and contradictory-replay rejection",
+      "method": "PUT",
+      "operation_id": "record_language_api_v1_workforce_administration_employees__employee_id__languages_put",
+      "path": "/api/v1/workforce/administration/employees/{employee_id}/languages",
+      "reason": "Language evidence replay converges while materially different evidence fails closed.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "workforce",
+      "mechanism": "Unique Company/profile/Branch/time window and contradictory-replay rejection",
+      "method": "PUT",
+      "operation_id": "record_availability_api_v1_workforce_administration_employees__employee_id__availability_put",
+      "path": "/api/v1/workforce/administration/employees/{employee_id}/availability",
+      "reason": "Exact availability replay converges while changed status or source fails closed.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
       "classification": "IMMUTABLE_APPEND_ONLY",
       "domain": "engineering",
       "mechanism": "domain-owned deterministic evidence/receipt identity",
@@ -2659,6 +2729,6 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "f4839ff7636cfe32899deef07c10e8f37be4650f74f79c6e0019f5cfd27e9aa5",
+  "fingerprint": "c4520c10c0eb7fa76c8319328448bcba20649832cb50bd45e7a6f4a9d4968c48",
   "schema_version": "1"
 }

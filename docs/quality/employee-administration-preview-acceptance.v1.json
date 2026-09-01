@@ -1,0 +1,29 @@
+{
+  "contract_version": "EMPLOYEE.WORKFORCE.ADMINISTRATION.PROGRAM.1.v1",
+  "data_classification": "SYNTHETIC_ONLY",
+  "personas": [
+    "TECHNICIAN",
+    "DISPATCHER",
+    "SERVICE_CSR",
+    "OFFICE_MANAGER",
+    "COMPANY_ADMINISTRATOR",
+    "OWN_DATA_ROLE"
+  ],
+  "checks": [
+    "directory_and_detail_are_company_and_branch_scoped",
+    "roles_are_starting_bundles_not_identity_authority",
+    "effective_permissions_are_explained_by_business_area",
+    "branch_role_and_membership_changes_advance_authorization_state",
+    "own_data_resolves_from_authenticated_membership_employee_link",
+    "foreign_employee_and_branch_access_fail_closed",
+    "invitation_prepared_is_not_delivery_sent",
+    "mobile_readiness_reports_explicit_blockers",
+    "workforce_evidence_exact_replay_converges",
+    "contradictory_evidence_replay_conflicts",
+    "deactivation_preserves_historical_evidence"
+  ],
+  "physical_iphone_execution_owner": "Laptop1 Mobile",
+  "preview_deployment_owner": "Enterprise",
+  "external_gates": ["TRANSACTIONAL_EMAIL_PROVIDER_NOT_CONFIGURED"],
+  "real_employee_data_allowed": false
+}
