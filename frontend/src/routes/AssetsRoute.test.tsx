@@ -26,9 +26,11 @@ vi.mock("../api/assets", () => ({
     },
   ]),
   getAsset: vi.fn(),
+  listAssetActions: vi.fn().mockResolvedValue([]),
   createAsset: vi.fn(),
   recordAssetEvidence: vi.fn(),
   relateAsset: vi.fn(),
+  recordAssetAction: vi.fn(),
 }));
 
 const show = () =>

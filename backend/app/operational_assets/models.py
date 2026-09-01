@@ -222,3 +222,61 @@ class AssetLifecycleEvidence(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
     )
+
+
+class AssetActionEvidence(Base):
+    """Immutable typed operational evidence used by ASSET.002–ASSET.009."""
+
+    __tablename__ = "operational_asset_action_evidence"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "asset_id"],
+            ["operational_assets.company_id", "operational_assets.id"],
+            name="fk_asset_action_asset",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "action_type IN ('equipment_install','equipment_remove','equipment_replace','warranty_evidence','warranty_review','service_link','vehicle_assignment','inspection','maintenance','out_of_service','custody_transfer','custody_return','document_binding')",
+            name="ck_asset_action_type",
+        ),
+        CheckConstraint("asset_version >= 1", name="ck_asset_action_version"),
+        UniqueConstraint(
+            "company_id", "idempotency_key", name="uq_asset_action_command"
+        ),
+        UniqueConstraint(
+            "company_id", "asset_id", "evidence_digest", name="uq_asset_action_digest"
+        ),
+        Index("ix_asset_action_history", "company_id", "asset_id", "occurred_at", "id"),
+        Index(
+            "ix_asset_action_queue",
+            "company_id",
+            "branch_id",
+            "action_type",
+            "occurred_at",
+        ),
+    )
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    asset_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    action_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    state: Mapped[str] = mapped_column(String(40), nullable=False)
+    related_entity_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    payload: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    asset_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    request_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(160), nullable=False)
+    actor_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
