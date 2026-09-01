@@ -45,6 +45,22 @@ class StoredEnvelope:
     raw_sha256: str
 
 
+@dataclass(frozen=True)
+class AcquisitionFailureEvidence:
+    schema_version: str
+    catalog_version: str
+    acquisition_generation: str
+    entity_kind: str | None
+    query_classification: str
+    page: int | None
+    provider_status_classification: str
+    error_classification: str
+    retryable: bool
+    catalog_requirement: str
+    occurred_at: str
+    correlation_id: str
+
+
 class EvidenceStore(Protocol):
     def begin_run(
         self, *, run_id: str, snapshot: SnapshotIdentity, company_name: str
@@ -61,6 +77,7 @@ class EvidenceStore(Protocol):
         state: RunState,
         ended_at: datetime,
         failure_code: str | None = None,
+        failure_evidence: AcquisitionFailureEvidence | None = None,
     ) -> str: ...
 
 
@@ -258,6 +275,7 @@ class ProtectedFilesystemEvidenceStore(EvidenceStore):
         state: RunState,
         ended_at: datetime,
         failure_code: str | None = None,
+        failure_evidence: AcquisitionFailureEvidence | None = None,
     ) -> str:
         if state == RunState.IN_PROGRESS or ended_at.tzinfo is None:
             raise ValueError("terminal state and timezone-aware end are required")
@@ -269,6 +287,9 @@ class ProtectedFilesystemEvidenceStore(EvidenceStore):
         document["state"] = state.value
         document["ended_at"] = ended_at.isoformat()
         document["failure_code"] = failure_code
+        document["failure_evidence"] = (
+            asdict(failure_evidence) if failure_evidence is not None else None
+        )
         entities = document.pop("entities")
         pages = document.pop("pages")
         assert isinstance(entities, dict)

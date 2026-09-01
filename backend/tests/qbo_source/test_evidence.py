@@ -23,7 +23,7 @@ from app.qbo_source.evidence import (
     ProtectedFilesystemEvidenceStore,
     RunState,
 )
-from app.qbo_source.intuit import PageEvidence
+from app.qbo_source.intuit import PageEvidence, PartialAcquisitionError
 from app.qbo_source.runner import AcquisitionRunner
 
 
@@ -206,4 +206,45 @@ async def test_runner_seals_partial_failure_without_source_mutation(
         (tmp_path / "protected/runs/partial-run/manifest.json").read_bytes()
     )
     assert manifest["failure_code"] == "acquisition_failed"
+    assert manifest["failure_evidence"]["error_classification"] == "PROVIDER_UNCERTAIN"
+    assert manifest["failure_evidence"]["catalog_requirement"] == (
+        "REQUIRED_FOR_COMPLETE_ACQUISITION"
+    )
     assert manifest["entities"][0]["raw_sha256"] == envelope("first").raw_sha256
+
+
+@pytest.mark.asyncio
+async def test_runner_seals_safe_structured_catalog_failure(tmp_path: Path) -> None:
+    class RejectedProvider:
+        async def acquire(self, request):  # type: ignore[no-untyped-def]
+            if False:
+                yield
+            raise PartialAcquisitionError(
+                "api_request_rejected",
+                entity_kind="tax_payment",
+                page=3,
+                provider_status=400,
+            )
+
+    repository = tmp_path / "repository"
+    repository.mkdir()
+    store = evidence_store(tmp_path / "protected", repository)
+    result = await AcquisitionRunner(
+        provider=RejectedProvider(), evidence_store=store
+    ).run(
+        run_id="rejected-run",
+        request=AcquisitionRequest(snapshot(), (EntityKind.TAX_PAYMENT,)),
+        company_name="Synthetic",
+    )
+
+    assert result.state is RunState.PARTIAL
+    manifest = json.loads(
+        (tmp_path / "protected/runs/rejected-run/manifest.json").read_bytes()
+    )
+    failure = manifest["failure_evidence"]
+    assert failure["entity_kind"] == "tax_payment"
+    assert failure["page"] == 3
+    assert failure["error_classification"] == "UNKNOWN_PROVIDER_REJECTION"
+    assert failure["provider_status_classification"] == "client_rejection"
+    assert failure["catalog_requirement"] == "OPTIONAL_PROVIDER_DEPENDENT"
+    assert "400" not in json.dumps(failure)

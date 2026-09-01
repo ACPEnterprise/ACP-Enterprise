@@ -259,8 +259,15 @@ class IntuitRequestError(IntuitError):
 
 
 class PartialAcquisitionError(IntuitError):
-    def __init__(self, code: str, *, entity_kind: str, page: int) -> None:
-        super().__init__(code)
+    def __init__(
+        self,
+        code: str,
+        *,
+        entity_kind: str,
+        page: int,
+        provider_status: int | None = None,
+    ) -> None:
+        super().__init__(code, provider_status=provider_status)
         self.entity_kind = entity_kind
         self.page = page
 
@@ -657,7 +664,10 @@ class IntuitReadOnlyAdapter(SourceAcquisitionProvider):
                 )
             except IntuitError as error:
                 raise PartialAcquisitionError(
-                    error.code, entity_kind=kind.value, page=page
+                    error.code,
+                    entity_kind=kind.value,
+                    page=page,
+                    provider_status=error.provider_status,
                 ) from error
             document = response.json()
             query_response = document.get("QueryResponse")
@@ -718,7 +728,9 @@ class IntuitReadOnlyAdapter(SourceAcquisitionProvider):
             if response.status in {401, 403}:
                 raise IntuitAuthenticationError("api_authorization_rejected")
             if response.status not in {408, 429, 500, 502, 503, 504}:
-                raise IntuitRequestError("api_request_rejected")
+                raise IntuitRequestError(
+                    "api_request_rejected", provider_status=response.status
+                )
             if attempt == self.max_attempts:
                 break
             retry_after = response.headers.get("Retry-After")
@@ -729,7 +741,9 @@ class IntuitReadOnlyAdapter(SourceAcquisitionProvider):
                 self.max_backoff_seconds,
             )
             await self.clock.sleep(delay)
-        raise IntuitRequestError("api_retry_exhausted")
+        raise IntuitRequestError(
+            "api_retry_exhausted", provider_status=response.status
+        )
 
     def _backoff(self, request_identity: str, attempt: int) -> float:
         seed = hashlib.sha256(f"{request_identity}:{attempt}".encode()).digest()[0]
