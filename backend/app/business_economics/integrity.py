@@ -39,6 +39,31 @@ _SEMANTICS = {
         EconomicMeaning.SETTLEMENT_EVIDENCE,
         "Payment is settlement evidence and must not duplicate earned revenue.",
     ),
+    "payment_assertion": SourceSemantic(
+        "payment_assertion",
+        EconomicMeaning.OPERATIONAL_ONLY,
+        "A payment assertion is not settlement, cash receipt, deposit, or Accounting recognition.",
+    ),
+    "deposit": SourceSemantic(
+        "deposit",
+        EconomicMeaning.OPERATIONAL_ONLY,
+        "A deposit is a cash/clearing lifecycle fact and must not duplicate revenue.",
+    ),
+    "open_receivable": SourceSemantic(
+        "open_receivable",
+        EconomicMeaning.OPERATIONAL_ONLY,
+        "An open customer obligation is not collected cash or cash-basis income.",
+    ),
+    "open_vendor_obligation": SourceSemantic(
+        "open_vendor_obligation",
+        EconomicMeaning.OPERATIONAL_ONLY,
+        "A Vendor obligation is not bank outflow or automatic Accounting expense.",
+    ),
+    "credit_card_settlement": SourceSemantic(
+        "credit_card_settlement",
+        EconomicMeaning.SETTLEMENT_EVIDENCE,
+        "Card settlement reduces an obligation and must not recreate the original cost.",
+    ),
     "estimate": SourceSemantic(
         "estimate",
         EconomicMeaning.OPERATIONAL_ONLY,

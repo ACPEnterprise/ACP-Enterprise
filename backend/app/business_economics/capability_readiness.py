@@ -6,7 +6,7 @@ import json
 from hashlib import sha256
 from typing import Final
 
-CAPABILITY_MATRIX_VERSION: Final = "economics.capability-readiness.v1"
+CAPABILITY_MATRIX_VERSION: Final = "economics.capability-readiness.v2"
 
 _CAPABILITIES: Final = (
     ("source_readiness", "AUTHORITATIVE", "business_economics", ()),
@@ -74,9 +74,23 @@ _CAPABILITIES: Final = (
     ),
     (
         "cash_working_capital",
+        "PARTIAL",
+        "accounting_ar_ap_business_economics",
+        ("admitted_native_accounting_cash_totals",),
+    ),
+    (
+        "cash_operational_truth_separation",
+        "COMPLETED_IN_THIS_PROGRAM",
+        "business_economics",
+        (),
+    ),
+    ("operational_ar_readiness", "AUTHORITATIVE", "invoicing", ()),
+    ("operational_ap_readiness", "AUTHORITATIVE", "accounts_payable", ()),
+    (
+        "cash_basis_accounting_totals",
         "EXTERNAL_GATE",
         "accounting_migration",
-        ("admitted_native_accounting_evidence",),
+        ("admitted_native_accounting_report",),
     ),
     ("exception_center", "COMPLETED_IN_THIS_PROGRAM", "business_economics", ()),
     ("owner_dashboard", "AUTHORITATIVE", "business_economics", ()),

@@ -158,14 +158,20 @@ async def source_readiness(
             },
             {
                 "domain": "cash_collection",
-                "state": "policy_required",
-                "use": "invoice revenue is never treated as settled cash",
+                "state": "partial",
+                "use": "native operational AR/payment/deposit evidence is available; Accounting cash totals remain separately gated",
+            },
+            {
+                "domain": "cash_basis_accounting",
+                "state": "external_gate",
+                "use": "only admitted native Accounting reports may establish recognized cash-basis income or expense",
             },
         ],
         "limitations": [
             "Luminary does not infer Employee-to-Job attribution.",
             "Luminary does not infer causality or choose allocation policy.",
             "Luminary does not create Beacon workflow or operational mutations.",
+            "Luminary treats work, obligations, settlement, deposit, and Accounting recognition as distinct events.",
         ],
     }
 

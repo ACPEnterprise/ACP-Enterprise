@@ -7,12 +7,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_database_session
 from app.platform.permissions.authorization import AuthorizationContext
-from app.platform.permissions.codes import EconomicsPolicyPermission
-from app.platform.permissions.dependencies import require_permission
+from app.platform.permissions.codes import (
+    AccountingPermission,
+    AccountsPayablePermission,
+    EconomicsPolicyPermission,
+    InvoicePermission,
+    PaymentPermission,
+)
+from app.platform.permissions.dependencies import (
+    require_all_permissions,
+    require_permission,
+)
 from app.platform.reliability.correlation import current_correlation_id
 from app.platform.reliability.failures import ClientRecovery, FailureCode, SafeFailure
 
 from .capability_readiness import capability_readiness_matrix
+from .cash_operational_service import CashOperationalEconomicsService
 from .owner_intelligence import (
     OwnerIntelligenceQuery,
     OwnerIntelligenceService,
@@ -32,6 +42,18 @@ Reader = Annotated[
 PolicyReader = Annotated[
     AuthorizationContext,
     Depends(require_permission(EconomicsPolicyPermission.READ)),
+]
+CashOperationalReader = Annotated[
+    AuthorizationContext,
+    Depends(
+        require_all_permissions(
+            EconomicsPolicyPermission.MEASUREMENT_READ,
+            InvoicePermission.READ,
+            PaymentPermission.READ,
+            AccountsPayablePermission.REPORT_READ,
+            AccountingPermission.REPORT_READ,
+        )
+    ),
 ]
 
 
@@ -84,6 +106,30 @@ async def economics_source_completeness(
         failure = SafeFailure(
             FailureCode.VALIDATION,
             "Business Economics source-completeness request requires correction.",
+            ClientRecovery.USER_CORRECTION_REQUIRED,
+            current_correlation_id(),
+        )
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY, failure.detail()
+        ) from error
+
+
+@router.get("/cash-operational", response_model=dict[str, object])
+async def cash_operational_economics(
+    session: Session,
+    context: CashOperationalReader,
+    start: Annotated[date, Query()],
+    end: Annotated[date, Query()],
+) -> dict[str, object]:
+    """Separate earned work, operational obligations, and Accounting cash truth."""
+    try:
+        return await CashOperationalEconomicsService().overview(
+            session, context=context, period_start=start, period_end=end
+        )
+    except ValueError as error:
+        failure = SafeFailure(
+            FailureCode.VALIDATION,
+            "Cash and operational Economics request requires correction.",
             ClientRecovery.USER_CORRECTION_REQUIRED,
             current_correlation_id(),
         )

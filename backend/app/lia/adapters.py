@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from datetime import datetime
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 from app.beacon.intelligence import BeaconIntelligencePacket
 
@@ -85,6 +85,59 @@ def economics_evidence(
         reconciliation=str(context.get("result_authority", "unavailable")),
         limitations=tuple(limitations),
         safe_summary=f"Authorized Economics evidence: {answer_kind or 'unavailable'}.",
+        drillback_path="/business-economics",
+    )
+
+
+def cash_operational_evidence(
+    packet: Mapping[str, Any], *, observed_at: datetime
+) -> EvidenceEnvelope:
+    """Explain truth-plane readiness without recalculating or exposing source rows."""
+    if packet.get("version") != "economics.cash-operational-composition.v1":
+        raise ValueError("Unsupported cash and operational Economics contract.")
+    digest = packet.get("projection_digest")
+    if not isinstance(digest, str) or len(digest) != 64:
+        raise ValueError("Cash and operational Economics digest is invalid.")
+    work = packet.get("work_period")
+    operational = packet.get("operational_current_state")
+    accounting = packet.get("cash_accounting_period")
+    if not all(isinstance(value, Mapping) for value in (work, operational, accounting)):
+        raise TypeError("All three economic truth planes are required.")
+    work = cast(Mapping[str, object], work)
+    operational = cast(Mapping[str, object], operational)
+    accounting = cast(Mapping[str, object], accounting)
+    states = (str(work["state"]), str(operational["state"]), str(accounting["state"]))
+    if "CONFLICTING" in states:
+        state = EvidenceState.CONFLICTING
+    elif any(
+        value in {"EXTERNAL_GATE", "PARTIAL", "AVAILABLE_BASIS_ONLY"}
+        for value in states
+    ):
+        state = EvidenceState.PARTIAL
+    else:
+        state = EvidenceState.KNOWN
+    return EvidenceEnvelope(
+        evidence_id=f"cash-operational:{digest}",
+        source_id="ECONOMICS_CASH_OPERATIONAL",
+        source_domain="Business Economics",
+        source_entity_type="cash_operational_projection",
+        source_entity_id=None,
+        version_or_digest=digest,
+        effective_at=None,
+        observed_at=observed_at,
+        state=state,
+        freshness="CURRENT_OR_EXPLICITLY_INCOMPLETE",
+        confidence="DETERMINISTIC",
+        completeness="complete" if state is EvidenceState.KNOWN else "partial",
+        reconciliation="three_truth_planes_preserved",
+        limitations=(
+            "LIA cannot infer cash from an Invoice, Payment assertion, settlement, or deposit.",
+            "LIA cannot choose Accounting recognition policy or mutate AR/AP.",
+        ),
+        safe_summary=(
+            "Earned-work Economics, operational AR/AP, and cash-basis Accounting are "
+            "separate admitted truth planes. Open the owner Economics view for values."
+        ),
         drillback_path="/business-economics",
     )
 
