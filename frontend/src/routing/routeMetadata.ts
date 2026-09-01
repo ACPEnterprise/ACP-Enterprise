@@ -132,6 +132,8 @@ export const inventoryHandle = {
   },
 } as const satisfies ShellRouteHandle;
 
+export const assetsHandle = { workspace: { pageTitle: "Assets & Fleet", breadcrumbs: [{ label: "Assets & Fleet" }], helpTopic: "operational-assets", aiContext: "operational-assets" } } as const satisfies ShellRouteHandle;
+
 export const purchasingHandle = {
   workspace: {
     pageTitle: "Purchasing",

@@ -22,6 +22,7 @@ import {
   engineeringHandle,
   estimatesHandle,
   inventoryHandle,
+  assetsHandle,
   purchasingHandle,
   invoicesHandle,
   paymentsHandle,
@@ -220,6 +221,7 @@ export const appRoutes: RouteObject[] = [
                 .InventoryRoute,
             }),
           },
+          { path: "assets", handle: assetsHandle, lazy: async () => ({ Component: (await import("../routes/AssetsRoute")).AssetsRoute }) },
           {
             path: "purchasing",
             handle: purchasingHandle,
