@@ -411,9 +411,7 @@ async def test_canonical_role_sync_adds_only_missing_grant_and_advances_user(
         )
         session.add(assignment)
         permission_id = await session.scalar(
-            select(Permission.id).where(
-                Permission.code == "COMPANY_CUSTOMER_READ"
-            )
+            select(Permission.id).where(Permission.code == "COMPANY_CUSTOMER_READ")
         )
         assert permission_id is not None
         grant = await session.scalar(
@@ -428,7 +426,9 @@ async def test_canonical_role_sync_adds_only_missing_grant_and_advances_user(
     async with factory() as session:
         plan = await service.plan(session, company_id=fixture.context.company.id)
         item = next(value for value in plan.items if value.code == "SERVICE_CSR")
-        assert item.classification is RoleSyncClassification.MISSING_CANONICAL_PERMISSION
+        assert (
+            item.classification is RoleSyncClassification.MISSING_CANONICAL_PERMISSION
+        )
     async with factory() as session:
         result = await service.apply(
             session,
@@ -461,7 +461,9 @@ async def test_canonical_role_sync_rejects_custom_code_collision_without_mutatio
     async with factory() as session:
         plan = await service.plan(session, company_id=fixture.context.company.id)
         collision = next(value for value in plan.items if value.code == "SERVICE_CSR")
-        assert collision.classification is RoleSyncClassification.UNSAFE_IDENTITY_COLLISION
+        assert (
+            collision.classification is RoleSyncClassification.UNSAFE_IDENTITY_COLLISION
+        )
     async with factory() as session:
         with pytest.raises(CanonicalRoleSyncConflict, match="require review"):
             await service.apply(
@@ -571,7 +573,9 @@ async def test_canonical_role_sync_rolls_back_all_changes_on_failure(
     def fail_audit(*_args: object, **_kwargs: object) -> None:
         raise RuntimeError("injected audit failure")
 
-    monkeypatch.setattr("app.platform.permissions.role_sync.audit_service.stage", fail_audit)
+    monkeypatch.setattr(
+        "app.platform.permissions.role_sync.audit_service.stage", fail_audit
+    )
     async with factory() as session:
         with pytest.raises(RuntimeError, match="injected audit failure"):
             await service.apply(
@@ -1343,6 +1347,10 @@ async def test_permission_catalog_is_canonical_ordered_and_company_scoped(
             "assignable",
             "assigned",
             "reconciliation_required",
+            "category",
+            "access_nature",
+            "own_data",
+            "high_impact",
         }
         for record in records
     )
