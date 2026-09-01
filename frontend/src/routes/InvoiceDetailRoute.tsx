@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useParams } from "react-router";
+import { Link, useParams } from "react-router";
 import { useHasPermission } from "../auth";
 import { InvoiceSummary } from "../components/invoices/InvoiceSummary";
 import { useInvoice, useInvoiceMutations } from "../hooks/useInvoices";
@@ -22,6 +22,12 @@ export function InvoiceDetailRoute() {
   return (
     <div className="mx-auto max-w-3xl space-y-5">
       <InvoiceSummary invoice={invoice.data} />
+      <Link
+        className="inline-flex min-h-11 items-center justify-center rounded-md bg-action-secondary px-ui-4 text-sm font-semibold text-content hover:brightness-110"
+        to={`/lia?contextDomain=invoicing&contextId=${encodeURIComponent(invoice.data.id)}`}
+      >
+        Ask LIA about this Invoice
+      </Link>
       {mutationError && <Alert variant="danger">The Invoice could not be updated. Refresh and verify its current state before retrying.</Alert>}
       {invoice.data.status === "draft" && canIssue && (
         <Button

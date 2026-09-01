@@ -16,6 +16,7 @@ from app.customers.models import Customer
 from app.estimates.models import Estimate
 from app.inventory.models import InventoryItem
 from app.invoicing.models import Invoice
+from app.jobs.lia_context import job_lia_context_service
 from app.jobs.models import Job
 from app.luminary.models import LuminaryBriefingRecord
 from app.operational_migration.models import HcpMigrationMasterRun
@@ -112,27 +113,48 @@ class GovernedRetrievalService:
         contextual_reference: EvidenceReference | None = None
         if entity_id is not None and len(contextual_domains) == 1:
             domain = next(iter(contextual_domains))
-            projection = (
-                await customer_lia_context_service.for_customer(
+            if domain == "customers":
+                customer_projection = await customer_lia_context_service.for_customer(
                     session, context=context, customer_id=entity_id
                 )
-                if domain == "customers"
-                else await customer_lia_context_service.for_job(
+                if customer_projection is not None:
+                    contextual_reference = EvidenceReference(
+                        domain=domain,
+                        label="Minimum-necessary Customer operational context",
+                        authority=customer_projection.contract_version,
+                        observed_at=customer_projection.observed_at,
+                        freshness="CURRENT_QUERY",
+                        entity_id=customer_projection.entity_id,
+                        evidence_digest=customer_projection.evidence_digest,
+                        count=len(customer_projection.jobs),
+                        state=customer_projection.safe_summary(),
+                        source_contract_version=customer_projection.contract_version,
+                        company_id=customer_projection.company_id,
+                        branch_ids=customer_projection.branch_ids,
+                        authorization_version=customer_projection.authorization_version,
+                        limitations=customer_projection.limitations,
+                    )
+            else:
+                job_projection = await job_lia_context_service.project(
                     session, context=context, job_id=entity_id
                 )
-            )
-            if projection is not None:
-                contextual_reference = EvidenceReference(
-                    domain=domain,
-                    label="Minimum-necessary Customer operational context",
-                    authority=projection.contract_version,
-                    observed_at=projection.observed_at,
-                    freshness="CURRENT_QUERY",
-                    entity_id=projection.entity_id,
-                    evidence_digest=projection.evidence_digest,
-                    count=len(projection.jobs),
-                    state=projection.safe_summary(),
-                )
+                if job_projection is not None:
+                    contextual_reference = EvidenceReference(
+                        domain=domain,
+                        label="Minimum-necessary Job operational context",
+                        authority=job_projection.contract_version,
+                        observed_at=job_projection.observed_at,
+                        freshness="CURRENT_QUERY",
+                        entity_id=job_projection.entity_id,
+                        evidence_digest=job_projection.evidence_digest,
+                        count=len(job_projection.appointments),
+                        state=job_projection.safe_summary(),
+                        source_contract_version=job_projection.contract_version,
+                        company_id=job_projection.company_id,
+                        branch_ids=(job_projection.branch_id,),
+                        authorization_version=job_projection.authorization_version,
+                        limitations=job_projection.limitations,
+                    )
         # Permission checks select adapters before any protected query is executed.
         permitted = tuple(
             adapter
@@ -147,6 +169,7 @@ class GovernedRetrievalService:
         )
         for adapter in permitted:
             predicates = [adapter.model.company_id == context.company.id]
+            evidence_branch_ids: tuple[Any, ...] = ()
             if hasattr(adapter.model, "branch_id"):
                 branch_ids = (
                     frozenset({context.active_branch.id})
@@ -154,6 +177,7 @@ class GovernedRetrievalService:
                     else context.authorized_branch_ids
                 )
                 predicates.append(adapter.model.branch_id.in_(branch_ids))
+                evidence_branch_ids = tuple(sorted(branch_ids, key=str))
             if entity_id is not None:
                 predicates.append(adapter.model.id == entity_id)
             rows = (
@@ -191,6 +215,10 @@ class GovernedRetrievalService:
                     evidence_digest=digest,
                     count=total,
                     state=state,
+                    source_contract_version=f"{adapter.domain.upper()}.BOUNDED_CONTEXT.v1",
+                    company_id=context.company.id,
+                    branch_ids=evidence_branch_ids,
+                    authorization_version=context.authorization_version,
                 )
             )
         if context.has_permission(LuminaryPermission.READ) and (

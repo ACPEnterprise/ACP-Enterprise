@@ -117,14 +117,37 @@ export function LiaRoute() {
   const [searchParams] = useSearchParams();
   const contextDomain = searchParams.get("contextDomain");
   const contextId = searchParams.get("contextId");
+  const contextualDomains = new Set([
+    "customers",
+    "jobs",
+    "scheduling",
+    "estimates",
+    "invoicing",
+    "payments",
+    "purchasing",
+    "inventory",
+  ]);
   const context =
-    (contextDomain === "customers" || contextDomain === "jobs") &&
+    contextDomain !== null &&
+    contextualDomains.has(contextDomain) &&
     contextId &&
     /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
       contextId,
     )
       ? { domain: contextDomain, entity_id: contextId }
       : undefined;
+  const contextLabel = context
+    ? {
+        customers: "Customer",
+        jobs: "Job",
+        scheduling: "Scheduling",
+        estimates: "Estimate",
+        invoicing: "Invoice",
+        payments: "Payment",
+        purchasing: "Purchasing",
+        inventory: "Inventory",
+      }[context.domain]
+    : undefined;
   const readiness = useLiaReadiness();
   const foundation = useLiaFoundationReadiness();
   const briefing = useOwnerBriefing();
@@ -211,8 +234,7 @@ export function LiaRoute() {
       {context ? (
         <Alert variant="success" title="Entity context ready">
           LIA will retrieve only the server-authorized minimum-necessary{" "}
-          {context.domain === "customers" ? "Customer" : "Job"} context. The
-          entity identifier does not grant access.
+          {contextLabel} context. The entity identifier does not grant access.
         </Alert>
       ) : null}
       {foundation.data ? (
