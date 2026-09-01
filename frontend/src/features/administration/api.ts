@@ -100,6 +100,8 @@ export interface MigrationReadiness {
     delta_state: string;
     freeze_state: string;
     authority_digest: string;
+    cutoff?: string | null;
+    post_cutoff_exclusions?: Record<string, number>;
   }>;
   counts: Array<{
     domain: string;

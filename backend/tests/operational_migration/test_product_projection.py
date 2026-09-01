@@ -54,6 +54,37 @@ def test_unavailable_sandbox_never_fabricates_connection_readiness() -> None:
     assert sources["QBO Development"]["connection_state"] == "unavailable"
 
 
+def test_bounded_real_qbo_snapshot_is_visible_but_not_promoted() -> None:
+    result = build_migration_product_projection(
+        company_id="company-a",
+        branch_id="branch-a",
+        qbo_sandbox_connected=True,
+        qbo_production_connected=True,
+        qbo_production_snapshot={
+            "state": "BOUNDED_COMPLETE",
+            "accounting_date_cutoff": "2026-08-31",
+            "bounded_snapshot_sha256": "a" * 64,
+            "included_counts": {"invoice": 12, "payment": 9},
+            "excluded_post_cutoff_counts": {"deposit": 1},
+        },
+    )
+    sources = {item["source"]: item for item in result["sources"]}
+    production = sources["QBO Production"]
+    assert production["connection_state"] == "active_verified"
+    assert production["acquisition_state"] == "bounded_complete"
+    assert production["post_cutoff_exclusions"] == {"deposit": 1}
+    assert result["historical_window"]["ends_on"] == "2026-08-31"
+    assert "real_qbo_reconciliation_required" in result["go_no_go"]["blockers"]
+    real_counts = {
+        item["domain"]: item
+        for item in result["counts"]
+        if item["domain"].startswith("Real QBO")
+    }
+    assert real_counts["Real QBO Invoice"]["deferred"] == 12
+    assert real_counts["Real QBO Invoice"]["migrated"] == 0
+    assert real_counts["Real QBO Invoice"]["delta"] == 0
+
+
 def test_company_wide_review_does_not_fabricate_branch_scope() -> None:
     result = build_migration_product_projection(
         company_id="company-a",
@@ -87,8 +118,16 @@ def test_cutover_packets_preserve_known_hcp_contradictions() -> None:
     packets = {item["decision_id"]: item for item in result["decision_packets"]}
     assert packets["HCP.CANCELED_BALANCE_JOBS"]["recommended_default"] == "retain_hold"
     assert "296" in packets["HCP.CANCELED_BALANCE_JOBS"]["current_evidence"]
-    assert packets["HCP.UNLINKED_ESTIMATES"]["recommended_default"] == "retain_evidence_only"
-    assert "fabricated Job link" in packets["HCP.UNLINKED_ESTIMATES"]["current_evidence"]
+    assert (
+        packets["HCP.UNLINKED_ESTIMATES"]["recommended_default"]
+        == "retain_evidence_only"
+    )
+    assert (
+        "fabricated Job link" in packets["HCP.UNLINKED_ESTIMATES"]["current_evidence"]
+    )
     assert result["go_no_go"]["state"] == "external_auth_required"
     assert not result["go_no_go"]["activation_eligible"]
-    assert result["freeze_authority"]["late_change_behavior"] == "invalidate_delta_and_return_to_reconciliation"
+    assert (
+        result["freeze_authority"]["late_change_behavior"]
+        == "invalidate_delta_and_return_to_reconciliation"
+    )
