@@ -18,8 +18,16 @@ class CommunicationType(StrEnum):
 
 
 class CommunicationDeliveryState(StrEnum):
+    PREPARED = "prepared"
     PENDING = "pending"
     CLAIMED = "claimed"
     RETRY_SCHEDULED = "retry_scheduled"
-    SENT = "sent"
+    ACCEPTED = "accepted"
+    DELIVERED = "delivered"
+    DEFERRED = "deferred"
+    BOUNCED = "bounced"
+    REJECTED = "rejected"
     FAILED = "failed"
+    UNCERTAIN = "uncertain"
+    CANCELED = "canceled"
+    SUPPRESSED = "suppressed"

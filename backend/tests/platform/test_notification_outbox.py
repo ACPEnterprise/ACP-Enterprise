@@ -674,3 +674,122 @@ async def test_concurrent_same_company_replay_creates_one_intent(
     first, second = await asyncio.gather(create(), create())
     assert first[0].id == second[0].id
     assert sorted((first[1], second[1])) == [False, True]
+
+
+@pytest.mark.asyncio
+async def test_provider_acceptance_is_not_misclassified_as_delivery(
+    outbox_database: tuple[AsyncEngine, async_sessionmaker[AsyncSession]],
+) -> None:
+    _, factory = outbox_database
+    pending = await enqueue_fixture(factory)
+    now = utc_now()
+    async with factory() as session, session.begin():
+        claimed = (
+            await NotificationOutboxRepository.claim_batch(
+                session, worker_id="provider-worker", now=now, limit=1
+            )
+        )[0]
+        token = claimed.claim_token
+        assert token is not None
+        assert await NotificationOutboxRepository.record_provider_submission(
+            session,
+            notification_id=pending.id,
+            claim_token=token,
+            submitted_at=now,
+            provider_reference="synthetic-provider-reference",
+        )
+        assert await NotificationOutboxRepository.mark_accepted(
+            session, notification_id=pending.id, claim_token=token, at=now
+        )
+    async with factory() as session:
+        record = await session.get(NotificationOutbox, pending.id)
+        assert record is not None
+        assert record.status == "accepted"
+        assert record.sent_at is None
+        evidence = list(
+            (
+                await session.scalars(
+                    select(NotificationDeliveryEvidence)
+                    .where(NotificationDeliveryEvidence.outbox_id == pending.id)
+                    .order_by(NotificationDeliveryEvidence.sequence)
+                )
+            ).all()
+        )
+        assert [item.outcome for item in evidence] == [
+            "claimed",
+            "submitted",
+            "accepted",
+        ]
+
+
+@pytest.mark.asyncio
+async def test_provider_events_are_idempotent_tenant_bound_and_order_safe(
+    outbox_database: tuple[AsyncEngine, async_sessionmaker[AsyncSession]],
+) -> None:
+    _, factory = outbox_database
+    company_id = uuid4()
+    pending = await enqueue_fixture(factory, company_id=company_id)
+    now = utc_now()
+    async with factory() as session, session.begin():
+        claimed = (
+            await NotificationOutboxRepository.claim_batch(
+                session, worker_id="provider-worker", now=now, limit=1
+            )
+        )[0]
+        token = claimed.claim_token
+        assert token is not None
+        await NotificationOutboxRepository.record_provider_submission(
+            session,
+            notification_id=pending.id,
+            claim_token=token,
+            submitted_at=now,
+            provider_reference="provider-event-reference",
+        )
+        await NotificationOutboxRepository.mark_accepted(
+            session, notification_id=pending.id, claim_token=token, at=now
+        )
+    async with factory() as session, session.begin():
+        assert not await NotificationOutboxRepository.apply_provider_event(
+            session,
+            company_id=uuid4(),
+            provider_reference="provider-event-reference",
+            provider_event_key="event-1",
+            outcome="delivered",
+            at=now,
+        )
+        assert await NotificationOutboxRepository.apply_provider_event(
+            session,
+            company_id=company_id,
+            provider_reference="provider-event-reference",
+            provider_event_key="event-1",
+            outcome="delivered",
+            at=now,
+        )
+        assert await NotificationOutboxRepository.apply_provider_event(
+            session,
+            company_id=company_id,
+            provider_reference="provider-event-reference",
+            provider_event_key="event-1",
+            outcome="delivered",
+            at=now,
+        )
+        assert not await NotificationOutboxRepository.apply_provider_event(
+            session,
+            company_id=company_id,
+            provider_reference="provider-event-reference",
+            provider_event_key="event-2",
+            outcome="bounced",
+            at=now,
+        )
+    async with factory() as session:
+        record = await session.get(NotificationOutbox, pending.id)
+        assert record is not None and record.status == "sent"
+        delivered_count = await session.scalar(
+            select(func.count())
+            .select_from(NotificationDeliveryEvidence)
+            .where(
+                NotificationDeliveryEvidence.outbox_id == pending.id,
+                NotificationDeliveryEvidence.outcome == "delivered",
+            )
+        )
+        assert delivered_count == 1

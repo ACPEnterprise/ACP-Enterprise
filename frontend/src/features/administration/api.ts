@@ -64,6 +64,21 @@ export interface IdentityOnboardingInitiateRequest {
   login_email: string;
 }
 
+export interface IdentityOnboardingDeliveryView {
+  request_id: string;
+  invitation_id: string;
+  message_id: string | null;
+  invitation_status: string;
+  delivery_status: string;
+  template_version: string | null;
+  retry_count: number;
+  provider_reference_present: boolean;
+  last_error_code: string | null;
+  created_at: string | null;
+  submitted_at: string | null;
+  delivered_at: string | null;
+}
+
 const ADMIN_PATH = "/api/v1/company-admin";
 const QBO_SANDBOX_AUTHORIZE_PATH = "/api/v1/integrations/qbo/oauth/authorize";
 const QBO_SANDBOX_CONNECTION_PATH = "/api/v1/integrations/qbo/connection";
@@ -287,6 +302,36 @@ export async function initiateEmployeeBetaOnboarding(
     await apiClient.post<IdentityOnboardingView>(
       "/api/v1/identity-onboarding",
       request,
+    )
+  ).data;
+}
+
+export async function getIdentityOnboardingDelivery(
+  requestId: string,
+): Promise<IdentityOnboardingDeliveryView> {
+  return (
+    await apiClient.get<IdentityOnboardingDeliveryView>(
+      `/api/v1/identity-onboarding/${requestId}/delivery`,
+    )
+  ).data;
+}
+
+export async function reissueIdentityOnboarding(
+  requestId: string,
+): Promise<IdentityOnboardingView> {
+  return (
+    await apiClient.post<IdentityOnboardingView>(
+      `/api/v1/identity-onboarding/${requestId}/reissue`,
+    )
+  ).data;
+}
+
+export async function revokeIdentityOnboarding(
+  requestId: string,
+): Promise<IdentityOnboardingView> {
+  return (
+    await apiClient.post<IdentityOnboardingView>(
+      `/api/v1/identity-onboarding/${requestId}/revoke`,
     )
   ).data;
 }

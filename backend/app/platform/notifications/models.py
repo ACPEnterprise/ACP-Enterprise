@@ -45,7 +45,7 @@ class NotificationOutbox(Base):
             name="ck_notification_outbox_idempotency_key_not_blank",
         ),
         CheckConstraint(
-            "status IN ('pending', 'claimed', 'retry_scheduled', 'sent', 'failed', 'ambiguous', 'canceled', 'suppressed')",
+            "status IN ('pending', 'claimed', 'retry_scheduled', 'accepted', 'sent', 'failed', 'ambiguous', 'canceled', 'suppressed')",
             name="ck_notification_outbox_status",
         ),
         CheckConstraint(
@@ -61,6 +61,8 @@ class NotificationOutbox(Base):
             "(status = 'retry_scheduled' AND claimed_at IS NULL "
             "AND claimed_by IS NULL AND claim_token IS NULL "
             "AND sent_at IS NULL AND failed_at IS NULL AND retry_count > 0) OR "
+            "(status = 'accepted' AND claim_token IS NULL AND submitted_at IS NOT NULL "
+            "AND provider_reference IS NOT NULL AND sent_at IS NULL AND failed_at IS NULL) OR "
             "(status = 'sent' AND claim_token IS NULL AND sent_at IS NOT NULL "
             "AND failed_at IS NULL) OR "
             "(status = 'failed' AND claim_token IS NULL AND sent_at IS NULL "
@@ -184,11 +186,16 @@ class NotificationDeliveryEvidence(Base):
     __tablename__ = "notification_delivery_evidence"
     __table_args__ = (
         CheckConstraint(
-            "outcome IN ('claimed','submitted','delivered','retryable','failed','ambiguous','recovered','canceled','suppressed')",
+            "outcome IN ('claimed','submitted','accepted','delivered','retryable','failed','ambiguous','recovered','canceled','suppressed','deferred','bounced','rejected','complaint','expired')",
             name="ck_notification_delivery_evidence_outcome",
         ),
         UniqueConstraint(
             "outbox_id", "sequence", name="uq_notification_delivery_evidence_sequence"
+        ),
+        UniqueConstraint(
+            "outbox_id",
+            "provider_event_key",
+            name="uq_notification_delivery_evidence_provider_event",
         ),
         Index("ix_notification_delivery_evidence_outbox", "outbox_id", "sequence"),
     )
@@ -208,6 +215,7 @@ class NotificationDeliveryEvidence(Base):
     worker_id: Mapped[str | None] = mapped_column(String(120))
     claim_token: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
     provider_reference: Mapped[str | None] = mapped_column(String(200))
+    provider_event_key: Mapped[str | None] = mapped_column(String(200))
     error_code: Mapped[str | None] = mapped_column(String(80))
     error_category: Mapped[str | None] = mapped_column(String(80))
     actor_user_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))

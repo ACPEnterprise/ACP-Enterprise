@@ -296,7 +296,13 @@ class CommunicationService:
                     else None
                 ),
                 request_identity=record.idempotency_key,
-                state=CommunicationDeliveryState(record.status),
+                state=CommunicationDeliveryState(
+                    "delivered"
+                    if record.status == "sent"
+                    else "uncertain"
+                    if record.status == "ambiguous"
+                    else record.status
+                ),
                 retry_count=record.retry_count,
                 terminal_failure=record.terminal_failure,
                 scheduled_at=record.scheduled_at,

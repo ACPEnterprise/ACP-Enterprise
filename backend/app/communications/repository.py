@@ -5,7 +5,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.customers.models import Customer, CustomerContact
 from app.events.models import BusinessEvent
-from app.platform.notifications.models import NotificationOutbox
+from app.platform.notifications.models import (
+    NotificationDeliveryEvidence,
+    NotificationOutbox,
+)
 
 
 class CommunicationRepository:
@@ -73,7 +76,7 @@ class CommunicationRepository:
         return await session.scalar(
             select(NotificationOutbox).where(
                 NotificationOutbox.company_id == company_id,
-                NotificationOutbox.idempotency_key == request_identity
+                NotificationOutbox.idempotency_key == request_identity,
             )
         )
 
@@ -91,9 +94,7 @@ class CommunicationRepository:
             NotificationOutbox.company_id == company_id,
         )
         if branch_id is not None:
-            statement = statement.where(
-                NotificationOutbox.branch_id == branch_id
-            )
+            statement = statement.where(NotificationOutbox.branch_id == branch_id)
         if customer_id is not None:
             statement = statement.where(
                 NotificationOutbox.payload["customer_id"].astext == str(customer_id)
@@ -102,6 +103,20 @@ class CommunicationRepository:
             NotificationOutbox.created_at.desc(), NotificationOutbox.id.desc()
         ).limit(limit)
         return list((await session.scalars(statement)).all())
+
+    @staticmethod
+    async def delivery_evidence(
+        session: AsyncSession, *, outbox_id: UUID
+    ) -> list[NotificationDeliveryEvidence]:
+        return list(
+            (
+                await session.scalars(
+                    select(NotificationDeliveryEvidence)
+                    .where(NotificationDeliveryEvidence.outbox_id == outbox_id)
+                    .order_by(NotificationDeliveryEvidence.sequence)
+                )
+            ).all()
+        )
 
 
 communication_repository = CommunicationRepository()
