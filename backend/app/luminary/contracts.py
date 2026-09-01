@@ -28,6 +28,7 @@ class FindingType(StrEnum):
     BRANCH_COMPARISON = "branch_comparison"
     MISSING_EVIDENCE = "missing_evidence"
     ALLOCATION_POLICY = "allocation_policy"
+    SOURCE_READINESS = "source_readiness"
     BEACON_ATTENTION = "beacon_attention"
 
 

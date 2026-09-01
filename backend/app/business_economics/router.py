@@ -12,6 +12,7 @@ from app.platform.permissions.dependencies import require_permission
 from app.platform.reliability.correlation import current_correlation_id
 from app.platform.reliability.failures import ClientRecovery, FailureCode, SafeFailure
 
+from .capability_readiness import capability_readiness_matrix
 from .owner_intelligence import (
     OwnerIntelligenceQuery,
     OwnerIntelligenceService,
@@ -32,6 +33,16 @@ PolicyReader = Annotated[
     AuthorizationContext,
     Depends(require_permission(EconomicsPolicyPermission.READ)),
 ]
+
+
+@router.get("/capabilities", response_model=dict[str, object])
+async def economics_capabilities(context: Reader) -> dict[str, object]:
+    matrix = capability_readiness_matrix()
+    return {
+        **matrix,
+        "company_id": str(context.company.id),
+        "branch_id": str(context.active_branch.id) if context.active_branch else None,
+    }
 
 
 @router.get("/workspace", response_model=dict[str, object])

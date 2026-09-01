@@ -13,6 +13,8 @@ def workspace(*, quality: str = "complete", allocation: bool = True):
             {"other_direct_cost_minor": 0},
             {"other_direct_cost_minor": 5},
         ],
+        "customers": [{"label": "Synthetic Customer"}],
+        "branches": [{"label": "Synthetic Branch"}],
         "fully_allocated_available": allocation,
         "readiness": {"policy_gaps": []},
     }
@@ -34,10 +36,27 @@ def test_matrix_distinguishes_admitted_inputs_from_policy_and_partial_seams() ->
         "overhead_allocation": "AVAILABLE",
         "job_identity_lifecycle": "AVAILABLE",
         "service_category": "AVAILABLE",
+        "customer_attribution": "AVAILABLE",
+        "branch_attribution": "AVAILABLE",
+        "workforce_attribution": "PARTIAL",
+        "procurement_inventory_provenance": "PARTIAL",
+        "callback_warranty_relationship": "EXTERNAL_GATE",
+        "service_agreement_economics": "SOURCE_REQUIRED",
+        "capacity_utilization": "SOURCE_REQUIRED",
+        "cash_working_capital": "EXTERNAL_GATE",
         "accounting_evidence": "PARTIAL",
     }
     assert value["complete_for_direct_contribution"] is True
-    assert value["complete_for_fully_allocated_profitability"] is False
+    assert value["complete_for_fully_allocated_profitability"] is True
+
+
+def test_unrelated_external_gates_do_not_block_fully_allocated_job_profitability() -> (
+    None
+):
+    value = source_completeness_matrix(workspace())
+    assert states(value)["callback_warranty_relationship"] == "EXTERNAL_GATE"
+    assert states(value)["cash_working_capital"] == "EXTERNAL_GATE"
+    assert value["complete_for_fully_allocated_profitability"] is True
 
 
 def test_matrix_fails_closed_for_conflicting_evidence_and_missing_policy() -> None:
@@ -52,4 +71,16 @@ def test_matrix_replay_digest_is_deterministic() -> None:
     assert (
         source_completeness_matrix(workspace())["matrix_digest"]
         == source_completeness_matrix(workspace())["matrix_digest"]
+    )
+
+
+def test_exception_center_prioritizes_blockers_without_mutation_authority() -> None:
+    value = source_completeness_matrix(workspace(allocation=False))
+    exceptions = value["exceptions"]
+    assert exceptions
+    assert all(item["mutation_authority"] == "none" for item in exceptions)
+    assert any(
+        item["source"] == "callback_warranty_relationship"
+        and item["owning_domain"] == "jobs_assets"
+        for item in exceptions
     )

@@ -7,7 +7,7 @@ import json
 from dataclasses import dataclass
 from datetime import date
 from enum import StrEnum
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 from sqlalchemy import select
@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.platform.permissions.authorization import AuthorizationContext
 
 from .models import EconomicsProfitabilityResultSupersessionRecord
+from .source_completeness import source_completeness_matrix
 from .workspace import EconomicsWorkspaceService
 
 CONTRACT_VERSION = "economics.owner-intelligence.v1"
@@ -30,6 +31,11 @@ class OwnerQuestion(StrEnum):
     INCOMPLETE_MEASUREMENTS = "incomplete_measurements"
     WHAT_CHANGED = "what_changed"
     MARGIN_LEAKAGE = "margin_leakage"
+    LABOR_COST_MOVEMENT = "labor_cost_movement"
+    MATERIAL_COST_MOVEMENT = "material_cost_movement"
+    FULL_PROFITABILITY_BLOCKERS = "full_profitability_blockers"
+    OWNER_DECISIONS_REQUIRED = "owner_decisions_required"
+    INSPECT_FIRST = "inspect_first"
 
 
 @dataclass(frozen=True, slots=True)
@@ -117,6 +123,48 @@ class OwnerIntelligenceService:
             }
         if question is OwnerQuestion.WHAT_CHANGED:
             return {"kind": "period_comparison", "comparison": value["comparison"]}
+        if question in {
+            OwnerQuestion.LABOR_COST_MOVEMENT,
+            OwnerQuestion.MATERIAL_COST_MOVEMENT,
+        }:
+            component = (
+                "labor"
+                if question is OwnerQuestion.LABOR_COST_MOVEMENT
+                else "materials"
+            )
+            comparison = value["comparison"]
+            return {
+                "kind": "component_movement",
+                "component": component,
+                "state": comparison.get("state"),
+                "change_minor": comparison.get(f"{component}_change_minor"),
+                "comparison": comparison,
+                "limitation": "Measured co-movement does not establish causality.",
+            }
+        if question is OwnerQuestion.FULL_PROFITABILITY_BLOCKERS:
+            completeness = source_completeness_matrix(value)
+            exceptions = cast(list[dict[str, object]], completeness["exceptions"])
+            return {
+                "kind": "profitability_blockers",
+                "items": exceptions[:MAX_CONTEXT_ITEMS],
+                "fully_allocated_available": value["fully_allocated_available"],
+            }
+        if question is OwnerQuestion.OWNER_DECISIONS_REQUIRED:
+            readiness = value["readiness"]
+            return {
+                "kind": "owner_decisions",
+                "items": readiness.get("policy_gaps", [])[:MAX_CONTEXT_ITEMS],
+                "allocation": readiness.get("allocation_authority"),
+                "limitation": "This answer identifies configuration authority; it does not select a policy.",
+            }
+        if question is OwnerQuestion.INSPECT_FIRST:
+            completeness = source_completeness_matrix(value)
+            exceptions = cast(list[dict[str, object]], completeness["exceptions"])
+            return {
+                "kind": "inspection_priority",
+                "items": exceptions[:MAX_CONTEXT_ITEMS],
+                "ordering": "conflicting, stale, policy required, source required, external gate, partial, unavailable",
+            }
         return {
             "kind": "economic_findings",
             "items": value["beacon_conditions"][:MAX_CONTEXT_ITEMS],
