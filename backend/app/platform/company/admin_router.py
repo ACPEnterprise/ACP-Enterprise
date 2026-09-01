@@ -117,6 +117,22 @@ def translate_admin_error(error: AccessPolicyAdministrationError) -> HTTPExcepti
     )
 
 
+def translate_canonical_role_sync_error(
+    error: CanonicalRoleSyncConflict,
+) -> HTTPException:
+    del error
+    failure = SafeFailure(
+        FailureCode.RESOURCE_STATE_CONFLICT,
+        "Canonical role reconciliation conflicts with current authority.",
+        ClientRecovery.RETRY_AFTER_REFRESH,
+        current_correlation_id(),
+    )
+    return HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=failure.detail(),
+    )
+
+
 @router.get("/memberships", response_model=list[MembershipResponse])
 async def list_memberships(
     context: MembershipReadContext,
@@ -281,10 +297,7 @@ async def apply_canonical_role_reconciliation(
             expected_plan_digest=data.expected_plan_digest,
         )
     except CanonicalRoleSyncConflict as error:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=str(error),
-        ) from error
+        raise translate_canonical_role_sync_error(error) from error
     return CanonicalRoleSyncResultResponse(
         plan=canonical_role_plan_response(result.plan),
         roles_created=result.roles_created,
