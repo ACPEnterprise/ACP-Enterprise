@@ -6,6 +6,8 @@ from dataclasses import asdict
 from typing import Any
 from uuid import UUID, uuid5
 
+from app.business_economics.source_completeness import source_completeness_matrix
+
 from .contracts import (
     LUMINARY_BRIEFING_VERSION,
     LUMINARY_FINDING_VERSION,
@@ -101,6 +103,32 @@ class LuminaryEngine:
                     ("Review the Economics allocation-policy readiness decision.",),
                 )
             )
+        completeness = source_completeness_matrix(economics)
+        exceptions = self._sequence(completeness.get("exceptions"))
+        if exceptions:
+            named = tuple(
+                str(item.get("source"))
+                for item in exceptions[:10]
+                if isinstance(item, dict)
+            )
+            findings.append(
+                self._finding(
+                    package,
+                    FindingClass.INSUFFICIENT_EVIDENCE,
+                    FindingType.SOURCE_READINESS,
+                    "Economic evidence limits the owner conclusion",
+                    f"{len(exceptions)} admitted source-readiness exception(s) remain for this period.",
+                    (),
+                    self._confidence(economics),
+                    quality,
+                    "Luminary reports the Economics readiness result without substituting missing values.",
+                    tuple(f"{name} is not AVAILABLE." for name in named),
+                    tuple(
+                        f"Inspect {name.replace('_', ' ')} authority."
+                        for name in named[:3]
+                    ),
+                )
+            )
         for signal in package.beacon_conditions:
             evidence = EvidenceReference(
                 "beacon", "signal", signal.signal_id, signal.evidence_digest
@@ -154,7 +182,11 @@ class LuminaryEngine:
             ("attention", {FindingType.BEACON_ATTENTION}),
             (
                 "readiness",
-                {FindingType.MISSING_EVIDENCE, FindingType.ALLOCATION_POLICY},
+                {
+                    FindingType.MISSING_EVIDENCE,
+                    FindingType.ALLOCATION_POLICY,
+                    FindingType.SOURCE_READINESS,
+                },
             ),
         ):
             ids = tuple(

@@ -40,6 +40,15 @@ vi.mock("../hooks/useBusinessEconomics", () => ({
                 explanation: "Owner policy is required.",
               },
             ],
+            exceptions: [
+              {
+                source: "overhead_allocation",
+                state: "POLICY_REQUIRED",
+                explanation: "Owner policy is required.",
+                owning_domain: "business_economics",
+                mutation_authority: "none",
+              },
+            ],
           },
           policy_families: [
             {
@@ -92,6 +101,8 @@ describe("Economics policy administration", () => {
     expect(screen.getAllByText(/policy required/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/1 policy decision/i)).toBeVisible();
     expect(screen.getByText("approved allocation drivers")).toBeVisible();
+    expect(screen.getByText(/economic exception center/i)).toBeVisible();
+    expect(screen.getByText(/business economics · read-only/i)).toBeVisible();
     expect(
       screen.getByRole("link", { name: "Open Luminary interpretation" }),
     ).toHaveAttribute("href", "/luminary");

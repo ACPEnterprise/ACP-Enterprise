@@ -64,6 +64,7 @@ export function EconomicsPolicyAdministrationRoute() {
   const decisions = value.policy_families.filter(
     (item) => item.state !== "CONFIGURED",
   );
+  const exceptions = value.readiness.exceptions ?? [];
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 pb-12">
@@ -127,6 +128,29 @@ export function EconomicsPolicyAdministrationRoute() {
           </Card>
         ))}
       </section>
+      <Card>
+        <CardHeader>
+          <CardTitle>Economic exception center</CardTitle>
+          <CardDescription>
+            Prioritized evidence and policy blockers. Resolution remains in each owning domain.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {exceptions.length ? (
+            <ul className="grid gap-3 sm:grid-cols-2">
+              {exceptions.map((item) => (
+                <li className="rounded-lg border border-stroke p-3" key={item.source}>
+                  <p className="font-semibold capitalize">{label(item.source)} · {label(item.state)}</p>
+                  <p className="mt-1 text-sm text-content-muted">{item.explanation}</p>
+                  <p className="mt-2 text-xs">Owner: {label(item.owning_domain)} · read-only</p>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-content-muted">No evidence or policy exception is present for this period.</p>
+          )}
+        </CardContent>
+      </Card>
       <Alert
         variant={decisions.length ? "warning" : "success"}
         title={

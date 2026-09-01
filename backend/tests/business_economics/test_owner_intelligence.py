@@ -45,6 +45,16 @@ def projection() -> dict[str, Any]:
         "service_categories": [{"label": "Repair", "contribution_minor": 400}],
         "branches": [{"label": "Main", "contribution_minor": 400}],
         "comparison": {"state": "unavailable", "reason": "incomplete"},
+        "period": {"start": "2026-08-01", "end": "2026-08-31"},
+        "currency": "USD",
+        "source_result_count": 3,
+        "job_count": 3,
+        "customers": [{"label": "Synthetic Customer"}],
+        "totals": {"revenue": 1000, "labor": 300, "materials": 200},
+        "readiness": {
+            "policy_gaps": [{"gap_key": "allocation", "state": "open"}],
+            "allocation_authority": {"state": "policy_required"},
+        },
         "beacon_conditions": [
             {"kind": "incomplete_economic_evidence", "state": "partial"}
         ],
@@ -104,3 +114,25 @@ def test_context_references_expose_stable_economics_ids_only() -> None:
             "authority_state": "current",
         },
     ]
+
+
+def test_expanded_owner_questions_explain_changes_and_blockers() -> None:
+    value = projection()
+    value["comparison"] = {
+        "state": "available",
+        "labor_change_minor": 40,
+        "materials_change_minor": -10,
+    }
+    labor = OwnerIntelligenceService._select(OwnerQuestion.LABOR_COST_MOVEMENT, value)
+    blockers = OwnerIntelligenceService._select(
+        OwnerQuestion.FULL_PROFITABILITY_BLOCKERS, value
+    )
+    decisions = OwnerIntelligenceService._select(
+        OwnerQuestion.OWNER_DECISIONS_REQUIRED, value
+    )
+    inspect = OwnerIntelligenceService._select(OwnerQuestion.INSPECT_FIRST, value)
+    assert labor["change_minor"] == 40
+    assert "does not establish causality" in labor["limitation"]
+    assert blockers["fully_allocated_available"] is False
+    assert decisions["kind"] == "owner_decisions"
+    assert inspect["items"]
