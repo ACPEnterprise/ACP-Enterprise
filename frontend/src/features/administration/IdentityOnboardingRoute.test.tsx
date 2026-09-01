@@ -89,6 +89,20 @@ describe("IdentityOnboardingRoute", () => {
       masked_login: "s***@example.invalid",
       status: "invited",
     });
+    vi.mocked(api.getIdentityOnboardingDelivery).mockResolvedValue({
+      request_id: "request-1",
+      invitation_id: "invitation-1",
+      message_id: "message-1",
+      invitation_status: "active",
+      delivery_status: "provider_not_configured",
+      template_version: "employee-invitation-v1",
+      retry_count: 0,
+      provider_reference_present: false,
+      last_error_code: "PROVIDER_NOT_CONFIGURED",
+      created_at: "2026-09-01T00:00:00Z",
+      submitted_at: null,
+      delivered_at: null,
+    });
   });
 
   it("prepares a protected Employee identity with an explicit Branch and role", async () => {
@@ -116,6 +130,8 @@ describe("IdentityOnboardingRoute", () => {
     }));
     expect(vi.mocked(api.initiateEmployeeBetaOnboarding).mock.calls[0]?.[0].request_key).toMatch(/^employee-admin-/);
     expect(await screen.findByText(/Onboarding was created/)).toBeInTheDocument();
+    expect(await screen.findByText("provider not configured", { exact: true })).toBeInTheDocument();
+    expect(screen.getByText("Provider not configured or not accepted")).toBeInTheDocument();
     expect(screen.queryByDisplayValue("synthetic@example.invalid")).not.toBeInTheDocument();
   });
 

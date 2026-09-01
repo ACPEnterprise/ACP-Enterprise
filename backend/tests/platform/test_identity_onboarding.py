@@ -10,6 +10,10 @@ from uuid import UUID, uuid4
 
 import pytest
 import pytest_asyncio
+from sqlalchemy import select, text, update
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
 from app.core.config import Settings, settings
 from app.payroll.contracts import PayrollAdmissionState, evaluate_payroll_admission
 from app.platform.audit.models import AuditRecord
@@ -36,11 +40,14 @@ from app.platform.onboarding.service import (
     ProtectedInvitationDelivery,
 )
 from app.platform.permissions.codes import AdministrationPermission
+from app.platform.permissions.models import (
+    MembershipRole,
+    Permission,
+    Role,
+    RolePermission,
+)
 from app.platform.users.models import User, UserCredential
 from app.timekeeping.repository import timekeeping_repository
-from sqlalchemy import select, text, update
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 
 class Context:
@@ -162,6 +169,7 @@ def command(
     email: str | None = None,
     existing_user_id: UUID | None = None,
     role_ids: tuple[UUID, ...] = (),
+    additional_permission_ids: tuple[UUID, ...] = (),
 ) -> OnboardingCommand:
     return OnboardingCommand(
         request_key=request_key,
@@ -173,9 +181,90 @@ def command(
         employee_number_prefix="EMP-",
         employee_number_width=4,
         role_ids=role_ids,
+        additional_permission_ids=additional_permission_ids,
         login_email=email,
         existing_user_id=existing_user_id,
     )
+
+
+@pytest.mark.asyncio
+async def test_explicit_employee_permission_profile_is_additive_replay_safe(
+    onboarding_db: tuple[
+        async_sessionmaker[AsyncSession], Context, IdentityOnboardingService
+    ],
+) -> None:
+    factory, context, service = onboarding_db
+    permission = Permission(
+        code=f"TEST_EMPLOYEE_ADD_{uuid4().hex[:12].upper()}",
+        name="Synthetic additive Employee permission",
+        resource="synthetic_employee",
+        action="read",
+        status="active",
+    )
+    async with factory() as setup, setup.begin():
+        setup.add(permission)
+
+    email = f"employee-profile-{uuid4()}@example.test"
+    profile_command = command(
+        context,
+        request_key=f"profile-{uuid4()}",
+        email=email,
+        additional_permission_ids=(permission.id,),
+    )
+    async with factory() as session:
+        created = await service.initiate(
+            session, context=context, command=profile_command
+        )
+        replay = await service.initiate(
+            session, context=context, command=profile_command
+        )
+        assert replay.id == created.id
+        profile_roles = tuple(
+            await session.scalars(
+                select(Role)
+                .join(MembershipRole, MembershipRole.role_id == Role.id)
+                .where(
+                    MembershipRole.membership_id == created.membership_id,
+                    Role.code.like("EMPLOYEE_PROFILE_%"),
+                )
+            )
+        )
+        assert len(profile_roles) == 1
+        assert await session.scalar(
+            select(RolePermission.id).where(
+                RolePermission.role_id == profile_roles[0].id,
+                RolePermission.permission_id == permission.id,
+            )
+        )
+        user = await session.get(User, created.user_id)
+        assert user is not None and user.authorization_version == 2
+
+
+@pytest.mark.asyncio
+async def test_explicit_employee_permission_profile_rejects_unknown_permission(
+    onboarding_db: tuple[
+        async_sessionmaker[AsyncSession], Context, IdentityOnboardingService
+    ],
+) -> None:
+    factory, context, service = onboarding_db
+    async with factory() as session:
+        with pytest.raises(OnboardingConflictError):
+            await service.initiate(
+                session,
+                context=context,
+                command=command(
+                    context,
+                    request_key=f"unknown-permission-{uuid4()}",
+                    email=f"unknown-permission-{uuid4()}@example.test",
+                    additional_permission_ids=(uuid4(),),
+                ),
+            )
+        assert not await session.scalar(
+            select(IdentityOnboardingRequest.id).where(
+                IdentityOnboardingRequest.company_id == context.company.id,
+                IdentityOnboardingRequest.request_key.like("unknown-permission-%"),
+            )
+        )
 
 
 @pytest.mark.asyncio
@@ -209,8 +298,7 @@ async def test_invitation_activation_is_single_use_and_secret_safe(
         assert invitation.token_hash.encode() not in envelope.ciphertext
         outbox = await session.scalar(
             select(NotificationOutbox).where(
-                NotificationOutbox.notification_type
-                == "identity.onboarding_invitation"
+                NotificationOutbox.notification_type == "identity.onboarding_invitation"
             )
         )
         assert outbox is not None
@@ -276,9 +364,7 @@ async def test_owner_claim_reuses_protected_boundary_and_is_single_use(
         envelope = await session.scalar(
             select(ProtectedInvitationDeliveryEnvelope)
             .join(IdentityOnboardingInvitation)
-            .where(
-                IdentityOnboardingInvitation.onboarding_request_id == request_id
-            )
+            .where(IdentityOnboardingInvitation.onboarding_request_id == request_id)
         )
         assert envelope is not None and envelope.status == "delivered"
         assert envelope.ciphertext == b""
@@ -366,9 +452,7 @@ async def test_concurrent_owner_claim_has_one_winner_and_one_audit(
             await verification.scalars(
                 select(ProtectedInvitationDeliveryEnvelope)
                 .join(IdentityOnboardingInvitation)
-                .where(
-                    IdentityOnboardingInvitation.onboarding_request_id == request_id
-                )
+                .where(IdentityOnboardingInvitation.onboarding_request_id == request_id)
             )
         ).all()
         audits = (
@@ -399,7 +483,9 @@ async def test_owner_claim_requires_permission_scope_and_non_production(
         record = await service.initiate(
             session,
             context=context,
-            command=command(context, email=f"owner-claim-guards-{uuid4()}@example.test"),
+            command=command(
+                context, email=f"owner-claim-guards-{uuid4()}@example.test"
+            ),
         )
         request_id = record.id
         denied = Context(
@@ -479,12 +565,15 @@ async def test_initiate_rejects_valid_but_unauthorized_company_branch(
         )
         with pytest.raises(OnboardingConflictError, match="Branch"):
             await service.initiate(session, context=context, command=attempted)
-        assert await session.scalar(
-            select(IdentityOnboardingRequest.id).where(
-                IdentityOnboardingRequest.company_id == context.company.id,
-                IdentityOnboardingRequest.request_key == request_key,
+        assert (
+            await session.scalar(
+                select(IdentityOnboardingRequest.id).where(
+                    IdentityOnboardingRequest.company_id == context.company.id,
+                    IdentityOnboardingRequest.request_key == request_key,
+                )
             )
-        ) is None
+            is None
+        )
 
 
 @pytest.mark.asyncio
@@ -603,7 +692,9 @@ async def test_employee_number_allocation_is_concurrent_and_never_reuses(
             )
             return record.employee_id
 
-    employee_ids = await asyncio.gather(initiate("concurrent-a"), initiate("concurrent-b"))
+    employee_ids = await asyncio.gather(
+        initiate("concurrent-a"), initiate("concurrent-b")
+    )
     async with factory() as session:
         employees = list(
             (

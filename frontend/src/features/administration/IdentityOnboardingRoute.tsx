@@ -15,10 +15,15 @@ import {
   Spinner,
 } from "../../ui";
 import {
+  getIdentityOnboardingDelivery,
   initiateEmployeeBetaOnboarding,
   listPermissions,
   listRoles,
+  reissueIdentityOnboarding,
+  revokeIdentityOnboarding,
   type CompanyRole,
+  type IdentityOnboardingDeliveryView,
+  type IdentityOnboardingView,
   type PermissionDefinition,
 } from "./api";
 
@@ -59,6 +64,8 @@ export function IdentityOnboardingRoute() {
   const [additionalPermissionIds, setAdditionalPermissionIds] = useState<string[]>([]);
   const [permissionSearch, setPermissionSearch] = useState("");
   const [highImpactOnly, setHighImpactOnly] = useState(false);
+  const [onboarding, setOnboarding] = useState<IdentityOnboardingView | null>(null);
+  const [delivery, setDelivery] = useState<IdentityOnboardingDeliveryView | null>(null);
 
   useEffect(() => {
     if (!authorized) return;
@@ -132,7 +139,7 @@ export function IdentityOnboardingRoute() {
     setResult(null);
     setErrorMessage("");
     try {
-      await initiateEmployeeBetaOnboarding({
+      const created = await initiateEmployeeBetaOnboarding({
         request_key: requestKey,
         branch_id: branchId,
         first_name: firstName.trim(),
@@ -145,11 +152,31 @@ export function IdentityOnboardingRoute() {
         additional_permission_ids: additionalPermissionIds,
         login_email: loginAddress.trim(),
       });
+      setOnboarding(created);
+      setDelivery(await getIdentityOnboardingDelivery(created.id));
       setLoginAddress("");
       setFirstName("");
       setLastName("");
       setDisplayName("");
       setRequestKey(`employee-admin-${crypto.randomUUID()}`);
+      setResult("success");
+    } catch (error) {
+      setErrorMessage(submissionMessage(error));
+      setResult("error");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const updateInvitation = async (operation: "reissue" | "revoke") => {
+    if (!onboarding) return;
+    setSubmitting(true);
+    try {
+      const updated = operation === "reissue"
+        ? await reissueIdentityOnboarding(onboarding.id)
+        : await revokeIdentityOnboarding(onboarding.id);
+      setOnboarding(updated);
+      setDelivery(await getIdentityOnboardingDelivery(updated.id));
       setResult("success");
     } catch (error) {
       setErrorMessage(submissionMessage(error));
@@ -273,6 +300,52 @@ export function IdentityOnboardingRoute() {
           )}
         </CardContent>
       </Card>
+      {onboarding && delivery && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Invitation readiness</CardTitle>
+            <CardDescription>
+              Invitation authority and Communications delivery evidence are reported
+              separately. A queued message is not proof of delivery.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-ui-4">
+            <dl className="grid gap-ui-3 text-body-s sm:grid-cols-2">
+              <div>
+                <dt className="text-content-muted">Invitation</dt>
+                <dd className="font-semibold">{delivery.invitation_status.replaceAll("_", " ")}</dd>
+              </div>
+              <div>
+                <dt className="text-content-muted">Delivery</dt>
+                <dd className="font-semibold">{delivery.delivery_status.replaceAll("_", " ")}</dd>
+              </div>
+              <div>
+                <dt className="text-content-muted">Activation</dt>
+                <dd className="font-semibold">{onboarding.status.replaceAll("_", " ")}</dd>
+              </div>
+              <div>
+                <dt className="text-content-muted">Provider acceptance</dt>
+                <dd className="font-semibold">
+                  {delivery.provider_reference_present ? "Provider reference recorded" : "Provider not configured or not accepted"}
+                </dd>
+              </div>
+            </dl>
+            {delivery.last_error_code && (
+              <Alert variant="warning">
+                Delivery requires attention: {delivery.last_error_code.replaceAll("_", " ")}.
+              </Alert>
+            )}
+            <div className="flex flex-wrap gap-ui-3">
+              <Button variant="secondary" loading={submitting} onClick={() => void updateInvitation("reissue")}>
+                Reissue invitation
+              </Button>
+              <Button variant="secondary" loading={submitting} onClick={() => void updateInvitation("revoke")}>
+                Revoke invitation
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
       <Link className="text-link" to="/administration">
         Back to Administration
       </Link>
