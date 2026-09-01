@@ -44,6 +44,11 @@ class EvidenceReference(LiaSchema):
     evidence_digest: str
     count: int | None = None
     state: str | None = None
+    source_contract_version: str | None = None
+    company_id: UUID | None = None
+    branch_ids: tuple[UUID, ...] = ()
+    authorization_version: int | None = None
+    limitations: tuple[str, ...] = ()
 
 
 class NavigationSuggestion(LiaSchema):
