@@ -539,6 +539,8 @@ class ControlReportKind(str, Enum):
     OPEN_INVOICES = "open_invoices"
     VENDOR_BALANCE_DETAIL = "vendor_balance_detail"
     UNPAID_BILLS = "unpaid_bills"
+    ACCOUNT_QUICK_REPORT = "account_quick_report"
+    INVENTORY_VALUATION_SUMMARY = "inventory_valuation_summary"
 
 
 @dataclass(frozen=True)

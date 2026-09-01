@@ -47,6 +47,12 @@ those rows remain held.
 
 All reports use Accrual basis and cutoff 2026-08-31 unless stated otherwise.
 
+Full available history does not prove the balance sheet immediately before the
+first reliable transaction family. Obtain a Balance Sheet and Trial Balance as
+of 2021-07-06. That opening control is evidence only; it does not authorize an
+opening journal. Families beginning later retain their stated limitation and
+must not be backfilled from the opening control.
+
 | Gate | Required QBO evidence | Purpose |
 |---|---|---|
 | AR | A/R Aging Detail, Open Invoices, Trial Balance | Tie open items to AR control and resolve the post-cutoff-modified invoice |
