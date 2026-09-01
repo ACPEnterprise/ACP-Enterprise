@@ -1,7 +1,7 @@
 """create operational asset authority
 
 Revision ID: h6f7d04c2a8b
-Revises: g5e4c93b0f6d, i5h3g51b8z4x
+Revises: i5h3g51b8z4x
 """
 
 from collections.abc import Sequence
@@ -11,7 +11,7 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision: str = "h6f7d04c2a8b"
-down_revision: tuple[str, str] = ("g5e4c93b0f6d", "i5h3g51b8z4x")
+down_revision: str = "i5h3g51b8z4x"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
