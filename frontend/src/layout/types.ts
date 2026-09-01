@@ -38,6 +38,7 @@ export type NavigationItemId =
   | "luminary"
   | "payroll"
   | "inventory"
+  | "assets"
   | "purchasing"
   | "technician"
   | "workday"

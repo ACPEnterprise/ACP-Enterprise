@@ -203,6 +203,14 @@ export const navigationCatalog = [
     requiredPermission: "COMPANY_INVENTORY_READ",
   },
   {
+    id: "assets",
+    label: "Assets & Fleet",
+    path: "/assets",
+    icon: Wrench,
+    availability: "available",
+    requiredPermission: "COMPANY_ASSET_READ",
+  },
+  {
     id: "purchasing",
     label: "Purchasing",
     path: "/purchasing",
