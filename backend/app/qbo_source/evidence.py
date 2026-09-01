@@ -13,6 +13,7 @@ from typing import Protocol
 
 from .contracts import QboSourceEnvelope, SnapshotIdentity, _json_domain
 from .intuit import CatalogDispositionEvidence, PageEvidence, PageObserver
+from .snapshot_policy import build_bounded_snapshot
 
 
 class EvidenceStoreError(RuntimeError):
@@ -129,7 +130,9 @@ def _envelope_document(envelope: QboSourceEnvelope) -> dict[str, object]:
 class ProtectedFilesystemEvidenceStore(EvidenceStore):
     """Restricted, content-addressed store. Raw payloads never enter manifests."""
 
-    def __init__(self, *, root: Path, repository_root: Path) -> None:
+    def __init__(
+        self, *, root: Path, repository_root: Path, bounded_snapshot: bool = False
+    ) -> None:
         self.root = root.expanduser().resolve()
         repository = repository_root.expanduser().resolve()
         if self.root == repository or repository in self.root.parents:
@@ -141,6 +144,7 @@ class ProtectedFilesystemEvidenceStore(EvidenceStore):
         else:
             self.root.mkdir(parents=True, mode=0o700)
         os.chmod(self.root, 0o700)
+        self.bounded_snapshot = bounded_snapshot
         for name in ("blobs", "envelopes", "runs", "controls"):
             path = self.root / name
             path.mkdir(mode=0o700, exist_ok=True)
@@ -281,7 +285,9 @@ class ProtectedFilesystemEvidenceStore(EvidenceStore):
             raise EvidenceStoreError("run_state_invalid")
         record = asdict(evidence)
         matching = [
-            item for item in dispositions if item.get("entity_kind") == evidence.entity_kind
+            item
+            for item in dispositions
+            if item.get("entity_kind") == evidence.entity_kind
         ]
         if matching and matching[0] != record:
             raise EvidenceStoreError("catalog_disposition_conflict")
@@ -341,6 +347,20 @@ class ProtectedFilesystemEvidenceStore(EvidenceStore):
                 catalog_dispositions, key=lambda row: row["entity_kind"]
             ),
         }
+        if state is RunState.COMPLETE and self.bounded_snapshot:
+            bounded = build_bounded_snapshot(
+                source_manifest=manifest, blob_root=self.root / "blobs"
+            )
+            bounded_bytes = _canonical_json(bounded.document)
+            self._store_named_immutable(
+                self.root / "runs" / run_id / "bounded-manifest.json",
+                bounded_bytes,
+            )
+            manifest["snapshot_policy_version"] = bounded.document[
+                "snapshot_policy_version"
+            ]
+            manifest["bounded_snapshot_sha256"] = bounded.digest
+            manifest["post_cutoff_exclusion_sha256"] = bounded.exclusion_digest
         manifest_bytes = _canonical_json(manifest)
         self._store_named_immutable(
             self.root / "runs" / run_id / "manifest.json", manifest_bytes
@@ -354,6 +374,25 @@ class ProtectedFilesystemEvidenceStore(EvidenceStore):
         if not path.is_file():
             raise EvidenceStoreError("run_not_found")
         return path
+
+    def bounded_snapshot_summary(self, *, run_id: str) -> dict[str, object] | None:
+        _safe_identity(run_id)
+        path = self.root / "runs" / run_id / "bounded-manifest.json"
+        if not path.is_file():
+            return None
+        document = self._read_json(path)
+        return {
+            "state": document.get("state"),
+            "snapshot_policy_version": document.get("snapshot_policy_version"),
+            "bounded_snapshot_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+            "post_cutoff_exclusion_sha256": document.get("exclusion_digest"),
+            "excluded_post_cutoff_counts": document.get(
+                "excluded_post_cutoff_counts", {}
+            ),
+            "maximum_included_transaction_dates": document.get(
+                "maximum_included_transaction_dates", {}
+            ),
+        }
 
     def _store_blob(self, digest: str, content: bytes) -> None:
         if hashlib.sha256(content).hexdigest() != digest:
