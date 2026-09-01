@@ -6,8 +6,6 @@ from unittest.mock import AsyncMock
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
-
 from app.customers.lia_context import (
     CONTRACT_VERSION,
     MAX_JOBS,
@@ -18,6 +16,7 @@ from app.customers.models import Customer, ServiceLocation
 from app.jobs.repository import JobRepository
 from app.lia.retrieval import GovernedRetrievalService
 from app.platform.permissions.codes import CustomerPermission, JobPermission
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from tests.jobs.test_jobs_persistence import JobsFixture, build_job
 
 pytest_plugins = ("tests.jobs.test_jobs_persistence",)

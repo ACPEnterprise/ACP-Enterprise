@@ -7,13 +7,12 @@ from types import SimpleNamespace
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
-
 from app.jobs.lia_context import CONTRACT_VERSION, JobLiaContextService
 from app.jobs.repository import JobRepository
 from app.lia.contracts import EvidenceReference
 from app.lia.foundation import SOURCE_REGISTRY, SourceReadiness
 from app.platform.permissions.codes import CustomerPermission, JobPermission
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from tests.jobs.test_jobs_persistence import JobsFixture, build_job
 
 pytest_plugins = ("tests.jobs.test_jobs_persistence",)
