@@ -2,3 +2,4 @@ export type Asset = { id:string; company_id:string; branch_id:string; asset_numb
 export type AssetEvidence = { id:string; asset_id:string; evidence_type:string; state:string; value:Record<string,unknown>; source_reference:string|null; protected_document_id:string|null; occurred_at:string; evidence_digest:string; created_at:string };
 export type AssetRelationship = { id:string; asset_id:string; relationship_type:string; related_entity_id:string; valid_from:string; valid_to:string|null; evidence_digest:string; created_at:string };
 export type AssetDetail = { asset:Asset; evidence:AssetEvidence[]; relationships:AssetRelationship[]; readiness:string; readiness_reasons:string[] };
+export type AssetAction = { id:string; asset_id:string; action_type:string; state:string; related_entity_id:string|null; payload:Record<string,unknown>; occurred_at:string; asset_version:number; evidence_digest:string; created_at:string };

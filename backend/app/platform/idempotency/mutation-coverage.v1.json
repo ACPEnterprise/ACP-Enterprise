@@ -2644,8 +2644,21 @@
       "path": "/api/v1/workforce/eligibility",
       "reason": "POST carries a structured eligibility query but persists no Workforce authority.",
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "operational_assets",
+      "mechanism": "Company-scoped command identity, canonical request digest, Asset row lock, optimistic version, and immutable typed action evidence",
+      "method": "POST",
+      "operation_id": "record_asset_action_api_v1_assets__asset_id__actions_post",
+      "path": "/api/v1/assets/{asset_id}/actions",
+      "reason": "Install, warranty, service, Fleet, inspection, maintenance, custody, and document commands must replay exactly once and reject contradictory authority.",
+      "replay_evidence": [
+        "tests/operational_assets/test_operational_assets.py"
+      ],
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "8f29166df8b301f6bf6d17b08d778825688e2cffd43b354573547f4a97c59b2d",
+  "fingerprint": "f4839ff7636cfe32899deef07c10e8f37be4650f74f79c6e0019f5cfd27e9aa5",
   "schema_version": "1"
 }

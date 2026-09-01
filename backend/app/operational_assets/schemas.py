@@ -89,3 +89,26 @@ class AssetDetail(Schema):
     relationships: list[RelationshipOut]
     readiness: str
     readiness_reasons: list[str]
+
+
+class AssetActionCreate(Schema):
+    action_type: str
+    state: str = Field(min_length=1, max_length=40)
+    related_entity_id: UUID | None = None
+    payload: dict[str, object] = Field(default_factory=dict)
+    occurred_at: datetime
+    expected_version: int = Field(ge=1)
+    idempotency_key: str = Field(min_length=1, max_length=160)
+
+
+class AssetActionOut(Schema):
+    id: UUID
+    asset_id: UUID
+    action_type: str
+    state: str
+    related_entity_id: UUID | None
+    payload: dict[str, object]
+    occurred_at: datetime
+    asset_version: int
+    evidence_digest: str
+    created_at: datetime
