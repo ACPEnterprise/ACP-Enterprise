@@ -1,0 +1,40 @@
+{
+  "program": "COMMUNICATIONS.OMNICHANNEL.OPERATIONS.PROGRAM.2",
+  "authority_base": "66d22691d09598312ab83d9560013c64b82ec6f3",
+  "branch": "work/communications-omnichannel-operations-program-2",
+  "scope": [
+    "governed operational message catalog",
+    "channel and transactional-policy selection",
+    "provider and sender readiness projection",
+    "fixed Email and SMS rendering",
+    "provider-neutral STOP START HELP evidence contract",
+    "Communications Administration product surface",
+    "provider decision and admission packet"
+  ],
+  "business_truth_owners_unchanged": [
+    "identity",
+    "scheduling",
+    "dispatch",
+    "jobs",
+    "estimates",
+    "invoicing",
+    "payments",
+    "service_agreements"
+  ],
+  "schema_change": false,
+  "provider_admission": "PROVIDER_REQUIRED",
+  "real_delivery": false,
+  "preview_deployment": false,
+  "production_operation": false,
+  "validation": {
+    "backend_focused": "136 passed",
+    "backend_broad": "427 passed; 6 pre-reconciliation Job fixture teardown errors, corrected by current authority and requalified focused",
+    "frontend": "106 files / 346 tests passed",
+    "ruff": "passed",
+    "mypy": "passed",
+    "python_compile": "passed",
+    "eslint": "passed",
+    "typescript_vite_build": "passed",
+    "alembic": "k7l5n83d0q6r current=head; one head; no drift"
+  }
+}

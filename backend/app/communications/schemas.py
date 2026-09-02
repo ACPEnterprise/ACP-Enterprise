@@ -3,6 +3,7 @@ from uuid import UUID
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
+from .readiness import ReadinessState
 from .types import CommunicationChannel, CommunicationDeliveryState, CommunicationType
 
 
@@ -46,3 +47,20 @@ class CommunicationItem(BaseModel):
 
 class CommunicationPage(BaseModel):
     items: tuple[CommunicationItem, ...]
+
+
+class MessageCatalogItem(BaseModel):
+    message_class: CommunicationType
+    owner_domain: str
+    allowed_channels: tuple[CommunicationChannel, ...]
+    template_version: str
+    policy_required: bool
+
+
+class CommunicationsReadinessItem(BaseModel):
+    email: ReadinessState
+    sms: ReadinessState
+    webhook: ReadinessState
+    overall: ReadinessState
+    synthetic_only: bool
+    catalog_fingerprint: str

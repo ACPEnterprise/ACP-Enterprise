@@ -11,6 +11,7 @@ from app.platform.permissions.dependencies import require_permission
 from app.platform.reliability.correlation import current_correlation_id
 from app.platform.reliability.failures import ClientRecovery, FailureCode, SafeFailure
 
+from .catalog import OPERATIONAL_MESSAGE_CATALOG, catalog_fingerprint
 from .contracts import CommunicationRequest
 from .errors import (
     CommunicationAuthorizationError,
@@ -19,7 +20,14 @@ from .errors import (
     CommunicationNotFoundError,
     CommunicationValidationError,
 )
-from .schemas import CommunicationCreate, CommunicationItem, CommunicationPage
+from .readiness import ProviderConfiguration, project_readiness
+from .schemas import (
+    CommunicationCreate,
+    CommunicationItem,
+    CommunicationPage,
+    CommunicationsReadinessItem,
+    MessageCatalogItem,
+)
 from .service import communication_service
 
 router = APIRouter(prefix="/api/v1/communications", tags=["Communications"])
@@ -112,3 +120,32 @@ async def history(
         )
     except CommunicationError as error:
         raise communication_http(error) from error
+
+
+@router.get("/catalog", response_model=tuple[MessageCatalogItem, ...])
+async def catalog(context: ReadContext) -> tuple[MessageCatalogItem, ...]:
+    del context
+    return tuple(
+        MessageCatalogItem(
+            message_class=policy.communication_type,
+            owner_domain=policy.owner_domain,
+            allowed_channels=tuple(sorted(policy.allowed_channels, key=lambda x: x.value)),
+            template_version=policy.template_identifier,
+            policy_required=policy.policy_required,
+        )
+        for policy in sorted(
+            OPERATIONAL_MESSAGE_CATALOG.values(),
+            key=lambda value: value.communication_type.value,
+        )
+    )
+
+
+@router.get("/readiness", response_model=CommunicationsReadinessItem)
+async def readiness(context: ReadContext) -> CommunicationsReadinessItem:
+    del context
+    # Real provider admission is intentionally configuration-gated. Synthetic
+    # qualification must never be projected as delivery readiness.
+    result = project_readiness(ProviderConfiguration())
+    return CommunicationsReadinessItem(
+        **result.__dict__, catalog_fingerprint=catalog_fingerprint()
+    )

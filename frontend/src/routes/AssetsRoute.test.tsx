@@ -31,6 +31,9 @@ vi.mock("../api/assets", () => ({
   recordAssetEvidence: vi.fn(),
   relateAsset: vi.fn(),
   recordAssetAction: vi.fn(),
+  getAssetOperationalReadiness: vi.fn().mockResolvedValue({ state: "DATA_REQUIRED", counts: {}, policy_states: { inspection: "POLICY_REQUIRED" } }),
+  draftAssetPolicy: vi.fn(),
+  previewAssetImport: vi.fn(),
 }));
 
 const show = () =>

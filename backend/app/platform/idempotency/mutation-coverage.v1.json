@@ -2707,8 +2707,28 @@
         "tests/operational_assets/test_operational_assets.py"
       ],
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "operational_assets",
+      "mechanism": "Company-scoped command identity, canonical policy digest, immutable version, and explicit unconfigured state",
+      "method": "POST",
+      "operation_id": "draft_asset_policy_api_v1_assets_operationalization_policies_post",
+      "path": "/api/v1/assets/operationalization/policies",
+      "reason": "Policy drafts replay exactly while changed configuration under one command identity fails closed.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "operational_assets",
+      "mechanism": "Source-system identity, canonical source digest, immutable classification evidence, and operator review gate",
+      "method": "POST",
+      "operation_id": "preview_asset_import_api_v1_assets_operationalization_import_preview_post",
+      "path": "/api/v1/assets/operationalization/import-preview",
+      "reason": "Import preview replay cannot duplicate candidates or silently overwrite changed source evidence.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "d6f50d76001b721beb4335dda6c87722289f637d4350351976f5e53886a558ad",
+  "fingerprint": "89d40f0d62757aa73f02c137ba8a0f3508e3b8c55abf39dfadf07b46d3656dc3",
   "schema_version": "1"
 }
