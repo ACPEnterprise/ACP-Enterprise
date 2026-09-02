@@ -6,7 +6,7 @@ import {
 } from "axios";
 import { describe, expect, it } from "vitest";
 
-import { getOperatorApiError } from "./errors";
+import { getApiErrorMessage, getOperatorApiError } from "./errors";
 
 function failure(status?: number, detail?: unknown): AxiosError {
   const config = { headers: new AxiosHeaders() } as InternalAxiosRequestConfig;
@@ -77,5 +77,26 @@ describe("operator API errors", () => {
     );
     expect(result.message).not.toContain("provider-secret-customer-canary");
     expect(result.message).not.toContain("sql://");
+  });
+
+  it.each([500, 502, 503])(
+    "keeps legacy error surfaces safe for status %s",
+    (status) => {
+      const message = getApiErrorMessage(
+        failure(status, "/srv/acp/provider-secret-customer-canary"),
+      );
+      expect(message).toBe("The service could not be reached. Try again.");
+      expect(message).not.toContain("provider-secret-customer-canary");
+      expect(message).not.toContain("/srv/acp");
+    },
+  );
+
+  it("keeps legacy network and unexpected failures fixed and recoverable", () => {
+    expect(getApiErrorMessage(failure())).toBe(
+      "The requested service could not be reached. Check your connection and try again.",
+    );
+    expect(
+      getApiErrorMessage(new Error("private traceback customer canary")),
+    ).toBe("The operation could not be completed.");
   });
 });
