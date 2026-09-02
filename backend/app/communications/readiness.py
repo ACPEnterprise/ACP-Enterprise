@@ -3,6 +3,8 @@
 from dataclasses import dataclass
 from enum import StrEnum
 
+from app.core.config import Settings
+
 
 class ReadinessState(StrEnum):
     EMAIL_PROVIDER_NOT_CONFIGURED = "EMAIL_PROVIDER_NOT_CONFIGURED"
@@ -28,6 +30,26 @@ class ProviderConfiguration:
     sms_sender: bool = False
     sms_registration: bool = False
     webhook: bool = False
+
+
+def configuration_from_settings(settings: Settings) -> ProviderConfiguration:
+    """Project presence/readiness only; secret references never leave Settings."""
+    enabled = settings.communications_delivery_enabled
+    return ProviderConfiguration(
+        email_provider=enabled
+        and bool(settings.communications_email_provider_identity)
+        and bool(settings.communications_email_credential_reference),
+        email_sender_verified=settings.communications_email_sender_verified,
+        email_domain_verified=settings.communications_email_domain_verified,
+        sms_provider=enabled
+        and bool(settings.communications_sms_provider_identity)
+        and bool(settings.communications_sms_credential_reference),
+        sms_sender=bool(settings.communications_sms_sender_identity),
+        sms_registration=settings.communications_sms_registration_verified,
+        webhook=enabled
+        and settings.communications_webhook_enabled
+        and bool(settings.communications_webhook_secret_reference),
+    )
 
 
 @dataclass(frozen=True)
