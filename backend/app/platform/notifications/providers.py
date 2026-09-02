@@ -42,3 +42,19 @@ class NotificationProvider(Protocol):
     async def deliver(
         self, message: NotificationMessage
     ) -> NotificationDeliveryResult: ...
+
+
+class NotificationProviderTransportError(Exception):
+    """Safe transport failure raised without exposing provider response details."""
+
+    def __init__(
+        self,
+        error_code: str,
+        *,
+        retryable: bool,
+        submission_possible: bool,
+    ) -> None:
+        super().__init__(error_code)
+        self.error_code = error_code
+        self.retryable = retryable
+        self.submission_possible = submission_possible

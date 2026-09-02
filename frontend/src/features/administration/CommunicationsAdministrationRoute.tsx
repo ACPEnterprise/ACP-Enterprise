@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { MailCheck, MessageSquareText, ShieldCheck } from "lucide-react";
 
 import {
+  getCommunicationOperationsSummary,
   getCommunicationsReadiness,
   listOperationalMessageCatalog,
 } from "../../api/communications";
@@ -26,17 +27,22 @@ export function CommunicationsAdministrationRoute() {
     queryFn: listOperationalMessageCatalog,
     enabled: canRead,
   });
+  const summary = useQuery({
+    queryKey: ["communications-operations-summary"],
+    queryFn: getCommunicationOperationsSummary,
+    enabled: canRead,
+  });
 
   if (!canRead) {
     return <Alert variant="danger">Communications readiness requires Communications read permission.</Alert>;
   }
-  if (readiness.isLoading || catalog.isLoading) {
+  if (readiness.isLoading || catalog.isLoading || summary.isLoading) {
     return <Spinner label="Loading Communications readiness" />;
   }
-  if (readiness.isError || catalog.isError) {
+  if (readiness.isError || catalog.isError || summary.isError) {
     return (
       <Alert variant="danger" title="Communications readiness unavailable">
-        {getApiErrorMessage(readiness.error ?? catalog.error)}
+        {getApiErrorMessage(readiness.error ?? catalog.error ?? summary.error)}
       </Alert>
     );
   }
@@ -69,6 +75,24 @@ export function CommunicationsAdministrationRoute() {
       <Alert variant="information">
         Real sender identity, domain verification, provider credentials, webhooks, and SMS registration remain external admission gates.
       </Alert>
+      <section aria-labelledby="communications-operations-heading">
+        <h2 id="communications-operations-heading" className="text-xl font-semibold">Delivery operations</h2>
+        <p className="mt-1 text-sm text-content-muted">Provider acceptance remains pending until delivery evidence arrives.</p>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          {[
+            ["Pending", summary.data!.pending],
+            ["Pending delivery", summary.data!.accepted_pending_delivery],
+            ["Delivered", summary.data!.delivered],
+            ["Needs attention", summary.data!.needs_attention],
+            ["Suppressed", summary.data!.suppressed],
+          ].map(([label, count]) => (
+            <Card className="p-4" key={String(label)}>
+              <p className="text-sm text-content-muted">{String(label)}</p>
+              <p className="mt-1 text-2xl font-semibold">{String(count)}</p>
+            </Card>
+          ))}
+        </div>
+      </section>
       <section>
         <h2 className="text-xl font-semibold">Governed operational catalog</h2>
         <p className="mt-1 text-sm text-content-muted">
@@ -80,10 +104,11 @@ export function CommunicationsAdministrationRoute() {
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <h3 className="font-semibold">{words(item.message_class)}</h3>
                 <Badge variant={item.policy_required ? "warning" : "neutral"}>
-                  {item.policy_required ? "Policy required" : "Engineering ready"}
+                  {item.policy_required ? "Policy required" : words(item.purpose)}
                 </Badge>
               </div>
               <p className="mt-2 text-sm text-content-muted">Authority: {words(item.owner_domain)}</p>
+              <p className="mt-1 text-sm">Purpose: {words(item.purpose)}</p>
               <p className="mt-1 text-sm">Channels: {item.allowed_channels.map(words).join(", ")}</p>
               <p className="mt-1 break-all text-xs text-content-muted">Template: {item.template_version}</p>
             </Card>

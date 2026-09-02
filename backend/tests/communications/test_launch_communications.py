@@ -13,6 +13,7 @@ from app.communications.errors import (
     CommunicationNotFoundError,
     CommunicationValidationError,
 )
+from app.communications.repository import CommunicationRepository
 from app.communications.service import POLICIES, CommunicationService
 from app.communications.types import CommunicationChannel, CommunicationType
 from app.main import app
@@ -97,6 +98,7 @@ def repository_for(ctx, spec: CommunicationRequest, *, consent="granted"):
         correlation_id=uuid4(),
         payload={"customer_id": str(spec.customer_id)},
     )
+
     contact = SimpleNamespace(
         normalized_email="owner@example.test",
         email="owner@example.test",
@@ -110,10 +112,48 @@ def repository_for(ctx, spec: CommunicationRequest, *, consent="granted"):
     )
     return SimpleNamespace(
         source_event=AsyncMock(return_value=source),
+        source_customer_id=AsyncMock(return_value=spec.customer_id),
         customer_contact=AsyncMock(return_value=(SimpleNamespace(), contact)),
+        is_recipient_suppressed=AsyncMock(return_value=False),
         latest_consent=AsyncMock(return_value=consent_event),
         list_scoped=AsyncMock(return_value=[]),
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "entity_type",
+    [
+        "appointment",
+        "job",
+        "estimate",
+        "invoice",
+        "service_agreement",
+        "service_agreement_billing_occurrence",
+        "dispatch_assignment",
+    ],
+)
+async def test_missing_payload_customer_resolves_from_supported_source_aggregate(
+    entity_type: str,
+) -> None:
+    customer_id = uuid4()
+    session = SimpleNamespace(scalar=AsyncMock(return_value=customer_id))
+    source = SimpleNamespace(
+        entity_type=entity_type,
+        entity_id=uuid4(),
+        payload={},
+    )
+
+    assert (
+        await CommunicationRepository.source_customer_id(
+            session,
+            source=source,
+            company_id=uuid4(),
+            branch_id=uuid4(),
+        )
+        == customer_id
+    )
+    session.scalar.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -179,6 +219,18 @@ async def test_request_fails_closed_without_current_consent(consent) -> None:
 
 
 @pytest.mark.asyncio
+async def test_request_fails_closed_for_current_recipient_suppression() -> None:
+    ctx = context()
+    spec = request()
+    repository = repository_for(ctx, spec)
+    repository.is_recipient_suppressed = AsyncMock(return_value=True)
+    with pytest.raises(CommunicationAuthorizationError, match="suppression"):
+        await CommunicationService(repository).request(
+            FakeSession(), context=ctx, request=spec
+        )
+
+
+@pytest.mark.asyncio
 async def test_request_fails_closed_for_missing_recipient() -> None:
     ctx = context()
     spec = request(channel=CommunicationChannel.EMAIL)
@@ -215,6 +267,50 @@ async def test_wrong_company_or_missing_source_fails_closed() -> None:
         "company_id": ctx.company.id,
         "branch_id": spec.branch_id,
     }
+
+
+@pytest.mark.asyncio
+async def test_source_aggregate_customer_must_match_requested_customer() -> None:
+    ctx = context()
+    spec = request()
+    repository = repository_for(ctx, spec)
+    repository.source_customer_id = AsyncMock(return_value=uuid4())
+
+    with pytest.raises(CommunicationValidationError, match="does not belong"):
+        await CommunicationService(repository).request(
+            FakeSession(), context=ctx, request=spec
+        )
+    repository.customer_contact.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_unresolved_source_aggregate_customer_fails_closed() -> None:
+    ctx = context()
+    spec = request()
+    repository = repository_for(ctx, spec)
+    repository.source_customer_id = AsyncMock(return_value=None)
+
+    with pytest.raises(CommunicationValidationError, match="could not be resolved"):
+        await CommunicationService(repository).request(
+            FakeSession(), context=ctx, request=spec
+        )
+    repository.customer_contact.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_general_request_rejects_non_delivery_channels() -> None:
+    ctx = context()
+    spec = request(
+        communication_type=CommunicationType.ESTIMATE_ACTION_REQUESTED,
+        channel=CommunicationChannel.PROTECTED_LINK,
+    )
+    repository = repository_for(ctx, spec)
+
+    with pytest.raises(CommunicationValidationError, match="Email and SMS only"):
+        await CommunicationService(repository).request(
+            FakeSession(), context=ctx, request=spec
+        )
+    repository.source_event.assert_not_awaited()
 
 
 @pytest.mark.asyncio

@@ -7,7 +7,7 @@ import json
 from dataclasses import asdict, dataclass
 
 from .contracts import CommunicationPolicy
-from .types import CommunicationChannel, CommunicationType
+from .types import CommunicationChannel, CommunicationPurpose, CommunicationType
 
 EMAIL_SMS = frozenset({CommunicationChannel.EMAIL, CommunicationChannel.SMS})
 EMAIL_ONLY = frozenset({CommunicationChannel.EMAIL})
@@ -28,6 +28,7 @@ def _policy(
     channels: frozenset[CommunicationChannel],
     *,
     consent_required: bool = True,
+    purpose: CommunicationPurpose = CommunicationPurpose.TRANSACTIONAL,
     policy_required: bool = False,
 ) -> CommunicationPolicy:
     return CommunicationPolicy(
@@ -37,6 +38,7 @@ def _policy(
         consent_required=consent_required,
         owner_domain=owner,
         allowed_channels=channels,
+        purpose=purpose,
         policy_required=policy_required,
     )
 
@@ -48,6 +50,7 @@ OPERATIONAL_MESSAGE_CATALOG: dict[CommunicationType, CommunicationPolicy] = {
         {"identity.invitation_created"},
         EMAIL_ONLY,
         consent_required=False,
+        purpose=CommunicationPurpose.ACCOUNT_SECURITY,
     ),
     CommunicationType.ACCOUNT_ACTIVATION: _policy(
         CommunicationType.ACCOUNT_ACTIVATION,
@@ -55,6 +58,7 @@ OPERATIONAL_MESSAGE_CATALOG: dict[CommunicationType, CommunicationPolicy] = {
         {"identity.invitation_claimed"},
         EMAIL_ONLY,
         consent_required=False,
+        purpose=CommunicationPurpose.ACCOUNT_SECURITY,
     ),
     CommunicationType.SECURITY_NOTIFICATION: _policy(
         CommunicationType.SECURITY_NOTIFICATION,
@@ -62,6 +66,7 @@ OPERATIONAL_MESSAGE_CATALOG: dict[CommunicationType, CommunicationPolicy] = {
         {"identity.security_notification_requested"},
         EMAIL_ONLY,
         consent_required=False,
+        purpose=CommunicationPurpose.ACCOUNT_SECURITY,
         policy_required=True,
     ),
     CommunicationType.APPOINTMENT_CONFIRMATION: _policy(
@@ -69,12 +74,14 @@ OPERATIONAL_MESSAGE_CATALOG: dict[CommunicationType, CommunicationPolicy] = {
         "scheduling",
         {"appointment.booked"},
         EMAIL_SMS,
+        purpose=CommunicationPurpose.OPERATIONAL,
     ),
     CommunicationType.APPOINTMENT_REMINDER: _policy(
         CommunicationType.APPOINTMENT_REMINDER,
         "scheduling",
         {"appointment.booked", "appointment.rescheduled"},
         EMAIL_SMS,
+        purpose=CommunicationPurpose.OPERATIONAL,
         policy_required=True,
     ),
     CommunicationType.APPOINTMENT_RESCHEDULED: _policy(
@@ -82,18 +89,21 @@ OPERATIONAL_MESSAGE_CATALOG: dict[CommunicationType, CommunicationPolicy] = {
         "scheduling",
         {"appointment.rescheduled"},
         EMAIL_SMS,
+        purpose=CommunicationPurpose.OPERATIONAL,
     ),
     CommunicationType.APPOINTMENT_CANCELLED: _policy(
         CommunicationType.APPOINTMENT_CANCELLED,
         "scheduling",
         {"appointment.cancelled"},
         EMAIL_SMS,
+        purpose=CommunicationPurpose.OPERATIONAL,
     ),
     CommunicationType.TECHNICIAN_ASSIGNED: _policy(
         CommunicationType.TECHNICIAN_ASSIGNED,
         "dispatch",
         {"technician.assigned"},
         EMAIL_SMS,
+        purpose=CommunicationPurpose.OPERATIONAL,
         policy_required=True,
     ),
     CommunicationType.TECHNICIAN_EN_ROUTE: _policy(
@@ -101,6 +111,7 @@ OPERATIONAL_MESSAGE_CATALOG: dict[CommunicationType, CommunicationPolicy] = {
         "dispatch",
         {"technician.en_route"},
         EMAIL_SMS,
+        purpose=CommunicationPurpose.OPERATIONAL,
         policy_required=True,
     ),
     CommunicationType.TECHNICIAN_ARRIVED: _policy(
@@ -108,6 +119,7 @@ OPERATIONAL_MESSAGE_CATALOG: dict[CommunicationType, CommunicationPolicy] = {
         "dispatch",
         {"technician.arrived"},
         EMAIL_SMS,
+        purpose=CommunicationPurpose.OPERATIONAL,
         policy_required=True,
     ),
     CommunicationType.WORK_COMPLETED: _policy(
@@ -115,6 +127,7 @@ OPERATIONAL_MESSAGE_CATALOG: dict[CommunicationType, CommunicationPolicy] = {
         "jobs",
         {"job.completed", "field.completion_requirements_satisfied"},
         EMAIL_SMS,
+        purpose=CommunicationPurpose.OPERATIONAL,
         policy_required=True,
     ),
     CommunicationType.ESTIMATE_ACTION_REQUESTED: _policy(
@@ -128,6 +141,7 @@ OPERATIONAL_MESSAGE_CATALOG: dict[CommunicationType, CommunicationPolicy] = {
         "estimates",
         {"estimate.sent"},
         EMAIL_SMS,
+        purpose=CommunicationPurpose.MARKETING_OUTREACH,
         policy_required=True,
     ),
     CommunicationType.ESTIMATE_STATUS_NOTICE: _policy(
@@ -135,6 +149,7 @@ OPERATIONAL_MESSAGE_CATALOG: dict[CommunicationType, CommunicationPolicy] = {
         "estimates",
         {"estimate.approved", "estimate.rejected", "estimate.expired"},
         EMAIL_SMS,
+        purpose=CommunicationPurpose.OPERATIONAL,
     ),
     CommunicationType.INVOICE_READY: _policy(
         CommunicationType.INVOICE_READY,
@@ -153,6 +168,7 @@ OPERATIONAL_MESSAGE_CATALOG: dict[CommunicationType, CommunicationPolicy] = {
         "payments",
         {"payment.failed", "payment.refund_succeeded"},
         EMAIL_SMS,
+        purpose=CommunicationPurpose.OPERATIONAL,
         policy_required=True,
     ),
     CommunicationType.SERVICE_AGREEMENT_NOTICE: _policy(
@@ -206,7 +222,11 @@ def select_channel(
 ) -> ChannelSelection:
     """Select deterministically; marketing consent never substitutes for operations."""
     by_channel = {item.channel: item for item in eligibility}
-    order = tuple(dict.fromkeys((preferred,) + fallback_order)) if preferred else fallback_order
+    order = (
+        tuple(dict.fromkeys((preferred,) + fallback_order))
+        if preferred
+        else fallback_order
+    )
     for candidate in order:
         state = by_channel.get(candidate)
         if (
@@ -218,7 +238,13 @@ def select_channel(
         ):
             return ChannelSelection(
                 channel=candidate,
-                fallback_from=(preferred if preferred and candidate != preferred else None),
-                reason=("preferred_channel" if candidate == preferred else "governed_fallback"),
+                fallback_from=(
+                    preferred if preferred and candidate != preferred else None
+                ),
+                reason=(
+                    "preferred_channel"
+                    if candidate == preferred
+                    else "governed_fallback"
+                ),
             )
     raise ValueError("No eligible transactional communication channel is available.")

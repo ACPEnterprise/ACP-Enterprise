@@ -74,6 +74,18 @@ class Settings(BaseSettings):
     identity_onboarding_delivery_key_file: str | None = None
     identity_onboarding_active_delivery_kid: str | None = None
     identity_onboarding_delivery_provider: str | None = None
+    communications_delivery_enabled: bool = False
+    communications_email_provider_identity: str | None = None
+    communications_email_credential_reference: str | None = None
+    communications_email_sender_identity: str | None = None
+    communications_email_sender_verified: bool = False
+    communications_email_domain_verified: bool = False
+    communications_sms_provider_identity: str | None = None
+    communications_sms_credential_reference: str | None = None
+    communications_sms_sender_identity: str | None = None
+    communications_sms_registration_verified: bool = False
+    communications_webhook_secret_reference: str | None = None
+    communications_webhook_enabled: bool = False
     payroll_paystatement_artifact_root: str | None = None
     credential_lockout_threshold: int = 5
     credential_lockout_duration_seconds: int = 900
@@ -150,6 +162,20 @@ class Settings(BaseSettings):
             ) from error
         if self.hsts_max_age_seconds < 0:
             raise ValueError("HSTS_MAX_AGE_SECONDS cannot be negative")
+        if self.communications_delivery_enabled:
+            references = (
+                self.communications_email_credential_reference,
+                self.communications_sms_credential_reference,
+                self.communications_webhook_secret_reference,
+            )
+            if any(not value or not value.strip() for value in references):
+                raise ValueError(
+                    "Communications delivery requires server-side credential references"
+                )
+            if self.environment not in {"preview", "production"}:
+                raise ValueError(
+                    "Real Communications delivery is restricted to admitted environments"
+                )
         if self.qbo_sandbox_enabled:
             expected_callback = (
                 "https://preview.allcountyhomeservices.com"
