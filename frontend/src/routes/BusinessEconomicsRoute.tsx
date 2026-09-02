@@ -307,6 +307,37 @@ export function BusinessEconomicsRoute() {
           </form>
         </CardContent>
       </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>What ACP can answer</CardTitle>
+          <CardDescription>
+            Every owner question is classified from current evidence and
+            authority. Missing, unauthorized, and true-zero states remain
+            distinct.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {value.owner_question_acceptance.questions.map((item) => (
+            <details className="rounded-lg border border-stroke p-3" key={item.key}>
+              <summary className="cursor-pointer font-medium">
+                {item.question}{" "}
+                <span className="text-sm font-normal text-content-muted">
+                  · {qualityLabel(item.disposition)}
+                </span>
+              </summary>
+              <div className="mt-2 space-y-1 text-sm text-content-muted">
+                <p>{item.why}</p>
+                {item.what_resolves_it ? <p><strong>Next:</strong> {item.what_resolves_it}</p> : null}
+                {item.limitation ? <p><strong>Limit:</strong> {item.limitation}</p> : null}
+                <p>Owned by {item.owning_domains.join(", ")}.</p>
+              </div>
+            </details>
+          ))}
+          <p className="break-all pt-2 text-xs text-content-muted">
+            Acceptance matrix {value.owner_question_acceptance.version} · {value.owner_question_acceptance.matrix_digest}
+          </p>
+        </CardContent>
+      </Card>
       <Alert
         variant={
           value.quality_state === "complete"

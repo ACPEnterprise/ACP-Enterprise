@@ -22,6 +22,7 @@ from .models import (
     EconomicsProfitabilityResultRecord,
     EconomicsProfitabilityResultSupersessionRecord,
 )
+from .owner_acceptance import owner_question_acceptance_matrix
 
 
 @dataclass(frozen=True, slots=True)
@@ -99,7 +100,7 @@ class EconomicsWorkspaceService:
         current_projection = self._project(current, identities)
         prior_projection = self._project(prior, identities)
         comparison = self._comparison(current_projection, prior_projection)
-        return {
+        projection: dict[str, object] = {
             "period": {
                 "start": period_start.isoformat(),
                 "end": period_end.isoformat(),
@@ -171,6 +172,10 @@ class EconomicsWorkspaceService:
             },
             "beacon_conditions": self._conditions(current_projection, comparison),
         }
+        projection["owner_question_acceptance"] = owner_question_acceptance_matrix(
+            projection, context.permission_codes
+        )
+        return projection
 
     async def detail(
         self,

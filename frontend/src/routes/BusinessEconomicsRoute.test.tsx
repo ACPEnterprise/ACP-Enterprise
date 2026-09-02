@@ -129,6 +129,37 @@ vi.mock("../hooks/useBusinessEconomics", () => ({
         beacon_conditions: [
           { kind: "incomplete_economic_evidence", state: "partial" },
         ],
+        owner_question_acceptance: {
+          version: "economics.owner-question-acceptance.v1",
+          matrix_digest: "b".repeat(64),
+          mutation_authority: "none",
+          questions: [
+            {
+              key: "work",
+              question: "How much work did we perform?",
+              disposition: "PARTIALLY_ANSWERABLE",
+              answer_source: "earned_work",
+              owning_domains: ["Business Economics"],
+              inspect_path: "/business-economics",
+              missing_permissions: [],
+              why: "ACP can answer part of this question, but evidence is partial.",
+              what_resolves_it: null,
+              limitation: null,
+            },
+            {
+              key: "collected",
+              question: "How much have we collected?",
+              disposition: "EXTERNAL_GATE",
+              answer_source: "accounting_cash",
+              owning_domains: ["Accounting"],
+              inspect_path: "/financial-reports",
+              missing_permissions: [],
+              why: "Admitted cash-basis Accounting totals are required.",
+              what_resolves_it: "Wait for the owning domain to admit authoritative evidence.",
+              limitation: "Payment assertions are not cash truth.",
+            },
+          ],
+        },
       },
     };
   },
@@ -174,6 +205,9 @@ describe("BusinessEconomicsRoute", () => {
     expect(screen.getAllByText("$1,000.00").length).toBeGreaterThan(0);
     expect(screen.getByText("$250.00")).toBeVisible();
     expect(screen.getByText("Unavailable")).toBeVisible();
+    expect(screen.getByText(/What ACP can answer/i)).toBeVisible();
+    expect(screen.getByText(/partially answerable/i)).toBeVisible();
+    expect(screen.getAllByText(/external gate/i).length).toBeGreaterThan(0);
   });
   it("keeps cross-domain cash and obligation amounts behind every owning permission", () => {
     allowed = true;
