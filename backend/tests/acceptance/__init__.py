@@ -1,0 +1,1 @@
+"""Enterprise operational acceptance qualification."""

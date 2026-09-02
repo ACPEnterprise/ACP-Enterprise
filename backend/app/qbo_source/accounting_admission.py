@@ -12,8 +12,7 @@ from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
 
-from .evidence import ControlEvidenceRegistry
-from .evidence import ProtectedFilesystemEvidenceStore
+from .evidence import ControlEvidenceRegistry, ProtectedFilesystemEvidenceStore
 
 DECISION_VERSION = "migration-owner-history-decision/v1"
 ADMISSION_VERSION = "qbo-accounting-admission-readiness/v1"
@@ -261,7 +260,10 @@ def provision_admission_packet(
     if bounded_digest != authority.bounded_snapshot_digest:
         raise ValueError("bounded snapshot authority mismatch")
     accounts: list[Mapping[str, object]] = []
-    for row in bounded.get("included_entities", []):
+    included_entities = bounded.get("included_entities")
+    if not isinstance(included_entities, list):
+        raise TypeError("bounded QBO entity evidence is required")
+    for row in included_entities:
         if not isinstance(row, Mapping) or row.get("entity_kind") != "account":
             continue
         digest = row.get("raw_sha256")
