@@ -34,16 +34,18 @@ that policy without discarding unpaid customer or vendor obligations.
 
 ## Opening boundary
 
-The empty 2021-07-06 Balance Sheet and Trial Balance prove only that those
-reports were empty on that date. The populated 2022-12-31 and 2023-07-31 Trial
-Balances prove the ledger was active by 2022-12-31; they do not identify its
-first posting.
+Successor controls establish that the current QBO environment began on
+2024-02-19 with a QuickBooks Desktop company import. Imported history retains
+its source-effective dates: ledger activity begins 2022-01-01 and ordinary
+non-transfer activity begins 2022-01-03. The 2024-02-19 Accrual Trial Balance is
+balanced, and the Cash Balance Sheet is balanced on the same transition date.
+Neither has an Opening Balance Equity balance. These controls supersede the
+prior search for a 2021/2022 current-file creation event without rewriting the
+earlier evidence.
 
-The smallest next report is an **Accrual General Ledger for 2021-07-07 through
-2022-12-31**, sorted oldest first, including opening-balance entries. It should
-identify the first ledger activity directly. If it does not expose an opening
-event, obtain an Audit Log limited to that first-activity interval rather than a
-large sequence of arbitrary Trial Balances.
+The transition ledger and historical Cash position are controlled. No opening
+journal is inferred or authorized. Operational AR/AP, bank, card, clearing,
+other-liability, and equity admission remain independently controlled.
 
 The approximately August 2023 Company change is separate. Evidence should be a
 legal/name/ownership document or QBO Company/Audit history showing whether it
@@ -68,4 +70,11 @@ recognition of their originating transaction.
 3. Approve operational AR/AP controls and the one post-cutoff Invoice correction.
 4. Approve bank, credit-card, undeposited-funds, liability, Payroll/tax, equity,
    and inventory cutoff controls.
-5. Determine the first ledger/opening event from the next report.
+5. Reconcile the 2026-08-31 cutoff subledgers and account-level controls.
+
+## Current single evidence gate
+
+The next report is **Accounts Receivable Aging Detail**, operational/Accrual
+view, as of **2026-08-31**. It controls open Invoices, aging, applications,
+credits, and the known post-cutoff-modified Invoice. No observed AR aggregate is
+admitted before this tie-out.
