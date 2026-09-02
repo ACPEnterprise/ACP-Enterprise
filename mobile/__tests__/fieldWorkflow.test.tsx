@@ -28,4 +28,17 @@ describe("authorized employee field workflow", () => {
     await waitFor(() => expect(h.field.arrival).toHaveBeenCalledTimes(1)); expect(screen.getByRole("button", { name: "Begin Travel" }).props.accessibilityState.disabled).toBe(true);
     await act(async () => release()); await waitFor(() => expect(h.field.state).toHaveBeenCalledTimes(2));
   });
+
+  it("renders only assignment-scoped equipment, warranty evidence, and issued Estimate context", async () => {
+    const h = harness();
+    h.field.equipment = jest.fn(async () => ({ job_id: assignment.job_id!, history_limit: 10, attachment_upload_state: "source_required" as const, items: [{ asset_id: "60000000-0000-4000-8000-000000000001", display_name: "Synthetic Heat Pump", lifecycle: "active", manufacturer: "Synthetic Manufacturing", model: "Model Test", installation_state: "verified", warranty_state: "insufficient_evidence", service_history: [], evidence: [] }] }));
+    h.field.estimate = jest.fn(async () => ({ job_id: assignment.job_id!, available: true, estimate_number: "EST-000001", estimate_status: "sent", acceptance_status: "pending", revision_number: 2, revision_status: "issued", proposal_title: "Synthetic repair option", customer_message: null, total_amount: 125, currency: "USD", expires_at: null, lines: [{ position: 1, title: "Synthetic repair", description: null, quantity: 1, line_total: 125, currency: "USD" }], customer_handoff_state: "server_authority_required" as const }));
+    h.field.readiness = jest.fn(async () => ({ fleet: [], workforce_profile_available: true, branch_eligible: true, availability_state: "available", inspection_interaction: "policy_required" as const, notification_inbox: "source_required" as const, push_provider: "external_provider_required" as const, payment_collection: "not_authorized" as const }));
+    render(<JobWorkspaceScreen appointmentId={assignment.appointment_id} initialAssignment={assignment} initialTimezone="America/New_York" businessDate="2026-08-28" service={h.employee} fieldService={h.field} network={h.network} canReadField canReadAssets canReadEstimates />);
+    expect(await screen.findByText("Synthetic Heat Pump")).toBeOnTheScreen();
+    expect(screen.getByText(/Warranty: insufficient_evidence/)).toBeOnTheScreen();
+    expect(screen.getByText(/EST-000001 · sent/)).toBeOnTheScreen();
+    expect(screen.getByText(/Mobile cannot rewrite it/)).toBeOnTheScreen();
+    expect(screen.getByText(/Photo\/document upload: SOURCE_REQUIRED/)).toBeOnTheScreen();
+  });
 });
