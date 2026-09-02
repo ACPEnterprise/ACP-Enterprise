@@ -126,6 +126,14 @@ class WorkforceEligibilityService:
                     ),
                     DispatchAssignment.window_start_at < query.window_end_at,
                     DispatchAssignment.window_end_at > query.window_start_at,
+                    *(
+                        (
+                            DispatchAssignment.appointment_id
+                            != query.exclude_appointment_id,
+                        )
+                        if query.exclude_appointment_id is not None
+                        else ()
+                    ),
                 )
                 .limit(1)
             )
@@ -149,6 +157,14 @@ class WorkforceEligibilityService:
                     ),
                     DispatchAssignment.window_start_at < query.window_end_at,
                     DispatchAssignment.window_end_at > query.window_start_at,
+                    *(
+                        (
+                            DispatchAssignment.appointment_id
+                            != query.exclude_appointment_id,
+                        )
+                        if query.exclude_appointment_id is not None
+                        else ()
+                    ),
                 )
                 .limit(1)
             )

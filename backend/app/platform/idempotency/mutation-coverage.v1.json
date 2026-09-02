@@ -138,6 +138,16 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     },
     {
+      "classification": "NON_MUTATING_READ_ONLY",
+      "domain": "dispatch",
+      "mechanism": "deterministic proposal query over scoped owning-domain projections",
+      "method": "POST",
+      "operation_id": "recommend_api_v1_dispatch_jobs__job_id__recommendations_post",
+      "path": "/api/v1/dispatch/jobs/{job_id}/recommendations",
+      "reason": "POST carries bounded what-if windows and creates no Scheduling, Dispatch, or recommendation authority.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
       "classification": "IDEMPOTENCY_REQUIRED",
       "domain": "dispatch",
       "mechanism": "domain durable command/receipt identity and request digest",
@@ -2759,6 +2769,6 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "1598d614347d73b13195266d20a7e4bd101e30310b4b5a2d5dc812c92aff14b2",
+  "fingerprint": "39a208d45baf73c22e64095101299c0989802ddc25606acca59e29b1b61b1ad6",
   "schema_version": "1"
 }

@@ -12,6 +12,8 @@ from app.dispatch.errors import (
     DispatchNotFound,
     DispatchValidation,
 )
+from app.dispatch.intelligence import TimeWindow
+from app.dispatch.intelligence_runtime import dispatch_recommendation_service
 from app.dispatch.schemas import (
     ArrivalStateRequest,
     AssignmentItem,
@@ -20,13 +22,22 @@ from app.dispatch.schemas import (
     CrewMutationRequest,
     DispatchBoardPage,
     DispatchExceptionRequest,
+    DispatchRecommendationResponse,
+    RecommendationRequest,
     ReconcileRequest,
     TechnicianEligibilityItem,
 )
 from app.dispatch.service import dispatch_service
 from app.platform.permissions.authorization import AuthorizationContext
-from app.platform.permissions.codes import DispatchPermission, JobPermission
-from app.platform.permissions.dependencies import require_permission
+from app.platform.permissions.codes import (
+    DispatchPermission,
+    JobPermission,
+    SchedulingPermission,
+)
+from app.platform.permissions.dependencies import (
+    require_all_permissions,
+    require_permission,
+)
 from app.platform.reliability.correlation import current_correlation_id
 from app.platform.reliability.failures import ClientRecovery, FailureCode, SafeFailure
 
@@ -40,6 +51,16 @@ ManageContext = Annotated[
 ]
 ExecuteContext = Annotated[
     AuthorizationContext, Depends(require_permission(JobPermission.EXECUTE))
+]
+IntelligenceReadContext = Annotated[
+    AuthorizationContext,
+    Depends(
+        require_all_permissions(
+            DispatchPermission.READ,
+            SchedulingPermission.READ,
+            JobPermission.READ,
+        )
+    ),
 ]
 
 
@@ -115,6 +136,36 @@ async def eligible(
                 session, context=context, appointment_id=appointment_id
             )
         )
+    except (DispatchError, ValueError) as error:
+        raise dispatch_http(
+            error
+            if isinstance(error, DispatchError)
+            else DispatchValidation(str(error))
+        ) from error
+
+
+@router.post(
+    "/jobs/{job_id}/recommendations",
+    response_model=DispatchRecommendationResponse,
+)
+async def recommend(
+    job_id: UUID,
+    request: RecommendationRequest,
+    context: IntelligenceReadContext,
+    session: DatabaseSession,
+) -> DispatchRecommendationResponse:
+    """Evaluate calendar proposals without creating an appointment or assignment."""
+    try:
+        result = await dispatch_recommendation_service.recommend(
+            session,
+            context=context,
+            job_id=job_id,
+            proposed_windows=tuple(
+                TimeWindow(item.start_at, item.end_at)
+                for item in request.proposed_windows
+            ),
+        )
+        return DispatchRecommendationResponse.model_validate(result)
     except (DispatchError, ValueError) as error:
         raise dispatch_http(
             error
