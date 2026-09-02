@@ -5,7 +5,7 @@ cd "$(dirname "$0")/.."
 npm ci
 npm run beta:preflight
 EXPO_PUBLIC_APP_ENV=preview EXPO_PUBLIC_API_BASE_URL=https://preview.allcountyhomeservices.com \
-  npx expo export --platform all --output-dir build/beta/export
+  npm run export
 
 if command -v pod >/dev/null 2>&1; then
   (cd ios && pod install)
