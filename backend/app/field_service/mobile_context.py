@@ -399,9 +399,9 @@ class MobileFieldContext:
             for item in all_evidence:
                 if len(evidence_by_asset[item.asset_id]) < 10:
                     evidence_by_asset[item.asset_id].append(item)
-            for item in all_actions:
-                if len(actions_by_asset[item.asset_id]) < 10:
-                    actions_by_asset[item.asset_id].append(item)
+            for action_item in all_actions:
+                if len(actions_by_asset[action_item.asset_id]) < 10:
+                    actions_by_asset[action_item.asset_id].append(action_item)
         for asset in assets:
             evidence = tuple(evidence_by_asset[asset.id])
             latest = {item.evidence_type: item.state for item in reversed(evidence)}
