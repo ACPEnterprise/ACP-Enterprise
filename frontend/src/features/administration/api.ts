@@ -69,6 +69,20 @@ export interface IdentityOnboardingInitiateRequest {
   login_email: string;
 }
 
+export interface IdentityOnboardingPlan {
+  classification: string;
+  safe_to_apply: boolean;
+  masked_login: string;
+  user_action: string;
+  membership_action: string;
+  employee_action: string;
+  branch_action: string;
+  role_codes: string[];
+  additional_permission_codes: string[];
+  readiness_stages: Record<string, string>;
+  blockers: string[];
+}
+
 export interface IdentityOnboardingDeliveryView {
   request_id: string;
   invitation_id: string;
@@ -308,6 +322,17 @@ export async function initiateEmployeeBetaOnboarding(
   return (
     await apiClient.post<IdentityOnboardingView>(
       "/api/v1/identity-onboarding",
+      request,
+    )
+  ).data;
+}
+
+export async function planEmployeeOnboarding(
+  request: Omit<IdentityOnboardingInitiateRequest, "request_key" | "employee_type" | "employee_number_prefix" | "employee_number_width">,
+): Promise<IdentityOnboardingPlan> {
+  return (
+    await apiClient.post<IdentityOnboardingPlan>(
+      "/api/v1/identity-onboarding/plan",
       request,
     )
   ).data;
