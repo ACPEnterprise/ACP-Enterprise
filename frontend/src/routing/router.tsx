@@ -312,6 +312,17 @@ export const appRoutes: RouteObject[] = [
             }),
           },
           {
+            path: "administration/communications",
+            handle: administrationHandle,
+            lazy: async () => ({
+              Component: (
+                await import(
+                  "../features/administration/CommunicationsAdministrationRoute"
+                )
+              ).CommunicationsAdministrationRoute,
+            }),
+          },
+          {
             path: "*",
             handle: notFoundHandle,
             lazy: async () => {

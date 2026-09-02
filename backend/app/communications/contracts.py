@@ -49,3 +49,8 @@ class CommunicationPolicy:
     source_event_types: frozenset[str]
     template_identifier: str
     consent_required: bool = True
+    owner_domain: str = "communications"
+    allowed_channels: frozenset[CommunicationChannel] = frozenset(
+        {CommunicationChannel.EMAIL}
+    )
+    policy_required: bool = False

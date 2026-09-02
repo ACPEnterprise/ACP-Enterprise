@@ -14,6 +14,7 @@ from app.platform.notifications.models import NotificationOutbox
 from app.platform.notifications.repository import NotificationOutboxRepository
 from app.platform.permissions.authorization import AuthorizationContext
 
+from .catalog import OPERATIONAL_MESSAGE_CATALOG
 from .contracts import (
     CommunicationEvidence,
     CommunicationPolicy,
@@ -28,7 +29,7 @@ from .errors import (
 from .repository import CommunicationRepository, communication_repository
 from .types import CommunicationChannel, CommunicationDeliveryState, CommunicationType
 
-POLICIES = {
+LEGACY_POLICIES = {
     CommunicationType.APPOINTMENT_CONFIRMATION: CommunicationPolicy(
         CommunicationType.APPOINTMENT_CONFIRMATION,
         frozenset({"appointment.booked"}),
@@ -70,6 +71,8 @@ POLICIES = {
         "estimate-status-notice-v1",
     ),
 }
+POLICIES = LEGACY_POLICIES
+REQUEST_POLICIES = OPERATIONAL_MESSAGE_CATALOG
 
 
 def _canonical_digest(value: dict[str, object]) -> str:
@@ -130,9 +133,13 @@ class CommunicationService:
         request: CommunicationRequest,
     ) -> CommunicationEvidence:
         self._validate_branch(context, request.branch_id)
-        policy = POLICIES.get(request.communication_type)
+        policy = REQUEST_POLICIES.get(request.communication_type)
         if policy is None:
             raise CommunicationValidationError("Unsupported communication type.")
+        if request.channel not in policy.allowed_channels:
+            raise CommunicationValidationError(
+                "Communication channel is not allowed for this message class."
+            )
         source = await self.repository.source_event(
             session,
             event_id=request.source_event_id,
