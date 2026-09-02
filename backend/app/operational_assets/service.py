@@ -14,11 +14,13 @@ from app.inventory.models import StockLocation
 from app.jobs.models import Job
 from app.operational_assets.models import (
     Asset,
+    AssetActionEvidence,
     AssetEvidence,
     AssetLifecycleEvidence,
     AssetRelationship,
 )
 from app.operational_assets.schemas import (
+    AssetActionCreate,
     AssetCreate,
     EvidenceCreate,
     LifecycleChange,
@@ -513,6 +515,175 @@ class AssetService:
         await session.commit()
         await session.refresh(row)
         return row
+
+    async def record_action(
+        self,
+        session: AsyncSession,
+        context: AuthorizationContext,
+        asset_id: UUID,
+        data: AssetActionCreate,
+    ) -> AssetActionEvidence:
+        row = await self._asset(session, context, asset_id, lock=True)
+        raw = data.model_dump(mode="json", exclude={"idempotency_key"})
+        request = digest(raw)
+        replay = await session.scalar(
+            select(AssetActionEvidence).where(
+                AssetActionEvidence.company_id == context.company.id,
+                AssetActionEvidence.idempotency_key == data.idempotency_key,
+            )
+        )
+        if replay:
+            if replay.asset_id != row.id or replay.request_digest != request:
+                raise AssetConflict()
+            return replay
+        if row.version != data.expected_version:
+            raise AssetConflict()
+        await self._validate_action(session, context, row, data)
+        evidence_digest = digest({"asset": row.identity_digest, **raw})
+        item = AssetActionEvidence(
+            company_id=context.company.id,
+            branch_id=row.branch_id,
+            asset_id=row.id,
+            action_type=data.action_type,
+            state=data.state,
+            related_entity_id=data.related_entity_id,
+            payload=data.payload,
+            occurred_at=data.occurred_at,
+            asset_version=row.version + 1,
+            request_digest=request,
+            evidence_digest=evidence_digest,
+            idempotency_key=data.idempotency_key,
+            actor_user_id=context.user.id,
+        )
+        row.version += 1
+        row.updated_at = datetime.now(timezone.utc)
+        session.add(item)
+        self._event(
+            session,
+            row,
+            context.user.id,
+            EventType.ASSET_EVIDENCE_RECORDED,
+            data.action_type,
+            evidence_digest,
+        )
+        await session.commit()
+        await session.refresh(item)
+        return item
+
+    async def action_history(
+        self,
+        session: AsyncSession,
+        context: AuthorizationContext,
+        asset_id: UUID,
+        limit: int,
+    ) -> list[AssetActionEvidence]:
+        row = await self._asset(session, context, asset_id)
+        return list(
+            (
+                await session.scalars(
+                    select(AssetActionEvidence)
+                    .where(
+                        AssetActionEvidence.company_id == context.company.id,
+                        AssetActionEvidence.asset_id == row.id,
+                    )
+                    .order_by(
+                        AssetActionEvidence.occurred_at.desc(),
+                        AssetActionEvidence.id.desc(),
+                    )
+                    .limit(limit)
+                )
+            ).all()
+        )
+
+    async def _validate_action(
+        self,
+        session: AsyncSession,
+        context: AuthorizationContext,
+        asset: Asset,
+        data: AssetActionCreate,
+    ) -> None:
+        equipment_actions = {
+            "equipment_install",
+            "equipment_remove",
+            "equipment_replace",
+            "warranty_evidence",
+            "warranty_review",
+            "service_link",
+        }
+        vehicle_actions = {
+            "vehicle_assignment",
+            "inspection",
+            "maintenance",
+            "out_of_service",
+        }
+        custody_actions = {"custody_transfer", "custody_return"}
+        if (
+            data.action_type in equipment_actions
+            and asset.asset_class != "customer_equipment"
+        ):
+            raise AssetValidation()
+        if data.action_type in vehicle_actions and asset.asset_class != "vehicle":
+            raise AssetValidation()
+        if data.action_type in custody_actions and asset.asset_class not in {
+            "tool",
+            "equipment",
+        }:
+            raise AssetValidation()
+        if data.action_type == "equipment_install":
+            customer_id = self._payload_uuid(data.payload, "customer_id")
+            location_id = self._payload_uuid(data.payload, "service_location_id")
+            found = await session.scalar(
+                select(ServiceLocation.id)
+                .join(Customer, Customer.id == ServiceLocation.customer_id)
+                .where(
+                    Customer.id == customer_id,
+                    Customer.company_id == context.company.id,
+                    ServiceLocation.id == location_id,
+                )
+            )
+            if found is None:
+                raise AssetNotFound()
+        if data.action_type == "service_link":
+            job_id = data.related_entity_id or self._payload_uuid(
+                data.payload, "job_id"
+            )
+            found = await session.scalar(
+                select(Job.id).where(
+                    Job.id == job_id,
+                    Job.company_id == context.company.id,
+                    Job.branch_id == asset.branch_id,
+                )
+            )
+            if found is None:
+                raise AssetNotFound()
+        if data.action_type == "vehicle_assignment":
+            employee_id = data.related_entity_id or self._payload_uuid(
+                data.payload, "employee_id"
+            )
+            found = await session.scalar(
+                select(Employee.id).where(
+                    Employee.id == employee_id,
+                    Employee.company_id == context.company.id,
+                    or_(
+                        Employee.home_branch_id.is_(None),
+                        Employee.home_branch_id == asset.branch_id,
+                    ),
+                )
+            )
+            if found is None:
+                raise AssetNotFound()
+        if data.action_type in {
+            "warranty_review",
+            "out_of_service",
+        } and not data.payload.get("reason"):
+            raise AssetValidation()
+
+    @staticmethod
+    def _payload_uuid(payload: dict[str, object], key: str) -> UUID:
+        try:
+            return UUID(str(payload[key]))
+        except (KeyError, TypeError, ValueError) as error:
+            raise AssetValidation() from error
 
     @staticmethod
     def readiness(row: Asset, evidence: list[AssetEvidence]) -> tuple[str, list[str]]:

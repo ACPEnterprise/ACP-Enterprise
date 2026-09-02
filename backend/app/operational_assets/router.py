@@ -6,6 +6,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_database_session
 from app.operational_assets.schemas import (
+    AssetActionCreate,
+    AssetActionOut,
     AssetCreate,
     AssetDetail,
     AssetOut,
@@ -158,6 +160,43 @@ async def change_lifecycle(
     try:
         return AssetOut.model_validate(
             await asset_service.transition(session, context, asset_id, data)
+        )
+    except (AssetNotFound, AssetConflict, AssetValidation) as e:
+        raise translated(e) from e
+
+
+@router.get("/{asset_id}/actions", response_model=list[AssetActionOut])
+async def asset_action_history(
+    asset_id: UUID,
+    context: Read,
+    session: Session,
+    limit: int = Query(100, ge=1, le=200),
+):
+    try:
+        return [
+            AssetActionOut.model_validate(item)
+            for item in await asset_service.action_history(
+                session, context, asset_id, limit
+            )
+        ]
+    except (AssetNotFound, AssetConflict, AssetValidation) as e:
+        raise translated(e) from e
+
+
+@router.post(
+    "/{asset_id}/actions",
+    response_model=AssetActionOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def record_asset_action(
+    asset_id: UUID,
+    data: AssetActionCreate,
+    context: Manage,
+    session: Session,
+):
+    try:
+        return AssetActionOut.model_validate(
+            await asset_service.record_action(session, context, asset_id, data)
         )
     except (AssetNotFound, AssetConflict, AssetValidation) as e:
         raise translated(e) from e
