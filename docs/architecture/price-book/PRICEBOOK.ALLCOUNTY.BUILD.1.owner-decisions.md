@@ -9,9 +9,10 @@ the candidate catalog.
    Company policy.
 2. Approve the 10 explicit price overrides separately from the 208 mechanically
    calculated candidates.
-3. Provide or identify the intended `pricebook_materials_template.numbers` and
-   dedicated Water Heater Sales Playbook. Neither exists under a mechanically
-   equivalent name in the supplied directory.
+3. Identify the vendor represented by `pricebook_materials_template.numbers`
+   and, if available, provide manufacturer identities, manufacturer part
+   numbers, pack quantities and effective/source dates. Decide the duplicate
+   disposition for source part number `828627` at rows 43 and 64.
 4. Reconcile Essential/Plus/Premier fees, benefits, discount applicability,
    after-hours treatment, rate locks, transfer, renewal and cancellation terms
    in the Service Agreements domain. The recommendation and sales material are
@@ -27,4 +28,6 @@ the candidate catalog.
    complete.
 8. Authorize coherent activation groups only after review gates close. Current
    activation-ready count is zero by design.
-
+9. Confirm that Water Heater script price and component examples remain sales
+   explanation only. They conflict with the workbook's fuel/capacity-specific
+   candidates and have not replaced any workbook value.
