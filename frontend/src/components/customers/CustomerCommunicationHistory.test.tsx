@@ -26,4 +26,28 @@ describe("CustomerCommunicationHistory", () => {
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
     expect(communicationsApi.listCustomerCommunicationHistory).toHaveBeenCalledWith("customer-1");
   });
+
+  it("does not reflect protected provider details from a failed history request", async () => {
+    vi.mocked(communicationsApi.listCustomerCommunicationHistory).mockRejectedValue({
+      isAxiosError: true,
+      response: {
+        status: 503,
+        data: { detail: "/srv/provider/customer-communication-secret-canary" },
+      },
+    });
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={client}>
+        <CustomerCommunicationHistory customerId="customer-1" />
+      </QueryClientProvider>,
+    );
+
+    expect(
+      await screen.findByText("The service could not be reached. Try again."),
+    ).toBeVisible();
+    expect(screen.queryByText(/communication-secret-canary/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/\/srv\/provider/)).not.toBeInTheDocument();
+  });
 });
