@@ -225,6 +225,15 @@ export const auditHandle = {
   workspace: { pageTitle: "Audit history", breadcrumbs: [{ label: "Audit history" }], helpTopic: "audit-history" },
 } as const satisfies ShellRouteHandle;
 
+export const dataQualityHandle = {
+  workspace: {
+    pageTitle: "Data Quality",
+    breadcrumbs: [{ label: "Data Quality" }],
+    helpTopic: "data-quality",
+    aiContext: "operational-data-quality",
+  },
+} as const satisfies ShellRouteHandle;
+
 export const reportsHandle = {
   workspace: { pageTitle: "Report Center", breadcrumbs: [{ label: "Report Center" }], helpTopic: "report-center" },
 } as const satisfies ShellRouteHandle;

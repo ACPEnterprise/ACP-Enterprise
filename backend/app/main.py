@@ -18,6 +18,7 @@ from app.customer_migration.native_location_review import (
     router as location_identity_router,
 )
 from app.customers.router import router as customers_router
+from app.data_quality.router import router as data_quality_router
 from app.database.session import AsyncSessionFactory, engine
 from app.dispatch.router import router as dispatch_router
 from app.employee_operations.router import router as employee_operations_router
@@ -167,6 +168,7 @@ app.include_router(beacon_router)
 app.include_router(business_economics_router)
 app.include_router(luminary_router)
 app.include_router(customers_router)
+app.include_router(data_quality_router)
 app.include_router(location_identity_router)
 app.include_router(auth_router)
 app.include_router(authorization_router)
