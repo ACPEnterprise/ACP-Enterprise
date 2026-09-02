@@ -5,10 +5,6 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import CheckConstraint, func, select, update
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from app.accounting.models import Account, ChartVersion, Journal
 from app.accounts_payable.models import (
     AccountingVendor,
@@ -55,6 +51,9 @@ from app.purchasing.models import (
     PurchaseOrderReceiptLine,
     PurchaseReturn,
 )
+from sqlalchemy import CheckConstraint, func, select, update
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 
 def test_match_line_database_constraints_protect_derived_quantity_truth() -> None:
