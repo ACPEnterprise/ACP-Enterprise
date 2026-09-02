@@ -9,7 +9,7 @@ export const serviceLocationSchema = z.object({
   state: z.string(),
   postal_code: z.string(),
   country: z.string(),
-}).strict();
+});
 
 export const dayAssignmentSchema = z.object({
   appointment_id: z.string().uuid(),
@@ -26,13 +26,13 @@ export const dayAssignmentSchema = z.object({
   designation: z.enum(["current", "next"]).nullable(),
   customer_display_name: z.string(),
   service_location: serviceLocationSchema,
-}).strict();
+});
 
 export const employeeDaySchema = z.object({
   business_date: z.string().date(),
   timezone: z.string(),
   assignments: z.array(dayAssignmentSchema),
-}).strict();
+});
 
 export type DayAssignment = z.infer<typeof dayAssignmentSchema>;
 export type EmployeeDay = z.infer<typeof employeeDaySchema>;

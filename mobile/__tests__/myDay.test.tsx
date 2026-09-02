@@ -135,10 +135,24 @@ describe("native employee My Day", () => {
     expect(screen.getByTestId("my-day-scroll").props.refreshControl.props.accessibilityLabel).toBe("Refresh authoritative assigned work");
   });
 
-  it("accepts only the employee-safe strict projection", () => {
+  it("ignores additive server fields while retaining only the employee-safe projection", () => {
     const unsafe = { ...first, customer_phone: "555-0100", invoice_total: 100, compensation: 50, internal_notes: "private" };
-    expect(dayAssignmentSchema.safeParse(unsafe).success).toBe(false);
+    const parsed = dayAssignmentSchema.parse(unsafe);
+    expect(parsed).toEqual(first);
+    expect(JSON.stringify(parsed)).not.toMatch(/555-0100|invoice_total|compensation|internal_notes/);
     expect(JSON.stringify(first)).not.toMatch(/phone|email|invoice|payment|balance|cost|margin|payroll|compensation|note|problem|description/i);
+  });
+
+  it("preserves last-confirmed work as stale through a transient 502 and recovers", async () => {
+    const h = harness();
+    render(<MyDayScreen service={h.service} network={h.network} />);
+    await screen.findByText("Synthetic Customer One");
+    (h.service.day as jest.Mock).mockRejectedValueOnce(new ApiFailure("unavailable", "502"));
+    await act(async () => screen.getByTestId("my-day-scroll").props.refreshControl.props.onRefresh());
+    expect(await screen.findByText(/Unable to refresh My Day.*stale/i)).toBeOnTheScreen();
+    expect(screen.getByText("Synthetic Customer One")).toBeOnTheScreen();
+    await act(async () => screen.getByTestId("my-day-scroll").props.refreshControl.props.onRefresh());
+    await waitFor(() => expect(screen.queryByText(/Unable to refresh My Day/)).not.toBeOnTheScreen());
   });
 
   it("calls only the self-service endpoint without identity or broad query parameters", async () => {

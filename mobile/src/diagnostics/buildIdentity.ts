@@ -10,11 +10,13 @@ export type SafeBuildIdentity = Readonly<{
   compatibilityVersion: string;
 }>;
 
+export function currentAppVersion(): string { return Constants.expoConfig?.version ?? "unknown"; }
+
 export function safeBuildIdentity(environment: AppEnvironment): SafeBuildIdentity {
   const config = Constants.expoConfig;
   return {
     product: "ACP Employee",
-    version: config?.version ?? "unknown",
+    version: currentAppVersion(),
     build: config?.ios?.buildNumber ?? String(config?.android?.versionCode ?? "unknown"),
     environment: environment.environment,
     channel: environment.environment,

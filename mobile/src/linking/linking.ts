@@ -10,3 +10,9 @@ export function isActivationLink(url: string): boolean {
     return trusted && route && Boolean(parsed.searchParams.get("token")?.trim());
   } catch { return false; }
 }
+
+/** Extracts an invitation only after host/path validation. The value must remain memory-only. */
+export function activationTokenFromLink(url: string): string | null {
+  if (!isActivationLink(url)) return null;
+  try { return new URL(url).searchParams.get("token")?.trim() || null; } catch { return null; }
+}
