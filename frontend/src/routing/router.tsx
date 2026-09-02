@@ -56,6 +56,7 @@ export const appRoutes: RouteObject[] = [
     children: [
       {
         Component: ApplicationShell,
+        ErrorBoundary: RouteErrorBoundary,
         children: [
           {
             index: true,
