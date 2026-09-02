@@ -1,7 +1,7 @@
 {
   "program": "MOBILE.EMPLOYEE.FIELD.PRODUCT.PROGRAM.2",
   "base_authority": "604bc137e512e338698a359ad577b3ada2667074",
-  "branch": "work/mobile-employee-field-product-program-2",
+  "branch": "work/mobile-employee-field-product-program-2-successor",
   "preview_deployment": false,
   "production_operation": false,
   "migrations": [],
