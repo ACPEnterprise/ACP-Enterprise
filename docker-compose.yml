@@ -1,5 +1,12 @@
+x-default-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
 services:
   postgres:
+    logging: *default-logging
     image: postgres:16-alpine
     container_name: acp-enterprise-postgres
     environment:
@@ -22,6 +29,7 @@ services:
     restart: unless-stopped
 
   redis:
+    logging: *default-logging
     image: redis:7-alpine
     container_name: acp-enterprise-redis
     ports:
@@ -36,6 +44,7 @@ services:
     restart: unless-stopped
 
   backend:
+    logging: *default-logging
     build:
       context: ./backend
     container_name: acp-enterprise-backend
