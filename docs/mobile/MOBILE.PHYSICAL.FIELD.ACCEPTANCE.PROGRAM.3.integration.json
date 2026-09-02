@@ -1,0 +1,32 @@
+{
+  "program": "MOBILE.PHYSICAL.FIELD.ACCEPTANCE.PROGRAM.3",
+  "starting_authority": "648faa17a6c9dba60d17ec5a2a15abac26c118f4",
+  "branch": "work/mobile-physical-field-acceptance-program-3",
+  "scope": "mobile UX, recovery, physical acceptance packet",
+  "server_contract_changes": [],
+  "migrations": [],
+  "preview_mutation": false,
+  "production_operation": false,
+  "apple_distribution_integrated": false,
+  "apple_readiness": "NEEDS_RECONCILIATION",
+  "external_apple_gate": true,
+  "repairs": [
+    "authoritative ready Job exposes Start Work",
+    "full Job workspace pull-to-refresh",
+    "field-context reconnect recovery",
+    "live Jobs open their Job workspace",
+    "mutation outcome language and duplicate protection",
+    "technician-readable completion blockers",
+    "customer-readable Estimate presentation",
+    "bounded equipment-history presentation",
+    "Jobs-level own Fleet readiness",
+    "explicit Job versus Timekeeping independence",
+    "sign-in keyboard and scroll resilience"
+  ],
+  "enterprise_integration": {
+    "owner": "Enterprise",
+    "deployment": "protected integration and Preview deployment remain Enterprise-owned",
+    "rollback": "revert this program's Mobile commits; no schema rollback",
+    "physical_acceptance": "execute owner observation packet after Preview deployment"
+  }
+}
