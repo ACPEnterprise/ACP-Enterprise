@@ -96,14 +96,21 @@ funds-in-transit or card balance, and a physical quantity plus accepted cost
 basis for inventory. Otherwise the class is explicitly not applicable. Native
 ACP controls begin prospectively; no historical balance is fabricated.
 
-## Consolidated next evidence packet
+## Supplemental controls accepted
 
-Only three corrected QBO exports remain mechanically necessary now:
+The corrected Cash Trial Balance and Cash Balance Sheet are balanced, and the
+corrected Accrual General Ledger is accepted for January 2022 through August
+2026. Cash cutoff continuity is now controlled. The three earlier basis-mismatch
+files remain historical evidence but no longer block readiness.
 
-1. Trial Balance — **Cash**, as of 2026-08-31.
-2. Balance Sheet — **Cash**, as of 2026-08-31.
-3. General Ledger — **Accrual**, 2022-01-01 through 2026-08-31.
+The 850.00 A/R difference is one source-version conflict: an August 18 Invoice
+is open in the earlier Aging export but zero in the Accrual ledger; the later
+Trial Balance, Open Invoices, and Customer Balance Detail all agree. Finance
+must explicitly choose the accepted cutoff version or request transaction audit
+evidence. ACP will not silently resolve it.
 
-These unlock Cash-position continuity, complete ledger/subledger tracing of the
-850.00 A/R variance, and final liability/equity/account mapping evidence. Do not
-resubmit the other seven packet reports.
+The remaining opening schedule is an accountant decision/control, not another
+batch of historical QBO reports: approve the A/R exception; confirm the empty
+A/P reports represent the complete scope; approve each admitted bank and card
+opening balance; and classify funds in transit and inventory as controlled
+opening values or not applicable.

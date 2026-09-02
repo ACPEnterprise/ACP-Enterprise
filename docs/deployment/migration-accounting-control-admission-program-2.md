@@ -109,6 +109,24 @@ reconciliation, and prospective inventory quantity/cost/custody movements from
 the accepted cutover boundary. Historical absence is evidence, never permission
 to fabricate balances.
 
-The consolidated next evidence packet is limited to corrected exports of the
-Cash Trial Balance, Cash Balance Sheet, and Accrual General Ledger. No repeat of
-the already accepted controls is required.
+## Supplemental controls
+
+The three corrected exports are registered as immutable v2 successor controls.
+Embedded QuickBooks metadata verifies:
+
+- Cash Trial Balance, as of 2026-08-31: balanced at 1,283,400.24 debits and
+  credits.
+- Cash Balance Sheet, as of 2026-08-31: 308,935.58 assets, 464,078.66
+  liabilities, and -155,143.08 equity; balance delta 0.00.
+- Accrual General Ledger, January 2022 through August 2026: accepted as the
+  intended activity control.
+
+These controls supersede only the three basis-mismatch readiness blockers. The
+predecessor files remain immutable evidence.
+
+Detailed comparison isolates the 850.00 A/R variance to one 2026-08-18 Invoice:
+the earlier Aging report retains an 850.00 open item while the Accrual General
+Ledger records zero activity for that Invoice and the later Trial Balance, Open
+Invoices, and Customer Balance Detail agree at 479,029.48. This is
+`SOURCE_VERSION_CONFLICTING_INVOICE`, not an arithmetic discrepancy. Accountant
+disposition remains required; no source version is silently promoted.
