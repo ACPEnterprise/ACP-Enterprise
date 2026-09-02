@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_database_session
+from app.field_service.artifacts import field_artifact_service
 from app.field_service.errors import (
     FieldServiceConflict,
     FieldServiceError,
@@ -14,10 +15,16 @@ from app.field_service.errors import (
 from app.field_service.mobile_context import mobile_field_context
 from app.field_service.schemas import (
     ApprovalInput,
+    FieldArtifactFinalizeInput,
+    FieldArtifactIntentInput,
+    FieldArtifactIntentOut,
+    FieldArtifactOut,
     FieldEquipmentProjection,
     FieldEstimatePresentation,
     FieldHistoryProjection,
+    FieldJobSources,
     FieldJobState,
+    FieldPriceBookItem,
     FieldReadinessProjection,
     HandoffInput,
     Itinerary,
@@ -25,11 +32,17 @@ from app.field_service.schemas import (
     NoteInput,
 )
 from app.field_service.service import field_service
+from app.field_service.sources import field_source_service
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import (
     AssetPermission,
+    CommunicationsPermission,
+    CustomerPermission,
     EstimatePermission,
+    InvoicePermission,
     JobPermission,
+    PaymentPermission,
+    PriceBookPermission,
 )
 from app.platform.permissions.dependencies import (
     require_all_permissions,
@@ -54,6 +67,22 @@ AssetRead = Annotated[
 EstimateRead = Annotated[
     AuthorizationContext,
     Depends(require_all_permissions(JobPermission.READ, EstimatePermission.READ)),
+]
+SourceRead = Annotated[
+    AuthorizationContext,
+    Depends(
+        require_all_permissions(
+            JobPermission.READ,
+            CustomerPermission.READ,
+            InvoicePermission.READ,
+            PaymentPermission.READ,
+            CommunicationsPermission.READ,
+        )
+    ),
+]
+PriceBookRead = Annotated[
+    AuthorizationContext,
+    Depends(require_all_permissions(JobPermission.READ, PriceBookPermission.READ)),
 ]
 
 
@@ -197,6 +226,74 @@ async def refresh_invoice_handoff(
     try:
         return await field_service.refresh_handoff(
             session, context=context, job_id=job_id, payload=payload
+        )
+    except FieldServiceError as error:
+        raise field_error(error) from error
+
+
+@router.get("/jobs/{job_id}/sources", response_model=FieldJobSources)
+async def job_sources(
+    job_id: UUID, context: SourceRead, session: Session
+) -> FieldJobSources:
+    try:
+        return await field_source_service.job_sources(
+            session, context=context, job_id=job_id
+        )
+    except FieldServiceError as error:
+        raise field_error(error) from error
+
+
+@router.get(
+    "/jobs/{job_id}/price-book", response_model=tuple[FieldPriceBookItem, ...]
+)
+async def field_price_book(
+    job_id: UUID, context: PriceBookRead, session: Session, limit: int = 50
+) -> tuple[FieldPriceBookItem, ...]:
+    try:
+        return await field_source_service.price_book(
+            session, context=context, job_id=job_id, limit=min(max(limit, 1), 100)
+        )
+    except FieldServiceError as error:
+        raise field_error(error) from error
+
+
+@router.post(
+    "/jobs/{job_id}/artifacts/intents",
+    response_model=FieldArtifactIntentOut,
+    status_code=201,
+)
+async def create_artifact_intent(
+    job_id: UUID,
+    payload: FieldArtifactIntentInput,
+    context: Execute,
+    session: Session,
+) -> FieldArtifactIntentOut:
+    try:
+        return await field_artifact_service.create_intent(
+            session, context=context, job_id=job_id, payload=payload
+        )
+    except FieldServiceError as error:
+        raise field_error(error) from error
+
+
+@router.post(
+    "/jobs/{job_id}/artifacts/intents/{intent_id}/finalize",
+    response_model=FieldArtifactOut,
+)
+async def finalize_artifact(
+    job_id: UUID,
+    intent_id: UUID,
+    payload: FieldArtifactFinalizeInput,
+    context: Execute,
+    session: Session,
+) -> FieldArtifactOut:
+    try:
+        return await field_artifact_service.finalize(
+            session,
+            context=context,
+            job_id=job_id,
+            intent_id=intent_id,
+            payload=payload,
         )
     except FieldServiceError as error:
         raise field_error(error) from error
