@@ -772,7 +772,7 @@ async def test_provider_events_are_idempotent_tenant_bound_and_order_safe(
             outcome="delivered",
             at=now,
         )
-        assert not await NotificationOutboxRepository.apply_provider_event(
+        assert await NotificationOutboxRepository.apply_provider_event(
             session,
             company_id=company_id,
             provider_reference="provider-event-reference",
@@ -792,3 +792,13 @@ async def test_provider_events_are_idempotent_tenant_bound_and_order_safe(
             )
         )
         assert delivered_count == 1
+        bounced_count = await session.scalar(
+            select(func.count())
+            .select_from(NotificationDeliveryEvidence)
+            .where(
+                NotificationDeliveryEvidence.outbox_id == pending.id,
+                NotificationDeliveryEvidence.outcome == "bounced",
+                NotificationDeliveryEvidence.error_category == "late_provider_event",
+            )
+        )
+        assert bounced_count == 1

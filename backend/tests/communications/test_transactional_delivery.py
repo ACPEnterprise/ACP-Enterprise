@@ -16,6 +16,7 @@ from app.communications.templates import (
 from app.platform.notifications.providers import (
     NotificationDeliveryResult,
     NotificationProviderOutcome,
+    NotificationProviderTransportError,
 )
 from app.platform.notifications.repository import NotificationOutboxRepository
 
@@ -91,6 +92,7 @@ def claimed_record():
         correlation_id=uuid4(),
         provider_idempotency_key="synthetic-key",
         submitted_at=None,
+        retry_count=0,
     )
 
 
@@ -176,3 +178,110 @@ async def test_provider_acceptance_without_reference_becomes_uncertain(
     )
     assert result.outcome == "uncertain"
     assert ambiguous.await_args.kwargs["error_code"] == "provider_reference_missing"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("error_code", "retryable"),
+    [
+        ("provider_dns_failure", True),
+        ("provider_timeout_before_submission", True),
+        ("provider_rate_limited", True),
+        ("provider_5xx", True),
+        ("provider_authentication_rejected", False),
+    ],
+)
+async def test_known_pre_submission_transport_failure_is_bounded_and_truthful(
+    monkeypatch: pytest.MonkeyPatch, error_code: str, retryable: bool
+) -> None:
+    record = claimed_record()
+    provider = SyntheticNotificationProvider(
+        transport_error=NotificationProviderTransportError(
+            error_code, retryable=retryable, submission_possible=False
+        )
+    )
+    retry = AsyncMock(return_value=True)
+    failed = AsyncMock(return_value=True)
+    monkeypatch.setattr(NotificationOutboxRepository, "schedule_retry", retry)
+    monkeypatch.setattr(NotificationOutboxRepository, "mark_failed", failed)
+
+    result = await TransactionalDeliveryService().deliver_claimed(
+        SimpleNamespace(),
+        record=record,
+        provider=provider,
+        resolver=Resolver(),
+        now=datetime.now(timezone.utc),
+    )
+
+    assert result.outcome == "deferred"
+    if retryable:
+        assert retry.await_args.kwargs["error_code"] == error_code
+        assert failed.await_count == 0
+    else:
+        assert retry.await_count == 0
+        assert failed.await_args.kwargs["error_code"] == error_code
+
+
+@pytest.mark.asyncio
+async def test_possible_submission_transport_failure_becomes_ambiguous_without_retry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    record = claimed_record()
+    provider = SyntheticNotificationProvider(
+        transport_error=NotificationProviderTransportError(
+            "provider_timeout_after_submission",
+            retryable=True,
+            submission_possible=True,
+        )
+    )
+    submission = AsyncMock(return_value=True)
+    ambiguous = AsyncMock(return_value=True)
+    retry = AsyncMock(return_value=True)
+    monkeypatch.setattr(
+        NotificationOutboxRepository, "record_provider_submission", submission
+    )
+    monkeypatch.setattr(NotificationOutboxRepository, "mark_ambiguous", ambiguous)
+    monkeypatch.setattr(NotificationOutboxRepository, "schedule_retry", retry)
+
+    result = await TransactionalDeliveryService().deliver_claimed(
+        SimpleNamespace(),
+        record=record,
+        provider=provider,
+        resolver=Resolver(),
+        now=datetime.now(timezone.utc),
+    )
+
+    assert result.outcome == "uncertain"
+    assert submission.await_count == 1
+    assert ambiguous.await_args.kwargs["error_code"] == (
+        "provider_timeout_after_submission"
+    )
+    assert retry.await_count == 0
+
+
+@pytest.mark.asyncio
+async def test_technical_retry_limit_fails_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    record = claimed_record()
+    record.retry_count = TransactionalDeliveryService.MAX_TECHNICAL_RETRIES
+    provider = SyntheticNotificationProvider(
+        transport_error=NotificationProviderTransportError(
+            "provider_rate_limited", retryable=True, submission_possible=False
+        )
+    )
+    retry = AsyncMock(return_value=True)
+    failed = AsyncMock(return_value=True)
+    monkeypatch.setattr(NotificationOutboxRepository, "schedule_retry", retry)
+    monkeypatch.setattr(NotificationOutboxRepository, "mark_failed", failed)
+
+    await TransactionalDeliveryService().deliver_claimed(
+        SimpleNamespace(),
+        record=record,
+        provider=provider,
+        resolver=Resolver(),
+        now=datetime.now(timezone.utc),
+    )
+
+    assert retry.await_count == 0
+    assert failed.await_args.kwargs["error_code"] == "technical_retry_limit_reached"

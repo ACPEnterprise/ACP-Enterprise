@@ -4,6 +4,9 @@ from alembic import context
 from app.accounts_payable import models as accounts_payable_models  # noqa: F401
 from app.beacon import models as beacon_models  # noqa: F401
 from app.business_economics import models as business_economics_models  # noqa: F401
+from app.communications import (
+    suppression as communication_suppression_models,  # noqa: F401
+)
 from app.core.config import settings
 from app.core.database import Base
 from app.customer_migration import models as customer_migration_models  # noqa: F401
@@ -54,8 +57,8 @@ from app.inventory import models as inventory_models  # noqa: F401
 from app.invoicing import models as invoicing_models  # noqa: F401
 from app.jobs import models as job_models  # noqa: F401
 from app.luminary import models as luminary_models  # noqa: F401
-from app.operational_migration import cutover_models  # noqa: F401
 from app.operational_assets import models as operational_asset_models  # noqa: F401
+from app.operational_migration import cutover_models  # noqa: F401
 from app.operational_migration import (
     models as operational_migration_models,  # noqa: F401
 )

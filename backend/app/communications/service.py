@@ -27,6 +27,7 @@ from .errors import (
     CommunicationValidationError,
 )
 from .repository import CommunicationRepository, communication_repository
+from .suppression import destination_digest
 from .types import CommunicationChannel, CommunicationDeliveryState, CommunicationType
 
 LEGACY_POLICIES = {
@@ -118,9 +119,25 @@ class CommunicationService:
         return recipient
 
     @staticmethod
-    def _validate_source_customer(source: BusinessEvent, customer_id: UUID) -> None:
+    def _recipient_display(recipient: str, channel: CommunicationChannel) -> str:
+        if channel is CommunicationChannel.EMAIL:
+            local, _, domain = recipient.partition("@")
+            return f"{local[:1]}***@{domain}" if local and domain else "masked email"
+        return f"***{recipient[-4:]}" if len(recipient) >= 4 else "masked SMS"
+
+    @staticmethod
+    def _validate_source_customer(
+        source: BusinessEvent, customer_id: UUID, authoritative_customer_id: UUID | None
+    ) -> None:
         recorded_customer = source.payload.get("customer_id")
-        if recorded_customer is not None and str(recorded_customer) != str(customer_id):
+        if authoritative_customer_id is None:
+            raise CommunicationValidationError(
+                "Source-domain Customer authority could not be resolved."
+            )
+        if authoritative_customer_id != customer_id or (
+            recorded_customer is not None
+            and str(recorded_customer) != str(authoritative_customer_id)
+        ):
             raise CommunicationValidationError(
                 "Source-domain evidence does not belong to the customer."
             )
@@ -140,6 +157,13 @@ class CommunicationService:
             raise CommunicationValidationError(
                 "Communication channel is not allowed for this message class."
             )
+        if request.channel not in {
+            CommunicationChannel.EMAIL,
+            CommunicationChannel.SMS,
+        }:
+            raise CommunicationValidationError(
+                "General communication requests support Email and SMS only."
+            )
         source = await self.repository.source_event(
             session,
             event_id=request.source_event_id,
@@ -152,7 +176,13 @@ class CommunicationService:
             raise CommunicationValidationError(
                 "Source-domain evidence does not support this communication type."
             )
-        self._validate_source_customer(source, request.customer_id)
+        source_customer_id = await self.repository.source_customer_id(
+            session,
+            source=source,
+            company_id=context.company.id,
+            branch_id=request.branch_id,
+        )
+        self._validate_source_customer(source, request.customer_id, source_customer_id)
         contact_record = await self.repository.customer_contact(
             session,
             company_id=context.company.id,
@@ -163,6 +193,16 @@ class CommunicationService:
             raise CommunicationNotFoundError("Customer contact was not found.")
         _, contact = contact_record
         recipient = self._recipient(contact, request.channel)
+        if await self.repository.is_recipient_suppressed(
+            session,
+            company_id=context.company.id,
+            channel=request.channel,
+            destination_digest_value=destination_digest(recipient),
+            purpose=policy.purpose,
+        ):
+            raise CommunicationAuthorizationError(
+                "Current recipient suppression prohibits this communication."
+            )
         consent = await self.repository.latest_consent(
             session,
             company_id=context.company.id,
@@ -199,6 +239,7 @@ class CommunicationService:
             "source_entity_type": source.entity_type,
             "source_entity_id": str(source.entity_id) if source.entity_id else None,
             "consent_event_id": str(consent.id) if consent else None,
+            "communication_purpose": policy.purpose.value,
         }
         request_digest = _canonical_digest(request_facts)
         payload: dict[str, object] = {
@@ -279,6 +320,21 @@ class CommunicationService:
         )
         return tuple(self._evidence(record) for record in records)
 
+    async def operations_summary(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        branch_id: UUID | None,
+    ) -> dict[str, object]:
+        if branch_id is not None:
+            self._validate_branch(context, branch_id)
+        return await self.repository.operations_summary(
+            session,
+            company_id=context.company.id,
+            branch_id=branch_id,
+        )
+
     @staticmethod
     def _evidence(record: NotificationOutbox) -> CommunicationEvidence:
         payload = record.payload
@@ -293,7 +349,10 @@ class CommunicationService:
                 branch_id=UUID(str(payload["branch_id"])),
                 customer_id=UUID(str(payload["customer_id"])),
                 contact_id=UUID(str(payload["contact_id"])),
-                recipient=record.recipient,
+                recipient_display=CommunicationService._recipient_display(
+                    record.recipient,
+                    CommunicationChannel(str(payload["channel"])),
+                ),
                 source_event_id=UUID(str(payload["source_event_id"])),
                 source_event_type=str(payload["source_event_type"]),
                 source_entity_type=str(payload["source_entity_type"]),
