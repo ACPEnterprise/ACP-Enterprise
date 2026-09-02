@@ -24,9 +24,17 @@ export function useFieldContext(service: FieldService, network: NetworkMonitor, 
       setEquipment(nextEquipment); setEstimate(nextEstimate); setReadiness(nextReadiness); hasConfirmed.current = true; setStatus("live");
     } catch (error) {
       const denied = error instanceof ApiFailure && (error.kind === "forbidden" || error.kind === "not_found");
+      if (denied) { setEquipment(null); setEstimate(null); setReadiness(null); hasConfirmed.current = false; }
       setStatus(denied ? "denied" : hasConfirmed.current ? "stale" : "unavailable");
     }
   }, [assets, estimates, jobId, network, service]);
   useEffect(() => { void Promise.resolve().then(refresh); }, [refresh]);
+  useEffect(() => {
+    if (!jobId || (!assets && !estimates)) return undefined;
+    return network.subscribe((connected) => {
+      if (connected) void refresh();
+      else setStatus(hasConfirmed.current ? "stale" : "offline");
+    });
+  }, [assets, estimates, jobId, network, refresh]);
   return { equipment, estimate, readiness, status, refresh };
 }

@@ -3,6 +3,7 @@ import {
   assignPrimary,
   changeCrew,
   getDispatchBoard,
+  getDispatchRecommendation,
   getEligibleTechnicians,
   markReconciliation,
   releasePrimary,
@@ -16,12 +17,30 @@ export const dispatchKeys = {
   board: (start: string, end: string, branch?: string) =>
     ["dispatch", "board", start, end, branch] as const,
   eligible: (id: string) => ["dispatch", "eligible", id] as const,
+  recommendation: (jobId: string, start: string, end: string) =>
+    ["dispatch", "recommendation", jobId, start, end] as const,
 };
 export function useDispatchBoard(start: string, end: string, branch?: string, enabled = true) {
   return useQuery({
     queryKey: dispatchKeys.board(start, end, branch),
     queryFn: () => getDispatchBoard(start, end, branch),
     enabled,
+  });
+}
+export function useDispatchRecommendation(
+  jobId: string | null | undefined,
+  startAt: string,
+  endAt: string,
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: dispatchKeys.recommendation(jobId ?? "", startAt, endAt),
+    queryFn: () =>
+      getDispatchRecommendation(jobId as string, [
+        { start_at: startAt, end_at: endAt },
+      ]),
+    enabled: enabled && Boolean(jobId && startAt && endAt),
+    staleTime: 30_000,
   });
 }
 export function useEligibleTechnicians(id?: string) {

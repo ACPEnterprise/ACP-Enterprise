@@ -72,10 +72,38 @@ recognition of their originating transaction.
    and inventory cutoff controls.
 5. Reconcile the 2026-08-31 cutoff subledgers and account-level controls.
 
-## Current single evidence gate
+## August 31 control result
 
-The 2026-08-31 **Accounts Receivable Aging Detail** is accepted at 479,879.48.
-It preserves 96 Invoice rows and 66 negative Payment/Deposit rows with no
-post-cutoff transaction dates. The next report is an **Accrual Trial Balance as
-of 2026-08-31** to tie that net to the ledger Accounts Receivable control. No AR
-is ledger-admitted before the tie-out.
+- A/R Aging Detail: 479,879.48.
+- Accrual Trial Balance A/R, Open Invoices, and Customer Balance Detail:
+  479,029.48 each.
+- Unresolved A/R variance: -850.00; no amount is forced to zero.
+- A/P Aging Detail, Unpaid Bills, and Vendor Balance Detail are empty; zero A/P
+  is a supported candidate but still requires accountant confirmation of report
+  scope.
+- Cash Profit & Loss is accepted for 2022-01-01 through 2026-08-31.
+- The files named Cash Trial Balance and Balance Sheet contain Accrual-basis
+  footers. The requested Accrual General Ledger contains a Cash-basis footer.
+  These are basis-mismatch exceptions, not admitted controls.
+
+## Legacy controls not maintained
+
+All County did not maintain dedicated historical controls for Undeposited
+Funds, company credit-card accounts, or formal inventory valuation. ACP will
+reconstruct only facts proven by transaction/application/settlement evidence.
+At cutover, the accountant must provide an opening control for any admitted
+funds-in-transit or card balance, and a physical quantity plus accepted cost
+basis for inventory. Otherwise the class is explicitly not applicable. Native
+ACP controls begin prospectively; no historical balance is fabricated.
+
+## Consolidated next evidence packet
+
+Only three corrected QBO exports remain mechanically necessary now:
+
+1. Trial Balance — **Cash**, as of 2026-08-31.
+2. Balance Sheet — **Cash**, as of 2026-08-31.
+3. General Ledger — **Accrual**, 2022-01-01 through 2026-08-31.
+
+These unlock Cash-position continuity, complete ledger/subledger tracing of the
+850.00 A/R variance, and final liability/equity/account mapping evidence. Do not
+resubmit the other seven packet reports.

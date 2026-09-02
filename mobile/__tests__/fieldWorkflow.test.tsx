@@ -18,14 +18,14 @@ describe("authorized employee field workflow", () => {
     expect(await screen.findByText("Travel status: pending")).toBeOnTheScreen();
     expect(h.field.itinerary).toHaveBeenCalledWith("2026-08-28");
     expect(screen.getByLabelText("Work performed summary")).toBeOnTheScreen();
-    expect(screen.getByText(/Every field action is reconciled/)).toBeOnTheScreen();
+    expect(screen.getByText(/ACP confirms every action/)).toBeOnTheScreen();
   });
 
   it("prevents duplicate action while authoritative reconciliation is in flight", async () => {
     const h = harness(); let release!: () => void; (h.field.arrival as jest.Mock).mockImplementation(() => new Promise<void>((resolve) => { release = resolve; }));
     render(<JobWorkspaceScreen appointmentId={assignment.appointment_id} initialAssignment={assignment} initialTimezone="America/New_York" businessDate="2026-08-28" service={h.employee} fieldService={h.field} network={h.network} canReadField canExecuteField />);
-    const action = await screen.findByRole("button", { name: "Begin Travel" }); fireEvent.press(action); fireEvent.press(action);
-    await waitFor(() => expect(h.field.arrival).toHaveBeenCalledTimes(1)); expect(screen.getByRole("button", { name: "Begin Travel" }).props.accessibilityState.disabled).toBe(true);
+    const action = await screen.findByRole("button", { name: "Confirm On My Way with ACP" }); fireEvent.press(action); fireEvent.press(action);
+    await waitFor(() => expect(h.field.arrival).toHaveBeenCalledTimes(1)); expect(screen.getByRole("button", { name: "Confirm On My Way with ACP" }).props.accessibilityState.disabled).toBe(true);
     await act(async () => release()); await waitFor(() => expect(h.field.state).toHaveBeenCalledTimes(2));
   });
 
@@ -36,9 +36,9 @@ describe("authorized employee field workflow", () => {
     h.field.readiness = jest.fn(async () => ({ fleet: [], workforce_profile_available: true, branch_eligible: true, availability_state: "available", inspection_interaction: "policy_required" as const, notification_inbox: "source_required" as const, push_provider: "external_provider_required" as const, payment_collection: "not_authorized" as const }));
     render(<JobWorkspaceScreen appointmentId={assignment.appointment_id} initialAssignment={assignment} initialTimezone="America/New_York" businessDate="2026-08-28" service={h.employee} fieldService={h.field} network={h.network} canReadField canReadAssets canReadEstimates />);
     expect(await screen.findByText("Synthetic Heat Pump")).toBeOnTheScreen();
-    expect(screen.getByText(/Warranty: insufficient_evidence/)).toBeOnTheScreen();
+    expect(screen.getByText(/Warranty evidence: insufficient evidence/)).toBeOnTheScreen();
     expect(screen.getByText(/EST-000001 · sent/)).toBeOnTheScreen();
-    expect(screen.getByText(/Mobile cannot rewrite it/)).toBeOnTheScreen();
-    expect(screen.getByText(/Photo\/document upload: SOURCE_REQUIRED/)).toBeOnTheScreen();
+    expect(screen.getByText(/cannot edit pricing or accept the Estimate/)).toBeOnTheScreen();
+    expect(screen.getByText(/Photos and documents aren't available yet/)).toBeOnTheScreen();
   });
 });

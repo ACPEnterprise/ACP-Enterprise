@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
 
 class DispatchSchema(BaseModel):
@@ -65,6 +65,59 @@ class DispatchBoardItem(DispatchSchema):
 class DispatchBoardPage(DispatchSchema):
     items: tuple[DispatchBoardItem, ...]
     total_count: int
+
+
+class RecommendationWindow(DispatchSchema):
+    start_at: AwareDatetime
+    end_at: AwareDatetime
+
+
+class RecommendationRequest(DispatchSchema):
+    """Proposal-only windows selected from the authoritative calendar surface."""
+
+    proposed_windows: tuple[RecommendationWindow, ...] = Field(
+        default=(), max_length=24
+    )
+
+
+class RecommendationConstraint(DispatchSchema):
+    constraint: str
+    result: str
+    explanation: str
+
+
+class RecommendationEvidence(DispatchSchema):
+    authority: str
+    identity: str
+    digest: str
+
+
+class PlacementRecommendationItem(DispatchSchema):
+    employee_id: UUID
+    proposed_window: RecommendationWindow
+    placement_class: str
+    eligible: bool
+    rank: int | None
+    constraints: tuple[RecommendationConstraint, ...]
+    tradeoffs: tuple[str, ...]
+    limitations: tuple[str, ...]
+    confidence: str
+
+
+class DispatchRecommendationResponse(DispatchSchema):
+    recommendation_id: UUID
+    contract_version: str
+    engine_version: str
+    job_id: UUID
+    company_id: UUID
+    branch_id: UUID
+    candidates: tuple[PlacementRecommendationItem, ...]
+    risk_conditions: tuple[dict[str, str], ...]
+    recovery_options: tuple[dict[str, str], ...]
+    evidence: tuple[RecommendationEvidence, ...]
+    limitations: tuple[str, ...]
+    recommendation_digest: str
+    mutation_authority: str
 
 
 class AssignPrimaryRequest(DispatchSchema):

@@ -57,14 +57,14 @@ describe("native employee Job workspace", () => {
     expect(screen.getByText("Appointment APT-SAFE-01")).toBeOnTheScreen();
     expect(screen.getByText("Job JOB-SAFE-01")).toBeOnTheScreen();
     expect(screen.getByLabelText(/Authoritative assignment detail.*Synthetic Detail Customer/)).toBeOnTheScreen();
-    expect(screen.getByText("Read-only assigned work. Job status and My Time remain independent.")).toBeOnTheScreen();
-    expect(screen.getByTestId("job-workspace-scroll").props.refreshControl.props.accessibilityLabel).toBe("Refresh authoritative Job workspace");
+    expect(screen.getByText("Read-only assigned work. Job status and My Time are separate.")).toBeOnTheScreen();
+    expect(screen.getByTestId("job-workspace-scroll").props.refreshControl.props.accessibilityLabel).toBe("Refresh latest Job information");
   });
 
   it("fails closed for guessed, cross-Company, or cross-Branch identifiers", async () => {
     const h = harness();
     render(detail(h, "90000000-0000-4000-8000-000000000009", null));
-    expect(await screen.findByText(/no longer available in your authoritative My Day/i)).toBeOnTheScreen();
+    expect(await screen.findByText(/no longer assigned to you/i)).toBeOnTheScreen();
     expect(screen.queryByText("Synthetic Detail Customer")).not.toBeOnTheScreen();
     expect(h.service.day).toHaveBeenCalledTimes(1);
   });
@@ -75,7 +75,7 @@ describe("native employee Job workspace", () => {
     h.replace(projectedDay([]));
     await act(async () => screen.getByTestId("job-workspace-scroll").props.refreshControl.props.onRefresh());
     await waitFor(() => expect(screen.queryByText("Synthetic Detail Customer")).not.toBeOnTheScreen());
-    expect(screen.getByText(/no longer available/i)).toBeOnTheScreen();
+    expect(screen.getByText(/no longer assigned/i)).toBeOnTheScreen();
   });
 
   it("reflects authoritative cancellation and rescheduling", async () => {
@@ -85,7 +85,7 @@ describe("native employee Job workspace", () => {
     expect(await screen.findByText("Appointment status: cancelled")).toBeOnTheScreen();
     h.replace(projectedDay([]));
     await act(async () => screen.getByTestId("job-workspace-scroll").props.refreshControl.props.onRefresh());
-    expect(await screen.findByText(/no longer available/i)).toBeOnTheScreen();
+    expect(await screen.findByText(/no longer assigned/i)).toBeOnTheScreen();
   });
 
   it("marks last-confirmed detail stale offline and refreshes on restoration", async () => {
@@ -94,7 +94,7 @@ describe("native employee Job workspace", () => {
     expect(await screen.findByText(/last confirmed and may be stale/i)).toBeOnTheScreen();
     expect(screen.getByLabelText(/Stale assignment detail/)).toBeOnTheScreen();
     h.replace(projectedDay([])); h.connect(true);
-    expect(await screen.findByText(/no longer available/i)).toBeOnTheScreen();
+    expect(await screen.findByText(/no longer assigned/i)).toBeOnTheScreen();
   });
 
   it.each([

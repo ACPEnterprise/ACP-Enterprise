@@ -7,6 +7,7 @@ import {
   DispatchWorkQueue,
 } from "../components/dispatch/DispatchQueues";
 import { DispatchAssignmentPanel } from "../components/dispatch/DispatchAssignmentPanel";
+import { DispatchRecommendationPanel } from "../components/dispatch/DispatchRecommendationPanel";
 import { DispatchScopeControls } from "../components/dispatch/DispatchScopeControls";
 import { DispatchSummary } from "../components/dispatch/DispatchSummary";
 import { DispatchWorkspaceLayout } from "../components/dispatch/DispatchWorkspaceLayout";
@@ -103,6 +104,9 @@ export function DispatchRoute() {
           item={selectedWork}
           onClose={() => setSelectedWork(null)}
         />
+      )}
+      {selectedWork && canReadJobs && (
+        <DispatchRecommendationPanel item={selectedWork} />
       )}
       <DispatchWorkspaceLayout
         appointments={

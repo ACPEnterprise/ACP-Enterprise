@@ -12,6 +12,7 @@ class WorkforceEligibilityQuery:
     window_end_at: datetime
     required_capability_codes: frozenset[str] = frozenset()
     required_language_codes: frozenset[str] = frozenset()
+    exclude_appointment_id: UUID | None = None
 
 
 @dataclass(frozen=True)

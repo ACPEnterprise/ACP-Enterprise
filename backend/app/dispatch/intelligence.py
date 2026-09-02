@@ -78,6 +78,7 @@ class JobDemand:
     required_capabilities: frozenset[str]
     required_certifications: frozenset[str]
     evidence: tuple[EvidenceRef, ...]
+    fleet_required: bool = True
 
 
 @dataclass(frozen=True, slots=True)
@@ -267,7 +268,7 @@ def _evaluate(
             _contained(candidate.proposed_window, job.promised_window),
             "Placement must preserve the promised Customer window.",
         ),
-        _fleet_constraint(candidate),
+        _fleet_constraint(job, candidate),
         _duration_constraint(job),
     )
     failed = [item for item in constraints if item.result is ConstraintResult.FAIL]
@@ -386,7 +387,15 @@ def _availability_constraint(candidate: CandidatePlacement) -> ConstraintEvidenc
     )
 
 
-def _fleet_constraint(candidate: CandidatePlacement) -> ConstraintEvidence:
+def _fleet_constraint(
+    job: JobDemand, candidate: CandidatePlacement
+) -> ConstraintEvidence:
+    if not job.fleet_required:
+        return ConstraintEvidence(
+            "fleet_readiness",
+            ConstraintResult.PASS,
+            "No authoritative Fleet requirement applies to this Job.",
+        )
     if (
         candidate.fleet_state is not EvidenceState.KNOWN
         or candidate.fleet_ready is None

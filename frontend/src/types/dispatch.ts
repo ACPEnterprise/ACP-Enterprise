@@ -66,3 +66,34 @@ export interface TechnicianEligibility {
   availability_confidence: string;
   eligible: boolean;
 }
+export interface DispatchRecommendationConstraint {
+  constraint: string;
+  result: "PASS" | "FAIL" | "UNKNOWN";
+  explanation: string;
+}
+export interface DispatchPlacementRecommendation {
+  employee_id: string;
+  proposed_window: { start_at: string; end_at: string };
+  placement_class: string;
+  eligible: boolean;
+  rank: number | null;
+  constraints: readonly DispatchRecommendationConstraint[];
+  tradeoffs: readonly string[];
+  limitations: readonly string[];
+  confidence: string;
+}
+export interface DispatchRecommendation {
+  recommendation_id: string;
+  contract_version: string;
+  engine_version: string;
+  job_id: string;
+  company_id: string;
+  branch_id: string;
+  candidates: readonly DispatchPlacementRecommendation[];
+  risk_conditions: readonly Record<string, string>[];
+  recovery_options: readonly Record<string, string>[];
+  evidence: readonly { authority: string; identity: string; digest: string }[];
+  limitations: readonly string[];
+  recommendation_digest: string;
+  mutation_authority: "none";
+}
