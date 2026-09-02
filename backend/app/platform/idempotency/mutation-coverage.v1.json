@@ -1,6 +1,16 @@
 {
   "entries": [
     {
+      "classification": "NON_MUTATING_READ_ONLY",
+      "domain": "identity_onboarding",
+      "mechanism": "read-only tenant-scoped preflight projection with no persistence side effects",
+      "method": "POST",
+      "operation_id": "plan_api_v1_identity_onboarding_plan_post",
+      "path": "/api/v1/identity-onboarding/plan",
+      "reason": "Sensitive identity inputs remain in the request body while the operation performs collision and authority planning only.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
       "classification": "IDEMPOTENCY_REQUIRED",
       "domain": "service_agreements",
       "mechanism": "Company-scoped immutable agreement evidence and canonical request digest",
@@ -2709,6 +2719,6 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "d6f50d76001b721beb4335dda6c87722289f637d4350351976f5e53886a558ad",
+  "fingerprint": "e08cca763bcd68680917c6c17fd9a70735b914c3c456107f2d46bd2a29bed8d6",
   "schema_version": "1"
 }

@@ -1,0 +1,28 @@
+{
+  "contract_version": "EMPLOYEE.WORKFORCE.OPERATIONALIZATION.PROGRAM.3.v1",
+  "data_classification": "SYNTHETIC_ONLY",
+  "personas": {
+    "OWN_DATA_ROLE": {
+      "allows": ["COMPANY_EMPLOYEE_OPERATIONS_OWN_DAY_READ", "COMPANY_TIMEKEEPING_OWN_READ", "COMPANY_TIMEKEEPING_OWN_PUNCH", "COMPANY_PAYROLL_STATEMENT_OWN_READ"],
+      "denies_categories": ["Customers", "Administration", "Accounting", "Payroll administration"]
+    },
+    "TECHNICIAN": {"allows_categories": ["Field own assignment", "Timekeeping own data"], "denies_categories": ["Administration", "Accounting", "Payroll administration"]},
+    "SERVICE_CSR": {"allows_categories": ["Customers", "Estimates", "Scheduling read", "Jobs read", "Dispatch read", "Invoices read", "Payments read", "Communications read"], "denies_categories": ["Financial execution", "Payroll", "Accounting", "Purchasing mutation", "Inventory mutation", "Administration", "Migration", "Beacon management"]},
+    "DISPATCHER": {"allows_categories": ["Scheduling", "Dispatch"], "denies_categories": ["Accounting", "Payroll administration", "Payment execution"]},
+    "OFFICE_MANAGER": {"derive_from_current_catalog": true, "administrator_synonym": false},
+    "COMPANY_ADMINISTRATOR": {"derive_from_current_catalog": true, "protected_payroll_data_requires_explicit_permission": true}
+  },
+  "dynamic_scenarios": [
+    "role_change_recalculates_effective_authority",
+    "permission_removal_advances_authorization_version",
+    "stale_session_denied",
+    "branch_b_removed_while_branch_a_remains",
+    "membership_deactivation_fails_closed",
+    "additive_permission_is_explained_and_audited"
+  ],
+  "invitation_scenarios": ["provider_not_configured", "accepted", "delivered", "deferred", "rejected", "bounced", "suppressed", "uncertain", "expired", "revoked"],
+  "activation_attacks": ["expired", "revoked", "used", "concurrent_claim", "recipient_substitution", "response_loss"],
+  "physical_device_owner": "Laptop1 Mobile",
+  "preview_owner": "Enterprise",
+  "real_employee_data_allowed": false
+}
