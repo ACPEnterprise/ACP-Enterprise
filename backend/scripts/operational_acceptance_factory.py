@@ -82,10 +82,11 @@ SCENARIOS: Final[tuple[Scenario, ...]] = (
     Scenario("error_safety", "RESTRICTED_EMPLOYEE", "no internal detail is reflected", ("tests/platform/test_sensitive_output_controls.py", "tests/platform/test_enterprise_security_hardening.py")),
     Scenario("migration_readiness", "COMPANY_ADMINISTRATOR", "synthetic readiness remains deterministic and fail closed", ("tests/customer_migration/test_dry_run_readiness.py::test_manifest_is_immutable_deterministic_tenant_scoped_and_complete",)),
     Scenario("redis_failure", "COMPANY_ADMINISTRATOR", "rate limiting fails closed without required Redis", gate_classification="DEPENDENCY_BLOCKED", limitation="Supported Redis service unavailable on this host; no in-memory authority substituted."),
+    Scenario("communications_readiness", "COMPANY_ADMINISTRATOR", "governed channel selection and provider admission remain truthful", ("tests/communications/test_omnichannel_operations.py",)),
     Scenario("real_communications_provider", "OFFICE_MANAGER", "provider delivery acceptance", gate_classification="PASSED_WITH_EXTERNAL_GATE", limitation="Synthetic provider qualified; real email/SMS prohibited."),
     Scenario("physical_mobile", "TECHNICIAN", "physical-device workflow", gate_classification="PASSED_WITH_EXTERNAL_GATE", limitation="Server and Jest contracts qualified; physical device owned externally."),
     Scenario("real_migration_source", "COMPANY_ADMINISTRATOR", "protected source acquisition", gate_classification="SOURCE_REQUIRED", limitation="Real QBO/HCP access prohibited."),
-    Scenario("asset_policy", "COMPANY_ADMINISTRATOR", "readiness policy selection", gate_classification="POLICY_REQUIRED", limitation="No readiness or warranty policy invented."),
+    Scenario("asset_policy", "COMPANY_ADMINISTRATOR", "authoritative import and readiness policy classify without inference", ("tests/operational_assets/test_operational_assets.py::test_vehicle_with_powertrain_still_requires_configured_readiness_policy", "tests/operational_assets/test_operational_assets.py::test_import_classification_preserves_replacement_and_conflict")),
 )
 
 

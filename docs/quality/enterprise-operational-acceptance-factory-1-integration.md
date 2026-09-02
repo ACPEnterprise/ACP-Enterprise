@@ -2,8 +2,8 @@
 
 ## Authority and classification
 
-- Starting protected authority: `66d22691d09598312ab83d9560013c64b82ec6f3`.
-- Candidate schema head: `k7l5n83d0q6r`.
+- Starting protected authority: `66d22691d09598312ab83d9560013c64b82ec6f3`; final reconciled authority: `1b2158f900848c4a41a1a8dd69824c789e2290ca`.
+- Candidate schema head: `l8m6p94e1r7s`.
 - Branch: `work/enterprise-operational-acceptance-factory-1`.
 - Classification: **NON_PRODUCTION_READY_WITH_EXTERNAL_GATES**.
 - No Preview, Production, real Customer/Employee, real email/SMS, real payment, real QBO/HCP, Payroll/tax execution, Accounting posting, or source freeze was used.
@@ -12,7 +12,7 @@
 
 `backend/scripts/operational_acceptance_factory.py` is a reusable scenario orchestrator. Versioned scenarios bind persona, expected result, exact repository test nodes, authority SHA, schema head, actual classification, duration, and a SHA-256 digest of captured test output. Raw output is not retained in the packet. Executable scenarios use existing application/router/service contracts; explicit provider, source, device, Redis, and policy gates are recorded without pretending execution occurred.
 
-The generated packet is `docs/quality/enterprise-operational-acceptance-factory.v1.json`. On isolated PostgreSQL database `acp_acceptance_factory_r2` it recorded **51 scenarios: 46 passed, 5 gated, 0 failed** in 105.153 seconds. This is a deterministic component-composed operating day; it does not claim one Production-like transaction or real-provider rehearsal.
+The generated packet is `docs/quality/enterprise-operational-acceptance-factory.v1.json`. After final authority reconciliation, isolated PostgreSQL database `acp_acceptance_factory_r4` recorded **52 scenarios: 48 passed, 4 gated, 0 failed** in 107.911 seconds. This is a deterministic component-composed operating day; it does not claim one Production-like transaction or real-provider rehearsal.
 
 ## Capability matrix
 
@@ -24,7 +24,7 @@ The generated packet is `docs/quality/enterprise-operational-acceptance-factory.
 | JOBS / SCHEDULING / DISPATCH | READY | Creation, replay, lifecycle, reschedule, cancel, assignment/readiness passed |
 | MOBILE_MY_DAY / FIELD_JOB | READY_WITH_EXTERNAL_GATE | Server and Jest contracts passed; physical device external |
 | TIMEKEEPING | READY | Employee-owned punch, manual authority and Payroll snapshot separation passed |
-| ASSETS_EQUIPMENT / FLEET | PARTIAL | Current authority and replay passed; readiness/warranty policy remains owner-controlled |
+| ASSETS_EQUIPMENT / FLEET | READY | Final authority's import/readiness policy, identity, replay and fail-closed evidence passed; no policy was invented |
 | PRICE_BOOK / ESTIMATES | READY | Scoped snapshot, revision, stale and decision outcomes passed |
 | ESTIMATE_DELIVERY / COMMUNICATIONS | READY_WITH_EXTERNAL_GATE | Exact artifact/logical intent and synthetic provider truth passed; real provider prohibited |
 | JOB_COMPLETION | READY | Field evidence, blocker, stale and replay contracts passed |
@@ -54,7 +54,7 @@ The generated packet is `docs/quality/enterprise-operational-acceptance-factory.
 3. Employee readiness and Mobile/My Day: **PASSED_WITH_EXTERNAL_GATE** — server composition passed; physical device remains external.
 4. On My Way, arrival/start and Communications: **PASSED_WITH_EXTERNAL_GATE** — idempotent arrival and logical delivery truth passed; real provider prohibited.
 5. Timekeeping: **PASSED** — independent punch/break/workday authority; no implicit Job-driven time mutation.
-6. Assets/equipment and Fleet: **PASSED / POLICY_REQUIRED** — identity, replay and fail-closed readiness passed; no readiness/warranty policy invented.
+6. Assets/equipment and Fleet: **PASSED** — final authority's import/readiness policy, identity, replay and fail-closed readiness passed; no policy was invented.
 7. Price Book, Estimate, delivery and decline: **PASSED** — immutable snapshot, revision, artifact digest, stale and decline-without-conversion behavior.
 8. Field evidence and Job completion: **PASSED** — snapshot, stale, blockers, event rollback and response-loss convergence.
 9. Invoice, delivery and Payment: **PASSED_WITH_EXTERNAL_GATE** — one receivable, stale rejection, same-day/partial/uncertain application; real money prohibited.
@@ -74,16 +74,17 @@ The generated packet is `docs/quality/enterprise-operational-acceptance-factory.
 
 ## Qualification totals
 
-- Acceptance factory: **46 passed, 5 gated, 0 failed** across 51 scenarios.
+- Acceptance factory: **48 passed, 4 gated, 0 failed** across 52 scenarios.
 - Backend fresh-database regression: **2,469 passed, 7 skipped, 1 deselected** in 250.42 seconds. The deselection is the known Redis-dependent rate-limit integration test.
-- Frontend: **105 files / 345 tests passed**; ESLint, TypeScript and production Vite build passed.
+- Frontend after final reconciliation: **106 files / 346 tests passed**; ESLint, TypeScript and production Vite build passed.
 - Mobile: **10 suites / 97 tests passed**; ESLint and TypeScript passed.
 - QBO synthetic affected boundary: **131 tests passed**; focused malformed-manifest regression: **17 passed**.
-- Database: exactly one head `k7l5n83d0q6r`; three fresh upgrades used by this program; current=head and drift clean.
-- Static: Python compilation and `pip check` passed; MyPy passed across **684 source files**; changed harness/tests pass Ruff; diff check passed.
+- Database: exactly one head `l8m6p94e1r7s`; four fresh upgrades used by this program; current=head and drift clean.
+- Final reconciled affected backend set: **197 tests passed** across acceptance, Assets, Communications, idempotency and QBO boundaries.
+- Static: Python compilation and `pip check` passed; MyPy passed across **687 source files**; changed harness/tests pass Ruff; diff check passed.
 - Dependencies: frontend runtime audit clean; Mobile runtime audit retains 24 advisories (15 moderate, 9 high) behind the Mobile/Expo owner gate.
 - Secret scan: four matches, all intentional synthetic test canaries; no value emitted.
-- Performance baseline: acceptance catalog 105.153 seconds; broad backend 250.42 seconds; My Day query shape, bounded history/list and N+1 regression tests passed. These are local non-production gross-regression measurements, not SLOs.
+- Performance baseline: final acceptance catalog 107.911 seconds; broad backend 250.42 seconds; My Day query shape, bounded history/list and N+1 regression tests passed. These are local non-production gross-regression measurements, not SLOs.
 
 ## Defects and repairs
 
@@ -104,6 +105,6 @@ No domain-semantic defect was taken from an active owner.
 
 ## Integration packet and remaining gates
 
-Integrate the acceptance harness, machine evidence, two bounded repairs, and this packet from `work/enterprise-operational-acceptance-factory-1`. Remaining gates are healthy Redis integration, real communications/payment providers, physical-device acceptance, protected Migration sources, infrastructure backup/restore rehearsal, Assets readiness/warranty policy, Mobile dependency-major ownership, Preview deployment, and Production authorization.
+Integrate the acceptance harness, machine evidence, two bounded repairs, and this packet from `work/enterprise-operational-acceptance-factory-1`. Remaining gates are healthy Redis integration, real communications/payment providers, physical-device acceptance, protected Migration sources, infrastructure backup/restore rehearsal, Mobile dependency-major ownership, Preview deployment, and Production authorization.
 
 Local collision-free acceptance work is exhausted. Preview and Production remain untouched.
