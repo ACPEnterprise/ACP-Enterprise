@@ -70,4 +70,6 @@ Bundle identity and native project are preserved. Entitlements, EAS profiles, Pr
 
 Expo 54 is the current accepted physical-device baseline. Dependency audit findings are tracked, but no major Expo upgrade is justified inside this program without an Apple release compatibility decision. A bounded future upgrade must preserve secure storage, linking, network recovery, native identifiers, and the physical acceptance matrix.
 
+Local qualification found 25 transitive audit findings (16 moderate, 9 high, zero critical). The available aggregate remediation is Expo 57, a semver-major toolchain change; Expo's compatibility check reports the current pinned dependencies aligned. Treat the major upgrade as a bounded Apple-release packet rather than changing the proven physical-device baseline here. Full unsigned native compilation remains externally gated on this host by CocoaPods, full Xcode selection, and a Java runtime; iOS/Android Hermes exports and plist/privacy/entitlement validation pass.
+
 Protected integration owns only `mobile/**` and this document. Enterprise must rebase/cherry-pick onto current authority, run Mobile qualification, and deploy Preview separately. No backend, schema, role, permission, fixture, Preview, Production, communications provider, or Apple state is changed by this lane.
