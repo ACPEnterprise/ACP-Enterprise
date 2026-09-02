@@ -4,6 +4,7 @@ import type { DayAssignment, EmployeeDay, EmployeeOperationsService } from "../s
 import { ApiFailure } from "../src/api/types";
 import { directionsUrl, JobWorkspaceScreen } from "../src/screens/JobWorkspaceScreen";
 import { MyDayScreen } from "../src/screens/MyDayScreen";
+import type { FieldService } from "../src/api/fieldService";
 
 const assignment: DayAssignment = {
   appointment_id: "30000000-0000-4000-8000-000000000001",
@@ -27,12 +28,17 @@ function harness(initial = projectedDay(), connected = true) {
   let value = initial;
   let listener: ((connected: boolean) => void) | undefined;
   const service: EmployeeOperationsService = { day: jest.fn(async () => value) };
+  const fieldService: FieldService = {
+    itinerary: jest.fn(async () => ({ service_date: "2026-08-28", technician_display_name: "Synthetic Technician", items: value.assignments.map((item) => ({ appointment_id: item.appointment_id, appointment_number: item.appointment_number, job_id: item.job_id, job_number: item.job_number, job_status: item.job_status, job_version: item.job_id ? 2 : null, customer_display_name: item.customer_display_name, service_location_label: item.service_location.label, window_start_at: item.window_start_at, window_end_at: item.window_end_at, assignment_status: item.assignment_status, assignment_version: 3, arrival_state: "pending", field_execution_enabled: true })) })),
+    state: jest.fn(async (jobId) => ({ job_id: jobId, assignment_id: "50000000-0000-4000-8000-000000000001", work_summary_recorded: false, customer_disposition: null, completion_ready: false, requirement_snapshot_version: 1, missing_requirements: ["work_performed_summary"], commercial_authorization: "missing" as const, non_billable_reason: null, invoice_handoff_status: null, invoice_id: null })),
+    arrival: jest.fn(), transition: jest.fn(), workSummary: jest.fn(), customerDisposition: jest.fn(),
+  };
   const network = { isConnected: jest.fn(async () => connected), subscribe: jest.fn((next: (connected: boolean) => void) => { listener = next; return () => undefined; }) };
-  return { service, network, replace(next: EmployeeDay) { value = next; }, connect(next: boolean) { connected = next; act(() => listener?.(next)); } };
+  return { service, fieldService, network, replace(next: EmployeeDay) { value = next; }, connect(next: boolean) { connected = next; act(() => listener?.(next)); } };
 }
 
 function detail(h: ReturnType<typeof harness>, appointmentId = assignment.appointment_id, initial: DayAssignment | null = assignment) {
-  return <JobWorkspaceScreen appointmentId={appointmentId} initialAssignment={initial} initialTimezone="America/New_York" service={h.service} network={h.network} />;
+  return <JobWorkspaceScreen appointmentId={appointmentId} businessDate="2026-08-28" initialAssignment={initial} initialTimezone="America/New_York" service={h.service} fieldService={h.fieldService} network={h.network} canExecute />;
 }
 
 describe("native employee Job workspace", () => {
@@ -41,7 +47,7 @@ describe("native employee Job workspace", () => {
     const h = harness(); const open = jest.fn();
     render(<MyDayScreen service={h.service} network={h.network} onOpenAssignment={open} />);
     fireEvent.press(await screen.findByLabelText(/Open assignment detail.*Synthetic Detail Customer/));
-    expect(open).toHaveBeenCalledWith(assignment, "America/New_York");
+    expect(open).toHaveBeenCalledWith(assignment, "America/New_York", "2026-08-28");
   });
 
   it("renders only safe operational detail with accessible hierarchy", async () => {
@@ -81,35 +87,35 @@ describe("native employee Job workspace", () => {
     expect(await screen.findByText("Appointment status: cancelled")).toBeOnTheScreen();
     h.replace(projectedDay([]));
     await act(async () => screen.getByTestId("job-workspace-scroll").props.refreshControl.props.onRefresh());
-    expect(await screen.findByText(/no longer available/i)).toBeOnTheScreen();
+    expect(await screen.findByText(/no longer (available|in your authoritative itinerary)/i)).toBeOnTheScreen();
   });
 
   it("marks last-confirmed detail stale offline and refreshes on restoration", async () => {
     const h = harness(); render(detail(h)); await screen.findByText("Synthetic Detail Customer");
     h.connect(false);
-    expect(await screen.findByText(/last confirmed and may be stale/i)).toBeOnTheScreen();
-    expect(screen.getByLabelText(/Stale assignment detail/)).toBeOnTheScreen();
+    expect(await screen.findByText(/Field actions are unavailable/i)).toBeOnTheScreen();
+    expect(screen.getByText("LAST CONFIRMED — STALE")).toBeOnTheScreen();
     h.replace(projectedDay([])); h.connect(true);
-    expect(await screen.findByText(/no longer available/i)).toBeOnTheScreen();
+    expect(await screen.findByText(/no longer (available|in your authoritative itinerary)/i)).toBeOnTheScreen();
   });
 
   it.each([
     ["unauthenticated", /session has expired/i],
-    ["forbidden", /not authorized/i],
     ["not_ready", /account is not ready/i],
     ["malformed_response", /Unable to refresh/i],
     ["unavailable", /Unable to refresh/i],
   ] as const)("keeps %s distinct", async (kind, expected) => {
-    const h = harness(); (h.service.day as jest.Mock).mockRejectedValue(new ApiFailure(kind, kind));
+    const h = harness(); (h.service.day as jest.Mock).mockRejectedValue(new ApiFailure(kind, kind)); (h.fieldService.itinerary as jest.Mock).mockRejectedValue(new ApiFailure(kind, kind));
     render(detail(h)); expect(await screen.findByText(expected)).toBeOnTheScreen();
     if (["unauthenticated", "forbidden", "not_ready"].includes(kind)) expect(screen.queryByText("Synthetic Detail Customer")).not.toBeOnTheScreen();
   });
 
-  it("contains no mutation, identity-selection, contact, financial, Payroll, or note surface", async () => {
+  it("exposes only assigned field authority and source-gates unsupported surfaces", async () => {
     const h = harness(); render(detail(h)); await screen.findByText("Synthetic Detail Customer");
-    expect(screen.queryByText(/Start Job|Finish Job|Arrive|Dispatch|Reassign|Cancel Job|Reschedule|Complete|Pause|employee_id/i)).not.toBeOnTheScreen();
-    expect(screen.queryByText(/phone|email|estimate|invoice|payment|balance|margin|cost|payroll|compensation|note|description|customer history/i)).not.toBeOnTheScreen();
-    expect(Object.keys(h.service)).toEqual(["day"]);
+    expect(await screen.findByText("On My Way")).toBeOnTheScreen();
+    expect(screen.getByText(/Photos and documents: SOURCE_REQUIRED/)).toBeOnTheScreen();
+    expect(screen.getByText(/Payment collection: NOT AUTHORIZED/)).toBeOnTheScreen();
+    expect(screen.queryByText(/Reassign|Cancel Job|Reschedule|employee_id|margin|cost|payroll|compensation|customer history/i)).not.toBeOnTheScreen();
   });
 
   it("creates a bounded system-map handoff without location tracking", () => {
