@@ -1,0 +1,769 @@
+{
+  "scenario_version": "ENTERPRISE.OPERATIONAL.ACCEPTANCE.FACTORY.v1",
+  "authority_sha": "604bc137e512e338698a359ad577b3ada2667074",
+  "schema_head": "l8m6p94e1r7s",
+  "execution_environment": "ISOLATED_NON_PRODUCTION",
+  "executed_at_epoch": 1788311376,
+  "duration_ms": 113091,
+  "summary": {
+    "total": 52,
+    "passed": 48,
+    "gated": 4,
+    "failed": 0
+  },
+  "scenarios": [
+    {
+      "scenario_id": "new_customer_call",
+      "persona": "SERVICE_CSR",
+      "expected": "idempotent tenant-scoped intake and evidence",
+      "test_nodes": [
+        "tests/customers/test_launch_gaps.py::test_launch_intake_duplicate_note_consent_and_location_workflow"
+      ],
+      "gate_classification": null,
+      "limitation": null,
+      "classification": "PASSED",
+      "actual_result": "PASS",
+      "duration_ms": 2036,
+      "evidence_digest": "4410557f3040d76778888866c26370e98ec2e76d675adec21e2ec316b0b5aa3d"
+    },
+    {
+      "scenario_id": "existing_customer_call",
+      "persona": "SERVICE_CSR",
+      "expected": "bounded scoped search and context",
+      "test_nodes": [
+        "tests/customers/test_search_timeline.py::test_customer_search_and_timeline_are_tenant_and_permission_scoped"
+      ],
+      "gate_classification": null,
+      "limitation": null,
+      "classification": "PASSED",
+      "actual_result": "PASS",
+      "duration_ms": 2231,
+      "evidence_digest": "642d875fdb7c158211b88faaa67dcb97fcbb7d31183ff594132f8d4bc8701ab2"
+    },
+    {
+      "scenario_id": "job_creation",
+      "persona": "SERVICE_CSR",
+      "expected": "one scoped Job and Event under replay",
+      "test_nodes": [
+        "tests/jobs/test_jobs_api.py::test_job_create_concurrent_replay_and_contradiction"
+      ],
+      "gate_classification": null,
+      "limitation": null,
+      "classification": "PASSED",
+      "actual_result": "PASS",
+      "duration_ms": 2386,
+      "evidence_digest": "d51eb33c88383e6d904f4c06f20b28225d82f86f86e91368b811cf180cdf62f7"
+    },
+    {
+      "scenario_id": "scheduling",
+      "persona": "DISPATCHER",
+      "expected": "schedule, reschedule, cancel and stale rejection",
+      "test_nodes": [
+        "tests/scheduling/test_scheduling_service.py::test_launch_workflow_links_retries_reschedules_cancels_and_reopens",
+        "tests/scheduling/test_scheduling_service.py::test_reschedule_moves_capacity_and_rejects_stale_version"
+      ],
+      "gate_classification": null,
+      "limitation": null,
+      "classification": "PASSED",
+      "actual_result": "PASS",
+      "duration_ms": 2159,
+      "evidence_digest": "412749e8fb955225fc4332e614cced25aadde4408652ed482a54f3aabae7a4de"
+    },
+    {
+      "scenario_id": "dispatch",
+      "persona": "DISPATCHER",
+      "expected": "assignment readiness, audit and release",
+      "test_nodes": [
+        "tests/dispatch/test_dispatch_service.py::test_assignment_is_idempotent_audited_and_releasable",
+        "tests/dispatch/test_dispatch_service.py::test_missing_availability_is_reported_unknown"
+      ],
+      "gate_classification": null,
+      "limitation": null,
+      "classification": "PASSED",
+      "actual_result": "PASS",
+      "duration_ms": 1835,
+      "evidence_digest": "c6159b7faf7be7bdcbf2fd8169c38605a71705d64118001665bfd9b99afbc68c"
+    },
+    {
+      "scenario_id": "employee_readiness",
+      "persona": "COMPANY_ADMINISTRATOR",
+      "expected": "explicit role, Branch, capability and credential evidence",
+      "test_nodes": [
+        "tests/workforce/test_operations_projection.py::test_readiness_uses_explicit_capability_credential_and_branch_evidence"
+      ],
+      "gate_classification": null,
+      "limitation": null,
+      "classification": "PASSED",
+      "actual_result": "PASS",
+      "duration_ms": 1169,
+      "evidence_digest": "c0df2f751bb50937c2d742cca713b2acba8c8d916730f7305420a5afeeae68a3"
+    },
+    {
+      "scenario_id": "mobile_my_day",
+      "persona": "TECHNICIAN",
+      "expected": "self-resolved bounded current assignments",
+      "test_nodes": [
+        "tests/employee_operations/test_my_day_projection.py::test_employee_sees_primary_and_active_crew_assignments",
+        "tests/employee_operations/test_my_day_projection.py::test_projection_contains_only_bounded_operational_fields"
+      ],
+      "gate_classification": null,
+      "limitation": null,
+      "classification": "PASSED",
+      "actual_result": "PASS",
+      "duration_ms": 5617,
+      "evidence_digest": "83b09107a3e1e5a531edff10101c359a0bdeac2da33d7cdc8a5adee38d644097"
+    },
+    {
+      "scenario_id": "on_my_way_arrival",
+      "persona": "TECHNICIAN",
+      "expected": "one arrival authority and assigned-employee enforcement",
+      "test_nodes": [
+        "tests/dispatch/test_dispatch_service.py::test_arrival_and_controlled_exception_evidence_is_idempotent",
+        "tests/dispatch/test_dispatch_service.py::test_unassigned_employee_cannot_record_arrival"
+      ],
+      "gate_classification": null,
+      "limitation": null,
+      "classification": "PASSED",
+      "actual_result": "PASS",
+      "duration_ms": 1733,
+      "evidence_digest": "8f76acaf8436594a73a16fbd5cbe2c3b429a01f017f500a9630dca15328cd9da"
+    },
+    {
+      "scenario_id": "communications_intent",
+      "persona": "SERVICE_CSR",
+      "expected": "one consent-bound logical intent under replay",
+      "test_nodes": [
+        "tests/communications/test_launch_communications.py::test_request_is_structured_consent_checked_and_idempotent"
+      ],
+      "gate_classification": null,
+      "limitation": null,
+      "classification": "PASSED",
+      "actual_result": "PASS",
+      "duration_ms": 6042,
+      "evidence_digest": "5c8fff0477ff20c4ff7707b1dc33102229c18927f13dec4c42e0a8af22ee89e8"
+    },
+    {
+      "scenario_id": "communications_provider_truth",
+      "persona": "OFFICE_MANAGER",
+      "expected": "accepted, rejected and uncertain delivery remain distinct",
+      "test_nodes": [
+        "tests/communications/test_transactional_delivery.py::test_synthetic_provider_outcomes_map_to_truthful_lifecycle",
+        "tests/communications/test_transactional_delivery.py::test_provider_acceptance_without_reference_becomes_uncertain"
+      ],
+      "gate_classification": null,
+      "limitation": null,
+      "classification": "PASSED",
+      "actual_result": "PASS",
+      "duration_ms": 723,
+      "evidence_digest": "0973610efd24a5e69f2741ee6f54766d53b0fa4aeb5f7ee38b8aa943fe847670"
+    },
+    {
+      "scenario_id": "timekeeping",
+      "persona": "TECHNICIAN",
+      "expected": "employee-owned punch and independent approved workday",
+      "test_nodes": [
+        "tests/timekeeping/test_workday_authority.py::test_manual_entry_requires_authority_and_punch_is_employee_owned",
+        "tests/timekeeping/test_workday_authority.py::test_phone_safe_api_manual_first_idempotency_and_payroll_snapshot"
+      ],
+      "gate_classification": null,
+      "limitation": null,
+      "classification": "PASSED",
+      "actual_result": "PASS",
+      "duration_ms": 6439,
+      "evidence_digest": "a4d8d2f4029465d564553d52bd1010d4e21345d201b52d713b429dda6ad99db2"
+    },
+    {
+      "scenario_id": "assets_equipment",
+      "persona": "TECHNICIAN",
+      "expected": "equipment identity and service-history evidence without inference",
+      "test_nodes": [
+        "tests/operational_assets/test_operational_assets.py::test_unknown_customer_equipment_evidence_does_not_block_identity",
+        "tests/operational_assets/test_operational_assets.py::test_typed_action_exact_replay_and_contradiction"
+      ],
+      "gate_classification": null,
+      "limitation": null,
+      "classification": "PASSED",
+      "actual_result": "PASS",
+      "duration_ms": 1400,
+      "evidence_digest": "8b24259a2bae4afa266e986ceb6fd5ba59a9708fae0b6d71fcdea5bb4e97e48a"
+    },
+    {
+      "scenario_id": "fleet",
+      "persona": "TECHNICIAN",
+      "expected": "vehicle readiness fails closed without configured evidence",
+      "test_nodes": [
+        "tests/operational_assets/test_operational_assets.py::test_vehicle_readiness_fails_closed_without_identity_evidence",
+        "tests/operational_assets/test_operational_assets.py::test_failed_vehicle_check_creates_attention_not_safety_inference"
+      ],
+      "gate_classification": null,
+      "limitation": null,
+      "classification": "PASSED",
+      "actual_result": "PASS",
+      "duration_ms": 1268,
+      "evidence_digest": "c675306df2bc95e73aaab9c0ac0f622726828173b043060306641652b64b845b"
+    },
+    {
+      "scenario_id": "price_book",
+      "persona": "SERVICE_CSR",
+      "expected": "authorized scoped retrieval and immutable snapshot",
+      "test_nodes": [
+        "tests/price_book/test_price_book_service.py::test_branch_and_company_scope_fail_closed",
+        "tests/estimates/test_estimate_foundation.py::test_create_uses_immutable_price_book_snapshot"
+      ],
+      "gate_classification": null,
+      "limitation": null,
+      "classification": "PASSED",
+      "actual_result": "PASS",
+      "duration_ms": 2172,
+      "evidence_digest": "b68de8d5f446e6d3da028ae27a9898104f08058398c0e6abc01d334169aa54a0"
+    },
+    {
+      "scenario_id": "estimate",
+      "persona": "SERVICE_CSR",
+      "expected": "revision, decision, stale and replay safety",
+      "test_nodes": [
+        "tests/estimates/test_estimate_workflow.py::test_revision_lineage_is_deterministic_and_historical_revision_survives",
+        "tests/estimates/test_estimate_workflow.py::test_stale_version_fails_closed"
+      ],
+      "gate_classification": null,
+      "limitation": null,
+      "classification": "PASSED",
+      "actual_result": "PASS",
+      "duration_ms": 1778,
+      "evidence_digest": "23ac08e881aec3e94c50ee1a8eb6b71cd0fed5cea13108073906af7262434bdd"
+    },
+    {
+      "scenario_id": "estimate_declined",
+      "persona": "SERVICE_CSR",
+      "expected": "decline persists without conversion inference",
+      "test_nodes": [
+        "tests/estimates/test_estimate_workflow.py::test_rejection_requires_and_preserves_reason",
+        "tests/estimates/test_estimate_conversion.py::test_conversion_requires_approved_estimate"
+      ],
+      "gate_classification": null,
+      "limitation": null,
+      "classification": "PASSED",
+      "actual_result": "PASS",
+      "duration_ms": 1770,
+      "evidence_digest": "71f301de177b6e91ddc34ee19f4f0233c376e7a47cb750438842141ecd1d1fb5"
+    },
+    {
+      "scenario_id": "estimate_delivery",
+      "persona": "SERVICE_CSR",
+      "expected": "delivery binds exact artifact digest",
+      "test_nodes": [
+        "tests/communications/test_transactional_delivery.py::test_document_notice_binds_exact_artifact_digest_without_path"
+      ],
+      "gate_classification": null,
+      "limitation": null,
+      "classification": "PASSED",
+      "actual_result": "PASS",
+      "duration_ms": 686,
+      "evidence_digest": "cf66b499395acc0e209b7b4cc0f8311b911c5b854f14845e00934996d80404f1"
+    },
+    {
+      "scenario_id": "field_evidence_completion",
+      "persona": "TECHNICIAN",
+      "expected": "snapshot, blockers, completion and replay converge",
+      "test_nodes": [
+        "tests/field_service/test_field_service_conformance.py::test_field_evidence_snapshot_replay_events_and_non_billable_completion",
+        "tests/field_service/test_field_service_conformance.py::test_stale_field_versions_fail_closed"
+      ],
+      "gate_classification": null,
+      "limitation": null,
+      "classification": "PASSED",
+      "actual_result": "PASS",
+      "duration_ms": 1924,
+      "evidence_digest": "144b715b605eaeef72b9206cef6c9632d604ebd570b0f97ab526ec03ef483d94"
+    },
+    {
+      "scenario_id": "invoice",
+      "persona": "OFFICE_MANAGER",
+      "expected": "accepted work creates one scoped receivable",
+      "test_nodes": [
+        "tests/invoicing/test_invoice_ar.py::test_accepted_work_creates_and_issues_one_exact_receivable",
+        "tests/invoicing/test_invoice_ar.py::test_company_branch_and_source_linkage_are_closed"
+      ],
+      "gate_classification": null,
+      "limitation": null,
+      "classification": "PASSED",
+      "actual_result": "PASS",
+      "duration_ms": 1987,
+      "evidence_digest": "c839ae09ef5ee64b448a90e8a5cf5cfe60529ba0ebaf5d0c6b30b964c3ac580b"
+    },
+    {
+      "scenario_id": "stale_invoice",
+      "persona": "OFFICE_MANAGER",
+      "expected": "stale mutation fails closed",
+      "test_nodes": [
+        "tests/invoicing/test_invoice_ar.py::test_stale_invoice_mutation_fails_closed"
+      ],
+      "gate_classification": null,
+      "limitation": null,
+      "classification": "PASSED",
+      "actual_result": "PASS",
+      "duration_ms": 1797,
+      "evidence_digest": "414c08f74f40e0eba5bb862d343ac2fe541e3bc0a2fdc9f6d9ce4696bf805051"
+    },
+    {
+      "scenario_id": "payment_same_day",
+      "persona": "OFFICE_MANAGER",
+      "expected": "one collection/application authority under concurrency",
+      "test_nodes": [
+        "tests/payments/test_payment_service_concurrency.py::test_concurrent_collection_and_refund_replay_have_one_economic_authority",
+        "tests/payments/test_payment_service_concurrency.py::test_concurrent_identical_application_changes_receipt_once"
+      ],
+      "gate_classification": null,
+      "limitation": null,
+      "classification": "PASSED",
+      "actual_result": "PASS",
+      "duration_ms": 1921,
+      "evidence_digest": "7b003058abb357e29bdabcc5eb06358d5ccb8f55e3f5c363dad3eb4ec6fe0869"
+    },
+    {
+      "scenario_id": "payment_partial",
+      "persona": "OFFICE_MANAGER",
+      "expected": "partial application conserves receipt and open balance",
+      "test_nodes": [
+        "tests/invoicing/test_invoice_ar.py::test_verified_receipt_application_and_accounting_receipt_seams"
+      ],
+      "gate_classification": null,
+      "limitation": null,
+      "classification": "PASSED",
+      "actual_result": "PASS",
+      "duration_ms": 1823,
+      "evidence_digest": "79dbc740620a211b2d73d3585e7503528256affe292a8344c52e09baf4605526"
+    },
+    {
+      "scenario_id": "payment_uncertain",
+      "persona": "OFFICE_MANAGER",
+      "expected": "possible provider acceptance requires reconciliation",
+      "test_nodes": [
+        "tests/payments/test_payment_service_concurrency.py::test_ambiguous_provider_outcome_is_reconciled_without_blind_retry"
+      ],
+      "gate_classification": null,
+      "limitation": null,
+      "classification": "PASSED",
+      "actual_result": "PASS",
+      "duration_ms": 1770,
+      "evidence_digest": "d801ebddfecb45b10c0b5fb07c5f377d35f3933f3754bd444781faadcc64e02b"
+    },
+    {
+      "scenario_id": "cash_ar_distinction",
+      "persona": "OFFICE_MANAGER",
+      "expected": "invoice, payment, settlement and cash remain distinct",
+      "test_nodes": [
+        "tests/lia/test_cash_operational_adapter.py::test_lia_adapter_explains_separation_without_exposing_amounts",
+        "tests/business_economics/test_owner_acceptance.py"
+      ],
+      "gate_classification": null,
+      "limitation": null,
+      "classification": "PASSED",
+      "actual_result": "PASS",
+      "duration_ms": 1658,
+      "evidence_digest": "4afb625a6cb1ce4cb4256ed7d62c923ba3d37a74422e2738bfc0d8ead6701e03"
+    },
+    {
+      "scenario_id": "vendor_ap",
+      "persona": "OFFICE_MANAGER",
+      "expected": "Vendor obligation, application and settlement conserve amounts",
+      "test_nodes": [
+        "tests/accounts_payable/test_concurrency.py::test_concurrent_disbursement_replay_has_one_application_and_conserves_amounts"
+      ],
+      "gate_classification": null,
+      "limitation": null,
+      "classification": "PASSED",
+      "actual_result": "PASS",
+      "duration_ms": 1613,
+      "evidence_digest": "d9fd86e9679c0784dd45d257e67a3e4d91c4a36c25dc7c45f068fa0b2797f75e"
+    },
+    {
+      "scenario_id": "inventory_material",
+      "persona": "OFFICE_MANAGER",
+      "expected": "receipt/movement/reservation preserve quantity and Branch scope",
+      "test_nodes": [
+        "tests/inventory/test_inventory_foundation.py::test_concurrent_exact_movement_replay_has_one_authoritative_winner",
+        "tests/inventory/test_inventory_application.py::test_repository_lists_do_not_leak_other_branches"
+      ],
+      "gate_classification": null,
+      "limitation": null,
+      "classification": "PASSED",
+      "actual_result": "PASS",
+      "duration_ms": 1421,
+      "evidence_digest": "a37b197546bfb4f54021655f10ae1a8fcdc0c8bac0a598ebdbc6d41d0ebb0518"
+    },
+    {
+      "scenario_id": "service_agreement",
+      "persona": "OFFICE_MANAGER",
+      "expected": "versioned lifecycle and replay evidence",
+      "test_nodes": [
+        "tests/service_agreements/test_service_agreements.py"
+      ],
+      "gate_classification": null,
+      "limitation": null,
+      "classification": "PASSED",
+      "actual_result": "PASS",
+      "duration_ms": 1052,
+      "evidence_digest": "1a140591518b5802286ba9a317867f1b3b59dffcc7c4fa5b0f04b4db20f264fd"
+    },
+    {
+      "scenario_id": "customer_communication_history",
+      "persona": "SERVICE_CSR",
+      "expected": "bounded Company/Branch/Customer history",
+      "test_nodes": [
+        "tests/communications/test_launch_communications.py::test_history_preserves_company_branch_and_customer_scope"
+      ],
+      "gate_classification": null,
+      "limitation": null,
+      "classification": "PASSED",
+      "actual_result": "PASS",
+      "duration_ms": 5465,
+      "evidence_digest": "f95ecc3147d69e5b3be9988b6b82b1ae543113dbe21fdfbaf2cb08dc437f56b9"
+    },
+    {
+      "scenario_id": "owner_operations",
+      "persona": "COMPANY_ADMINISTRATOR",
+      "expected": "owner projection reflects supported evidence without fabrication",
+      "test_nodes": [
+        "tests/business_economics/test_owner_workspace.py::test_owner_projection_reconciles_jobs_rollups_and_losses"
+      ],
+      "gate_classification": null,
+      "limitation": null,
+      "classification": "PASSED",
+      "actual_result": "PASS",
+      "duration_ms": 1701,
+      "evidence_digest": "63799e360a703e49ca32d8c5fd8415fb75517cf96ce4f2bc982e396753900da3"
+    },
+    {
+      "scenario_id": "economics",
+      "persona": "COMPANY_ADMINISTRATOR",
+      "expected": "work, obligations and cash readiness remain distinct",
+      "test_nodes": [
+        "tests/business_economics/test_owner_acceptance.py",
+        "tests/business_economics/test_evidence_acceptance.py::test_workday_and_job_participation_are_distinct_reconcilable_contracts"
+      ],
+      "gate_classification": null,
+      "limitation": null,
+      "classification": "PASSED",
+      "actual_result": "PASS",
+      "duration_ms": 1659,
+      "evidence_digest": "894273ae02783a03a6270aad521916639bb7eeaa9457086fdbcba19616d4a2a8"
+    },
+    {
+      "scenario_id": "luminary",
+      "persona": "COMPANY_ADMINISTRATOR",
+      "expected": "briefing requires read authority and avoids unsupported causality",
+      "test_nodes": [
+        "tests/luminary/test_api_boundary.py::test_analyze_permission_does_not_imply_luminary_read",
+        "tests/business_economics/test_owner_acceptance.py"
+      ],
+      "gate_classification": null,
+      "limitation": null,
+      "classification": "PASSED",
+      "actual_result": "PASS",
+      "duration_ms": 1993,
+      "evidence_digest": "40ae02fba86bc98ad5f807ed1cb2de7da44996e65d33bf1fe862b12f9d7cff8b"
+    },
+    {
+      "scenario_id": "beacon",
+      "persona": "OFFICE_MANAGER",
+      "expected": "existing signal replay and tenant evidence binding",
+      "test_nodes": [
+        "tests/beacon/test_workflow.py::test_exact_replay_uses_durable_event_without_re_evaluating_signal",
+        "tests/beacon/test_native_financial_signals.py::test_company_branch_and_evidence_bind_identity"
+      ],
+      "gate_classification": null,
+      "limitation": null,
+      "classification": "PASSED",
+      "actual_result": "PASS",
+      "duration_ms": 1639,
+      "evidence_digest": "d30d577c5d025364799b6403a55a5d3c36a36b2684b4464bd23d6c363e31fb49"
+    },
+    {
+      "scenario_id": "lia",
+      "persona": "OFFICE_MANAGER",
+      "expected": "bounded read-only answers preserve evidence distinctions",
+      "test_nodes": [
+        "tests/lia/test_governed_assistant.py",
+        "tests/lia/test_cash_operational_adapter.py",
+        "tests/lia/test_operational_intelligence_program_3.py"
+      ],
+      "gate_classification": null,
+      "limitation": null,
+      "classification": "PASSED",
+      "actual_result": "PASS",
+      "duration_ms": 2533,
+      "evidence_digest": "95be1d659e33387c54777e67e4b0b15280a078cefd7d54558112b8ac2757e8d4"
+    },
+    {
+      "scenario_id": "audit_events",
+      "persona": "COMPANY_ADMINISTRATOR",
+      "expected": "traceability is scoped, replay-safe and payload-safe",
+      "test_nodes": [
+        "tests/events/test_router_security.py::test_event_reads_are_company_and_authorized_branch_scoped",
+        "tests/audit_completeness/test_audit_completeness.py::test_company_and_branch_binding_reject_cross_scope_evidence"
+      ],
+      "gate_classification": null,
+      "limitation": null,
+      "classification": "PASSED",
+      "actual_result": "PASS",
+      "duration_ms": 1643,
+      "evidence_digest": "3e4e8512edb8f12152a1a4e0425cb88ffe461213a991f8a683c1902667f00aa5"
+    },
+    {
+      "scenario_id": "reschedule_stale_communication",
+      "persona": "DISPATCHER",
+      "expected": "reschedule creates current version and stale commands fail",
+      "test_nodes": [
+        "tests/scheduling/test_scheduling_api.py::test_reschedule_moves_reservation_and_stages_event",
+        "tests/communications/test_launch_communications.py::test_replayed_identity_with_changed_inputs_fails_closed"
+      ],
+      "gate_classification": null,
+      "limitation": null,
+      "classification": "PASSED",
+      "actual_result": "PASS",
+      "duration_ms": 6585,
+      "evidence_digest": "bb739f4840db6d07fddf6a69da6b4b74c8b7e3fdb279377ce4c0afa723bb5ac6"
+    },
+    {
+      "scenario_id": "cancellation",
+      "persona": "DISPATCHER",
+      "expected": "versioned cancellation releases capacity and retains truth",
+      "test_nodes": [
+        "tests/scheduling/test_scheduling_api.py::test_cancellation_is_versioned_idempotent_and_releases_capacity",
+        "tests/jobs/test_jobs_api.py::test_cancel_and_reopen_are_exposed"
+      ],
+      "gate_classification": null,
+      "limitation": null,
+      "classification": "PASSED",
+      "actual_result": "PASS",
+      "duration_ms": 2690,
+      "evidence_digest": "e7e22dfbdf6efa3cd38a1ef89727dd9dc3be70222610dc3dfbcccd54d8e2a99f"
+    },
+    {
+      "scenario_id": "backend_outage_recovery",
+      "persona": "TECHNICIAN",
+      "expected": "failure rollback and replay do not duplicate mutation",
+      "test_nodes": [
+        "tests/scheduling/test_scheduling_service.py::test_event_staging_failure_rolls_back_appointment_and_reservation",
+        "tests/jobs/test_jobs_service.py::test_event_failure_rolls_back_job_number_and_all_persistence"
+      ],
+      "gate_classification": null,
+      "limitation": null,
+      "classification": "PASSED",
+      "actual_result": "PASS",
+      "duration_ms": 1887,
+      "evidence_digest": "7b003058abb357e29bdabcc5eb06358d5ccb8f55e3f5c363dad3eb4ec6fe0869"
+    },
+    {
+      "scenario_id": "response_loss",
+      "persona": "OFFICE_MANAGER",
+      "expected": "commit plus retry converges on one authority",
+      "test_nodes": [
+        "tests/payments/test_payment_service_concurrency.py::test_concurrent_identical_application_changes_receipt_once",
+        "tests/communications/test_transactional_delivery.py::test_exact_synthetic_delivery_preserves_logical_identity"
+      ],
+      "gate_classification": null,
+      "limitation": null,
+      "classification": "PASSED",
+      "actual_result": "PASS",
+      "duration_ms": 1985,
+      "evidence_digest": "c2985eefbf0cda203378588d82b87df9abfdd662d5218d99e6feb9186a2c305e"
+    },
+    {
+      "scenario_id": "permission_revoked",
+      "persona": "OFFICE_MANAGER",
+      "expected": "reopened context reauthorizes permission and version",
+      "test_nodes": [
+        "tests/lia/test_foundation_safety.py::test_conversation_reopen_reauthorizes_permission_branch_and_membership_version"
+      ],
+      "gate_classification": null,
+      "limitation": null,
+      "classification": "PASSED",
+      "actual_result": "PASS",
+      "duration_ms": 1693,
+      "evidence_digest": "b604670dafe6da926b8df9e17b0a01c6d0e73aa43692f923fe5b4f6b351ee169"
+    },
+    {
+      "scenario_id": "branch_revoked",
+      "persona": "DISPATCHER",
+      "expected": "foreign or removed Branch fails closed",
+      "test_nodes": [
+        "tests/scheduling/test_scheduling_api.py::test_create_conceals_tenant_and_branch_references",
+        "tests/employee_operations/test_my_day_projection.py::test_branch_scope_is_passed_unchanged"
+      ],
+      "gate_classification": null,
+      "limitation": null,
+      "classification": "PASSED",
+      "actual_result": "PASS",
+      "duration_ms": 6523,
+      "evidence_digest": "bf89895620d63695b51f5dbb56d984ba9448ccedb0a22e55e76920c9660da57f"
+    },
+    {
+      "scenario_id": "membership_deactivated",
+      "persona": "RESTRICTED_EMPLOYEE",
+      "expected": "inactive Membership loses server authority",
+      "test_nodes": [
+        "tests/platform/test_authorization_service.py::test_inactive_identity_and_tenant_states_are_rejected"
+      ],
+      "gate_classification": null,
+      "limitation": null,
+      "classification": "PASSED",
+      "actual_result": "PASS",
+      "duration_ms": 2059,
+      "evidence_digest": "df2f9ce991ae58880e2180e760036e7d68b38b514e8a2e381f5d169d14fa0d57"
+    },
+    {
+      "scenario_id": "rapid_actions",
+      "persona": "OFFICE_MANAGER",
+      "expected": "representative create/transition/apply operations converge",
+      "test_nodes": [
+        "tests/customers/test_api.py::test_customer_create_replay_conflict_and_company_scope",
+        "tests/jobs/test_jobs_service.py::test_concurrent_lifecycle_transition_has_one_authoritative_winner",
+        "tests/scheduling/test_scheduling_service.py::test_concurrent_idempotent_creation_returns_one_appointment"
+      ],
+      "gate_classification": null,
+      "limitation": null,
+      "classification": "PASSED",
+      "actual_result": "PASS",
+      "duration_ms": 2787,
+      "evidence_digest": "1e34a021c60dd1d19a64a973d4e33d74348ff87c84dad9152952baf3d99b8f64"
+    },
+    {
+      "scenario_id": "tenant_attack",
+      "persona": "RESTRICTED_EMPLOYEE",
+      "expected": "foreign tenant and Branch identities are concealed",
+      "test_nodes": [
+        "tests/isolation/test_isolation_property_suite.py",
+        "tests/customers/test_launch_gaps.py::test_launch_endpoints_hide_other_company_customer"
+      ],
+      "gate_classification": null,
+      "limitation": null,
+      "classification": "PASSED",
+      "actual_result": "PASS",
+      "duration_ms": 2140,
+      "evidence_digest": "95b851f858211b5691f09aaa25b3f33899423f89d0f123c7fc27f9503a7d0bb6"
+    },
+    {
+      "scenario_id": "persona_attack",
+      "persona": "RESTRICTED_EMPLOYEE",
+      "expected": "positive and negative permission composition remains explicit",
+      "test_nodes": [
+        "tests/platform/test_permission_explainability_product.py",
+        "tests/jobs/test_jobs_api.py::test_management_endpoint_permission_matrix"
+      ],
+      "gate_classification": null,
+      "limitation": null,
+      "classification": "PASSED",
+      "actual_result": "PASS",
+      "duration_ms": 5490,
+      "evidence_digest": "cec9452037ac8037454a1ccc93663d8669f071f20af171bb73a03e572517c367"
+    },
+    {
+      "scenario_id": "error_safety",
+      "persona": "RESTRICTED_EMPLOYEE",
+      "expected": "no internal detail is reflected",
+      "test_nodes": [
+        "tests/platform/test_sensitive_output_controls.py",
+        "tests/platform/test_enterprise_security_hardening.py"
+      ],
+      "gate_classification": null,
+      "limitation": null,
+      "classification": "PASSED",
+      "actual_result": "PASS",
+      "duration_ms": 1668,
+      "evidence_digest": "63f9c5c72d79fc32a1fde0b74f1856e7ec2cb9ab12060bba2f0efe1ce99fcd97"
+    },
+    {
+      "scenario_id": "migration_readiness",
+      "persona": "COMPANY_ADMINISTRATOR",
+      "expected": "synthetic readiness remains deterministic and fail closed",
+      "test_nodes": [
+        "tests/customer_migration/test_dry_run_readiness.py::test_manifest_is_immutable_deterministic_tenant_scoped_and_complete"
+      ],
+      "gate_classification": null,
+      "limitation": null,
+      "classification": "PASSED",
+      "actual_result": "PASS",
+      "duration_ms": 436,
+      "evidence_digest": "e35538c1593e5091a9775bdb122d2a18264855e5c47356f472d1b7d60a7c0098"
+    },
+    {
+      "scenario_id": "redis_failure",
+      "persona": "COMPANY_ADMINISTRATOR",
+      "expected": "rate limiting fails closed without required Redis",
+      "test_nodes": [],
+      "gate_classification": "DEPENDENCY_BLOCKED",
+      "limitation": "Supported Redis service unavailable on this host; no in-memory authority substituted.",
+      "classification": "DEPENDENCY_BLOCKED",
+      "actual_result": "GATED",
+      "duration_ms": 0,
+      "evidence_digest": "2f6bac9bff1af42f5cfeedf7403f2e21c291c03e87e0d60e1f2f7617484a8503"
+    },
+    {
+      "scenario_id": "communications_readiness",
+      "persona": "COMPANY_ADMINISTRATOR",
+      "expected": "governed channel selection and provider admission remain truthful",
+      "test_nodes": [
+        "tests/communications/test_omnichannel_operations.py"
+      ],
+      "gate_classification": null,
+      "limitation": null,
+      "classification": "PASSED",
+      "actual_result": "PASS",
+      "duration_ms": 780,
+      "evidence_digest": "341ae316e792cdf8c40617e11c5bb41468b9dba4ce691eb7470454d1797b84a6"
+    },
+    {
+      "scenario_id": "real_communications_provider",
+      "persona": "OFFICE_MANAGER",
+      "expected": "provider delivery acceptance",
+      "test_nodes": [],
+      "gate_classification": "PASSED_WITH_EXTERNAL_GATE",
+      "limitation": "Synthetic provider qualified; real email/SMS prohibited.",
+      "classification": "PASSED_WITH_EXTERNAL_GATE",
+      "actual_result": "GATED",
+      "duration_ms": 0,
+      "evidence_digest": "5f0caadc8c98c265b04afea74a4fe9fe8b561db7bd59afebf8173facbcfcd15c"
+    },
+    {
+      "scenario_id": "physical_mobile",
+      "persona": "TECHNICIAN",
+      "expected": "physical-device workflow",
+      "test_nodes": [],
+      "gate_classification": "PASSED_WITH_EXTERNAL_GATE",
+      "limitation": "Server and Jest contracts qualified; physical device owned externally.",
+      "classification": "PASSED_WITH_EXTERNAL_GATE",
+      "actual_result": "GATED",
+      "duration_ms": 0,
+      "evidence_digest": "27b983ef579b8d631e0a704116f86ace8eaefe3afe1f38a4b5e0c2d5f3a407e5"
+    },
+    {
+      "scenario_id": "real_migration_source",
+      "persona": "COMPANY_ADMINISTRATOR",
+      "expected": "protected source acquisition",
+      "test_nodes": [],
+      "gate_classification": "SOURCE_REQUIRED",
+      "limitation": "Real QBO/HCP access prohibited.",
+      "classification": "SOURCE_REQUIRED",
+      "actual_result": "GATED",
+      "duration_ms": 0,
+      "evidence_digest": "f3d6d7cf2ae53cdce31db084d0e51a879d297da8acd2d7435d69b4819d185ac0"
+    },
+    {
+      "scenario_id": "asset_policy",
+      "persona": "COMPANY_ADMINISTRATOR",
+      "expected": "authoritative import and readiness policy classify without inference",
+      "test_nodes": [
+        "tests/operational_assets/test_operational_assets.py::test_vehicle_with_powertrain_still_requires_configured_readiness_policy",
+        "tests/operational_assets/test_operational_assets.py::test_import_classification_preserves_replacement_and_conflict"
+      ],
+      "gate_classification": null,
+      "limitation": null,
+      "classification": "PASSED",
+      "actual_result": "PASS",
+      "duration_ms": 1314,
+      "evidence_digest": "c42556f432fb63e8dddd325ebf9ce1037ea0c961bce91fb7593e2085d02e5f0f"
+    }
+  ]
+}

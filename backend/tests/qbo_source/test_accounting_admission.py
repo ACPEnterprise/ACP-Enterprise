@@ -1,14 +1,17 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from datetime import datetime, timezone
 from pathlib import Path
 
+import pytest
 from app.qbo_source.accounting_admission import (
     HistoryDecisionAuthority,
     accounting_control_matrix,
     build_coa_mapping_packet,
     cash_basis_control_matrix,
+    provision_admission_packet,
     provision_cash_basis_successor_packet,
     seal_full_history_decision,
 )
@@ -43,6 +46,39 @@ def test_full_history_decision_is_immutable_and_binds_both_sources(
     assert document["decision"] == "FULL_AVAILABLE_HISTORY"
     assert document["qbo_bounded_snapshot_digest"] == "a" * 64
     assert document["hcp_master_id"] == "master-id"
+
+
+def test_admission_rejects_malformed_bounded_entity_collection(tmp_path: Path) -> None:
+    repository = tmp_path / "repo"
+    repository.mkdir()
+    store = ProtectedFilesystemEvidenceStore(
+        root=tmp_path / "evidence", repository_root=repository
+    )
+    registry = ControlEvidenceRegistry(store)
+    run_root = store.root / "runs" / "malformed-run"
+    run_root.mkdir(parents=True)
+    manifest = run_root / "bounded-manifest.json"
+    manifest.write_text(
+        json.dumps(
+            {"state": "BOUNDED_COMPLETE", "included_entities": {"unsafe": True}}
+        ),
+        encoding="utf-8",
+    )
+    authority = HistoryDecisionAuthority(
+        "owner-safe-id",
+        datetime(2026, 9, 1, tzinfo=timezone.utc),
+        hashlib.sha256(manifest.read_bytes()).hexdigest(),
+        "master-id",
+        "b" * 64,
+        "2026-08-31",
+    )
+
+    with pytest.raises(TypeError, match="bounded QBO entity evidence is required"):
+        provision_admission_packet(
+            registry=registry,
+            run_id="malformed-run",
+            authority=authority,
+        )
 
 
 def test_coa_packet_is_safe_conservative_and_complete() -> None:
