@@ -12,6 +12,7 @@ import { Link } from "react-router";
 import { getOperatorApiError } from "../api/errors";
 import { useAuth, useHasPermission } from "../auth";
 import { DispatchAssignmentPanel } from "../components/dispatch/DispatchAssignmentPanel";
+import { DispatchRecommendationPanel } from "../components/dispatch/DispatchRecommendationPanel";
 import {
   dayRange,
   localDateValue,
@@ -418,6 +419,9 @@ export function SchedulingRoute() {
           item={selectedDispatch}
           onClose={() => setSelected(null)}
         />
+      )}
+      {selectedDispatch && canDispatch && (
+        <DispatchRecommendationPanel item={selectedDispatch} />
       )}
     </div>
   );
