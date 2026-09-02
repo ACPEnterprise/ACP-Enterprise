@@ -5,12 +5,18 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_database_session
+from app.operational_assets.operationalization import asset_operationalization_service
 from app.operational_assets.schemas import (
     AssetActionCreate,
     AssetActionOut,
     AssetCreate,
     AssetDetail,
+    AssetImportCandidate,
+    AssetImportOut,
+    AssetOperationalReadiness,
     AssetOut,
+    AssetPolicyDraft,
+    AssetPolicyOut,
     EvidenceCreate,
     EvidenceOut,
     LifecycleChange,
@@ -200,3 +206,39 @@ async def record_asset_action(
         )
     except (AssetNotFound, AssetConflict, AssetValidation) as e:
         raise translated(e) from e
+
+
+@router.post(
+    "/operationalization/policies", response_model=AssetPolicyOut, status_code=201
+)
+async def draft_asset_policy(data: AssetPolicyDraft, context: Manage, session: Session):
+    try:
+        return AssetPolicyOut.model_validate(
+            await asset_operationalization_service.draft_policy(session, context, data)
+        )
+    except (AssetNotFound, AssetConflict, AssetValidation) as e:
+        raise translated(e) from e
+
+
+@router.post(
+    "/operationalization/import-preview", response_model=AssetImportOut, status_code=201
+)
+async def preview_asset_import(
+    data: AssetImportCandidate, context: Manage, session: Session
+):
+    try:
+        return AssetImportOut.model_validate(
+            await asset_operationalization_service.import_candidate(
+                session, context, data
+            )
+        )
+    except (AssetNotFound, AssetConflict, AssetValidation) as e:
+        raise translated(e) from e
+
+
+@router.get("/operationalization/readiness", response_model=AssetOperationalReadiness)
+async def asset_operational_readiness(context: Read, session: Session):
+    state, counts, policies = await asset_operationalization_service.readiness(
+        session, context
+    )
+    return AssetOperationalReadiness(state=state, counts=counts, policy_states=policies)

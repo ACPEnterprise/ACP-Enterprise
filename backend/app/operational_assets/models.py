@@ -280,3 +280,132 @@ class AssetActionEvidence(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
     )
+
+
+class AssetOperationalPolicy(Base):
+    __tablename__ = "operational_asset_policies"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "branch_id"],
+            ["branches.company_id", "branches.id"],
+            name="fk_asset_policy_branch",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "policy_type IN ('inspection','maintenance','out_of_service','warranty','sensitive_identifier','import')",
+            name="ck_asset_policy_type",
+        ),
+        CheckConstraint(
+            "status IN ('draft','active','superseded','unconfigured')",
+            name="ck_asset_policy_status",
+        ),
+        CheckConstraint("version >= 1", name="ck_asset_policy_version"),
+        UniqueConstraint(
+            "company_id",
+            "branch_id",
+            "policy_type",
+            "version",
+            name="uq_asset_policy_version",
+        ),
+        UniqueConstraint(
+            "company_id", "idempotency_key", name="uq_asset_policy_command"
+        ),
+        Index(
+            "ix_asset_policy_current",
+            "company_id",
+            "branch_id",
+            "policy_type",
+            "status",
+        ),
+    )
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    policy_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="draft")
+    configuration: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    effective_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    predecessor_policy_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("operational_asset_policies.id", ondelete="RESTRICT"),
+    )
+    request_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    policy_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(160), nullable=False)
+    created_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
+class AssetImportRow(Base):
+    __tablename__ = "operational_asset_import_rows"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "branch_id"],
+            ["branches.company_id", "branches.id"],
+            name="fk_asset_import_branch",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "source_type IN ('customer_equipment','vehicle','tracked_tool','company_equipment')",
+            name="ck_asset_import_source_type",
+        ),
+        CheckConstraint(
+            "classification IN ('exact_identity','strong_candidate','ambiguous','insufficient_evidence','conflict','new_asset_candidate','replacement_candidate')",
+            name="ck_asset_import_classification",
+        ),
+        CheckConstraint(
+            "disposition IN ('pending_review','accepted','rejected','blocked')",
+            name="ck_asset_import_disposition",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "source_system",
+            "source_identity",
+            name="uq_asset_import_source",
+        ),
+        UniqueConstraint(
+            "company_id", "idempotency_key", name="uq_asset_import_command"
+        ),
+        Index(
+            "ix_asset_import_review",
+            "company_id",
+            "branch_id",
+            "classification",
+            "disposition",
+        ),
+    )
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    source_system: Mapped[str] = mapped_column(String(80), nullable=False)
+    source_identity: Mapped[str] = mapped_column(String(160), nullable=False)
+    source_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    source_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    normalized_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
+    classification: Mapped[str] = mapped_column(String(40), nullable=False)
+    candidate_asset_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    issues: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    disposition: Mapped[str] = mapped_column(
+        String(30), nullable=False, default="pending_review"
+    )
+    request_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(160), nullable=False)
+    actor_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )

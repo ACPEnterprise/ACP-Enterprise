@@ -4,6 +4,7 @@ from uuid import uuid4
 
 import pytest
 
+from app.operational_assets.operationalization import classify_candidate
 from app.operational_assets.schemas import AssetActionCreate
 from app.operational_assets.service import AssetConflict, AssetService, digest
 
@@ -108,3 +109,26 @@ async def test_typed_action_exact_replay_and_contradiction(monkeypatch):
         await service.record_action(
             FakeSession([asset, first]), context, asset_id, changed
         )
+
+
+def test_import_classification_fails_closed_without_customer_location():
+    state, issues = classify_candidate(
+        "customer_equipment", {"manufacturer": "Synthetic"}
+    )
+    assert state == "insufficient_evidence"
+    assert issues == ["missing_customer_id", "missing_service_location_id"]
+
+
+def test_import_classification_preserves_replacement_and_conflict():
+    assert (
+        classify_candidate(
+            "tracked_tool", {"asset_number": "T-1", "replacement_of": "old"}
+        )[0]
+        == "replacement_candidate"
+    )
+    assert (
+        classify_candidate(
+            "vehicle", {"asset_number": "V-1", "conflicting_branch": True}
+        )[0]
+        == "conflict"
+    )

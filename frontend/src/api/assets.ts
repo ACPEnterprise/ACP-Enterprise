@@ -1,5 +1,5 @@
 import { apiClient } from "./client";
-import type { Asset, AssetAction, AssetDetail } from "../types/assets";
+import type { Asset, AssetAction, AssetDetail, AssetOperationalReadiness } from "../types/assets";
 const ROOT="/api/v1/assets";
 export const listAssets=async(params?:Record<string,string>)=>(await apiClient.get<Asset[]>(ROOT,{params})).data;
 export const getAsset=async(id:string)=>(await apiClient.get<AssetDetail>(`${ROOT}/${id}`)).data;
@@ -8,3 +8,6 @@ export const recordAssetEvidence=async(id:string,data:Record<string,unknown>)=>(
 export const relateAsset=async(id:string,data:Record<string,unknown>)=>(await apiClient.post(`${ROOT}/${id}/relationships`,data)).data;
 export const listAssetActions=async(id:string)=>(await apiClient.get<AssetAction[]>(`${ROOT}/${id}/actions`)).data;
 export const recordAssetAction=async(id:string,data:Record<string,unknown>)=>(await apiClient.post<AssetAction>(`${ROOT}/${id}/actions`,data)).data;
+export const getAssetOperationalReadiness=async()=>(await apiClient.get<AssetOperationalReadiness>(`${ROOT}/operationalization/readiness`)).data;
+export const draftAssetPolicy=async(data:Record<string,unknown>)=>(await apiClient.post(`${ROOT}/operationalization/policies`,data)).data;
+export const previewAssetImport=async(data:Record<string,unknown>)=>(await apiClient.post(`${ROOT}/operationalization/import-preview`,data)).data;

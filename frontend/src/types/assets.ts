@@ -3,3 +3,4 @@ export type AssetEvidence = { id:string; asset_id:string; evidence_type:string; 
 export type AssetRelationship = { id:string; asset_id:string; relationship_type:string; related_entity_id:string; valid_from:string; valid_to:string|null; evidence_digest:string; created_at:string };
 export type AssetDetail = { asset:Asset; evidence:AssetEvidence[]; relationships:AssetRelationship[]; readiness:string; readiness_reasons:string[] };
 export type AssetAction = { id:string; asset_id:string; action_type:string; state:string; related_entity_id:string|null; payload:Record<string,unknown>; occurred_at:string; asset_version:number; evidence_digest:string; created_at:string };
+export type AssetOperationalReadiness = { state:string; counts:Record<string,number>; policy_states:Record<string,string> };
