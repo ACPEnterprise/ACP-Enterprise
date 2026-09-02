@@ -6,7 +6,7 @@ import type { Capability } from "../permissions/capabilities";
 import type { SessionRepository } from "./sessionRepository";
 import type { Session } from "./types";
 
-export type EstablishedState = { kind: "authenticated"; capabilities: readonly Capability[] } | { kind: "onboarding_incomplete" } | { kind: "access_limited" };
+export type EstablishedState = { kind: "authenticated"; capabilities: readonly Capability[]; identity: { displayName: string; login: string } } | { kind: "onboarding_incomplete" } | { kind: "access_limited" };
 
 export class AuthenticationCoordinator {
   constructor(private readonly client: ApiClient, private readonly sessions: SessionRepository, private readonly qualifyEmployee: (capabilities: readonly Capability[]) => Promise<void>) {}
@@ -66,6 +66,6 @@ export class AuthenticationCoordinator {
     if (!usable) return { kind: "access_limited" };
     try { await this.qualifyEmployee(capabilities); }
     catch (error) { if (error instanceof ApiFailure && error.kind === "not_ready") return { kind: "onboarding_incomplete" }; throw error; }
-    return { kind: "authenticated", capabilities };
+    return { kind: "authenticated", capabilities, identity: { displayName: active.user.display_name, login: active.user.normalized_email } };
   }
 }

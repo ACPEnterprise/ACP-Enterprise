@@ -10,7 +10,7 @@ Android later uses the same host for `/.well-known/assetlinks.json`; its signing
 
 ## Synthetic fixture gate
 
-`npm run beta:fixture` validates and prints the deterministic Preview-only plan without mutation. The fixture key is stable and every record must carry the synthetic marker/external key. Apply requires both `ACP_ENVIRONMENT=preview` and `ACP_BETA_FIXTURE_AUTHORIZED=true`, plus a separately accepted domain provisioning adapter. The command deliberately refuses `--apply` in this milestone. Contradictory existing keys must fail; idempotent reruns must return existing matching records. Reset must revoke invitations/sessions, remove active assignment/time evidence in domain-safe order, and then remove only records bearing the fixture key. Never use direct SQL, Production, realistic identities, compensation, Payroll, bank, or tax data.
+`npm run beta:fixture` validates and prints the deterministic Preview-only plan without mutation. The fixture key is stable and every record must carry the synthetic marker/external key. Apply requires both `ACP_ENVIRONMENT=preview` and `ACP_BETA_FIXTURE_AUTHORIZED=true`, plus a separately accepted domain provisioning adapter. The command deliberately refuses `--apply` in this milestone. Contradictory existing keys must fail; idempotent reruns must return existing matching records. Reset must revoke invitations/sessions, remove active assignment/time/field evidence in domain-safe order, and then remove only records bearing the fixture key. The completed contract requires Job read/execute and own-pay-statement read plus synthetic statement/status scenarios; it still prohibits Payroll administration, wages, compensation, bank, and tax data. Never use direct SQL, Production, or realistic identities.
 
 ## Release preflight
 
@@ -31,7 +31,9 @@ Record build manifest and Preview server evidence for every step:
 7. Open read-only Job Workspace, prove no mutation, and explicitly hand off to system Maps.
 8. Enable airplane mode; prove mutations fail and cached reads are stale. Restore connectivity and prove reconciliation/no duplicate operation.
 9. Inspect task switcher, device logs, and safe errors for secrets, tokens, PII, Payroll, and compensation.
-10. Confirm network evidence contains zero Production requests or endpoint selection.
+10. Record assignment-scoped travel/work/approval evidence, verify reconciliation, and prove no broad Job lifecycle command is offered.
+11. Open My Pay, verify current status, corrected/original provenance, unavailable-YTD behavior, and protected statement rendering; prove another statement cannot be selected by Employee ID.
+12. Confirm network evidence contains zero Production requests or endpoint selection.
 
 Exercise fixture scenarios for no shift, clocked in, active break, clocked out/history, assignment/workspace, reassignment, session expiration, permission denial, offline stale, and recovery.
 

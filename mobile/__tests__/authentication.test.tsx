@@ -60,5 +60,5 @@ describe("secure invitation activation", () => {
 });
 
 describe("restricted authenticated states", () => {
-  it.each(["onboarding_incomplete", "access_limited"] as const)("renders %s with logout", (kind) => { render(<RestrictedStateScreen kind={kind} onLogout={jest.fn()} />); expect(screen.getByText("Sign Out")).toBeOnTheScreen(); });
+  it.each(["onboarding_incomplete", "access_limited"] as const)("renders %s with revalidation and logout", (kind) => { render(<RestrictedStateScreen kind={kind} onRetry={jest.fn()} onLogout={jest.fn()} />); expect(screen.getByText("Check Access Again")).toBeOnTheScreen(); expect(screen.getByText("Sign Out")).toBeOnTheScreen(); });
 });

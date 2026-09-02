@@ -1,4 +1,5 @@
 import { safeLogger } from "../src/diagnostics/safeLogger";
 describe("safe diagnostics", () => {
   it("redacts protected data", () => { const spy = jest.spyOn(console, "info").mockImplementation(); safeLogger.info("test", { accessToken: "must-not-appear", status: 401 }); expect(spy).toHaveBeenCalledWith("test", { accessToken: "[REDACTED]", status: 401 }); expect(JSON.stringify(spy.mock.calls)).not.toContain("must-not-appear"); });
+  it("recursively redacts protected payload and PII fields while retaining safe diagnostics", () => { const spy = jest.spyOn(console, "error").mockImplementation(); safeLogger.error("failure", { route: "/api/v1/timekeeping/me/state", correlationId: "synthetic-correlation", nested: { customerAddress: "must-not-appear", payload: { value: "must-not-appear" } } }); expect(JSON.stringify(spy.mock.calls)).not.toContain("must-not-appear"); expect(spy).toHaveBeenCalledWith("failure", { route: "/api/v1/timekeeping/me/state", correlationId: "synthetic-correlation", nested: { customerAddress: "[REDACTED]", payload: "[REDACTED]" } }); });
 });
