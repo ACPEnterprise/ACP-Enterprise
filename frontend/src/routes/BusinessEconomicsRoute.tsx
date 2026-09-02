@@ -11,6 +11,7 @@ import {
   useEconomicsResult,
   useEconomicsWorkspace,
   useOwnerIntelligence,
+  useOperationalSourceEconomics,
 } from "../hooks/useBusinessEconomics";
 import {
   Alert,
@@ -201,6 +202,10 @@ export function BusinessEconomicsRoute() {
     "COMPANY_ACCOUNTS_PAYABLE_REPORT_READ",
   );
   const canReadAccounting = useHasPermission("COMPANY_ACCOUNTING_REPORT_READ");
+  const canReadAssets = useHasPermission("COMPANY_ASSET_READ");
+  const canReadWorkforce = useHasPermission("COMPANY_WORKFORCE_READ");
+  const canReadCommunications = useHasPermission("COMPANY_COMMUNICATIONS_READ");
+  const canReadOperationalSources = canRead && canReadAssets && canReadWorkforce && canReadCommunications && canReadAccounting;
   const canReadCashOperational =
     canRead &&
     canReadInvoices &&
@@ -224,6 +229,11 @@ export function BusinessEconomicsRoute() {
     scope.start,
     scope.end,
     canRead,
+  );
+  const operationalSources = useOperationalSourceEconomics(
+    scope.start,
+    scope.end,
+    canReadOperationalSources,
   );
   const sortedLosses = useMemo(
     () =>
@@ -464,6 +474,31 @@ export function BusinessEconomicsRoute() {
                 </p>
               </CardContent>
             </Card>
+          </div>
+        )}
+      </section>
+      <section aria-label="Operational evidence readiness" className="space-y-3">
+        <div>
+          <h2 className="text-xl font-semibold">Operational evidence that may affect the owner view</h2>
+          <p className="text-sm text-content-muted">Assets, Workforce, communications, and Accounting readiness provide context. They do not create costs, cash, causality, or Employee scores.</p>
+        </div>
+        {!canReadOperationalSources ? (
+          <Alert variant="warning">This view requires explicit read authority from every owning domain. Economics remains available without exposing those sources.</Alert>
+        ) : operationalSources.isPending ? (
+          <Spinner label="Loading operational evidence readiness" />
+        ) : operationalSources.isError || !operationalSources.data ? (
+          <Alert variant="warning">Operational readiness could not be verified. No condition or value was inferred.</Alert>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            {operationalSources.data.sources.map((source) => (
+              <Card key={source.source}>
+                <CardHeader>
+                  <CardTitle className="capitalize">{qualityLabel(source.source)}</CardTitle>
+                  <CardDescription>{qualityLabel(source.state)} · {source.evidence_count} evidence item(s)</CardDescription>
+                </CardHeader>
+                <CardContent className="text-sm text-content-muted">{source.explanation}</CardContent>
+              </Card>
+            ))}
           </div>
         )}
       </section>

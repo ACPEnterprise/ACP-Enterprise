@@ -2,7 +2,7 @@
 
 ## Authority and classification
 
-- Starting protected authority: `66d22691d09598312ab83d9560013c64b82ec6f3`; final reconciled authority: `8deeda96fc422accf07cd5e143f4aa5ef4694c06`.
+- Starting protected authority: `66d22691d09598312ab83d9560013c64b82ec6f3`; final reconciled authority: `8bb0d9aa010a48259f45945852583c5825e4a8c2`.
 - Candidate schema head: `l8m6p94e1r7s`.
 - Branch: `work/enterprise-operational-acceptance-factory-1`.
 - Classification: **NON_PRODUCTION_READY_WITH_EXTERNAL_GATES**.
@@ -12,7 +12,7 @@
 
 `backend/scripts/operational_acceptance_factory.py` is a reusable scenario orchestrator. Versioned scenarios bind persona, expected result, exact repository test nodes, authority SHA, schema head, actual classification, duration, and a SHA-256 digest of captured test output. Raw output is not retained in the packet. Executable scenarios use existing application/router/service contracts; explicit provider, source, device, Redis, and policy gates are recorded without pretending execution occurred.
 
-The generated packet is `docs/quality/enterprise-operational-acceptance-factory.v1.json`. After final authority reconciliation, isolated PostgreSQL database `acp_acceptance_factory_r7` recorded **52 scenarios: 48 passed, 4 gated, 0 failed** in 116.209 seconds. This is a deterministic component-composed operating day; it does not claim one Production-like transaction or real-provider rehearsal.
+The generated packet is `docs/quality/enterprise-operational-acceptance-factory.v1.json`. After final authority reconciliation, isolated PostgreSQL database `acp_acceptance_factory_r8` recorded **52 scenarios: 48 passed, 4 gated, 0 failed** in 123.951 seconds. This is a deterministic component-composed operating day; it does not claim one Production-like transaction or real-provider rehearsal.
 
 ## Capability matrix
 
@@ -84,10 +84,11 @@ The generated packet is `docs/quality/enterprise-operational-acceptance-factory.
 - LIA/Assets/Workforce reconciliation set: **97 backend tests passed**.
 - Final Employee/Onboarding/Company/idempotency reconciliation set: **88 backend tests passed**; Identity Onboarding UI 5/5 plus lint/build passed.
 - Final Migration Accounting control reconciliation set: **14 tests passed**; no real source evidence was accessed.
-- Static: Python compilation and `pip check` passed; MyPy passed across **689 source files**; changed harness/tests pass Ruff; diff check passed.
+- Final Economics operational-source reconciliation set: **8 backend tests passed**; Business Economics UI 4/4 plus lint/build passed.
+- Static: Python compilation and `pip check` passed; MyPy passed across **691 source files**; changed harness/tests pass Ruff; diff check passed.
 - Dependencies: frontend runtime audit clean; reconciled Mobile runtime audit retains 17 moderate advisories and zero high/critical advisories behind the Mobile owner gate.
 - Secret scan: four matches, all intentional synthetic test canaries; no value emitted.
-- Performance baseline: final acceptance catalog 116.209 seconds; broad backend 250.42 seconds; My Day query shape, bounded history/list and N+1 regression tests passed. These are local non-production gross-regression measurements, not SLOs.
+- Performance baseline: final acceptance catalog 123.951 seconds; broad backend 250.42 seconds; My Day query shape, bounded history/list and N+1 regression tests passed. These are local non-production gross-regression measurements, not SLOs.
 
 ## Defects and repairs
 

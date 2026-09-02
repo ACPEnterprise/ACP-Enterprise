@@ -1,10 +1,10 @@
 {
   "scenario_version": "ENTERPRISE.OPERATIONAL.ACCEPTANCE.FACTORY.v1",
-  "authority_sha": "8deeda96fc422accf07cd5e143f4aa5ef4694c06",
+  "authority_sha": "8bb0d9aa010a48259f45945852583c5825e4a8c2",
   "schema_head": "l8m6p94e1r7s",
   "execution_environment": "ISOLATED_NON_PRODUCTION",
-  "executed_at_epoch": 1788311846,
-  "duration_ms": 116209,
+  "executed_at_epoch": 1788312110,
+  "duration_ms": 123951,
   "summary": {
     "total": 52,
     "passed": 48,
@@ -23,8 +23,8 @@
       "limitation": null,
       "classification": "PASSED",
       "actual_result": "PASS",
-      "duration_ms": 2016,
-      "evidence_digest": "6ae267e1c21cae06eaba960250713730cb82238e485ae31fe83ec7da5244448f"
+      "duration_ms": 1924,
+      "evidence_digest": "f0e35737763068fc9bd4cb5b40662aff850b8408e63e67aba711d6a70607b4a4"
     },
     {
       "scenario_id": "existing_customer_call",
@@ -37,8 +37,8 @@
       "limitation": null,
       "classification": "PASSED",
       "actual_result": "PASS",
-      "duration_ms": 1951,
-      "evidence_digest": "8c21e21cf480ea43a4d25b71e4b59837218e585e65cfe13f939d20e6851445f4"
+      "duration_ms": 1898,
+      "evidence_digest": "22cbbf4609135d40bf3044092ed1d43b7d006401b8c99b89b97c7850091c8ca9"
     },
     {
       "scenario_id": "job_creation",
@@ -51,8 +51,8 @@
       "limitation": null,
       "classification": "PASSED",
       "actual_result": "PASS",
-      "duration_ms": 2456,
-      "evidence_digest": "75015f0bd47c48ddbea5dee8e135ccaf962365802b374eedbb91cfa5d5b611a4"
+      "duration_ms": 2143,
+      "evidence_digest": "716a7795e096fbc47e7394d9c93b77e56525ac32fc3bee1c37e5e87b1ab4641d"
     },
     {
       "scenario_id": "scheduling",
@@ -66,8 +66,8 @@
       "limitation": null,
       "classification": "PASSED",
       "actual_result": "PASS",
-      "duration_ms": 2115,
-      "evidence_digest": "449abc66a0a456529ed2f9b52b9149a1b3085242d0a3d4020eac85b3ce245af2"
+      "duration_ms": 1975,
+      "evidence_digest": "9da1d21d6656a3c41a2443d11e8c94b677b90ab3ceca82f2832f7aad0fc5524e"
     },
     {
       "scenario_id": "dispatch",
@@ -81,8 +81,8 @@
       "limitation": null,
       "classification": "PASSED",
       "actual_result": "PASS",
-      "duration_ms": 1681,
-      "evidence_digest": "a415fc66a745c6866a0de8e3e3a4a4c719af8223973969c59aa6640080dba3eb"
+      "duration_ms": 1595,
+      "evidence_digest": "f71957ebe507b03fd375cd45b814f31ea47e3de02a03f396004601a65eab642a"
     },
     {
       "scenario_id": "employee_readiness",
@@ -95,8 +95,8 @@
       "limitation": null,
       "classification": "PASSED",
       "actual_result": "PASS",
-      "duration_ms": 1154,
-      "evidence_digest": "671d4814bf910ca475f97ebb779b0469b5650f658b38ed68bbe55a78fac70e04"
+      "duration_ms": 1049,
+      "evidence_digest": "32077549f5ce75fdbd61752b317d26b194c9c740858e8d3b2238710cff119c83"
     },
     {
       "scenario_id": "mobile_my_day",
@@ -110,8 +110,8 @@
       "limitation": null,
       "classification": "PASSED",
       "actual_result": "PASS",
-      "duration_ms": 5649,
-      "evidence_digest": "f71f3a9a4382d894093ff3e3c78cfa5aba4c2d335df778121bec480c93b75875"
+      "duration_ms": 5277,
+      "evidence_digest": "5974e3f3dbd894b74ca2b318183aa71e75df86803f8e665a9e6d8e106227a7ef"
     },
     {
       "scenario_id": "on_my_way_arrival",
@@ -125,8 +125,8 @@
       "limitation": null,
       "classification": "PASSED",
       "actual_result": "PASS",
-      "duration_ms": 1788,
-      "evidence_digest": "c6d17a09af1913c251d84903437c37eb91180d6259d4def00a130654882377d2"
+      "duration_ms": 1653,
+      "evidence_digest": "4d64d963733a1eeaff1eeb91d8663fa5bc8e12561898b72fddcda685665fc553"
     },
     {
       "scenario_id": "communications_intent",
@@ -139,8 +139,8 @@
       "limitation": null,
       "classification": "PASSED",
       "actual_result": "PASS",
-      "duration_ms": 6382,
-      "evidence_digest": "5fae00791f4c105d515dcf363a0a8681fc20127280adaeccc537efe1ec2b6f5b"
+      "duration_ms": 5845,
+      "evidence_digest": "05970edf656887bff06cb3182d3c07b72188ec9e52628dae472c2a229bfb931b"
     },
     {
       "scenario_id": "communications_provider_truth",
@@ -154,8 +154,8 @@
       "limitation": null,
       "classification": "PASSED",
       "actual_result": "PASS",
-      "duration_ms": 781,
-      "evidence_digest": "23b1d8f9399d4b9f137608bb3cdf7c58b4211f95bc00d108434ae287d098f8cd"
+      "duration_ms": 686,
+      "evidence_digest": "0973610efd24a5e69f2741ee6f54766d53b0fa4aeb5f7ee38b8aa943fe847670"
     },
     {
       "scenario_id": "timekeeping",
@@ -169,8 +169,8 @@
       "limitation": null,
       "classification": "PASSED",
       "actual_result": "PASS",
-      "duration_ms": 6659,
-      "evidence_digest": "d20df6b787b8a4f76f82dde9bfe6fd275ea7f256c0dcd1bc7579b104000a7449"
+      "duration_ms": 6193,
+      "evidence_digest": "b395d5146577eb0f87917d1feee702a2be8e39fc2760f0db877fdc310548e90c"
     },
     {
       "scenario_id": "assets_equipment",
@@ -184,8 +184,8 @@
       "limitation": null,
       "classification": "PASSED",
       "actual_result": "PASS",
-      "duration_ms": 1394,
-      "evidence_digest": "f37db69a34b0539029bac48335e2103f47b807c30f7225e7428fdcf0782cbf0e"
+      "duration_ms": 1366,
+      "evidence_digest": "e6232a75da6c54f1f68ae7436f12a429ad88615fdb7b6e2cf370b94377186762"
     },
     {
       "scenario_id": "fleet",
@@ -199,8 +199,8 @@
       "limitation": null,
       "classification": "PASSED",
       "actual_result": "PASS",
-      "duration_ms": 1258,
-      "evidence_digest": "c675306df2bc95e73aaab9c0ac0f622726828173b043060306641652b64b845b"
+      "duration_ms": 1202,
+      "evidence_digest": "df23d66514addda616e0fed7959bf6a8c6e39929ddf7ae9e4d22d7902d8bb584"
     },
     {
       "scenario_id": "price_book",
@@ -214,8 +214,8 @@
       "limitation": null,
       "classification": "PASSED",
       "actual_result": "PASS",
-      "duration_ms": 2113,
-      "evidence_digest": "8cadc7e58f666f57cb437e143098f27b6f289205b0c771c95455b3a8999228a1"
+      "duration_ms": 2053,
+      "evidence_digest": "f2b43aab62d5f8b947592f724e20e56d262f85d84dd83624565f44aac91966c7"
     },
     {
       "scenario_id": "estimate",
@@ -229,8 +229,8 @@
       "limitation": null,
       "classification": "PASSED",
       "actual_result": "PASS",
-      "duration_ms": 1750,
-      "evidence_digest": "08cd0227258d28f708c18e959852c0a061887a42f26530719f98407bf0109bd3"
+      "duration_ms": 1684,
+      "evidence_digest": "cfdacf53a69cc63c98f5b9d59c7bba2f91683a1d3630996d76761f3a8b55c904"
     },
     {
       "scenario_id": "estimate_declined",
@@ -244,8 +244,8 @@
       "limitation": null,
       "classification": "PASSED",
       "actual_result": "PASS",
-      "duration_ms": 2133,
-      "evidence_digest": "9b247c1a7afff5f616d9a7e76be149c5e7202582e301afda2ed0ed7aec0c5ee2"
+      "duration_ms": 1707,
+      "evidence_digest": "46a9b36939efc57b80d1dc431cdbe318a97f66735af799f2e4c10f33f747f3ce"
     },
     {
       "scenario_id": "estimate_delivery",
@@ -258,8 +258,8 @@
       "limitation": null,
       "classification": "PASSED",
       "actual_result": "PASS",
-      "duration_ms": 1089,
-      "evidence_digest": "ac70c38933efbdb9919226626018da34b9c7452d82531849bed4002cd8e7a4ac"
+      "duration_ms": 672,
+      "evidence_digest": "cf66b499395acc0e209b7b4cc0f8311b911c5b854f14845e00934996d80404f1"
     },
     {
       "scenario_id": "field_evidence_completion",
@@ -273,8 +273,8 @@
       "limitation": null,
       "classification": "PASSED",
       "actual_result": "PASS",
-      "duration_ms": 2562,
-      "evidence_digest": "33062c04bcf7ff425eb2712cbfd286acdf9726b8cc1a76485ab850523f12962a"
+      "duration_ms": 1810,
+      "evidence_digest": "9a64511d28a57568c383621bfa2ed23161dcc3bf19b755cba3ec3f24b20fc1f6"
     },
     {
       "scenario_id": "invoice",
@@ -288,8 +288,8 @@
       "limitation": null,
       "classification": "PASSED",
       "actual_result": "PASS",
-      "duration_ms": 2686,
-      "evidence_digest": "b2ff8a70bf0199d808e6865b8b29d69e4d77bd812ad73cfa10f3489763098d27"
+      "duration_ms": 1872,
+      "evidence_digest": "2d5112bbac4826b0ddcc65c1a68a045cc6d3ccaf8a61df166168257ae93252e4"
     },
     {
       "scenario_id": "stale_invoice",
@@ -302,8 +302,8 @@
       "limitation": null,
       "classification": "PASSED",
       "actual_result": "PASS",
-      "duration_ms": 2289,
-      "evidence_digest": "6cb42844be376b60b1cb4a2fe5ce72afe5771c1d03506668741254dbc5e0b92a"
+      "duration_ms": 1740,
+      "evidence_digest": "760b62e953cc6b98215ddd86bd338b8ac49cdae4227848f21310ad715800e9b7"
     },
     {
       "scenario_id": "payment_same_day",
@@ -317,8 +317,8 @@
       "limitation": null,
       "classification": "PASSED",
       "actual_result": "PASS",
-      "duration_ms": 2255,
-      "evidence_digest": "c42a9a692fc3d37ad965944b6dab06e5e89d2e2a4a752cdc7cb8cf59715457f9"
+      "duration_ms": 2114,
+      "evidence_digest": "b3415cebb1898c730777a1ec41f3f65f855bb7ab0f7d1f25e9753d4c69b581a7"
     },
     {
       "scenario_id": "payment_partial",
@@ -331,8 +331,8 @@
       "limitation": null,
       "classification": "PASSED",
       "actual_result": "PASS",
-      "duration_ms": 1930,
-      "evidence_digest": "d0044b1f101373e0ce0180429879b66d92f0e63803780700a1b52120c0571eb9"
+      "duration_ms": 1936,
+      "evidence_digest": "021786adc158ba1488802bb1277a837955a2acc4500abe53a8e5967189aa2cc3"
     },
     {
       "scenario_id": "payment_uncertain",
@@ -345,8 +345,8 @@
       "limitation": null,
       "classification": "PASSED",
       "actual_result": "PASS",
-      "duration_ms": 1826,
-      "evidence_digest": "3bd3baaac94024720cfa7d37b32049d8868d481cb98e39cea5e6aa1f9b7a9025"
+      "duration_ms": 1774,
+      "evidence_digest": "40e1328daadb0507dd63a2a732d4628b3d29bae95155c8b4244883b21ce04503"
     },
     {
       "scenario_id": "cash_ar_distinction",
@@ -360,8 +360,8 @@
       "limitation": null,
       "classification": "PASSED",
       "actual_result": "PASS",
-      "duration_ms": 1632,
-      "evidence_digest": "894273ae02783a03a6270aad521916639bb7eeaa9457086fdbcba19616d4a2a8"
+      "duration_ms": 1761,
+      "evidence_digest": "36dbb73f4a004de1ef62953fe4e69fc1b242c59c715f9aee0cc83f266497ee6d"
     },
     {
       "scenario_id": "vendor_ap",
@@ -374,8 +374,8 @@
       "limitation": null,
       "classification": "PASSED",
       "actual_result": "PASS",
-      "duration_ms": 1603,
-      "evidence_digest": "0af79ae8855bb950754b0461a914e872cd9d1837b96d751ed4eba507efb1cb45"
+      "duration_ms": 1764,
+      "evidence_digest": "96f3d557cb4fa6c2d738099a593741e6891c6a0e683d395afba18e07250bdbf4"
     },
     {
       "scenario_id": "inventory_material",
@@ -389,8 +389,8 @@
       "limitation": null,
       "classification": "PASSED",
       "actual_result": "PASS",
-      "duration_ms": 1423,
-      "evidence_digest": "36cc6f8b62fb9bf824e8f618dcb2f900e8bfd54f31121e80a62dd3ece2572859"
+      "duration_ms": 2203,
+      "evidence_digest": "a7412da5380df8e0bd3cfc2524a1bf554387bf9443d219d1442a7e26ccf1f853"
     },
     {
       "scenario_id": "service_agreement",
@@ -403,8 +403,8 @@
       "limitation": null,
       "classification": "PASSED",
       "actual_result": "PASS",
-      "duration_ms": 1119,
-      "evidence_digest": "4ece48d3f5047746466afcab446e3b1265741e5653d4149ac807454358b43500"
+      "duration_ms": 1799,
+      "evidence_digest": "07d6251333bfc9abec06f1bccc8c0028fa996689f330d9bb730531422317c3f5"
     },
     {
       "scenario_id": "customer_communication_history",
@@ -417,8 +417,8 @@
       "limitation": null,
       "classification": "PASSED",
       "actual_result": "PASS",
-      "duration_ms": 5835,
-      "evidence_digest": "23f28db22d99249550ebf9dfa82c7d5d4eb22f196207881daff13671de2caaa1"
+      "duration_ms": 9557,
+      "evidence_digest": "1ca48a4020243d1fb4a7bdc3bd1a0dd6ffe1269cb1b1a62d3dd1c8e8ff489ac1"
     },
     {
       "scenario_id": "owner_operations",
@@ -431,8 +431,8 @@
       "limitation": null,
       "classification": "PASSED",
       "actual_result": "PASS",
-      "duration_ms": 1732,
-      "evidence_digest": "290515aec8e3f3b600df8f6112e8aefc176d0903162dad65c8e3be8f3834af4f"
+      "duration_ms": 2564,
+      "evidence_digest": "f96bfbe1bc6f029af3f74ca9a34b9fdd236b63a9badee9036fa62010f261cc57"
     },
     {
       "scenario_id": "economics",
@@ -440,14 +440,15 @@
       "expected": "work, obligations and cash readiness remain distinct",
       "test_nodes": [
         "tests/business_economics/test_owner_acceptance.py",
-        "tests/business_economics/test_evidence_acceptance.py::test_workday_and_job_participation_are_distinct_reconcilable_contracts"
+        "tests/business_economics/test_evidence_acceptance.py::test_workday_and_job_participation_are_distinct_reconcilable_contracts",
+        "tests/business_economics/test_operational_source_expansion.py"
       ],
       "gate_classification": null,
       "limitation": null,
       "classification": "PASSED",
       "actual_result": "PASS",
-      "duration_ms": 1747,
-      "evidence_digest": "e58eade4335c2f4b60877a617c19a8d3d6ccbe4cf3d38ad3d76fa76c75a86e3b"
+      "duration_ms": 2787,
+      "evidence_digest": "7c985c44536eaccfe1406fb828c532d959b1107d1cdc97773e390de93d250c8c"
     },
     {
       "scenario_id": "luminary",
@@ -461,8 +462,8 @@
       "limitation": null,
       "classification": "PASSED",
       "actual_result": "PASS",
-      "duration_ms": 1917,
-      "evidence_digest": "a4407603edfb277ec7dee461f38fa779a38e5fa67d1f803e049d76ed47b7ca68"
+      "duration_ms": 3092,
+      "evidence_digest": "af2ef86ae9cbc803089ae239ffd7507bdd5b3ec379cf8e832da226e6204a930c"
     },
     {
       "scenario_id": "beacon",
@@ -476,8 +477,8 @@
       "limitation": null,
       "classification": "PASSED",
       "actual_result": "PASS",
-      "duration_ms": 1613,
-      "evidence_digest": "27c9c0ee7245b72e0f1b7f88c52bdd46c2ea34ae383fd4eb4cefe6f6744f67cc"
+      "duration_ms": 2634,
+      "evidence_digest": "04fb0f43cf1cd0124d62d3dc5de480314bf74b5787addc7933bab2be53987804"
     },
     {
       "scenario_id": "lia",
@@ -492,8 +493,8 @@
       "limitation": null,
       "classification": "PASSED",
       "actual_result": "PASS",
-      "duration_ms": 2471,
-      "evidence_digest": "e35778ae7d3396460ffecd6092186d86895433a1469bfe5eff3b430dc26e4fa1"
+      "duration_ms": 3909,
+      "evidence_digest": "199a84040a57981b0cfd23a3bd1f2e451e6699d7a419534b7a4b7592bb2babbb"
     },
     {
       "scenario_id": "audit_events",
@@ -507,8 +508,8 @@
       "limitation": null,
       "classification": "PASSED",
       "actual_result": "PASS",
-      "duration_ms": 1554,
-      "evidence_digest": "7d6a85254b8b8c92a59e6be1c6ab83ef18a79e1b179d6e03961298f98ab8b60a"
+      "duration_ms": 2283,
+      "evidence_digest": "09dc1418178561682fda548619496795748005736894645a6485ee70ff2cb9b4"
     },
     {
       "scenario_id": "reschedule_stale_communication",
@@ -522,8 +523,8 @@
       "limitation": null,
       "classification": "PASSED",
       "actual_result": "PASS",
-      "duration_ms": 6460,
-      "evidence_digest": "ecc307b25bb11a43f8ff314d81032d2e8f71ae8f22a2776c54e20f9397c65cc4"
+      "duration_ms": 9316,
+      "evidence_digest": "213b98494a2abffc6b343b03e69c71a526ceceab8948665f73de2baf836e03a4"
     },
     {
       "scenario_id": "cancellation",
@@ -537,8 +538,8 @@
       "limitation": null,
       "classification": "PASSED",
       "actual_result": "PASS",
-      "duration_ms": 3100,
-      "evidence_digest": "f2211556582a6c6421cb33bb52e1b0ec5115d2e57f6d84fc0f64276200ad7d75"
+      "duration_ms": 2582,
+      "evidence_digest": "2465f79257b00df94a03354cdc5c5b1add8b3ce798a79aeede936d211780e87d"
     },
     {
       "scenario_id": "backend_outage_recovery",
@@ -552,8 +553,8 @@
       "limitation": null,
       "classification": "PASSED",
       "actual_result": "PASS",
-      "duration_ms": 2059,
-      "evidence_digest": "447ebe95215cec4c7dff7647475a034956b23e17c3608c070e2d5af963fff7b3"
+      "duration_ms": 1871,
+      "evidence_digest": "c6bff65e32d145fe642d3af4bf5d698026c180e931fe8f9c42bff4004a5fd16f"
     },
     {
       "scenario_id": "response_loss",
@@ -567,8 +568,8 @@
       "limitation": null,
       "classification": "PASSED",
       "actual_result": "PASS",
-      "duration_ms": 2098,
-      "evidence_digest": "58608cd9c56e44b4bba0a3d622000f4f28db4c6cdc7f021e45ee884b930f7e46"
+      "duration_ms": 1862,
+      "evidence_digest": "836df7d77f1099e56ed83c1a64a8baa52e65c403e58e1d497de87a4f4e055eda"
     },
     {
       "scenario_id": "permission_revoked",
@@ -581,8 +582,8 @@
       "limitation": null,
       "classification": "PASSED",
       "actual_result": "PASS",
-      "duration_ms": 1814,
-      "evidence_digest": "40e1328daadb0507dd63a2a732d4628b3d29bae95155c8b4244883b21ce04503"
+      "duration_ms": 1700,
+      "evidence_digest": "290515aec8e3f3b600df8f6112e8aefc176d0903162dad65c8e3be8f3834af4f"
     },
     {
       "scenario_id": "branch_revoked",
@@ -596,8 +597,8 @@
       "limitation": null,
       "classification": "PASSED",
       "actual_result": "PASS",
-      "duration_ms": 6245,
-      "evidence_digest": "29bb6533f893c6028192ca029b6bc87c487cd8385044023245821ad464eed538"
+      "duration_ms": 6418,
+      "evidence_digest": "869ec366d5546b5b57dfa747585e803203a17988196dc5d5517abc5bf97dec28"
     },
     {
       "scenario_id": "membership_deactivated",
@@ -610,8 +611,8 @@
       "limitation": null,
       "classification": "PASSED",
       "actual_result": "PASS",
-      "duration_ms": 1745,
-      "evidence_digest": "1d9d2e78cc89f45ee46ad6bbad3ae3c44ce4f3ebfd4533f34537d7908764b60f"
+      "duration_ms": 1935,
+      "evidence_digest": "98c63af8be645fd6700cce8843c99834dc68da9274b1b4e27da8e5daa8d0260e"
     },
     {
       "scenario_id": "rapid_actions",
@@ -626,8 +627,8 @@
       "limitation": null,
       "classification": "PASSED",
       "actual_result": "PASS",
-      "duration_ms": 2618,
-      "evidence_digest": "22d9896f5893a6c37cf16f4b2ea7aeeaad68ee33dae3fce08eeec9654a1897f6"
+      "duration_ms": 2856,
+      "evidence_digest": "4b2fcc7566baa751360a55d4e02fa6caa7f44c8f01eea1a4203d83887606cbfa"
     },
     {
       "scenario_id": "tenant_attack",
@@ -641,8 +642,8 @@
       "limitation": null,
       "classification": "PASSED",
       "actual_result": "PASS",
-      "duration_ms": 2157,
-      "evidence_digest": "80103eb73fbdf0f1f6029d4b88f0352415f880239e2d0b796e0a519c1040afe0"
+      "duration_ms": 2130,
+      "evidence_digest": "e0ae6462de6d32e77b23951b5eb076359b615814424c6ed58bfc8f2bcda14ed7"
     },
     {
       "scenario_id": "persona_attack",
@@ -656,8 +657,8 @@
       "limitation": null,
       "classification": "PASSED",
       "actual_result": "PASS",
-      "duration_ms": 5149,
-      "evidence_digest": "63a53a62350dbc0cc7583115c5308cd0559e7def03486248d743eaadd3571d74"
+      "duration_ms": 5019,
+      "evidence_digest": "349bdef1a0add220074eece29cba6f9fb0ca439d28d414b4855e278870795fc0"
     },
     {
       "scenario_id": "error_safety",
@@ -671,8 +672,8 @@
       "limitation": null,
       "classification": "PASSED",
       "actual_result": "PASS",
-      "duration_ms": 1669,
-      "evidence_digest": "a5ee0018d4927e67590770bc566968da7db7ad2f8594bc752f2c76953e78e063"
+      "duration_ms": 1517,
+      "evidence_digest": "91fb97d4000dfaad2140d61650913a58d86b1f3a61dabe8b249999f0f9ca7b41"
     },
     {
       "scenario_id": "migration_readiness",
@@ -685,7 +686,7 @@
       "limitation": null,
       "classification": "PASSED",
       "actual_result": "PASS",
-      "duration_ms": 408,
+      "duration_ms": 382,
       "evidence_digest": "88bcd96d9572fa7f5e3fa164a54cf47a7bff1654e2eb8a0dadaea2de32e384ad"
     },
     {
@@ -711,8 +712,8 @@
       "limitation": null,
       "classification": "PASSED",
       "actual_result": "PASS",
-      "duration_ms": 787,
-      "evidence_digest": "23b1d8f9399d4b9f137608bb3cdf7c58b4211f95bc00d108434ae287d098f8cd"
+      "duration_ms": 666,
+      "evidence_digest": "1805244dfcc15e49d4e4c176cea7ce8efe7bc70e5070d98b0d0df6d723a6cc25"
     },
     {
       "scenario_id": "real_communications_provider",
@@ -762,8 +763,8 @@
       "limitation": null,
       "classification": "PASSED",
       "actual_result": "PASS",
-      "duration_ms": 1319,
-      "evidence_digest": "e8897a2cd13972ee993fe1ae4c1517f09d999ffe02d3c6cfd18b771854cd6405"
+      "duration_ms": 1165,
+      "evidence_digest": "9abac7ec149ff4085ffad171e20bc4077b40cfb2373bfea789b08a7d8efe893b"
     }
   ]
 }

@@ -345,6 +345,23 @@ export interface EconomicsResultLineage {
     limitations: string[];
   }>;
 }
+export interface OperationalSourceEconomics {
+  version: string;
+  sources: Array<{ source: string; state: string; evidence_count: number; explanation: string }>;
+  asset_equipment: {
+    asset_count: number;
+    repeated_service: Array<{ asset_id: string; asset_number: string; service_evidence_count: number }>;
+    attention: Array<{ asset_id: string; asset_number: string; asset_class: string; condition: string; state: string }>;
+    economic_cost_state: "UNAVAILABLE";
+  };
+  workforce: { profile_count: number; labor_attribution: string; employee_scoring: "PROHIBITED" };
+  communications: { failure_count: number; causality_authority: "none" };
+  accounting: { readiness: string; cash_truth: string; protected_migration_rows_accessed: false };
+  owner_questions: Array<{ key: string; question: string; state: string; count: number | null; limitation: string }>;
+  limitations: string[];
+  projection_digest: string;
+  mutation_authority: "none";
+}
 
 export async function getEconomicsWorkspace(start: string, end: string) {
   return (
@@ -377,6 +394,14 @@ export async function getCashOperationalEconomics(start: string, end: string) {
   return (
     await apiClient.get<CashOperationalEconomics>(
       "/api/v1/business-economics/cash-operational",
+      { params: { start, end } },
+    )
+  ).data;
+}
+export async function getOperationalSourceEconomics(start: string, end: string) {
+  return (
+    await apiClient.get<OperationalSourceEconomics>(
+      "/api/v1/business-economics/operational-sources",
       { params: { start, end } },
     )
   ).data;
