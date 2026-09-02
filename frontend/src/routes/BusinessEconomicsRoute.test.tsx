@@ -14,6 +14,26 @@ vi.mock("../auth", () => ({
     permission === "COMPANY_ECONOMICS_MEASUREMENT_READ" ? allowed : cashAllowed,
 }));
 vi.mock("../hooks/useBusinessEconomics", () => ({
+  useOperationalSourceEconomics: () => ({
+    isPending: false,
+    isError: false,
+    data: {
+      sources: [
+        {
+          source: "fleet_readiness",
+          state: "ADMISSIBLE",
+          evidence_count: 2,
+          explanation: "Operational facts only; Fleet cost remains unavailable.",
+        },
+        {
+          source: "accounting_readiness",
+          state: "EXTERNAL_GATE",
+          evidence_count: 0,
+          explanation: "Cash totals require admitted Accounting reporting evidence.",
+        },
+      ],
+    },
+  }),
   useCashOperationalEconomics: () => ({
     isPending: false,
     isError: false,
@@ -205,6 +225,8 @@ describe("BusinessEconomicsRoute", () => {
     expect(screen.getAllByText("$1,000.00").length).toBeGreaterThan(0);
     expect(screen.getByText("$250.00")).toBeVisible();
     expect(screen.getByText("Unavailable")).toBeVisible();
+    expect(screen.getByText(/Operational evidence that may affect/i)).toBeVisible();
+    expect(screen.getByText(/Fleet cost remains unavailable/i)).toBeVisible();
     expect(screen.getByText(/What ACP can answer/i)).toBeVisible();
     expect(screen.getByText(/partially answerable/i)).toBeVisible();
     expect(screen.getAllByText(/external gate/i).length).toBeGreaterThan(0);
