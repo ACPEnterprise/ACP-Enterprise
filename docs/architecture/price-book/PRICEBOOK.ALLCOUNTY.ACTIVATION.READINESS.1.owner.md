@@ -20,4 +20,3 @@ The smallest remaining owner decision set is:
 Material mapping, labor costing, Economics optimization, measured break-even,
 conversion analysis and operational-efficiency models are future internal
 readiness work, not prerequisites for customer-facing non-member activation.
-

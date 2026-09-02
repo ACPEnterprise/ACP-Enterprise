@@ -16,4 +16,3 @@ tax classes from those decisions. Internal material mapping, planned margin,
 overhead, Inventory costing and Economics optimization are not accountant gates
 for Price Book activation unless the accountant identifies a specific required
 classification dependency.
-
