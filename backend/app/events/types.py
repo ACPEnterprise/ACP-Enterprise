@@ -236,6 +236,7 @@ class EventType(str, Enum):
     FIELD_COMPLETION_REQUIREMENTS_SATISFIED = "field.completion_requirements_satisfied"
     FIELD_INVOICE_HANDOFF_REQUESTED = "field.invoice_handoff_requested"
     FIELD_INVOICE_HANDOFF_COMPLETED = "field.invoice_handoff_completed"
+    FIELD_ARTIFACT_RECORDED = "field.artifact_recorded"
 
     # Price Book
     PRICE_BOOK_PRICE_VERSION_ACTIVATED = "price_book.price_version_activated"

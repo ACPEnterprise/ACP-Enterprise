@@ -312,3 +312,80 @@ class FieldNonBillableDisposition(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
     )
+
+
+class FieldArtifactIntent(Base):
+    __tablename__ = "field_artifact_intents"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "branch_id", "job_id"],
+            ["jobs.company_id", "jobs.branch_id", "jobs.id"],
+            name="fk_field_artifact_intent_job",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "artifact_class IN ('photo','field_document','equipment_evidence')",
+            name="ck_field_artifact_intent_class",
+        ),
+        CheckConstraint("expected_size > 0", name="ck_field_artifact_intent_size"),
+        UniqueConstraint(
+            "company_id", "idempotency_key", name="uq_field_artifact_intent_command"
+        ),
+    )
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    job_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    assignment_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("dispatch_assignments.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    artifact_class: Mapped[str] = mapped_column(String(40), nullable=False)
+    media_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    expected_size: Mapped[int] = mapped_column(Integer, nullable=False)
+    expected_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    opaque_upload_reference: Mapped[str] = mapped_column(String(160), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    request_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    created_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+
+class FieldArtifactEvidence(Base):
+    __tablename__ = "field_artifact_evidence"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "branch_id", "job_id"],
+            ["jobs.company_id", "jobs.branch_id", "jobs.id"],
+            name="fk_field_artifact_evidence_job",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("company_id", "intent_id", name="uq_field_artifact_intent"),
+        UniqueConstraint(
+            "company_id", "job_id", "content_digest", name="uq_field_artifact_digest"
+        ),
+    )
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    job_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    assignment_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("dispatch_assignments.id", ondelete="RESTRICT"), nullable=False
+    )
+    intent_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("field_artifact_intents.id", ondelete="RESTRICT"), nullable=False
+    )
+    artifact_class: Mapped[str] = mapped_column(String(40), nullable=False)
+    media_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    size: Mapped[int] = mapped_column(Integer, nullable=False)
+    content_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    opaque_storage_reference: Mapped[str] = mapped_column(String(160), nullable=False)
+    evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    recorded_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
