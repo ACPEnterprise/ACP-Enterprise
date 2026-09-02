@@ -6,6 +6,7 @@ import pytest
 
 from app.operational_assets.schemas import AssetActionCreate
 from app.operational_assets.service import AssetConflict, AssetService, digest
+from app.scheduling import models as scheduling_models  # noqa: F401
 
 
 class FakeSession:
