@@ -2,7 +2,7 @@ from datetime import date
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_database_session
@@ -11,9 +11,14 @@ from app.field_service.errors import (
     FieldServiceError,
     FieldServiceNotFound,
 )
+from app.field_service.mobile_context import mobile_field_context
 from app.field_service.schemas import (
     ApprovalInput,
+    FieldEquipmentProjection,
+    FieldEstimatePresentation,
+    FieldHistoryProjection,
     FieldJobState,
+    FieldReadinessProjection,
     HandoffInput,
     Itinerary,
     NonBillableInput,
@@ -21,8 +26,15 @@ from app.field_service.schemas import (
 )
 from app.field_service.service import field_service
 from app.platform.permissions.authorization import AuthorizationContext
-from app.platform.permissions.codes import JobPermission
-from app.platform.permissions.dependencies import require_permission
+from app.platform.permissions.codes import (
+    AssetPermission,
+    EstimatePermission,
+    JobPermission,
+)
+from app.platform.permissions.dependencies import (
+    require_all_permissions,
+    require_permission,
+)
 from app.platform.reliability.correlation import current_correlation_id
 from app.platform.reliability.failures import ClientRecovery, FailureCode, SafeFailure
 
@@ -34,6 +46,14 @@ Execute = Annotated[
 ]
 Manage = Annotated[
     AuthorizationContext, Depends(require_permission(JobPermission.MANAGE))
+]
+AssetRead = Annotated[
+    AuthorizationContext,
+    Depends(require_all_permissions(JobPermission.READ, AssetPermission.READ)),
+]
+EstimateRead = Annotated[
+    AuthorizationContext,
+    Depends(require_all_permissions(JobPermission.READ, EstimatePermission.READ)),
 ]
 
 
@@ -77,6 +97,59 @@ async def itinerary(service_date: date, context: Read, session: Session) -> Itin
 async def job_state(job_id: UUID, context: Read, session: Session) -> FieldJobState:
     try:
         return await field_service.state(session, context=context, job_id=job_id)
+    except FieldServiceError as error:
+        raise field_error(error) from error
+
+
+@router.get("/jobs/{job_id}/equipment", response_model=FieldEquipmentProjection)
+async def job_equipment(
+    job_id: UUID, context: AssetRead, session: Session
+) -> FieldEquipmentProjection:
+    try:
+        return await mobile_field_context.equipment(
+            session, context=context, job_id=job_id
+        )
+    except FieldServiceError as error:
+        raise field_error(error) from error
+
+
+@router.get("/jobs/{job_id}/estimate", response_model=FieldEstimatePresentation)
+async def job_estimate(
+    job_id: UUID, context: EstimateRead, session: Session
+) -> FieldEstimatePresentation:
+    try:
+        return await mobile_field_context.estimate(
+            session, context=context, job_id=job_id
+        )
+    except FieldServiceError as error:
+        raise field_error(error) from error
+
+
+@router.get("/history", response_model=FieldHistoryProjection)
+async def completed_history(
+    context: Read,
+    session: Session,
+    days: Annotated[int, Query(ge=1, le=90)] = 30,
+    limit: Annotated[int, Query(ge=1, le=50)] = 20,
+) -> FieldHistoryProjection:
+    # Bounds are enforced here so no client can turn this into Company history.
+    try:
+        return await mobile_field_context.history(
+            session,
+            context=context,
+            days=days,
+            limit=limit,
+        )
+    except FieldServiceError as error:
+        raise field_error(error) from error
+
+
+@router.get("/readiness", response_model=FieldReadinessProjection)
+async def technician_readiness(
+    context: AssetRead, session: Session
+) -> FieldReadinessProjection:
+    try:
+        return await mobile_field_context.readiness(session, context=context)
     except FieldServiceError as error:
         raise field_error(error) from error
 

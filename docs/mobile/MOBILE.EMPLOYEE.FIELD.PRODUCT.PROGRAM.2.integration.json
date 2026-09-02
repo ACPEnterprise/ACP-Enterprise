@@ -1,0 +1,47 @@
+{
+  "program": "MOBILE.EMPLOYEE.FIELD.PRODUCT.PROGRAM.2",
+  "base_authority": "604bc137e512e338698a359ad577b3ada2667074",
+  "branch": "work/mobile-employee-field-product-program-2-successor",
+  "preview_deployment": false,
+  "production_operation": false,
+  "migrations": [],
+  "server_contracts": [
+    "GET /api/v1/technician/jobs/{job_id}/equipment",
+    "GET /api/v1/technician/jobs/{job_id}/estimate",
+    "GET /api/v1/technician/history?days=30&limit=20",
+    "GET /api/v1/technician/readiness"
+  ],
+  "authorization": {
+    "equipment": ["COMPANY_JOB_READ", "COMPANY_ASSET_READ", "active assignment", "authorized Branch"],
+    "estimate": ["COMPANY_JOB_READ", "COMPANY_ESTIMATE_READ", "active assignment", "authorized Branch", "exact current issued revision"],
+    "history": ["COMPANY_JOB_READ", "server-resolved active Employee", "own assignment or crew", "authorized Branch"],
+    "readiness": ["COMPANY_JOB_READ", "COMPANY_ASSET_READ", "server-resolved active Employee", "own custody", "authorized Branch"]
+  },
+  "bounded_reads": {
+    "equipment_per_job": 25,
+    "equipment_history_per_asset": 10,
+    "estimate_lines": 50,
+    "completed_history_default_days": 30,
+    "completed_history_max_days": 90,
+    "completed_history_default_count": 20,
+    "completed_history_max_count": 50,
+    "own_custody_assets": 25
+  },
+  "explicit_gates": {
+    "attachment_upload": "SOURCE_REQUIRED",
+    "protected_document_download": "SOURCE_REQUIRED",
+    "inspection_mutation": "POLICY_REQUIRED_OR_SOURCE_REQUIRED",
+    "notification_inbox": "SOURCE_REQUIRED",
+    "push_provider": "EXTERNAL_PROVIDER_REQUIRED",
+    "estimate_decision_or_delivery": "SOURCE_REQUIRED",
+    "customer_communication_delivery": "PROVIDER_REQUIRED",
+    "technician_payment_collection": "NOT_AUTHORIZED",
+    "apple_distribution": "EXTERNAL_OWNER_AUTHORITY_REQUIRED"
+  },
+  "enterprise_integration": {
+    "owner": "Enterprise",
+    "recommended_order": ["server-contract", "mobile-client", "tests-and-docs"],
+    "deployment": "Enterprise-owned protected integration and Preview deployment",
+    "rollback": "revert this program's commits; no schema rollback is required"
+  }
+}
