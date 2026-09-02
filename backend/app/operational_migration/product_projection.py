@@ -302,7 +302,7 @@ def build_migration_product_projection(
             "economics_basis": "accepted_economic_evidence",
             "historical_window_decision": "resolved_full_available_history",
             "chart_of_accounts": "owner_finance_review_required",
-            "ar": "control_report_required",
+            "ar": "aging_control_accepted_ledger_tie_required",
             "ap": "control_report_required",
             "cash_bank": "account_level_control_required",
             "post_cutoff_invoice_correction": "owner_finance_decision_required",
@@ -310,7 +310,7 @@ def build_migration_product_projection(
             "transition_ledger_control": "accepted_balanced",
             "transition_cash_balance_control": "accepted_balanced",
             "opening_boundary": "transition_controls_accepted",
-            "next_control": "ar_aging_detail_2026-08-31",
+            "next_control": "accrual_trial_balance_2026-08-31",
         },
         "decision_packets": decision_packets,
         "freeze_authority": {
