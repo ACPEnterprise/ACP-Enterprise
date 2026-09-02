@@ -6,6 +6,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_database_session
+from app.operational_measurement.foundation import (
+    CONTRACT_VERSION as MEASUREMENT_VERSION,
+)
+from app.operational_measurement.foundation import (
+    source_matrix as operational_measurement_source_matrix,
+)
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import (
     AccountingPermission,
@@ -80,6 +86,67 @@ async def economics_capabilities(context: Reader) -> dict[str, object]:
         **matrix,
         "company_id": str(context.company.id),
         "branch_id": str(context.active_branch.id) if context.active_branch else None,
+    }
+
+
+@router.get("/measurement-foundation", response_model=dict[str, object])
+async def economics_measurement_foundation(context: Reader) -> dict[str, object]:
+    """Expose policy-neutral source readiness and bounded future-consumer seams."""
+    return {
+        "contract_version": MEASUREMENT_VERSION,
+        "company_id": str(context.company.id),
+        "branch_id": str(context.active_branch.id) if context.active_branch else None,
+        "source_matrix": operational_measurement_source_matrix(),
+        "time_measures": (
+            "PAID_TIME",
+            "AVAILABLE_TIME",
+            "SCHEDULED_TIME",
+            "TRAVEL_TIME",
+            "ARRIVAL_WAIT_TIME",
+            "ACTIVE_JOB_TIME",
+            "PAUSED_JOB_TIME",
+            "NONPRODUCTIVE_TIME",
+            "BREAK_TIME",
+            "OVERTIME",
+            "UNCLASSIFIED_TIME",
+        ),
+        "ratio_candidates": (
+            "active_job_time_over_paid_time",
+            "productive_time_over_available_time",
+            "completed_work_time_over_paid_time",
+            "scheduled_utilization",
+            "capacity_utilization",
+        ),
+        "canonical_efficiency_kpi": None,
+        "beacon_conditions": (
+            "MEASUREMENT_INCOMPLETE",
+            "PRODUCTIVE_TIME_DECLINING",
+            "CONVERSION_CHANGE_OBSERVED",
+            "COST_EVIDENCE_STALE",
+        ),
+        "beacon_thresholds": None,
+        "lia_questions": (
+            "What do we actually know about productive time?",
+            "Why is this efficiency calculation incomplete?",
+            "What evidence is missing?",
+            "How has conversion changed?",
+            "Which cost inputs are authoritative?",
+        ),
+        "model_lab": {
+            "fact_input": "immutable digest-bound measurement snapshot",
+            "parameter_input": "separate approved effective-dated policy/model version",
+            "output": "separate modeled result with both lineage references",
+            "arbitrary_formula_engine": False,
+        },
+        "mutation_authority": "none",
+        "prohibited_outputs": (
+            "pricing_change",
+            "markup_change",
+            "staffing_action",
+            "employment_action",
+            "accounting_posting",
+            "causal_claim",
+        ),
     }
 
 
