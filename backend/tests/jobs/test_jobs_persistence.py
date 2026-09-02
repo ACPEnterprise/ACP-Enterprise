@@ -1,28 +1,19 @@
 import asyncio
-from collections.abc import AsyncIterator
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import delete, select, text
-from sqlalchemy.exc import DBAPIError, IntegrityError
-from sqlalchemy.ext.asyncio import (
-    AsyncEngine,
-    AsyncSession,
-    async_sessionmaker,
-    create_async_engine,
-)
-
 from app.core.config import settings
 from app.customers.models import Customer, ServiceLocation
+from app.events.models import BusinessEvent
 from app.jobs.models import Job, JobAppointmentLink, JobNumberSequence
 from app.jobs.repository import JobRepository
 from app.jobs.types import JobPriority, JobStatus
-from app.platform.auth import models as auth_models  # noqa: F401
 from app.platform.audit import models as audit_models  # noqa: F401
+from app.platform.auth import models as auth_models  # noqa: F401
 from app.platform.branch.models import Branch
 from app.platform.company import membership_models  # noqa: F401
 from app.platform.company.models import Company
@@ -32,6 +23,14 @@ from app.platform.permissions import models as permission_models  # noqa: F401
 from app.platform.users import identity_models  # noqa: F401
 from app.platform.users.models import User
 from app.scheduling.models import Appointment
+from sqlalchemy import delete, select, text
+from sqlalchemy.exc import DBAPIError, IntegrityError
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 
 def utc_now() -> datetime:
@@ -220,6 +219,9 @@ async def jobs_database() -> AsyncIterator[
             )
             await session.execute(
                 delete(Appointment).where(Appointment.company_id.in_(company_ids))
+            )
+            await session.execute(
+                delete(BusinessEvent).where(BusinessEvent.company_id.in_(company_ids))
             )
             await session.execute(
                 delete(ServiceLocation).where(
