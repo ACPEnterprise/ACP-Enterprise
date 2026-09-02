@@ -1,0 +1,35 @@
+{
+  "contractVersion": "1",
+  "product": "ACP Employee",
+  "bundleIdentifier": "com.acpenterprise.employee",
+  "currentLocalCandidate": { "version": "0.2.0", "build": "2", "uploaded": false },
+  "versionPolicy": {
+    "marketingVersion": "Owner-approved semantic product release train",
+    "buildNumber": "Strictly increasing positive integer for every uploaded build within a train",
+    "reservation": "Read the latest App Store Connect build immediately before an authenticated build, then reserve the next integer",
+    "reuseUploadedBuild": false,
+    "sourceOfTruthBeforeFirstUpload": "repository",
+    "sourceOfTruthAfterFirstUpload": "App Store Connect plus repository"
+  },
+  "previewDistribution": {
+    "profile": "beta",
+    "channel": "preview",
+    "apiBaseUrl": "https://preview.allcountyhomeservices.com",
+    "productionActivated": false
+  },
+  "productionDistribution": {
+    "authorized": false,
+    "apiBaseUrl": "https://production-api.example.invalid",
+    "activationRequired": true
+  },
+  "universalLinks": {
+    "associatedDomain": "applinks:employee.acpenterprise.com",
+    "aasaUrl": "https://employee.acpenterprise.com/.well-known/apple-app-site-association",
+    "paths": ["/activate", "/activate/*"]
+  },
+  "minimumIos": "16.4",
+  "supportedDevices": ["iPhone"],
+  "orientation": "portrait",
+  "appleMutationAuthorized": false,
+  "uploadAuthorized": false
+}
