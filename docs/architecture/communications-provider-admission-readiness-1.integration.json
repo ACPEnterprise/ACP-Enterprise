@@ -1,0 +1,158 @@
+{
+  "program": "COMMUNICATIONS.PROVIDER.ADMISSION.READINESS.1",
+  "authority_base": "fd2af4057a8dc1ba14777e3c052dd6ed39656404",
+  "authority_reconciled": "5ee0dd237ed052864c951950c1836b23f4a063b3",
+  "branch": "work/communications-provider-admission-readiness-1",
+  "delivery_activation": false,
+  "provider_selection": "OWNER_PROVIDER_SELECTION_REQUIRED",
+  "real_customer_communication": false,
+  "preview_deployment": false,
+  "production_operation": false,
+  "capability_audit": {
+    "AUTHORITATIVE": [
+      "Company-scoped durable communication intent and outbox identity",
+      "idempotent intent creation and provider event replay protection",
+      "provider-neutral Email and SMS delivery boundary",
+      "versioned fixed-field content rendering and content digests",
+      "provider acceptance separated from delivery evidence",
+      "append-only recipient suppression evidence",
+      "source-aggregate recipient resolution for Appointment, Job, Dispatch, Estimate, Invoice, Service Agreement and billing occurrence",
+      "protected identity activation-envelope authority remains separate from delivery evidence"
+    ],
+    "PARTIAL": [
+      "source domains define event contracts but do not all compose communication intents automatically",
+      "Customer/Job communication history is bounded and masked but recipient preference capture is not complete",
+      "read/manage permissions exist; finer template, provider-diagnostic and suppression-administration permissions remain an authority decision",
+      "document delivery is provider-neutral but artifact attachment/link packaging still requires source-domain composition"
+    ],
+    "SOURCE_REQUIRED": [
+      "per-contact preferred channel",
+      "contact-level Email/SMS consent evidence",
+      "existing DNC/no-contact import authority",
+      "authorized alternate recipients",
+      "CRM campaign and follow-up definitions"
+    ],
+    "POLICY_REQUIRED": [
+      "operational and account-security exceptions to all-contact or channel-specific suppression",
+      "appointment reminder, technician status, work completion and payment-status trigger policy",
+      "marketing permission, unsubscribe and re-consent policy",
+      "manual resend/reissue roles and reasons",
+      "retention and owner reporting thresholds"
+    ],
+    "PROVIDER_REQUIRED": [
+      "real Email and SMS adapters",
+      "provider-specific signature verification and status reconciliation",
+      "provider rate-limit headers and retry-after interpretation"
+    ],
+    "EXTERNAL_GATE": [
+      "provider selection",
+      "sender Email/domain verification",
+      "SMS sender registration/verification",
+      "environment-scoped credential and webhook-secret references",
+      "sanctioned Preview test recipients",
+      "Preview provider acceptance rehearsal",
+      "separate owner authorization for Production"
+    ],
+    "ABSENT": [
+      "real provider credentials",
+      "real provider activation",
+      "real outbound campaign"
+    ]
+  },
+  "communication_types": [
+    "employee_invitation",
+    "account_activation",
+    "security_notification",
+    "appointment_confirmation",
+    "appointment_reminder",
+    "appointment_rescheduled",
+    "appointment_cancelled",
+    "technician_assigned",
+    "technician_en_route",
+    "technician_arrived",
+    "work_completed",
+    "estimate_action_requested",
+    "estimate_status_notice",
+    "estimate_follow_up",
+    "invoice_ready",
+    "payment_receipt",
+    "payment_status_notification",
+    "service_agreement_notice"
+  ],
+  "purpose_boundaries": [
+    "account_security",
+    "transactional",
+    "operational",
+    "marketing_outreach",
+    "internal"
+  ],
+  "delivery_truth": [
+    "prepared",
+    "pending",
+    "claimed",
+    "retry_scheduled",
+    "accepted",
+    "delivered",
+    "deferred",
+    "bounced",
+    "rejected",
+    "failed",
+    "uncertain",
+    "canceled",
+    "suppressed"
+  ],
+  "synthetic_qualification": {
+    "provider_outcomes": [
+      "accepted",
+      "delivered",
+      "deferred",
+      "rejected",
+      "bounced",
+      "timeout_before_submission",
+      "uncertain_submission",
+      "rate_limited"
+    ],
+    "webhook_cases": [
+      "authenticated",
+      "forged",
+      "duplicate",
+      "out_of_order",
+      "unknown_message",
+      "cross_company_provider_reference",
+      "late_terminal_event"
+    ],
+    "recipient_control_cases": [
+      "sms_stop",
+      "sms_start",
+      "sms_help",
+      "marketing_only_suppression",
+      "all_contact_suppression"
+    ]
+  },
+  "data_change": "one append-only communication_recipient_controls table",
+  "activation_packet": "docs/operations/communications-provider-decision-packet.md",
+  "validation": {
+    "communications_and_outbox": "81 passed",
+    "affected_backend_domains": "435 passed; four path-sensitive migration tests rerun from their documented backend working directory: 6 passed",
+    "frontend": "108 files / 363 tests passed after protected-authority reconciliation",
+    "mobile_field_contracts": "14 suites / 118 tests passed",
+    "ruff_changed_files": "passed",
+    "mypy_communications_notifications_config": "18 source files passed",
+    "frontend_eslint": "passed",
+    "frontend_typescript_production_build": "passed",
+    "mobile_eslint_and_typescript": "passed",
+    "postgresql_migration": "n0p8r16g3t9u current=head; alembic check reports no new operations",
+    "python_compilation": "passed",
+    "credential_private_key_scan": "passed",
+    "runtime_dependency_audit": "frontend 0 vulnerabilities; mobile has 17 moderate transitive findings with no non-breaking complete fix"
+  },
+  "owner_decisions": [
+    "select an Email/SMS provider that satisfies the activation packet",
+    "approve sender Email/domain and SMS sender identities",
+    "approve class-specific consent, suppression, re-consent and exception policy",
+    "name sanctioned Preview recipients and authorize the Preview acceptance sequence",
+    "define roles for template, suppression, resend and provider-diagnostic administration",
+    "authorize Production separately only after Preview acceptance"
+  ],
+  "integration_instruction": "Enterprise should integrate this branch after migration and qualification review; provider activation remains disabled and requires a separate owner decision."
+}

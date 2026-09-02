@@ -4,6 +4,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.database.session import get_database_session
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import CommunicationsPermission
@@ -20,10 +21,11 @@ from .errors import (
     CommunicationNotFoundError,
     CommunicationValidationError,
 )
-from .readiness import ProviderConfiguration, project_readiness
+from .readiness import configuration_from_settings, project_readiness
 from .schemas import (
     CommunicationCreate,
     CommunicationItem,
+    CommunicationOperationsSummary,
     CommunicationPage,
     CommunicationsReadinessItem,
     MessageCatalogItem,
@@ -122,6 +124,23 @@ async def history(
         raise communication_http(error) from error
 
 
+@router.get("/summary", response_model=CommunicationOperationsSummary)
+async def operations_summary(
+    context: ReadContext,
+    session: DatabaseSession,
+    branch_id: UUID | None = None,
+) -> CommunicationOperationsSummary:
+    try:
+        result = await communication_service.operations_summary(
+            session,
+            context=context,
+            branch_id=branch_id,
+        )
+        return CommunicationOperationsSummary.model_validate(result)
+    except CommunicationError as error:
+        raise communication_http(error) from error
+
+
 @router.get("/catalog", response_model=tuple[MessageCatalogItem, ...])
 async def catalog(context: ReadContext) -> tuple[MessageCatalogItem, ...]:
     del context
@@ -129,8 +148,11 @@ async def catalog(context: ReadContext) -> tuple[MessageCatalogItem, ...]:
         MessageCatalogItem(
             message_class=policy.communication_type,
             owner_domain=policy.owner_domain,
-            allowed_channels=tuple(sorted(policy.allowed_channels, key=lambda x: x.value)),
+            allowed_channels=tuple(
+                sorted(policy.allowed_channels, key=lambda x: x.value)
+            ),
             template_version=policy.template_identifier,
+            purpose=policy.purpose,
             policy_required=policy.policy_required,
         )
         for policy in sorted(
@@ -145,7 +167,7 @@ async def readiness(context: ReadContext) -> CommunicationsReadinessItem:
     del context
     # Real provider admission is intentionally configuration-gated. Synthetic
     # qualification must never be projected as delivery readiness.
-    result = project_readiness(ProviderConfiguration())
+    result = project_readiness(configuration_from_settings(settings))
     return CommunicationsReadinessItem(
         **result.__dict__, catalog_fingerprint=catalog_fingerprint()
     )

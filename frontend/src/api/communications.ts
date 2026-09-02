@@ -6,7 +6,7 @@ export interface CommunicationHistoryItem {
   channel: "email" | "sms" | "protected_link" | "print" | "in_app";
   customer_id: string;
   contact_id: string;
-  recipient: string;
+  recipient_display: string;
   state:
     | "prepared"
     | "pending"
@@ -36,6 +36,7 @@ export interface OperationalMessageCatalogItem {
   owner_domain: string;
   allowed_channels: string[];
   template_version: string;
+  purpose: "account_security" | "transactional" | "operational" | "marketing_outreach" | "internal";
   policy_required: boolean;
 }
 
@@ -46,6 +47,22 @@ export interface CommunicationsReadiness {
   overall: "READY" | "DEGRADED";
   synthetic_only: boolean;
   catalog_fingerprint: string;
+}
+
+export interface CommunicationOperationsSummary {
+  pending: number;
+  accepted_pending_delivery: number;
+  delivered: number;
+  needs_attention: number;
+  suppressed: number;
+  oldest_pending_at: string | null;
+}
+
+export async function getCommunicationOperationsSummary(): Promise<CommunicationOperationsSummary> {
+  const response = await apiClient.get<CommunicationOperationsSummary>(
+    "/api/v1/communications/summary",
+  );
+  return response.data;
 }
 
 export async function getCommunicationsReadiness(): Promise<CommunicationsReadiness> {

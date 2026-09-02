@@ -327,7 +327,20 @@ class NotificationOutboxRepository:
         if duplicate is not None:
             return True
         if record.status in {"sent", "failed", "canceled", "suppressed"}:
-            return False
+            # Preserve authenticated late/contradictory provider truth without
+            # rewriting the already-terminal business-facing state.
+            await NotificationOutboxRepository._evidence(
+                session,
+                record,
+                outcome,
+                at,
+                provider_reference=provider_reference,
+                provider_event_key=provider_event_key,
+                error_code=error_code,
+                error_category="late_provider_event",
+            )
+            await session.flush()
+            return True
         await NotificationOutboxRepository._evidence(
             session,
             record,
