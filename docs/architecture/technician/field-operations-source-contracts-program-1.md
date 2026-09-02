@@ -12,10 +12,12 @@ Jobs, Customers, Assets, Price Book, Estimates, Invoicing, Payments, Communicati
 
 | Contract | Authority and recovery |
 | --- | --- |
-| `GET /api/v1/technician/jobs/{job_id}/sources` | Current assignment version plus minimum Customer contact, location-bound equipment, own custody, exact converted Estimate revision, Invoice, Payment, Communications, and completion state. Refetch after stale/conflict or response loss. |
+| `GET /api/v1/technician/jobs/{job_id}/sources` | Current assignment version plus minimum Customer contact, Invoice, Payment, Communications, and completion state. Refetch after stale/conflict or response loss. |
 | `GET /api/v1/technician/jobs/{job_id}/price-book` | Assignment-scoped active customer-facing items and current price versions. Internal cost is absent. Results are bounded to 100. |
-| `GET /api/v1/technician/history/completed` | Own primary/crew assignments only, active Company and authorized Branches, completed/closed Jobs, bounded to 100. |
-| `GET /api/v1/technician/readiness` | Truthful READY/POLICY_REQUIRED/PROVIDER_REQUIRED/SOURCE_REQUIRED gates so clients do not infer capability from failures. |
+| `GET /api/v1/technician/history` | Authoritative Mobile successor contract: own primary/crew assignments only, active Company and authorized Branches, completed Jobs, bounded by period/count. |
+| `GET /api/v1/technician/readiness` | Authoritative Mobile successor contract for own Fleet/workforce readiness and truthful policy/source/provider gates. |
+| `GET /api/v1/technician/jobs/{job_id}/equipment` | Authoritative Mobile successor contract for assignment-scoped equipment and bounded service evidence. |
+| `GET /api/v1/technician/jobs/{job_id}/estimate` | Authoritative Mobile successor contract for exact issued Estimate presentation. |
 | `POST /api/v1/technician/jobs/{job_id}/artifacts/intents` | Validates assignment version, class, MIME, size, digest, and idempotency key. Returns an opaque reference; real protected byte storage remains provider-gated. |
 | `POST /api/v1/technician/jobs/{job_id}/artifacts/intents/{intent_id}/finalize` | Exact digest/size/MIME binding. Exact replay returns the immutable evidence; contradictory replay conflicts. |
 
@@ -24,7 +26,7 @@ Opaque IDs and future deep links are locators, not authorization. Each resolutio
 ## Projection limits
 
 - Contact data is the preferred active Job Customer contact only. There is no Customer search, unrelated history, payment instrument, or internal note surface.
-- Equipment must share Company, Branch, Customer, and Service Location with the assigned Job. History is bounded safe Asset evidence; warranty is readiness evidence, never an eligibility decision.
+- Equipment remains governed by the integrated Mobile successor contract. History is bounded safe Asset evidence; warranty is readiness evidence, never an eligibility decision.
 - Fleet/tool custody is limited to the active Employee and authorized Branch. It grants no Fleet Administration or Inventory mutation.
 - Estimates are exact revisions already converted to the assigned Job. Technician Estimate creation/revision remains source-gated until accepted commercial command authority exists.
 - Invoice and Payment are read-only, provider-neutral projections. They expose no instrument, merchant, or Accounting internals and grant no collection authority.

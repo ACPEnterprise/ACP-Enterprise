@@ -1,6 +1,7 @@
 {
   "program": "FIELD.OPERATIONS.SOURCE.CONTRACTS.PROGRAM.1",
   "authority_base": "ce4e357504529a005558fe2f7164a75f9aaf7693",
+  "reconciled_authority": "9d3d2f5a67e7a34324310f896565e39fae985de1",
   "branch": "work/field-operations-source-contracts-program-1",
   "authorization_root": "authenticated_user->membership->employee->branch->assignment->permission",
   "contracts": [

@@ -2,7 +2,7 @@ from datetime import date
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_database_session
@@ -12,17 +12,20 @@ from app.field_service.errors import (
     FieldServiceError,
     FieldServiceNotFound,
 )
+from app.field_service.mobile_context import mobile_field_context
 from app.field_service.schemas import (
     ApprovalInput,
-    CompletedFieldHistory,
     FieldArtifactFinalizeInput,
     FieldArtifactIntentInput,
     FieldArtifactIntentOut,
     FieldArtifactOut,
+    FieldEquipmentProjection,
+    FieldEstimatePresentation,
+    FieldHistoryProjection,
     FieldJobSources,
     FieldJobState,
     FieldPriceBookItem,
-    FieldReadiness,
+    FieldReadinessProjection,
     HandoffInput,
     Itinerary,
     NonBillableInput,
@@ -31,8 +34,20 @@ from app.field_service.schemas import (
 from app.field_service.service import field_service
 from app.field_service.sources import field_source_service
 from app.platform.permissions.authorization import AuthorizationContext
-from app.platform.permissions.codes import JobPermission
-from app.platform.permissions.dependencies import require_permission
+from app.platform.permissions.codes import (
+    AssetPermission,
+    CommunicationsPermission,
+    CustomerPermission,
+    EstimatePermission,
+    InvoicePermission,
+    JobPermission,
+    PaymentPermission,
+    PriceBookPermission,
+)
+from app.platform.permissions.dependencies import (
+    require_all_permissions,
+    require_permission,
+)
 from app.platform.reliability.correlation import current_correlation_id
 from app.platform.reliability.failures import ClientRecovery, FailureCode, SafeFailure
 
@@ -44,6 +59,30 @@ Execute = Annotated[
 ]
 Manage = Annotated[
     AuthorizationContext, Depends(require_permission(JobPermission.MANAGE))
+]
+AssetRead = Annotated[
+    AuthorizationContext,
+    Depends(require_all_permissions(JobPermission.READ, AssetPermission.READ)),
+]
+EstimateRead = Annotated[
+    AuthorizationContext,
+    Depends(require_all_permissions(JobPermission.READ, EstimatePermission.READ)),
+]
+SourceRead = Annotated[
+    AuthorizationContext,
+    Depends(
+        require_all_permissions(
+            JobPermission.READ,
+            CustomerPermission.READ,
+            InvoicePermission.READ,
+            PaymentPermission.READ,
+            CommunicationsPermission.READ,
+        )
+    ),
+]
+PriceBookRead = Annotated[
+    AuthorizationContext,
+    Depends(require_all_permissions(JobPermission.READ, PriceBookPermission.READ)),
 ]
 
 
@@ -87,6 +126,59 @@ async def itinerary(service_date: date, context: Read, session: Session) -> Itin
 async def job_state(job_id: UUID, context: Read, session: Session) -> FieldJobState:
     try:
         return await field_service.state(session, context=context, job_id=job_id)
+    except FieldServiceError as error:
+        raise field_error(error) from error
+
+
+@router.get("/jobs/{job_id}/equipment", response_model=FieldEquipmentProjection)
+async def job_equipment(
+    job_id: UUID, context: AssetRead, session: Session
+) -> FieldEquipmentProjection:
+    try:
+        return await mobile_field_context.equipment(
+            session, context=context, job_id=job_id
+        )
+    except FieldServiceError as error:
+        raise field_error(error) from error
+
+
+@router.get("/jobs/{job_id}/estimate", response_model=FieldEstimatePresentation)
+async def job_estimate(
+    job_id: UUID, context: EstimateRead, session: Session
+) -> FieldEstimatePresentation:
+    try:
+        return await mobile_field_context.estimate(
+            session, context=context, job_id=job_id
+        )
+    except FieldServiceError as error:
+        raise field_error(error) from error
+
+
+@router.get("/history", response_model=FieldHistoryProjection)
+async def completed_history(
+    context: Read,
+    session: Session,
+    days: Annotated[int, Query(ge=1, le=90)] = 30,
+    limit: Annotated[int, Query(ge=1, le=50)] = 20,
+) -> FieldHistoryProjection:
+    # Bounds are enforced here so no client can turn this into Company history.
+    try:
+        return await mobile_field_context.history(
+            session,
+            context=context,
+            days=days,
+            limit=limit,
+        )
+    except FieldServiceError as error:
+        raise field_error(error) from error
+
+
+@router.get("/readiness", response_model=FieldReadinessProjection)
+async def technician_readiness(
+    context: AssetRead, session: Session
+) -> FieldReadinessProjection:
+    try:
+        return await mobile_field_context.readiness(session, context=context)
     except FieldServiceError as error:
         raise field_error(error) from error
 
@@ -140,7 +232,9 @@ async def refresh_invoice_handoff(
 
 
 @router.get("/jobs/{job_id}/sources", response_model=FieldJobSources)
-async def job_sources(job_id: UUID, context: Read, session: Session) -> FieldJobSources:
+async def job_sources(
+    job_id: UUID, context: SourceRead, session: Session
+) -> FieldJobSources:
     try:
         return await field_source_service.job_sources(
             session, context=context, job_id=job_id
@@ -153,7 +247,7 @@ async def job_sources(job_id: UUID, context: Read, session: Session) -> FieldJob
     "/jobs/{job_id}/price-book", response_model=tuple[FieldPriceBookItem, ...]
 )
 async def field_price_book(
-    job_id: UUID, context: Read, session: Session, limit: int = 50
+    job_id: UUID, context: PriceBookRead, session: Session, limit: int = 50
 ) -> tuple[FieldPriceBookItem, ...]:
     try:
         return await field_source_service.price_book(
@@ -161,24 +255,6 @@ async def field_price_book(
         )
     except FieldServiceError as error:
         raise field_error(error) from error
-
-
-@router.get("/history/completed", response_model=CompletedFieldHistory)
-async def completed_history(
-    context: Read, session: Session, limit: int = 30
-) -> CompletedFieldHistory:
-    try:
-        return await field_source_service.completed_history(
-            session, context=context, limit=min(max(limit, 1), 100)
-        )
-    except FieldServiceError as error:
-        raise field_error(error) from error
-
-
-@router.get("/readiness", response_model=FieldReadiness)
-async def field_readiness(context: Read) -> FieldReadiness:
-    del context
-    return field_source_service.readiness()
 
 
 @router.post(

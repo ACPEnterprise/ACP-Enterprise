@@ -12,6 +12,31 @@ def test_field_service_openapi_is_bounded() -> None:
     assert "/api/v1/technician/jobs/{job_id}/customer-approval" in paths
     assert "/api/v1/technician/jobs/{job_id}/invoice-handoff" in paths
     assert "/api/v1/technician/jobs/{job_id}/non-billable" in paths
+    assert "/api/v1/technician/jobs/{job_id}/equipment" in paths
+    assert "/api/v1/technician/jobs/{job_id}/estimate" in paths
+    assert "/api/v1/technician/history" in paths
+    assert "/api/v1/technician/readiness" in paths
+
+def test_mobile_field_contract_never_exposes_sensitive_asset_or_workforce_fields() -> None:
+    schemas = app.openapi()["components"]["schemas"]
+    mobile_contract = str(
+        {
+            name: value
+            for name, value in schemas.items()
+            if name.startswith("Field")
+        }
+    ).lower()
+    for forbidden in (
+        "serial_reference",
+        "vin",
+        "license_plate",
+        "identity_digest",
+        "credential_reference",
+        "compensation",
+        "filesystem",
+        "recipient_reference",
+    ):
+        assert forbidden not in mobile_contract
 
 
 @pytest.mark.asyncio

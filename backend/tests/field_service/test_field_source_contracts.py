@@ -1,4 +1,3 @@
-from decimal import Decimal
 from uuid import uuid4
 
 import pytest
@@ -14,14 +13,15 @@ from app.field_service.schemas import (
     FieldContact,
     FieldInvoice,
 )
-from app.field_service.sources import FieldSourceService
 
 
 def test_field_source_routes_are_assignment_scoped() -> None:
     paths = {route.path for route in router.routes}
     assert "/api/v1/technician/jobs/{job_id}/sources" in paths
     assert "/api/v1/technician/jobs/{job_id}/price-book" in paths
-    assert "/api/v1/technician/history/completed" in paths
+    assert "/api/v1/technician/history" in paths
+    assert "/api/v1/technician/jobs/{job_id}/equipment" in paths
+    assert "/api/v1/technician/jobs/{job_id}/estimate" in paths
     assert "/api/v1/technician/jobs/{job_id}/artifacts/intents" in paths
     assert "/api/v1/technician/readiness" in paths
     assert not any("customers/search" in path or "assets/search" in path for path in paths)
@@ -54,28 +54,6 @@ def test_artifact_intent_rejects_mime_and_size_attacks() -> None:
         FieldArtifactIntentInput(
             **common, media_type="image/jpeg", expected_size=25_000_001
         )
-
-
-def test_readiness_truthfully_preserves_policy_and_provider_gates() -> None:
-    invoice = FieldInvoice(
-        invoice_id=uuid4(),
-        invoice_number="INV-000001",
-        status="issued",
-        version=1,
-        open_amount=Decimal("100.00"),
-        currency="USD",
-    )
-    gates = {
-        gate.capability: gate.state
-        for gate in FieldSourceService._gates(
-            equipment=(), fleet=(), estimates=(), invoice=invoice
-        )
-    }
-    assert gates["attachments"] == "PROVIDER_REQUIRED"
-    assert gates["customer_authorization"] == "POLICY_REQUIRED"
-    assert gates["communications"] == "PROVIDER_REQUIRED"
-    assert gates["notifications"] == "SOURCE_REQUIRED"
-    assert gates["payment"] == "READY"
 
 
 def test_field_contract_has_no_payment_instrument_or_internal_cost_surface() -> None:

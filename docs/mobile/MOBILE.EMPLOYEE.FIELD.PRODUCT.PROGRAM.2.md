@@ -18,13 +18,15 @@ This packet reconciles the authoritative Field Program 1 lineage with the later 
 | Timekeeping and breaks | AUTHORITATIVE | Own Workday endpoints |
 | Own Payroll statements | AUTHORITATIVE | Own Payroll projection; independent from field work |
 | Customer contact action | SOURCE_REQUIRED | No assignment-safe Employee contact projection or intent command |
-| Customer equipment/service history/warranty | SOURCE_REQUIRED | Asset APIs are administrative Company/Branch reads, not assignment scoped |
-| Fleet, inspections, out-of-service, custody | SOURCE_REQUIRED/POLICY_REQUIRED | Asset authority exists but no own-assignment/own-custody Employee projection; checklist policy absent |
+| Customer equipment/service history/warranty | AUTHORITATIVE | Job assignment + Branch + Asset permission projection; explicit Job↔Asset relationships only; history capped at 10 |
+| Fleet, out-of-service, maintenance, custody | AUTHORITATIVE READ | Own-Employee custody and authorized-Branch projection; sensitive identifiers excluded |
+| Technician inspection mutation | POLICY_REQUIRED | Readiness is visible; no accepted checklist/cadence/admission policy exists |
 | Photos/documents | SOURCE_REQUIRED | No field artifact upload/custody contract |
-| Estimate/Price Book/presentation/decision | SOURCE_REQUIRED | Current APIs are broad administrative projections |
+| Estimate presentation | AUTHORITATIVE READ | Job assignment + Branch + Estimate permission + exact Job conversion/current issued revision |
+| Estimate decision/delivery | SOURCE_REQUIRED | Mobile cannot rewrite a revision or originate a delivery/decision without a dedicated command |
 | Customer signature | SOURCE_REQUIRED | No version-bound field authorization contract |
 | Communications delivery status | PROVIDER_REQUIRED/SOURCE_REQUIRED | Communications owns recipient/template/provider; no field intent/status endpoint |
-| Completed Job history | SOURCE_REQUIRED | Itinerary is current/upcoming only |
+| Completed Job history | AUTHORITATIVE | Own-assignment/crew history, authorized Branch, 30-day/default and 90-day/50-record hard maximum |
 | Employee notifications/push | SOURCE_REQUIRED/PROVIDER_REQUIRED | No Employee notification inbox/token-registration contract |
 | Payment collection | POLICY_REQUIRED/SOURCE_REQUIRED | ACP Employee has no Technician collection authority |
 
@@ -34,14 +36,14 @@ All field mutations are online-required. Arrival, lifecycle, evidence, Invoice h
 
 ## Source contracts required
 
-1. **Equipment:** assignment-scoped `GET /technician/jobs/{job_id}/equipment` returning minimum safe equipment, Location, service-history summary, and warranty-evidence readiness. Server must verify current assignment and Branch.
+1. **Equipment:** delivered by assignment-scoped `GET /technician/jobs/{job_id}/equipment`; future source is needed only for upload/download of protected artifacts.
 2. **Attachments:** initiate/upload-complete/read contracts bound to assigned Job/equipment, with size/MIME/content scanning, digest/idempotency, expiring protected URLs, EXIF policy, and orphan cleanup.
-3. **Commercial:** assignment-scoped Estimate summary/detail with exact revision; explicitly authorized Price Book query/create/revise/present/deliver/decision commands. No internal cost/margin.
+3. **Commercial:** assignment-scoped exact issued Estimate revision is delivered; separate present/deliver/decision commands remain required. No internal cost/margin is projected.
 4. **Signature:** version-bound customer authorization record with signer disclosure, artifact custody, consent, and audit semantics.
 5. **Communications:** field intent endpoint keyed to an operational transition; server resolves recipient, consent, template, channel and provider. An intent key must converge to one logical communication.
 6. **Notifications:** own inbox plus provider-neutral device-token registration. Payload contains opaque target/reference only; every tap re-reads authorized state.
-7. **History:** bounded own-assignment completed history with explicit range/limit.
-8. **Fleet/custody:** own-vehicle and own/vehicle-custody projections. Inspection execution additionally requires authoritative definition/cadence policy.
+7. **History:** delivered by bounded own-assignment completed history with explicit range/limit.
+8. **Fleet/custody:** own-Employee custody projection is delivered. Inspection execution still requires authoritative definition/cadence policy.
 9. **Payments:** future Technician collection requires explicit permission, allowed tenders, amount/invoice authority, provider boundary, receipt, reversal/reconciliation, and offline prohibition.
 
 ## Attachment threat model
@@ -81,3 +83,22 @@ Foreground and restored connectivity revalidate authority without background pol
 ## Native gates
 
 iOS Xcode 26.6/CocoaPods 1.17, Expo/Hermes, simulator, unsigned device and development-signed physical device builds are qualified. Distribution signing, live AASA, App Store Connect and TestFlight remain external. Android Hermes/configuration qualifies; JDK, Android SDK, device build, release signing, asset links and Play Console remain toolchain/external gates.
+
+The Program 2 execution host currently selects Command Line Tools rather than full Xcode, has no `pod` executable, and has no Java runtime, so this increment can qualify Expo iOS/Android exports and committed native configuration but cannot repeat an Xcode/CocoaPods or Gradle build locally. The Info plist, privacy manifest, and entitlements parse successfully, including the expected associated domain. `expo-doctor` passes 19/21 checks: the two explicit gates are missing CocoaPods and native-project/app-config synchronization ownership. Because native folders are committed, future configuration changes must be reconciled in both native projects rather than assumed to flow from `app.json`.
+
+The installed baseline is Expo 57.0.19, React Native 0.86.3, and React 19.2.3—not Expo 54. Production dependency audit reports 17 moderate transitive advisories and no high or critical advisories. The package manager proposes an invalid major downgrade as its aggregate automatic fix, so no forced audit fix or major framework change is accepted here. A future upgrade must use the Expo-supported target at that time, regenerate/reconcile native projects in an isolated lane, preserve SecureStore/linking/Hermes/navigation behavior, run both platform builds, repeat the full synthetic device packet, and retain the current branch/build as rollback. TestFlight remains downstream of owner-authorized signing.
+
+## Program 2 physical-iPhone acceptance packet
+
+Use only the synthetic Preview technician and synthetic assigned records. Refresh before each mutation; if the app says stale, unavailable, or needs confirmation, do not retry until the authoritative state is visible.
+
+1. Open **My Day**, open its assigned Job, and confirm only that Job's equipment appears. Expected server evidence: successful assignment-scoped equipment read. A foreign Job/Asset URL must present unavailable without existence disclosure. Read-only retry is safe.
+2. Confirm manufacturer/model when recorded, installation evidence, warranty evidence wording, and a maximum of ten service-history records per asset. “Evidence unavailable” must never be phrased as warranty coverage. Read-only retry is safe.
+3. Review **My field readiness**. Only the synthetic Employee's custody Fleet/Tool records may appear. Out-of-service must be text, not color alone. Inspection remains `POLICY_REQUIRED`; no inspection tap is expected.
+4. Review **Estimate**. Only a current issued revision explicitly converted to this assigned Job may appear, with line presentation and total. No edit, acceptance, or arbitrary delivery control may appear. Read-only retry is safe.
+5. Open **Jobs → Completed/recent**. Confirm the 30-day, 20-record bounded own-assignment history and no Company-wide history. Read-only retry is safe.
+6. Disable connectivity after a successful context refresh. Confirm `LAST CONFIRMED — STALE`, retained read-only context, and no new field-context mutation. Restore connectivity and pull to refresh; reinstall must not be required.
+7. Remove Asset or Estimate permission from a separate synthetic control session, foreground the app, and confirm that surface disappears or returns permission changed. Direct API access must deny. Restore authority and reauthenticate/refresh as directed by the server.
+8. Revoke the synthetic Branch or assignment and open a previously known deep link. The Job and all related equipment/Estimate context must become unavailable without revealing existence.
+
+External/provider-gated: notification inbox, push admission/delivery, communications delivery proof, attachment upload/download, and inspection execution. Apple-gated: distribution signing, App Store Connect, and TestFlight. None is part of this safe Preview sequence.
