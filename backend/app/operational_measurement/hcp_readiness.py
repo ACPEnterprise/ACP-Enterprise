@@ -644,6 +644,7 @@ def data_quality_conditions(
     if len(jobs) + len(appointments) > MAX_BATCH_SIZE:
         raise ValueError("operational quality batch exceeds its bound")
     results: list[DataQualityCondition] = []
+    jobs_by_source_id = {item.source_id: item for item in jobs}
     seen: dict[tuple[str, str], str] = {}
 
     def add(
@@ -696,6 +697,19 @@ def data_quality_conditions(
                 item.source_id,
                 "MISSING_JOB",
                 ReadinessState.SOURCE_REQUIRED,
+                item.source_digest,
+            )
+        parent = jobs_by_source_id.get(item.source_job_id)
+        if (
+            parent is not None
+            and item.status == "completed"
+            and parent.status == "cancelled"
+        ):
+            add(
+                "APPOINTMENT",
+                item.source_id,
+                "CONFLICTING_LIFECYCLE",
+                ReadinessState.CONFLICTING,
                 item.source_digest,
             )
         if item.customer_id is None:

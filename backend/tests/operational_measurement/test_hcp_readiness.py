@@ -331,6 +331,20 @@ def test_data_quality_detects_contradictory_duplicate_source_identity() -> None:
     )
 
 
+def test_data_quality_fails_closed_on_conflicting_lifecycle() -> None:
+    conditions = data_quality_conditions(
+        (job(status="cancelled"),),
+        (appointment(status="completed"),),
+        accepted_timezone="America/New_York",
+        crosswalks=(crosswalk(),),
+    )
+    assert any(
+        item.code == "CONFLICTING_LIFECYCLE"
+        and item.state is ReadinessState.CONFLICTING
+        for item in conditions
+    )
+
+
 def test_batch_limit_fails_closed() -> None:
     with pytest.raises(ValueError, match="batch exceeds"):
         reconcile_date(
