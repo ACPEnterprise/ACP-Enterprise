@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import (
 
 from app.core.config import settings
 from app.customers.models import Customer, ServiceLocation
+from app.events.models import BusinessEvent
 from app.jobs.models import Job, JobAppointmentLink, JobNumberSequence
 from app.jobs.repository import JobRepository
 from app.jobs.types import JobPriority, JobStatus
@@ -220,6 +221,9 @@ async def jobs_database() -> AsyncIterator[
             )
             await session.execute(
                 delete(Appointment).where(Appointment.company_id.in_(company_ids))
+            )
+            await session.execute(
+                delete(BusinessEvent).where(BusinessEvent.company_id.in_(company_ids))
             )
             await session.execute(
                 delete(ServiceLocation).where(
