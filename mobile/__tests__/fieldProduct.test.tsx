@@ -39,7 +39,7 @@ describe("permission-driven field product contracts", () => {
 
   it("bounds the Job list to three assignment-scoped itinerary days", async () => {
     const itinerary = jest.fn(async (date: string) => ({ service_date: date, technician_display_name: "Synthetic", items: [] }));
-    const service = { itinerary, state: jest.fn(), arrival: jest.fn(), transition: jest.fn(), workSummary: jest.fn(), customerDisposition: jest.fn() };
+    const service = { itinerary, state: jest.fn(), arrival: jest.fn(), transition: jest.fn(), workSummary: jest.fn(), customerDisposition: jest.fn(), note: jest.fn(), approval: jest.fn(), refreshHandoff: jest.fn() };
     const network = { isConnected: jest.fn(async () => true), subscribe: jest.fn(() => () => undefined) };
     render(<JobsScreen service={service} network={network} />);
     await waitFor(() => expect(itinerary).toHaveBeenCalledTimes(3));

@@ -1,12 +1,19 @@
 import { useState } from "react";
 import { Linking, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import type { DayAssignment, EmployeeOperationsService } from "../api/employeeOperations";
+import { fieldIdempotencyKey, type FieldService } from "../api/fieldService";
 import { colors, spacing } from "../design/tokens";
 import { useAssignmentDetail } from "../myDay/useAssignmentDetail";
 import type { NetworkMonitor } from "../network/networkMonitor";
-import type { FieldService, JobAction } from "../api/fieldService";
-import { useFieldJob } from "../field/useFieldJob";
+import { useFieldWorkspace } from "../field/useFieldWorkspace";
 import { PrimaryButton } from "../components/PrimaryButton";
+
+function lifecycleAction(status: string | null) {
+  if (status === "active") return { action: "start" as const, label: "Start Work" };
+  if (status === "in_progress") return { action: "pause" as const, label: "Pause Work" };
+  if (status === "paused") return { action: "resume" as const, label: "Resume Work" };
+  return null;
+}
 
 function formatWindow(value: string, timezone: string) {
   return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short", timeZone: timezone }).format(new Date(value));
@@ -34,21 +41,14 @@ function Detail({ assignment, timezone, stale, onDirections }: { assignment: Day
   </View>;
 }
 
-function actionFor(status: string | null): { action: JobAction; label: string } | null {
-  if (status === "active") return { action: "start", label: "Start Work" };
-  if (status === "in_progress") return { action: "pause", label: "Pause Work" };
-  if (status === "paused") return { action: "resume", label: "Resume Work" };
-  return null;
-}
-
-export function JobWorkspaceScreen({ appointmentId, businessDate, initialAssignment, initialTimezone, service, fieldService, network, canExecute }: { appointmentId: string; businessDate: string; initialAssignment: DayAssignment | null; initialTimezone: string; service: EmployeeOperationsService; fieldService: FieldService; network: NetworkMonitor; canExecute: boolean }) {
+export function JobWorkspaceScreen({ appointmentId, initialAssignment, initialTimezone, businessDate, service, fieldService, network, canReadField = false, canExecuteField = false }: { appointmentId: string; initialAssignment: DayAssignment | null; initialTimezone: string; businessDate?: string; service: EmployeeOperationsService; fieldService: FieldService; network: NetworkMonitor; canReadField?: boolean; canExecuteField?: boolean }) {
   const detail = useAssignmentDetail(service, network, appointmentId, initialAssignment);
-  const field = useFieldJob(fieldService, network, businessDate, appointmentId, initialAssignment?.job_id ?? null);
   const [directionsError, setDirectionsError] = useState(false);
-  const [summary, setSummary] = useState(""); const [customerName, setCustomerName] = useState(""); const [dispositionReason, setDispositionReason] = useState("");
+  const [summary, setSummary] = useState("");
   const timezone = detail.timezone ?? initialTimezone;
+  const serviceDate = businessDate ?? detail.assignment?.window_start_at.slice(0, 10) ?? initialAssignment?.window_start_at.slice(0, 10) ?? new Date().toISOString().slice(0, 10);
+  const field = useFieldWorkspace(fieldService, network, appointmentId, detail.assignment?.job_id ?? initialAssignment?.job_id ?? null, serviceDate, canReadField);
   const stale = (detail.status === "offline" || detail.status === "error") && detail.assignment !== null;
-  const fieldStale = field.status !== "live";
   const message = detail.status === "not_authorized" ? "You are not authorized to view this assignment."
     : detail.status === "identity_not_ready" ? "Your employee account is not ready for assigned work."
     : detail.status === "session_expired" ? "Your session has expired. Please sign in again."
@@ -69,28 +69,40 @@ export function JobWorkspaceScreen({ appointmentId, businessDate, initialAssignm
   }
   return <ScrollView testID="job-workspace-scroll" style={styles.safe} contentContainerStyle={styles.body} refreshControl={<RefreshControl refreshing={detail.status === "loading" || detail.refreshing} onRefresh={() => void detail.refresh()} accessibilityLabel="Refresh authoritative Job workspace" />}>
     <Text accessibilityRole="header" style={styles.title}>Job Workspace</Text>
-    <Text style={styles.readOnly}>Read-only assigned work. Job status and My Time remain independent.</Text>
+    <Text style={styles.readOnly}>{canExecuteField ? "Authorized field evidence. Job status and My Time remain independent." : "Read-only assigned work. Job status and My Time remain independent."}</Text>
     {directionsError && <Text accessibilityRole="alert" style={styles.message}>Directions are unavailable on this device. The service address remains shown below.</Text>}
     {message && <Text accessibilityRole="alert" style={stale ? styles.stale : styles.message}>{message}</Text>}
     {detail.status === "loading" && !detail.assignment && <Text accessibilityLabel="Loading authoritative assignment detail">Loading assignment…</Text>}
     {detail.assignment && <Detail assignment={detail.assignment} timezone={timezone} stale={stale} onDirections={() => void openDirections()} />}
-    {detail.assignment?.job_id && <View style={styles.detail}>
-      <Text accessibilityRole="header" style={styles.sectionTitle}>Field status</Text>
-      <Text style={styles.kicker}>{field.status === "live" ? "LIVE — SERVER CONFIRMED" : field.status === "mutation_uncertain" ? "MUTATION OUTCOME UNCERTAIN" : "LAST CONFIRMED — STALE"}</Text>
-      {field.message && <Text accessibilityRole="alert" style={fieldStale ? styles.stale : styles.message}>{field.message}</Text>}
-      {field.item && <><Text style={styles.line}>Dispatch: {field.item.assignment_status}</Text><Text style={styles.line}>Travel: {field.item.arrival_state.replaceAll("_", " ")}</Text><Text style={styles.line}>Job: {field.item.job_status ?? "not available"}</Text></>}
-      {!canExecute && <Text style={styles.readOnly}>Read-only: your effective permissions do not allow field mutations.</Text>}
-      {canExecute && field.mutationsAllowed && field.item?.arrival_state !== "en_route" && field.item?.arrival_state !== "arrived" && <PrimaryButton label="On My Way" accessibilityLabel="Confirm On My Way with ACP Enterprise" onPress={() => void field.arrival("en_route")} />}
-      {canExecute && field.mutationsAllowed && field.item?.arrival_state === "en_route" && <PrimaryButton label="Confirm Arrival" accessibilityLabel="Confirm arrival with ACP Enterprise" onPress={() => void field.arrival("arrived")} />}
-      {canExecute && field.mutationsAllowed && field.item?.arrival_state === "arrived" && actionFor(field.item.job_status) && <PrimaryButton label={actionFor(field.item.job_status)!.label} onPress={() => void field.transition(actionFor(field.item!.job_status)!.action)} />}
-      {canExecute && field.mutationsAllowed && field.item?.job_status === "in_progress" && field.field?.completion_ready && <PrimaryButton label="Complete Work" accessibilityLabel="Complete Job after confirmed requirements" onPress={() => void field.transition("complete")} />}
-      {canExecute && field.mutationsAllowed && field.field && !field.field.work_summary_recorded && <View style={styles.section}><Text style={styles.sectionTitle}>Work performed</Text><TextInput accessibilityLabel="Work performed summary" multiline value={summary} onChangeText={setSummary} placeholder="Summarize completed work" style={styles.input} /><PrimaryButton label="Record Work Summary" disabled={!summary.trim()} onPress={() => void field.workSummary(summary)} /></View>}
-      {canExecute && field.mutationsAllowed && field.field && !field.field.customer_disposition && <View style={styles.section}><Text style={styles.sectionTitle}>Customer disposition</Text><TextInput accessibilityLabel="Customer name for approval" value={customerName} onChangeText={setCustomerName} placeholder="Customer name for approval" style={styles.input} /><PrimaryButton label="Record Customer Approval" disabled={!customerName.trim()} onPress={() => void field.customerDisposition("approved", customerName.trim(), null)} /><TextInput accessibilityLabel="Reason customer approval unavailable" multiline value={dispositionReason} onChangeText={setDispositionReason} placeholder="Reason unavailable or refused" style={styles.input} /><PrimaryButton label="Customer Unavailable" disabled={!dispositionReason.trim()} onPress={() => void field.customerDisposition("unavailable", null, dispositionReason.trim())} /></View>}
-      {field.field && <View style={styles.section}><Text style={styles.sectionTitle}>Completion readiness</Text><Text style={styles.line}>{field.field.completion_ready ? "Ready for completion" : "Blocked by authoritative requirements"}</Text>{field.field.missing_requirements.map((value) => <Text key={value} style={styles.line}>• {value.replaceAll("_", " ")}</Text>)}<Text style={styles.line}>Estimate/commercial authority: {field.field.commercial_authorization.replaceAll("_", " ")}</Text><Text style={styles.line}>Invoice handoff: {field.field.invoice_handoff_status ?? "not ready"}</Text></View>}
-      <View style={styles.section}><Text style={styles.sectionTitle}>Field product sources</Text><Text style={styles.line}>Photos and documents: SOURCE_REQUIRED</Text><Text style={styles.line}>Installed equipment: SOURCE_REQUIRED for assignment-scoped Customer equipment</Text><Text style={styles.line}>Estimate presentation: SOURCE_REQUIRED for assignment-scoped read contract</Text><Text style={styles.line}>Payment collection: NOT AUTHORIZED</Text><Text style={styles.line}>Customer communication is server-owned; Mobile never sends arbitrary messages.</Text></View>
-      <Text style={styles.readOnly}>Job status and My Time are separate authorities. Field actions never clock you in or out.</Text>
+    {canReadField && detail.assignment?.job_id && <View style={styles.detail} accessible accessibilityLabel="Authoritative field workflow">
+      <Text style={styles.sectionTitle}>Field workflow</Text>
+      {field.status === "loading" && <Text>Refreshing authoritative field state…</Text>}
+      {field.status === "offline" && <Text accessibilityRole="alert" style={styles.stale}>You're offline. Field actions are disabled; displayed state may be stale.</Text>}
+      {field.status === "forbidden" && <Text accessibilityRole="alert">This assignment is no longer available for field execution.</Text>}
+      {(field.status === "conflict" || field.status === "error") && <Text accessibilityRole="alert">Field state changed or could not be confirmed. It has been refreshed before another action.</Text>}
+      {field.item && <><Text>Travel status: {field.item.arrival_state.replaceAll("_", " ")}</Text><Text>Assignment: {field.item.assignment_status}</Text></>}
+      {field.job && <><Text>Work summary: {field.job.work_summary_recorded ? "Recorded" : "Required"}</Text><Text>Customer disposition: {field.job.customer_disposition ?? "Not recorded"}</Text><Text>Completion readiness: {field.job.completion_ready ? "Ready" : `Blocked — ${field.job.missing_requirements.join(", ") || "requirements pending"}`}</Text><Text>Invoice handoff: {field.job.invoice_handoff_status ?? "Not available"}</Text></>}
+      {canExecuteField && field.item && field.item.job_id && field.item.job_version && <View style={styles.section}>
+        {field.item.arrival_state === "pending" && <PrimaryButton label="Begin Travel" disabled={field.status !== "ready"} onPress={() => void field.mutate(() => fieldService.arrival(appointmentId, "en_route", field.item!.assignment_version))} />}
+        {field.item.arrival_state === "en_route" && <PrimaryButton label="Mark Arrived" disabled={field.status !== "ready"} onPress={() => void field.mutate(() => fieldService.arrival(appointmentId, "arrived", field.item!.assignment_version))} />}
+        {field.item.arrival_state === "arrived" && lifecycleAction(field.item.job_status) && <PrimaryButton label={lifecycleAction(field.item.job_status)!.label} disabled={field.status !== "ready"} onPress={() => void field.mutate(() => fieldService.transition(field.item!.job_id!, lifecycleAction(field.item!.job_status)!.action, field.item!.job_version!))} />}
+        {field.job?.completion_ready && field.item.job_status === "in_progress" && <PrimaryButton label="Complete Work" disabled={field.status !== "ready"} onPress={() => void field.mutate(() => fieldService.transition(field.item!.job_id!, "complete", field.item!.job_version!))} />}
+        <Text style={styles.sectionTitle}>Work performed</Text><TextInput accessibilityLabel="Work performed summary" multiline value={summary} onChangeText={setSummary} editable={field.status === "ready"} style={styles.input} placeholder="Describe completed work" />
+        <PrimaryButton label="Save Work Summary" disabled={!summary.trim() || field.status !== "ready"} onPress={() => void field.mutate(async () => { await fieldService.workSummary(field.item!.job_id!, summary.trim(), field.item!.job_version!, field.item!.assignment_version, fieldIdempotencyKey("work-summary")); setSummary(""); })} />
+        <Text style={styles.sectionTitle}>Customer work approval</Text><PrimaryButton label="Customer Approved Work" disabled={field.status !== "ready"} onPress={() => void field.mutate(() => fieldService.customerDisposition(field.item!.job_id!, "approved", null, null, field.item!.job_version!, field.item!.assignment_version, fieldIdempotencyKey("approval-approved")))} /><PrimaryButton label="Customer Unavailable" disabled={field.status !== "ready"} onPress={() => void field.mutate(() => fieldService.customerDisposition(field.item!.job_id!, "unavailable", null, null, field.item!.job_version!, field.item!.assignment_version, fieldIdempotencyKey("approval-unavailable")))} /><PrimaryButton label="Customer Refused" disabled={field.status !== "ready"} onPress={() => void field.mutate(() => fieldService.customerDisposition(field.item!.job_id!, "refused", null, null, field.item!.job_version!, field.item!.assignment_version, fieldIdempotencyKey("approval-refused")))} />
+        <PrimaryButton label="Refresh Invoice Handoff" disabled={field.status !== "ready"} onPress={() => void field.mutate(() => fieldService.refreshHandoff(field.item!.job_id!, field.item!.job_version!, field.item!.assignment_version))} />
+        <Text style={styles.readOnly}>Every field action is reconciled from authoritative Job and assignment state. Job actions never create a Timekeeping punch.</Text>
+      </View>}
+      <View style={styles.section} accessible accessibilityLabel="Additional field capability readiness">
+        <Text style={styles.sectionTitle}>Additional field tools</Text>
+        <Text style={styles.line}>Equipment and service history: office connection required</Text>
+        <Text style={styles.line}>Photos and documents: upload service not yet available</Text>
+        <Text style={styles.line}>Estimate presentation: field-safe source not yet available</Text>
+        <Text style={styles.line}>Customer messages: sent only by ACP Enterprise when enabled</Text>
+        <Text style={styles.line}>Payment collection: not authorized in ACP Employee</Text>
+      </View>
     </View>}
   </ScrollView>;
 }
 
-const styles = StyleSheet.create({ safe: { flex: 1, backgroundColor: colors.canvas }, body: { padding: spacing.lg, paddingBottom: spacing.xl, gap: spacing.md }, title: { fontSize: 30, fontWeight: "800", color: colors.text }, readOnly: { color: colors.muted, fontSize: 15, lineHeight: 22 }, message: { color: colors.text, fontSize: 16 }, stale: { color: colors.warning, fontWeight: "700", fontSize: 16, backgroundColor: "#FFF7D6", borderRadius: 12, padding: spacing.md }, detail: { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, borderRadius: 14, padding: spacing.lg, gap: spacing.md }, kicker: { fontSize: 13, fontWeight: "800", color: colors.brandDark }, customer: { fontSize: 24, fontWeight: "800", color: colors.text }, window: { fontSize: 17, fontWeight: "700", color: colors.brandDark }, section: { borderTopColor: colors.border, borderTopWidth: 1, paddingTop: spacing.md, gap: spacing.sm }, sectionTitle: { fontSize: 17, fontWeight: "700", color: colors.text }, line: { fontSize: 16, lineHeight: 23, color: colors.text }, input: { minHeight: 52, borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, fontSize: 16, color: colors.text, backgroundColor: colors.canvas }, directions: { alignItems: "center", alignSelf: "flex-start", borderColor: colors.brand, borderRadius: 10, borderWidth: 1, justifyContent: "center", minHeight: 48, marginTop: spacing.sm, paddingHorizontal: spacing.md }, directionsText: { color: colors.brand, fontSize: 16, fontWeight: "700" } });
+const styles = StyleSheet.create({ safe: { flex: 1, backgroundColor: colors.canvas }, body: { padding: spacing.lg, paddingBottom: spacing.xl, gap: spacing.md }, title: { fontSize: 30, fontWeight: "800", color: colors.text }, readOnly: { color: colors.muted, fontSize: 15, lineHeight: 22 }, message: { color: colors.text, fontSize: 16 }, stale: { color: colors.warning, fontWeight: "700", fontSize: 16, backgroundColor: "#FFF7D6", borderRadius: 12, padding: spacing.md }, detail: { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, borderRadius: 14, padding: spacing.lg, gap: spacing.md }, kicker: { fontSize: 13, fontWeight: "800", color: colors.brandDark }, customer: { fontSize: 24, fontWeight: "800", color: colors.text }, window: { fontSize: 17, fontWeight: "700", color: colors.brandDark }, section: { borderTopColor: colors.border, borderTopWidth: 1, paddingTop: spacing.md, gap: spacing.sm }, sectionTitle: { fontSize: 17, fontWeight: "700", color: colors.text }, line: { fontSize: 16, lineHeight: 23, color: colors.text }, input: { minHeight: 100, borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, fontSize: 16, textAlignVertical: "top", color: colors.text, backgroundColor: colors.surface }, directions: { alignItems: "center", alignSelf: "flex-start", borderColor: colors.brand, borderRadius: 10, borderWidth: 1, justifyContent: "center", minHeight: 48, marginTop: spacing.sm, paddingHorizontal: spacing.md }, directionsText: { color: colors.brand, fontSize: 16, fontWeight: "700" } });

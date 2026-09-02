@@ -1,4 +1,4 @@
 <resources>
   <string name="app_name">ACP Employee</string>
-  <string name="expo_runtime_version">0.1.0</string>
+  <string name="expo_runtime_version">0.2.0</string>
 </resources>
