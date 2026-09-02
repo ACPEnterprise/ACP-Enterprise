@@ -6,6 +6,7 @@ import {
   getEconomicsResultLineage,
   getEconomicsWorkspace,
   getOwnerIntelligence,
+  getOperationalSourceEconomics,
   type OwnerQuestion,
 } from "../api/businessEconomics";
 
@@ -17,6 +18,13 @@ export function useEconomicsWorkspace(
   return useQuery({
     queryKey: ["business-economics", "workspace", start, end],
     queryFn: () => getEconomicsWorkspace(start, end),
+    enabled,
+  });
+}
+export function useOperationalSourceEconomics(start: string, end: string, enabled = true) {
+  return useQuery({
+    queryKey: ["business-economics", "operational-sources", start, end],
+    queryFn: () => getOperationalSourceEconomics(start, end),
     enabled,
   });
 }

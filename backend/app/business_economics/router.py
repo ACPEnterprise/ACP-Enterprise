@@ -10,9 +10,12 @@ from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import (
     AccountingPermission,
     AccountsPayablePermission,
+    AssetPermission,
+    CommunicationsPermission,
     EconomicsPolicyPermission,
     InvoicePermission,
     PaymentPermission,
+    WorkforcePermission,
 )
 from app.platform.permissions.dependencies import (
     require_all_permissions,
@@ -23,6 +26,7 @@ from app.platform.reliability.failures import ClientRecovery, FailureCode, SafeF
 
 from .capability_readiness import capability_readiness_matrix
 from .cash_operational_service import CashOperationalEconomicsService
+from .operational_sources import OperationalSourceEconomicsService
 from .owner_intelligence import (
     OwnerIntelligenceQuery,
     OwnerIntelligenceService,
@@ -51,6 +55,18 @@ CashOperationalReader = Annotated[
             InvoicePermission.READ,
             PaymentPermission.READ,
             AccountsPayablePermission.REPORT_READ,
+            AccountingPermission.REPORT_READ,
+        )
+    ),
+]
+OperationalSourceReader = Annotated[
+    AuthorizationContext,
+    Depends(
+        require_all_permissions(
+            EconomicsPolicyPermission.MEASUREMENT_READ,
+            AssetPermission.READ,
+            WorkforcePermission.READ,
+            CommunicationsPermission.READ,
             AccountingPermission.REPORT_READ,
         )
     ),
@@ -130,6 +146,30 @@ async def cash_operational_economics(
         failure = SafeFailure(
             FailureCode.VALIDATION,
             "Cash and operational Economics request requires correction.",
+            ClientRecovery.USER_CORRECTION_REQUIRED,
+            current_correlation_id(),
+        )
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY, failure.detail()
+        ) from error
+
+
+@router.get("/operational-sources", response_model=dict[str, object])
+async def operational_source_economics(
+    session: Session,
+    context: OperationalSourceReader,
+    start: Annotated[date, Query()],
+    end: Annotated[date, Query()],
+) -> dict[str, object]:
+    """Project bounded operational readiness without creating economic truth."""
+    try:
+        return await OperationalSourceEconomicsService().overview(
+            session, context=context, period_start=start, period_end=end
+        )
+    except ValueError as error:
+        failure = SafeFailure(
+            FailureCode.VALIDATION,
+            "Operational source Economics request requires correction.",
             ClientRecovery.USER_CORRECTION_REQUIRED,
             current_correlation_id(),
         )
