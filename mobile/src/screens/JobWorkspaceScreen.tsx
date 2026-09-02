@@ -7,6 +7,7 @@ import { useAssignmentDetail } from "../myDay/useAssignmentDetail";
 import type { NetworkMonitor } from "../network/networkMonitor";
 import { useFieldWorkspace } from "../field/useFieldWorkspace";
 import { PrimaryButton } from "../components/PrimaryButton";
+import { useFieldContext } from "../field/useFieldContext";
 
 function lifecycleAction(status: string | null) {
   if (status === "active") return { action: "start" as const, label: "Start Work" };
@@ -41,13 +42,14 @@ function Detail({ assignment, timezone, stale, onDirections }: { assignment: Day
   </View>;
 }
 
-export function JobWorkspaceScreen({ appointmentId, initialAssignment, initialTimezone, businessDate, service, fieldService, network, canReadField = false, canExecuteField = false }: { appointmentId: string; initialAssignment: DayAssignment | null; initialTimezone: string; businessDate?: string; service: EmployeeOperationsService; fieldService: FieldService; network: NetworkMonitor; canReadField?: boolean; canExecuteField?: boolean }) {
+export function JobWorkspaceScreen({ appointmentId, initialAssignment, initialTimezone, businessDate, service, fieldService, network, canReadField = false, canExecuteField = false, canReadAssets = false, canReadEstimates = false }: { appointmentId: string; initialAssignment: DayAssignment | null; initialTimezone: string; businessDate?: string; service: EmployeeOperationsService; fieldService: FieldService; network: NetworkMonitor; canReadField?: boolean; canExecuteField?: boolean; canReadAssets?: boolean; canReadEstimates?: boolean }) {
   const detail = useAssignmentDetail(service, network, appointmentId, initialAssignment);
   const [directionsError, setDirectionsError] = useState(false);
   const [summary, setSummary] = useState("");
   const timezone = detail.timezone ?? initialTimezone;
   const serviceDate = businessDate ?? detail.assignment?.window_start_at.slice(0, 10) ?? initialAssignment?.window_start_at.slice(0, 10) ?? new Date().toISOString().slice(0, 10);
   const field = useFieldWorkspace(fieldService, network, appointmentId, detail.assignment?.job_id ?? initialAssignment?.job_id ?? null, serviceDate, canReadField);
+  const context = useFieldContext(fieldService, network, detail.assignment?.job_id ?? initialAssignment?.job_id ?? null, canReadAssets, canReadEstimates);
   const stale = (detail.status === "offline" || detail.status === "error") && detail.assignment !== null;
   const message = detail.status === "not_authorized" ? "You are not authorized to view this assignment."
     : detail.status === "identity_not_ready" ? "Your employee account is not ready for assigned work."
@@ -93,16 +95,29 @@ export function JobWorkspaceScreen({ appointmentId, initialAssignment, initialTi
         <PrimaryButton label="Refresh Invoice Handoff" disabled={field.status !== "ready"} onPress={() => void field.mutate(() => fieldService.refreshHandoff(field.item!.job_id!, field.item!.job_version!, field.item!.assignment_version))} />
         <Text style={styles.readOnly}>Every field action is reconciled from authoritative Job and assignment state. Job actions never create a Timekeeping punch.</Text>
       </View>}
+      {(canReadAssets || canReadEstimates) && <View style={styles.section} accessible accessibilityLabel="Assignment scoped field context">
+        <Text style={styles.sectionTitle}>Field context</Text>
+        {context.status === "loading" && <Text>Refreshing latest field context…</Text>}
+        {context.status === "stale" && <Text accessibilityRole="alert" style={styles.stale}>LAST CONFIRMED — STALE. Actions requiring current context remain unavailable.</Text>}
+        {context.status === "offline" && <Text accessibilityRole="alert">Equipment and Estimate information are unavailable offline until first confirmed.</Text>}
+        {context.status === "denied" && <Text accessibilityRole="alert">Permission or assignment changed. Field context is no longer available.</Text>}
+        {context.status === "unavailable" && <Text accessibilityRole="alert">Equipment or Estimate information is unavailable. Pull to refresh when connected.</Text>}
+        {canReadAssets && context.equipment && <View accessibilityLabel="Assigned Job equipment">
+          <Text style={styles.sectionTitle}>Equipment</Text>
+          {context.equipment.items.length === 0 ? <Text style={styles.line}>No equipment is explicitly related to this Job.</Text> : context.equipment.items.map((asset) => <View key={asset.asset_id} style={styles.contextCard}><Text style={styles.sectionTitle}>{asset.display_name}</Text><Text style={styles.line}>{[asset.manufacturer, asset.model].filter(Boolean).join(" · ") || "Equipment details unavailable"}</Text><Text style={styles.line}>Status: {asset.lifecycle}</Text><Text style={styles.line}>Installed: {asset.installation_state ?? "Evidence unavailable"}</Text><Text style={styles.line}>Warranty: {asset.warranty_state ?? "Evidence unavailable — coverage not determined"}</Text><Text style={styles.line}>Service history: {asset.service_history.length} of {context.equipment?.history_limit ?? 10} bounded records</Text><Text style={styles.line}>Protected evidence: {asset.evidence.some((item) => item.protected_document_available) ? "Available through protected server authority" : "None confirmed"}</Text></View>)}
+          <Text style={styles.readOnly}>Photo/document upload: SOURCE_REQUIRED. No device file is published or retried.</Text>
+        </View>}
+        {canReadAssets && context.readiness && <View><Text style={styles.sectionTitle}>My field readiness</Text><Text style={styles.line}>Workforce profile: {context.readiness.workforce_profile_available ? "Available" : "Not configured"}</Text><Text style={styles.line}>Branch eligibility: {context.readiness.branch_eligible ? "Confirmed" : "Not confirmed"}</Text><Text style={styles.line}>Availability: {context.readiness.availability_state ?? "No current evidence"}</Text>{context.readiness.fleet.map((asset) => <Text key={asset.asset_id} style={styles.line}>{asset.display_name}: {asset.out_of_service ? "Out of service" : asset.readiness_state ?? "Readiness unavailable"}; inspection {asset.inspection_state ?? "unavailable"}; maintenance {asset.maintenance_state ?? "unavailable"}</Text>)}<Text style={styles.readOnly}>Inspection interaction: POLICY_REQUIRED.</Text></View>}
+        {canReadEstimates && context.estimate && <View accessibilityLabel="Assigned Job Estimate presentation"><Text style={styles.sectionTitle}>Estimate</Text>{!context.estimate.available ? <Text style={styles.line}>No current issued Estimate is related to this Job.</Text> : <><Text style={styles.line}>{context.estimate.estimate_number} · {context.estimate.estimate_status}</Text><Text style={styles.line}>{context.estimate.proposal_title}</Text>{context.estimate.lines.map((line) => <Text key={line.position} style={styles.line}>{line.title}: {line.line_total.toFixed(2)} {line.currency}</Text>)}<Text style={styles.line}>Total: {context.estimate.total_amount?.toFixed(2)} {context.estimate.currency}</Text><Text style={styles.line}>Customer decision: {context.estimate.acceptance_status}</Text><Text style={styles.readOnly}>Presentation is revision {context.estimate.revision_number}; Mobile cannot rewrite it. Delivery remains server-authority required.</Text></>}</View>}
+      </View>}
       <View style={styles.section} accessible accessibilityLabel="Additional field capability readiness">
         <Text style={styles.sectionTitle}>Additional field tools</Text>
-        <Text style={styles.line}>Equipment and service history: office connection required</Text>
-        <Text style={styles.line}>Photos and documents: upload service not yet available</Text>
-        <Text style={styles.line}>Estimate presentation: field-safe source not yet available</Text>
         <Text style={styles.line}>Customer messages: sent only by ACP Enterprise when enabled</Text>
+        <Text style={styles.line}>Notifications and push delivery: source/provider required</Text>
         <Text style={styles.line}>Payment collection: not authorized in ACP Employee</Text>
       </View>
     </View>}
   </ScrollView>;
 }
 
-const styles = StyleSheet.create({ safe: { flex: 1, backgroundColor: colors.canvas }, body: { padding: spacing.lg, paddingBottom: spacing.xl, gap: spacing.md }, title: { fontSize: 30, fontWeight: "800", color: colors.text }, readOnly: { color: colors.muted, fontSize: 15, lineHeight: 22 }, message: { color: colors.text, fontSize: 16 }, stale: { color: colors.warning, fontWeight: "700", fontSize: 16, backgroundColor: "#FFF7D6", borderRadius: 12, padding: spacing.md }, detail: { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, borderRadius: 14, padding: spacing.lg, gap: spacing.md }, kicker: { fontSize: 13, fontWeight: "800", color: colors.brandDark }, customer: { fontSize: 24, fontWeight: "800", color: colors.text }, window: { fontSize: 17, fontWeight: "700", color: colors.brandDark }, section: { borderTopColor: colors.border, borderTopWidth: 1, paddingTop: spacing.md, gap: spacing.sm }, sectionTitle: { fontSize: 17, fontWeight: "700", color: colors.text }, line: { fontSize: 16, lineHeight: 23, color: colors.text }, input: { minHeight: 100, borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, fontSize: 16, textAlignVertical: "top", color: colors.text, backgroundColor: colors.surface }, directions: { alignItems: "center", alignSelf: "flex-start", borderColor: colors.brand, borderRadius: 10, borderWidth: 1, justifyContent: "center", minHeight: 48, marginTop: spacing.sm, paddingHorizontal: spacing.md }, directionsText: { color: colors.brand, fontSize: 16, fontWeight: "700" } });
+const styles = StyleSheet.create({ safe: { flex: 1, backgroundColor: colors.canvas }, body: { padding: spacing.lg, paddingBottom: spacing.xl, gap: spacing.md }, title: { fontSize: 30, fontWeight: "800", color: colors.text }, readOnly: { color: colors.muted, fontSize: 15, lineHeight: 22 }, message: { color: colors.text, fontSize: 16 }, stale: { color: colors.warning, fontWeight: "700", fontSize: 16, backgroundColor: "#FFF7D6", borderRadius: 12, padding: spacing.md }, detail: { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, borderRadius: 14, padding: spacing.lg, gap: spacing.md }, contextCard: { borderColor: colors.border, borderWidth: 1, borderRadius: 10, padding: spacing.md, gap: spacing.sm, marginVertical: spacing.sm }, kicker: { fontSize: 13, fontWeight: "800", color: colors.brandDark }, customer: { fontSize: 24, fontWeight: "800", color: colors.text }, window: { fontSize: 17, fontWeight: "700", color: colors.brandDark }, section: { borderTopColor: colors.border, borderTopWidth: 1, paddingTop: spacing.md, gap: spacing.sm }, sectionTitle: { fontSize: 17, fontWeight: "700", color: colors.text }, line: { fontSize: 16, lineHeight: 23, color: colors.text }, input: { minHeight: 100, borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, fontSize: 16, textAlignVertical: "top", color: colors.text, backgroundColor: colors.surface }, directions: { alignItems: "center", alignSelf: "flex-start", borderColor: colors.brand, borderRadius: 10, borderWidth: 1, justifyContent: "center", minHeight: 48, marginTop: spacing.sm, paddingHorizontal: spacing.md }, directionsText: { color: colors.brand, fontSize: 16, fontWeight: "700" } });

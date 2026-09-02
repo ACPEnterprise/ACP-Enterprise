@@ -44,6 +44,22 @@ describe("permission-driven field product contracts", () => {
     render(<JobsScreen service={service} network={network} />);
     await waitFor(() => expect(itinerary).toHaveBeenCalledTimes(3));
     expect(screen.getByText(/assigned work only/i)).toBeOnTheScreen();
-    expect(screen.getByText(/Source required.*completed history/i)).toBeOnTheScreen();
+    expect(screen.getByText(/Completed history is unavailable/i)).toBeOnTheScreen();
+  });
+
+  it("uses assignment-scoped successor projections without client identity scope", async () => {
+    const request = jest.fn()
+      .mockResolvedValueOnce({ job_id: "40000000-0000-4000-8000-000000000001", history_limit: 10, attachment_upload_state: "source_required", items: [] })
+      .mockResolvedValueOnce({ job_id: "40000000-0000-4000-8000-000000000001", available: false, estimate_number: null, estimate_status: null, acceptance_status: null, revision_number: null, revision_status: null, proposal_title: null, customer_message: null, total_amount: null, currency: null, expires_at: null, lines: [], customer_handoff_state: "server_authority_required" })
+      .mockResolvedValueOnce({ days: 30, limit: 20, items: [] });
+    const service = createFieldService({ request } as unknown as ApiClient);
+    const job = "40000000-0000-4000-8000-000000000001";
+    await service.equipment!(job); await service.estimate!(job); await service.history!();
+    expect(request.mock.calls.map((call) => call[0])).toEqual([
+      `/api/v1/technician/jobs/${job}/equipment`,
+      `/api/v1/technician/jobs/${job}/estimate`,
+      "/api/v1/technician/history?days=30&limit=20",
+    ]);
+    expect(JSON.stringify(request.mock.calls)).not.toMatch(/employee_id|customer_id|branch_id/i);
   });
 });
