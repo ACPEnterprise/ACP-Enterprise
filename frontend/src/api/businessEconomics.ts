@@ -86,6 +86,30 @@ export interface EconomicsWorkspace {
     policy_gaps: { gap_key: string; requirement: string; state: string }[];
   };
   beacon_conditions: { kind: string; state: string }[];
+  owner_question_acceptance: {
+    version: string;
+    matrix_digest: string;
+    mutation_authority: "none";
+    questions: Array<{
+      key: string;
+      question: string;
+      disposition:
+        | "ANSWERABLE"
+        | "PARTIALLY_ANSWERABLE"
+        | "POLICY_REQUIRED"
+        | "SOURCE_REQUIRED"
+        | "EXTERNAL_GATE"
+        | "NOT_AUTHORIZED"
+        | "NOT_APPLICABLE";
+      answer_source: string;
+      owning_domains: string[];
+      inspect_path: string;
+      missing_permissions: string[];
+      why: string;
+      what_resolves_it: string | null;
+      limitation: string | null;
+    }>;
+  };
 }
 export interface EconomicsResultDetail {
   id: string;
