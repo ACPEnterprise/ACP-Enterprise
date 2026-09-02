@@ -38,6 +38,22 @@ DOMAIN_KEYWORDS = {
     "payments": ("payment", "settlement", "cash"),
     "purchasing": ("purchasing", "purchase order", "vendor"),
     "inventory": ("inventory", "stock", "material"),
+    "assets": ("asset", "equipment", "vehicle", "fleet", "warranty", "tracked tool"),
+    "workforce": (
+        "employee readiness",
+        "technician readiness",
+        "certification",
+        "language evidence",
+        "mobile-ready",
+        "employee permission",
+    ),
+    "communications": (
+        "communication",
+        "message delivery",
+        "email bounce",
+        "text failed",
+        "suppressed destination",
+    ),
     "business-economics": (
         "profit",
         "margin",
@@ -77,6 +93,9 @@ INTELLIGENCE_BRIEFING_DOMAINS = {
     "beacon",
     "migration",
     "payroll",
+    "assets",
+    "workforce",
+    "communications",
 }
 
 ASSOCIATION_QUESTION_PHRASES = (
@@ -102,6 +121,9 @@ ROUTES = {
     "payments": "/payments",
     "purchasing": "/purchasing",
     "inventory": "/inventory",
+    "assets": "/assets",
+    "workforce": "/employees",
+    "communications": "/communications",
 }
 
 
