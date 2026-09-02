@@ -1,0 +1,31 @@
+{
+  "contract": "LIA.OPERATIONAL_INTELLIGENCE.PRODUCT.PROGRAM.3",
+  "context_contracts": [
+    "LIA.CONTEXT.v1",
+    "ASSET.LIA_CONTEXT.v1",
+    "WORKFORCE.LIA_CONTEXT.v1"
+  ],
+  "deterministic_operation": "ENGINEERING_READY",
+  "external_ai_provider": "PROVIDER_REQUIRED",
+  "no_autonomous_mutation": true,
+  "privacy": {
+    "asset_identifiers": "EXCLUDED",
+    "payroll_compensation_tax_banking": "EXCLUDED",
+    "source_text": "UNTRUSTED_DATA"
+  },
+  "qualification": [
+    "explicit_permission_before_retrieval",
+    "company_branch_scope_before_retrieval",
+    "opaque_context_revalidated_server_side",
+    "bounded_asset_workforce_communications_evidence",
+    "deterministic_evidence_digest",
+    "no_source_domain_mutation",
+    "no_provider_call"
+  ],
+  "remaining_gates": {
+    "conversation_retention": "POLICY_REQUIRED",
+    "provider_admission": "OWNER_APPROVAL_REQUIRED",
+    "service_location_relationship_projection": "SOURCE_REQUIRED"
+  },
+  "qualification_fingerprint": "aa696f2096bab0c49cd64812a7df2b88023fc58b984895dcd4a5bceb74ad06fe"
+}

@@ -24,15 +24,15 @@ export type FixtureContract = {
   user: { loginPlaceholder: string };
 };
 
-const requiredPermissions = ["COMPANY_TIMEKEEPING_OWN_READ", "COMPANY_TIMEKEEPING_OWN_PUNCH", "COMPANY_EMPLOYEE_OPERATIONS_OWN_DAY_READ"];
-const requiredScenarios = ["NO_ACTIVE_SHIFT", "CLOCKED_IN", "BREAK_ACTIVE", "CLOCKED_OUT", "MY_TIME_HISTORY", "MY_DAY_ONE_ASSIGNMENT", "JOB_WORKSPACE", "REASSIGNMENT_REMOVAL", "OFFLINE_STALE", "SESSION_EXPIRATION", "PERMISSION_DENIED", "NETWORK_RECOVERY"];
+const requiredPermissions = ["COMPANY_TIMEKEEPING_OWN_READ", "COMPANY_TIMEKEEPING_OWN_PUNCH", "COMPANY_EMPLOYEE_OPERATIONS_OWN_DAY_READ", "COMPANY_JOB_READ", "COMPANY_JOB_EXECUTE", "COMPANY_PAYROLL_STATEMENT_OWN_READ"];
+const requiredScenarios = ["NO_ACTIVE_SHIFT", "CLOCKED_IN", "BREAK_ACTIVE", "CLOCKED_OUT", "MY_TIME_HISTORY", "MY_DAY_ONE_ASSIGNMENT", "JOB_WORKSPACE", "REASSIGNMENT_REMOVAL", "OFFLINE_STALE", "SESSION_EXPIRATION", "PERMISSION_DENIED", "NETWORK_RECOVERY", "FIELD_EVIDENCE", "MY_PAY_STATEMENT", "PAYROLL_STATUS", "CORRECTED_STATEMENT", "YTD_UNAVAILABLE"];
 
 export function validateFixture(contract: FixtureContract): void {
   if (contract.environment !== "preview" || contract.syntheticMarker !== "SYNTHETIC_BETA_ONLY") throw new Error("Fixture must be explicitly synthetic and Preview-only");
   if (!contract.fixtureKey || contract.user.loginPlaceholder !== "OWNER_SUPPLIED_SYNTHETIC_PREVIEW_LOGIN") throw new Error("Fixture identity contract is unsafe");
   if (!requiredPermissions.every((permission) => contract.permissions.includes(permission))) throw new Error("Fixture permission contract is incomplete");
   if (!requiredScenarios.every((scenario) => contract.scenarios.includes(scenario))) throw new Error("Fixture scenario contract is incomplete");
-  if (!["compensation", "wage", "payroll", "bank", "tax"].every((field) => contract.prohibitedData.includes(field))) throw new Error("Fixture prohibited-data contract is incomplete");
+  if (!["compensation", "wage", "payroll_administration", "bank", "tax"].every((field) => contract.prohibitedData.includes(field))) throw new Error("Fixture prohibited-data contract is incomplete");
 }
 
 export type FixtureRecord = Readonly<{ kind: string; externalKey: string; value: unknown }>;

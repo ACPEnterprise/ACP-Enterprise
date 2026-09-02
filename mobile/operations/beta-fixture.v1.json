@@ -10,16 +10,20 @@
   "permissions": [
     "COMPANY_TIMEKEEPING_OWN_READ",
     "COMPANY_TIMEKEEPING_OWN_PUNCH",
-    "COMPANY_EMPLOYEE_OPERATIONS_OWN_DAY_READ"
+    "COMPANY_EMPLOYEE_OPERATIONS_OWN_DAY_READ",
+    "COMPANY_JOB_READ",
+    "COMPANY_JOB_EXECUTE",
+    "COMPANY_PAYROLL_STATEMENT_OWN_READ"
   ],
   "customer": { "externalKey": "synthetic-beta-customer", "displayName": "Synthetic Test Customer" },
   "serviceLocation": { "externalKey": "synthetic-beta-location", "address": "100 Test Fixture Way, Example, NY 10001" },
   "job": { "externalKey": "synthetic-beta-job", "serviceCategory": "Synthetic plumbing inspection" },
   "appointment": { "externalKey": "synthetic-beta-appointment", "assignmentRole": "PRIMARY" },
-  "prohibitedData": ["compensation", "wage", "payroll", "bank", "tax"],
+  "prohibitedData": ["compensation", "wage", "payroll_administration", "bank", "tax"],
   "scenarios": [
     "NO_ACTIVE_SHIFT", "CLOCKED_IN", "BREAK_ACTIVE", "CLOCKED_OUT", "MY_TIME_HISTORY",
     "MY_DAY_ONE_ASSIGNMENT", "JOB_WORKSPACE", "REASSIGNMENT_REMOVAL", "OFFLINE_STALE",
-    "SESSION_EXPIRATION", "PERMISSION_DENIED", "NETWORK_RECOVERY"
+    "SESSION_EXPIRATION", "PERMISSION_DENIED", "NETWORK_RECOVERY", "FIELD_EVIDENCE",
+    "MY_PAY_STATEMENT", "PAYROLL_STATUS", "CORRECTED_STATEMENT", "YTD_UNAVAILABLE"
   ]
 }
