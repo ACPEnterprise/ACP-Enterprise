@@ -43,15 +43,19 @@ is not identity. Confirmation unlocks the source Plumbing unit and the 277/278
 selected open Jobs that previously lacked Business Unit evidence. Otherwise
 those rows remain held.
 
-## Exact cutoff controls
+## Accepted transition controls and remaining cutoff controls
+
+The current QBO environment boundary is 2024-02-19. Its Accrual Trial Balance
+and Cash Balance Sheet are balanced successor controls, and neither reports an
+Opening Balance Equity balance. Pre-2024 transactions remain full-history
+source evidence with import provenance. The transition controls do not replace
+the 2026-08-31 operational subledger and account-level controls below.
 
 All reports use Accrual basis and cutoff 2026-08-31 unless stated otherwise.
 
-Full available history does not prove the balance sheet immediately before the
-first reliable transaction family. Obtain a Balance Sheet and Trial Balance as
-of 2021-07-06. That opening control is evidence only; it does not authorize an
-opening journal. Families beginning later retain their stated limitation and
-must not be backfilled from the opening control.
+No fabricated opening journal is required or authorized. Families beginning
+later retain their stated limitation and must not be backfilled from an
+aggregate control.
 
 | Gate | Required QBO evidence | Purpose |
 |---|---|---|
