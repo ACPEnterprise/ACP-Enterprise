@@ -6,9 +6,6 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import func, select, update
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from app.core.config import settings
 from app.customers.models import Customer
 from app.estimates.service import EstimateService
@@ -34,6 +31,8 @@ from app.invoicing.service import InvoiceService
 from app.jobs.models import Job
 from app.platform.branch.models import Branch
 from app.platform.company.models import Company
+from sqlalchemy import func, select, update
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from tests.estimates.test_estimate_conversion import (
     approved_estimate,
     conversion_spec,
@@ -94,6 +93,31 @@ async def issue(factory, actor, invoice):
     )
     async with factory() as session:
         return await InvoiceService().issue(session, spec)
+
+
+@pytest.mark.asyncio
+async def test_office_workspace_and_customer_balance_use_native_scoped_evidence(invoice_fixture):
+    factory, company, branch, _, customer, _, spec = invoice_fixture
+    service = InvoiceService()
+    async with factory() as session:
+        invoice = await service.create_from_estimate(session, spec)
+    as_of = spec.due_date
+    async with factory() as session:
+        rows = await service.workspace(session, company.id, frozenset({branch.id}), as_of=as_of, state="all", query=customer.display_name, limit=10)
+        balance = await service.customer_balance(session, company.id, frozenset({branch.id}), customer.id, as_of=as_of)
+    assert len(rows) == 1
+    assert rows[0]["id"] == invoice.id
+    assert rows[0]["customer_display_name"] == customer.display_name
+    assert rows[0]["job_number"].startswith("JOB-")
+    assert rows[0]["aging_bucket"] == "paid"
+    assert balance is not None
+    assert balance["native_invoice_count"] == 1
+    assert balance["invoice_total"] == invoice.total_amount
+    assert balance["open_balance"] == Decimal("0.00")
+
+    async with factory() as session:
+        hidden = await service.workspace(session, company.id, frozenset({uuid4()}), as_of=as_of, state="all")
+    assert hidden == ()
 
 
 @pytest.mark.asyncio

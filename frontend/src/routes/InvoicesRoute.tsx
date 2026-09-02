@@ -1,7 +1,8 @@
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router";
 import { useHasPermission } from "../auth";
-import { useInvoiceMutations, useInvoices } from "../hooks/useInvoices";
+import { useInvoiceMutations, useInvoiceWorkspace } from "../hooks/useInvoices";
+import type { InvoiceWorkspaceState } from "../types/invoices";
 import {
   Alert,
   Button,
@@ -17,7 +18,7 @@ import {
 export function InvoicesRoute() {
   const canRead = useHasPermission("COMPANY_INVOICE_READ");
   const canManage = useHasPermission("COMPANY_INVOICE_MANAGE");
-  const invoices = useInvoices(canRead);
+  const today = new Date().toISOString().slice(0, 10);
   const mutations = useInvoiceMutations();
   const [form, setForm] = useState({
     branch: "",
@@ -27,7 +28,8 @@ export function InvoicesRoute() {
     terms: "Net 30",
   });
   const [query, setQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState("open");
+  const [statusFilter, setStatusFilter] = useState<InvoiceWorkspaceState>("open");
+  const invoices = useInvoiceWorkspace({ asOf: today, state: statusFilter, query: query.trim() || undefined }, canRead);
   if (!canRead)
     return (
       <Alert variant="danger">You are not authorized to view Invoices.</Alert>
@@ -43,11 +45,7 @@ export function InvoicesRoute() {
       idempotency_key: crypto.randomUUID(),
     });
   };
-  const rows = (invoices.data ?? []).filter((invoice) => {
-    const matchesQuery = !query || invoice.invoice_number.toLowerCase().includes(query.toLowerCase()) || invoice.customer_id?.includes(query);
-    const matchesStatus = statusFilter === "all" || (statusFilter === "open" ? Number(invoice.open_amount) > 0 && !["voided", "cancelled"].includes(invoice.status) : invoice.status === statusFilter);
-    return matchesQuery && matchesStatus;
-  });
+  const rows = invoices.data ?? [];
   const openTotal = rows.reduce((sum, invoice) => sum + Number(invoice.open_amount), 0);
   return (
     <div className="mx-auto max-w-5xl space-y-6 pb-12">
@@ -74,21 +72,19 @@ export function InvoicesRoute() {
           </CardHeader>
           <CardContent>
             <div className="mb-4 grid gap-3 sm:grid-cols-2">
-              <Input aria-label="Search invoices" placeholder="Invoice number or customer ID" value={query} onChange={(event) => setQuery(event.target.value)} />
-              <label className="grid gap-1 text-sm"><span>Status</span><select aria-label="Invoice status" className="rounded-lg border border-stroke bg-surface px-3 py-2" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="open">Open balance</option><option value="all">All</option><option value="draft">Draft</option><option value="issued">Issued</option><option value="partially_paid">Partially paid</option><option value="paid">Paid</option><option value="adjusted">Adjusted</option><option value="voided">Voided</option></select></label>
+              <Input aria-label="Search invoices" placeholder="Customer, Invoice, or Job" value={query} onChange={(event) => setQuery(event.target.value)} />
+              <label className="grid gap-1 text-sm"><span>View</span><select aria-label="Invoice status" className="rounded-lg border border-stroke bg-surface px-3 py-2" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as InvoiceWorkspaceState)}><option value="open">Open balance</option><option value="overdue">Overdue</option><option value="needs_attention">Needs attention</option><option value="all">All</option><option value="draft">Draft</option><option value="issued">Issued</option><option value="partially_paid">Partial</option><option value="paid">Paid</option><option value="adjusted">Adjusted</option><option value="voided">Voided</option></select></label>
             </div>
             <ul className="space-y-2">
               {rows.map((invoice) => (
                 <li key={invoice.id}>
                   <Link
-                    className="flex justify-between rounded-lg border border-stroke p-3"
+                    className="grid gap-2 rounded-lg border border-stroke p-3 sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto] sm:items-center"
                     to={`/invoices/${invoice.id}`}
                   >
-                    <span>{invoice.invoice_number}</span>
-                    <span>
-                      {invoice.status} · {invoice.open_amount}{" "}
-                      {invoice.currency}
-                    </span>
+                    <span><strong>{invoice.invoice_number}</strong><span className="block truncate text-sm text-content-muted">{invoice.customer_display_name} · {invoice.customer_number}</span></span>
+                    <span className="text-sm"><span className="block">{invoice.job_number}</span><span className="block truncate text-content-muted">{invoice.service_location_label}</span></span>
+                    <span className="text-left sm:text-right"><strong>{Number(invoice.open_amount).toLocaleString(undefined, { style: "currency", currency: invoice.currency })}</strong><span className="block text-xs text-content-muted">{invoice.status.replaceAll("_", " ")} · due {invoice.due_date}{invoice.age_days > 0 ? ` · ${invoice.age_days}d overdue` : ""}</span>{invoice.attention_reasons.length > 0 && <span className="block text-xs font-semibold text-status-warning">{invoice.attention_reasons.map((reason) => reason.replaceAll("_", " ").toLowerCase()).join(" · ")}</span>}</span>
                   </Link>
                 </li>
               ))}

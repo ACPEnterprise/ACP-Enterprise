@@ -1,9 +1,8 @@
 from datetime import date
+from decimal import Decimal
 from uuid import uuid4
 
 import pytest
-from fastapi import FastAPI, HTTPException
-
 from app.accounts_payable.errors import APValidation
 from app.accounts_payable.router import _branch as require_ap_branch
 from app.accounts_payable.router import router as accounts_payable_router
@@ -11,7 +10,8 @@ from app.accounts_payable.service import AccountsPayableService
 from app.invoicing.errors import InvoiceValidation
 from app.invoicing.router import _branch as require_invoice_branch
 from app.invoicing.router import router as invoice_router
-from app.invoicing.service import InvoiceService
+from app.invoicing.service import InvoiceService, aging_bucket
+from fastapi import FastAPI, HTTPException
 
 app = FastAPI()
 app.include_router(invoice_router)
@@ -27,6 +27,22 @@ def test_invoice_and_ap_lists_publish_bounded_pagination_contracts() -> None:
         assert parameters["limit"]["schema"]["maximum"] == 200
         assert parameters["offset"]["schema"]["default"] == 0
         assert parameters["offset"]["schema"]["minimum"] == 0
+
+    workspace = document["paths"]["/api/v1/invoices/workspace"]["get"]
+    parameters = {item["name"]: item for item in workspace["parameters"]}
+    assert parameters["as_of"]["required"] is True
+    assert parameters["limit"]["schema"]["maximum"] == 200
+    assert '"maxLength": 160' in __import__("json").dumps(parameters["query"]["schema"])
+
+
+def test_invoice_aging_is_deterministic_and_never_ages_paid_balances() -> None:
+    as_of = date(2026, 9, 2)
+    assert aging_bucket(date(2026, 9, 3), as_of, Decimal("1.00")) == (0, "current")
+    assert aging_bucket(date(2026, 9, 2), as_of, Decimal("1.00")) == (0, "current")
+    assert aging_bucket(date(2026, 8, 3), as_of, Decimal("1.00")) == (30, "1_30")
+    assert aging_bucket(date(2026, 8, 2), as_of, Decimal("1.00")) == (31, "31_60")
+    assert aging_bucket(date(2026, 5, 1), as_of, Decimal("1.00")) == (124, "91_plus")
+    assert aging_bucket(date(2020, 1, 1), as_of, Decimal("0.00")) == (0, "paid")
 
 
 @pytest.mark.asyncio

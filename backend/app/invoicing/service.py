@@ -1,14 +1,15 @@
 import hashlib
 import json
 from dataclasses import asdict
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import func, select, text
+from sqlalchemy import String, and_, cast, func, or_, select, text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.customers.models import Customer, ServiceLocation
 from app.estimates.models import (
     Estimate,
     EstimateCommercialSnapshotReference,
@@ -39,8 +40,24 @@ from app.invoicing.models import (
     PaymentReceiptEvidence,
 )
 from app.jobs.models import Job
+from app.payments.models import PaymentReceipt
 
 CENT = Decimal("0.01")
+
+
+def aging_bucket(due_date: date, as_of: date, open_amount: Decimal) -> tuple[int, str]:
+    if open_amount <= 0:
+        return 0, "paid"
+    days = max((as_of - due_date).days, 0)
+    if days == 0:
+        return 0, "current"
+    if days <= 30:
+        return days, "1_30"
+    if days <= 60:
+        return days, "31_60"
+    if days <= 90:
+        return days, "61_90"
+    return days, "91_plus"
 
 
 def _digest(value: object) -> str:
@@ -545,6 +562,147 @@ class InvoiceService:
                 )
             ).all()
         )
+
+    async def workspace(
+        self,
+        session: AsyncSession,
+        company_id: UUID,
+        branches: frozenset[UUID],
+        *,
+        as_of: date,
+        state: str | None = None,
+        query: str | None = None,
+        customer_id: UUID | None = None,
+        invoice_id: UUID | None = None,
+        branch_id: UUID | None = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> tuple[dict[str, object], ...]:
+        if not 1 <= limit <= 200 or offset < 0:
+            raise InvoiceValidation("Invoice workspace page is invalid.")
+        scoped_branches = branches
+        if branch_id is not None:
+            scoped_branches = frozenset({branch_id}) if branch_id in branches else frozenset()
+
+        last_activity_type = (
+            select(ARLedgerEntry.entry_type)
+            .where(
+                ARLedgerEntry.company_id == Invoice.company_id,
+                ARLedgerEntry.invoice_id == Invoice.id,
+            )
+            .order_by(ARLedgerEntry.occurred_at.desc(), ARLedgerEntry.id.desc())
+            .limit(1)
+            .correlate(Invoice)
+            .scalar_subquery()
+        )
+        last_activity_at = (
+            select(ARLedgerEntry.occurred_at)
+            .where(
+                ARLedgerEntry.company_id == Invoice.company_id,
+                ARLedgerEntry.invoice_id == Invoice.id,
+            )
+            .order_by(ARLedgerEntry.occurred_at.desc(), ARLedgerEntry.id.desc())
+            .limit(1)
+            .correlate(Invoice)
+            .scalar_subquery()
+        )
+        statement = (
+            select(
+                Invoice,
+                Customer.customer_number,
+                Customer.display_name,
+                ServiceLocation.nickname,
+                ServiceLocation.address,
+                ServiceLocation.city,
+                ServiceLocation.state,
+                Job.job_number,
+                last_activity_type.label("last_activity_type"),
+                last_activity_at.label("last_activity_at"),
+            )
+            .join(Customer, and_(Customer.company_id == Invoice.company_id, Customer.id == Invoice.customer_id))
+            .join(ServiceLocation, ServiceLocation.id == Invoice.service_location_id)
+            .join(Job, and_(Job.company_id == Invoice.company_id, Job.branch_id == Invoice.branch_id, Job.id == Invoice.job_id))
+            .where(Invoice.company_id == company_id, Invoice.branch_id.in_(scoped_branches))
+        )
+        if customer_id is not None:
+            statement = statement.where(Invoice.customer_id == customer_id)
+        if invoice_id is not None:
+            statement = statement.where(Invoice.id == invoice_id)
+        normalized = (query or "").strip()
+        if normalized:
+            term = f"%{normalized}%"
+            statement = statement.where(
+                or_(
+                    Invoice.invoice_number.ilike(term),
+                    Job.job_number.ilike(term),
+                    Customer.customer_number.ilike(term),
+                    Customer.display_name.ilike(term),
+                    cast(Invoice.id, String).ilike(term),
+                )
+            )
+        open_states = ("draft", "issued", "partially_paid", "adjusted")
+        if state == "open":
+            statement = statement.where(Invoice.status.in_(open_states), Invoice.open_amount > 0)
+        elif state == "overdue":
+            statement = statement.where(Invoice.status.in_(open_states), Invoice.open_amount > 0, Invoice.due_date < as_of)
+        elif state == "needs_attention":
+            statement = statement.where(or_(Invoice.accounting_status == "reconciliation_required", Invoice.legacy_evidence_missing.is_(True), and_(Invoice.status.in_(open_states), Invoice.open_amount > 0, Invoice.due_date < as_of)))
+        elif state and state != "all":
+            statement = statement.where(Invoice.status == state)
+        rows = (
+            await session.execute(
+                statement.order_by(Invoice.due_date.asc(), Invoice.created_at.desc(), Invoice.id.desc())
+                .limit(limit)
+                .offset(offset)
+            )
+        ).all()
+        result: list[dict[str, object]] = []
+        for invoice, customer_number, display_name, nickname, address, city, location_state, job_number, activity_type, activity_at in rows:
+            age_days, bucket = aging_bucket(invoice.due_date, as_of, invoice.open_amount)
+            attention: list[str] = []
+            if invoice.open_amount > 0 and invoice.due_date < as_of:
+                attention.append("INVOICE_OVERDUE")
+            if invoice.accounting_status == "reconciliation_required":
+                attention.append("ACCOUNTING_RECONCILIATION_REQUIRED")
+            if invoice.legacy_evidence_missing:
+                attention.append("MIGRATION_EVIDENCE_INCOMPLETE")
+            result.append({
+                "id": invoice.id, "branch_id": invoice.branch_id,
+                "customer_id": invoice.customer_id, "customer_number": customer_number,
+                "customer_display_name": display_name,
+                "service_location_id": invoice.service_location_id,
+                "service_location_label": nickname or f"{address}, {city}, {location_state}",
+                "job_id": invoice.job_id, "job_number": job_number,
+                "estimate_id": invoice.estimate_id, "invoice_number": invoice.invoice_number,
+                "status": invoice.status, "accounting_status": invoice.accounting_status,
+                "currency": invoice.currency, "issue_date": invoice.issue_date,
+                "due_date": invoice.due_date, "terms": invoice.terms,
+                "total_amount": invoice.total_amount, "open_amount": invoice.open_amount,
+                "age_days": age_days, "aging_bucket": bucket,
+                "attention_reasons": tuple(attention),
+                "last_ar_activity_type": activity_type, "last_ar_activity_at": activity_at,
+                "legacy_evidence_missing": invoice.legacy_evidence_missing,
+                "version": invoice.version,
+            })
+        return tuple(result)
+
+    async def customer_balance(
+        self, session: AsyncSession, company_id: UUID, branches: frozenset[UUID], customer_id: UUID, *, as_of: date
+    ) -> dict[str, object] | None:
+        customer = await session.scalar(select(Customer).where(Customer.company_id == company_id, Customer.id == customer_id))
+        if customer is None:
+            return None
+        invoices = tuple((await session.scalars(select(Invoice).where(Invoice.company_id == company_id, Invoice.customer_id == customer_id, Invoice.branch_id.in_(branches)))).all())
+        if not invoices:
+            return {"customer_id": customer.id, "customer_number": customer.customer_number, "customer_display_name": customer.display_name, "currency": "USD", "invoice_total": Decimal(0), "open_balance": Decimal(0), "credit_total": Decimal(0), "write_off_total": Decimal(0), "applied_payment_total": Decimal(0), "unapplied_receipt_total": Decimal(0), "disputed_receipt_total": Decimal(0), "native_invoice_count": 0, "legacy_evidence_incomplete": False, "as_of": as_of}
+        currencies = {item.currency for item in invoices}
+        if len(currencies) != 1:
+            raise InvoiceValidation("Customer balance requires a single currency scope.")
+        invoice_ids = tuple(item.id for item in invoices)
+        ledger = (await session.execute(select(ARLedgerEntry.entry_type, func.coalesce(func.sum(ARLedgerEntry.amount), 0)).where(ARLedgerEntry.company_id == company_id, ARLedgerEntry.invoice_id.in_(invoice_ids)).group_by(ARLedgerEntry.entry_type))).all()
+        totals = {kind: Decimal(amount) for kind, amount in ledger}
+        receipts = (await session.execute(select(func.coalesce(func.sum(PaymentReceipt.available_amount), 0), func.coalesce(func.sum(PaymentReceipt.disputed_amount), 0)).where(PaymentReceipt.company_id == company_id, PaymentReceipt.customer_id == customer_id, PaymentReceipt.branch_id.in_(branches)))).one()
+        return {"customer_id": customer.id, "customer_number": customer.customer_number, "customer_display_name": customer.display_name, "currency": next(iter(currencies)), "invoice_total": sum((item.total_amount for item in invoices), Decimal(0)), "open_balance": sum((item.open_amount for item in invoices), Decimal(0)), "credit_total": -totals.get("credit_memo", Decimal(0)), "write_off_total": -totals.get("write_off", Decimal(0)), "applied_payment_total": -totals.get("payment_application", Decimal(0)) + totals.get("application_reversal", Decimal(0)), "unapplied_receipt_total": Decimal(receipts[0]), "disputed_receipt_total": Decimal(receipts[1]), "native_invoice_count": len(invoices), "legacy_evidence_incomplete": any(item.legacy_evidence_missing for item in invoices), "as_of": as_of}
 
     async def _reduction(self, session, spec, kind, event):
         async with session.begin():
