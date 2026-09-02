@@ -2696,26 +2696,6 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     },
     {
-      "classification": "NATURALLY_IDEMPOTENT",
-      "domain": "company_administration",
-      "mechanism": "Expected deterministic plan digest, canonical role identities, and transactional reconciliation",
-      "method": "POST",
-      "operation_id": "apply_canonical_role_reconciliation_api_v1_company_admin_canonical_roles_reconciliation_apply_post",
-      "path": "/api/v1/company-admin/canonical-roles/reconciliation/apply",
-      "reason": "Applying the same current canonical-role plan converges without duplicating role authority.",
-      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
-    },
-    {
-      "classification": "NON_MUTATING_READ_ONLY",
-      "domain": "workforce",
-      "mechanism": "Read-only Company and Branch scoped eligibility projection",
-      "method": "POST",
-      "operation_id": "eligibility_api_v1_workforce_eligibility_post",
-      "path": "/api/v1/workforce/eligibility",
-      "reason": "POST carries a structured eligibility query but persists no Workforce authority.",
-      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
-    },
-    {
       "classification": "IDEMPOTENCY_REQUIRED",
       "domain": "operational_assets",
       "mechanism": "Company-scoped command identity, canonical request digest, Asset row lock, optimistic version, and immutable typed action evidence",
@@ -2729,6 +2709,6 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "c4055b2572cc50c4c78f66d0c1cadc2a3ccd3cf08f5cda4c674441f26c795fea",
+  "fingerprint": "d6f50d76001b721beb4335dda6c87722289f637d4350351976f5e53886a558ad",
   "schema_version": "1"
 }
