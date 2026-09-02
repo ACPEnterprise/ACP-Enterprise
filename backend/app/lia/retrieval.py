@@ -19,15 +19,20 @@ from app.invoicing.models import Invoice
 from app.jobs.lia_context import job_lia_context_service
 from app.jobs.models import Job
 from app.luminary.models import LuminaryBriefingRecord
+from app.operational_assets.lia_context import asset_lia_context_service
+from app.operational_assets.models import Asset
 from app.operational_migration.models import HcpMigrationMasterRun
 from app.payments.models import PaymentReceipt
 from app.payroll.models import PayrollPayStatementRecord, PayrollReportingSnapshotRecord
 from app.payroll.permissions import PayrollPermission
 from app.platform.employees.models import Employee
+from app.platform.notifications.models import NotificationOutbox
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import (
     AdministrationPermission,
     AnalyticsPermission,
+    AssetPermission,
+    CommunicationsPermission,
     CustomerPermission,
     EconomicsPolicyPermission,
     EstimatePermission,
@@ -38,9 +43,12 @@ from app.platform.permissions.codes import (
     PaymentPermission,
     PurchasingPermission,
     SchedulingPermission,
+    WorkforcePermission,
 )
 from app.purchasing.models import PurchaseOrder
 from app.scheduling.models import Appointment
+from app.workforce.lia_context import workforce_lia_context_service
+from app.workforce.service import workforce_operations_service
 
 from .contracts import EvidenceReference
 
@@ -97,6 +105,9 @@ ADAPTERS = (
         InventoryItem,
         InventoryItem.status,
     ),
+    AdapterSpec(
+        "assets", "Operational Assets", AssetPermission.READ, Asset, Asset.lifecycle
+    ),
 )
 
 
@@ -109,7 +120,9 @@ class GovernedRetrievalService:
         domains: set[str] | None = None,
         entity_id: Any | None = None,
     ) -> tuple[EvidenceReference, ...]:
-        contextual_domains = ({"customers", "jobs"} & domains) if domains else set()
+        contextual_domains = (
+            {"customers", "jobs", "assets", "workforce"} & domains if domains else set()
+        )
         contextual_reference: EvidenceReference | None = None
         if entity_id is not None and len(contextual_domains) == 1:
             domain = next(iter(contextual_domains))
@@ -134,7 +147,7 @@ class GovernedRetrievalService:
                         authorization_version=customer_projection.authorization_version,
                         limitations=customer_projection.limitations,
                     )
-            else:
+            elif domain == "jobs":
                 job_projection = await job_lia_context_service.project(
                     session, context=context, job_id=entity_id
                 )
@@ -154,6 +167,48 @@ class GovernedRetrievalService:
                         branch_ids=(job_projection.branch_id,),
                         authorization_version=job_projection.authorization_version,
                         limitations=job_projection.limitations,
+                    )
+            elif domain == "assets":
+                asset_projection = await asset_lia_context_service.project(
+                    session, context=context, asset_id=entity_id
+                )
+                if asset_projection is not None:
+                    contextual_reference = EvidenceReference(
+                        domain=domain,
+                        label="Minimum-necessary Asset operational context",
+                        authority=asset_projection.contract_version,
+                        observed_at=asset_projection.observed_at,
+                        freshness="CURRENT_QUERY",
+                        entity_id=asset_projection.entity_id,
+                        evidence_digest=asset_projection.evidence_digest,
+                        count=sum(asset_projection.evidence_states.values()),
+                        state=asset_projection.safe_summary(),
+                        source_contract_version=asset_projection.contract_version,
+                        company_id=asset_projection.company_id,
+                        branch_ids=(asset_projection.branch_id,),
+                        authorization_version=asset_projection.authorization_version,
+                        limitations=asset_projection.limitations,
+                    )
+            else:
+                workforce_projection = await workforce_lia_context_service.project(
+                    session, context=context, employee_id=entity_id
+                )
+                if workforce_projection is not None:
+                    contextual_reference = EvidenceReference(
+                        domain=domain,
+                        label="Minimum-necessary Workforce readiness context",
+                        authority=workforce_projection.contract_version,
+                        observed_at=workforce_projection.observed_at,
+                        freshness="CURRENT_QUERY",
+                        entity_id=workforce_projection.entity_id,
+                        evidence_digest=workforce_projection.evidence_digest,
+                        count=len(workforce_projection.capability_codes),
+                        state=workforce_projection.safe_summary(),
+                        source_contract_version=workforce_projection.contract_version,
+                        company_id=workforce_projection.company_id,
+                        branch_ids=workforce_projection.branch_ids,
+                        authorization_version=workforce_projection.authorization_version,
+                        limitations=workforce_projection.limitations,
                     )
         # Permission checks select adapters before any protected query is executed.
         permitted = tuple(
@@ -274,6 +329,81 @@ class GovernedRetrievalService:
             or context.has_permission(PayrollPermission.STATEMENT_OWN_READ)
         ) and (domains is None or "payroll" in domains):
             evidence.extend(await self._payroll(session, context, observed_at))
+        if (
+            context.has_permission(WorkforcePermission.READ)
+            and (domains is None or "workforce" in domains)
+            and not (entity_id is not None and "workforce" in contextual_domains)
+        ):
+            directory = await workforce_operations_service.directory(
+                session, context=context
+            )
+            states: dict[str, int] = {}
+            for item in directory.items[:25]:
+                states[item.readiness_state] = states.get(item.readiness_state, 0) + 1
+            evidence.append(
+                _reference(
+                    domain="workforce",
+                    label="Workforce operational readiness",
+                    authority="WORKFORCE.READINESS.v1",
+                    observed_at=max(
+                        (item.updated_at for item in directory.items[:25]),
+                        default=observed_at,
+                    ),
+                    rows=tuple(
+                        (str(item.employee_id), item.readiness_state)
+                        for item in directory.items[:25]
+                    ),
+                    states=states,
+                )
+            )
+        if context.has_permission(CommunicationsPermission.READ) and (
+            domains is None or "communications" in domains
+        ):
+            branch_ids = (
+                frozenset({context.active_branch.id})
+                if context.active_branch is not None
+                else context.authorized_branch_ids
+            )
+            communication_rows: tuple[NotificationOutbox, ...] = tuple(
+                (
+                    await session.scalars(
+                        select(NotificationOutbox)
+                        .where(
+                            NotificationOutbox.company_id == context.company.id,
+                            NotificationOutbox.branch_id.in_(branch_ids),
+                            NotificationOutbox.notification_type.like(
+                                "communications.%"
+                            ),
+                        )
+                        .order_by(
+                            NotificationOutbox.created_at.desc(),
+                            NotificationOutbox.id.desc(),
+                        )
+                        .limit(25)
+                    )
+                ).all()
+            )
+            communication_states: dict[str, int] = {}
+            for row in communication_rows:
+                communication_states[row.status] = (
+                    communication_states.get(row.status, 0) + 1
+                )
+            evidence.append(
+                _reference(
+                    domain="communications",
+                    label="Customer communication delivery evidence",
+                    authority="COMMUNICATIONS.DELIVERY.v1",
+                    observed_at=max(
+                        (row.updated_at for row in communication_rows),
+                        default=observed_at,
+                    ),
+                    rows=tuple(
+                        (str(row.id), row.intent_digest or "unsealed_intent")
+                        for row in communication_rows
+                    ),
+                    states=communication_states,
+                )
+            )
         return tuple(evidence)
 
     @staticmethod
@@ -507,6 +637,10 @@ def permitted_domain_names(context: AuthorizationContext) -> set[str]:
         domains.add("beacon")
     if context.has_permission(AdministrationPermission.COMPANY_ADMINISTER):
         domains.add("migration")
+    if context.has_permission(WorkforcePermission.READ):
+        domains.add("workforce")
+    if context.has_permission(CommunicationsPermission.READ):
+        domains.add("communications")
     if context.has_permission(
         PayrollPermission.REPORTING_READ
     ) or context.has_permission(PayrollPermission.STATEMENT_OWN_READ):

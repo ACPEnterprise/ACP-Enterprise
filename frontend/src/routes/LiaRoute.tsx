@@ -126,6 +126,8 @@ export function LiaRoute() {
     "payments",
     "purchasing",
     "inventory",
+    "assets",
+    "workforce",
   ]);
   const context =
     contextDomain !== null &&
@@ -146,6 +148,8 @@ export function LiaRoute() {
         payments: "Payment",
         purchasing: "Purchasing",
         inventory: "Inventory",
+        assets: "Asset",
+        workforce: "Employee",
       }[context.domain]
     : undefined;
   const readiness = useLiaReadiness();
