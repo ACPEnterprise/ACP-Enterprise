@@ -1,0 +1,32 @@
+{
+  "packet": "MOBILE.EMPLOYEE.FIELD.PRODUCT.PROGRAM.1",
+  "authority_sha": "7b5a46e87a87832b0b0eb6bcdbe2d06a0233d196",
+  "branch": "work/mobile-employee-field-product-program-1",
+  "commits": [
+    "ea72414",
+    "393d415",
+    "8bc0198",
+    "72bf943"
+  ],
+  "owned_paths": [
+    "mobile/**",
+    "docs/mobile/MOBILE.EMPLOYEE.FIELD.PRODUCT.PROGRAM.1*"
+  ],
+  "server_changes": false,
+  "schema_changes": false,
+  "preview_deployment": false,
+  "production_operation": false,
+  "apple_mutation": false,
+  "qualification": {
+    "typecheck": "pass",
+    "lint": "pass",
+    "tests": "97_pass",
+    "preview_config": "pass",
+    "synthetic_fixture_dry_run": "pass",
+    "ios_hermes_export": "pass",
+    "android_hermes_export": "pass",
+    "native_ios_build": "external_cocoapods_xcode_gate",
+    "native_android_build": "external_java_gate"
+  },
+  "integration": "Rebase or cherry-pick the four implementation commits and this packet onto the current protected Enterprise authority, rerun mobile beta:preflight and platform exports, then use the documented synthetic physical-iPhone packet. Enterprise alone owns Preview deployment."
+}
