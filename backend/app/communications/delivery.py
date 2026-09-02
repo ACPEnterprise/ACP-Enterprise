@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from enum import StrEnum
 from typing import Protocol
 from uuid import UUID
 
@@ -39,6 +40,32 @@ class ProviderDeliveryEvent:
     outcome: str
     occurred_at: datetime
     safe_error_code: str | None = None
+
+
+class RecipientControlKind(StrEnum):
+    OPT_OUT = "opt_out"
+    OPT_IN = "opt_in"
+    HELP = "help"
+
+
+@dataclass(frozen=True)
+class ProviderRecipientControlEvent:
+    company_id: UUID
+    provider_event_key: str
+    destination_digest: str
+    channel: str
+    kind: RecipientControlKind
+    occurred_at: datetime
+
+    def validate(self) -> None:
+        if self.channel != "sms":
+            raise ValueError("Recipient control event channel is unsupported.")
+        if len(self.destination_digest) != 64 or not all(
+            character in "0123456789abcdef" for character in self.destination_digest
+        ):
+            raise ValueError("Recipient control destination evidence is invalid.")
+        if not self.provider_event_key.strip():
+            raise ValueError("Provider event identity is required.")
 
 
 class ProviderWebhookService:

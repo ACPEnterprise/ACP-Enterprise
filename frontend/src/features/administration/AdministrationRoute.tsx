@@ -223,6 +223,24 @@ export function AdministrationRoute() {
           </CardContent>
         </Card>
       )}
+      {permissionCodes.includes("COMPANY_COMMUNICATIONS_READ") && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Communications readiness</CardTitle>
+            <CardDescription>
+              Review Email, SMS, webhook, message-catalog, and policy admission gates.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Link
+              className="inline-flex min-h-11 items-center justify-center rounded-md bg-action-primary px-ui-4 text-body-s font-semibold text-content-inverse"
+              to="/administration/communications"
+            >
+              Review Communications
+            </Link>
+          </CardContent>
+        </Card>
+      )}
       {canAdminister && (
         <Card className="border-warning/50">
           <CardHeader>
