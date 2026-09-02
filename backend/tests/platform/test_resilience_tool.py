@@ -102,6 +102,8 @@ def test_release_check_fails_all_inconsistent_release_dimensions(capsys) -> None
         actual_backend_sha="b",
         expected_frontend_sha="a",
         actual_frontend_sha="c",
+        expected_mission_control_sha="a",
+        actual_mission_control_sha="d",
         expected_schema_head=["h1"],
         actual_schema_head=["h2"],
     )
@@ -111,4 +113,24 @@ def test_release_check_fails_all_inconsistent_release_dimensions(capsys) -> None
     output = capsys.readouterr().out
     assert "BACKEND_SHA_MISMATCH" in output
     assert "FRONTEND_SHA_MISMATCH" in output
+    assert "MISSION_CONTROL_SHA_MISMATCH" in output
     assert "SCHEMA_MISMATCH" in output
+
+
+def test_release_check_accepts_one_coherent_mission_control_release(capsys) -> None:
+    args = Namespace(
+        expected_backend_sha="a",
+        actual_backend_sha="a",
+        expected_frontend_sha="a",
+        actual_frontend_sha="a",
+        expected_mission_control_sha="b",
+        actual_mission_control_sha="b",
+        expected_schema_head=["h1"],
+        actual_schema_head=["h1"],
+    )
+
+    module.release_check(args)
+
+    output = capsys.readouterr().out
+    assert '"ready": true' in output
+    assert '"state": "HEALTHY"' in output
