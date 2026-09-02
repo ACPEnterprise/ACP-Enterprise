@@ -52,3 +52,31 @@ test("shows truthful provider gates and governed catalog", async () => {
   expect(screen.getByText("Authority: dispatch")).toBeVisible();
   expect(screen.getByText(/Synthetic qualification never means real/)).toBeVisible();
 });
+
+test("does not reflect protected readiness failure details", async () => {
+  vi.mocked(api.getCommunicationsReadiness).mockRejectedValue({
+    isAxiosError: true,
+    response: {
+      status: 502,
+      data: { detail: "Traceback: provider-readiness-secret-canary" },
+    },
+  });
+  vi.mocked(api.listOperationalMessageCatalog).mockResolvedValue([]);
+  render(
+    <AuthenticationContext.Provider value={auth}>
+      <QueryClientProvider
+        client={new QueryClient({
+          defaultOptions: { queries: { retry: false } },
+        })}
+      >
+        <CommunicationsAdministrationRoute />
+      </QueryClientProvider>
+    </AuthenticationContext.Provider>,
+  );
+
+  expect(
+    await screen.findByText("The service could not be reached. Try again."),
+  ).toBeVisible();
+  expect(screen.queryByText(/readiness-secret-canary/)).not.toBeInTheDocument();
+  expect(screen.queryByText(/Traceback/)).not.toBeInTheDocument();
+});
