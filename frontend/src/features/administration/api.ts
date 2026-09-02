@@ -20,6 +20,10 @@ export interface PermissionDefinition {
   assignable: boolean;
   assigned: boolean;
   reconciliation_required: boolean;
+  category?: string;
+  access_nature?: "READ_ONLY" | "MUTATION" | "ADMIN_OR_MUTATION";
+  own_data?: boolean;
+  high_impact?: boolean;
 }
 
 export interface CanonicalRoleSyncPlan {
@@ -52,15 +56,16 @@ export interface IdentityOnboardingView {
 }
 
 export interface IdentityOnboardingInitiateRequest {
-  request_key: "acp-employee-beta-v1";
+  request_key: string;
   branch_id: string;
-  first_name: "ACP Employee";
-  last_name: "Beta";
-  display_name: "ACP Employee Beta";
-  employee_type: "employee";
-  employee_number_prefix: "EMP-";
-  employee_number_width: 4;
-  role_ids: [string];
+  first_name: string;
+  last_name: string;
+  display_name: string;
+  employee_type: "employee" | "contractor" | "vendor";
+  employee_number_prefix: string;
+  employee_number_width: number;
+  role_ids: string[];
+  additional_permission_ids: string[];
   login_email: string;
 }
 

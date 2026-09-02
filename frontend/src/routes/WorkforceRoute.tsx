@@ -1,8 +1,12 @@
 import { useMemo, useState } from "react";
 import { Award, Languages, Search, ShieldCheck, UserRoundCheck, UsersRound } from "lucide-react";
+import { Link } from "react-router";
 
 import { getOperatorApiError } from "../api/errors";
-import { useWorkforceDirectory, useWorkforceEligibility, useWorkforceEmployee } from "../hooks/useWorkforce";
+import type { EmployeePermissionExplanation } from "../api/workforce";
+import { useAuth } from "../auth";
+import { useRoles } from "../features/administration/hooks";
+import { useEmployeeAccessMutation, useEmployeeAdministration, useWorkforceDirectory, useWorkforceEligibility, useWorkforceEmployee } from "../hooks/useWorkforce";
 import { Alert, Badge, Card, Input, Spinner } from "../ui";
 
 function Readiness({ state }: { state: "READY" | "BLOCKED" | "INSUFFICIENT_EVIDENCE" }) {
@@ -10,23 +14,41 @@ function Readiness({ state }: { state: "READY" | "BLOCKED" | "INSUFFICIENT_EVIDE
 }
 
 export function WorkforceRoute() {
+  const { activeCompany, permissionCodes = [] } = useAuth();
+  const canAdministerEmployees = permissionCodes.includes("COMPANY_WORKFORCE_MANAGE") && permissionCodes.includes("COMPANY_MEMBERSHIP_READ") && permissionCodes.includes("COMPANY_ROLE_READ");
   const directory = useWorkforceDirectory();
   const [selected, setSelected] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const detail = useWorkforceEmployee(selected);
+  const administration = useEmployeeAdministration(selected, canAdministerEmployees);
+  const accessMutation = useEmployeeAccessMutation(selected);
+  const canManageMembership = permissionCodes.includes("COMPANY_MEMBERSHIP_MANAGE");
+  const canManageBranches = permissionCodes.includes("COMPANY_BRANCH_ACCESS_MANAGE");
+  const canManageRoles = permissionCodes.includes("COMPANY_ROLE_MANAGE");
+  const roles = useRoles(canManageRoles);
+  const [selectedBranchGrant, setSelectedBranchGrant] = useState("");
+  const [selectedRoleGrant, setSelectedRoleGrant] = useState("");
   const eligibility = useWorkforceEligibility();
   const [branchId, setBranchId] = useState("");
   const [windowStart, setWindowStart] = useState("");
   const [windowEnd, setWindowEnd] = useState("");
   const [capabilities, setCapabilities] = useState("");
   const [languages, setLanguages] = useState("");
+  const administrationPermissions = administration.data?.permissions;
+  const permissionAreas = useMemo(() => {
+    const groups: Record<string, EmployeePermissionExplanation[]> = {};
+    for (const permission of administrationPermissions ?? []) {
+      (groups[permission.business_area] ??= []).push(permission);
+    }
+    return groups;
+  }, [administrationPermissions]);
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase();
     return (directory.data ?? []).filter((item) => !query || [item.display_name, item.employee_number, item.job_title ?? "", ...item.capability_codes, ...item.language_codes].some((value) => value.toLowerCase().includes(query)));
   }, [directory.data, search]);
 
   return <div className="space-y-6">
-    <header><p className="text-sm font-medium text-action-primary">Workforce operations</p><h2 className="mt-1 text-2xl font-bold sm:text-3xl">Employee readiness</h2><p className="mt-2 text-content-muted">Operational identity, capability, credential, language, and Branch evidence. Payroll data is excluded.</p></header>
+    <header className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-sm font-medium text-action-primary">Workforce operations</p><h2 className="mt-1 text-2xl font-bold sm:text-3xl">Employee readiness</h2><p className="mt-2 text-content-muted">Operational identity, capability, credential, language, and Branch evidence. Payroll data is excluded.</p></div>{permissionCodes.includes("COMPANY_IDENTITY_ONBOARDING_MANAGE") && <Link className="rounded-lg bg-action-primary px-4 py-2 font-semibold text-white" to="/administration/identity-onboarding">Add Employee</Link>}</header>
     <Card className="p-4 sm:p-6">
       <h3 className="text-lg font-semibold">Assignment eligibility</h3>
       <p className="mt-1 text-sm text-content-muted">Evaluate explicit Branch, availability, capability, language, restriction, and assignment evidence. This does not assign work.</p>
@@ -54,6 +76,26 @@ export function WorkforceRoute() {
       {!selected ? <Card className="flex min-h-72 items-center justify-center p-8 text-center"><div><UsersRound className="mx-auto text-action-primary"/><h3 className="mt-3 text-xl font-semibold">Select an Employee</h3><p className="mt-2 text-sm text-content-muted">Inspect explicit readiness evidence without exposing Payroll or compensation data.</p></div></Card> : detail.isLoading ? <Card className="p-8"><Spinner label="Loading Employee profile"/></Card> : detail.isError || !detail.data ? <Alert variant="danger" title="Employee profile unavailable">The profile could not be loaded within the current Company and Branch authority.</Alert> : <Card className="min-w-0 p-4 sm:p-6">
         <div className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-sm text-action-primary">{detail.data.employee_number}</p><h3 className="mt-1 text-2xl font-bold">{detail.data.display_name}</h3><p className="mt-1 text-content-muted">{detail.data.job_title ?? detail.data.employee_type}</p></div><Readiness state={detail.data.readiness_state}/></div>
         {detail.data.readiness_blockers.length > 0 && <section className="mt-5 rounded-xl border border-status-warning/40 bg-status-warning/5 p-4"><h4 className="font-semibold">Assignment readiness blockers</h4><ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-content-muted">{detail.data.readiness_blockers.map((item) => <li key={item}>{item.replaceAll("_", " ")}</li>)}</ul></section>}
+        {canAdministerEmployees && administration.isLoading && <div className="mt-5"><Spinner label="Loading Employee administration"/></div>}
+        {canAdministerEmployees && administration.isError && <div className="mt-5"><Alert variant="danger" title="Employee administration unavailable">Operational Workforce evidence remains visible, but identity and permission readiness could not be loaded.</Alert></div>}
+        {administration.data && <section className="mt-5 rounded-xl border border-stroke p-4" aria-labelledby="employee-access-heading">
+          <div className="flex flex-wrap items-start justify-between gap-3"><div><h4 id="employee-access-heading" className="font-semibold">Identity, access, and Mobile readiness</h4><p className="mt-1 text-sm text-content-muted">User, Membership, Branch grants, canonical roles, and effective permissions remain distinct authorities.</p></div><Badge variant={administration.data.mobile_readiness === "READY" ? "success" : "warning"}>{administration.data.mobile_readiness.replaceAll("_", " ")}</Badge></div>
+          <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+            <div><dt className="text-content-muted">User</dt><dd className="font-medium">{administration.data.user_status ?? "Not linked"}</dd></div>
+            <div><dt className="text-content-muted">Membership</dt><dd className="font-medium">{administration.data.membership_status ?? "Not linked"}</dd></div>
+            <div><dt className="text-content-muted">Invitation</dt><dd className="font-medium">{administration.data.onboarding_status ?? "Not prepared"}</dd></div>
+            <div><dt className="text-content-muted">Login</dt><dd className="font-medium">{administration.data.masked_login ?? "Unavailable"}</dd></div>
+          </dl>
+          <div className="mt-4 grid gap-4 lg:grid-cols-2"><div><h5 className="text-sm font-semibold">Roles</h5><div className="mt-2 flex flex-wrap gap-2">{administration.data.role_codes.map((code) => <Badge key={code} variant="neutral">{code.replaceAll("_", " ")}</Badge>)}{administration.data.role_codes.length === 0 && <span className="text-sm text-content-muted">No active role assignment.</span>}</div></div><div><h5 className="text-sm font-semibold">Branch grants</h5><p className="mt-2 break-words text-sm text-content-muted">{administration.data.branch_ids.length ? administration.data.branch_ids.join(", ") : "No explicit Branch grant."}</p></div></div>
+          {administration.data.membership_id && (canManageMembership || canManageBranches || canManageRoles) && <div className="mt-4 grid gap-3 rounded-lg bg-surface-subtle p-3 lg:grid-cols-3">
+            {canManageMembership && <div><h5 className="text-sm font-semibold">Membership state</h5><button type="button" disabled={accessMutation.isPending} onClick={() => accessMutation.mutate({ type: "membership", membershipId: administration.data.membership_id!, status: administration.data.membership_status === "active" ? "suspended" : "active" })} className="mt-2 rounded-lg border border-stroke px-3 py-2 text-sm font-medium">{administration.data.membership_status === "active" ? "Suspend access" : "Reactivate access"}</button></div>}
+            {canManageBranches && <form onSubmit={(event) => { event.preventDefault(); if (selectedBranchGrant) accessMutation.mutate({ type: "branch", membershipId: administration.data.membership_id!, branchId: selectedBranchGrant, enabled: !administration.data.branch_ids.includes(selectedBranchGrant) }); }}><label className="text-sm font-semibold" htmlFor="employee-branch-grant">Branch access</label><select id="employee-branch-grant" className="mt-2 min-h-10 w-full rounded-lg border border-stroke bg-surface px-2" value={selectedBranchGrant} onChange={(event) => setSelectedBranchGrant(event.target.value)}><option value="">Select Branch</option>{(activeCompany?.branches ?? []).map((branch) => <option key={branch.id} value={branch.id}>{branch.name}{administration.data.branch_ids.includes(branch.id) ? " (granted)" : ""}</option>)}</select><button type="submit" disabled={!selectedBranchGrant || accessMutation.isPending} className="mt-2 rounded-lg border border-stroke px-3 py-2 text-sm font-medium">{administration.data.branch_ids.includes(selectedBranchGrant) ? "Remove grant" : "Grant Branch"}</button></form>}
+            {canManageRoles && <form onSubmit={(event) => { event.preventDefault(); const role = roles.data?.find((item) => item.id === selectedRoleGrant); if (role) accessMutation.mutate({ type: "role", membershipId: administration.data.membership_id!, roleId: role.id, enabled: !administration.data.role_codes.includes(role.code) }); }}><label className="text-sm font-semibold" htmlFor="employee-role-grant">Role bundle</label><select id="employee-role-grant" className="mt-2 min-h-10 w-full rounded-lg border border-stroke bg-surface px-2" value={selectedRoleGrant} onChange={(event) => setSelectedRoleGrant(event.target.value)}><option value="">Select role</option>{(roles.data ?? []).map((role) => <option key={role.id} value={role.id}>{role.name}{administration.data.role_codes.includes(role.code) ? " (assigned)" : ""}</option>)}</select><button type="submit" disabled={!selectedRoleGrant || accessMutation.isPending} className="mt-2 rounded-lg border border-stroke px-3 py-2 text-sm font-medium">Update role</button></form>}
+          </div>}
+          {accessMutation.isError && <div className="mt-3"><Alert variant="danger" title="Access change not applied">The change conflicts with current authority or requires a permitted administrator. Refresh and review the Employee state.</Alert></div>}
+          {administration.data.mobile_readiness_blockers.length > 0 && <Alert variant="warning" title="Mobile readiness blockers"><ul className="list-disc pl-5">{administration.data.mobile_readiness_blockers.map((item) => <li key={item}>{item.replaceAll("_", " ")}</li>)}</ul></Alert>}
+          <div className="mt-5"><h5 className="font-semibold">Effective permission explanation</h5><p className="mt-1 text-sm text-content-muted">Permissions are grouped by business area and derived from active roles. Own-data permissions never authorize another Employee identity.</p><div className="mt-3 grid gap-3 md:grid-cols-2">{Object.entries(permissionAreas).map(([area, items]) => <section key={area} className="rounded-lg bg-surface-subtle p-3"><h6 className="font-semibold">{area}</h6><ul className="mt-2 space-y-2">{items.map((permission) => <li key={permission.code} className="text-sm"><span className="font-medium">{permission.name}</span><span className="block text-xs text-content-muted">{permission.authority.replaceAll("_", " ")} · {permission.branch_scoped ? "Branch scoped" : "Company scoped"} · {permission.role_codes.join(", ")}</span></li>)}</ul></section>)}</div></div>
+        </section>}
         <div className="mt-6 grid gap-4 md:grid-cols-2">
           <section className="rounded-xl border border-stroke p-4"><h4 className="flex items-center gap-2 font-semibold"><UserRoundCheck size={17}/>Capabilities</h4><div className="mt-3 space-y-2">{detail.data.capabilities.map((item) => <p key={item.code} className="text-sm"><strong>{item.display_name}</strong> · {item.proficiency}</p>)}{detail.data.capabilities.length === 0 && <p className="text-sm text-content-muted">No explicit capability evidence.</p>}</div></section>
           <section className="rounded-xl border border-stroke p-4"><h4 className="flex items-center gap-2 font-semibold"><Languages size={17}/>Languages</h4><div className="mt-3 space-y-2">{detail.data.languages.map((item) => <p key={item.code} className="text-sm"><strong>{item.english_name}</strong> · {item.spoken_proficiency}{item.customer_facing_eligible ? " · customer-facing" : ""}</p>)}{detail.data.languages.length === 0 && <p className="text-sm text-content-muted">No explicit language evidence.</p>}</div></section>

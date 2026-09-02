@@ -75,6 +75,10 @@ class PermissionCatalogResponse(StrictAdminSchema):
     assignable: bool
     assigned: bool
     reconciliation_required: bool = False
+    category: str
+    access_nature: str
+    own_data: bool
+    high_impact: bool
 
 
 class AssignmentResponse(StrictAdminSchema):

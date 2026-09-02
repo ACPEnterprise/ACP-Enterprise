@@ -15,29 +15,22 @@ import {
   Spinner,
 } from "../../ui";
 import {
-  initiateEmployeeBetaOnboarding,
   getIdentityOnboardingDelivery,
+  initiateEmployeeBetaOnboarding,
   listPermissions,
   listRoles,
   reissueIdentityOnboarding,
   revokeIdentityOnboarding,
+  type CompanyRole,
   type IdentityOnboardingDeliveryView,
   type IdentityOnboardingView,
-  type CompanyRole,
+  type PermissionDefinition,
 } from "./api";
 
 const ONBOARDING_PERMISSION = "COMPANY_IDENTITY_ONBOARDING_MANAGE";
-const EMPLOYEE_ROLE_CODE = "COMPANY_USER";
-const REQUIRED_EMPLOYEE_PERMISSIONS = new Set([
-  "COMPANY_TIMEKEEPING_OWN_READ",
-  "COMPANY_TIMEKEEPING_OWN_PUNCH",
-  "COMPANY_EMPLOYEE_OPERATIONS_OWN_DAY_READ",
-  "COMPANY_JOB_READ",
-]);
-
 type Preparation =
   | { state: "loading" }
-  | { state: "ready"; role: CompanyRole }
+  | { state: "ready"; roles: CompanyRole[] }
   | { state: "blocked"; message: string };
 
 function submissionMessage(error: unknown): string {
@@ -53,65 +46,42 @@ function submissionMessage(error: unknown): string {
 export function IdentityOnboardingRoute() {
   const { activeCompany, permissionCodes = [] } = useAuth();
   const authorized = permissionCodes.includes(ONBOARDING_PERMISSION);
-  const branches = useMemo(
-    () => activeCompany?.branches ?? [],
-    [activeCompany],
-  );
-  const initialBranchId =
-    activeCompany?.default_branch_id ?? branches[0]?.id ?? "";
+  const branches = useMemo(() => activeCompany?.branches ?? [], [activeCompany]);
+  const initialBranchId = activeCompany?.default_branch_id ?? branches[0]?.id ?? "";
   const [branchId, setBranchId] = useState(initialBranchId);
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [roleId, setRoleId] = useState("");
   const [loginAddress, setLoginAddress] = useState("");
-  const [preparation, setPreparation] = useState<Preparation>({
-    state: "loading",
-  });
+  const [requestKey, setRequestKey] = useState(() => `employee-admin-${crypto.randomUUID()}`);
+  const [preparation, setPreparation] = useState<Preparation>({ state: "loading" });
   const [readinessAttempt, setReadinessAttempt] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<"success" | "error" | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
-  const [onboarding, setOnboarding] = useState<IdentityOnboardingView | null>(
-    null,
-  );
-  const [delivery, setDelivery] =
-    useState<IdentityOnboardingDeliveryView | null>(null);
+  const [permissions, setPermissions] = useState<PermissionDefinition[]>([]);
+  const [additionalPermissionIds, setAdditionalPermissionIds] = useState<string[]>([]);
+  const [permissionSearch, setPermissionSearch] = useState("");
+  const [highImpactOnly, setHighImpactOnly] = useState(false);
+  const [onboarding, setOnboarding] = useState<IdentityOnboardingView | null>(null);
+  const [delivery, setDelivery] = useState<IdentityOnboardingDeliveryView | null>(null);
 
   useEffect(() => {
     if (!authorized) return;
     let current = true;
-    void listRoles()
-      .then(async (roles) => {
-        const role = roles.find(
-          (candidate) =>
-            candidate.code === EMPLOYEE_ROLE_CODE &&
-            candidate.status === "active",
-        );
-        if (!role) return { role: null, permissions: [] };
-        return { role, permissions: await listPermissions(role.id) };
-      })
-      .then(({ role, permissions }) => {
+    void listRoles().then((roles) => {
         if (!current) return;
-        if (!role) {
+        const available = roles.filter((role) => role.status === "active" && role.is_system);
+        if (available.length === 0) {
           setPreparation({
             state: "blocked",
-            message: "The canonical Company Employee role is unavailable.",
+            message: "Canonical Employee roles are unavailable.",
           });
           return;
         }
-        const assigned = new Set(
-          permissions
-            .filter((permission) => permission.assigned)
-            .map((permission) => permission.code),
-        );
-        if (
-          [...REQUIRED_EMPLOYEE_PERMISSIONS].some((code) => !assigned.has(code))
-        ) {
-          setPreparation({
-            state: "blocked",
-            message:
-              "The canonical Company Employee role is not ready for ACP Employee onboarding.",
-          });
-          return;
-        }
-        setPreparation({ state: "ready", role });
+        setRoleId((currentRole) => currentRole || available[0].id);
+        setPreparation({ state: "ready", roles: available });
       })
       .catch(() => {
         if (current) {
@@ -126,6 +96,34 @@ export function IdentityOnboardingRoute() {
     };
   }, [authorized, readinessAttempt]);
 
+  useEffect(() => {
+    if (!authorized || !roleId) {
+      return;
+    }
+    let current = true;
+    void Promise.all([listPermissions(roleId), listPermissions()])
+      .then(([roleItems, allItems]) => {
+        if (!current) return;
+        const defaults = new Set(roleItems.filter((item) => item.assigned).map((item) => item.id));
+        setPermissions(allItems.map((item) => ({ ...item, assigned: defaults.has(item.id) })));
+        setAdditionalPermissionIds([]);
+      })
+      .catch(() => { if (current) setPermissions([]); });
+    return () => { current = false; };
+  }, [authorized, roleId]);
+
+  const visiblePermissions = useMemo(() => {
+    const query = permissionSearch.trim().toLowerCase();
+    return permissions.filter((permission) =>
+      (!highImpactOnly || permission.high_impact) &&
+      (!query || [permission.name, permission.description ?? "", permission.category ?? "Other", permission.code].some((value) => value.toLowerCase().includes(query)))
+    );
+  }, [permissions, permissionSearch, highImpactOnly]);
+  const permissionGroups = useMemo(() => visiblePermissions.reduce<Record<string, PermissionDefinition[]>>((groups, permission) => {
+    (groups[permission.category ?? "Other"] ??= []).push(permission);
+    return groups;
+  }, {}), [visiblePermissions]);
+
   if (!authorized) {
     return (
       <Alert variant="danger" announcement="assertive">
@@ -136,27 +134,31 @@ export function IdentityOnboardingRoute() {
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    if (preparation.state !== "ready" || !branchId || !loginAddress.trim())
-      return;
+    if (preparation.state !== "ready" || !branchId || !roleId || !loginAddress.trim() || !firstName.trim() || !lastName.trim()) return;
     setSubmitting(true);
     setResult(null);
     setErrorMessage("");
     try {
       const created = await initiateEmployeeBetaOnboarding({
-        request_key: "acp-employee-beta-v1",
+        request_key: requestKey,
         branch_id: branchId,
-        first_name: "ACP Employee",
-        last_name: "Beta",
-        display_name: "ACP Employee Beta",
+        first_name: firstName.trim(),
+        last_name: lastName.trim(),
+        display_name: displayName.trim() || `${firstName.trim()} ${lastName.trim()}`,
         employee_type: "employee",
         employee_number_prefix: "EMP-",
         employee_number_width: 4,
-        role_ids: [preparation.role.id],
+        role_ids: [roleId],
+        additional_permission_ids: additionalPermissionIds,
         login_email: loginAddress.trim(),
       });
       setOnboarding(created);
       setDelivery(await getIdentityOnboardingDelivery(created.id));
       setLoginAddress("");
+      setFirstName("");
+      setLastName("");
+      setDisplayName("");
+      setRequestKey(`employee-admin-${crypto.randomUUID()}`);
       setResult("success");
     } catch (error) {
       setErrorMessage(submissionMessage(error));
@@ -166,39 +168,15 @@ export function IdentityOnboardingRoute() {
     }
   };
 
-  const refreshDelivery = async () => {
-    if (!onboarding) return;
-    try {
-      setDelivery(await getIdentityOnboardingDelivery(onboarding.id));
-    } catch {
-      setErrorMessage("Delivery history could not be refreshed safely.");
-      setResult("error");
-    }
-  };
-
-  const reissue = async () => {
+  const updateInvitation = async (operation: "reissue" | "revoke") => {
     if (!onboarding) return;
     setSubmitting(true);
     try {
-      const next = await reissueIdentityOnboarding(onboarding.id);
-      setOnboarding(next);
-      setDelivery(await getIdentityOnboardingDelivery(next.id));
-      setResult("success");
-    } catch (error) {
-      setErrorMessage(submissionMessage(error));
-      setResult("error");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const revoke = async () => {
-    if (!onboarding) return;
-    setSubmitting(true);
-    try {
-      const next = await revokeIdentityOnboarding(onboarding.id);
-      setOnboarding(next);
-      setDelivery(await getIdentityOnboardingDelivery(next.id));
+      const updated = operation === "reissue"
+        ? await reissueIdentityOnboarding(onboarding.id)
+        : await revokeIdentityOnboarding(onboarding.id);
+      setOnboarding(updated);
+      setDelivery(await getIdentityOnboardingDelivery(updated.id));
       setResult("success");
     } catch (error) {
       setErrorMessage(submissionMessage(error));
@@ -213,14 +191,13 @@ export function IdentityOnboardingRoute() {
       <header>
         <h1 className="text-heading-m">Identity Onboarding</h1>
         <p className="mt-ui-2 text-body-s text-content-muted">
-          Create the fixed Preview ACP Employee beta identity through canonical
-          Company onboarding.
+          Prepare a Company-scoped User, Membership, Employee, Branch grant, role,
+          and protected invitation through canonical onboarding.
         </p>
       </header>
       {result === "success" && (
         <Alert variant="success" announcement="polite">
-          Onboarding was created. Continue with the protected owner activation
-          claim.
+          Onboarding was created. Continue with the protected owner activation claim.
         </Alert>
       )}
       {result === "error" && (
@@ -230,10 +207,10 @@ export function IdentityOnboardingRoute() {
       )}
       <Card>
         <CardHeader>
-          <CardTitle>ACP Employee beta</CardTitle>
+          <CardTitle>Add Employee</CardTitle>
           <CardDescription>
-            Identity key: acp-employee-beta-v1. Activation material is never
-            shown by this form.
+            Duplicate identity and replay checks are enforced server-side. Activation
+            material is never shown by this form.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -255,14 +232,14 @@ export function IdentityOnboardingRoute() {
               </div>
             </Alert>
           ) : (
-            <form
-              className="space-y-ui-4"
-              onSubmit={(event) => void submit(event)}
-            >
+            <form className="space-y-ui-4" onSubmit={(event) => void submit(event)}>
+              <div className="grid gap-ui-3 sm:grid-cols-2">
+                <label className="block space-y-ui-2"><span className="text-body-s font-semibold">First name</span><Input value={firstName} onChange={(event) => setFirstName(event.target.value)} required /></label>
+                <label className="block space-y-ui-2"><span className="text-body-s font-semibold">Last name</span><Input value={lastName} onChange={(event) => setLastName(event.target.value)} required /></label>
+              </div>
+              <label className="block space-y-ui-2"><span className="text-body-s font-semibold">Display name</span><Input value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder={`${firstName} ${lastName}`.trim()} /></label>
               <label className="block space-y-ui-2">
-                <span className="text-body-s font-semibold">
-                  Preview Branch
-                </span>
+                <span className="text-body-s font-semibold">Preview Branch</span>
                 <select
                   className="min-h-11 w-full rounded-md border border-stroke bg-surface px-ui-3"
                   value={branchId}
@@ -280,6 +257,26 @@ export function IdentityOnboardingRoute() {
                 </select>
               </label>
               <label className="block space-y-ui-2">
+                <span className="text-body-s font-semibold">Baseline role</span>
+                <select className="min-h-11 w-full rounded-md border border-stroke bg-surface px-ui-3" value={roleId} onChange={(event) => setRoleId(event.target.value)} required>
+                  {preparation.roles.map((role) => <option key={role.id} value={role.id}>{role.name} — {role.description ?? role.code}</option>)}
+                </select>
+                <span className="text-body-xs text-content-muted">The role is a starting bundle. Effective authority remains permission- and Branch-scoped.</span>
+              </label>
+              <fieldset className="space-y-ui-3 rounded-lg border border-stroke p-ui-4">
+                <legend className="px-ui-2 font-semibold">Effective permission preview</legend>
+                <p className="text-body-xs text-content-muted">Role defaults and explicit additive Employee permissions are shown before onboarding. Branch scope is <strong>{branches.find((branch) => branch.id === branchId)?.name ?? "not selected"}</strong>. Removing a role default requires choosing a narrower baseline role; hidden deny semantics are not invented.</p>
+                <div className="grid gap-ui-3 sm:grid-cols-[1fr_auto]">
+                  <label><span className="sr-only">Search permissions</span><Input value={permissionSearch} onChange={(event) => setPermissionSearch(event.target.value)} placeholder="Search permission, category, or capability" /></label>
+                  <label className="flex min-h-11 items-center gap-ui-2"><input type="checkbox" checked={highImpactOnly} onChange={(event) => setHighImpactOnly(event.target.checked)} /> High-impact only</label>
+                </div>
+                <div className="max-h-80 space-y-ui-3 overflow-y-auto" aria-live="polite">
+                  {Object.entries(permissionGroups).map(([category, items]) => <section key={category} className="rounded-md bg-surface-subtle p-ui-3"><h3 className="font-semibold">{category}</h3><ul className="mt-ui-2 space-y-ui-2">{items?.map((permission) => <li key={permission.id} className="text-body-s"><label className="flex items-start gap-ui-2"><input type="checkbox" className="mt-1" checked={permission.assigned || additionalPermissionIds.includes(permission.id)} disabled={permission.assigned || !permission.assignable} onChange={(event) => setAdditionalPermissionIds((current) => event.target.checked ? [...current, permission.id] : current.filter((id) => id !== permission.id))} /><span><span className="font-medium">{permission.name}</span>{permission.assigned && <span className="ml-ui-2 text-body-xs text-content-muted">Role default</span>}{permission.high_impact && <span className="ml-ui-2 rounded bg-status-warning/15 px-ui-2 py-0.5 text-body-xs">High impact</span>}<span className="block text-body-xs text-content-muted">{permission.own_data ? "Own data only" : (permission.access_nature ?? "MUTATION").replaceAll("_", " ")} · {permission.description ?? permission.code}</span></span></label></li>)}</ul></section>)}
+                  {visiblePermissions.length === 0 && <p className="text-body-s text-content-muted">No role-default permission matches this filter.</p>}
+                </div>
+              </fieldset>
+              {additionalPermissionIds.length > 0 && <Alert variant="warning">Change summary: {additionalPermissionIds.length} explicit Employee permission{additionalPermissionIds.length === 1 ? "" : "s"} will be added beyond the selected role defaults. This advances effective authority when the account activates.</Alert>}
+              <label className="block space-y-ui-2">
                 <span className="text-body-s font-semibold">
                   Employee login address
                 </span>
@@ -295,9 +292,9 @@ export function IdentityOnboardingRoute() {
                 type="submit"
                 loading={submitting}
                 loadingLabel="Creating onboarding"
-                disabled={submitting || !branchId || !loginAddress.trim()}
+                disabled={submitting || !branchId || !roleId || !firstName.trim() || !lastName.trim() || !loginAddress.trim()}
               >
-                Create beta onboarding
+                Prepare Employee onboarding
               </Button>
             </form>
           )}
@@ -306,68 +303,43 @@ export function IdentityOnboardingRoute() {
       {onboarding && delivery && (
         <Card>
           <CardHeader>
-            <CardTitle>Invitation delivery</CardTitle>
+            <CardTitle>Invitation readiness</CardTitle>
             <CardDescription>
-              Truthful provider-neutral state for {onboarding.masked_login}.
-              Provider acceptance is not proof of delivery.
+              Invitation authority and Communications delivery evidence are reported
+              separately. A queued message is not proof of delivery.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-ui-4">
-            <dl
-              className="grid gap-ui-3 sm:grid-cols-2"
-              aria-label="Invitation delivery state"
-            >
+            <dl className="grid gap-ui-3 text-body-s sm:grid-cols-2">
               <div>
-                <dt className="text-body-s text-content-muted">Invitation</dt>
-                <dd className="font-semibold uppercase">
-                  {delivery.invitation_status}
+                <dt className="text-content-muted">Invitation</dt>
+                <dd className="font-semibold">{delivery.invitation_status.replaceAll("_", " ")}</dd>
+              </div>
+              <div>
+                <dt className="text-content-muted">Delivery</dt>
+                <dd className="font-semibold">{delivery.delivery_status.replaceAll("_", " ")}</dd>
+              </div>
+              <div>
+                <dt className="text-content-muted">Activation</dt>
+                <dd className="font-semibold">{onboarding.status.replaceAll("_", " ")}</dd>
+              </div>
+              <div>
+                <dt className="text-content-muted">Provider acceptance</dt>
+                <dd className="font-semibold">
+                  {delivery.provider_reference_present ? "Provider reference recorded" : "Provider not configured or not accepted"}
                 </dd>
-              </div>
-              <div>
-                <dt className="text-body-s text-content-muted">Delivery</dt>
-                <dd className="font-semibold uppercase">
-                  {delivery.delivery_status}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-body-s text-content-muted">Template</dt>
-                <dd>{delivery.template_version ?? "Not prepared"}</dd>
-              </div>
-              <div>
-                <dt className="text-body-s text-content-muted">Attempts</dt>
-                <dd>{delivery.retry_count}</dd>
               </div>
             </dl>
             {delivery.last_error_code && (
               <Alert variant="warning">
-                Delivery requires review: {delivery.last_error_code}
+                Delivery requires attention: {delivery.last_error_code.replaceAll("_", " ")}.
               </Alert>
             )}
-            {delivery.delivery_status === "pending" && (
-              <Alert variant="warning">
-                Transactional email provider is not configured. The invitation
-                remains durable and unsent.
-              </Alert>
-            )}
-            <div className="flex flex-col gap-ui-3 sm:flex-row">
-              <Button
-                variant="secondary"
-                onClick={() => void refreshDelivery()}
-              >
-                Refresh delivery
-              </Button>
-              <Button
-                variant="secondary"
-                disabled={submitting || onboarding.status !== "invited"}
-                onClick={() => void reissue()}
-              >
+            <div className="flex flex-wrap gap-ui-3">
+              <Button variant="secondary" loading={submitting} onClick={() => void updateInvitation("reissue")}>
                 Reissue invitation
               </Button>
-              <Button
-                variant="destructive"
-                disabled={submitting || onboarding.status !== "invited"}
-                onClick={() => void revoke()}
-              >
+              <Button variant="secondary" loading={submitting} onClick={() => void updateInvitation("revoke")}>
                 Revoke invitation
               </Button>
             </div>

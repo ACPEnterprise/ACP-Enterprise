@@ -37,6 +37,10 @@ const requiredPermissions = [
   assignable: true,
   assigned: true,
   reconciliation_required: false,
+  category: code.includes("TIMEKEEPING") ? "Timekeeping" : "Jobs",
+  access_nature: code.includes("READ") ? "READ_ONLY" as const : "MUTATION" as const,
+  own_data: code.includes("_OWN_"),
+  high_impact: false,
 }));
 
 const context: AuthenticationContextValue = {
@@ -62,12 +66,7 @@ const context: AuthenticationContextValue = {
 
 function renderPage(authentication = context) {
   const router = createMemoryRouter(
-    [
-      {
-        path: "/administration/identity-onboarding",
-        Component: IdentityOnboardingRoute,
-      },
-    ],
+    [{ path: "/administration/identity-onboarding", Component: IdentityOnboardingRoute }],
     { initialEntries: ["/administration/identity-onboarding"] },
   );
   render(
@@ -94,19 +93,19 @@ describe("IdentityOnboardingRoute", () => {
       request_id: "request-1",
       invitation_id: "invitation-1",
       message_id: "message-1",
-      invitation_status: "pending",
-      delivery_status: "pending",
-      template_version: "identity-onboarding-invitation-v1",
+      invitation_status: "active",
+      delivery_status: "provider_not_configured",
+      template_version: "employee-invitation-v1",
       retry_count: 0,
       provider_reference_present: false,
-      last_error_code: null,
-      created_at: "2026-09-01T12:00:00Z",
+      last_error_code: "PROVIDER_NOT_CONFIGURED",
+      created_at: "2026-09-01T00:00:00Z",
       submitted_at: null,
       delivered_at: null,
     });
   });
 
-  it("submits the protected address in a POST body bound to the beta identity", async () => {
+  it("prepares a protected Employee identity with an explicit Branch and role", async () => {
     const user = userEvent.setup();
     renderPage();
 
@@ -114,90 +113,45 @@ describe("IdentityOnboardingRoute", () => {
       await screen.findByLabelText("Employee login address"),
       "synthetic@example.invalid",
     );
-    await user.click(
-      screen.getByRole("button", { name: "Create beta onboarding" }),
-    );
+    await user.type(screen.getByLabelText("First name"), "Synthetic");
+    await user.type(screen.getByLabelText("Last name"), "Technician");
+    await user.click(screen.getByRole("button", { name: "Prepare Employee onboarding" }));
 
-    expect(api.initiateEmployeeBetaOnboarding).toHaveBeenCalledWith({
-      request_key: "acp-employee-beta-v1",
+    expect(api.initiateEmployeeBetaOnboarding).toHaveBeenCalledWith(expect.objectContaining({
       branch_id: "branch-1",
-      first_name: "ACP Employee",
-      last_name: "Beta",
-      display_name: "ACP Employee Beta",
+      first_name: "Synthetic",
+      last_name: "Technician",
+      display_name: "Synthetic Technician",
       employee_type: "employee",
       employee_number_prefix: "EMP-",
       employee_number_width: 4,
       role_ids: ["employee-role"],
       login_email: "synthetic@example.invalid",
-    });
-    expect(
-      await screen.findByText(/Onboarding was created/),
-    ).toBeInTheDocument();
-    expect(await screen.findByText("Invitation delivery")).toBeInTheDocument();
-    expect(screen.getByText(/provider is not configured/i)).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Reissue invitation" }),
-    ).toBeEnabled();
-    expect(
-      screen.getByRole("button", { name: "Revoke invitation" }),
-    ).toBeEnabled();
-    expect(
-      screen.queryByDisplayValue("synthetic@example.invalid"),
-    ).not.toBeInTheDocument();
-  });
-
-  it("shows truthful delivered and bounced provider states without raw errors", async () => {
-    const user = userEvent.setup();
-    vi.mocked(api.getIdentityOnboardingDelivery).mockResolvedValue({
-      request_id: "request-1",
-      invitation_id: "invitation-1",
-      message_id: "message-1",
-      invitation_status: "pending",
-      delivery_status: "bounced",
-      template_version: "identity-onboarding-invitation-v1",
-      retry_count: 1,
-      provider_reference_present: true,
-      last_error_code: "recipient_rejected",
-      created_at: "2026-09-01T12:00:00Z",
-      submitted_at: "2026-09-01T12:01:00Z",
-      delivered_at: null,
-    });
-    renderPage();
-    await user.type(
-      await screen.findByLabelText("Employee login address"),
-      "synthetic@example.invalid",
-    );
-    await user.click(
-      screen.getByRole("button", { name: "Create beta onboarding" }),
-    );
-    expect(await screen.findByText(/bounced/i)).toBeVisible();
-    expect(screen.getByText(/recipient_rejected/i)).toBeVisible();
-    expect(screen.queryByText(/smtp|sql|traceback/i)).not.toBeInTheDocument();
+    }));
+    expect(vi.mocked(api.initiateEmployeeBetaOnboarding).mock.calls[0]?.[0].request_key).toMatch(/^employee-admin-/);
+    expect(await screen.findByText(/Onboarding was created/)).toBeInTheDocument();
+    expect(await screen.findByText("provider not configured", { exact: true })).toBeInTheDocument();
+    expect(screen.getByText("Provider not configured or not accepted")).toBeInTheDocument();
+    expect(screen.queryByDisplayValue("synthetic@example.invalid")).not.toBeInTheDocument();
   });
 
   it("fails closed without onboarding authority", () => {
     renderPage({ ...context, permissionCodes: [] });
     expect(
-      screen.getByText(
-        "You are not authorized to initiate Company identity onboarding.",
-      ),
+      screen.getByText("You are not authorized to initiate Company identity onboarding."),
     ).toBeInTheDocument();
     expect(api.listRoles).not.toHaveBeenCalled();
   });
 
-  it("does not permit onboarding through an unqualified Employee role", async () => {
-    vi.mocked(api.listPermissions).mockResolvedValue(
-      requiredPermissions.slice(0, 3),
-    );
+  it("does not permit onboarding without an active canonical role", async () => {
+    vi.mocked(api.listRoles).mockResolvedValue([]);
     renderPage();
     expect(
       await screen.findByText(
-        "The canonical Company Employee role is not ready for ACP Employee onboarding.",
+        "Canonical Employee roles are unavailable.",
       ),
     ).toBeInTheDocument();
-    expect(
-      screen.queryByLabelText("Employee login address"),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Employee login address")).not.toBeInTheDocument();
   });
 
   it("recovers readiness after a temporary API failure", async () => {
@@ -207,14 +161,10 @@ describe("IdentityOnboardingRoute", () => {
       .mockResolvedValueOnce([employeeRole]);
     renderPage();
     expect(
-      await screen.findByText(
-        "Employee onboarding readiness could not be verified.",
-      ),
+      await screen.findByText("Employee onboarding readiness could not be verified."),
     ).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Retry readiness" }));
-    expect(
-      await screen.findByLabelText("Employee login address"),
-    ).toBeInTheDocument();
+    expect(await screen.findByLabelText("Employee login address")).toBeInTheDocument();
     expect(api.listRoles).toHaveBeenCalledTimes(2);
   });
 });

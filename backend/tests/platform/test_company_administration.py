@@ -7,6 +7,15 @@ from uuid import UUID, uuid4
 import httpx
 import pytest
 import pytest_asyncio
+from fastapi import FastAPI
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
+
 from app.core.config import settings
 from app.database.session import get_database_session
 from app.events.models import BusinessEvent
@@ -29,6 +38,7 @@ from app.platform.company.admin_service import (
 )
 from app.platform.company.membership_models import Membership
 from app.platform.company.models import Company
+from app.platform.employees.models import Employee
 from app.platform.permissions.authorization import (
     AuthorizationContext,
     AuthorizationService,
@@ -56,13 +66,15 @@ from app.platform.permissions.role_sync import (
     RoleSyncClassification,
 )
 from app.platform.users.models import User, UserCredential
-from fastapi import FastAPI
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import (
-    AsyncEngine,
-    AsyncSession,
-    async_sessionmaker,
-    create_async_engine,
+from app.workforce.administration_commands import (
+    WorkforceAdministrationConflict,
+    WorkforceAdministrationService,
+)
+from app.workforce.models import (
+    Capability,
+    CapabilityCategory,
+    Certification,
+    Language,
 )
 
 
@@ -399,9 +411,7 @@ async def test_canonical_role_sync_adds_only_missing_grant_and_advances_user(
         )
         session.add(assignment)
         permission_id = await session.scalar(
-            select(Permission.id).where(
-                Permission.code == "COMPANY_CUSTOMER_READ"
-            )
+            select(Permission.id).where(Permission.code == "COMPANY_CUSTOMER_READ")
         )
         assert permission_id is not None
         grant = await session.scalar(
@@ -416,7 +426,9 @@ async def test_canonical_role_sync_adds_only_missing_grant_and_advances_user(
     async with factory() as session:
         plan = await service.plan(session, company_id=fixture.context.company.id)
         item = next(value for value in plan.items if value.code == "SERVICE_CSR")
-        assert item.classification is RoleSyncClassification.MISSING_CANONICAL_PERMISSION
+        assert (
+            item.classification is RoleSyncClassification.MISSING_CANONICAL_PERMISSION
+        )
     async with factory() as session:
         result = await service.apply(
             session,
@@ -449,7 +461,9 @@ async def test_canonical_role_sync_rejects_custom_code_collision_without_mutatio
     async with factory() as session:
         plan = await service.plan(session, company_id=fixture.context.company.id)
         collision = next(value for value in plan.items if value.code == "SERVICE_CSR")
-        assert collision.classification is RoleSyncClassification.UNSAFE_IDENTITY_COLLISION
+        assert (
+            collision.classification is RoleSyncClassification.UNSAFE_IDENTITY_COLLISION
+        )
     async with factory() as session:
         with pytest.raises(CanonicalRoleSyncConflict, match="require review"):
             await service.apply(
@@ -559,7 +573,9 @@ async def test_canonical_role_sync_rolls_back_all_changes_on_failure(
     def fail_audit(*_args: object, **_kwargs: object) -> None:
         raise RuntimeError("injected audit failure")
 
-    monkeypatch.setattr("app.platform.permissions.role_sync.audit_service.stage", fail_audit)
+    monkeypatch.setattr(
+        "app.platform.permissions.role_sync.audit_service.stage", fail_audit
+    )
     async with factory() as session:
         with pytest.raises(RuntimeError, match="injected audit failure"):
             await service.apply(
@@ -578,6 +594,124 @@ async def test_canonical_role_sync_rolls_back_all_changes_on_failure(
             )
         )
     assert system_count == 0
+
+
+@pytest.mark.asyncio
+async def test_workforce_administration_evidence_is_tenant_scoped_and_replay_safe(
+    admin_database: tuple[AsyncEngine, async_sessionmaker[AsyncSession]],
+) -> None:
+    _, factory = admin_database
+    fixture = await seed_admin_fixture(factory, "WFADMIN")
+    async with factory() as session, session.begin():
+        employee = Employee(
+            company_id=fixture.context.company.id,
+            membership_id=fixture.target_membership_id,
+            home_branch_id=fixture.company_branch_id,
+            employee_number=f"EMP-{uuid4().hex[:8]}",
+            first_name="Synthetic",
+            last_name="Employee",
+            display_name="Synthetic Employee",
+            employee_type="employee",
+            status="active",
+        )
+        category = CapabilityCategory(
+            company_id=fixture.context.company.id,
+            code=f"skill-{uuid4().hex[:8]}",
+            display_name="Synthetic skills",
+        )
+        language = Language(
+            company_id=fixture.context.company.id,
+            code="es",
+            english_name="Spanish",
+        )
+        certification = Certification(
+            company_id=fixture.context.company.id,
+            code=f"cert-{uuid4().hex[:8]}",
+            display_name="Synthetic certification",
+        )
+        session.add_all([employee, category, language, certification])
+        await session.flush()
+        capability = Capability(
+            company_id=fixture.context.company.id,
+            category_id=category.id,
+            code=f"skill-{uuid4().hex[:8]}",
+            display_name="Synthetic capability",
+        )
+        session.add(capability)
+    service = WorkforceAdministrationService()
+    async with factory() as session:
+        profile, created = await service.ensure_profile(
+            session, context=fixture.context, employee_id=employee.id
+        )
+    assert created
+    async with factory() as session:
+        replay, created = await service.ensure_profile(
+            session, context=fixture.context, employee_id=employee.id
+        )
+    assert not created and replay.id == profile.id
+    async with factory() as session:
+        evidence_id, created = await service.add_capability(
+            session,
+            context=fixture.context,
+            employee_id=employee.id,
+            capability_id=capability.id,
+            proficiency="qualified",
+        )
+    assert created
+    async with factory() as session:
+        replay_id, created = await service.add_capability(
+            session,
+            context=fixture.context,
+            employee_id=employee.id,
+            capability_id=capability.id,
+            proficiency="qualified",
+        )
+    assert not created and replay_id == evidence_id
+    async with factory() as session:
+        with pytest.raises(WorkforceAdministrationConflict, match="conflicts"):
+            await service.add_capability(
+                session,
+                context=fixture.context,
+                employee_id=employee.id,
+                capability_id=capability.id,
+                proficiency="expert",
+            )
+    async with factory() as session:
+        await service.add_language(
+            session,
+            context=fixture.context,
+            employee_id=employee.id,
+            language_id=language.id,
+            spoken_proficiency="professional",
+            customer_facing_eligible=True,
+        )
+        await service.add_certification(
+            session,
+            context=fixture.context,
+            employee_id=employee.id,
+            certification_id=certification.id,
+            credential_reference="SYNTHETIC-ONLY",
+            status="pending",
+            issued_on=None,
+            expires_on=None,
+        )
+        await service.add_availability(
+            session,
+            context=fixture.context,
+            employee_id=employee.id,
+            branch_id=fixture.company_branch_id,
+            start_at=utc_now(),
+            end_at=utc_now() + timedelta(hours=8),
+            status="available",
+            source="synthetic_test",
+        )
+    async with factory() as session:
+        with pytest.raises(WorkforceAdministrationConflict, match="not found"):
+            await service.ensure_profile(
+                session,
+                context=fixture.context,
+                employee_id=uuid4(),
+            )
 
 
 @pytest.mark.asyncio
@@ -1213,6 +1347,10 @@ async def test_permission_catalog_is_canonical_ordered_and_company_scoped(
             "assignable",
             "assigned",
             "reconciliation_required",
+            "category",
+            "access_nature",
+            "own_data",
+            "high_impact",
         }
         for record in records
     )
