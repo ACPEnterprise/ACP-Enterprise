@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test": "jest --runInBand",
-    "export": "expo export --platform all",
+    "export": "expo export --platform ios --output-dir dist/ios && expo export --platform android --output-dir dist/android",
     "config:validate": "tsx scripts/validate-config.ts",
     "beta:aasa": "tsx scripts/beta-aasa.ts",
     "beta:fixture": "tsx scripts/beta-fixture.ts",
