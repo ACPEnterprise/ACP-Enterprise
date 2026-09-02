@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_database_session
+from app.field_service.artifacts import field_artifact_service
 from app.field_service.errors import (
     FieldServiceConflict,
     FieldServiceError,
@@ -13,13 +14,22 @@ from app.field_service.errors import (
 )
 from app.field_service.schemas import (
     ApprovalInput,
+    CompletedFieldHistory,
+    FieldArtifactFinalizeInput,
+    FieldArtifactIntentInput,
+    FieldArtifactIntentOut,
+    FieldArtifactOut,
+    FieldJobSources,
     FieldJobState,
+    FieldPriceBookItem,
+    FieldReadiness,
     HandoffInput,
     Itinerary,
     NonBillableInput,
     NoteInput,
 )
 from app.field_service.service import field_service
+from app.field_service.sources import field_source_service
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import JobPermission
 from app.platform.permissions.dependencies import require_permission
@@ -124,6 +134,90 @@ async def refresh_invoice_handoff(
     try:
         return await field_service.refresh_handoff(
             session, context=context, job_id=job_id, payload=payload
+        )
+    except FieldServiceError as error:
+        raise field_error(error) from error
+
+
+@router.get("/jobs/{job_id}/sources", response_model=FieldJobSources)
+async def job_sources(job_id: UUID, context: Read, session: Session) -> FieldJobSources:
+    try:
+        return await field_source_service.job_sources(
+            session, context=context, job_id=job_id
+        )
+    except FieldServiceError as error:
+        raise field_error(error) from error
+
+
+@router.get(
+    "/jobs/{job_id}/price-book", response_model=tuple[FieldPriceBookItem, ...]
+)
+async def field_price_book(
+    job_id: UUID, context: Read, session: Session, limit: int = 50
+) -> tuple[FieldPriceBookItem, ...]:
+    try:
+        return await field_source_service.price_book(
+            session, context=context, job_id=job_id, limit=min(max(limit, 1), 100)
+        )
+    except FieldServiceError as error:
+        raise field_error(error) from error
+
+
+@router.get("/history/completed", response_model=CompletedFieldHistory)
+async def completed_history(
+    context: Read, session: Session, limit: int = 30
+) -> CompletedFieldHistory:
+    try:
+        return await field_source_service.completed_history(
+            session, context=context, limit=min(max(limit, 1), 100)
+        )
+    except FieldServiceError as error:
+        raise field_error(error) from error
+
+
+@router.get("/readiness", response_model=FieldReadiness)
+async def field_readiness(context: Read) -> FieldReadiness:
+    del context
+    return field_source_service.readiness()
+
+
+@router.post(
+    "/jobs/{job_id}/artifacts/intents",
+    response_model=FieldArtifactIntentOut,
+    status_code=201,
+)
+async def create_artifact_intent(
+    job_id: UUID,
+    payload: FieldArtifactIntentInput,
+    context: Execute,
+    session: Session,
+) -> FieldArtifactIntentOut:
+    try:
+        return await field_artifact_service.create_intent(
+            session, context=context, job_id=job_id, payload=payload
+        )
+    except FieldServiceError as error:
+        raise field_error(error) from error
+
+
+@router.post(
+    "/jobs/{job_id}/artifacts/intents/{intent_id}/finalize",
+    response_model=FieldArtifactOut,
+)
+async def finalize_artifact(
+    job_id: UUID,
+    intent_id: UUID,
+    payload: FieldArtifactFinalizeInput,
+    context: Execute,
+    session: Session,
+) -> FieldArtifactOut:
+    try:
+        return await field_artifact_service.finalize(
+            session,
+            context=context,
+            job_id=job_id,
+            intent_id=intent_id,
+            payload=payload,
         )
     except FieldServiceError as error:
         raise field_error(error) from error

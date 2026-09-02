@@ -2215,6 +2215,26 @@
       "domain": "technician",
       "mechanism": "domain durable command/receipt identity and request digest",
       "method": "POST",
+      "operation_id": "create_artifact_intent_api_v1_technician_jobs__job_id__artifacts_intents_post",
+      "path": "/api/v1/technician/jobs/{job_id}/artifacts/intents",
+      "reason": "Accepted request identity is enforced by the domain contract.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "technician",
+      "mechanism": "artifact intent identity plus immutable digest, size, and media binding",
+      "method": "POST",
+      "operation_id": "finalize_artifact_api_v1_technician_jobs__job_id__artifacts_intents__intent_id__finalize_post",
+      "path": "/api/v1/technician/jobs/{job_id}/artifacts/intents/{intent_id}/finalize",
+      "reason": "Exact finalization replay recovers the one immutable artifact evidence row; contradictory payload conflicts.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "technician",
+      "mechanism": "domain durable command/receipt identity and request digest",
+      "method": "POST",
       "operation_id": "record_approval_api_v1_technician_jobs__job_id__customer_approval_post",
       "path": "/api/v1/technician/jobs/{job_id}/customer-approval",
       "reason": "Accepted request identity is enforced by the domain contract.",
@@ -2739,6 +2759,6 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "a2cd62bed60d8de71f11b8e1a2e726a2ca015caf88112fca32f0d2554c8d74ca",
+  "fingerprint": "1598d614347d73b13195266d20a7e4bd101e30310b4b5a2d5dc812c92aff14b2",
   "schema_version": "1"
 }

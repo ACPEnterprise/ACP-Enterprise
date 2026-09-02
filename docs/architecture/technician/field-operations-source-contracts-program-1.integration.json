@@ -1,0 +1,52 @@
+{
+  "program": "FIELD.OPERATIONS.SOURCE.CONTRACTS.PROGRAM.1",
+  "authority_base": "ce4e357504529a005558fe2f7164a75f9aaf7693",
+  "branch": "work/field-operations-source-contracts-program-1",
+  "authorization_root": "authenticated_user->membership->employee->branch->assignment->permission",
+  "contracts": [
+    "assignment-scoped field source projection",
+    "field-safe active Price Book projection",
+    "bounded own-assignment completed Job history",
+    "server-side field readiness projection",
+    "governed Job artifact upload intent and immutable finalization",
+    "provider-neutral lock-screen-safe Employee push seam"
+  ],
+  "business_truth_owners_unchanged": [
+    "jobs",
+    "customers",
+    "assets",
+    "price_book",
+    "estimates",
+    "invoicing",
+    "payments",
+    "communications",
+    "workforce"
+  ],
+  "migration": {
+    "revision": "m9n7q05f2s8t",
+    "parent": "l8m6p94e1r7s",
+    "purpose": "field artifact custody and append-only finalized evidence"
+  },
+  "gates": {
+    "provider_required": [
+      "protected artifact byte storage",
+      "real Communications delivery",
+      "APNs/FCM delivery"
+    ],
+    "policy_required": [
+      "legal customer authorization/signature semantics",
+      "inspection definitions and cadence",
+      "technician collection policy and provider"
+    ],
+    "source_required": [
+      "technician Estimate mutation authority",
+      "Employee in-app inbox lifecycle"
+    ]
+  },
+  "real_customer_mutation": false,
+  "real_employee": false,
+  "real_communication": false,
+  "real_payment": false,
+  "preview_deployment": false,
+  "production_operation": false
+}
