@@ -19,6 +19,9 @@ export function WorkforceRoute() {
   const directory = useWorkforceDirectory();
   const [selected, setSelected] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [branchFilter, setBranchFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [readinessFilter, setReadinessFilter] = useState("");
   const detail = useWorkforceEmployee(selected);
   const administration = useEmployeeAdministration(selected, canAdministerEmployees);
   const accessMutation = useEmployeeAccessMutation(selected);
@@ -44,8 +47,19 @@ export function WorkforceRoute() {
   }, [administrationPermissions]);
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase();
-    return (directory.data ?? []).filter((item) => !query || [item.display_name, item.employee_number, item.job_title ?? "", ...item.capability_codes, ...item.language_codes].some((value) => value.toLowerCase().includes(query)));
-  }, [directory.data, search]);
+    return (directory.data ?? []).filter((item) =>
+      (!query || [item.display_name, item.employee_number, item.job_title ?? "", ...item.capability_codes, ...item.language_codes].some((value) => value.toLowerCase().includes(query)))
+      && (!branchFilter || item.home_branch_id === branchFilter)
+      && (!statusFilter || item.employee_status === statusFilter)
+      && (!readinessFilter || item.readiness_state === readinessFilter)
+    );
+  }, [branchFilter, directory.data, readinessFilter, search, statusFilter]);
+  const morningReview = useMemo(() => ({
+    total: directory.data?.length ?? 0,
+    inactive: (directory.data ?? []).filter((item) => item.employee_status !== "active").length,
+    missingProfile: (directory.data ?? []).filter((item) => !item.profile_id).length,
+    needsAttention: (directory.data ?? []).filter((item) => item.readiness_state !== "READY").length,
+  }), [directory.data]);
 
   return <div className="space-y-6">
     <header className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-sm font-medium text-action-primary">Workforce operations</p><h2 className="mt-1 text-2xl font-bold sm:text-3xl">Employee readiness</h2><p className="mt-2 text-content-muted">Operational identity, capability, credential, language, and Branch evidence. Payroll data is excluded.</p></div>{permissionCodes.includes("COMPANY_IDENTITY_ONBOARDING_MANAGE") && <Link className="rounded-lg bg-action-primary px-4 py-2 font-semibold text-white" to="/administration/identity-onboarding">Add Employee</Link>}</header>
@@ -63,9 +77,12 @@ export function WorkforceRoute() {
       {eligibility.isError && <div className="mt-4"><Alert variant="danger" title="Eligibility unavailable">The evidence could not be evaluated. Verify the authorized Branch and time window.</Alert></div>}
       {eligibility.data && <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">{eligibility.data.map((item) => <div key={item.employee_id} className="rounded-xl border border-stroke p-3"><div className="flex items-start justify-between gap-2"><div><strong>{item.display_name}</strong><p className="text-xs text-content-muted">{item.employee_number}</p></div><Badge variant={item.eligible ? "success" : "neutral"}>{item.decision}</Badge></div><p className="mt-2 text-xs text-content-muted">{item.reasons.length ? item.reasons.join(" · ") : "No blockers"} · {item.availability_confidence}</p></div>)}</div>}
     </Card>
+    <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Owner morning Employee review">
+      {[['Authorized Employees', morningReview.total], ['Inactive identities', morningReview.inactive], ['Missing Workforce profile', morningReview.missingProfile], ['Readiness needs attention', morningReview.needsAttention]].map(([label, value]) => <Card key={String(label)} className="p-4"><p className="text-sm text-content-muted">{label}</p><p className="mt-1 text-2xl font-bold">{value}</p></Card>)}
+    </section>
     <div className="grid gap-6 xl:grid-cols-[minmax(20rem,0.85fr)_minmax(0,1.4fr)]">
       <Card className="min-w-0 overflow-hidden">
-        <div className="border-b border-stroke p-4"><label className="relative block"><span className="sr-only">Search workforce</span><Search size={17} className="absolute left-3 top-3 text-content-muted"/><Input className="pl-10" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search name, number, role, capability, language"/></label></div>
+        <div className="space-y-3 border-b border-stroke p-4"><label className="relative block"><span className="sr-only">Search workforce</span><Search size={17} className="absolute left-3 top-3 text-content-muted"/><Input className="pl-10" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search name, number, role, capability, language"/></label><div className="grid gap-2 sm:grid-cols-3"><label className="text-xs text-content-muted">Branch<select aria-label="Filter by Branch" className="mt-1 min-h-10 w-full rounded-lg border border-stroke bg-surface px-2 text-content" value={branchFilter} onChange={(event) => setBranchFilter(event.target.value)}><option value="">All authorized</option>{(activeCompany?.branches ?? []).map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</select></label><label className="text-xs text-content-muted">Employee status<select aria-label="Filter by Employee status" className="mt-1 min-h-10 w-full rounded-lg border border-stroke bg-surface px-2 text-content" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="">All</option><option value="active">Active</option><option value="inactive">Inactive</option><option value="archived">Archived</option></select></label><label className="text-xs text-content-muted">Readiness<select aria-label="Filter by readiness" className="mt-1 min-h-10 w-full rounded-lg border border-stroke bg-surface px-2 text-content" value={readinessFilter} onChange={(event) => setReadinessFilter(event.target.value)}><option value="">All</option><option value="READY">Ready</option><option value="BLOCKED">Blocked</option><option value="INSUFFICIENT_EVIDENCE">Insufficient evidence</option></select></label></div></div>
         {directory.isLoading && <div className="p-8"><Spinner label="Loading workforce"/></div>}
         {directory.isError && (() => { const error = getOperatorApiError(directory.error, "workforce directory"); return <div className="p-4"><Alert variant="danger" title={error.title}>{error.message}</Alert></div>; })()}
         <div className="divide-y divide-stroke">

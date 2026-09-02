@@ -1357,6 +1357,18 @@ async def test_permission_catalog_is_canonical_ordered_and_company_scoped(
     assert other_company.status_code == 404
 
 
+def test_high_impact_permission_review_uses_current_operation_semantics() -> None:
+    assert CompanyAdministrationService._permission_high_impact(
+        "COMPANY_ASSET_MANAGE", "manage"
+    )
+    assert CompanyAdministrationService._permission_high_impact(
+        "COMPANY_COMMUNICATION_PROVIDER_MANAGE", "manage"
+    )
+    assert not CompanyAdministrationService._permission_high_impact(
+        "COMPANY_PAYMENT_READ", "read"
+    )
+
+
 @pytest.mark.asyncio
 async def test_unknown_company_permission_is_visible_but_not_assignable(
     admin_database: tuple[AsyncEngine, async_sessionmaker[AsyncSession]],

@@ -81,6 +81,25 @@ describe("IdentityOnboardingRoute", () => {
     vi.clearAllMocks();
     vi.mocked(api.listRoles).mockResolvedValue([employeeRole]);
     vi.mocked(api.listPermissions).mockResolvedValue(requiredPermissions);
+    vi.mocked(api.planEmployeeOnboarding).mockResolvedValue({
+      classification: "NEW_EMPLOYEE_CANDIDATE",
+      safe_to_apply: true,
+      masked_login: "s***@example.invalid",
+      user_action: "CREATE_USER",
+      membership_action: "CREATE_MEMBERSHIP",
+      employee_action: "CREATE_EMPLOYEE",
+      branch_action: "GRANT_EXPLICIT_BRANCH",
+      role_codes: ["COMPANY_USER"],
+      additional_permission_codes: [],
+      readiness_stages: {
+        IDENTITY: "READY",
+        BRANCH: "READY",
+        ROLE: "READY",
+        PERMISSIONS: "READY",
+        INVITATION: "PROVIDER_REQUIRED",
+      },
+      blockers: [],
+    });
     vi.mocked(api.initiateEmployeeBetaOnboarding).mockResolvedValue({
       id: "request-1",
       employee_id: "employee-1",
@@ -115,7 +134,10 @@ describe("IdentityOnboardingRoute", () => {
     );
     await user.type(screen.getByLabelText("First name"), "Synthetic");
     await user.type(screen.getByLabelText("Last name"), "Technician");
-    await user.click(screen.getByRole("button", { name: "Prepare Employee onboarding" }));
+    await user.click(screen.getByRole("button", { name: "Review Employee plan" }));
+    expect(await screen.findByText("NEW EMPLOYEE CANDIDATE")).toBeInTheDocument();
+    expect(api.initiateEmployeeBetaOnboarding).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Apply reviewed Employee onboarding" }));
 
     expect(api.initiateEmployeeBetaOnboarding).toHaveBeenCalledWith(expect.objectContaining({
       branch_id: "branch-1",
@@ -133,6 +155,30 @@ describe("IdentityOnboardingRoute", () => {
     expect(await screen.findByText("provider not configured", { exact: true })).toBeInTheDocument();
     expect(screen.getByText("Provider not configured or not accepted")).toBeInTheDocument();
     expect(screen.queryByDisplayValue("synthetic@example.invalid")).not.toBeInTheDocument();
+  });
+
+  it("blocks apply when identity review finds a conflict", async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.planEmployeeOnboarding).mockResolvedValue({
+      classification: "DUPLICATE_CONFLICT",
+      safe_to_apply: false,
+      masked_login: "s***@example.invalid",
+      user_action: "REUSE_REVIEW_REQUIRED",
+      membership_action: "REUSE_MEMBERSHIP",
+      employee_action: "NO_CHANGE",
+      branch_action: "GRANT_EXPLICIT_BRANCH",
+      role_codes: ["COMPANY_USER"],
+      additional_permission_codes: [],
+      readiness_stages: { IDENTITY: "REVIEW_REQUIRED" },
+      blockers: ["employee_identity_already_exists"],
+    });
+    renderPage();
+    await user.type(await screen.findByLabelText("Employee login address"), "synthetic@example.invalid");
+    await user.type(screen.getByLabelText("First name"), "Synthetic");
+    await user.type(screen.getByLabelText("Last name"), "Existing");
+    await user.click(screen.getByRole("button", { name: "Review Employee plan" }));
+    expect(await screen.findByText("DUPLICATE CONFLICT")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Apply reviewed Employee onboarding" })).not.toBeInTheDocument();
   });
 
   it("fails closed without onboarding authority", () => {

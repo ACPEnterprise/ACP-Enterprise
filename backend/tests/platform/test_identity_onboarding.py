@@ -188,6 +188,64 @@ def command(
 
 
 @pytest.mark.asyncio
+async def test_onboarding_plan_detects_new_and_duplicate_identity_without_mutation(
+    onboarding_db: tuple[
+        async_sessionmaker[AsyncSession], Context, IdentityOnboardingService
+    ],
+) -> None:
+    factory, context, service = onboarding_db
+    role = Role(
+        company_id=context.company.id,
+        code=f"PLAN_ROLE_{uuid4().hex[:10].upper()}",
+        name="Synthetic planning role",
+        status="active",
+        is_system=True,
+    )
+    async with factory() as setup, setup.begin():
+        setup.add(role)
+    email = f"plan-{uuid4()}@example.test"
+    async with factory() as session:
+        plan = await service.plan(
+            session,
+            context=context,
+            branch_id=context.active_branch.id,
+            login_email=email,
+            role_ids=(role.id,),
+            additional_permission_ids=(),
+        )
+        assert plan.classification == "NEW_EMPLOYEE_CANDIDATE"
+        assert plan.safe_to_apply
+        assert plan.readiness_stages["INVITATION"] == "PROVIDER_REQUIRED"
+        assert not await session.scalar(
+            select(User.id).where(User.normalized_email == email)
+        )
+        await session.rollback()
+
+        created = await service.initiate(
+            session,
+            context=context,
+            command=command(
+                context,
+                request_key=f"plan-apply-{uuid4()}",
+                email=email,
+                role_ids=(role.id,),
+            ),
+        )
+        duplicate = await service.plan(
+            session,
+            context=context,
+            branch_id=context.active_branch.id,
+            login_email=email,
+            role_ids=(role.id,),
+            additional_permission_ids=(),
+        )
+        assert duplicate.classification == "DUPLICATE_CONFLICT"
+        assert not duplicate.safe_to_apply
+        assert duplicate.blockers == ("employee_identity_already_exists",)
+        assert created.employee_id is not None
+
+
+@pytest.mark.asyncio
 async def test_explicit_employee_permission_profile_is_additive_replay_safe(
     onboarding_db: tuple[
         async_sessionmaker[AsyncSession], Context, IdentityOnboardingService

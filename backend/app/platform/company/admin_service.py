@@ -111,7 +111,9 @@ class CompanyAdministrationService:
                 "category": self._permission_category(permission.code),
                 "access_nature": self._permission_nature(permission.action),
                 "own_data": "_OWN_" in permission.code,
-                "high_impact": self._permission_high_impact(permission.code),
+                "high_impact": self._permission_high_impact(
+                    permission.code, permission.action
+                ),
             }
             for permission in permissions
         ]
@@ -144,15 +146,28 @@ class CompanyAdministrationService:
         return "MUTATION"
 
     @staticmethod
-    def _permission_high_impact(code: str) -> bool:
-        return any(
+    def _permission_high_impact(code: str, action: str) -> bool:
+        protected_domain = any(
             token in code
             for token in (
-                "PAYROLL_ADMIN", "ACCOUNTING_POST", "PAYMENT_", "ROLE_MANAGE",
-                "PERMISSION_MANAGE", "MIGRATION_EXECUTE", "PURCHASING_APPROVE",
-                "INVENTORY_ADJUST", "COMPANY_ADMIN",
+                "PAYROLL_ADMIN",
+                "ACCOUNTING_",
+                "PAYMENT_",
+                "ROLE_MANAGE",
+                "PERMISSION_MANAGE",
+                "IDENTITY_ONBOARDING_MANAGE",
+                "BRANCH_ACCESS_MANAGE",
+                "MEMBERSHIP_MANAGE",
+                "MIGRATION_",
+                "PURCHASING_",
+                "INVENTORY_",
+                "BEACON_",
+                "ECONOMICS_",
+                "ASSET_",
+                "COMMUNICATION_",
             )
         )
+        return protected_domain and action not in {"read", "list", "view", "own_read"}
 
     async def list_memberships(
         self,

@@ -40,6 +40,7 @@ from .models import (
     IdentityOnboardingRequest,
     ProtectedInvitationDeliveryEnvelope,
 )
+from .schemas import OnboardingPlanResponse
 
 
 class OnboardingError(Exception):
@@ -104,6 +105,126 @@ class IdentityOnboardingService:
             AdministrationPermission.IDENTITY_ONBOARDING_MANAGE
         ):
             raise OnboardingAuthorizationError("Onboarding authority is required.")
+
+    async def plan(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        branch_id: UUID,
+        login_email: str,
+        role_ids: tuple[UUID, ...],
+        additional_permission_ids: tuple[UUID, ...],
+    ) -> OnboardingPlanResponse:
+        """Build a read-only, tenant-scoped onboarding plan before mutation."""
+        self._require_admin(context)
+        email = normalize_email(login_email)
+        branch = await session.scalar(
+            select(Branch).where(
+                Branch.id == branch_id,
+                Branch.company_id == context.company.id,
+                Branch.status == "active",
+                Branch.archived_at.is_(None),
+            )
+        )
+        blockers: list[str] = []
+        if branch is None or not context.can_access_branch(branch_id):
+            blockers.append("branch_not_authorized")
+
+        roles = tuple(
+            await session.scalars(
+                select(Role).where(
+                    Role.id.in_(tuple(set(role_ids))),
+                    Role.company_id == context.company.id,
+                    Role.status == "active",
+                    Role.archived_at.is_(None),
+                )
+            )
+        )
+        if {role.id for role in roles} != set(role_ids):
+            blockers.append("role_not_authorized")
+        if not roles:
+            blockers.append("baseline_role_required")
+        permissions = tuple(
+            await session.scalars(
+                select(Permission).where(
+                    Permission.id.in_(tuple(set(additional_permission_ids))),
+                    Permission.status == "active",
+                    Permission.retired_at.is_(None),
+                )
+            )
+        )
+        if {permission.id for permission in permissions} != set(
+            additional_permission_ids
+        ):
+            blockers.append("permission_not_assignable")
+
+        user = await session.scalar(select(User).where(User.normalized_email == email))
+        membership = None
+        employee = None
+        classification = "NEW_EMPLOYEE_CANDIDATE"
+        user_action = "CREATE_USER"
+        membership_action = "CREATE_MEMBERSHIP"
+        employee_action = "CREATE_EMPLOYEE"
+        if user is not None:
+            user_action = "REUSE_REVIEW_REQUIRED"
+            membership = await session.scalar(
+                select(Membership).where(
+                    Membership.user_id == user.id,
+                    Membership.company_id == context.company.id,
+                )
+            )
+            if membership is None:
+                classification = "EXISTING_USER_NEEDS_MEMBERSHIP"
+                membership_action = "REVIEW_AND_CREATE_MEMBERSHIP"
+                blockers.append("existing_user_linkage_review_required")
+            else:
+                membership_action = "REUSE_MEMBERSHIP"
+                employee = await session.scalar(
+                    select(Employee).where(
+                        Employee.company_id == context.company.id,
+                        Employee.membership_id == membership.id,
+                    )
+                )
+                if employee is None:
+                    classification = "MEMBERSHIP_NEEDS_EMPLOYEE_LINK"
+                    employee_action = "LINK_NEW_EMPLOYEE"
+                    if (
+                        user.status != "active"
+                        or user.archived_at is not None
+                        or user.email_verified_at is None
+                        or membership.status != "active"
+                    ):
+                        blockers.append("existing_identity_not_linkable")
+                else:
+                    classification = "DUPLICATE_CONFLICT"
+                    employee_action = "NO_CHANGE"
+                    blockers.append("employee_identity_already_exists")
+
+        safe_to_apply = not blockers
+        return OnboardingPlanResponse(
+            classification=classification,
+            safe_to_apply=safe_to_apply,
+            masked_login=_masked(email),
+            user_action=user_action,
+            membership_action=membership_action,
+            employee_action=employee_action,
+            branch_action="GRANT_EXPLICIT_BRANCH" if branch is not None else "BLOCKED",
+            role_codes=tuple(sorted(role.code for role in roles)),
+            additional_permission_codes=tuple(
+                sorted(permission.code for permission in permissions)
+            ),
+            readiness_stages={
+                "IDENTITY": "READY" if classification == "NEW_EMPLOYEE_CANDIDATE" else "REVIEW_REQUIRED",
+                "BRANCH": "READY" if branch is not None and context.can_access_branch(branch_id) else "BLOCKED",
+                "ROLE": "READY" if roles and "role_not_authorized" not in blockers else "BLOCKED",
+                "PERMISSIONS": "READY" if "permission_not_assignable" not in blockers else "BLOCKED",
+                "INVITATION": "PROVIDER_REQUIRED",
+                "ACTIVATION": "PENDING_INVITATION",
+                "MOBILE": "PENDING_ACTIVATION",
+            },
+            blockers=tuple(blockers),
+        )
 
     def _delivery_cipher(self) -> tuple[str, AESGCM]:
         key_id = self.configuration.identity_onboarding_active_delivery_kid

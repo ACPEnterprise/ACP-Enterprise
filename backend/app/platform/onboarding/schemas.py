@@ -27,6 +27,34 @@ class OnboardingInitiateRequest(BaseModel):
         return self
 
 
+class OnboardingPlanRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    branch_id: UUID
+    first_name: str = Field(min_length=1, max_length=100)
+    last_name: str = Field(min_length=1, max_length=100)
+    display_name: str = Field(min_length=1, max_length=200)
+    role_ids: tuple[UUID, ...] = ()
+    additional_permission_ids: tuple[UUID, ...] = ()
+    login_email: SecretStr
+
+
+class OnboardingPlanResponse(BaseModel):
+    classification: str
+    safe_to_apply: bool
+    masked_login: str
+    user_action: str
+    membership_action: str
+    employee_action: str
+    branch_action: str
+    role_codes: tuple[str, ...]
+    additional_permission_codes: tuple[str, ...]
+    readiness_stages: dict[str, str]
+    blockers: tuple[str, ...]
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class OnboardingActivateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     token: str = Field(min_length=20, max_length=1024)

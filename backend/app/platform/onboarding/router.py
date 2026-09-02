@@ -19,6 +19,8 @@ from .schemas import (
     OnboardingDeliveryView,
     OnboardingInitiateRequest,
     OnboardingOwnerClaimView,
+    OnboardingPlanRequest,
+    OnboardingPlanResponse,
     OnboardingView,
 )
 from .service import (
@@ -52,6 +54,28 @@ def _safe_error(error: Exception) -> HTTPException:
         current_correlation_id(),
     )
     return HTTPException(status.HTTP_409_CONFLICT, failure.detail())
+
+
+@router.post("/plan", response_model=OnboardingPlanResponse)
+async def plan(
+    data: OnboardingPlanRequest, context: OnboardingAdmin, session: Session
+) -> OnboardingPlanResponse:
+    if (
+        data.additional_permission_ids
+        and AdministrationPermission.PERMISSION_MANAGE not in context.permission_codes
+    ):
+        raise _safe_error(OnboardingAuthorizationError())
+    try:
+        return await identity_onboarding_service.plan(
+            session,
+            context=context,
+            branch_id=data.branch_id,
+            login_email=data.login_email.get_secret_value(),
+            role_ids=data.role_ids,
+            additional_permission_ids=data.additional_permission_ids,
+        )
+    except (OnboardingAuthorizationError, OnboardingConflictError) as error:
+        raise _safe_error(error) from error
 
 
 @router.post("", response_model=OnboardingView, status_code=status.HTTP_201_CREATED)
