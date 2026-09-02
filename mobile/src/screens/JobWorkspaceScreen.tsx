@@ -93,6 +93,14 @@ export function JobWorkspaceScreen({ appointmentId, initialAssignment, initialTi
         <PrimaryButton label="Refresh Invoice Handoff" disabled={field.status !== "ready"} onPress={() => void field.mutate(() => fieldService.refreshHandoff(field.item!.job_id!, field.item!.job_version!, field.item!.assignment_version))} />
         <Text style={styles.readOnly}>Every field action is reconciled from authoritative Job and assignment state. Job actions never create a Timekeeping punch.</Text>
       </View>}
+      <View style={styles.section} accessible accessibilityLabel="Additional field capability readiness">
+        <Text style={styles.sectionTitle}>Additional field tools</Text>
+        <Text style={styles.line}>Equipment and service history: office connection required</Text>
+        <Text style={styles.line}>Photos and documents: upload service not yet available</Text>
+        <Text style={styles.line}>Estimate presentation: field-safe source not yet available</Text>
+        <Text style={styles.line}>Customer messages: sent only by ACP Enterprise when enabled</Text>
+        <Text style={styles.line}>Payment collection: not authorized in ACP Employee</Text>
+      </View>
     </View>}
   </ScrollView>;
 }
