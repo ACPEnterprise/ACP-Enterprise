@@ -88,7 +88,7 @@ def test_every_mutating_operation_has_exactly_one_current_classification() -> No
     operations = _mutation_operations()
     coverage = mutation_coverage_registry.by_identity()
     assert operations.keys() == coverage.keys()
-    assert len(operations) == len(coverage) == 275
+    assert len(operations) == len(coverage) == 277
     for identity, operation in operations.items():
         assert operation["operationId"] == coverage[identity].operation_id
 
@@ -102,7 +102,7 @@ def test_required_operations_expose_an_accepted_request_identity() -> None:
         for entry in mutation_coverage_registry.entries
         if entry.classification is MutationClassification.REQUIRED
     )
-    assert len(required) == 115
+    assert len(required) == 117
     for entry in required:
         operation = operations[entry.identity]
         schema = (
