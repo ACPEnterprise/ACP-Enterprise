@@ -118,3 +118,23 @@ def test_registers_audit_log_csv_without_disclosing_content(tmp_path: Path) -> N
     assert result["kind"] == "audit_log"
     assert result["source_mutated"] is False
     assert tuple((tmp_path / "protected/controls/raw").glob("*.csv"))
+
+
+def test_registers_operational_xlsx_control(tmp_path: Path) -> None:
+    repository = tmp_path / "repository"
+    repository.mkdir()
+    source = tmp_path / "ar-aging.xlsx"
+    workbook(source)
+    result = register_control_report(
+        command=RegisterControlReport(
+            source_file=source,
+            control_id="qbo-cutoff-ar-aging-detail-v1",
+            kind=ControlReportKind.AR_AGING_DETAIL,
+            basis="operational",
+            start_date=date(2026, 8, 31),
+            end_date=date(2026, 8, 31),
+        ),
+        evidence_root=tmp_path / "protected",
+        repository_root=repository,
+    )
+    assert result["basis"] == "operational"

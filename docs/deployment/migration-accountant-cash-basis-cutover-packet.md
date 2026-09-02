@@ -74,7 +74,8 @@ recognition of their originating transaction.
 
 ## Current single evidence gate
 
-The next report is **Accounts Receivable Aging Detail**, operational/Accrual
-view, as of **2026-08-31**. It controls open Invoices, aging, applications,
-credits, and the known post-cutoff-modified Invoice. No observed AR aggregate is
-admitted before this tie-out.
+The 2026-08-31 **Accounts Receivable Aging Detail** is accepted at 479,879.48.
+It preserves 96 Invoice rows and 66 negative Payment/Deposit rows with no
+post-cutoff transaction dates. The next report is an **Accrual Trial Balance as
+of 2026-08-31** to tie that net to the ledger Accounts Receivable control. No AR
+is ledger-admitted before the tie-out.

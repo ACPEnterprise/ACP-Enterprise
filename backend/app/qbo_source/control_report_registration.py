@@ -41,7 +41,7 @@ def register_control_report(
     if command.kind is ControlReportKind.AUDIT_LOG:
         if command.basis != "operational":
             raise EvidenceStoreError("audit_control_basis_invalid")
-    elif command.basis not in {"cash", "accrual"}:
+    elif command.basis not in {"cash", "accrual", "operational"}:
         raise EvidenceStoreError("control_basis_invalid")
     source = command.source_file.expanduser()
     if source.is_symlink() or not source.is_file():

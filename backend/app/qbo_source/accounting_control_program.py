@@ -15,6 +15,7 @@ _AUTHORITIES = (
     "qbo-current-environment-authority-v1",
     "qbo-transition-ledger-control-2024-02-19-v1",
     "qbo-transition-cash-balance-control-2024-02-19-v1",
+    "qbo-cutoff-ar-aging-control-2026-08-31-v1",
 )
 
 
@@ -31,7 +32,7 @@ def seal_accounting_control_program(
             raise EvidenceStoreError("accounting_control_authority_digest_invalid")
         controls[authority_id] = hashlib.sha256(path.read_bytes()).hexdigest()
     document: dict[str, object] = {
-        "schema_version": "migration-accounting-control-admission-program/v2",
+        "schema_version": "migration-accounting-control-admission-program/v3",
         "historical_reporting_basis": "CASH",
         "full_available_history": "PRESERVED",
         "current_qbo_environment_authority_date": "2024-02-19",
@@ -39,7 +40,7 @@ def seal_accounting_control_program(
         "opening_state": {
             "ledger": "TRANSITION_CONTROL_ACCEPTED",
             "cash_reporting": "TRANSITION_CONTROL_ACCEPTED",
-            "operational_ar": "CONTROL_REPORT_REQUIRED",
+            "operational_ar": "AGING_CONTROL_ACCEPTED_LEDGER_TIE_REQUIRED",
             "operational_ap": "CONTROL_REPORT_REQUIRED",
             "bank_cash": "ACCOUNT_LEVEL_EXTERNAL_CONTROL_REQUIRED",
             "credit_cards": "ACCOUNT_LEVEL_EXTERNAL_CONTROL_REQUIRED",
@@ -56,7 +57,7 @@ def seal_accounting_control_program(
         },
         "controls": {
             "cash_continuity": "TRANSITION_ACCEPTED_CUTOFF_CONTINUITY_PENDING",
-            "ar": "AR_AGING_DETAIL_REQUIRED",
+            "ar": "AGING_DETAIL_ACCEPTED_ACCRUAL_TRIAL_BALANCE_REQUIRED",
             "ap": "AP_AGING_DETAIL_REQUIRED",
             "bank_cash": "PER_ACCOUNT_QUICKREPORT_AND_EXTERNAL_RECONCILIATION_REQUIRED",
             "credit_cards": "PER_ACCOUNT_QUICKREPORT_AND_STATEMENT_REQUIRED",
@@ -83,19 +84,19 @@ def seal_accounting_control_program(
             "production_activation": "NOT_AUTHORIZED",
         },
         "next_owner_evidence": {
-            "report": "Accounts Receivable Aging Detail",
-            "basis": "accrual_operational",
+            "report": "Trial Balance",
+            "basis": "accrual",
             "as_of": "2026-08-31",
-            "purpose": "cutoff open-invoice and AR-control reconciliation",
+            "purpose": "tie accepted operational AR to the ledger control account",
         },
     }
     document["evidence_digest"] = _digest(document)
     authority_digest = ControlEvidenceRegistry(store).register_authority_document(
-        authority_id="migration-accounting-control-admission-program-v2",
+        authority_id="migration-accounting-control-admission-program-v3",
         document=document,
     )
     return {
-        "state": "ACCOUNTING_CONTROL_PROGRAM_READY_AT_AR_EVIDENCE_GATE",
+        "state": "ACCOUNTING_CONTROL_PROGRAM_READY_AT_AR_LEDGER_TIE_GATE",
         "authority_digest": authority_digest,
         "opening_ledger": "ACCEPTED",
         "opening_cash_reporting": "ACCEPTED",
@@ -103,7 +104,7 @@ def seal_accounting_control_program(
         "coa_owner_accountant_decisions": 92,
         "canceled_job_holds": 296,
         "unlinked_estimates": 24,
-        "next_report": "AR_AGING_DETAIL_2026-08-31",
+        "next_report": "ACCRUAL_TRIAL_BALANCE_2026-08-31",
     }
 
 
