@@ -1,0 +1,97 @@
+{
+  "contract_version": "hcp-operational-measurement-handoff.v1",
+  "consumer_contract": "hcp-operational-measurement-readiness.v1",
+  "source_authority_owner": "Migration",
+  "prohibitions": [
+    "no_raw_source_access",
+    "no_parallel_admission",
+    "no_source_mutation",
+    "no_employee_creation",
+    "no_inferred_time"
+  ],
+  "unlocks": {
+    "visual_scheduling": {
+      "required": [
+        "source_appointment_id",
+        "source_digest",
+        "source_job_id",
+        "admitted_company_id",
+        "admitted_branch_id",
+        "admitted_customer_id",
+        "admitted_service_location_id",
+        "appointment_status",
+        "arrival_window_start_at",
+        "arrival_window_end_at",
+        "timezone_provenance"
+      ],
+      "optional": [
+        "scheduled_duration_minutes",
+        "source_technician_ids",
+        "employee_crosswalk_outcomes",
+        "service_category"
+      ],
+      "note": "Technician mapping and measured duration are not required for basic calendar rendering."
+    },
+    "dispatch_intelligence": {
+      "required": [
+        "all_visual_scheduling_required_fields",
+        "job_lifecycle",
+        "customer_commitment_window",
+        "scheduled_duration_or_explicit_unknown",
+        "technician_crosswalk_disposition"
+      ],
+      "optional_explicit_unknown": [
+        "travel",
+        "fleet_requirement",
+        "capability_requirement",
+        "certification_requirement"
+      ]
+    },
+    "duration_measurement": {
+      "required": [
+        "source_job_id",
+        "source_digest",
+        "work_started_at",
+        "work_completed_at",
+        "pause_resume_intervals_or_explicitly_absent",
+        "correction_or_supersession_identity"
+      ],
+      "classification_without_pause_evidence": "PARTIAL_DURATION_EVIDENCE"
+    },
+    "economics_readiness": {
+      "required": [
+        "work_period",
+        "admitted_job_id",
+        "admitted_customer_id",
+        "admitted_service_location_id",
+        "service_category_or_explicit_unknown",
+        "source_digest"
+      ],
+      "not_implied": [
+        "revenue",
+        "cash",
+        "labor_cost",
+        "material_cost",
+        "profitability"
+      ]
+    },
+    "august_28_2026_acceptance": {
+      "timezone": "America/New_York",
+      "required_dispositions": [
+        "ADMITTED",
+        "HELD",
+        "UNMAPPED_TECHNICIAN",
+        "INCOMPLETE_WINDOW",
+        "CANCELED_HISTORICAL",
+        "OTHER_EXPLICIT_DISPOSITION"
+      ],
+      "invariant": "source_count == sum(disposition_counts)",
+      "hard_coded_source_count": false
+    }
+  },
+  "batching": {
+    "maximum_records_per_evaluation": 10000,
+    "ordering": ["source_id", "source_digest"],
+    "pagination_owner": "Migration admission projection"
+  }
+}
