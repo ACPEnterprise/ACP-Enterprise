@@ -2,9 +2,6 @@ from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import delete
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from app.communications.suppression import (
     CommunicationRecipientControl,
     RecipientControlDecision,
@@ -14,6 +11,8 @@ from app.communications.suppression import (
 )
 from app.communications.types import CommunicationChannel, CommunicationPurpose
 from app.core.config import settings
+from sqlalchemy import delete
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 NOW = datetime(2026, 9, 2, 18, tzinfo=timezone.utc)
 
