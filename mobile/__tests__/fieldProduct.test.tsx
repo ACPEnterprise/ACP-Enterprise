@@ -1,8 +1,9 @@
 import { createFieldService, fieldIdempotencyKey } from "../src/api/fieldService";
 import type { ApiClient } from "../src/api/client";
 import { capabilitiesFromPermissions } from "../src/permissions/capabilities";
-import { render, screen, waitFor } from "@testing-library/react-native";
+import { act, render, screen, waitFor } from "@testing-library/react-native";
 import { JobsScreen } from "../src/screens/JobsScreen";
+import { ApiFailure } from "../src/api/types";
 
 describe("permission-driven field product contracts", () => {
   it("derives field surfaces from effective permissions, never role labels", () => {
@@ -61,5 +62,17 @@ describe("permission-driven field product contracts", () => {
       "/api/v1/technician/history?days=30&limit=20",
     ]);
     expect(JSON.stringify(request.mock.calls)).not.toMatch(/employee_id|customer_id|branch_id/i);
+  });
+
+  it("removes cached Job data when refreshed authority is revoked", async () => {
+    const item = { appointment_id: "30000000-0000-4000-8000-000000000001", appointment_number: "APT-1", job_id: "40000000-0000-4000-8000-000000000001", job_number: "JOB-1", job_status: "ready", job_version: 1, customer_display_name: "Synthetic Customer", service_location_label: "Synthetic Site", window_start_at: "2026-09-02T12:00:00Z", window_end_at: "2026-09-02T13:00:00Z", assignment_status: "assigned", assignment_version: 1, arrival_state: "pending" as const, field_execution_enabled: true };
+    let denied = false; let reconnect: ((connected: boolean) => void) | undefined;
+    let itineraryCall = 0;
+    const service = { itinerary: jest.fn(async (date: string) => { if (denied) throw new ApiFailure("forbidden", "Permission changed"); itineraryCall += 1; return { service_date: date, technician_display_name: "Synthetic", items: itineraryCall % 3 === 1 ? [item] : [] }; }), state: jest.fn(), arrival: jest.fn(), transition: jest.fn(), workSummary: jest.fn(), customerDisposition: jest.fn(), note: jest.fn(), approval: jest.fn(), refreshHandoff: jest.fn() };
+    const network = { isConnected: jest.fn(async () => true), subscribe: jest.fn((listener: (connected: boolean) => void) => { reconnect = listener; return () => undefined; }) };
+    render(<JobsScreen service={service} network={network} />);
+    expect(await screen.findByText("Job JOB-1")).toBeOnTheScreen();
+    denied = true; await act(async () => reconnect?.(true));
+    await waitFor(() => expect(screen.queryByText("Job JOB-1")).not.toBeOnTheScreen());
   });
 });

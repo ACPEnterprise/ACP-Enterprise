@@ -17,10 +17,17 @@ function address(assignment: DayAssignment) {
   return [location.address_line_1, location.address_line_2, `${location.city}, ${location.state} ${location.postal_code}`, location.country === "US" ? null : location.country].filter(Boolean).join(", ");
 }
 
+function expectedAction(assignment: DayAssignment) {
+  if (assignment.job_status === "completed") return "Complete — check My Time separately";
+  if (assignment.job_status === "in_progress") return "Continue work";
+  if (assignment.job_status === "paused") return "Resume when ready";
+  return "Open for next action";
+}
+
 function AssignmentCard({ assignment, timezone, stale, onOpen }: { assignment: DayAssignment; timezone: string; stale: boolean; onOpen?(): void }) {
   const identity = assignment.job_number ? `Job ${assignment.job_number}` : `Appointment ${assignment.appointment_number}`;
   return <Pressable accessibilityRole="button" accessibilityLabel={`Open assignment detail for ${assignment.customer_display_name}, ${stale ? "stale, " : ""}${formatWindow(assignment.window_start_at, timezone)} to ${formatWindow(assignment.window_end_at, timezone)}, ${assignment.appointment_status}, ${assignment.assignment_role}`} disabled={!onOpen} onPress={onOpen} style={styles.card}>
-    <Text style={styles.window}>{formatWindow(assignment.window_start_at, timezone)} – {formatWindow(assignment.window_end_at, timezone)}</Text>
+    <View style={styles.cardHeader}><Text style={styles.window}>{formatWindow(assignment.window_start_at, timezone)} – {formatWindow(assignment.window_end_at, timezone)}</Text><Text style={styles.next}>{expectedAction(assignment)}</Text></View>
     <Text style={styles.customer}>{assignment.customer_display_name}</Text>
     <Text style={styles.address}>{address(assignment)}</Text>
     {assignment.service_category && <Text style={styles.category}>{assignment.service_category}</Text>}
@@ -56,6 +63,6 @@ const styles = StyleSheet.create({
   title: { fontSize: 30, fontWeight: "800", color: colors.text }, date: { fontSize: 20, fontWeight: "700", color: colors.text }, timezone: { fontSize: 14, color: colors.muted },
   message: { fontSize: 16, color: colors.text }, stale: { fontSize: 16, color: colors.warning, fontWeight: "700", backgroundColor: "#FFF7D6", padding: spacing.md, borderRadius: 12 },
   empty: { backgroundColor: colors.surface, borderRadius: 14, padding: spacing.lg, gap: spacing.sm, borderWidth: 1, borderColor: colors.border }, emptyTitle: { fontSize: 22, fontWeight: "700", color: colors.text },
-  card: { backgroundColor: colors.surface, borderRadius: 14, padding: spacing.lg, gap: spacing.sm, borderWidth: 1, borderColor: colors.border },
+  card: { backgroundColor: colors.surface, borderRadius: 14, padding: spacing.lg, gap: spacing.sm, borderWidth: 1, borderColor: colors.border, minHeight: 48 }, cardHeader: { gap: spacing.xs }, next: { color: colors.brandDark, fontSize: 15, fontWeight: "700" },
   window: { color: colors.brandDark, fontSize: 18, fontWeight: "800" }, customer: { color: colors.text, fontSize: 21, fontWeight: "700" }, address: { color: colors.text, fontSize: 16, lineHeight: 23 }, category: { color: colors.brandDark, fontSize: 16, fontWeight: "600" }, metadata: { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: spacing.sm, gap: spacing.xs },
 });
