@@ -76,5 +76,39 @@ has a transaction date after cutoff. The difference from the previously
 observed current-source balance is preserved as a time/version variance, not
 forced to zero.
 
-The single next evidence item is an **Accrual Trial Balance as of 2026-08-31**.
-It must tie the accepted aging net to the Accounts Receivable control account.
+## August 31 cutoff packet reconciliation
+
+The complete owner packet is registered immutably under
+`qbo-cutoff-control-packet-2026-08-31-v1`. The Accrual Trial Balance, Open
+Invoices, and Customer Balance Detail agree at 479,029.48. They differ from the
+previously accepted A/R Aging Detail net of 479,879.48 by -850.00. The variance
+is preserved as an exception; AR is not admitted by forcing either control to
+the other.
+
+A/P Aging Detail, Unpaid Bills, and Vendor Balance Detail contain no numeric
+items. Together with no nonzero A/P control observed in the Accrual Trial
+Balance, this supports a zero-A/P candidate, subject to accountant confirmation
+that the reports used the intended scope and filters.
+
+Workbook-embedded metadata also proves that three requested files were exported
+in the wrong basis: `Trial Balance cash` and `Balance Sheet` say Accrual, while
+`General Ledger` says Cash. Their original registrations remain immutable, but
+the successor packet marks each `REJECTED_BASIS_MISMATCH`. The Cash Profit &
+Loss is accepted. No legitimate Cash/Accrual difference is treated as an error.
+
+## Legacy control gap register
+
+| Control | Historical state | Cutover treatment |
+|---|---|---|
+| Undeposited funds | `LEGACY_CONTROL_NOT_MAINTAINED` | Reconstruct only settlement-linked items proven by evidence; otherwise obtain an accountant opening control and `START_NATIVE_AT_CUTOVER` |
+| Company credit cards | `LEGACY_CONTROL_NOT_MAINTAINED` | Obtain an accepted balance per admitted card; preserve Purchase, liability, settlement, and bank outflow as separate facts; `START_NATIVE_AT_CUTOVER` |
+| Inventory valuation | `LEGACY_CONTROL_NOT_MAINTAINED` | Do not derive value from Items or Purchases; require physical quantity plus accepted cost basis, or classify not applicable; `START_NATIVE_AT_CUTOVER` |
+
+Native ACP must maintain funds-in-transit lifecycle, card statement/liability
+reconciliation, and prospective inventory quantity/cost/custody movements from
+the accepted cutover boundary. Historical absence is evidence, never permission
+to fabricate balances.
+
+The consolidated next evidence packet is limited to corrected exports of the
+Cash Trial Balance, Cash Balance Sheet, and Accrual General Ledger. No repeat of
+the already accepted controls is required.
