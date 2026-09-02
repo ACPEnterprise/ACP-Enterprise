@@ -1,0 +1,56 @@
+{
+  "program": "OM1.MOBILE.AUTHORITY.GAP.CLOSURE.1",
+  "branch": "work/mobile-physical-iphone-acceptance-4",
+  "mobile_qualification_sha": "428dcbddd7d072b5b8d9edff489efcd4373960b5",
+  "fetched_enterprise_authority": "fd2af4057a8dc1ba14777e3c052dd6ed39656404",
+  "authority_gap": {
+    "behind": 3,
+    "ahead": 0,
+    "mobile_reconciliation_required": false,
+    "reason": "The gap is additive HCP operational-measurement implementation, tests, and documentation only."
+  },
+  "ownership": {
+    "om1": [
+      "repository integrity",
+      "Mobile/server contract qualification",
+      "automated and synthetic acceptance",
+      "dependency-safe defect support"
+    ],
+    "physical_device": "Laptop1"
+  },
+  "changes": [
+    "Laptop1 physical acceptance gap matrix",
+    "Laptop1 owner handoff sequence",
+    "contract qualification record",
+    "bounded physical-failure reproduction map"
+  ],
+  "source_repairs": [],
+  "server_contract_changes": [],
+  "migrations": [],
+  "dependency_changes": [],
+  "preview_mutation": false,
+  "production_operation": false,
+  "apple_signing": false,
+  "qualification": {
+    "mobile_test_suites": 14,
+    "mobile_tests": 118,
+    "typescript": "pass",
+    "eslint": "pass",
+    "preview_configuration": "pass",
+    "synthetic_fixture": "dry_run_no_mutation",
+    "ios_hermes_export": "pass",
+    "android_hermes_export": "pass",
+    "backend_static_files": 69,
+    "backend_runtime_tests": "OM1_PYTHON_ENVIRONMENT_GATE",
+    "plist_privacy_entitlements": "pass",
+    "secret_scan": "pass",
+    "git_diff_check": "pass"
+  },
+  "laptop1_admission": "Enterprise must confirm the isolated sanctioned Preview fixture and synthetic login before physical mutations.",
+  "apple": {
+    "laptop1_physical_acceptance": "READY",
+    "distribution": "NEEDS_RECONCILIATION",
+    "signing_upload_testflight": "EXTERNAL_APPLE_GATE"
+  },
+  "recommended_integration": "Documentation-only; Enterprise may fast-forward/cherry-pick after confirming authority metadata remains current."
+}
