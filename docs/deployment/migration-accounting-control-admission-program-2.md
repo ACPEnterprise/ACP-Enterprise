@@ -23,7 +23,7 @@ Opening Balance Equity balance.
 |---|---|---|
 | Ledger transition | Accepted | Balanced account state; no fabricated opening journal |
 | Historical Cash position | Accepted | Cash-basis transition continuity |
-| Operational AR | Control required | No open-Invoice balance admitted yet |
+| Operational AR | Aging accepted; ledger tie required | Open items preserved; no ledger admission yet |
 | Operational AP | Control required | Empty API Bill families do not prove zero |
 | Bank/cash | Account-level control required | Deposits and Payments do not prove balances |
 | Credit cards | Account-level control required | Purchase and later settlement remain distinct |
@@ -68,7 +68,13 @@ Population accounting and replay authority are unchanged. Accounting admission,
 combined rehearsal completion, freeze readiness, and go/no-go remain blocked by
 cutoff subledger/account controls and genuine Owner/Finance decisions.
 
-The single next evidence item is **Accounts Receivable Aging Detail**, using the
-operational/Accrual view, as of **2026-08-31**. It unlocks open-Invoice,
-customer-balance, aging, credit/application, unapplied-receipt, and the known
-post-cutoff-corrected Invoice reconciliation.
+The registered **Accounts Receivable Aging Detail** as of 2026-08-31 contains
+162 rows across 115 customers: 96 Invoices, 62 Payments, and 4 Deposits. Invoice
+open balances are 566,442.39; Payment and Deposit rows provide negative
+applications/credits, producing a reconciled report net of 479,879.48. No row
+has a transaction date after cutoff. The difference from the previously
+observed current-source balance is preserved as a time/version variance, not
+forced to zero.
+
+The single next evidence item is an **Accrual Trial Balance as of 2026-08-31**.
+It must tie the accepted aging net to the Accounts Receivable control account.
