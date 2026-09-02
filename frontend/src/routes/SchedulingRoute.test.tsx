@@ -154,6 +154,51 @@ describe("SchedulingRoute", () => {
     expect(screen.getByRole("button", { name: "Next week" })).toBeVisible();
   });
 
+  it("projects the same appointments across Work Week, Month, and Dispatch", async () => {
+    vi.mocked(useAppointments).mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: { items: [appointment], total_count: 1, page: 1, page_size: 100 },
+    } as never);
+    render(
+      <MemoryRouter>
+        <SchedulingRoute />
+      </MemoryRouter>,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Work Week" }));
+    expect(
+      screen.getByRole("region", { name: "Work Week calendar" }),
+    ).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: "Month" }));
+    expect(screen.getByRole("region", { name: "Month calendar" })).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: "Day" }));
+    await userEvent.click(screen.getByRole("button", { name: "Dispatch" }));
+    expect(
+      screen.getByRole("region", { name: "Dispatch timeline" }),
+    ).toBeVisible();
+    expect(screen.getByText(/review-only/i)).toBeVisible();
+  });
+
+  it("offers Unassigned as an explicit projection without a second engine", async () => {
+    vi.mocked(useAppointments).mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: { items: [], total_count: 0, page: 1, page_size: 100 },
+    } as never);
+    render(
+      <MemoryRouter>
+        <SchedulingRoute />
+      </MemoryRouter>,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Unassigned" }));
+    expect(
+      screen.getByRole("heading", { name: "Needs scheduling" }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("heading", { name: "Appointment details" }),
+    ).toBeInTheDocument();
+  });
+
   it("shows unscheduled Jobs as a distinct office queue", () => {
     vi.mocked(useAppointments).mockReturnValue({
       isLoading: false,

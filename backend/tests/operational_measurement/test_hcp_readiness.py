@@ -8,6 +8,7 @@ from app.operational_measurement.hcp_readiness import (
     MAX_BATCH_SIZE,
     DateDisposition,
     DurationCandidateClass,
+    NativeScheduleProjection,
     OperationalAppointmentEvidence,
     OperationalJobEvidence,
     ReadinessState,
@@ -16,6 +17,7 @@ from app.operational_measurement.hcp_readiness import (
     adapt_migration_appointment,
     adapt_migration_job,
     classify_duration,
+    compare_source4_schedule,
     data_quality_conditions,
     dispatch_readiness,
     economics_operational_readiness,
@@ -246,6 +248,83 @@ def test_august_28_reconciliation_accounts_for_every_source_identity() -> None:
         crosswalks=(crosswalk(),),
     )
     assert replay.evidence_digest == report.evidence_digest
+
+
+def native_projection(**changes: object) -> NativeScheduleProjection:
+    values = {
+        "source_appointment_id": "appt_synthetic_1",
+        "company_id": COMPANY,
+        "branch_id": BRANCH,
+        "status": "scheduled",
+        "window_start_at": START,
+        "window_end_at": START + timedelta(hours=2),
+        "employee_ids": (EMPLOYEE,),
+        "evidence_digest": "c" * 64,
+    }
+    values.update(changes)
+    return NativeScheduleProjection(**values)  # type: ignore[arg-type]
+
+
+def test_source4_schedule_comparison_is_deterministic_and_exact() -> None:
+    first = compare_source4_schedule(
+        (appointment(),), (native_projection(),), crosswalks=(crosswalk(),)
+    )
+    replay = compare_source4_schedule(
+        (appointment(),), (native_projection(),), crosswalks=(crosswalk(),)
+    )
+    assert first.contract_version == "hcp-acp-schedule-comparison.v1"
+    assert first.counts == {"MATCHED": 1}
+    assert first.evidence_digest == replay.evidence_digest
+
+
+def test_source4_schedule_comparison_exposes_unmapped_and_conflicting_truth() -> None:
+    unmapped = appointment(
+        source_id="appt_unmapped", source_technician_ids=("pro_unknown",)
+    )
+    report = compare_source4_schedule(
+        (appointment(), unmapped),
+        (
+            native_projection(status="completed"),
+            native_projection(
+                source_appointment_id="appt_unmapped", employee_ids=()
+            ),
+        ),
+        crosswalks=(crosswalk(),),
+    )
+    assert report.source_count == report.native_count == 2
+    assert report.counts == {"CONFLICTING": 1, "PARTIAL": 1}
+    assert report.rows[0].conditions == ("STATUS_CONFLICT",)
+    assert report.rows[1].conditions == ("TECHNICIAN_MAPPING_INCOMPLETE",)
+
+
+def test_source4_schedule_comparison_rejects_duplicate_native_lineage() -> None:
+    report = compare_source4_schedule(
+        (appointment(),),
+        (native_projection(), native_projection(evidence_digest="d" * 64)),
+        crosswalks=(crosswalk(),),
+    )
+    assert report.counts == {"CONFLICTING": 1}
+    assert report.rows[0].conditions == ("DUPLICATE_NATIVE_SOURCE_IDENTITY",)
+
+
+def test_source4_schedule_comparison_is_input_order_independent() -> None:
+    second_source = appointment(
+        source_id="appt_synthetic_2", source_digest="d" * 64
+    )
+    second_native = native_projection(
+        source_appointment_id="appt_synthetic_2", evidence_digest="e" * 64
+    )
+    ordered = compare_source4_schedule(
+        (appointment(), second_source),
+        (native_projection(), second_native),
+        crosswalks=(crosswalk(),),
+    )
+    reversed_input = compare_source4_schedule(
+        (second_source, appointment()),
+        (second_native, native_projection()),
+        crosswalks=(crosswalk(),),
+    )
+    assert ordered.evidence_digest == reversed_input.evidence_digest
 
 
 def test_dispatch_and_luminary_remain_truthful_when_context_is_missing() -> None:
