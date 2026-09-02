@@ -19,6 +19,9 @@ from .errors import (
 )
 from .schemas import (
     ActivationRequest,
+    AdjustmentProposalCreate,
+    AdjustmentProposalDecision,
+    AdjustmentProposalItem,
     AuditItem,
     CatalogPage,
     CategoryCreate,
@@ -31,6 +34,9 @@ from .schemas import (
     PriceVersionCreate,
     PriceVersionItem,
     PriceVersionUpdate,
+    ReviewBatchCreate,
+    ReviewBatchDecision,
+    ReviewBatchItem,
     ServiceItem,
     ServiceItemCreate,
     SnapshotItem,
@@ -342,3 +348,84 @@ async def audit_history(
     return await price_book_service.audit_history(
         session, context=context, entity_id=entity_id
     )
+
+
+@router.post(
+    "/activation-readiness/review-batches",
+    response_model=ReviewBatchItem,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_review_batch(
+    payload: ReviewBatchCreate, context: ManageContext, session: DatabaseSession
+) -> ReviewBatchItem:
+    try:
+        return ReviewBatchItem.model_validate(
+            await price_book_service.create_review_batch(
+                session, context=context, payload=payload
+            )
+        )
+    except PriceBookError as error:
+        raise http_error(error) from error
+
+
+@router.post(
+    "/activation-readiness/review-batches/{batch_id}/decision",
+    response_model=ReviewBatchItem,
+)
+async def decide_review_batch(
+    batch_id: UUID,
+    payload: ReviewBatchDecision,
+    context: ManageContext,
+    session: DatabaseSession,
+) -> ReviewBatchItem:
+    try:
+        return ReviewBatchItem.model_validate(
+            await price_book_service.decide_review_batch(
+                session, context=context, batch_id=batch_id, payload=payload
+            )
+        )
+    except PriceBookError as error:
+        raise http_error(error) from error
+
+
+@router.post(
+    "/activation-readiness/adjustment-proposals",
+    response_model=AdjustmentProposalItem,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_adjustment_proposal(
+    payload: AdjustmentProposalCreate,
+    context: ManageContext,
+    session: DatabaseSession,
+) -> AdjustmentProposalItem:
+    try:
+        return AdjustmentProposalItem.model_validate(
+            await price_book_service.create_adjustment_proposal(
+                session, context=context, payload=payload
+            )
+        )
+    except PriceBookError as error:
+        raise http_error(error) from error
+
+
+@router.post(
+    "/activation-readiness/adjustment-proposals/{proposal_id}/decision",
+    response_model=AdjustmentProposalItem,
+)
+async def decide_adjustment_proposal(
+    proposal_id: UUID,
+    payload: AdjustmentProposalDecision,
+    context: ManageContext,
+    session: DatabaseSession,
+) -> AdjustmentProposalItem:
+    try:
+        return AdjustmentProposalItem.model_validate(
+            await price_book_service.decide_adjustment_proposal(
+                session,
+                context=context,
+                proposal_id=proposal_id,
+                payload=payload,
+            )
+        )
+    except PriceBookError as error:
+        raise http_error(error) from error

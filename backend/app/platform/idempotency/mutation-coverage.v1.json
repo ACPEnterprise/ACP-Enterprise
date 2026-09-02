@@ -268,6 +268,46 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     },
     {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "price_book",
+      "mechanism": "Company-scoped idempotency key plus exact candidate-set digest",
+      "method": "POST",
+      "operation_id": "create_review_batch_api_v1_price_book_activation_readiness_review_batches_post",
+      "path": "/api/v1/price-book/activation-readiness/review-batches",
+      "reason": "Exact replay returns one draft review batch and contradictory evidence is rejected.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "price_book",
+      "mechanism": "row lock, optimistic version, evidence digest and convergent terminal decision",
+      "method": "POST",
+      "operation_id": "decide_review_batch_api_v1_price_book_activation_readiness_review_batches__batch_id__decision_post",
+      "path": "/api/v1/price-book/activation-readiness/review-batches/{batch_id}/decision",
+      "reason": "A reviewed candidate set converges on one evidence-bound decision or rejects stale/contradictory replay.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "price_book",
+      "mechanism": "Company-scoped recommendation identity plus immutable proposal digest",
+      "method": "POST",
+      "operation_id": "create_adjustment_proposal_api_v1_price_book_activation_readiness_adjustment_proposals_post",
+      "path": "/api/v1/price-book/activation-readiness/adjustment-proposals",
+      "reason": "Recommendation replay returns one non-activating proposal and contradictory evidence is rejected.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "price_book",
+      "mechanism": "row lock, optimistic version, proposal digest and convergent terminal decision",
+      "method": "POST",
+      "operation_id": "decide_adjustment_proposal_api_v1_price_book_activation_readiness_adjustment_proposals__proposal_id__decision_post",
+      "path": "/api/v1/price-book/activation-readiness/adjustment-proposals/{proposal_id}/decision",
+      "reason": "Proposal review is evidence-bound and cannot activate or rewrite Price Book versions.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
       "classification": "EXPLICIT_EXEMPTION",
       "domain": "accounting",
       "mechanism": "legacy compatibility boundary; no shared durable receipt asserted",
@@ -2909,6 +2949,6 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "2959a05f7167ee4305f371c5a90b7c76e1ecceeae388eb4d6ca67fe7c89a9da7",
+  "fingerprint": "22139ac7b36be0d95fe0f0ad10a4bd3e09752fa8da3167b7a6906a0df0cc342a",
   "schema_version": "1"
 }

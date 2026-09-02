@@ -527,3 +527,130 @@ class PriceBookAuditEntry(Base):
     occurred_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, nullable=False
     )
+
+
+class PriceBookReviewBatch(Base):
+    __tablename__ = "price_book_review_batches"
+    __table_args__ = (
+        CheckConstraint(
+            "review_type IN ('commercial_content','candidate_prices','tax_classification','membership','source_conflict')",
+            name="ck_price_book_review_batches_type",
+        ),
+        CheckConstraint(
+            "status IN ('draft','approved','returned','excluded')",
+            name="ck_price_book_review_batches_status",
+        ),
+        CheckConstraint("version >= 1", name="ck_price_book_review_batches_version"),
+        CheckConstraint(
+            "candidate_set_digest ~ '^[0-9a-f]{64}$'",
+            name="ck_price_book_review_batches_digest",
+        ),
+        UniqueConstraint(
+            "company_id", "idempotency_key", name="uq_price_book_review_batches_key"
+        ),
+        UniqueConstraint(
+            "company_id", "id", name="uq_price_book_review_batches_company_id"
+        ),
+        Index(
+            "ix_price_book_review_batches_queue",
+            "company_id",
+            "status",
+            "review_type",
+            "created_at",
+        ),
+    )
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    configuration_version: Mapped[str] = mapped_column(String(120), nullable=False)
+    review_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    selector: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    service_codes: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    exclusions: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
+    candidate_set_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="draft")
+    decision_reason: Mapped[str | None] = mapped_column(String(500))
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    created_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    decided_by_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT")
+    )
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, nullable=False
+    )
+
+
+class PriceBookAdjustmentProposal(Base):
+    __tablename__ = "price_book_adjustment_proposals"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('draft','approved','returned','rejected','superseded')",
+            name="ck_price_book_adjustment_proposals_status",
+        ),
+        CheckConstraint(
+            "transformation_kind IN ('percentage','fixed_amount','markup_policy')",
+            name="ck_price_book_adjustment_proposals_kind",
+        ),
+        CheckConstraint("version >= 1", name="ck_price_book_adjustment_proposals_version"),
+        CheckConstraint(
+            "proposal_digest ~ '^[0-9a-f]{64}$'",
+            name="ck_price_book_adjustment_proposals_digest",
+        ),
+        UniqueConstraint(
+            "company_id", "recommendation_identity", name="uq_price_book_adjustment_recommendation"
+        ),
+        UniqueConstraint(
+            "company_id", "id", name="uq_price_book_adjustment_proposals_company_id"
+        ),
+        Index(
+            "ix_price_book_adjustment_proposals_queue",
+            "company_id",
+            "status",
+            "created_at",
+        ),
+    )
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("companies.id", ondelete="RESTRICT"), nullable=False
+    )
+    source_price_book_version: Mapped[str] = mapped_column(String(120), nullable=False)
+    recommendation_identity: Mapped[str] = mapped_column(String(160), nullable=False)
+    economics_evidence_version: Mapped[str | None] = mapped_column(String(160))
+    model_version: Mapped[str | None] = mapped_column(String(160))
+    affected_service_codes: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    owner_exclusions: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
+    transformation_kind: Mapped[str] = mapped_column(String(30), nullable=False)
+    transformation: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    impacts: Mapped[list[dict[str, object]]] = mapped_column(JSONB, nullable=False)
+    limitations: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
+    effective_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    proposal_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="draft")
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    created_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    approved_by_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT")
+    )
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, nullable=False
+    )

@@ -23,12 +23,16 @@ from app.price_book.errors import PriceBookConflict, PriceBookNotFound
 from app.price_book.models import PriceBookAuditEntry, PriceBookCommercialSnapshot
 from app.price_book.router import router as price_book_router
 from app.price_book.schemas import (
+    AdjustmentProposalCreate,
+    AdjustmentProposalDecision,
     CategoryCreate,
     ComponentCreate,
     OptionCreate,
     OptionGroupCreate,
     PriceVersionCreate,
     PriceVersionUpdate,
+    ReviewBatchCreate,
+    ReviewBatchDecision,
     ServiceItemCreate,
     SnapshotRequest,
     TaxClassificationCreate,
@@ -843,3 +847,127 @@ async def test_competing_activation_and_snapshot_during_successor_activation(
 
     _, snapshot = await asyncio.gather(activate_successor(), resolve_historical())
     assert snapshot.price_version_id == active.id
+
+
+@pytest.mark.asyncio
+async def test_activation_readiness_review_and_proposal_are_non_activating(
+    price_book_fixture,
+) -> None:
+    factory, context, _branch = price_book_fixture
+    service = PriceBookService()
+    async with factory() as session:
+        snapshots_before = await session.scalar(
+            select(func.count()).select_from(PriceBookCommercialSnapshot)
+        )
+    digest = "a" * 64
+    review_payload = ReviewBatchCreate(
+        configuration_version="all-county-build-1",
+        review_type="candidate_prices",
+        selector={"category": "Water Heaters"},
+        service_codes=("WH-001", "WH-002"),
+        exclusions=("WH-002",),
+        candidate_set_digest=digest,
+        idempotency_key="review-water-heaters-1",
+    )
+    async with factory() as session:
+        batch = await service.create_review_batch(
+            session, context=context, payload=review_payload
+        )
+    async with factory() as session:
+        replay = await service.create_review_batch(
+            session, context=context, payload=review_payload
+        )
+        assert replay.id == batch.id
+    async with factory() as session:
+        approved = await service.decide_review_batch(
+            session,
+            context=context,
+            batch_id=batch.id,
+            payload=ReviewBatchDecision(
+                expected_version=1,
+                expected_digest=digest,
+                decision="approved",
+                reason="Workbook prices reviewed as a coherent family.",
+            ),
+        )
+        assert approved.status == "approved"
+        assert approved.version == 2
+
+    proposal_digest = "b" * 64
+    async with factory() as session:
+        proposal = await service.create_adjustment_proposal(
+            session,
+            context=context,
+            payload=AdjustmentProposalCreate(
+                source_price_book_version="all-county-build-1",
+                recommendation_identity="synthetic-economics-proposal-1",
+                economics_evidence_version="synthetic-economics-v1",
+                model_version="model-contract-v1",
+                affected_service_codes=("WH-001", "WH-002"),
+                owner_exclusions=("WH-002",),
+                transformation_kind="percentage",
+                transformation={"percentage": "5.00"},
+                impacts=(
+                    {
+                        "service_code": "WH-001",
+                        "current_price": "100.00",
+                        "proposed_price": "105.00",
+                    },
+                ),
+                limitations=("Cost evidence incomplete; no profit claim.",),
+                effective_at=datetime.now(timezone.utc) + timedelta(days=30),
+                proposal_digest=proposal_digest,
+            ),
+        )
+    async with factory() as session:
+        approved_proposal = await service.decide_adjustment_proposal(
+            session,
+            context=context,
+            proposal_id=proposal.id,
+            payload=AdjustmentProposalDecision(
+                expected_version=1,
+                expected_digest=proposal_digest,
+                decision="approved",
+                reason="Synthetic successor proposal approved for rehearsal only.",
+            ),
+        )
+        snapshots = await session.scalar(
+            select(func.count()).select_from(PriceBookCommercialSnapshot)
+        )
+        assert approved_proposal.status == "approved"
+        assert snapshots == snapshots_before
+
+
+@pytest.mark.asyncio
+async def test_activation_readiness_decisions_reject_stale_authority(
+    price_book_fixture,
+) -> None:
+    factory, context, _branch = price_book_fixture
+    service = PriceBookService()
+    digest = "c" * 64
+    async with factory() as session:
+        batch = await service.create_review_batch(
+            session,
+            context=context,
+            payload=ReviewBatchCreate(
+                configuration_version="all-county-build-1",
+                review_type="commercial_content",
+                selector={"category": "Drain"},
+                service_codes=("DRAIN-001",),
+                candidate_set_digest=digest,
+                idempotency_key="review-drain-content-1",
+            ),
+        )
+    with pytest.raises(PriceBookConflict):
+        async with factory() as session:
+            await service.decide_review_batch(
+                session,
+                context=context,
+                batch_id=batch.id,
+                payload=ReviewBatchDecision(
+                    expected_version=2,
+                    expected_digest=digest,
+                    decision="approved",
+                    reason="Stale request must fail.",
+                ),
+            )

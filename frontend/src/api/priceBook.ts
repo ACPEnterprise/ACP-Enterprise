@@ -1,12 +1,145 @@
 import { apiClient } from "./client";
-import type { PriceBookCatalog, PriceBookCategory, PriceBookOption, PriceBookOptionGroup, PriceBookServiceItem, PriceBookVersion, TaxClassification } from "../types/priceBook";
+import type {
+  PriceBookCatalog,
+  PriceBookCategory,
+  PriceBookOption,
+  PriceBookOptionGroup,
+  PriceBookReviewBatch,
+  PriceBookServiceItem,
+  PriceBookVersion,
+  TaxClassification,
+} from "../types/priceBook";
 
 const path = "/api/v1/price-book";
-export async function getPriceBook(branchId?: string): Promise<PriceBookCatalog> { return (await apiClient.get<PriceBookCatalog>(path, { params: branchId ? { branch_id: branchId } : undefined })).data; }
-export async function createCategory(data: { code: string; name: string }): Promise<PriceBookCategory> { return (await apiClient.post<PriceBookCategory>(`${path}/categories`, data)).data; }
-export async function createTax(data: { code: string; name: string; taxable: boolean }): Promise<TaxClassification> { return (await apiClient.post<TaxClassification>(`${path}/tax-classifications`, data)).data; }
-export async function createServiceItem(data: { branch_id?: string; category_id: string; code: string; name: string; customer_description: string }): Promise<PriceBookServiceItem> { return (await apiClient.post<PriceBookServiceItem>(`${path}/service-items`, data)).data; }
-export async function createPriceVersion(itemId: string, data: { branch_id?: string; tax_classification_id: string; currency: string; unit_price: string; effective_at: string; components: Array<{ component_type: "labor" | "material"; code?: string; label: string; quantity: string; unit_cost?: string }> }): Promise<PriceBookVersion> { return (await apiClient.post<PriceBookVersion>(`${path}/service-items/${itemId}/versions`, data)).data; }
-export async function activatePriceVersion(versionId: string, version: number): Promise<PriceBookVersion> { return (await apiClient.post<PriceBookVersion>(`${path}/versions/${versionId}/activate`, { expected_version: version, reason: "Owner activated Price Book version." })).data; }
-export async function createOptionGroup(data: { code: string; name: string; minimum_selections: number; maximum_selections: number }): Promise<PriceBookOptionGroup> { return (await apiClient.post<PriceBookOptionGroup>(`${path}/option-groups`, data)).data; }
-export async function addOption(groupId: string, data: { service_item_id: string; label: string; position: number }): Promise<PriceBookOption> { return (await apiClient.post<PriceBookOption>(`${path}/option-groups/${groupId}/options`, data)).data; }
+export async function getPriceBook(
+  branchId?: string,
+): Promise<PriceBookCatalog> {
+  return (
+    await apiClient.get<PriceBookCatalog>(path, {
+      params: branchId ? { branch_id: branchId } : undefined,
+    })
+  ).data;
+}
+export async function createCategory(data: {
+  code: string;
+  name: string;
+}): Promise<PriceBookCategory> {
+  return (await apiClient.post<PriceBookCategory>(`${path}/categories`, data))
+    .data;
+}
+export async function createTax(data: {
+  code: string;
+  name: string;
+  taxable: boolean;
+}): Promise<TaxClassification> {
+  return (
+    await apiClient.post<TaxClassification>(`${path}/tax-classifications`, data)
+  ).data;
+}
+export async function createServiceItem(data: {
+  branch_id?: string;
+  category_id: string;
+  code: string;
+  name: string;
+  customer_description: string;
+}): Promise<PriceBookServiceItem> {
+  return (
+    await apiClient.post<PriceBookServiceItem>(`${path}/service-items`, data)
+  ).data;
+}
+export async function createPriceVersion(
+  itemId: string,
+  data: {
+    branch_id?: string;
+    tax_classification_id: string;
+    currency: string;
+    unit_price: string;
+    effective_at: string;
+    components: Array<{
+      component_type: "labor" | "material";
+      code?: string;
+      label: string;
+      quantity: string;
+      unit_cost?: string;
+    }>;
+  },
+): Promise<PriceBookVersion> {
+  return (
+    await apiClient.post<PriceBookVersion>(
+      `${path}/service-items/${itemId}/versions`,
+      data,
+    )
+  ).data;
+}
+export async function activatePriceVersion(
+  versionId: string,
+  version: number,
+): Promise<PriceBookVersion> {
+  return (
+    await apiClient.post<PriceBookVersion>(
+      `${path}/versions/${versionId}/activate`,
+      {
+        expected_version: version,
+        reason: "Owner activated Price Book version.",
+      },
+    )
+  ).data;
+}
+export async function createOptionGroup(data: {
+  code: string;
+  name: string;
+  minimum_selections: number;
+  maximum_selections: number;
+}): Promise<PriceBookOptionGroup> {
+  return (
+    await apiClient.post<PriceBookOptionGroup>(`${path}/option-groups`, data)
+  ).data;
+}
+export async function addOption(
+  groupId: string,
+  data: { service_item_id: string; label: string; position: number },
+): Promise<PriceBookOption> {
+  return (
+    await apiClient.post<PriceBookOption>(
+      `${path}/option-groups/${groupId}/options`,
+      data,
+    )
+  ).data;
+}
+export async function createReviewBatch(data: {
+  configuration_version: string;
+  review_type:
+    | "commercial_content"
+    | "candidate_prices"
+    | "tax_classification"
+    | "membership"
+    | "source_conflict";
+  selector: Record<string, unknown>;
+  service_codes: string[];
+  exclusions: string[];
+  candidate_set_digest: string;
+  idempotency_key: string;
+}): Promise<PriceBookReviewBatch> {
+  return (
+    await apiClient.post<PriceBookReviewBatch>(
+      `${path}/activation-readiness/review-batches`,
+      data,
+    )
+  ).data;
+}
+export async function decideReviewBatch(
+  batchId: string,
+  data: {
+    expected_version: number;
+    expected_digest: string;
+    decision: "approved" | "returned" | "excluded";
+    reason: string;
+  },
+): Promise<PriceBookReviewBatch> {
+  return (
+    await apiClient.post<PriceBookReviewBatch>(
+      `${path}/activation-readiness/review-batches/${batchId}/decision`,
+      data,
+    )
+  ).data;
+}

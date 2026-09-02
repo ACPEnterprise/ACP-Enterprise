@@ -16,6 +16,7 @@ from app.platform.permissions.authorization import AuthorizationContext
 
 from .errors import PriceBookConflict, PriceBookNotFound, PriceBookValidation
 from .models import (
+    PriceBookAdjustmentProposal,
     PriceBookAuditEntry,
     PriceBookCategory,
     PriceBookCommercialSnapshot,
@@ -23,10 +24,13 @@ from .models import (
     PriceBookOption,
     PriceBookOptionGroup,
     PriceBookPriceVersion,
+    PriceBookReviewBatch,
     PriceBookServiceItem,
     PriceBookTaxClassification,
 )
 from .schemas import (
+    AdjustmentProposalCreate,
+    AdjustmentProposalDecision,
     AuditItem,
     CatalogPage,
     CategoryCreate,
@@ -39,6 +43,8 @@ from .schemas import (
     PriceVersionCreate,
     PriceVersionItem,
     PriceVersionUpdate,
+    ReviewBatchCreate,
+    ReviewBatchDecision,
     ServiceItem,
     ServiceItemCreate,
     SnapshotRequest,
@@ -1067,6 +1073,253 @@ class PriceBookService:
                 version=1,
             )
         return snapshot
+
+    async def create_review_batch(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        payload: ReviewBatchCreate,
+    ) -> PriceBookReviewBatch:
+        codes = tuple(sorted(payload.service_codes))
+        exclusions = tuple(sorted(payload.exclusions))
+        if len(codes) != len(set(codes)) or len(exclusions) != len(set(exclusions)):
+            raise PriceBookValidation("Review service selections must be unique.")
+        if not set(exclusions).issubset(codes):
+            raise PriceBookValidation(
+                "Review exclusions must belong to the selected set."
+            )
+        async with session.begin():
+            existing = await session.scalar(
+                select(PriceBookReviewBatch).where(
+                    PriceBookReviewBatch.company_id == context.company.id,
+                    PriceBookReviewBatch.idempotency_key == payload.idempotency_key,
+                )
+            )
+            if existing is not None:
+                if (
+                    existing.configuration_version != payload.configuration_version
+                    or existing.review_type != payload.review_type
+                    or tuple(existing.service_codes) != codes
+                    or tuple(existing.exclusions) != exclusions
+                    or existing.candidate_set_digest != payload.candidate_set_digest
+                    or existing.selector != payload.selector
+                ):
+                    raise PriceBookConflict(
+                        "Review idempotency key was used for different evidence."
+                    )
+                return existing
+            batch = PriceBookReviewBatch(
+                company_id=context.company.id,
+                configuration_version=payload.configuration_version,
+                review_type=payload.review_type,
+                selector=payload.selector,
+                service_codes=list(codes),
+                exclusions=list(exclusions),
+                candidate_set_digest=payload.candidate_set_digest,
+                idempotency_key=payload.idempotency_key,
+                created_by_user_id=context.user.id,
+            )
+            session.add(batch)
+            await session.flush()
+            self._audit(
+                session,
+                context=context,
+                entity_type="price_book_review_batch",
+                entity_id=batch.id,
+                action="draft_created",
+                state={"digest": batch.candidate_set_digest, "count": len(codes)},
+                reason="Owner review batch saved as draft.",
+                version=1,
+            )
+        return batch
+
+    async def decide_review_batch(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        batch_id: UUID,
+        payload: ReviewBatchDecision,
+    ) -> PriceBookReviewBatch:
+        async with session.begin():
+            batch = await session.scalar(
+                select(PriceBookReviewBatch)
+                .where(
+                    PriceBookReviewBatch.id == batch_id,
+                    PriceBookReviewBatch.company_id == context.company.id,
+                )
+                .with_for_update()
+            )
+            if batch is None:
+                raise PriceBookNotFound("Review batch was not found.")
+            if (
+                batch.version != payload.expected_version
+                or batch.candidate_set_digest != payload.expected_digest
+            ):
+                raise PriceBookConflict("Review authority is stale.")
+            if batch.status != "draft":
+                if (
+                    batch.status == payload.decision
+                    and batch.decision_reason == payload.reason
+                ):
+                    return batch
+                raise PriceBookConflict(
+                    "Review batch already has a different decision."
+                )
+            batch.status = payload.decision
+            batch.decision_reason = payload.reason
+            batch.decided_by_user_id = context.user.id
+            batch.decided_at = utc_now()
+            batch.updated_at = batch.decided_at
+            batch.version += 1
+            self._audit(
+                session,
+                context=context,
+                entity_type="price_book_review_batch",
+                entity_id=batch.id,
+                action=payload.decision,
+                state={"digest": batch.candidate_set_digest, "status": batch.status},
+                reason=payload.reason,
+                version=batch.version,
+            )
+            BusinessEventService.stage(
+                session,
+                BusinessEventCreate(
+                    event_type=EventType.PRICE_BOOK_REVIEW_BATCH_DECIDED,
+                    entity_type="price_book_review_batch",
+                    entity_id=batch.id,
+                    company_id=context.company.id,
+                    branch_id=None,
+                    user_id=context.user.id,
+                    payload={
+                        "schema_version": "1.0",
+                        "status": batch.status,
+                        "candidate_set_digest": batch.candidate_set_digest,
+                    },
+                ),
+            )
+        return batch
+
+    async def create_adjustment_proposal(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        payload: AdjustmentProposalCreate,
+    ) -> PriceBookAdjustmentProposal:
+        codes = tuple(sorted(payload.affected_service_codes))
+        exclusions = tuple(sorted(payload.owner_exclusions))
+        if len(codes) != len(set(codes)) or not set(exclusions).issubset(codes):
+            raise PriceBookValidation("Proposal service evidence is invalid.")
+        async with session.begin():
+            existing = await session.scalar(
+                select(PriceBookAdjustmentProposal).where(
+                    PriceBookAdjustmentProposal.company_id == context.company.id,
+                    PriceBookAdjustmentProposal.recommendation_identity
+                    == payload.recommendation_identity,
+                )
+            )
+            if existing is not None:
+                if existing.proposal_digest != payload.proposal_digest:
+                    raise PriceBookConflict(
+                        "Recommendation identity conflicts with existing evidence."
+                    )
+                return existing
+            proposal = PriceBookAdjustmentProposal(
+                company_id=context.company.id,
+                source_price_book_version=payload.source_price_book_version,
+                recommendation_identity=payload.recommendation_identity,
+                economics_evidence_version=payload.economics_evidence_version,
+                model_version=payload.model_version,
+                affected_service_codes=list(codes),
+                owner_exclusions=list(exclusions),
+                transformation_kind=payload.transformation_kind,
+                transformation=payload.transformation,
+                impacts=list(payload.impacts),
+                limitations=list(payload.limitations),
+                effective_at=payload.effective_at,
+                proposal_digest=payload.proposal_digest,
+                created_by_user_id=context.user.id,
+            )
+            session.add(proposal)
+            await session.flush()
+            self._audit(
+                session,
+                context=context,
+                entity_type="price_book_adjustment_proposal",
+                entity_id=proposal.id,
+                action="draft_created",
+                state={"digest": proposal.proposal_digest, "count": len(codes)},
+                reason="Non-activating successor proposal saved as draft.",
+                version=1,
+            )
+        return proposal
+
+    async def decide_adjustment_proposal(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        proposal_id: UUID,
+        payload: AdjustmentProposalDecision,
+    ) -> PriceBookAdjustmentProposal:
+        async with session.begin():
+            proposal = await session.scalar(
+                select(PriceBookAdjustmentProposal)
+                .where(
+                    PriceBookAdjustmentProposal.id == proposal_id,
+                    PriceBookAdjustmentProposal.company_id == context.company.id,
+                )
+                .with_for_update()
+            )
+            if proposal is None:
+                raise PriceBookNotFound("Adjustment proposal was not found.")
+            if (
+                proposal.version != payload.expected_version
+                or proposal.proposal_digest != payload.expected_digest
+            ):
+                raise PriceBookConflict("Adjustment proposal authority is stale.")
+            if proposal.status != "draft":
+                if proposal.status == payload.decision:
+                    return proposal
+                raise PriceBookConflict(
+                    "Adjustment proposal already has a different decision."
+                )
+            proposal.status = payload.decision
+            proposal.approved_by_user_id = (
+                context.user.id if payload.decision == "approved" else None
+            )
+            proposal.approved_at = utc_now() if payload.decision == "approved" else None
+            proposal.updated_at = utc_now()
+            proposal.version += 1
+            self._audit(
+                session,
+                context=context,
+                entity_type="price_book_adjustment_proposal",
+                entity_id=proposal.id,
+                action=payload.decision,
+                state={"digest": proposal.proposal_digest, "status": proposal.status},
+                reason=payload.reason,
+                version=proposal.version,
+            )
+            BusinessEventService.stage(
+                session,
+                BusinessEventCreate(
+                    event_type=EventType.PRICE_BOOK_ADJUSTMENT_PROPOSAL_DECIDED,
+                    entity_type="price_book_adjustment_proposal",
+                    entity_id=proposal.id,
+                    company_id=context.company.id,
+                    branch_id=None,
+                    user_id=context.user.id,
+                    payload={
+                        "schema_version": "1.0",
+                        "status": proposal.status,
+                        "proposal_digest": proposal.proposal_digest,
+                    },
+                ),
+            )
+        return proposal
 
 
 price_book_service = PriceBookService()
