@@ -240,6 +240,10 @@ class EventType(str, Enum):
 
     # Price Book
     PRICE_BOOK_PRICE_VERSION_ACTIVATED = "price_book.price_version_activated"
+    PRICE_BOOK_REVIEW_BATCH_DECIDED = "price_book.review_batch_decided"
+    PRICE_BOOK_ADJUSTMENT_PROPOSAL_DECIDED = (
+        "price_book.adjustment_proposal_decided"
+    )
 
     # Dispatch
     DISPATCH_ASSIGNMENT_CREATED = "dispatch.assignment.created"

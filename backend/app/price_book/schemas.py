@@ -121,6 +121,93 @@ class OptionCreate(PriceBookSchema):
     position: int = Field(ge=1)
 
 
+class ReviewBatchCreate(PriceBookSchema):
+    configuration_version: str = Field(min_length=1, max_length=120)
+    review_type: str = Field(
+        pattern=r"^(commercial_content|candidate_prices|tax_classification|membership|source_conflict)$"
+    )
+    selector: dict[str, object]
+    service_codes: tuple[str, ...] = Field(min_length=1, max_length=500)
+    exclusions: tuple[str, ...] = Field(default=(), max_length=500)
+    candidate_set_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    idempotency_key: str = Field(pattern=r"^[A-Za-z0-9._:-]{8,128}$")
+
+
+class ReviewBatchDecision(PriceBookSchema):
+    expected_version: int = Field(ge=1)
+    expected_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    decision: str = Field(pattern=r"^(approved|returned|excluded)$")
+    reason: str = Field(min_length=1, max_length=500)
+
+
+class ReviewBatchItem(PriceBookSchema):
+    id: UUID
+    company_id: UUID
+    configuration_version: str
+    review_type: str
+    selector: dict[str, object]
+    service_codes: list[str]
+    exclusions: list[str]
+    candidate_set_digest: str
+    status: str
+    decision_reason: str | None
+    idempotency_key: str
+    version: int
+    created_by_user_id: UUID
+    decided_by_user_id: UUID | None
+    decided_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class AdjustmentProposalCreate(PriceBookSchema):
+    source_price_book_version: str = Field(min_length=1, max_length=120)
+    recommendation_identity: str = Field(min_length=1, max_length=160)
+    economics_evidence_version: str | None = Field(default=None, max_length=160)
+    model_version: str | None = Field(default=None, max_length=160)
+    affected_service_codes: tuple[str, ...] = Field(min_length=1, max_length=500)
+    owner_exclusions: tuple[str, ...] = Field(default=(), max_length=500)
+    transformation_kind: str = Field(
+        pattern=r"^(percentage|fixed_amount|markup_policy)$"
+    )
+    transformation: dict[str, object]
+    impacts: tuple[dict[str, object], ...] = Field(min_length=1, max_length=500)
+    limitations: tuple[str, ...] = Field(default=(), max_length=100)
+    effective_at: datetime
+    proposal_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
+class AdjustmentProposalDecision(PriceBookSchema):
+    expected_version: int = Field(ge=1)
+    expected_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    decision: str = Field(pattern=r"^(approved|returned|rejected)$")
+    reason: str = Field(min_length=1, max_length=500)
+
+
+class AdjustmentProposalItem(PriceBookSchema):
+    id: UUID
+    company_id: UUID
+    source_price_book_version: str
+    recommendation_identity: str
+    economics_evidence_version: str | None
+    model_version: str | None
+    affected_service_codes: list[str]
+    owner_exclusions: list[str]
+    transformation_kind: str
+    transformation: dict[str, object]
+    impacts: list[dict[str, object]]
+    limitations: list[str]
+    effective_at: datetime
+    proposal_digest: str
+    status: str
+    version: int
+    created_by_user_id: UUID
+    approved_by_user_id: UUID | None
+    approved_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+
 class CategoryItem(PriceBookSchema):
     id: UUID
     company_id: UUID
