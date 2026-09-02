@@ -2,7 +2,7 @@
 
 ## Authority and classification
 
-- Starting protected authority: `66d22691d09598312ab83d9560013c64b82ec6f3`; final reconciled authority: `1b2158f900848c4a41a1a8dd69824c789e2290ca`.
+- Starting protected authority: `66d22691d09598312ab83d9560013c64b82ec6f3`; final reconciled authority: `604bc137e512e338698a359ad577b3ada2667074`.
 - Candidate schema head: `l8m6p94e1r7s`.
 - Branch: `work/enterprise-operational-acceptance-factory-1`.
 - Classification: **NON_PRODUCTION_READY_WITH_EXTERNAL_GATES**.
@@ -12,7 +12,7 @@
 
 `backend/scripts/operational_acceptance_factory.py` is a reusable scenario orchestrator. Versioned scenarios bind persona, expected result, exact repository test nodes, authority SHA, schema head, actual classification, duration, and a SHA-256 digest of captured test output. Raw output is not retained in the packet. Executable scenarios use existing application/router/service contracts; explicit provider, source, device, Redis, and policy gates are recorded without pretending execution occurred.
 
-The generated packet is `docs/quality/enterprise-operational-acceptance-factory.v1.json`. After final authority reconciliation, isolated PostgreSQL database `acp_acceptance_factory_r4` recorded **52 scenarios: 48 passed, 4 gated, 0 failed** in 107.911 seconds. This is a deterministic component-composed operating day; it does not claim one Production-like transaction or real-provider rehearsal.
+The generated packet is `docs/quality/enterprise-operational-acceptance-factory.v1.json`. After final authority reconciliation, isolated PostgreSQL database `acp_acceptance_factory_r5` recorded **52 scenarios: 48 passed, 4 gated, 0 failed** in 113.091 seconds. This is a deterministic component-composed operating day; it does not claim one Production-like transaction or real-provider rehearsal.
 
 ## Capability matrix
 
@@ -77,14 +77,15 @@ The generated packet is `docs/quality/enterprise-operational-acceptance-factory.
 - Acceptance factory: **48 passed, 4 gated, 0 failed** across 52 scenarios.
 - Backend fresh-database regression: **2,469 passed, 7 skipped, 1 deselected** in 250.42 seconds. The deselection is the known Redis-dependent rate-limit integration test.
 - Frontend after final reconciliation: **106 files / 346 tests passed**; ESLint, TypeScript and production Vite build passed.
-- Mobile: **10 suites / 97 tests passed**; ESLint and TypeScript passed.
+- Mobile after field-product reconciliation: **14 suites / 115 tests passed**; ESLint, TypeScript and structural configuration validation passed. Tests retain two non-failing React `act(...)` warnings in the Timeclock virtualized-list fixture.
 - QBO synthetic affected boundary: **131 tests passed**; focused malformed-manifest regression: **17 passed**.
 - Database: exactly one head `l8m6p94e1r7s`; four fresh upgrades used by this program; current=head and drift clean.
 - Final reconciled affected backend set: **197 tests passed** across acceptance, Assets, Communications, idempotency and QBO boundaries.
-- Static: Python compilation and `pip check` passed; MyPy passed across **687 source files**; changed harness/tests pass Ruff; diff check passed.
-- Dependencies: frontend runtime audit clean; Mobile runtime audit retains 24 advisories (15 moderate, 9 high) behind the Mobile/Expo owner gate.
+- LIA/Assets/Workforce reconciliation set: **97 backend tests passed**.
+- Static: Python compilation and `pip check` passed; MyPy passed across **689 source files**; changed harness/tests pass Ruff; diff check passed.
+- Dependencies: frontend runtime audit clean; reconciled Mobile runtime audit retains 17 moderate advisories and zero high/critical advisories behind the Mobile owner gate.
 - Secret scan: four matches, all intentional synthetic test canaries; no value emitted.
-- Performance baseline: final acceptance catalog 107.911 seconds; broad backend 250.42 seconds; My Day query shape, bounded history/list and N+1 regression tests passed. These are local non-production gross-regression measurements, not SLOs.
+- Performance baseline: final acceptance catalog 113.091 seconds; broad backend 250.42 seconds; My Day query shape, bounded history/list and N+1 regression tests passed. These are local non-production gross-regression measurements, not SLOs.
 
 ## Defects and repairs
 
