@@ -28,4 +28,30 @@ describe("OwnerOperationsRoute", () => {
     expect(await screen.findByText("user-1")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /connect quickbooks|run migration|grant/i })).not.toBeInTheDocument();
   });
+
+  it("renders safely when Preview omits collection fields", async () => {
+    const context = vi.mocked(auth.useAuth)();
+    vi.mocked(auth.useAuth).mockReturnValue({
+      ...context,
+      activeCompany: { ...context.activeCompany!, branches: undefined },
+    } as never);
+    vi.mocked(api.getSystemReadiness).mockResolvedValue({
+      state: "DEGRADED", application: "ACP Enterprise", version: "test-sha",
+      environment: "preview", observed_at: "2026-08-30T12:00:00Z",
+      components: undefined,
+    } as never);
+    vi.mocked(api.getLaunchRoleMatrix).mockResolvedValue([
+      { code: "OWNER", purpose: "Owner", permission_codes: undefined, branch_access_required: false },
+    ] as never);
+    vi.mocked(api.getIntegrationReadiness).mockResolvedValue({
+      qbo: "not_connected",
+      migration: { overall_status: "BLOCKED", owner_decisions: undefined },
+    } as never);
+
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={client}><MemoryRouter><OwnerOperationsRoute /></MemoryRouter></QueryClientProvider>);
+
+    expect(await screen.findByText(/OWNER · 0 permissions/)).toBeInTheDocument();
+    expect(screen.queryByText(/Unexpected Application Error/i)).not.toBeInTheDocument();
+  });
 });

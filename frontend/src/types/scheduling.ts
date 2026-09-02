@@ -1,4 +1,5 @@
-export type AppointmentStatus = "draft" | "scheduled" | "confirmed" | "completed" | "cancelled" | "no_show";
+export type AppointmentStatus =
+  "draft" | "scheduled" | "confirmed" | "completed" | "cancelled" | "no_show";
 
 export interface AppointmentDetail {
   id: string;
@@ -38,4 +39,17 @@ export interface CalendarQueryResult {
   page_size: number;
   start_at: string;
   end_at: string;
+}
+
+export interface AppointmentRescheduleInput {
+  expected_version: number;
+  arrival_window_start_at: string;
+  arrival_window_end_at: string;
+  expected_duration_minutes: number;
+  capacity_units: string;
+  reason_code:
+    | "customer_request"
+    | "operational_adjustment"
+    | "scheduling_conflict"
+    | "weather";
 }
