@@ -44,6 +44,7 @@ export type NavigationItemId =
   | "workday"
   | "administration"
   | "audit"
+  | "data-quality"
   | "reports"
   | "operator-guide"
   | "owner-operations"

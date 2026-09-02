@@ -11,6 +11,7 @@ import {
   luminaryHandle,
   administrationHandle,
   auditHandle,
+  dataQualityHandle,
   reportsHandle,
   operatorGuideHandle,
   ownerOperationsHandle,
@@ -275,6 +276,11 @@ export const appRoutes: RouteObject[] = [
             path: "owner-operations",
             handle: ownerOperationsHandle,
             lazy: async () => ({ Component: (await import("../routes/OwnerOperationsRoute")).OwnerOperationsRoute }),
+          },
+          {
+            path: "data-quality",
+            handle: dataQualityHandle,
+            lazy: async () => ({ Component: (await import("../routes/DataQualityRoute")).DataQualityRoute }),
           },
           {
             path: "audit",
