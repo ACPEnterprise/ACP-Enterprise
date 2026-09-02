@@ -24,8 +24,8 @@ The deterministic builder is `scripts/pricebook_allcounty_build.py`.
 | `All_County_Membership_Brochure.pdf` | `191245abf31e4fc9981008b438c3900af3dfe3d1d8de49cbbef11f7006508e63` | OWNER_CUSTOMER_FACING_SOURCE | Customer-facing membership evidence; reconcile in Service Agreements |
 | `All_County_Pinellas_Pricing_Recommendation.docx` | `6c919b518828c47e5930745b1d66772c8a37e1ec37abb4ae65a1570a69fcfa19` | OWNER_RECOMMENDATION | Illustrative economics and recommendations; not policy |
 | `All_County_Sales_Script.docx` | `ffd08762bad5b9307231b94e40c9246afd5beb199f599c4424e95a3e3f7a5baf` | OWNER_RECOMMENDATION | Presentation/workflow evidence; not legal or pricing authority |
-| `pricebook_materials_template.numbers` | unavailable in supplied directory | SOURCE_REQUIRED | Vendor-material population gated; no historical Numbers file substituted |
-| `All_County_Water_Heater_Sales_Script.docx` | unavailable in supplied directory | SOURCE_REQUIRED | Separate playbook is referenced by onboarding evidence but absent |
+| `pricebook_materials_template.numbers` | `487afcbbce7584471c691507616c2f87464ee2959105b1b03bfe41eee03e92a9` | OWNER_OPERATIONAL_SOURCE | 361 provider-neutral material candidates; vendor identity remains source-required |
+| `All_County_Water_Heater_Sales_Script.docx` | `c9e815becc8011764e1c8f8752d218358c53d89d62c0fe70f7cc5e5bd4abf317` | OWNER_RECOMMENDATION | Scope/options reconciliation evidence; example economics do not override workbook prices |
 
 Additional documents in the owner directory were inspected only for source
 relationships. They are not promoted into the seven-source authority set.
@@ -48,9 +48,11 @@ links from category sheets through Quick Reference, All Items and Quote Builder.
 - Aggregate parts-cost evidence: 194 rows; no component cost: 24 rows.
 - Every tax classification is `OWNER_ACCOUNTANT_REVIEW_REQUIRED`.
 - Every candidate is `READY_FOR_OWNER_REVIEW` and `NOT_ACTIVATED`.
-- Water Heater/Tankless candidate family: 39 services. The missing dedicated
-  Water Heater script prevents playbook-specific reconciliation, but does not
-  erase workbook-derived candidates.
+- Water Heater/Tankless candidate family: 39 services. The dedicated script is
+  scope-consistent with standard, premium and tankless options already present.
+  Its generic price examples conflict with size/fuel-specific workbook amounts,
+  and its line-item economics are illustrative assumptions; neither overrides
+  a workbook candidate.
 
 Workbook price display is not taken on faith. The builder follows the workbook's
 named settings and category formulas, distinguishes overrides, applies its
@@ -65,6 +67,35 @@ part costs explicitly describe themselves as illustrative and are therefore not
 vendor cost authority. The tier table, customer-supplied labor adjustments,
 special-order surcharge and freight language are preserved as
 `OWNER_REVIEW_REQUIRED`; no material-cost change can change a customer price.
+
+## Vendor-material import
+
+The Numbers source contains one sheet, one table, 362 physical rows including
+the header, and 19 columns. Its contract supports category plus ten subcategory
+levels; the supplied dataset populates four hierarchy levels:
+`Plumbing / Parts / Residential / Parts`. All 361 data rows have a source part
+number, description, cost, taxable flag, `Each` unit and markup-enabled flag.
+No row supplies a customer price, vendor name, manufacturer, manufacturer part
+number, pack quantity or effective date.
+
+Provider-neutral reconciliation produced 361 candidates and 360 unique source
+identities. Source part number `828627` is duplicated exactly at rows 43 and 64;
+both copies are `DUPLICATE_CANDIDATE` and cannot overwrite one another. The 359
+remaining rows are `SOURCE_REQUIRED` until the vendor identity is supplied.
+Hierarchy and source row provenance are retained independently of ACP's
+user-facing category depth. No candidate creates a Price Book service or moves
+Inventory.
+
+## Water Heater reconciliation
+
+The native 39-service family comprises six standard tank-install choices, four
+premium tank-install choices, seven Tankless choices, sixteen repair/add-on
+choices, and six other install choices. The script's Standard/Premium/Tankless
+presentation is `CONSISTENT` with native option-group composition. Its generic
+Standard, Premium and Tankless figures are `CONFLICTING` with the workbook's
+fuel/capacity-specific candidate values and remain `RECOMMENDATION`. The
+line-item cost breakdown is `ILLUSTRATIVE_ASSUMPTION`; warranty, permit and code
+claims are `OWNER_RECOMMENDATION` pending applicable policy/legal authority.
 
 ## Product and domain boundaries
 
@@ -101,9 +132,9 @@ material mapping and tax-review state. Current group classification is:
 - `READY_FOR_ACTIVATION`: 0
 - `OWNER_ACCOUNTANT_REVIEW_REQUIRED`: 218
 - `MATERIAL_MAPPING_REQUIRED`: 194
-- `SOURCE_REQUIRED`: 2 source identities
+- `SOURCE_REQUIRED`: 359 vendor-material candidates missing vendor identity
+- `DUPLICATE_CANDIDATE`: 2 rows sharing one source part number
 
 No row disappears: all 218 workbook service rows have a candidate disposition
 and provenance identity. Activation requires a later explicit owner-authorized
 operation after tax, membership, materials and source conflicts are resolved.
-
