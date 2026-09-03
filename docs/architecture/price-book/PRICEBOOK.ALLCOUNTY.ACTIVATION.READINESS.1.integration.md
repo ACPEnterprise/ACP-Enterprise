@@ -9,7 +9,12 @@
 - Candidate configuration: `all-county-build-1.configuration.json`
 - Activation audit: `all-county-activation-readiness-1.json`
 - Activation audit SHA-256: `fc9c3673a4e4ca796f73fd0a12cce23ca73e3bce8a7236863368872c13a07c72`
-- Migration: `n0p8q16g3t9u` after `m9n7q05f2s8t`
+- Original migration lineage: Price Book `n0p8q16g3t9u` and protected
+  communications `n0p8r16g3t9u` were siblings after `m9n7q05f2s8t`.
+- Reconciled migration lineage: `m9n7q05f2s8t` → protected
+  `n0p8r16g3t9u` → Price Book `n0p8q16g3t9u`.
+- Protected authority at migration reconciliation:
+  `7d12ffeec1ff6de2f0a7dcfee8ba8e899bf71e6c`.
 
 ### Materials source provenance gate
 

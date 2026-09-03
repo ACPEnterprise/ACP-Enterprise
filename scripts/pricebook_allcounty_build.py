@@ -17,7 +17,7 @@ from typing import Any
 from xml.etree import ElementTree as ET
 from zipfile import ZipFile
 
-from numbers_parser import Document
+from numbers_parser import Document  # type: ignore[import-untyped]
 
 MAIN = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
 REL = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
