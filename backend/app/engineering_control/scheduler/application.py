@@ -18,7 +18,6 @@ from app.worker_control.contracts import AuthenticatedWorkerContext
 
 from .approved_queue import load_approved_factory_queue
 from .headless import HeadlessProposal
-from .readiness import load_current_readiness_projection
 
 
 class HeadlessApplicationError(RuntimeError):
@@ -80,17 +79,15 @@ class HeadlessApplicationService:
         queue = load_approved_factory_queue()
         if queue.authoritative_repository_sha != expected_authority_sha:
             raise HeadlessApplicationError("approved queue authority is stale")
-        readiness = load_current_readiness_projection()
-        current = next(
-            (item for item in readiness.milestones if item.milestone_id == proposal.milestone_id),
-            None,
-        )
         work = next(
             (item for item in queue.items if item.milestone_id == proposal.milestone_id),
             None,
         )
-        if current is None or work is None or current.current_state != "EXECUTABLE":
+        by_id = {item.milestone_id: item for item in queue.items}
+        if work is None or work.queue_state != "READY":
             raise HeadlessApplicationError("proposal is not currently executable")
+        if any(by_id[value].queue_state != "AUTHORITATIVE" for value in work.dependencies):
+            raise HeadlessApplicationError("proposal dependency is not authoritative")
         if work.capacity_identity != proposal.capacity_identity:
             raise HeadlessApplicationError("proposal capacity contradicts approved queue")
         command = await self.commands.create_command(
