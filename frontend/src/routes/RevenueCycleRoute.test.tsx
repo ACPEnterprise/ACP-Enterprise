@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { RevenueCycleRoute } from "./RevenueCycleRoute";
 
 const permission = vi.fn();
+let paymentFailure = false;
 vi.mock("../auth", () => ({ useHasPermission: (code: string) => permission(code) }));
 vi.mock("../hooks/useJobs", () => ({ useJobs: () => ({ isPending: false, isError: false, data: { items: [
   { id: "job-ready", job_number: "J-1", customer_display_name: "Ready Customer", status: "ready", appointment_count: 0 },
@@ -12,10 +13,10 @@ vi.mock("../hooks/useJobs", () => ({ useJobs: () => ({ isPending: false, isError
 ] } }) }));
 vi.mock("../hooks/useEstimates", () => ({ useEstimates: () => ({ isPending: false, data: { items: [{ id: "est-1", status: "sent" }] } }) }));
 vi.mock("../hooks/useInvoices", () => ({ useInvoices: () => ({ isPending: false, data: [{ id: "inv-1", job_id: "another-job", status: "issued", open_amount: "50.00", accounting_status: "pending" }] }) }));
-vi.mock("../hooks/usePayments", () => ({ usePayments: () => ({ isPending: false, data: [{ id: "pay-1" }] }) }));
+vi.mock("../hooks/usePayments", () => ({ usePayments: () => ({ isPending: false, isError: paymentFailure, data: [{ id: "pay-1" }] }) }));
 
 describe("RevenueCycleRoute", () => {
-  beforeEach(() => permission.mockReturnValue(true));
+  beforeEach(() => { permission.mockReturnValue(true); paymentFailure = false; });
 
   it("composes explicit operational queues without financial ranking", () => {
     render(<MemoryRouter><RevenueCycleRoute /></MemoryRouter>);
@@ -29,5 +30,11 @@ describe("RevenueCycleRoute", () => {
     permission.mockImplementation((code: string) => code !== "COMPANY_JOB_READ");
     render(<MemoryRouter><RevenueCycleRoute /></MemoryRouter>);
     expect(screen.getByText("You are not authorized to view the operational revenue cycle.")).toBeVisible();
+  });
+
+  it("does not report an unavailable evidence queue as zero", () => {
+    paymentFailure = true;
+    render(<MemoryRouter><RevenueCycleRoute /></MemoryRouter>);
+    expect(screen.getByText(/Unavailable queues are not zero/)).toBeVisible();
   });
 });

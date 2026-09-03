@@ -7,10 +7,6 @@ from uuid import UUID, uuid4
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import func, select
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from app.core.config import settings
 from app.customers.models import Customer
 from app.events.models import BusinessEvent
@@ -26,6 +22,7 @@ from app.payments.contracts import (
 )
 from app.payments.errors import PaymentConflict, PaymentNotFound, PaymentValidation
 from app.payments.models import (
+    PaymentAttempt,
     PaymentIntent,
     PaymentReceipt,
     ReceiptEvent,
@@ -41,6 +38,9 @@ from app.platform.company.models import Company
 from app.platform.permissions import models as permission_models  # noqa: F401
 from app.platform.users.models import User
 from app.scheduling.models import Appointment  # noqa: F401
+from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 
 class CountingFakeProvider(DeterministicFakeProvider):
@@ -51,6 +51,16 @@ class CountingFakeProvider(DeterministicFakeProvider):
     async def collect(self, request: ProviderRequest):
         self.collect_calls += 1
         return await super().collect(request)
+
+
+class ResponseLossProvider(DeterministicFakeProvider):
+    def __init__(self) -> None:
+        super().__init__()
+        self.collect_calls = 0
+
+    async def collect(self, request: ProviderRequest):
+        self.collect_calls += 1
+        raise TimeoutError("secret provider endpoint and raw backend detail")
 
 
 @pytest.mark.parametrize(
@@ -335,6 +345,51 @@ async def test_ambiguous_provider_outcome_is_reconciled_without_blind_retry(
             )
             == 1
         )
+
+
+@pytest.mark.asyncio
+async def test_provider_response_loss_persists_uncertainty_without_leak_or_resubmit(
+    payment_fixture,
+) -> None:
+    factory, company, branch, actor, customer = payment_fixture
+    provider = ResponseLossProvider()
+    service = PaymentService(provider, "synthetic-merchant")
+    command = CreateIntent(
+        company_id=company.id,
+        branch_id=branch.id,
+        customer_id=customer.id,
+        amount=Decimal("43.21"),
+        currency="USD",
+        opaque_payment_method="opaque_response_loss",
+        idempotency_key=f"response-loss-{uuid4()}",
+        actor_user_id=actor.id,
+    )
+
+    async with factory() as session:
+        first = await service.collect(session, command)
+    async with factory() as session:
+        replay = await service.collect(session, command)
+        attempt = await session.scalar(
+            select(PaymentAttempt).where(PaymentAttempt.intent_id == first.id)
+        )
+        exception = await session.scalar(
+            select(ReconciliationException).where(
+                ReconciliationException.entity_id == first.id
+            )
+        )
+
+    assert first.id == replay.id
+    assert first.status == replay.status == "reconciliation_required"
+    assert first.provider_operation_id is None
+    assert provider.collect_calls == 1
+    assert attempt is not None
+    assert attempt.outcome == "ambiguous"
+    assert attempt.provider_code == "provider_response_unavailable"
+    assert exception is not None
+    assert exception.reason_code == "ambiguous_processor_outcome"
+    assert "secret provider" not in str(attempt.evidence_digest)
+
+
 @pytest.mark.asyncio
 async def test_concurrent_identical_application_changes_receipt_once(
     payment_fixture, monkeypatch
@@ -454,7 +509,9 @@ async def test_payment_posting_receipt_replay_binds_complete_authority(
 
 
 @pytest.mark.asyncio
-async def test_dispute_replay_binds_amount_provider_and_evidence(payment_fixture) -> None:
+async def test_dispute_replay_binds_amount_provider_and_evidence(
+    payment_fixture,
+) -> None:
     factory, company, branch, actor, customer = payment_fixture
     service = PaymentService(CountingFakeProvider(), "synthetic-merchant")
     async with factory() as session:
@@ -626,8 +683,7 @@ async def test_webhook_contradiction_persists_one_reconciliation_exception(
             select(ReconciliationException).where(
                 ReconciliationException.entity_type == "webhook",
                 ReconciliationException.entity_id == first.id,
-                ReconciliationException.reason_code
-                == "contradictory_provider_event",
+                ReconciliationException.reason_code == "contradictory_provider_event",
             )
         )
         assert exception is not None
@@ -699,9 +755,7 @@ async def test_receipt_listing_is_stably_bounded_and_service_enforced(
             offset=2,
         )
     assert len(first_page) == 2
-    assert {row.id for row in first_page}.isdisjoint(
-        {row.id for row in second_page}
-    )
+    assert {row.id for row in first_page}.isdisjoint({row.id for row in second_page})
     assert receipt_ids.issubset(
         {row.id for row in first_page} | {row.id for row in second_page}
     )

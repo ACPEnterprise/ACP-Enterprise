@@ -27,6 +27,7 @@ export function RevenueCycleRoute() {
   const loading = jobs.isPending || (canReadEstimates && estimates.isPending) || (canReadInvoices && invoices.isPending) || (canReadPayments && payments.isPending);
   if (loading) return <Spinner label="Loading revenue cycle" />;
   if (jobs.isError) return <Alert variant="danger">The Job pipeline could not be loaded.</Alert>;
+  const partialFailure = estimates.isError || invoices.isError || payments.isError;
 
   const jobItems = jobs.data?.items ?? [];
   const invoiceItems = invoices.data ?? [];
@@ -36,6 +37,7 @@ export function RevenueCycleRoute() {
 
   return <div className="space-y-6">
     <header><p className="text-sm font-semibold text-action-primary">Field Operations / Customer to Cash</p><h1 className="mt-1 text-2xl font-bold sm:text-3xl">Revenue cycle</h1><p className="mt-2 max-w-3xl text-content-muted">Operational visibility from commercial decision through Job completion, Invoice handoff, and native Payment evidence. Amounts never influence queue priority.</p></header>
+    {partialFailure && <Alert variant="warning">Revenue Cycle evidence is incomplete. Unavailable queues are not zero; refresh before operational decisions.</Alert>}
     <section aria-label="Operational revenue queues" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
       {canReadEstimates && <Queue title="Estimates awaiting decision" count={(estimates.data?.items ?? []).filter((item) => ["sent", "viewed"].includes(item.status)).length} detail="Presented proposals with no accepted or rejected state." href="/estimates" />}
       <Queue title="Jobs needing scheduling" count={jobItems.filter((job) => job.status === "ready" && job.appointment_count === 0).length} detail="Ready Jobs without an authoritative Appointment." href="/jobs?status=ready" />
