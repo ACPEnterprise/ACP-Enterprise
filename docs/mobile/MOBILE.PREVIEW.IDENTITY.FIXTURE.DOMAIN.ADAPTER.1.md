@@ -26,10 +26,13 @@ deleted.
 
 ## Remaining operational fixture gap
 
-The broader field-day fixture cannot yet be safely bound end-to-end. Customer and Job
-offer idempotent creation, Scheduling accepts a deterministic idempotency UUID, and
-Dispatch assignment accepts an idempotency key. Service Location creation is not
-idempotent, and the owning domains do not provide a complete fixture-scoped teardown
+The broader field-day fixture cannot yet be safely bound end-to-end. Customer, Service
+Location, and Job now offer durable idempotent creation; Scheduling accepts a
+deterministic idempotency UUID; and Dispatch assignment accepts an idempotency key. The
+Service Location seam uses the same tenant-scoped durable mutation receipt authority as
+Customer and Job, including request-digest conflict detection and result recovery.
+
+The owning domains still do not provide a complete fixture-scoped teardown
 contract for Location, Job, Appointment, Dispatch, Timekeeping, and Field evidence.
 Archive/cancel operations retain truthful business history but cannot prove that an
 arbitrary record belongs exclusively to this fixture.
