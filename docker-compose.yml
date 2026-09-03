@@ -14,7 +14,7 @@ services:
       POSTGRES_USER: acp_enterprise
       POSTGRES_PASSWORD: acp_development_password
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - acp_postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -58,7 +58,7 @@ services:
       ACCESS_TOKEN_SIGNING_KEY: local-development-signing-key-change-before-use
       SECURITY_TOKEN_HMAC_KEY: local-development-hmac-key-change-before-use
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     volumes:
       - ./backend:/app
     depends_on:
