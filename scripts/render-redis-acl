@@ -1,0 +1,25 @@
+#!/bin/sh
+set -eu
+
+application_password_file=${1:?application password file required}
+health_password_file=${2:?health password file required}
+breakglass_password_file=${3:?break-glass password file required}
+output_file=${4:?ACL output file required}
+
+hash_file() {
+  tr -d '\n' < "$1" | sha256sum | awk '{print $1}'
+}
+
+application_hash=$(hash_file "$application_password_file")
+health_hash=$(hash_file "$health_password_file")
+breakglass_hash=$(hash_file "$breakglass_password_file")
+
+temporary_file="${output_file}.new"
+umask 027
+printf '%s\n' \
+  'user default off resetkeys -@all' \
+  "user acp-application reset on #${application_hash} ~auth-rate:* -@all +ping +multi +exec +discard +incrby +expire -config -module -replicaof -slaveof -shutdown -flushall -flushdb -debug -migrate" \
+  "user acp-health reset on #${health_hash} resetkeys -@all +ping -config -module -replicaof -slaveof -shutdown -flushall -flushdb -debug -migrate" \
+  "user acp-breakglass reset on #${breakglass_hash} ~* &* +@all" \
+  > "$temporary_file"
+mv "$temporary_file" "$output_file"
