@@ -586,33 +586,89 @@ class CustomerService:
         data: ServiceLocationCreate,
     ) -> ServiceLocation:
         async with session.begin():
-            customer = await self._customer_for_update(session, context, customer_id)
-            if data.is_primary:
-                await CustomerRepository.clear_primary_locations(
-                    session, customer_id=customer.id
-                )
-            values = data.model_dump()
-            location = ServiceLocation(
-                customer_id=customer.id,
-                **values,
-                normalized_address=build_normalized_address(
-                    data.address,
-                    data.address_line_2,
-                    data.city,
-                    data.state,
-                    data.postal_code,
-                ),
+            location = await self._stage_location(
+                session, context=context, customer_id=customer_id, data=data
             )
-            session.add(location)
-            await session.flush()
-            self._stage_event(
+        return location
+
+    async def add_location_idempotent(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        customer_id: UUID,
+        data: ServiceLocationCreate,
+        idempotency_key: str,
+    ) -> tuple[ServiceLocation, MutationDisposition]:
+        async def mutate() -> AuthoritativeOutcome[ServiceLocation]:
+            location = await self._stage_location(
+                session, context=context, customer_id=customer_id, data=data
+            )
+            return AuthoritativeOutcome(
+                location, "service_location", location.id, 201
+            )
+
+        async def recover(result_id: UUID) -> ServiceLocation | None:
+            return await CustomerRepository.get_location(
                 session,
-                context=context,
-                event_type=EventType.SERVICE_LOCATION_CREATED,
-                entity_type="service_location",
-                entity_id=location.id,
-                payload={"customer_id": str(customer.id)},
+                company_id=context.company.id,
+                customer_id=customer_id,
+                location_id=result_id,
             )
+
+        result = await mutation_reliability_service.execute(
+            session,
+            identity=IdempotencyIdentity(
+                company_id=context.company.id,
+                branch_id=context.active_branch.id if context.active_branch else None,
+                operation="customers.service_location.create",
+                idempotency_key=idempotency_key,
+            ),
+            actor_user_id=context.user.id,
+            request_digest=canonical_request_digest(
+                {"customer_id": str(customer_id), "data": data.model_dump(mode="json")}
+            ),
+            retention_class=RetentionClass.OPERATIONAL,
+            mutate=mutate,
+            recover=recover,
+        )
+        return result.value, result.disposition
+
+    async def _stage_location(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        customer_id: UUID,
+        data: ServiceLocationCreate,
+    ) -> ServiceLocation:
+        customer = await self._customer_for_update(session, context, customer_id)
+        if data.is_primary:
+            await CustomerRepository.clear_primary_locations(
+                session, customer_id=customer.id
+            )
+        values = data.model_dump()
+        location = ServiceLocation(
+            customer_id=customer.id,
+            **values,
+            normalized_address=build_normalized_address(
+                data.address,
+                data.address_line_2,
+                data.city,
+                data.state,
+                data.postal_code,
+            ),
+        )
+        session.add(location)
+        await session.flush()
+        self._stage_event(
+            session,
+            context=context,
+            event_type=EventType.SERVICE_LOCATION_CREATED,
+            entity_type="service_location",
+            entity_id=location.id,
+            payload={"customer_id": str(customer.id)},
+        )
         return location
 
     async def update_location(
