@@ -1,0 +1,31 @@
+{
+  "schema_version": "1.0",
+  "queue_id": "ACP.72H.2026-09-03",
+  "owner_authorization_reference": "ACP ENTERPRISE — 72-HOUR LAUNCH & OPERATIONS FACTORY",
+  "authoritative_repository_sha": "5d8ef3c9a372cc47511fd583281cc702a9817fff",
+  "items": [
+    {
+      "milestone_id": "BANK.DF.003",
+      "capacity_identity": "OM1",
+      "instruction": "Implement the bounded path and collision-domain evaluator on current protected authority; preserve all owner gates and do not deploy Production.",
+      "allowed_paths": ["backend/app/engineering_control/**", "backend/app/worker_runtime/**", "backend/tests/engineering_control/**", "docs/engineering/**"],
+      "validation_requirements": ["focused engineering control tests", "Ruff", "MyPy", "git diff --check"],
+      "requested_code_changes": true,
+      "execution_mode": "repository_only",
+      "hard_boundary_operations": [],
+      "successor_ids": ["BANK.DF.004"]
+    },
+    {
+      "milestone_id": "BANK.DF.004",
+      "capacity_identity": "OM1",
+      "instruction": "Implement bounded automatic safe-work selection only after BANK.DF.003 is authoritative; preserve authorization, collision, and owner gates.",
+      "allowed_paths": ["backend/app/engineering_control/**", "backend/app/worker_runtime/**", "backend/tests/engineering_control/**", "docs/engineering/**"],
+      "validation_requirements": ["focused engineering control tests", "Ruff", "MyPy", "git diff --check"],
+      "requested_code_changes": true,
+      "execution_mode": "repository_only",
+      "hard_boundary_operations": [],
+      "successor_ids": []
+    }
+  ],
+  "fingerprint": "f4e4c34b12f426054debdece968593a1b2454fa9d6a56de6b644a0a95c880ae2"
+}
