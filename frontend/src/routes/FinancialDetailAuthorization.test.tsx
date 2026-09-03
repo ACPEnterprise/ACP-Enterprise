@@ -15,6 +15,8 @@ vi.mock("../auth", () => ({
 }));
 vi.mock("../api/invoices", () => ({
   getInvoice: vi.fn(),
+  getInvoiceOfficeDetail: vi.fn(),
+  getCustomerBalance: vi.fn(),
   listInvoices: vi.fn(),
   createInvoice: vi.fn(),
   issueInvoice: vi.fn(),

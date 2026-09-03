@@ -63,3 +63,49 @@ class InvoiceItem(InvoiceSchema):
     issued_at: datetime | None
     created_at: datetime
     updated_at: datetime
+
+
+class InvoiceWorkspaceItem(InvoiceSchema):
+    id: UUID
+    branch_id: UUID
+    customer_id: UUID
+    customer_number: str
+    customer_display_name: str
+    service_location_id: UUID
+    service_location_label: str
+    job_id: UUID
+    job_number: str
+    estimate_id: UUID | None
+    invoice_number: str
+    status: str
+    accounting_status: str
+    currency: str
+    issue_date: date
+    due_date: date
+    terms: str
+    total_amount: Decimal
+    open_amount: Decimal
+    age_days: int
+    aging_bucket: str
+    attention_reasons: tuple[str, ...]
+    last_ar_activity_type: str | None
+    last_ar_activity_at: datetime | None
+    legacy_evidence_missing: bool
+    version: int
+
+
+class CustomerBalanceItem(InvoiceSchema):
+    customer_id: UUID
+    customer_number: str
+    customer_display_name: str
+    currency: str
+    invoice_total: Decimal
+    open_balance: Decimal
+    credit_total: Decimal
+    write_off_total: Decimal
+    applied_payment_total: Decimal
+    unapplied_receipt_total: Decimal
+    disputed_receipt_total: Decimal
+    native_invoice_count: int
+    legacy_evidence_incomplete: bool
+    as_of: date
