@@ -5,8 +5,6 @@ import json
 from uuid import uuid4
 
 import pytest
-from redis.asyncio import Redis
-
 from app.core.config import Settings, settings
 from app.platform.auth.errors import (
     RateLimitExceededError,
@@ -15,6 +13,7 @@ from app.platform.auth.errors import (
 from app.platform.auth.rate_limit import AuthenticationRateLimiter
 from app.platform.health.contracts import HealthState
 from app.platform.health.service import PlatformHealthService
+from redis.asyncio import Redis
 
 
 def _configuration(redis_url: str) -> Settings:

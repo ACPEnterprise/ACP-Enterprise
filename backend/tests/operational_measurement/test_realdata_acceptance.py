@@ -4,7 +4,6 @@ from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 import pytest
-
 from app.operational_measurement.hcp_readiness import (
     NativeScheduleProjection,
     OperationalAppointmentEvidence,

@@ -2,7 +2,6 @@ from datetime import date, datetime, timedelta, timezone
 from uuid import UUID
 
 import pytest
-
 from app.dispatch.intelligence import TimeWindow
 from app.operational_measurement.hcp_readiness import (
     MAX_BATCH_SIZE,
