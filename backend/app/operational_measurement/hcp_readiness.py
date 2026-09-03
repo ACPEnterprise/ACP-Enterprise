@@ -26,6 +26,7 @@ from app.operational_migration.service import (
 
 CONTRACT_VERSION: Final = "hcp-operational-measurement-readiness.v1"
 ACCEPTANCE_VERSION: Final = "hcp-operational-date-acceptance.v1"
+SCHEDULE_COMPARISON_VERSION: Final = "hcp-acp-schedule-comparison.v1"
 MAX_BATCH_SIZE: Final = 10_000
 MAX_WINDOW_HOURS: Final = 24
 
@@ -61,6 +62,12 @@ class TechnicianMappingState(StrEnum):
     UNMAPPED = "UNMAPPED"
     MULTIPLE = "MULTIPLE"
     NONE_REPORTED = "NONE_REPORTED"
+
+
+class ScheduleComparisonState(StrEnum):
+    MATCHED = "MATCHED"
+    PARTIAL = "PARTIAL"
+    CONFLICTING = "CONFLICTING"
 
 
 @dataclass(frozen=True, slots=True)
@@ -159,6 +166,40 @@ class DateAcceptanceReport:
     dispositions: tuple[AppointmentAcceptance, ...]
     disposition_counts: dict[str, int]
     reconciliation_delta: int
+    evidence_digest: str
+
+
+@dataclass(frozen=True, slots=True)
+class NativeScheduleProjection:
+    """Minimum ACP projection used for SOURCE.4 visual acceptance."""
+
+    source_appointment_id: str
+    company_id: UUID
+    branch_id: UUID
+    status: str
+    window_start_at: datetime | None
+    window_end_at: datetime | None
+    employee_ids: tuple[UUID, ...]
+    evidence_digest: str
+
+
+@dataclass(frozen=True, slots=True)
+class ScheduleComparisonRow:
+    source_appointment_id: str
+    state: ScheduleComparisonState
+    source_status: str
+    native_status: str | None
+    technician_state: TechnicianMappingState
+    conditions: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class ScheduleComparisonReport:
+    contract_version: str
+    rows: tuple[ScheduleComparisonRow, ...]
+    counts: dict[str, int]
+    source_count: int
+    native_count: int
     evidence_digest: str
 
 
@@ -552,6 +593,88 @@ def reconcile_date(
         tuple(results),
         counts,
         len(appointments) - sum(counts.values()),
+        _digest(payload),
+    )
+
+
+def compare_source4_schedule(
+    appointments: tuple[OperationalAppointmentEvidence, ...],
+    native: tuple[NativeScheduleProjection, ...],
+    *,
+    crosswalks: tuple[TechnicianCrosswalk, ...] = (),
+) -> ScheduleComparisonReport:
+    """Compare admitted SOURCE.4 schedule facts with bounded ACP projections.
+
+    This is acceptance evidence only. It does not admit Migration data or mutate
+    Scheduling. Every source identity receives one deterministic result row.
+    """
+    if len(appointments) > MAX_BATCH_SIZE or len(native) > MAX_BATCH_SIZE:
+        raise ValueError("schedule comparison batch exceeds its bound")
+    native_by_source: dict[str, NativeScheduleProjection] = {}
+    duplicate_native: set[str] = set()
+    for item in native:
+        if item.source_appointment_id in native_by_source:
+            duplicate_native.add(item.source_appointment_id)
+        else:
+            native_by_source[item.source_appointment_id] = item
+    rows: list[ScheduleComparisonRow] = []
+    for source in sorted(appointments, key=lambda item: item.source_id):
+        target = native_by_source.get(source.source_id)
+        mapping = technician_mapping(source.source_technician_ids, crosswalks)
+        conditions: list[str] = []
+        state = ScheduleComparisonState.MATCHED
+        if source.source_id in duplicate_native:
+            conditions.append("DUPLICATE_NATIVE_SOURCE_IDENTITY")
+            state = ScheduleComparisonState.CONFLICTING
+        elif target is None:
+            conditions.append("NATIVE_PROJECTION_MISSING")
+            state = ScheduleComparisonState.PARTIAL
+        else:
+            if (source.company_id, source.branch_id) != (
+                target.company_id,
+                target.branch_id,
+            ):
+                conditions.append("TENANT_OR_BRANCH_CONFLICT")
+            if source.status != target.status:
+                conditions.append("STATUS_CONFLICT")
+            if (source.window_start_at, source.window_end_at) != (
+                target.window_start_at,
+                target.window_end_at,
+            ):
+                conditions.append("WINDOW_CONFLICT")
+            if mapping.employee_ids != tuple(sorted(target.employee_ids, key=str)):
+                conditions.append("TECHNICIAN_MAPPING_CONFLICT")
+            if conditions:
+                state = ScheduleComparisonState.CONFLICTING
+            elif mapping.state in {
+                TechnicianMappingState.UNMAPPED,
+                TechnicianMappingState.NONE_REPORTED,
+            }:
+                conditions.append("TECHNICIAN_MAPPING_INCOMPLETE")
+                state = ScheduleComparisonState.PARTIAL
+        rows.append(
+            ScheduleComparisonRow(
+                source.source_id,
+                state,
+                source.status,
+                target.status if target else None,
+                mapping.state,
+                tuple(sorted(conditions)),
+            )
+        )
+    counts = dict(sorted(Counter(row.state.value for row in rows).items()))
+    payload = {
+        "contract": SCHEDULE_COMPARISON_VERSION,
+        "source_digests": sorted(item.source_digest for item in appointments),
+        "native_digests": sorted(item.evidence_digest for item in native),
+        "rows": [asdict(row) for row in rows],
+    }
+    return ScheduleComparisonReport(
+        SCHEDULE_COMPARISON_VERSION,
+        tuple(rows),
+        counts,
+        len(appointments),
+        len(native),
         _digest(payload),
     )
 
