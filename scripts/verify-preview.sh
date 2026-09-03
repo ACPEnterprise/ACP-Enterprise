@@ -41,7 +41,9 @@ require_healthy backend
 require_healthy frontend
 
 compose exec -T postgres sh -c 'pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"' >/dev/null
-compose exec -T redis redis-cli ping | grep -qx PONG
+compose exec -T redis sh -c \
+  'REDISCLI_AUTH=$(cat /run/secrets/redis/health-password) redis-cli --user acp-health ping' \
+  | grep -qx PONG
 
 curl --fail --silent --show-error "$preview_url/backend-health" \
   | python3 -c 'import json,sys; payload=json.load(sys.stdin); assert payload["status"] == "healthy"'

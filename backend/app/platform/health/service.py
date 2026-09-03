@@ -5,13 +5,13 @@ from datetime import UTC, datetime
 from alembic.config import Config
 from alembic.script import ScriptDirectory
 from alembic.util.exc import CommandError
-from redis.asyncio import Redis
 from redis.exceptions import RedisError
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from app.core.config import Settings
+from app.core.redis import redis_client
 from app.platform.health.contracts import ComponentHealth, HealthState, SystemReadiness
 
 
@@ -102,11 +102,7 @@ class PlatformHealthService:
         )
 
     async def redis(self) -> ComponentHealth:
-        client = Redis.from_url(
-            self.configuration.redis_url,
-            encoding="utf-8",
-            decode_responses=True,
-        )
+        client = redis_client(self.configuration)
         required = self.configuration.redis_required_for_readiness
         try:
             await client.ping()

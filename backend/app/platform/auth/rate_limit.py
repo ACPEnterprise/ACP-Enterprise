@@ -1,7 +1,7 @@
-from redis.asyncio import Redis
 from redis.exceptions import RedisError
 
 from app.core.config import Settings, settings
+from app.core.redis import redis_client
 from app.platform.auth.errors import (
     RateLimitExceededError,
     RateLimitUnavailableError,
@@ -20,11 +20,7 @@ class AuthenticationRateLimiter:
         limit: int,
         window_seconds: int,
     ) -> None:
-        client = Redis.from_url(
-            self.configuration.redis_url,
-            encoding="utf-8",
-            decode_responses=True,
-        )
+        client = redis_client(self.configuration)
         key = f"auth-rate:{bucket}:{identifier_hash}"
         try:
             async with client.pipeline(transaction=True) as pipeline:

@@ -18,6 +18,8 @@ class Settings(BaseSettings):
         "acp_development_password@postgres:5432/acp_enterprise"
     )
     redis_url: str = "redis://redis:6379/0"
+    redis_username: str | None = None
+    redis_password_file: str | None = None
     redis_required_for_readiness: bool = True
     alembic_config_path: str = "alembic.ini"
     repository_operation_root: str | None = None

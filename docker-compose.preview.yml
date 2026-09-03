@@ -5,6 +5,8 @@ x-backend-environment: &backend-environment
   BUSINESS_TIMEZONE: ${BUSINESS_TIMEZONE:-America/New_York}
   DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env.preview}
   REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+  REDIS_USERNAME: ${REDIS_USERNAME:-acp-application}
+  REDIS_PASSWORD_FILE: /run/secrets/redis/application-password
   CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-["https://preview.allcountyhomeservices.com"]}
   ALLOWED_HOSTS: ${ALLOWED_HOSTS:-["preview.allcountyhomeservices.com","backend","localhost","127.0.0.1"]}
   LOG_LEVEL: ${LOG_LEVEL:-INFO}
@@ -59,11 +61,12 @@ services:
   redis:
     logging: *default-logging
     image: redis:7-alpine
-    command: ["redis-server", "--appendonly", "yes"]
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--aclfile", "/run/secrets/redis/users.acl", "--protected-mode", "yes"]
     volumes:
       - preview_redis_data:/data
+      - ${REDIS_SECRET_DIR_HOST:?Set REDIS_SECRET_DIR_HOST in .env.preview}:/run/secrets/redis:ro
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "REDISCLI_AUTH=$$(cat /run/secrets/redis/health-password) redis-cli --user acp-health ping | grep -qx PONG"]
       interval: 5s
       timeout: 5s
       retries: 12
@@ -107,6 +110,7 @@ services:
       - preview_qbo_production_state:/var/lib/acp-qbo-production
       - preview_qbo_production_evidence:/var/lib/acp-qbo-production-evidence
       - ${IDENTITY_ONBOARDING_DELIVERY_SECRET_DIR_HOST:?Set IDENTITY_ONBOARDING_DELIVERY_SECRET_DIR_HOST in .env.preview}:/run/secrets/acp:ro
+      - ${REDIS_SECRET_DIR_HOST:?Set REDIS_SECRET_DIR_HOST in .env.preview}:/run/secrets/redis:ro
     healthcheck:
       test: ["CMD", "python", "-c", "import json,urllib.request; data=json.load(urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)); assert data['status']=='healthy'"]
       interval: 10s
