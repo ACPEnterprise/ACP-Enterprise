@@ -19,15 +19,23 @@ class QueueModel(BaseModel):
 
 
 class ApprovedWork(QueueModel):
-    milestone_id: str = Field(pattern=r"^BANK\.[A-Z0-9]+\.[0-9]{3}$")
+    milestone_id: str = Field(pattern=r"^[A-Z][A-Z0-9_.-]{4,119}$")
     capacity_identity: Literal["OM1", "OM2", "MIG", "ECO", "LAP"]
     instruction: str = Field(min_length=20, max_length=12_000)
     allowed_paths: tuple[str, ...] = Field(min_length=1)
     validation_requirements: tuple[str, ...] = Field(min_length=1)
     requested_code_changes: bool
-    execution_mode: Literal["repository_only"]
+    queue_state: Literal[
+        "AUTHORITATIVE", "READY", "BLOCKED_DEPENDENCY", "ENTERPRISE_REVIEW_REQUIRED"
+    ]
+    execution_mode: Literal["none", "repository_only", "preview_gated"]
     hard_boundary_operations: tuple[str, ...]
+    dependencies: tuple[str, ...]
     successor_ids: tuple[str, ...]
+    authoritative_commit_sha: str | None = Field(
+        default=None, pattern=r"^[0-9a-f]{40}$"
+    )
+    candidate_reference: str | None = None
 
 
 class ApprovedFactoryQueue(QueueModel):
@@ -67,8 +75,15 @@ def load_approved_factory_queue() -> ApprovedFactoryQueue:
     known = set(ids)
     if any(set(item.successor_ids) - known for item in queue.items):
         raise QueueError("approved queue references an unknown successor")
-    if any(item.hard_boundary_operations for item in queue.items):
-        raise QueueError("hard-boundary work is not headless-executable")
+    for item in queue.items:
+        if item.queue_state == "AUTHORITATIVE" and not item.authoritative_commit_sha:
+            raise QueueError("authoritative work requires commit evidence")
+        if item.queue_state == "READY" and (
+            item.execution_mode != "repository_only" or item.hard_boundary_operations
+        ):
+            raise QueueError("ready headless work must be repository-only")
+        if (set(item.dependencies) | set(item.successor_ids)) - known:
+            raise QueueError("approved queue references an unknown dependency")
     return queue
 
 

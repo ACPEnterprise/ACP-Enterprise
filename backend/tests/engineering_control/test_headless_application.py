@@ -21,7 +21,7 @@ def context(company_id):
 def proposal(kind="activate"):
     return HeadlessProposal(
         kind=kind,
-        milestone_id="BANK.DF.003",
+        milestone_id="MOBILE.PHYSICAL.ACCEPTANCE.HANDOFF.1",
         capacity_identity="OM1",
         reason="owner-approved executable queue item",
     )
@@ -126,12 +126,14 @@ async def test_bridge_rejects_reconciliation_retry_and_stale_authority() -> None
         )
 
 
-def test_reviewed_queue_is_fingerprinted_repository_only_and_successor_bounded() -> None:
+def test_reviewed_queue_tracks_actual_factory_authority_gates_and_successors() -> None:
     queue = load_approved_factory_queue()
-    assert [item.milestone_id for item in queue.items] == [
-        "BANK.DF.003",
-        "BANK.DF.004",
-    ]
-    assert all(item.execution_mode == "repository_only" for item in queue.items)
-    assert all(not item.hard_boundary_operations for item in queue.items)
-    assert queue.items[0].successor_ids == ("BANK.DF.004",)
+    by_id = {item.milestone_id: item for item in queue.items}
+    assert by_id["MOBILE.PREVIEW.IDENTITY.FIXTURE.1"].queue_state == "AUTHORITATIVE"
+    assert by_id["REVENUE.CYCLE.FAILURE.RECOVERY.ACCEPTANCE.1"].queue_state == "AUTHORITATIVE"
+    admission = by_id["MIGRATION.HCP.SOURCE4.PREVIEW.ADMISSION.1"]
+    assert admission.execution_mode == "preview_gated"
+    assert admission.hard_boundary_operations == ("preview_data_admission",)
+    assert by_id["PRICEBOOK.ALLCOUNTY.MIGRATION.RECONCILIATION.1"].queue_state == "READY"
+    assert by_id["COMMUNICATIONS.OPERATIONAL.MEASUREMENT.1"].queue_state == "READY"
+    assert by_id["PRICEBOOK.OWNER.DECISION.WORKSPACE.1"].queue_state == "BLOCKED_DEPENDENCY"
