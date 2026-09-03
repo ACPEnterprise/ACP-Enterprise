@@ -125,9 +125,11 @@ def reconcile_successors(
     domains: dict[str, Counter[str]] = defaultdict(Counter)
     for domain, disposition in classified:
         domains[domain][disposition.value] += 1
-    disposition_counts = {key: totals.get(key, 0) for key in SuccessorDisposition}
+    disposition_counts = {
+        key.value: totals.get(key.value, 0) for key in SuccessorDisposition
+    }
     domain_counts = {
-        domain: {key: counts.get(key, 0) for key in SuccessorDisposition}
+        domain: {key.value: counts.get(key.value, 0) for key in SuccessorDisposition}
         for domain, counts in sorted(domains.items())
     }
     safe_payload = {
@@ -139,7 +141,9 @@ def reconcile_successors(
         json.dumps(safe_payload, sort_keys=True, separators=(",", ":")).encode()
     ).hexdigest()
     return SuccessorReconciliationReport(
-        **safe_payload,
+        contract=CONTRACT_VERSION,
+        disposition_counts=disposition_counts,
+        domain_counts=domain_counts,
         safe_digest=safe_digest,
         admission_allowed=totals[SuccessorDisposition.AMBIGUOUS.value] == 0,
     )
