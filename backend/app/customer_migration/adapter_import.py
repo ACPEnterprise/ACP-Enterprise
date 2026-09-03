@@ -24,7 +24,7 @@ from app.customer_migration.models import (
     CustomerSourceIdentity,
     utc_now,
 )
-from app.customers.models import ServiceLocation
+from app.customers.models import Customer, ServiceLocation
 from app.customers.schemas import (
     ContactCreate,
     CustomerCreate,
@@ -633,6 +633,11 @@ class CustomerAdapterImportService:
             Awaitable[None],
         ]
         | None = None,
+        successor_reuse_callback: Callable[
+            [AsyncSession, AuthorizationContext, ReviewedCustomerAggregate],
+            Awaitable[tuple[Customer, tuple[ServiceLocation, ...]] | None],
+        ]
+        | None = None,
     ) -> CustomerAdapterImportReport:
         try:
             reviewed.validate_integrity()
@@ -744,26 +749,47 @@ class CustomerAdapterImportService:
                             reason_code="idempotent_replay",
                         )
                         continue
-                    locations = aggregate.service_locations
-                    customer = await self.customer_service.stage_migrated_customer(
-                        session,
-                        context=context,
-                        customer_data=aggregate.customer,
-                        contact_data=aggregate.contact,
-                        service_location_data=None,
-                        billing_address_data=aggregate.billing_address,
+                    reused = (
+                        await successor_reuse_callback(session, context, aggregate)
+                        if successor_reuse_callback is not None
+                        else None
                     )
-                    persisted_locations = tuple(
-                        [
-                            await self.customer_service.stage_migrated_service_location(
-                                session,
-                                context=context,
-                                customer_id=customer.id,
-                                data=location,
+                    if reused is None:
+                        locations = aggregate.service_locations
+                        customer = await self.customer_service.stage_migrated_customer(
+                            session,
+                            context=context,
+                            customer_data=aggregate.customer,
+                            contact_data=aggregate.contact,
+                            service_location_data=None,
+                            billing_address_data=aggregate.billing_address,
+                        )
+                        persisted_locations = tuple(
+                            [
+                                await self.customer_service.stage_migrated_service_location(
+                                    session,
+                                    context=context,
+                                    customer_id=customer.id,
+                                    data=location,
+                                )
+                                for location in locations
+                            ]
+                        )
+                    else:
+                        customer, persisted_locations = reused
+                        if customer.company_id != context.company.id:
+                            raise CustomerAdapterImportError(
+                                "successor Customer belongs to another Company"
                             )
-                            for location in locations
-                        ]
-                    )
+                        if len(persisted_locations) != len(
+                            aggregate.service_location_source_identities
+                        ) or any(
+                            location.customer_id != customer.id
+                            for location in persisted_locations
+                        ):
+                            raise CustomerAdapterImportError(
+                                "successor Customer relationship conflict"
+                            )
                     assert context.active_branch is not None
                     source_identity = CustomerSourceIdentity(
                         company_id=context.company.id,

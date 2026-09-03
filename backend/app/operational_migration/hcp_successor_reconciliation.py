@@ -24,6 +24,9 @@ class SuccessorDisposition(StrEnum):
     EXACT_SUCCESSOR = "exact_successor"
     AMBIGUOUS = "ambiguous"
     CONTROLLED_REPLACEMENT = "controlled_preview_replacement"
+    REUSE_LEGACY_TARGET = "reuse_legacy_target"
+    CREATE_NEW_TARGET = "create_new_target"
+    CONFLICT = "conflict"
 
 
 @dataclass(frozen=True)
@@ -47,6 +50,147 @@ class SuccessorReconciliationReport:
     domain_counts: dict[str, dict[str, int]]
     safe_digest: str
     admission_allowed: bool
+
+
+@dataclass(frozen=True)
+class PrivateReuseEntry:
+    domain: str
+    source_id: str
+    target_id: str
+
+
+@dataclass(frozen=True)
+class PrivateSuccessorManifest:
+    """Protected runtime authority. Entries must never be serialized publicly."""
+
+    entries: tuple[PrivateReuseEntry, ...]
+    digest: str
+
+    def __post_init__(self) -> None:
+        expected = _private_manifest_digest(self.entries)
+        if self.digest != expected:
+            raise ValueError("private successor manifest digest mismatch")
+
+
+@dataclass(frozen=True)
+class SuccessorReconciliationV2:
+    report: SuccessorReconciliationReport
+    private_manifest: PrivateSuccessorManifest
+
+
+def _private_manifest_digest(entries: tuple[PrivateReuseEntry, ...]) -> str:
+    return hashlib.sha256(
+        json.dumps(
+            [item.__dict__ for item in entries],
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode()
+    ).hexdigest()
+
+
+def reconcile_successors_v2(
+    *,
+    current_bindings: Iterable[IdentityBinding],
+    sealed_source4: Iterable[SealedIdentity],
+) -> SuccessorReconciliationV2:
+    """Split reusable targets from safe creation and conflicts.
+
+    The public report contains counts only. The private manifest binds the raw
+    provider/native mapping by digest and stays inside the protected runtime.
+    """
+
+    bindings = tuple(current_bindings)
+    sealed = tuple(sealed_source4)
+    if any(not item.domain or not item.source_id for item in sealed):
+        raise ValueError("sealed identities must have domain and source identity")
+    sealed_keys = [(item.domain, item.source_id) for item in sealed]
+    if len(sealed_keys) != len(set(sealed_keys)):
+        raise ValueError("sealed SOURCE.4 identity population contains duplicates")
+    if any(
+        item.source_system not in {LEGACY_SOURCE_SYSTEM, SOURCE4_SOURCE_SYSTEM}
+        for item in bindings
+    ):
+        raise ValueError("unsupported source system in successor reconciliation")
+
+    by_key: dict[tuple[str, str, str], list[str]] = defaultdict(list)
+    target_owners: dict[tuple[str, str, str], set[str]] = defaultdict(set)
+    for item in bindings:
+        if not item.domain or not item.source_id or not item.target_id:
+            raise ValueError("identity binding is incomplete")
+        by_key[(item.domain, item.source_system, item.source_id)].append(item.target_id)
+        target_owners[(item.domain, item.source_system, item.target_id)].add(
+            item.source_id
+        )
+
+    classified: list[tuple[str, SuccessorDisposition]] = []
+    reuse: list[PrivateReuseEntry] = []
+    for domain, source_id in sorted(sealed_keys):
+        legacy = by_key.get((domain, LEGACY_SOURCE_SYSTEM, source_id), [])
+        successor = by_key.get((domain, SOURCE4_SOURCE_SYSTEM, source_id), [])
+        collision = any(
+            len(target_owners[(domain, system, target)]) != 1
+            for system, targets in (
+                (LEGACY_SOURCE_SYSTEM, legacy),
+                (SOURCE4_SOURCE_SYSTEM, successor),
+            )
+            for target in targets
+        )
+        if len(legacy) > 1 or len(successor) > 1 or collision:
+            disposition = SuccessorDisposition.CONFLICT
+        elif successor and legacy and successor[0] == legacy[0]:
+            disposition = SuccessorDisposition.EXACT_SUCCESSOR
+            reuse.append(PrivateReuseEntry(domain, source_id, successor[0]))
+        elif successor:
+            disposition = SuccessorDisposition.CONFLICT
+        elif legacy:
+            disposition = SuccessorDisposition.REUSE_LEGACY_TARGET
+            reuse.append(PrivateReuseEntry(domain, source_id, legacy[0]))
+        else:
+            disposition = SuccessorDisposition.CREATE_NEW_TARGET
+        classified.append((domain, disposition))
+
+    sealed_set = set(sealed_keys)
+    classified.extend(
+        (item.domain, SuccessorDisposition.CONFLICT)
+        for item in bindings
+        if item.source_system == LEGACY_SOURCE_SYSTEM
+        and (item.domain, item.source_id) not in sealed_set
+    )
+    totals = Counter(item.value for _, item in classified)
+    domains: dict[str, Counter[str]] = defaultdict(Counter)
+    for domain, disposition in classified:
+        domains[domain][disposition.value] += 1
+    public_keys = (
+        SuccessorDisposition.EXACT_SUCCESSOR,
+        SuccessorDisposition.REUSE_LEGACY_TARGET,
+        SuccessorDisposition.CREATE_NEW_TARGET,
+        SuccessorDisposition.CONFLICT,
+    )
+    counts = {key.value: totals[key.value] for key in public_keys}
+    domain_counts = {
+        domain: {key.value: values[key.value] for key in public_keys}
+        for domain, values in sorted(domains.items())
+    }
+    public = {
+        "contract": "hcp-preview-successor-reconciliation/v2",
+        "disposition_counts": counts,
+        "domain_counts": domain_counts,
+    }
+    public_digest = hashlib.sha256(
+        json.dumps(public, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    ordered_reuse = tuple(sorted(reuse, key=lambda item: (item.domain, item.source_id)))
+    manifest_digest = _private_manifest_digest(ordered_reuse)
+    return SuccessorReconciliationV2(
+        report=SuccessorReconciliationReport(
+            contract="hcp-preview-successor-reconciliation/v2",
+            disposition_counts=counts,
+            domain_counts=domain_counts,
+            safe_digest=public_digest,
+            admission_allowed=counts[SuccessorDisposition.CONFLICT.value] == 0,
+        ),
+        private_manifest=PrivateSuccessorManifest(ordered_reuse, manifest_digest),
+    )
 
 
 def reconcile_successors(
@@ -125,11 +269,14 @@ def reconcile_successors(
     domains: dict[str, Counter[str]] = defaultdict(Counter)
     for domain, disposition in classified:
         domains[domain][disposition.value] += 1
-    disposition_counts = {
-        key.value: totals.get(key.value, 0) for key in SuccessorDisposition
-    }
+    legacy_keys = (
+        SuccessorDisposition.EXACT_SUCCESSOR,
+        SuccessorDisposition.AMBIGUOUS,
+        SuccessorDisposition.CONTROLLED_REPLACEMENT,
+    )
+    disposition_counts = {key.value: totals.get(key.value, 0) for key in legacy_keys}
     domain_counts = {
-        domain: {key.value: counts.get(key.value, 0) for key in SuccessorDisposition}
+        domain: {key.value: counts.get(key.value, 0) for key in legacy_keys}
         for domain, counts in sorted(domains.items())
     }
     safe_payload = {
