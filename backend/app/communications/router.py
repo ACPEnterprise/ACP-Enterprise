@@ -25,6 +25,7 @@ from .readiness import configuration_from_settings, project_readiness
 from .schemas import (
     CommunicationCreate,
     CommunicationItem,
+    CommunicationOperationalMeasurementItem,
     CommunicationOperationsSummary,
     CommunicationPage,
     CommunicationsReadinessItem,
@@ -137,6 +138,26 @@ async def operations_summary(
             branch_id=branch_id,
         )
         return CommunicationOperationsSummary.model_validate(result)
+    except CommunicationError as error:
+        raise communication_http(error) from error
+
+
+@router.get(
+    "/operational-measurement",
+    response_model=CommunicationOperationalMeasurementItem,
+)
+async def operational_measurement(
+    context: ReadContext,
+    session: DatabaseSession,
+    branch_id: UUID | None = None,
+) -> CommunicationOperationalMeasurementItem:
+    try:
+        result = await communication_service.operational_measurement(
+            session,
+            context=context,
+            branch_id=branch_id,
+        )
+        return CommunicationOperationalMeasurementItem.model_validate(result.__dict__)
     except CommunicationError as error:
         raise communication_http(error) from error
 

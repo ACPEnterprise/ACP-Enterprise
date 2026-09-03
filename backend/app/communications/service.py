@@ -17,6 +17,7 @@ from app.platform.permissions.authorization import AuthorizationContext
 from .catalog import OPERATIONAL_MESSAGE_CATALOG
 from .contracts import (
     CommunicationEvidence,
+    CommunicationOperationalMeasurement,
     CommunicationPolicy,
     CommunicationRequest,
 )
@@ -333,6 +334,77 @@ class CommunicationService:
             session,
             company_id=context.company.id,
             branch_id=branch_id,
+        )
+
+    async def operational_measurement(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        branch_id: UUID | None,
+    ) -> CommunicationOperationalMeasurement:
+        if branch_id is not None:
+            self._validate_branch(context, branch_id)
+        observed, final = await self.repository.operational_measurement(
+            session,
+            company_id=context.company.id,
+            branch_id=branch_id,
+        )
+        facts = {
+            "measurement_version": "communications-operational-v1",
+            "company_id": context.company.id,
+            "branch_id": branch_id,
+            "submitted": observed.get("submitted", 0),
+            "accepted": observed.get("accepted", 0),
+            "delivered": observed.get("delivered", 0),
+            "failed": observed.get("failed", 0),
+            "bounced_or_invalid_recipient": observed.get("bounced", 0)
+            + observed.get("rejected", 0),
+            "suppressed": observed.get("suppressed", 0),
+            "uncertain_submission": observed.get("ambiguous", 0),
+            "retry": observed.get("retryable", 0),
+            "recovered": observed.get("recovered", 0),
+            "webhook_replay": observed.get("webhook_replay", 0),
+            "final_pending": sum(
+                final.get(state, 0)
+                for state in ("pending", "claimed", "retry_scheduled")
+            ),
+            "final_accepted_pending_delivery": final.get("accepted", 0),
+            "final_delivered": final.get("sent", 0),
+            "final_failed": final.get("failed", 0),
+            "final_suppressed": final.get("suppressed", 0),
+            "final_uncertain": final.get("ambiguous", 0),
+        }
+        fingerprint = hashlib.sha256(
+            json.dumps(
+                facts, sort_keys=True, separators=(",", ":"), default=str
+            ).encode()
+        ).hexdigest()
+        return CommunicationOperationalMeasurement(
+            measurement_version="communications-operational-v1",
+            company_id=context.company.id,
+            branch_id=branch_id,
+            submitted=observed.get("submitted", 0),
+            accepted=observed.get("accepted", 0),
+            delivered=observed.get("delivered", 0),
+            failed=observed.get("failed", 0),
+            bounced_or_invalid_recipient=observed.get("bounced", 0)
+            + observed.get("rejected", 0),
+            suppressed=observed.get("suppressed", 0),
+            uncertain_submission=observed.get("ambiguous", 0),
+            retry=observed.get("retryable", 0),
+            recovered=observed.get("recovered", 0),
+            webhook_replay=observed.get("webhook_replay", 0),
+            final_pending=sum(
+                final.get(state, 0)
+                for state in ("pending", "claimed", "retry_scheduled")
+            ),
+            final_accepted_pending_delivery=final.get("accepted", 0),
+            final_delivered=final.get("sent", 0),
+            final_failed=final.get("failed", 0),
+            final_suppressed=final.get("suppressed", 0),
+            final_uncertain=final.get("ambiguous", 0),
+            measurement_fingerprint=fingerprint,
         )
 
     @staticmethod

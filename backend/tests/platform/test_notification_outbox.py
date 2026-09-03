@@ -5,12 +5,6 @@ from uuid import UUID, uuid4
 
 import pytest
 import pytest_asyncio
-from app.core.config import settings
-from app.platform.notifications.models import (
-    NotificationDeliveryEvidence,
-    NotificationOutbox,
-)
-from app.platform.notifications.repository import NotificationOutboxRepository
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -18,6 +12,14 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
+
+from app.communications.repository import CommunicationRepository
+from app.core.config import settings
+from app.platform.notifications.models import (
+    NotificationDeliveryEvidence,
+    NotificationOutbox,
+)
+from app.platform.notifications.repository import NotificationOutboxRepository
 
 
 def utc_now() -> datetime:
@@ -402,6 +404,83 @@ async def test_indeterminate_provider_result_blocks_unsafe_resend(
             "submitted",
             "ambiguous",
         ]
+
+
+@pytest.mark.asyncio
+async def test_duplicate_webhook_is_measured_without_changing_final_truth(
+    outbox_database: tuple[AsyncEngine, async_sessionmaker[AsyncSession]],
+) -> None:
+    _, factory = outbox_database
+    now = utc_now()
+    company_id = uuid4()
+    branch_id = uuid4()
+    async with factory() as session, session.begin():
+        record, _ = await NotificationOutboxRepository.enqueue(
+            session,
+            notification_type="communications.appointment_confirmation",
+            template_identifier="appointment-confirmation-v1",
+            recipient="synthetic@example.test",
+            payload={"classification": "synthetic"},
+            correlation_id=uuid4(),
+            idempotency_key=f"measurement:{uuid4()}",
+            scheduled_at=now,
+            now=now,
+            company_id=company_id,
+            branch_id=branch_id,
+        )
+        claimed = await NotificationOutboxRepository.claim_batch(
+            session, worker_id="synthetic-measurement", now=now, limit=1
+        )
+        token = claimed[0].claim_token
+        assert token is not None
+        assert await NotificationOutboxRepository.record_provider_submission(
+            session,
+            notification_id=record.id,
+            claim_token=token,
+            submitted_at=now,
+            provider_reference="synthetic-measurement-reference",
+        )
+        assert await NotificationOutboxRepository.mark_accepted(
+            session, notification_id=record.id, claim_token=token, at=now
+        )
+        provider_facts = {
+            "company_id": company_id,
+            "provider_reference": "synthetic-measurement-reference",
+            "provider_event_key": "synthetic-delivered-1",
+            "outcome": "delivered",
+            "at": now,
+        }
+        assert await NotificationOutboxRepository.apply_provider_event(
+            session, **provider_facts
+        )
+        assert await NotificationOutboxRepository.apply_provider_event(
+            session, **provider_facts
+        )
+
+    async with factory() as session:
+        observed, final = await CommunicationRepository.operational_measurement(
+            session, company_id=company_id, branch_id=branch_id
+        )
+        stored = await session.get(NotificationOutbox, record.id)
+        evidence = list(
+            await session.scalars(
+                select(NotificationDeliveryEvidence)
+                .where(NotificationDeliveryEvidence.outbox_id == record.id)
+                .order_by(NotificationDeliveryEvidence.sequence)
+            )
+        )
+    assert stored is not None and stored.status == "sent"
+    assert observed["submitted"] == 1
+    assert observed["accepted"] == 1
+    assert observed["delivered"] == 1
+    assert observed["webhook_replay"] == 1
+    assert final == {"sent": 1}
+    assert [item.outcome for item in evidence][-2:] == [
+        "delivered",
+        "webhook_replay",
+    ]
+    assert evidence[-1].provider_event_key is None
+    assert evidence[-1].reason_digest is not None
 
 
 @pytest.mark.asyncio

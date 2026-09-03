@@ -260,6 +260,49 @@ class CommunicationRepository:
         }
 
     @staticmethod
+    async def operational_measurement(
+        session: AsyncSession,
+        *,
+        company_id: UUID,
+        branch_id: UUID | None,
+    ) -> tuple[dict[str, int], dict[str, int]]:
+        evidence_scope = [
+            NotificationOutbox.company_id == company_id,
+            NotificationOutbox.notification_type.like("communications.%"),
+        ]
+        outbox_scope = list(evidence_scope)
+        if branch_id is not None:
+            evidence_scope.append(NotificationOutbox.branch_id == branch_id)
+            outbox_scope.append(NotificationOutbox.branch_id == branch_id)
+
+        observed_rows = (
+            await session.execute(
+                select(
+                    NotificationDeliveryEvidence.outcome,
+                    func.count(NotificationDeliveryEvidence.id),
+                )
+                .select_from(NotificationDeliveryEvidence)
+                .join(
+                    NotificationOutbox,
+                    NotificationOutbox.id == NotificationDeliveryEvidence.outbox_id,
+                )
+                .where(*evidence_scope)
+                .group_by(NotificationDeliveryEvidence.outcome)
+            )
+        ).all()
+        final_rows = (
+            await session.execute(
+                select(NotificationOutbox.status, func.count(NotificationOutbox.id))
+                .where(*outbox_scope)
+                .group_by(NotificationOutbox.status)
+            )
+        ).all()
+        return (
+            {str(outcome): int(count) for outcome, count in observed_rows},
+            {str(status): int(count) for status, count in final_rows},
+        )
+
+    @staticmethod
     async def delivery_evidence(
         session: AsyncSession, *, outbox_id: UUID
     ) -> list[NotificationDeliveryEvidence]:

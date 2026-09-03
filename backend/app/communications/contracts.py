@@ -60,3 +60,27 @@ class CommunicationPolicy:
     )
     purpose: CommunicationPurpose = CommunicationPurpose.TRANSACTIONAL
     policy_required: bool = False
+
+
+@dataclass(frozen=True)
+class CommunicationOperationalMeasurement:
+    measurement_version: str
+    company_id: UUID
+    branch_id: UUID | None
+    submitted: int
+    accepted: int
+    delivered: int
+    failed: int
+    bounced_or_invalid_recipient: int
+    suppressed: int
+    uncertain_submission: int
+    retry: int
+    recovered: int
+    webhook_replay: int
+    final_pending: int
+    final_accepted_pending_delivery: int
+    final_delivered: int
+    final_failed: int
+    final_suppressed: int
+    final_uncertain: int
+    measurement_fingerprint: str

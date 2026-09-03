@@ -325,6 +325,16 @@ class NotificationOutboxRepository:
             )
         )
         if duplicate is not None:
+            await NotificationOutboxRepository._evidence(
+                session,
+                record,
+                "webhook_replay",
+                at,
+                provider_reference=provider_reference,
+                reason_digest=hashlib.sha256(provider_event_key.encode()).hexdigest(),
+                error_category="duplicate_provider_event",
+            )
+            await session.flush()
             return True
         if record.status in {"sent", "failed", "canceled", "suppressed"}:
             # Preserve authenticated late/contradictory provider truth without

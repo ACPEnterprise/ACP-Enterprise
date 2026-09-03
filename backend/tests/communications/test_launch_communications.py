@@ -6,6 +6,7 @@ from uuid import UUID, uuid4
 
 import httpx
 import pytest
+
 from app.communications.contracts import CommunicationRequest
 from app.communications.errors import (
     CommunicationAuthorizationError,
@@ -40,6 +41,66 @@ class FakeSession:
     @asynccontextmanager
     async def begin(self):
         yield
+
+
+@pytest.mark.asyncio
+async def test_operational_measurement_is_deterministic_and_read_only() -> None:
+    branch_id = uuid4()
+    ctx = context()
+    repository = SimpleNamespace(
+        operational_measurement=AsyncMock(
+            return_value=(
+                {
+                    "submitted": 4,
+                    "accepted": 3,
+                    "delivered": 2,
+                    "failed": 1,
+                    "bounced": 1,
+                    "rejected": 1,
+                    "suppressed": 2,
+                    "ambiguous": 1,
+                    "retryable": 3,
+                    "recovered": 1,
+                    "webhook_replay": 2,
+                },
+                {
+                    "pending": 1,
+                    "retry_scheduled": 1,
+                    "accepted": 1,
+                    "sent": 2,
+                    "failed": 1,
+                    "suppressed": 2,
+                    "ambiguous": 1,
+                },
+            )
+        )
+    )
+    service = CommunicationService(repository)
+    first = await service.operational_measurement(
+        FakeSession(), context=ctx, branch_id=branch_id
+    )
+    second = await service.operational_measurement(
+        FakeSession(), context=ctx, branch_id=branch_id
+    )
+    assert first == second
+    assert first.bounced_or_invalid_recipient == 2
+    assert first.final_pending == 2
+    assert first.final_delivered == 2
+    assert first.final_uncertain == 1
+    assert first.recovered == 1
+    assert len(first.measurement_fingerprint) == 64
+    assert repository.operational_measurement.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_operational_measurement_rejects_foreign_branch_before_query() -> None:
+    repository = SimpleNamespace(operational_measurement=AsyncMock())
+    service = CommunicationService(repository)
+    with pytest.raises(CommunicationAuthorizationError):
+        await service.operational_measurement(
+            FakeSession(), context=context(can_access=False), branch_id=uuid4()
+        )
+    repository.operational_measurement.assert_not_awaited()
 
 
 def context(*, can_access: bool = True):

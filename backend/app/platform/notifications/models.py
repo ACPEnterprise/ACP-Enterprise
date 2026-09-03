@@ -186,7 +186,7 @@ class NotificationDeliveryEvidence(Base):
     __tablename__ = "notification_delivery_evidence"
     __table_args__ = (
         CheckConstraint(
-            "outcome IN ('claimed','submitted','accepted','delivered','retryable','failed','ambiguous','recovered','canceled','suppressed','deferred','bounced','rejected','complaint','expired')",
+            "outcome IN ('claimed','submitted','accepted','delivered','retryable','failed','ambiguous','recovered','canceled','suppressed','deferred','bounced','rejected','complaint','expired','webhook_replay')",
             name="ck_notification_delivery_evidence_outcome",
         ),
         UniqueConstraint(
