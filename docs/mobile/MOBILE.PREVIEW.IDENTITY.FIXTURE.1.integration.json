@@ -1,0 +1,36 @@
+{
+  "milestone": "MOBILE.PREVIEW.IDENTITY.FIXTURE.1",
+  "authority_base": "9f202c5e46395ad24e3611219d47c98b8bb7ac99",
+  "branch": "work/mobile-preview-identity-fixture-1",
+  "fixture_key": "acp-employee-beta-v1",
+  "classification": "SYNTHETIC_PREVIEW_ONLY",
+  "preview_mutation": false,
+  "production_operation": false,
+  "live_adapter_registered": false,
+  "provision_order": [
+    "company", "branch", "user", "membership", "branchGrant", "employee",
+    "customer", "serviceLocation", "job", "appointment", "assignment"
+  ],
+  "reset_preconditions": [
+    "revoke invitation", "revoke sessions", "clear operational evidence"
+  ],
+  "controls": [
+    "exact Preview environment and fixture authorization required",
+    "authorization bound to exact fixture key",
+    "non-routable .invalid login required",
+    "All County login identities rejected",
+    "synthetic external identities required",
+    "contradictory records rejected",
+    "only complete matching fixture records removable",
+    "reverse dependency removal order",
+    "no direct SQL boundary"
+  ],
+  "remaining_gate": "Enterprise must review and bind a successor adapter to existing owning-domain APIs before any separately authorized Preview fixture mutation.",
+  "qualification": {
+    "focused_mobile_tests": "3 suites / 31 tests passed",
+    "typescript": "passed",
+    "eslint_changed_typescript": "passed",
+    "fixture_dry_run": "passed; mutationPerformed=false",
+    "diff_check": "passed"
+  }
+}

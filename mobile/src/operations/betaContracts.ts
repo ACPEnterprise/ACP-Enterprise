@@ -21,7 +21,14 @@ export function sha256(value: string | Buffer): string {
 export type FixtureContract = {
   contractVersion: string; environment: string; fixtureKey: string; syntheticMarker: string;
   permissions: string[]; prohibitedData: string[]; scenarios: string[];
-  user: { loginPlaceholder: string };
+  company: { externalKey: string; displayName: string };
+  branch: { externalKey: string; displayName: string; timezone: string };
+  user: { externalKey: string; loginPlaceholder: string };
+  employee: { externalKey: string; displayName: string };
+  customer: { externalKey: string; displayName: string };
+  serviceLocation: { externalKey: string; address: string };
+  job: { externalKey: string; serviceCategory: string };
+  appointment: { externalKey: string; assignmentRole: string };
 };
 
 const requiredPermissions = ["COMPANY_TIMEKEEPING_OWN_READ", "COMPANY_TIMEKEEPING_OWN_PUNCH", "COMPANY_EMPLOYEE_OPERATIONS_OWN_DAY_READ", "COMPANY_JOB_READ", "COMPANY_JOB_EXECUTE", "COMPANY_ASSET_READ", "COMPANY_ESTIMATE_READ", "COMPANY_PAYROLL_STATEMENT_OWN_READ"];
@@ -29,7 +36,9 @@ const requiredScenarios = ["NO_ACTIVE_SHIFT", "CLOCKED_IN", "BREAK_ACTIVE", "CLO
 
 export function validateFixture(contract: FixtureContract): void {
   if (contract.environment !== "preview" || contract.syntheticMarker !== "SYNTHETIC_BETA_ONLY") throw new Error("Fixture must be explicitly synthetic and Preview-only");
-  if (!contract.fixtureKey || contract.user.loginPlaceholder !== "OWNER_SUPPLIED_SYNTHETIC_PREVIEW_LOGIN") throw new Error("Fixture identity contract is unsafe");
+  if (contract.fixtureKey !== "acp-employee-beta-v1" || contract.user.loginPlaceholder !== "OWNER_SUPPLIED_SYNTHETIC_PREVIEW_LOGIN") throw new Error("Fixture identity contract is unsafe");
+  const externalKeys = [contract.company.externalKey, contract.branch.externalKey, contract.user.externalKey, contract.employee.externalKey, contract.customer.externalKey, contract.serviceLocation.externalKey, contract.job.externalKey, contract.appointment.externalKey];
+  if (!externalKeys.every((value) => value.startsWith("synthetic-beta-")) || new Set(externalKeys).size !== externalKeys.length) throw new Error("Fixture external identities must be unique and synthetic");
   if (!requiredPermissions.every((permission) => contract.permissions.includes(permission))) throw new Error("Fixture permission contract is incomplete");
   if (!requiredScenarios.every((scenario) => contract.scenarios.includes(scenario))) throw new Error("Fixture scenario contract is incomplete");
   if (!["compensation", "wage", "payroll_administration", "bank", "tax"].every((field) => contract.prohibitedData.includes(field))) throw new Error("Fixture prohibited-data contract is incomplete");
