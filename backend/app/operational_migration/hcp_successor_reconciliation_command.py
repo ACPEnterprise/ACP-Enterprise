@@ -8,6 +8,7 @@ import json
 import os
 import stat
 import subprocess
+import tempfile
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -27,8 +28,9 @@ from app.operational_migration.hcp_migration2_plan import (
 from app.operational_migration.hcp_migration2_runner import SafeEvidenceError
 from app.operational_migration.hcp_successor_reconciliation import (
     IdentityBinding,
+    PrivateSuccessorManifest,
     SealedIdentity,
-    reconcile_successors,
+    reconcile_successors_v2,
 )
 from app.operational_migration.models import (
     AppointmentSourceIdentity,
@@ -38,7 +40,7 @@ from app.operational_migration.models import (
     PaymentSourceIdentity,
 )
 
-COMMAND_VERSION = "hcp-preview-successor-reconciliation-command/v1"
+COMMAND_VERSION = "hcp-preview-successor-reconciliation-command/v2"
 
 
 @dataclass(frozen=True)
@@ -51,6 +53,7 @@ class SuccessorReadAuthority:
     branch_id: UUID
     actor_id: UUID
     baseline_counts: dict[str, int]
+    private_manifest_output: Path
 
     @classmethod
     def load(cls, path: Path) -> SuccessorReadAuthority:
@@ -77,6 +80,7 @@ class SuccessorReadAuthority:
                 branch_id=UUID(value["branch_id"]),
                 actor_id=UUID(value["actor_id"]),
                 baseline_counts=dict(counts),
+                private_manifest_output=Path(value["private_manifest_output"]),
             )
         except SafeEvidenceError:
             raise
@@ -170,6 +174,52 @@ def _require_runtime(authority: SuccessorReadAuthority) -> None:
         raise SafeEvidenceError("successor_repository_authority_mismatch", "0" * 64)
 
 
+def write_private_manifest(path: Path, manifest: PrivateSuccessorManifest) -> None:
+    """Atomically retain private mappings; identical output is replay-safe."""
+
+    parent = path.parent
+    try:
+        if not parent.is_dir() or stat.S_IMODE(parent.stat().st_mode) & 0o077:
+            raise SafeEvidenceError("successor_manifest_directory_unsafe", "0" * 64)
+        payload = json.dumps(
+            {
+                "contract": "hcp-preview-successor-private-manifest/v1",
+                "digest": manifest.digest,
+                "entries": [asdict(item) for item in manifest.entries],
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode()
+        if path.exists():
+            if stat.S_IMODE(path.stat().st_mode) != 0o600:
+                raise SafeEvidenceError(
+                    "successor_manifest_permissions_unsafe", "0" * 64
+                )
+            if path.read_bytes() != payload:
+                raise SafeEvidenceError("successor_manifest_output_conflict", "0" * 64)
+            return
+        descriptor, temporary_name = tempfile.mkstemp(
+            prefix=f".{path.name}.", dir=parent
+        )
+        temporary = Path(temporary_name)
+        try:
+            os.fchmod(descriptor, 0o600)
+            with os.fdopen(descriptor, "wb") as target:
+                target.write(payload)
+                target.flush()
+                os.fsync(target.fileno())
+            # Refuse a race rather than replacing an independently created authority.
+            if path.exists():
+                raise SafeEvidenceError("successor_manifest_output_conflict", "0" * 64)
+            os.link(temporary, path)
+        finally:
+            temporary.unlink(missing_ok=True)
+    except SafeEvidenceError:
+        raise
+    except OSError as error:
+        raise SafeEvidenceError("successor_manifest_write_failed", "0" * 64) from error
+
+
 async def run(authority: SuccessorReadAuthority) -> dict[str, object]:
     _require_runtime(authority)
     builder = HcpMigration2ExecutionPlanBuilder(
@@ -188,14 +238,19 @@ async def run(authority: SuccessorReadAuthority) -> dict[str, object]:
         bindings = await load_preview_bindings(
             session, company_id=authority.company_id, branch_id=authority.branch_id
         )
-        report = reconcile_successors(
+        result = reconcile_successors_v2(
             current_bindings=bindings, sealed_source4=sealed_identities(plan)
         )
         await session.rollback()
+    write_private_manifest(authority.private_manifest_output, result.private_manifest)
     return {
         "command": COMMAND_VERSION,
         "plan_digest": plan_summary.plan_digest,
-        "report": asdict(report),
+        "report": asdict(result.report),
+        "private_manifest": {
+            "digest": result.private_manifest.digest,
+            "entry_count": len(result.private_manifest.entries),
+        },
     }
 
 
