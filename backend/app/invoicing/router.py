@@ -1,4 +1,5 @@
-from typing import Annotated
+from datetime import date
+from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -15,7 +16,9 @@ from app.invoicing.errors import InvoiceConflict, InvoiceError, InvoiceNotFound
 from app.invoicing.schemas import (
     AmountInput,
     CreateInvoiceInput,
+    CustomerBalanceItem,
     InvoiceItem,
+    InvoiceWorkspaceItem,
     MutationInput,
     PaymentApplicationInput,
 )
@@ -59,6 +62,38 @@ def _error(error: InvoiceError) -> HTTPException:
 def _branch(context: AuthorizationContext, branch_id: UUID) -> None:
     if not context.can_access_branch(branch_id):
         raise _error(InvoiceNotFound("Invoice was not found."))
+
+
+@router.get("/workspace", response_model=list[InvoiceWorkspaceItem])
+async def invoice_workspace(
+    context: Read,
+    session: Session,
+    as_of: date,
+    state: Literal["all", "open", "overdue", "needs_attention", "draft", "issued", "partially_paid", "adjusted", "paid", "voided", "cancelled"] = "open",
+    query: Annotated[str | None, Query(max_length=160)] = None,
+    customer_id: UUID | None = None,
+    branch_id: UUID | None = None,
+    limit: Annotated[int, Query(ge=1, le=200)] = 100,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> list[InvoiceWorkspaceItem]:
+    rows = await invoice_service.workspace(session, context.company.id, context.authorized_branch_ids, as_of=as_of, state=state, query=query, customer_id=customer_id, branch_id=branch_id, limit=limit, offset=offset)
+    return [InvoiceWorkspaceItem.model_validate(row) for row in rows]
+
+
+@router.get("/customers/{customer_id}/balance", response_model=CustomerBalanceItem)
+async def customer_balance(customer_id: UUID, context: Read, session: Session, as_of: date) -> CustomerBalanceItem:
+    row = await invoice_service.customer_balance(session, context.company.id, context.authorized_branch_ids, customer_id, as_of=as_of)
+    if row is None:
+        raise _error(InvoiceNotFound("Customer balance was not found."))
+    return CustomerBalanceItem.model_validate(row)
+
+
+@router.get("/{invoice_id}/office-detail", response_model=InvoiceWorkspaceItem)
+async def invoice_office_detail(invoice_id: UUID, context: Read, session: Session, as_of: date) -> InvoiceWorkspaceItem:
+    rows = await invoice_service.workspace(session, context.company.id, context.authorized_branch_ids, as_of=as_of, state="all", invoice_id=invoice_id, limit=1)
+    if not rows:
+        raise _error(InvoiceNotFound("Invoice was not found."))
+    return InvoiceWorkspaceItem.model_validate(rows[0])
 
 
 @router.get("", response_model=list[InvoiceItem])

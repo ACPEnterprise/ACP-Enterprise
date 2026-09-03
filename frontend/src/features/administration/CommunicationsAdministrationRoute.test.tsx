@@ -37,9 +37,18 @@ test("shows truthful provider gates and governed catalog", async () => {
       owner_domain: "dispatch",
       allowed_channels: ["email", "sms"],
       template_version: "technician-en-route-v1",
+      purpose: "operational",
       policy_required: true,
     },
   ]);
+  vi.mocked(api.getCommunicationOperationsSummary).mockResolvedValue({
+    pending: 2,
+    accepted_pending_delivery: 1,
+    delivered: 4,
+    needs_attention: 1,
+    suppressed: 3,
+    oldest_pending_at: "2026-09-02T12:00:00Z",
+  });
   render(
     <AuthenticationContext.Provider value={auth}>
       <QueryClientProvider client={new QueryClient()}>
@@ -51,6 +60,8 @@ test("shows truthful provider gates and governed catalog", async () => {
   expect(screen.getByText("technician en route")).toBeVisible();
   expect(screen.getByText("Authority: dispatch")).toBeVisible();
   expect(screen.getByText(/Synthetic qualification never means real/)).toBeVisible();
+  expect(screen.getByText("Needs attention")).toBeVisible();
+  expect(screen.getByText(/acceptance remains pending/i)).toBeVisible();
 });
 
 test("does not reflect protected readiness failure details", async () => {

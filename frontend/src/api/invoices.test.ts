@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { apiClient } from "./client";
-import { creditInvoice, createInvoice, issueInvoice, voidInvoice, writeOffInvoice } from "./invoices";
+import { creditInvoice, createInvoice, getCustomerBalance, getInvoiceWorkspace, issueInvoice, voidInvoice, writeOffInvoice } from "./invoices";
 
 vi.mock("./client", () => ({ apiClient: { post: vi.fn(), get: vi.fn() } }));
 
@@ -44,5 +44,12 @@ describe("Invoice API", () => {
     expect(apiClient.post).toHaveBeenLastCalledWith("/api/v1/invoices/invoice-1/write-offs", expect.objectContaining({ reason_code: "CUSTOMER_CREDIT" }));
     await voidInvoice("invoice-1", { branch_id: "branch-1", expected_version: 3, idempotency_key: "void-1", occurred_at: "2026-08-30T12:00:00Z" });
     expect(apiClient.post).toHaveBeenLastCalledWith("/api/v1/invoices/invoice-1/void", expect.objectContaining({ expected_version: 3 }));
+  });
+  it("uses bounded native office projections with explicit cutoffs", async () => {
+    vi.mocked(apiClient.get).mockResolvedValue({ data: [] });
+    await getInvoiceWorkspace({ asOf: "2026-09-02", state: "needs_attention", query: "Synthetic" });
+    expect(apiClient.get).toHaveBeenLastCalledWith("/api/v1/invoices/workspace", { params: expect.objectContaining({ as_of: "2026-09-02", state: "needs_attention", query: "Synthetic", limit: 100, offset: 0 }) });
+    await getCustomerBalance("customer-1", "2026-09-02");
+    expect(apiClient.get).toHaveBeenLastCalledWith("/api/v1/invoices/customers/customer-1/balance", { params: { as_of: "2026-09-02" } });
   });
 });

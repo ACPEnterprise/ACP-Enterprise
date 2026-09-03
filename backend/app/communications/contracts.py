@@ -2,7 +2,12 @@ from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
 
-from .types import CommunicationChannel, CommunicationDeliveryState, CommunicationType
+from .types import (
+    CommunicationChannel,
+    CommunicationDeliveryState,
+    CommunicationPurpose,
+    CommunicationType,
+)
 
 
 @dataclass(frozen=True)
@@ -26,7 +31,7 @@ class CommunicationEvidence:
     branch_id: UUID
     customer_id: UUID
     contact_id: UUID
-    recipient: str
+    recipient_display: str
     source_event_id: UUID
     source_event_type: str
     source_entity_type: str
@@ -53,4 +58,5 @@ class CommunicationPolicy:
     allowed_channels: frozenset[CommunicationChannel] = frozenset(
         {CommunicationChannel.EMAIL}
     )
+    purpose: CommunicationPurpose = CommunicationPurpose.TRANSACTIONAL
     policy_required: bool = False

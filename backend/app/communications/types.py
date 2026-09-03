@@ -9,6 +9,14 @@ class CommunicationChannel(StrEnum):
     IN_APP = "in_app"
 
 
+class CommunicationPurpose(StrEnum):
+    ACCOUNT_SECURITY = "account_security"
+    TRANSACTIONAL = "transactional"
+    OPERATIONAL = "operational"
+    MARKETING_OUTREACH = "marketing_outreach"
+    INTERNAL = "internal"
+
+
 class CommunicationType(StrEnum):
     EMPLOYEE_INVITATION = "employee_invitation"
     ACCOUNT_ACTIVATION = "account_activation"

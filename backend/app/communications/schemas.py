@@ -4,7 +4,12 @@ from uuid import UUID
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
 from .readiness import ReadinessState
-from .types import CommunicationChannel, CommunicationDeliveryState, CommunicationType
+from .types import (
+    CommunicationChannel,
+    CommunicationDeliveryState,
+    CommunicationPurpose,
+    CommunicationType,
+)
 
 
 class CommunicationCreate(BaseModel):
@@ -28,7 +33,7 @@ class CommunicationItem(BaseModel):
     branch_id: UUID
     customer_id: UUID
     contact_id: UUID
-    recipient: str
+    recipient_display: str
     source_event_id: UUID
     source_event_type: str
     source_entity_type: str
@@ -54,6 +59,7 @@ class MessageCatalogItem(BaseModel):
     owner_domain: str
     allowed_channels: tuple[CommunicationChannel, ...]
     template_version: str
+    purpose: CommunicationPurpose
     policy_required: bool
 
 
@@ -64,3 +70,12 @@ class CommunicationsReadinessItem(BaseModel):
     overall: ReadinessState
     synthetic_only: bool
     catalog_fingerprint: str
+
+
+class CommunicationOperationsSummary(BaseModel):
+    pending: int
+    accepted_pending_delivery: int
+    delivered: int
+    needs_attention: int
+    suppressed: int
+    oldest_pending_at: datetime | None

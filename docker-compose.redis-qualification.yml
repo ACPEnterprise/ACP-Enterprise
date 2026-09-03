@@ -1,0 +1,55 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: acp_redis_qualification
+      POSTGRES_USER: acp_redis_qualification
+      POSTGRES_HOST_AUTH_METHOD: trust
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U acp_redis_qualification -d acp_redis_qualification"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    tmpfs:
+      - /data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+
+  qualification:
+    build:
+      context: ./backend
+    environment:
+      ENVIRONMENT: test
+      DATABASE_URL: postgresql+asyncpg://acp_redis_qualification@postgres:5432/acp_redis_qualification
+      REDIS_URL: redis://redis:6379/15
+      REDIS_REQUIRED_FOR_READINESS: "true"
+      ACCESS_TOKEN_SIGNING_KEY: local-redis-qualification-signing-key
+      SECURITY_TOKEN_HMAC_KEY: local-redis-qualification-hmac-key
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app:ro
+    command:
+      - sh
+      - -lc
+      - >-
+        pip install -q -r requirements-dev.txt &&
+        alembic upgrade head &&
+        pytest -q -p no:cacheprovider
+        tests/platform/test_redis_runtime_integration.py
+        tests/platform/test_health_readiness.py
+        tests/platform/test_authentication_persistence.py
+        tests/platform/test_authentication_services.py
+        tests/platform/test_http_authentication_boundaries.py

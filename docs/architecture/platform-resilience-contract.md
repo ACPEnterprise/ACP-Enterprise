@@ -20,9 +20,10 @@
 `UNAVAILABLE` means the product cannot safely serve the operation. Process
 liveness alone never promotes readiness.
 
-The release gate compares exact backend SHA, frontend build SHA, and a single
-Alembic head. Any mismatch is `NOT_READY`. It detects incomplete deployment but
-does not automatically roll back or restore data.
+The release gate compares exact backend SHA, primary frontend build SHA,
+Mission Control artifact SHA-256, and a single Alembic head. Any mismatch is
+`NOT_READY`. It detects incomplete deployment but does not automatically roll
+back or restore data.
 
 ## Backup and restore evidence
 

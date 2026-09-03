@@ -14,7 +14,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
-
 ALLOWED_ENVIRONMENTS = {"development", "test", "preview-isolated"}
 os.umask(0o077)
 
@@ -60,8 +59,7 @@ def run(command: list[str], *, environment: dict[str, str] | None = None) -> str
         command,
         check=True,
         env=environment,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
         text=True,
     )
     return result.stdout.strip()
@@ -75,7 +73,17 @@ def backup(args: argparse.Namespace) -> None:
     if output.exists():
         raise ValueError("Refusing to overwrite an existing backup.")
     connection, environment = database_parts(args.database_url)
-    run(["pg_dump", *connection, "--format=custom", "--no-owner", "--file", str(output)], environment=environment)
+    run(
+        [
+            "pg_dump",
+            *connection,
+            "--format=custom",
+            "--no-owner",
+            "--file",
+            str(output),
+        ],
+        environment=environment,
+    )
     output.chmod(0o600)
     manifest = {
         "contract_version": "platform-resilience.backup.v1",
@@ -115,10 +123,14 @@ def verify(args: argparse.Namespace) -> None:
 
 def restore(args: argparse.Namespace) -> None:
     require_nonproduction(args.environment)
-    if args.environment != "preview-isolated" and not args.target_identity.startswith("isolated-"):
+    if args.environment != "preview-isolated" and not args.target_identity.startswith(
+        "isolated-"
+    ):
         raise ValueError("Restore target identity must begin with 'isolated-'.")
     if not database_name(args.database_url).startswith("acp_resilience_restore"):
-        raise ValueError("Restore database name must begin with 'acp_resilience_restore'.")
+        raise ValueError(
+            "Restore database name must begin with 'acp_resilience_restore'."
+        )
     backup_path = Path(args.backup).resolve()
     manifest = load_verified(backup_path)
     if manifest["environment"] == "production":
@@ -126,8 +138,26 @@ def restore(args: argparse.Namespace) -> None:
     if args.expected_source_identity != manifest["database_identity"]:
         raise ValueError("Backup database identity does not match the approved source.")
     connection, environment = database_parts(args.database_url)
-    run(["pg_restore", *connection, "--exit-on-error", "--single-transaction", "--no-owner", str(backup_path)], environment=environment)
-    print(json.dumps({"result": "ISOLATED_RESTORE_COMPLETED", "source_sha256": manifest["sha256"], "target_identity": args.target_identity}))
+    run(
+        [
+            "pg_restore",
+            *connection,
+            "--exit-on-error",
+            "--single-transaction",
+            "--no-owner",
+            str(backup_path),
+        ],
+        environment=environment,
+    )
+    print(
+        json.dumps(
+            {
+                "result": "ISOLATED_RESTORE_COMPLETED",
+                "source_sha256": manifest["sha256"],
+                "target_identity": args.target_identity,
+            }
+        )
+    )
 
 
 def release_check(args: argparse.Namespace) -> None:
@@ -140,7 +170,13 @@ def release_check(args: argparse.Namespace) -> None:
         failures.append("BACKEND_SHA_MISMATCH")
     if args.expected_frontend_sha != args.actual_frontend_sha:
         failures.append("FRONTEND_SHA_MISMATCH")
-    result = {"ready": not failures, "state": "HEALTHY" if not failures else "NOT_READY", "failures": failures}
+    if args.expected_mission_control_sha != args.actual_mission_control_sha:
+        failures.append("MISSION_CONTROL_SHA_MISMATCH")
+    result = {
+        "ready": not failures,
+        "state": "HEALTHY" if not failures else "NOT_READY",
+        "failures": failures,
+    }
     print(json.dumps(result, sort_keys=True))
     if failures:
         raise SystemExit(2)
@@ -172,6 +208,8 @@ def parser() -> argparse.ArgumentParser:
     release.add_argument("--actual-backend-sha", required=True)
     release.add_argument("--expected-frontend-sha", required=True)
     release.add_argument("--actual-frontend-sha", required=True)
+    release.add_argument("--expected-mission-control-sha", required=True)
+    release.add_argument("--actual-mission-control-sha", required=True)
     release.add_argument("--expected-schema-head", action="append", required=True)
     release.add_argument("--actual-schema-head", action="append", required=True)
     release.set_defaults(action=release_check)
@@ -182,7 +220,12 @@ def main() -> None:
     args = parser().parse_args()
     try:
         args.action(args)
-    except (FileNotFoundError, json.JSONDecodeError, subprocess.CalledProcessError, ValueError) as error:
+    except (
+        FileNotFoundError,
+        json.JSONDecodeError,
+        subprocess.CalledProcessError,
+        ValueError,
+    ) as error:
         print(json.dumps({"result": "BLOCKED", "reason": str(error)}), file=sys.stderr)
         raise SystemExit(1) from error
 
