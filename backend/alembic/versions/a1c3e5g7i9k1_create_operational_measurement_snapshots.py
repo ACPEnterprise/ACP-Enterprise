@@ -1,7 +1,7 @@
 """create immutable operational measurement snapshots
 
 Revision ID: a1c3e5g7i9k1
-Revises: z7q9m1o3r508
+Revises: n0p8r16g3t9u
 """
 
 from collections.abc import Sequence
@@ -11,7 +11,7 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision: str = "a1c3e5g7i9k1"
-down_revision: str | Sequence[str] | None = "z7q9m1o3r508"
+down_revision: str | Sequence[str] | None = "n0p8r16g3t9u"
 branch_labels = None
 depends_on = None
 
