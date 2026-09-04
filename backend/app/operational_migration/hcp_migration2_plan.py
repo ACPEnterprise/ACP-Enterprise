@@ -295,10 +295,12 @@ class HcpMigration2ExecutionPlanBuilder:
         package_root: Path,
         control_csv: Path,
         migration1a_root: Path,
+        schema_head: str = SCHEMA_HEAD,
     ) -> None:
         self.package_root = package_root.resolve()
         self.migration1a_root = migration1a_root.resolve()
         self.loader = ProtectedSource4Loader(self.package_root, control_csv)
+        self.schema_head = schema_head
 
     def _pages(self, entity: str) -> list[dict[str, Any]]:
         rows: list[dict[str, Any]] = []
@@ -1109,7 +1111,7 @@ class HcpMigration2ExecutionPlanBuilder:
             },
             transformation_contracts=contracts,
             owner_receipts=dict(receipts),
-            schema_head=SCHEMA_HEAD,
+            schema_head=self.schema_head,
             implementation_version=ORCHESTRATOR_VERSION,
             supported_entities=tuple(
                 sorted(
