@@ -10,6 +10,21 @@ export interface CompanyRole {
   is_system: boolean;
 }
 
+export interface CompanyMembership {
+  id: string;
+  user_id: string;
+  company_id: string;
+  status: string;
+  default_branch_id: string | null;
+  has_all_branch_access: boolean;
+}
+
+export interface RoleCreateInput {
+  code: string;
+  name: string;
+  description: string | null;
+}
+
 export interface PermissionDefinition {
   id: string;
   code: string;
@@ -267,6 +282,21 @@ export async function disconnectQuickBooksSandbox(): Promise<QboSandboxConnectio
 
 export async function listRoles(): Promise<CompanyRole[]> {
   return (await apiClient.get<CompanyRole[]>(`${ADMIN_PATH}/roles`)).data;
+}
+
+export async function createRole(input: RoleCreateInput): Promise<CompanyRole> {
+  return (await apiClient.post<CompanyRole>(`${ADMIN_PATH}/roles`, input)).data;
+}
+
+export async function listMemberships(): Promise<CompanyMembership[]> {
+  return (await apiClient.get<CompanyMembership[]>(`${ADMIN_PATH}/memberships`)).data;
+}
+
+export async function assignMembershipRole(
+  membershipId: string,
+  roleId: string,
+): Promise<void> {
+  await apiClient.put(`${ADMIN_PATH}/memberships/${membershipId}/roles/${roleId}`);
 }
 
 export async function getCanonicalRoleSyncPlan(): Promise<CanonicalRoleSyncPlan> {

@@ -2,7 +2,25 @@ import { AxiosHeaders } from "axios";
 import { describe, expect, it, vi } from "vitest";
 
 import { apiClient } from "../../api/client";
-import { disconnectQuickBooksSandbox, getQuickBooksSandboxConnection, launchQuickBooksProduction, launchQuickBooksSandbox } from "./api";
+import { assignMembershipRole, createRole, disconnectQuickBooksSandbox, getQuickBooksSandboxConnection, launchQuickBooksProduction, launchQuickBooksSandbox, listMemberships } from "./api";
+
+describe("Company role administration API", () => {
+  it("uses only the audited Company-admin role and Membership boundaries", async () => {
+    const post = vi.spyOn(apiClient, "post").mockResolvedValue({ data: { id: "role-1" } });
+    const get = vi.spyOn(apiClient, "get").mockResolvedValue({ data: [] });
+    const put = vi.spyOn(apiClient, "put").mockResolvedValue({ data: { id: "assignment-1" } });
+
+    await createRole({ code: "SOURCE4_PREVIEW_ADMISSION", name: "SOURCE.4 Preview Admission", description: null });
+    await listMemberships();
+    await assignMembershipRole("membership-1", "role-1");
+
+    expect(post).toHaveBeenCalledWith("/api/v1/company-admin/roles", {
+      code: "SOURCE4_PREVIEW_ADMISSION", name: "SOURCE.4 Preview Admission", description: null,
+    });
+    expect(get).toHaveBeenCalledWith("/api/v1/company-admin/memberships");
+    expect(put).toHaveBeenCalledWith("/api/v1/company-admin/memberships/membership-1/roles/role-1");
+  });
+});
 
 describe("QuickBooks sandbox administration API", () => {
   it("reads and disconnects through authenticated API paths", async () => {

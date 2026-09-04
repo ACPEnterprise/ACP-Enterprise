@@ -86,7 +86,7 @@ const requireReauthentication = vi.fn();
 const context: AuthenticationContextValue = {
   status: "authenticated",
   activeCompany: null,
-  permissionCodes: ["COMPANY_ADMINISTER", "COMPANY_ROLE_READ", "COMPANY_ROLE_MANAGE", "COMPANY_PERMISSION_MANAGE"],
+  permissionCodes: ["COMPANY_ADMINISTER", "COMPANY_ROLE_READ", "COMPANY_ROLE_MANAGE", "COMPANY_PERMISSION_MANAGE", "COMPANY_MEMBERSHIP_READ"],
   user: {
     id: "owner",
     normalized_email: "owner@example.com",
@@ -127,8 +127,16 @@ function renderPage() {
 describe("AdministrationRoute", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    context.permissionCodes = ["COMPANY_ADMINISTER", "COMPANY_ROLE_READ", "COMPANY_ROLE_MANAGE", "COMPANY_PERMISSION_MANAGE"];
+    context.permissionCodes = ["COMPANY_ADMINISTER", "COMPANY_ROLE_READ", "COMPANY_ROLE_MANAGE", "COMPANY_PERMISSION_MANAGE", "COMPANY_MEMBERSHIP_READ"];
     vi.mocked(api.listRoles).mockResolvedValue([role]);
+    vi.mocked(api.listMemberships).mockResolvedValue([
+      { id: "membership-active", user_id: "owner", company_id: "company-1", status: "active", default_branch_id: "branch-1", has_all_branch_access: false },
+      { id: "membership-inactive", user_id: "former-user", company_id: "company-1", status: "suspended", default_branch_id: "branch-2", has_all_branch_access: true },
+    ]);
+    vi.mocked(api.createRole).mockResolvedValue({
+      id: "role-source4", company_id: "company-1", code: "SOURCE4_PREVIEW_ADMISSION", name: "SOURCE.4 Preview Admission", description: null, status: "active", is_system: false,
+    });
+    vi.mocked(api.assignMembershipRole).mockResolvedValue(undefined);
     vi.mocked(api.listPermissions).mockResolvedValue(permissions);
     vi.mocked(api.grantPermission).mockResolvedValue(undefined);
     vi.mocked(api.removePermission).mockResolvedValue(undefined);
@@ -393,6 +401,49 @@ describe("AdministrationRoute", () => {
     expect(await screen.findByText("COMPANY_DISPATCH_READ")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Grant" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Remove" })).not.toBeInTheDocument();
+  });
+
+  it("creates an empty Company role without accepting Company or Branch scope", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await user.type(await screen.findByPlaceholderText("SOURCE4_PREVIEW_ADMISSION"), "SOURCE4_PREVIEW_ADMISSION");
+    await user.type(screen.getByPlaceholderText("SOURCE.4 Preview Admission"), "SOURCE.4 Preview Admission");
+    await user.click(screen.getByRole("button", { name: "Create role" }));
+    expect(vi.mocked(api.createRole).mock.calls[0]?.[0]).toEqual({
+      code: "SOURCE4_PREVIEW_ADMISSION",
+      name: "SOURCE.4 Preview Admission",
+      description: null,
+    });
+  });
+
+  it("assigns the selected role only to a visible active Membership", async () => {
+    const router = renderPage();
+    const membership = await screen.findByRole("combobox", { name: "Active Membership" });
+    expect(within(membership).getByRole("option", { name: "owner" })).toBeInTheDocument();
+    expect(within(membership).queryByRole("option", { name: "former-user" })).not.toBeInTheDocument();
+    await userEvent.selectOptions(membership, "membership-active");
+    await userEvent.click(screen.getByRole("button", { name: "Assign selected role" }));
+    expect(vi.mocked(api.assignMembershipRole).mock.calls[0]?.slice(0, 2)).toEqual([
+      "membership-active",
+      "role-1",
+    ]);
+    expect(requireReauthentication).toHaveBeenCalledOnce();
+    expect(router.state.location.pathname).toBe("/login");
+  });
+
+  it.each([
+    "COMPANY_ROLE_READ",
+    "COMPANY_ROLE_MANAGE",
+    "COMPANY_PERMISSION_MANAGE",
+    "COMPANY_MEMBERSHIP_READ",
+  ])("hides role creation and assignment without %s", async (missing) => {
+    context.permissionCodes = (context.permissionCodes ?? []).filter(
+      (code) => code !== missing,
+    );
+    renderPage();
+    await screen.findByText(/Role Administration|not authorized to administer Company roles/);
+    expect(screen.queryByRole("button", { name: "Create role" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Assign selected role" })).not.toBeInTheDocument();
   });
 
   it("renders Company-admin subworkspaces without requesting unauthorized role evidence", async () => {
