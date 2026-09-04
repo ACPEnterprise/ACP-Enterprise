@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from datetime import datetime
 from typing import Any
+from uuid import UUID
 
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,6 +17,7 @@ from app.worker_control.contracts import AuthenticatedWorkerContext
 
 from .application import HeadlessApplicationService
 from .approved_queue import ApprovedWork, load_approved_factory_queue
+from .delegation import SchedulerDelegationService
 from .headless import HeadlessProposal
 
 LOCK_KEY = "ACP.72H.HEADLESS.RUNNER.V1"
@@ -26,6 +28,7 @@ ACTIVE = {"execution_not_connected", "queued", "starting", "running"}
 class HeadlessRunner:
     def __init__(self, application: HeadlessApplicationService | None = None) -> None:
         self.application = application or HeadlessApplicationService()
+        self.delegations = SchedulerDelegationService()
 
     async def run_once(
         self,
@@ -35,6 +38,7 @@ class HeadlessRunner:
         worker_context: AuthenticatedWorkerContext,
         expected_authority_sha: str,
         now: datetime,
+        delegation_id: UUID | None = None,
     ) -> tuple[str, ...]:
         """Reconcile stale leases and fill free capacities once, idempotently."""
 
@@ -48,13 +52,19 @@ class HeadlessRunner:
             return ()
         try:
             await session.commit()
+            if delegation_id is not None:
+                await self.delegations.require_live(
+                    session, delegation_id=delegation_id, context=admin_context, now=now
+                )
             await self.application.reconcile_stale_executions(
                 session, worker_context=worker_context, now=now
             )
             queue = load_approved_factory_queue()
             rows = (
                 await session.execute(
-                    select(EngineeringCommand.idempotency_key, EngineeringExecution.state)
+                    select(
+                        EngineeringCommand.idempotency_key, EngineeringExecution.state
+                    )
                     .join(
                         EngineeringExecution,
                         EngineeringExecution.command_id == EngineeringCommand.id,
@@ -97,9 +107,25 @@ class HeadlessRunner:
                     expected_authority_sha=expected_authority_sha,
                     now=now,
                     completed_milestone_ids=completed,
+                    delegation_id=delegation_id,
                 )
                 occupied.add(work.capacity_identity)
                 applied.append(work.milestone_id)
+            remaining = [
+                item
+                for item in queue.items
+                if item.queue_state != "AUTHORITATIVE"
+                and item.milestone_id not in states
+            ]
+            if delegation_id is not None and not remaining and not occupied:
+                await self.delegations.end(
+                    session,
+                    delegation_id=delegation_id,
+                    context=admin_context,
+                    now=now,
+                    state="exhausted",
+                    reason="approved queue exhausted",
+                )
             return tuple(applied)
         finally:
             await session.scalar(
