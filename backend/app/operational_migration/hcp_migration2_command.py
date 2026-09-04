@@ -400,6 +400,34 @@ async def _schema_head(factory: async_sessionmaker[AsyncSession]) -> str:
         )
 
 
+def _rehearsal_context_is_valid(
+    *,
+    user: User | None,
+    company: Company | None,
+    branch: Branch | None,
+    membership: Membership | None,
+    branch_access: MembershipBranchAccess | None,
+    credential: UserCredential | None,
+    credentialed: bool,
+) -> bool:
+    if user is None or company is None or branch is None or membership is None:
+        return False
+    branch_is_authorized = (
+        membership.has_all_branch_access or branch_access is not None
+    )
+    return bool(
+        branch_is_authorized
+        and ((credential is not None) if credentialed else (credential is None))
+        and user.status == "active"
+        and company.status == "active"
+        and branch.status == "active"
+        and membership.status == "active"
+        and membership.company_id == company.id
+        and membership.user_id == user.id
+        and branch.company_id == company.id
+    )
+
+
 async def resolve_rehearsal_context(
     session: AsyncSession,
     authority: ProtectedExecutionAuthority,
@@ -463,19 +491,20 @@ async def resolve_rehearsal_context(
             .unique()
             .all()
         )
-    if (
-        user is None
-        or company is None
-        or branch is None
-        or membership is None
-        or branch_access is None
-        or ((credential is None) if credentialed else (credential is not None))
-        or user.status != "active"
-        or company.status != "active"
-        or branch.status != "active"
-        or branch.company_id != company.id
+    if not _rehearsal_context_is_valid(
+        user=user,
+        company=company,
+        branch=branch,
+        membership=membership,
+        branch_access=branch_access,
+        credential=credential,
+        credentialed=credentialed,
     ):
         raise SafeEvidenceError("rehearsal_actor_context_invalid", "4" * 64)
+    assert user is not None
+    assert company is not None
+    assert branch is not None
+    assert membership is not None
     context = AuthorizationContext(
         user=user,
         company=company,
