@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -190,3 +191,56 @@ class ProtectedInvitationDeliveryEnvelope(Base):
         DateTime(timezone=True), nullable=False, default=utc_now
     )
     destroyed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class PreviewFixtureResource(Base):
+    """Tenant-scoped ownership evidence for one sanctioned Preview fixture resource."""
+
+    __tablename__ = "preview_fixture_resources"
+    __table_args__ = (
+        UniqueConstraint(
+            "company_id",
+            "fixture_key",
+            "resource_key",
+            name="uq_preview_fixture_resource_key",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "resource_type",
+            "resource_id",
+            name="uq_preview_fixture_resource_identity",
+        ),
+        CheckConstraint(
+            "lifecycle IN ('active','released','audit_retained')",
+            name="ck_preview_fixture_resource_lifecycle",
+        ),
+        CheckConstraint(
+            "length(authority_digest) = 64",
+            name="ck_preview_fixture_resource_authority_digest",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    fixture_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    resource_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    resource_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    resource_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    authority_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    authority_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    authority_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    lifecycle: Mapped[str] = mapped_column(String(24), nullable=False, default="active")
+    active_projection: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+    released_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
