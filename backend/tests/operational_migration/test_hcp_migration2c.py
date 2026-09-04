@@ -31,14 +31,32 @@ class Context:
         branch_id: UUID = BRANCH_ID,
         actor_id: UUID = ACTOR_ID,
         permitted: bool = True,
+        company_status: str = "active",
+        branch_status: str = "active",
+        actor_status: str = "active",
+        membership_status: str = "active",
+        membership_company_id: UUID | None = None,
+        membership_actor_id: UUID | None = None,
+        branch_company_id: UUID | None = None,
+        accessible: bool = True,
     ) -> None:
-        self.company = SimpleNamespace(id=company_id)
-        self.active_branch = SimpleNamespace(id=branch_id)
-        self.user = SimpleNamespace(id=actor_id)
+        self.company = SimpleNamespace(id=company_id, status=company_status)
+        self.active_branch = SimpleNamespace(
+            id=branch_id,
+            company_id=branch_company_id or company_id,
+            status=branch_status,
+        )
+        self.user = SimpleNamespace(id=actor_id, status=actor_status)
+        self.membership = SimpleNamespace(
+            company_id=membership_company_id or company_id,
+            user_id=membership_actor_id or actor_id,
+            status=membership_status,
+        )
         self._permitted = permitted
+        self._accessible = accessible
 
     def can_access_branch(self, branch_id: UUID) -> bool:
-        return branch_id == self.active_branch.id
+        return self._accessible and branch_id == self.active_branch.id
 
     def has_permission(self, _permission: object) -> bool:
         return self._permitted
@@ -125,13 +143,20 @@ def test_reconciliation_requires_every_source_subject_to_have_one_outcome() -> N
 @pytest.mark.parametrize(
     "context",
     (
-        Context(company_id=UUID(int=1)),
-        Context(branch_id=UUID(int=2)),
-        Context(actor_id=UUID(int=3)),
+        Context(membership_actor_id=UUID(int=3)),
+        Context(branch_company_id=UUID(int=2)),
+        Context(membership_company_id=UUID(int=1)),
+        Context(accessible=False),
         Context(permitted=False),
+        Context(company_status="inactive"),
+        Context(branch_status="inactive"),
+        Context(actor_status="disabled"),
+        Context(membership_status="revoked"),
     ),
 )
-def test_only_sanctioned_actor_and_scope_are_accepted(context: Context) -> None:
+def test_spoofed_cross_company_inactive_or_unpermitted_context_is_rejected(
+    context: Context,
+) -> None:
     with pytest.raises(ValueError, match="sanctioned"):
         require_sanctioned_context(context)  # type: ignore[arg-type]
 
