@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from dataclasses import dataclass, replace
 from urllib.parse import urlparse
 from uuid import UUID, uuid5
@@ -37,6 +38,9 @@ from app.operational_migration.financial import (
     FinancialMigrationService,
     InvoiceMigrationRecord,
     PaymentMigrationRecord,
+)
+from app.operational_migration.hcp_customer_successor_reuse import (
+    CustomerSuccessorReuseResolver,
 )
 from app.operational_migration.hcp_hybrid_customer import (
     HybridCustomerAdmission,
@@ -72,6 +76,7 @@ from app.operational_migration.hcp_rehearsal_authority import (
     require_sanctioned_context,
     require_sanctioned_target,
 )
+from app.operational_migration.hcp_successor_reuse import QualifiedSuccessorManifest
 from app.operational_migration.models import (
     HcpCustomerSourceLineage,
     HcpEmployeeSourceCrosswalk,
@@ -349,10 +354,17 @@ class HcpMigration2Orchestrator:
                 select(func.current_database(), func.inet_server_addr())
             )
         ).one()
-        if database != "acp_hcp_rehearsal_import" or str(address) not in {
+        rehearsal = database == "acp_hcp_rehearsal_import" and str(address) in {
             "127.0.0.1",
             "::1",
-        }:
+        }
+        preview = (
+            database == "acp_enterprise_preview"
+            and os.getenv("TARGET_ENVIRONMENT") == "preview"
+            and os.getenv("PREVIEW_ACCESS_ENABLED", "false").lower() == "true"
+            and os.getenv("PRODUCTION_ACCESS_ENABLED", "false").lower() == "false"
+        )
+        if not rehearsal and not preview:
             raise ValueError(
                 "active session is outside the sanctioned rehearsal target"
             )
@@ -378,6 +390,7 @@ class HcpMigration2Orchestrator:
         boundary: ApprovedCustomerImportBoundary,
         hybrid_admission: HybridCustomerAdmission,
         parent_closure: JobParentClosure,
+        successor_manifest: QualifiedSuccessorManifest | None = None,
     ) -> CustomerAdapterImportReport:
         if reviewed.source_system != SOURCE4_SYSTEM:
             raise ValueError("orchestrator requires SOURCE.4 Customer identity")
@@ -513,6 +526,11 @@ class HcpMigration2Orchestrator:
             master_run_id=master_run_id,
             lineage_callback=lineage,
             location_lineage_callback=location_lineage,
+            successor_reuse_callback=(
+                CustomerSuccessorReuseResolver(successor_manifest)
+                if successor_manifest is not None
+                else None
+            ),
         )
 
     async def stage_customers(
@@ -709,6 +727,7 @@ class HcpMigration2Orchestrator:
         master_run_id: UUID,
         jobs: tuple[JobMigrationRecord, ...],
         appointments: tuple[AppointmentMigrationRecord, ...],
+        reuse_targets: dict[tuple[str, str], UUID] | None = None,
     ) -> MigrationReport:
         async with factory() as session:
             await self._active_master(
@@ -742,6 +761,7 @@ class HcpMigration2Orchestrator:
             appointments=appointments,
             dry_run=False,
             master_run_id=master_run_id,
+            reuse_targets=reuse_targets,
         )
 
     async def run_financial(
@@ -753,6 +773,7 @@ class HcpMigration2Orchestrator:
         estimates: tuple[EstimateMigrationRecord, ...],
         invoices: tuple[InvoiceMigrationRecord, ...],
         payments: tuple[PaymentMigrationRecord, ...],
+        reuse_targets: dict[tuple[str, str], UUID] | None = None,
     ) -> MigrationReport:
         async with factory() as session:
             await self._active_master(
@@ -787,6 +808,7 @@ class HcpMigration2Orchestrator:
             payments=payments,
             dry_run=False,
             master_run_id=master_run_id,
+            reuse_targets=reuse_targets,
         )
 
     async def run_operational_repair(

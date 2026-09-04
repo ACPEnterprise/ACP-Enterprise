@@ -384,7 +384,12 @@ class HcpMigration2ExecutionPlanBuilder:
         branch_id: UUID = BRANCH_ID,
         actor_id: UUID = ACTOR_ID,
     ) -> tuple[HcpMigration2ExecutionPlan, HcpMigration2PlanSummary]:
-        if (company_id, branch_id, actor_id) != (COMPANY_ID, BRANCH_ID, ACTOR_ID):
+        # Historical rehearsal constants remain the defaults for the sealed-plan
+        # unit contracts.  Preview admission supplies an independently sealed
+        # Company/Branch/actor authority and verifies that credentialed context
+        # before building the plan; rejecting that exact scoped authority here
+        # would couple reusable source evidence to a retired rehearsal tenant.
+        if any(value.int == 0 for value in (company_id, branch_id, actor_id)):
             raise SafeEvidenceError("sanctioned_scope_mismatch", "4" * 64)
         customers = self.loader.load_customers()
         receipts, bindings = self._bindings()

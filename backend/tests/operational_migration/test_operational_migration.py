@@ -7,14 +7,6 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import (
-    AsyncEngine,
-    AsyncSession,
-    async_sessionmaker,
-    create_async_engine,
-)
-
 from app.core.config import settings
 from app.customer_migration.children import HousecallProCustomerChildrenMigration
 from app.customer_migration.housecall_pro import HousecallProCustomerMigration
@@ -69,6 +61,13 @@ from app.platform.company.models import Company
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.users.models import User
 from app.scheduling.models import Appointment
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 NOW = datetime(2026, 1, 15, 14, 0, tzinfo=timezone.utc)
 
@@ -294,6 +293,141 @@ async def test_operational_import_repairs_single_primary_location_identity(
         assert identity is not None
         assert identity.source_location_id == (
             "adapter-customer-1::service-location::1"
+        )
+
+
+@pytest.mark.asyncio
+async def test_operational_manifest_reuse_preserves_native_targets(
+    migration_database: tuple[AsyncEngine, async_sessionmaker[AsyncSession]],
+    tmp_path: Path,
+) -> None:
+    _, factory = migration_database
+    context = await seed_context(factory)
+    await seed_migrated_customer(factory, context=context, tmp_path=tmp_path)
+    jobs, appointments = records()
+    jobs = jobs[:2]
+    appointments = appointments[:2]
+    legacy = await OperationalMigrationService().run(
+        factory,
+        context=context,
+        source_system="housecall_pro",
+        jobs=jobs,
+        appointments=appointments,
+        dry_run=False,
+    )
+    assert legacy.accepted == 4
+    async with factory() as session, session.begin():
+        customer = await session.scalar(
+            select(CustomerSourceIdentity).where(
+                CustomerSourceIdentity.source_system == "housecall_pro",
+                CustomerSourceIdentity.company_id == context.company.id,
+            )
+        )
+        location = await session.scalar(
+            select(ServiceLocationSourceIdentity).where(
+                ServiceLocationSourceIdentity.source_system == "housecall_pro",
+                ServiceLocationSourceIdentity.company_id == context.company.id,
+            )
+        )
+        assert customer is not None and location is not None
+        successor_customer = CustomerSourceIdentity(
+            company_id=customer.company_id,
+            branch_id=customer.branch_id,
+            customer_id=customer.customer_id,
+            source_system="successor_test",
+            source_customer_id=customer.source_customer_id,
+            first_run_id=customer.first_run_id,
+        )
+        session.add(successor_customer)
+        await session.flush()
+        session.add(
+            ServiceLocationSourceIdentity(
+                company_id=location.company_id,
+                customer_source_identity_id=successor_customer.id,
+                service_location_id=location.service_location_id,
+                customer_id=location.customer_id,
+                source_system="successor_test",
+                source_location_id=location.source_location_id,
+                first_run_id=location.first_run_id,
+            )
+        )
+        job_targets = {
+            item.source_job_id: item.job_id
+            for item in (
+                await session.scalars(
+                    select(JobSourceIdentity).where(
+                        JobSourceIdentity.source_system == "housecall_pro",
+                        JobSourceIdentity.company_id == context.company.id,
+                    )
+                )
+            ).all()
+        }
+        appointment_targets = {
+            item.source_appointment_id: item.appointment_id
+            for item in (
+                await session.scalars(
+                    select(AppointmentSourceIdentity).where(
+                        AppointmentSourceIdentity.source_system == "housecall_pro",
+                        AppointmentSourceIdentity.company_id == context.company.id,
+                    )
+                )
+            ).all()
+        }
+
+    report = await OperationalMigrationService().run(
+        factory,
+        context=context,
+        source_system="successor_test",
+        jobs=jobs,
+        appointments=appointments,
+        dry_run=False,
+        reuse_targets={
+            **{("job", key): value for key, value in job_targets.items()},
+            **{
+                ("appointment", key): value
+                for key, value in appointment_targets.items()
+            },
+        },
+    )
+    assert report.accepted == 4
+    async with factory() as session:
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(Job)
+                .where(Job.company_id == context.company.id)
+            )
+            == 2
+        )
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(Appointment)
+                .where(Appointment.company_id == context.company.id)
+            )
+            == 2
+        )
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(JobSourceIdentity)
+                .where(
+                    JobSourceIdentity.source_system == "successor_test",
+                    JobSourceIdentity.company_id == context.company.id,
+                )
+            )
+            == 2
+        )
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(AppointmentSourceIdentity)
+                .where(
+                    AppointmentSourceIdentity.source_system == "successor_test",
+                    AppointmentSourceIdentity.company_id == context.company.id,
+                )
+            )
+            == 2
         )
 
 
@@ -929,8 +1063,7 @@ async def test_financial_dry_run_import_rerun_and_reconciliation(
             if item.reason_code == "validation_failed"
         )
         assert all(
-            "missing-" not in item.detail
-            and "synthetic-reference" not in item.detail
+            "missing-" not in item.detail and "synthetic-reference" not in item.detail
             for item in migration_exceptions
         )
         assert (
@@ -967,6 +1100,142 @@ async def test_financial_dry_run_import_rerun_and_reconciliation(
         rerun.duplicate,
         rerun.unresolved,
     ) == (9, 0, 1, 6, 2)
+
+
+@pytest.mark.asyncio
+async def test_financial_manifest_reuse_preserves_native_truth_and_binds_items(
+    migration_database: tuple[AsyncEngine, async_sessionmaker[AsyncSession]],
+    tmp_path: Path,
+) -> None:
+    _, factory = migration_database
+    context = await seed_context(factory)
+    await seed_migrated_customer(factory, context=context, tmp_path=tmp_path)
+    await seed_migrated_job(factory, context=context)
+    estimates, invoices, payments = financial_records()
+    estimates, invoices, payments = estimates[:1], invoices[:1], payments[:1]
+    first = await FinancialMigrationService().run(
+        factory,
+        context=context,
+        source_system="housecall_pro",
+        estimates=estimates,
+        invoices=invoices,
+        payments=payments,
+        dry_run=False,
+    )
+    assert first.accepted == 3
+    async with factory() as session, session.begin():
+        legacy_job = await session.scalar(
+            select(JobSourceIdentity).where(
+                JobSourceIdentity.source_system == "housecall_pro",
+                JobSourceIdentity.company_id == context.company.id,
+            )
+        )
+        assert legacy_job is not None
+        session.add(
+            JobSourceIdentity(
+                company_id=legacy_job.company_id,
+                branch_id=legacy_job.branch_id,
+                job_id=legacy_job.job_id,
+                customer_id=legacy_job.customer_id,
+                service_location_id=legacy_job.service_location_id,
+                customer_source_identity_id=legacy_job.customer_source_identity_id,
+                service_location_source_identity_id=(
+                    legacy_job.service_location_source_identity_id
+                ),
+                source_system="successor_test",
+                source_job_id=legacy_job.source_job_id,
+                source_job_number=legacy_job.source_job_number,
+                source_status=legacy_job.source_status,
+                assigned_technician_source_ids=[],
+                external_metadata={},
+                first_run_id=legacy_job.first_run_id,
+            )
+        )
+        estimate = await session.scalar(
+            select(Estimate).where(Estimate.company_id == context.company.id)
+        )
+        invoice = await session.scalar(
+            select(Invoice).where(Invoice.company_id == context.company.id)
+        )
+        payment = await session.scalar(
+            select(Payment).where(Payment.company_id == context.company.id)
+        )
+        assert estimate is not None and invoice is not None and payment is not None
+        targets = {
+            ("estimate", estimates[0].source_id): estimate.id,
+            ("invoice", invoices[0].source_id): invoice.id,
+            ("payment", payments[0].source_id): payment.id,
+        }
+
+    report = await FinancialMigrationService().run(
+        factory,
+        context=context,
+        source_system="successor_test",
+        estimates=estimates,
+        invoices=invoices,
+        payments=payments,
+        dry_run=False,
+        reuse_targets=targets,
+    )
+    assert report.accepted == 3
+    async with factory() as session:
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(Estimate)
+                .where(Estimate.company_id == context.company.id)
+            )
+            == 1
+        )
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(Invoice)
+                .where(Invoice.company_id == context.company.id)
+            )
+            == 1
+        )
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(Payment)
+                .where(Payment.company_id == context.company.id)
+            )
+            == 1
+        )
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(EstimateLineItemSourceIdentity)
+                .where(
+                    EstimateLineItemSourceIdentity.source_system == "successor_test",
+                    EstimateLineItemSourceIdentity.company_id == context.company.id,
+                )
+            )
+            == 1
+        )
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(InvoiceLineItemSourceIdentity)
+                .where(
+                    InvoiceLineItemSourceIdentity.source_system == "successor_test",
+                    InvoiceLineItemSourceIdentity.company_id == context.company.id,
+                )
+            )
+            == 1
+        )
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(PaymentSourceIdentity)
+                .where(
+                    PaymentSourceIdentity.source_system == "successor_test",
+                    PaymentSourceIdentity.company_id == context.company.id,
+                )
+            )
+            == 1
+        )
 
 
 class FailingFinancialService(FinancialService):

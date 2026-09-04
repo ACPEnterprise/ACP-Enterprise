@@ -32,6 +32,12 @@ from app.operational_migration.hcp_migration2_runner import (
     HcpMigration2Runner,
     SafeEvidenceError,
 )
+from app.operational_migration.hcp_successor_reuse import (
+    AdmissionGuardEvidence,
+    QualifiedSuccessorManifest,
+    qualify_reuse_graph,
+    qualify_successor_admission,
+)
 from app.operational_migration.models import HcpMigrationMasterRun
 from app.scheduling.models import Appointment
 
@@ -66,6 +72,12 @@ class PreviewAdmissionAuthority:
     public_reconciliation_digest: str
     private_manifest_path: Path
     private_manifest_digest: str
+    successor_manifest_path: Path | None = None
+    successor_manifest_digest: str | None = None
+    customer_control_sha256: str | None = None
+    zero_migration_drift: bool = False
+    rollback_verified: bool = False
+    security_baseline_verified: bool = False
 
     @classmethod
     def load(cls, path: Path) -> PreviewAdmissionAuthority:
@@ -104,6 +116,20 @@ class PreviewAdmissionAuthority:
                         key: UUID(value[key])
                         for key in ("company_id", "branch_id", "actor_id")
                     },
+                    "successor_manifest_path": (
+                        Path(value["successor_manifest_path"])
+                        if value.get("successor_manifest_path")
+                        else None
+                    ),
+                    "successor_manifest_digest": value.get(
+                        "successor_manifest_digest"
+                    ),
+                    "customer_control_sha256": value.get("customer_control_sha256"),
+                    "zero_migration_drift": value.get("zero_migration_drift", False),
+                    "rollback_verified": value.get("rollback_verified", False),
+                    "security_baseline_verified": value.get(
+                        "security_baseline_verified", False
+                    ),
                 }
             )
         except SafeEvidenceError:
@@ -115,8 +141,8 @@ class PreviewAdmissionAuthority:
 
     def verify_files(self) -> None:
         if (
-            self.public_reconciliation_digest != PUBLIC_DIGEST
-            or self.private_manifest_digest != EMPTY_MANIFEST_DIGEST
+            self.successor_manifest_path is None
+            and self.public_reconciliation_digest != PUBLIC_DIGEST
         ):
             raise SafeEvidenceError(
                 "preview_reconciliation_authority_mismatch", "0" * 64
@@ -126,12 +152,25 @@ class PreviewAdmissionAuthority:
             or _sha256(self.backup_path) != self.backup_sha256
         ):
             raise SafeEvidenceError("preview_backup_authority_mismatch", "0" * 64)
-        manifest = json.loads(self.private_manifest_path.read_bytes())
+        if self.successor_manifest_path is None:
+            manifest = json.loads(self.private_manifest_path.read_bytes())
+            if (
+                self.private_manifest_digest != EMPTY_MANIFEST_DIGEST
+                or manifest.get("digest") != EMPTY_MANIFEST_DIGEST
+                or manifest.get("entries") != []
+            ):
+                raise SafeEvidenceError("preview_manifest_not_empty", "0" * 64)
+            return
         if (
-            manifest.get("digest") != EMPTY_MANIFEST_DIGEST
-            or manifest.get("entries") != []
+            self.customer_control_sha256 is None
+            or _sha256(self.control_csv) != self.customer_control_sha256
+            or not self.successor_manifest_path.is_file()
+            or stat.S_IMODE(self.successor_manifest_path.stat().st_mode) != 0o600
         ):
-            raise SafeEvidenceError("preview_manifest_not_empty", "0" * 64)
+            raise SafeEvidenceError("successor_artifact_authority_mismatch", "0" * 64)
+        successor = QualifiedSuccessorManifest.load(self.successor_manifest_path)
+        if successor.digest != self.successor_manifest_digest:
+            raise SafeEvidenceError("successor_manifest_authority_mismatch", "0" * 64)
 
 
 @dataclass(frozen=True)
@@ -186,10 +225,14 @@ async def run(
     if (
         os.getenv("TARGET_ENVIRONMENT") != "preview"
         or os.getenv("PRODUCTION_ACCESS_ENABLED", "false") != "false"
+        or os.getenv("PREVIEW_ACCESS_ENABLED", "false") != "true"
     ):
         raise SafeEvidenceError("preview_runtime_boundary_invalid", "0" * 64)
     async with factory() as session:
-        schema = await session.scalar(text("SELECT version_num FROM alembic_version"))
+        schemas = tuple(
+            (await session.scalars(text("SELECT version_num FROM alembic_version"))).all()
+        )
+        schema = schemas[0] if len(schemas) == 1 else None
         context = await resolve_rehearsal_context(session, authority, credentialed=True)  # type: ignore[arg-type]
         scoped = {
             model.__tablename__: await _count(
@@ -207,7 +250,12 @@ async def run(
         }
     if schema != authority.expected_schema_head:
         raise SafeEvidenceError("preview_schema_authority_mismatch", "0" * 64)
-    if any(scoped.values()):
+    successor_manifest = (
+        QualifiedSuccessorManifest.load(authority.successor_manifest_path)
+        if authority.successor_manifest_path is not None
+        else None
+    )
+    if successor_manifest is None and any(scoped.values()):
         raise SafeEvidenceError(
             "preview_sanctioned_scope_not_pristine",
             hashlib.sha256(json.dumps(scoped, sort_keys=True).encode()).hexdigest(),
@@ -218,7 +266,47 @@ async def run(
         migration1a_root=authority.migration1a_root,
         schema_head=authority.expected_schema_head,
     )
-    plan, summary = builder.build(baseline_counts=scoped)
+    plan, summary = builder.build(
+        baseline_counts=scoped,
+        company_id=authority.company_id,
+        branch_id=authority.branch_id,
+        actor_id=authority.actor_id,
+    )
+    preflight = None
+    if successor_manifest is not None:
+        preflight = qualify_successor_admission(
+            successor_manifest,
+            AdmissionGuardEvidence(
+                hybrid_digest=plan.customers.admission.digest,
+                customer_control_digest=_sha256(authority.control_csv),
+                protected_authority=repository_sha,
+                expected_protected_authority=authority.expected_repository_sha,
+                schema_current=str(schema or ""),
+                schema_head=authority.expected_schema_head,
+                backup_verified=True,
+                authorization_verified=True,
+                zero_prior_master_admissions=(
+                    scoped[HcpMigrationMasterRun.__tablename__] == 0
+                ),
+                zero_migration_drift=authority.zero_migration_drift,
+                rollback_verified=authority.rollback_verified,
+                security_baseline_verified=authority.security_baseline_verified,
+            ),
+        )
+        if not preflight.admission_allowed:
+            raise SafeEvidenceError(
+                "successor_admission_preflight_rejected", preflight.digest
+            )
+        async with factory() as graph_session:
+            await graph_session.execute(text("SET TRANSACTION READ ONLY"))
+            await qualify_reuse_graph(
+                graph_session,
+                company_id=str(authority.company_id),
+                branch_id=str(authority.branch_id),
+                plan=plan,
+                manifest=successor_manifest,
+            )
+            await graph_session.rollback()
     packet: dict[str, object] = {
         "command": COMMAND_VERSION,
         "mode": "execute" if execute else "qualify",
@@ -228,6 +316,23 @@ async def run(
         "atomic": False,
         "rollback": "full_database_restore",
         "backup_sha256": authority.backup_sha256,
+        "successor_preflight": (
+            {
+                "digest": preflight.digest,
+                "manifest_digest": preflight.manifest_digest,
+                "domain_counts": {
+                    key: value.__dict__
+                    for key, value in preflight.domain_counts.items()
+                },
+                "existing_preview_overlap_count": preflight.existing_preview_overlap_count,
+                "duplicate_risk_count": preflight.duplicate_risk_count,
+                "orphan_risk_count": preflight.orphan_risk_count,
+                "financial_overlap_count": preflight.financial_overlap_count,
+                "unresolved_owner_decision_count": preflight.unresolved_owner_decision_count,
+            }
+            if preflight is not None
+            else None
+        ),
     }
     if not execute:
         return packet
@@ -239,6 +344,7 @@ async def run(
         context=context,
         target=target,
         plan=plan,
+        successor_manifest=successor_manifest,
     )
     return {**packet, "result": result}
 

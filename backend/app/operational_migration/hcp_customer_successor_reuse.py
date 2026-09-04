@@ -15,6 +15,7 @@ from app.operational_migration.hcp_successor_reconciliation import (
     LEGACY_SOURCE_SYSTEM,
     PrivateSuccessorManifest,
 )
+from app.operational_migration.hcp_successor_reuse import QualifiedSuccessorManifest
 from app.platform.permissions.authorization import AuthorizationContext
 
 
@@ -25,16 +26,28 @@ class CustomerSuccessorReuseError(ValueError):
 class CustomerSuccessorReuseResolver:
     """Resolve only exact, manifest-authorized legacy targets in the same Branch."""
 
-    def __init__(self, manifest: PrivateSuccessorManifest) -> None:
+    def __init__(
+        self, manifest: PrivateSuccessorManifest | QualifiedSuccessorManifest
+    ) -> None:
         self._customers = {
-            item.source_id: item.target_id
+            item.source_id: getattr(item, "target_id", None)
+            or getattr(item, "native_id", None)
             for item in manifest.entries
             if item.domain == "customer"
+            and (
+                getattr(item, "target_id", None)
+                or getattr(item, "native_id", None)
+            )
         }
         self._locations = {
-            item.source_id: item.target_id
+            item.source_id: getattr(item, "target_id", None)
+            or getattr(item, "native_id", None)
             for item in manifest.entries
             if item.domain == "service_location"
+            and (
+                getattr(item, "target_id", None)
+                or getattr(item, "native_id", None)
+            )
         }
 
     async def __call__(
