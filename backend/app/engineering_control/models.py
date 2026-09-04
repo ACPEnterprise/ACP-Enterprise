@@ -213,6 +213,10 @@ class EngineeringCommand(Base):
     id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), primary_key=True, default=uuid4
     )
+    scheduler_delegation_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("engineering_scheduler_delegations.id", ondelete="RESTRICT"),
+    )
     ecid: Mapped[str] = mapped_column(String(32), nullable=False)
     company_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),

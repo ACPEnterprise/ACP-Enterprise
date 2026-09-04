@@ -65,6 +65,56 @@ class EngineeringSchedulerSnapshot(Base):
     activated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+class EngineeringSchedulerDelegation(Base):
+    """Exact, expiring owner delegation for the reviewed non-production queue."""
+
+    __tablename__ = "engineering_scheduler_delegations"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["activated_by_user_id", "company_id"],
+            ["memberships.user_id", "memberships.company_id"],
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint("queue_fingerprint ~ '^[0-9a-f]{64}$'"),
+        CheckConstraint("authority_sha ~ '^[0-9a-f]{40}$'"),
+        CheckConstraint("state IN ('active','revoked','exhausted','paused_p0')"),
+        CheckConstraint("expires_at > activated_at"),
+        CheckConstraint("expires_at <= activated_at + interval '72 hours'"),
+        Index(
+            "uq_scheduler_delegation_active_company",
+            "company_id",
+            unique=True,
+            postgresql_where=text("state = 'active'"),
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    queue_id: Mapped[str] = mapped_column(String(80), nullable=False)
+    queue_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    authority_sha: Mapped[str] = mapped_column(String(40), nullable=False)
+    scope: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    activated_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), nullable=False
+    )
+    credential_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    authorization_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    state: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
+    activated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    ended_by_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT")
+    )
+    end_reason: Mapped[str | None] = mapped_column(String(240))
+
+
 class EngineeringPermanentCapacity(Base):
     __tablename__ = "engineering_permanent_capacities"
     __table_args__ = (

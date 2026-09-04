@@ -32,6 +32,9 @@ from app.engineering_control.repository_operation.router import (
 )
 from app.engineering_control.review.router import router as engineering_reviews_router
 from app.engineering_control.router import router as engineering_commands_router
+from app.engineering_control.scheduler.router import (
+    router as engineering_scheduler_delegation_router,
+)
 from app.engineering_execution.controlled.router import (
     router as controlled_execution_router,
 )
@@ -201,6 +204,7 @@ app.include_router(payroll_router)
 app.include_router(accounts_payable_router)
 app.include_router(communications_router)
 app.include_router(engineering_commands_router)
+app.include_router(engineering_scheduler_delegation_router)
 app.include_router(engineering_reviews_router)
 app.include_router(repository_authorizations_router)
 app.include_router(repository_operations_router)

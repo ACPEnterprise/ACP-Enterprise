@@ -5,13 +5,16 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Protocol
+from uuid import UUID
 
+from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.engineering_control.commands import (
     ApproveEngineeringCommand,
     CreateEngineeringCommand,
 )
+from app.engineering_control.models import EngineeringCommand
 from app.engineering_control.repository_operation.errors import (
     RepositoryOperationGitError,
 )
@@ -20,6 +23,7 @@ from app.engineering_control.repository_operation.git_adapter import (
 )
 from app.engineering_control.service import EngineeringControlService
 from app.engineering_execution.controlled.service import ControlledExecutionService
+from app.engineering_execution.models import EngineeringExecution
 from app.engineering_execution.service import EngineeringExecutionService
 from app.platform.permissions.authorization import AuthorizationContext
 from app.worker_control.contracts import AuthenticatedWorkerContext
@@ -77,6 +81,7 @@ class HeadlessApplicationService:
         expected_authority_sha: str,
         now: datetime,
         completed_milestone_ids: frozenset[str] = frozenset(),
+        delegation_id: UUID | None = None,
     ) -> object:
         """Create a normal approved command and immutable execution request.
 
@@ -85,7 +90,11 @@ class HeadlessApplicationService:
         converted into replacement executions.
         """
 
-        if not (manage_context.company.id == approve_context.company.id == execution_context.company.id):
+        if not (
+            manage_context.company.id
+            == approve_context.company.id
+            == execution_context.company.id
+        ):
             raise HeadlessApplicationError("authorization contexts disagree on company")
         if proposal.kind == "reconcile":
             raise HeadlessApplicationError(
@@ -103,7 +112,11 @@ class HeadlessApplicationService:
         if observed != expected_authority_sha:
             raise HeadlessApplicationError("current work authority is not attested")
         work = next(
-            (item for item in queue.items if item.milestone_id == proposal.milestone_id),
+            (
+                item
+                for item in queue.items
+                if item.milestone_id == proposal.milestone_id
+            ),
             None,
         )
         by_id = {item.milestone_id: item for item in queue.items}
@@ -116,7 +129,9 @@ class HeadlessApplicationService:
         ):
             raise HeadlessApplicationError("proposal dependency is not authoritative")
         if work.capacity_identity != proposal.capacity_identity:
-            raise HeadlessApplicationError("proposal capacity contradicts approved queue")
+            raise HeadlessApplicationError(
+                "proposal capacity contradicts approved queue"
+            )
         command = await self.commands.create_command(
             session,
             context=manage_context,
@@ -136,13 +151,24 @@ class HeadlessApplicationService:
                     "allowed_paths": list(work.allowed_paths),
                     "forbidden_paths": [".git/**", ".env*", "**/.env*"],
                     "permitted_operations": [
-                        "inspect", "modify", "validate", "commit", "mechanical_reconcile", "push"
+                        "inspect",
+                        "modify",
+                        "validate",
+                        "commit",
+                        "mechanical_reconcile",
+                        "push",
                     ],
                     "validation_requirements": list(work.validation_requirements),
                 },
             ),
             now=now,
         )
+        if delegation_id is not None:
+            await session.execute(
+                update(EngineeringCommand)
+                .where(EngineeringCommand.id == command.id)
+                .values(scheduler_delegation_id=delegation_id)
+            )
         approved = await self.commands.approve_command(
             session,
             context=approve_context,
@@ -159,12 +185,20 @@ class HeadlessApplicationService:
             ),
             now=now,
         )
-        return await self.executions.request_execution(
+        execution = await self.executions.request_execution(
             session,
             context=execution_context,
             command_id=approved.id,
             now=now,
         )
+        if delegation_id is not None:
+            await session.execute(
+                update(EngineeringExecution)
+                .where(EngineeringExecution.id == execution.id)
+                .values(scheduler_delegation_id=delegation_id)
+            )
+            await session.commit()
+        return execution
 
 
 __all__ = ["HeadlessApplicationError", "HeadlessApplicationService"]
