@@ -73,6 +73,8 @@ class QualifiedSuccessorManifest:
     branch_id: str
     entries: tuple[SuccessorManifestEntry, ...]
     digest: str
+    canonical_reconciliation_digest: str = ""
+    canonical_reconciliation_admission_allowed: bool = False
 
     @classmethod
     def build(
@@ -81,30 +83,54 @@ class QualifiedSuccessorManifest:
         company_id: str,
         branch_id: str,
         entries: Iterable[SuccessorManifestEntry],
+        canonical_reconciliation_digest: str = "",
+        canonical_reconciliation_admission_allowed: bool = True,
     ) -> QualifiedSuccessorManifest:
         if not company_id or not branch_id:
             raise ValueError("successor manifest scope is required")
         ordered = tuple(sorted(entries, key=_entry_sort_key))
         _validate_entries(ordered)
-        payload = _manifest_payload(company_id, branch_id, ordered)
+        payload = _manifest_payload(
+            company_id,
+            branch_id,
+            ordered,
+            canonical_reconciliation_digest,
+            canonical_reconciliation_admission_allowed,
+        )
         return cls(
             contract=MANIFEST_CONTRACT,
             company_id=company_id,
             branch_id=branch_id,
             entries=ordered,
             digest=_digest(payload),
+            canonical_reconciliation_digest=canonical_reconciliation_digest,
+            canonical_reconciliation_admission_allowed=(
+                canonical_reconciliation_admission_allowed
+            ),
         )
 
     def verify(self) -> None:
         _validate_entries(self.entries)
         if self.contract != MANIFEST_CONTRACT or self.digest != _digest(
-            _manifest_payload(self.company_id, self.branch_id, self.entries)
+            _manifest_payload(
+                self.company_id,
+                self.branch_id,
+                self.entries,
+                self.canonical_reconciliation_digest,
+                self.canonical_reconciliation_admission_allowed,
+            )
         ):
             raise ValueError("successor manifest digest mismatch")
 
     def private_payload(self) -> dict[str, object]:
         self.verify()
-        return _manifest_payload(self.company_id, self.branch_id, self.entries) | {
+        return _manifest_payload(
+            self.company_id,
+            self.branch_id,
+            self.entries,
+            self.canonical_reconciliation_digest,
+            self.canonical_reconciliation_admission_allowed,
+        ) | {
             "digest": self.digest
         }
 
@@ -132,6 +158,12 @@ class QualifiedSuccessorManifest:
             branch_id=value["branch_id"],
             entries=entries,
             digest=value["digest"],
+            canonical_reconciliation_digest=value.get(
+                "canonical_reconciliation_digest", ""
+            ),
+            canonical_reconciliation_admission_allowed=value.get(
+                "canonical_reconciliation_admission_allowed", False
+            ),
         )
         result.verify()
         return result
@@ -144,6 +176,8 @@ def build_successor_manifest(
     current_bindings: Iterable[IdentityBinding],
     sealed_source4: Iterable[SealedIdentity],
     parents: dict[SourceKey, SourceKey] | None = None,
+    canonical_reconciliation_digest: str = "",
+    canonical_reconciliation_admission_allowed: bool = False,
 ) -> QualifiedSuccessorManifest:
     """Classify the sealed population; unrelated legacy Preview rows remain native."""
 
@@ -210,7 +244,13 @@ def build_successor_manifest(
             )
         )
     return QualifiedSuccessorManifest.build(
-        company_id=company_id, branch_id=branch_id, entries=entries
+        company_id=company_id,
+        branch_id=branch_id,
+        entries=entries,
+        canonical_reconciliation_digest=canonical_reconciliation_digest,
+        canonical_reconciliation_admission_allowed=(
+            canonical_reconciliation_admission_allowed
+        ),
     )
 
 
@@ -310,7 +350,11 @@ def qualify_successor_admission(
         )
         for domain, values in sorted(by_domain.items())
     }
-    failures = _guard_failures(guards)
+    failures = _guard_failures(guards) + (
+        ()
+        if manifest.canonical_reconciliation_admission_allowed
+        else ("canonical_successor_reconciliation",)
+    )
     conflicts = sum(item.conflict for item in counts.values())
     holds = sum(item.hold for item in counts.values())
     overlap_count = sum(item.reuse_exact for item in counts.values())
@@ -595,12 +639,18 @@ def _manifest_payload(
     company_id: str,
     branch_id: str,
     entries: tuple[SuccessorManifestEntry, ...],
+    canonical_reconciliation_digest: str,
+    canonical_reconciliation_admission_allowed: bool,
 ) -> dict[str, object]:
     return {
         "contract": MANIFEST_CONTRACT,
         "company_id": company_id,
         "branch_id": branch_id,
         "entries": [asdict(item) for item in entries],
+        "canonical_reconciliation_digest": canonical_reconciliation_digest,
+        "canonical_reconciliation_admission_allowed": (
+            canonical_reconciliation_admission_allowed
+        ),
     }
 
 
