@@ -1,6 +1,7 @@
 import axios from "axios";
 import { Search, ShieldCheck, Unplug } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router";
 
 import { useAuth } from "../../auth";
@@ -25,8 +26,11 @@ import {
   launchQuickBooksSandbox,
 } from "./api";
 import {
+  useAssignMembershipRole,
   useCanonicalRoleSync,
   useCanonicalRoleSyncPlan,
+  useCreateRole,
+  useMemberships,
   usePermissionMutation,
   useRolePermissions,
   useRoles,
@@ -44,14 +48,21 @@ function errorStatus(error: unknown): number | undefined {
 
 export function AdministrationRoute() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { permissionCodes = [], requireReauthentication } = useAuth();
   const canAdminister = permissionCodes.includes("COMPANY_ADMINISTER");
   const canReadRoles = permissionCodes.includes("COMPANY_ROLE_READ");
   const canManagePermissions = permissionCodes.includes("COMPANY_PERMISSION_MANAGE");
   const canManageRoles = permissionCodes.includes("COMPANY_ROLE_MANAGE");
+  const canReadMemberships = permissionCodes.includes("COMPANY_MEMBERSHIP_READ");
+  const canUseRoleWorkflow =
+    canReadRoles && canManageRoles && canManagePermissions && canReadMemberships;
   const canonicalRoles = useCanonicalRoleSyncPlan(canReadRoles);
   const canonicalRoleSync = useCanonicalRoleSync();
   const roles = useRoles(canReadRoles);
+  const memberships = useMemberships(canUseRoleWorkflow);
+  const createRole = useCreateRole();
+  const assignMembershipRole = useAssignMembershipRole();
   const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null);
   const selectedRole =
     roles.data?.find((role) => role.id === selectedRoleId) ??
@@ -61,6 +72,10 @@ export function AdministrationRoute() {
   const [search, setSearch] = useState("");
   const [pending, setPending] = useState<PendingChange | null>(null);
   const [mutationError, setMutationError] = useState<string | null>(null);
+  const [roleCode, setRoleCode] = useState("");
+  const [roleName, setRoleName] = useState("");
+  const [roleDescription, setRoleDescription] = useState("");
+  const [membershipId, setMembershipId] = useState("");
   const [qboPending, setQboPending] = useState(false);
   const [qboError, setQboError] = useState(false);
   const [qboProductionPending, setQboProductionPending] = useState(false);
@@ -71,6 +86,45 @@ export function AdministrationRoute() {
     QboSandboxConnectionState | "loading"
   >("loading");
   const mutation = usePermissionMutation(pending?.action ?? "grant");
+  const activeMemberships = (memberships.data ?? []).filter(
+    (membership) => membership.status === "active",
+  );
+
+  const submitRole = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setMutationError(null);
+    try {
+      const created = await createRole.mutateAsync({
+        code: roleCode.trim(),
+        name: roleName.trim(),
+        description: roleDescription.trim() || null,
+      });
+      setSelectedRoleId(created.id);
+      await queryClient.invalidateQueries({ queryKey: ["administration", "roles"] });
+      setRoleCode("");
+      setRoleName("");
+      setRoleDescription("");
+    } catch {
+      setMutationError("The role was not created. Review the values and current authorization.");
+    }
+  };
+
+  const submitMembershipRole = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!selectedRole || !activeMemberships.some((item) => item.id === membershipId))
+      return;
+    setMutationError(null);
+    try {
+      await assignMembershipRole.mutateAsync({ membershipId, roleId: selectedRole.id });
+      requireReauthentication();
+      await navigate("/login", {
+        replace: true,
+        state: { from: "/administration", authorizationChanged: true },
+      });
+    } catch {
+      setMutationError("The role assignment was not accepted. Company and Branch access were unchanged.");
+    }
+  };
 
   const applyCanonicalRoles = async () => {
     if (!canonicalRoles.data?.safe_to_apply) return;
@@ -402,6 +456,36 @@ export function AdministrationRoute() {
         </Card>
       )}
       {!canReadRoles && <Alert variant="information">Role administration requires role-read permission.</Alert>}
+      {canUseRoleWorkflow && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Create Company role</CardTitle>
+            <CardDescription>
+              Create an empty role in the current Company. Permissions and Membership
+              assignment remain separate audited actions; Branch access is unchanged.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form className="grid gap-ui-3" onSubmit={(event) => void submitRole(event)}>
+              <label>
+                <span className="text-body-s font-semibold">Role code</span>
+                <Input required value={roleCode} onChange={(event) => setRoleCode(event.target.value)} placeholder="SOURCE4_PREVIEW_ADMISSION" />
+              </label>
+              <label>
+                <span className="text-body-s font-semibold">Role name</span>
+                <Input required value={roleName} onChange={(event) => setRoleName(event.target.value)} placeholder="SOURCE.4 Preview Admission" />
+              </label>
+              <label>
+                <span className="text-body-s font-semibold">Description</span>
+                <Input value={roleDescription} onChange={(event) => setRoleDescription(event.target.value)} placeholder="Optional operational purpose" />
+              </label>
+              <Button type="submit" disabled={!roleCode.trim() || !roleName.trim()} loading={createRole.isPending} loadingLabel="Creating role">
+                Create role
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      )}
       {canReadRoles && <Card>
         <CardHeader>
           <CardTitle>Company roles</CardTitle>
@@ -513,6 +597,44 @@ export function AdministrationRoute() {
                   </li>
                 ))}
               </ul>
+            )}
+          </CardContent>
+        </Card>
+      )}
+      {canUseRoleWorkflow && selectedRole && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Assign role to active Membership</CardTitle>
+            <CardDescription>
+              Assign {selectedRole.name} within the current Company. This action does
+              not add or change Company or Branch access.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {memberships.isError ? (
+              <Alert variant="danger">Visible Memberships could not be loaded.</Alert>
+            ) : (
+              <form className="grid gap-ui-3" onSubmit={(event) => void submitMembershipRole(event)}>
+                <label>
+                  <span className="text-body-s font-semibold">Active Membership</span>
+                  <select
+                    aria-label="Active Membership"
+                    className="mt-ui-2 min-h-11 w-full rounded-md border border-stroke bg-surface px-ui-3"
+                    value={membershipId}
+                    onChange={(event) => setMembershipId(event.target.value)}
+                  >
+                    <option value="">Select active Membership</option>
+                    {activeMemberships.map((membership) => (
+                      <option key={membership.id} value={membership.id}>
+                        {membership.user_id}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <Button type="submit" disabled={!membershipId} loading={assignMembershipRole.isPending} loadingLabel="Assigning role">
+                  Assign selected role
+                </Button>
+              </form>
             )}
           </CardContent>
         </Card>

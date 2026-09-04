@@ -6,6 +6,7 @@ import * as api from "./api";
 export const administrationKeys = {
   access: ["administration", "access"] as const,
   roles: ["administration", "roles"] as const,
+  memberships: ["administration", "memberships"] as const,
   permissions: (roleId: string) =>
     ["administration", "permissions", roleId] as const,
   migration: ["administration", "migration-readiness"] as const,
@@ -52,6 +53,30 @@ export function useRoles(enabled = true) {
     queryFn: api.listRoles,
     retry: shouldRetryApiQuery,
     enabled,
+  });
+}
+
+export function useMemberships(enabled = true) {
+  return useQuery({
+    queryKey: administrationKeys.memberships,
+    queryFn: api.listMemberships,
+    retry: shouldRetryApiQuery,
+    enabled,
+  });
+}
+
+export function useCreateRole() {
+  return useMutation({
+    mutationFn: api.createRole,
+    retry: false,
+  });
+}
+
+export function useAssignMembershipRole() {
+  return useMutation({
+    mutationFn: ({ membershipId, roleId }: { membershipId: string; roleId: string }) =>
+      api.assignMembershipRole(membershipId, roleId),
+    retry: false,
   });
 }
 
