@@ -62,6 +62,7 @@ class HeadlessApplicationService:
         proposal: HeadlessProposal,
         expected_authority_sha: str,
         now: datetime,
+        completed_milestone_ids: frozenset[str] = frozenset(),
     ) -> object:
         """Create a normal approved command and immutable execution request.
 
@@ -84,9 +85,13 @@ class HeadlessApplicationService:
             None,
         )
         by_id = {item.milestone_id: item for item in queue.items}
-        if work is None or work.queue_state != "READY":
+        if work is None or work.queue_state not in {"READY", "BLOCKED_DEPENDENCY"}:
             raise HeadlessApplicationError("proposal is not currently executable")
-        if any(by_id[value].queue_state != "AUTHORITATIVE" for value in work.dependencies):
+        if any(
+            by_id[value].queue_state != "AUTHORITATIVE"
+            and value not in completed_milestone_ids
+            for value in work.dependencies
+        ):
             raise HeadlessApplicationError("proposal dependency is not authoritative")
         if work.capacity_identity != proposal.capacity_identity:
             raise HeadlessApplicationError("proposal capacity contradicts approved queue")
