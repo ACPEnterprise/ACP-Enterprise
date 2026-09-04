@@ -48,6 +48,11 @@ from app.operational_migration.hcp_migration2c import (
 )
 from app.operational_migration.hcp_migration2i import ChildOutcomeCounts
 from app.operational_migration.hcp_owner_disposition import NonProductionTarget
+from app.operational_migration.hcp_successor_reuse import (
+    AdmissionDisposition,
+    QualifiedSuccessorManifest,
+    qualify_reuse_graph,
+)
 from app.operational_migration.service import (
     AppointmentMigrationRecord,
     JobMigrationRecord,
@@ -459,10 +464,15 @@ class HcpMigration2Runner:
         context: AuthorizationContext,
         target: NonProductionTarget,
         plan: HcpMigration2ExecutionPlan,
+        successor_manifest: QualifiedSuccessorManifest | None = None,
     ) -> dict[str, object]:
         try:
             return await self._execute(
-                factory, context=context, target=target, plan=plan
+                factory,
+                context=context,
+                target=target,
+                plan=plan,
+                successor_manifest=successor_manifest,
             )
         except SafeEvidenceError:
             raise
@@ -479,8 +489,67 @@ class HcpMigration2Runner:
         context: AuthorizationContext,
         target: NonProductionTarget,
         plan: HcpMigration2ExecutionPlan,
+        successor_manifest: QualifiedSuccessorManifest | None,
     ) -> dict[str, object]:
         plan.validate()
+        reuse_targets: dict[tuple[str, str], UUID] = {}
+        if successor_manifest is not None:
+            successor_manifest.verify()
+            if context.active_branch is None or (
+                successor_manifest.company_id != str(context.company.id)
+                or successor_manifest.branch_id != str(context.active_branch.id)
+            ):
+                raise SafeEvidenceError(
+                    "successor_manifest_scope_mismatch", successor_manifest.digest
+                )
+            expected = {
+                ("customer", row.source_identity)
+                for row in plan.customers.reviewed.aggregates
+            }
+            expected.update(
+                ("contact", row.source_identity)
+                for row in plan.customers.reviewed.aggregates
+                if row.contact is not None
+            )
+            expected.update(
+                ("service_location", source_id)
+                for row in plan.customers.reviewed.aggregates
+                for source_id in row.service_location_source_identities
+            )
+            for domain in ("jobs", "appointments", "estimates", "invoices", "payments"):
+                expected.update(
+                    (domain.removesuffix("s"), row.source_id)
+                    for row in getattr(plan, domain)
+                )
+            actual = {(item.domain, item.source_id) for item in successor_manifest.entries}
+            if expected != actual:
+                raise SafeEvidenceError(
+                    "successor_manifest_population_mismatch",
+                    successor_manifest.digest,
+                )
+            if any(
+                item.disposition
+                in {AdmissionDisposition.HOLD_AMBIGUOUS, AdmissionDisposition.CONFLICT}
+                for item in successor_manifest.entries
+            ):
+                raise SafeEvidenceError(
+                    "successor_manifest_not_executable", successor_manifest.digest
+                )
+            reuse_targets = {
+                (item.domain, item.source_id): UUID(item.native_id)
+                for item in successor_manifest.entries
+                if item.disposition is AdmissionDisposition.REUSE_EXACT_SUCCESSOR
+                and item.native_id is not None
+            }
+            async with factory() as preflight_session:
+                await qualify_reuse_graph(
+                    preflight_session,
+                    company_id=str(context.company.id),
+                    branch_id=str(context.active_branch.id),
+                    plan=plan,
+                    manifest=successor_manifest,
+                )
+                await preflight_session.rollback()
         if plan.master.owner_receipts != plan.verified_owner_receipts:
             raise SafeEvidenceError(
                 "master_owner_receipt_binding_mismatch",
@@ -530,6 +599,7 @@ class HcpMigration2Runner:
             boundary=plan.customers.boundary,
             hybrid_admission=plan.customers.admission,
             parent_closure=plan.customers.parent_closure,
+            successor_manifest=successor_manifest,
         )
         async with factory() as session, session.begin():
             for employee_command in plan.employees:
@@ -545,6 +615,7 @@ class HcpMigration2Runner:
             master_run_id=master_id,
             jobs=plan.jobs,
             appointments=plan.appointments,
+            reuse_targets=reuse_targets,
         )
         async with factory() as session, session.begin():
             for estimate_command in plan.unlinked_estimates:
@@ -561,6 +632,7 @@ class HcpMigration2Runner:
             estimates=plan.estimates,
             invoices=plan.invoices,
             payments=plan.payments,
+            reuse_targets=reuse_targets,
         )
         history = await self.orchestrator.run_history(
             factory,

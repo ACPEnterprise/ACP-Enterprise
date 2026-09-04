@@ -21,6 +21,7 @@ from app.customer_migration.models import (
     CustomerSourceIdentity,
     ServiceLocationSourceIdentity,
 )
+from app.customers.models import Customer
 from app.database.session import AsyncSessionFactory
 from app.operational_migration.hcp_migration2_plan import (
     HcpMigration2ExecutionPlanBuilder,
@@ -31,6 +32,11 @@ from app.operational_migration.hcp_successor_reconciliation import (
     PrivateSuccessorManifest,
     SealedIdentity,
     reconcile_successors_v2,
+)
+from app.operational_migration.hcp_successor_reuse import (
+    QualifiedSuccessorManifest,
+    SourceKey,
+    build_successor_manifest,
 )
 from app.operational_migration.models import (
     AppointmentSourceIdentity,
@@ -54,6 +60,7 @@ class SuccessorReadAuthority:
     actor_id: UUID
     baseline_counts: dict[str, int]
     private_manifest_output: Path
+    qualified_manifest_output: Path | None = None
 
     @classmethod
     def load(cls, path: Path) -> SuccessorReadAuthority:
@@ -81,6 +88,11 @@ class SuccessorReadAuthority:
                 actor_id=UUID(value["actor_id"]),
                 baseline_counts=dict(counts),
                 private_manifest_output=Path(value["private_manifest_output"]),
+                qualified_manifest_output=(
+                    Path(value["qualified_manifest_output"])
+                    if value.get("qualified_manifest_output")
+                    else None
+                ),
             )
         except SafeEvidenceError:
             raise
@@ -132,6 +144,26 @@ async def load_preview_bindings(
             IdentityBinding(domain, source_system, source_id, str(target_id))
             for source_system, source_id, target_id in rows
         )
+    contact_rows = await session.execute(
+        select(
+            CustomerSourceIdentity.source_system,
+            CustomerSourceIdentity.source_customer_id,
+            Customer.primary_contact_id,
+        )
+        .join(Customer, Customer.id == CustomerSourceIdentity.customer_id)
+        .where(
+            CustomerSourceIdentity.company_id == company_id,
+            CustomerSourceIdentity.branch_id == branch_id,
+            CustomerSourceIdentity.source_system.in_(
+                ("housecall_pro", "housecall_pro_source4")
+            ),
+            Customer.primary_contact_id.is_not(None),
+        )
+    )
+    bindings.extend(
+        IdentityBinding("contact", source_system, source_id, str(target_id))
+        for source_system, source_id, target_id in contact_rows
+    )
     return tuple(bindings)
 
 
@@ -142,6 +174,11 @@ def sealed_identities(plan: Any) -> tuple[SealedIdentity, ...]:
         SealedIdentity("customer", row.source_identity)
         for row in plan.customers.reviewed.aggregates
     ]
+    result.extend(
+        SealedIdentity("contact", row.source_identity)
+        for row in plan.customers.reviewed.aggregates
+        if getattr(row, "contact", None) is not None
+    )
     result.extend(
         SealedIdentity("service_location", source_id)
         for row in plan.customers.reviewed.aggregates
@@ -220,6 +257,39 @@ def write_private_manifest(path: Path, manifest: PrivateSuccessorManifest) -> No
         raise SafeEvidenceError("successor_manifest_write_failed", "0" * 64) from error
 
 
+def write_qualified_manifest(path: Path, manifest: QualifiedSuccessorManifest) -> None:
+    """Persist new successor authority without replacing historical evidence."""
+
+    parent = path.parent
+    try:
+        if not parent.is_dir() or stat.S_IMODE(parent.stat().st_mode) & 0o077:
+            raise SafeEvidenceError("successor_manifest_directory_unsafe", "0" * 64)
+        payload = json.dumps(
+            manifest.private_payload(), sort_keys=True, separators=(",", ":")
+        ).encode()
+        if path.exists():
+            if stat.S_IMODE(path.stat().st_mode) != 0o600 or path.read_bytes() != payload:
+                raise SafeEvidenceError("successor_manifest_output_conflict", "0" * 64)
+            return
+        descriptor, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=parent)
+        temporary = Path(temporary_name)
+        try:
+            os.fchmod(descriptor, 0o600)
+            with os.fdopen(descriptor, "wb") as target:
+                target.write(payload)
+                target.flush()
+                os.fsync(target.fileno())
+            if path.exists():
+                raise SafeEvidenceError("successor_manifest_output_conflict", "0" * 64)
+            os.link(temporary, path)
+        finally:
+            temporary.unlink(missing_ok=True)
+    except SafeEvidenceError:
+        raise
+    except OSError as error:
+        raise SafeEvidenceError("successor_manifest_write_failed", "0" * 64) from error
+
+
 async def run(authority: SuccessorReadAuthority) -> dict[str, object]:
     _require_runtime(authority)
     builder = HcpMigration2ExecutionPlanBuilder(
@@ -243,6 +313,39 @@ async def run(authority: SuccessorReadAuthority) -> dict[str, object]:
         )
         await session.rollback()
     write_private_manifest(authority.private_manifest_output, result.private_manifest)
+    qualified: QualifiedSuccessorManifest | None = None
+    if authority.qualified_manifest_output is not None:
+        parents: dict[SourceKey, SourceKey] = {}
+        for aggregate in plan.customers.reviewed.aggregates:
+            for location_id in aggregate.service_location_source_identities:
+                parents[SourceKey("service_location", location_id)] = SourceKey(
+                    "customer", aggregate.source_identity
+                )
+        for job_record in plan.jobs:
+            parents[SourceKey("job", job_record.source_id)] = SourceKey(
+                "customer", job_record.source_customer_id
+            )
+        for appointment_record in plan.appointments:
+            parents[SourceKey("appointment", appointment_record.source_id)] = SourceKey(
+                "job", appointment_record.source_job_id
+            )
+        for domain in ("estimate", "invoice"):
+            for financial_record in getattr(plan, f"{domain}s"):
+                parents[SourceKey(domain, financial_record.source_id)] = SourceKey(
+                    "job", financial_record.source_job_id
+                )
+        for payment_record in plan.payments:
+            parents[SourceKey("payment", payment_record.source_id)] = SourceKey(
+                "invoice", payment_record.source_invoice_id
+            )
+        qualified = build_successor_manifest(
+            company_id=str(authority.company_id),
+            branch_id=str(authority.branch_id),
+            current_bindings=bindings,
+            sealed_source4=sealed_identities(plan),
+            parents=parents,
+        )
+        write_qualified_manifest(authority.qualified_manifest_output, qualified)
     return {
         "command": COMMAND_VERSION,
         "plan_digest": plan_summary.plan_digest,
@@ -251,6 +354,14 @@ async def run(authority: SuccessorReadAuthority) -> dict[str, object]:
             "digest": result.private_manifest.digest,
             "entry_count": len(result.private_manifest.entries),
         },
+        "qualified_manifest": (
+            {
+                "digest": qualified.digest,
+                "entry_count": len(qualified.entries),
+            }
+            if qualified is not None
+            else None
+        ),
     }
 
 

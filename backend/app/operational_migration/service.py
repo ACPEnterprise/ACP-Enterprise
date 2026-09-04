@@ -1,6 +1,6 @@
 import hashlib
 import json
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from typing import Literal
@@ -36,6 +36,7 @@ from app.operational_migration.repository import (
 )
 from app.platform.permissions.authorization import AuthorizationContext
 from app.scheduling.errors import SchedulingError
+from app.scheduling.models import Appointment
 from app.scheduling.service import (
     MigrateAppointmentCommand,
     SchedulingService,
@@ -280,6 +281,7 @@ class OperationalMigrationService:
         repair_generation: int = 0,
         resume_run_id: UUID | None = None,
         progress_callback: Callable[[MigrationProgress], None] | None = None,
+        reuse_targets: Mapping[tuple[str, str], UUID] | None = None,
     ) -> MigrationReport:
         source_system = self._validate_source_system(source_system)
         if source_system == SOURCE4_SYSTEM and master_run_id is None:
@@ -357,6 +359,7 @@ class OperationalMigrationService:
                         seen_fingerprints=seen_fingerprints["job"],
                         persist_identity=False,
                         progress_callback=progress_callback,
+                        reuse_targets=reuse_targets or {},
                     )
                     await self._process_appointments(
                         session,
@@ -371,6 +374,7 @@ class OperationalMigrationService:
                         seen_fingerprints=seen_fingerprints["appointment"],
                         persist_identity=False,
                         progress_callback=progress_callback,
+                        reuse_targets=reuse_targets or {},
                     )
                     await transaction.rollback()
             else:
@@ -391,6 +395,7 @@ class OperationalMigrationService:
                             persist_identity=True,
                             progress_callback=progress_callback,
                             resume_run_id=resume_run_id,
+                            reuse_targets=reuse_targets or {},
                         )
                 for index, appointment_record in enumerate(appointments, start=1):
                     async with factory() as session, session.begin():
@@ -409,6 +414,7 @@ class OperationalMigrationService:
                             persist_identity=True,
                             progress_callback=progress_callback,
                             resume_run_id=resume_run_id,
+                            reuse_targets=reuse_targets or {},
                         )
         except Exception:
             await self._finalize(
@@ -472,6 +478,7 @@ class OperationalMigrationService:
         persist_identity: bool,
         progress_callback: Callable[[MigrationProgress], None] | None,
         resume_run_id: UUID | None = None,
+        reuse_targets: Mapping[tuple[str, str], UUID],
     ) -> None:
         assert context.active_branch is not None
         disposition: Disposition = "accepted"
@@ -533,6 +540,61 @@ class OperationalMigrationService:
                         source_location_id=record.source_service_location_id,
                         persist_location_identity=persist_identity,
                     )
+                    reuse_id = reuse_targets.get(("job", record.source_id))
+                    if reuse_id is not None:
+                        job = await self._repository.get_job(
+                            session,
+                            company_id=context.company.id,
+                            job_id=reuse_id,
+                        )
+                        if (
+                            job is None
+                            or job.branch_id != context.active_branch.id
+                            or job.customer_id != parents.customer_identity.customer_id
+                            or job.service_location_id
+                            != parents.location_identity.service_location_id
+                        ):
+                            raise ParentResolutionError(
+                                "Manifest-bound Job successor is outside its parent scope."
+                            )
+                        planned_jobs[record.source_id] = job
+                        if persist_identity:
+                            metadata = dict(record.external_metadata or {})
+                            metadata["successor_reuse"] = True
+                            self._repository.add_job_identity(
+                                session,
+                                JobSourceIdentity(
+                                    company_id=context.company.id,
+                                    branch_id=context.active_branch.id,
+                                    job_id=job.id,
+                                    customer_id=job.customer_id,
+                                    service_location_id=job.service_location_id,
+                                    customer_source_identity_id=parents.customer_identity.id,
+                                    service_location_source_identity_id=parents.location_identity.id,
+                                    source_system=source_system,
+                                    source_job_id=record.source_id,
+                                    source_job_number=record.source_job_number,
+                                    source_status=record.status,
+                                    assigned_technician_source_ids=list(
+                                        record.assigned_technician_source_ids
+                                    ),
+                                    external_metadata=metadata,
+                                    first_run_id=run_id,
+                                ),
+                            )
+                        self._record_result(
+                            run_id,
+                            "job",
+                            index,
+                            record.source_id,
+                            disposition,
+                            reason,
+                            detail,
+                            counts,
+                            exceptions,
+                            progress_callback,
+                        )
+                        return
                     try:
                         priority = JobPriority(record.priority)
                     except ValueError as error:
@@ -631,6 +693,7 @@ class OperationalMigrationService:
         persist_identity: bool,
         progress_callback: Callable[[MigrationProgress], None] | None,
         resume_run_id: UUID | None = None,
+        reuse_targets: Mapping[tuple[str, str], UUID],
     ) -> None:
         assert context.active_branch is not None
         disposition: Disposition = "accepted"
@@ -693,6 +756,57 @@ class OperationalMigrationService:
                         raise ParentResolutionError(
                             "Migrated parent Job was not found."
                         )
+                    reuse_id = reuse_targets.get(("appointment", record.source_id))
+                    if reuse_id is not None:
+                        appointment = await session.get(Appointment, reuse_id)
+                        if (
+                            appointment is None
+                            or appointment.company_id != context.company.id
+                            or appointment.branch_id != context.active_branch.id
+                            or appointment.customer_id != job.customer_id
+                            or appointment.service_location_id
+                            != job.service_location_id
+                        ):
+                            raise ParentResolutionError(
+                                "Manifest-bound Appointment successor is outside its parent scope."
+                            )
+                        if persist_identity:
+                            assert job_identity is not None
+                            metadata = dict(record.external_metadata or {})
+                            metadata["successor_reuse"] = True
+                            self._repository.add_appointment_identity(
+                                session,
+                                AppointmentSourceIdentity(
+                                    company_id=context.company.id,
+                                    branch_id=context.active_branch.id,
+                                    appointment_id=appointment.id,
+                                    job_source_identity_id=job_identity.id,
+                                    job_id=job.id,
+                                    customer_id=job.customer_id,
+                                    service_location_id=job.service_location_id,
+                                    source_system=source_system,
+                                    source_appointment_id=record.source_id,
+                                    source_status=record.status,
+                                    assigned_technician_source_ids=list(
+                                        record.assigned_technician_source_ids
+                                    ),
+                                    external_metadata=metadata,
+                                    first_run_id=run_id,
+                                ),
+                            )
+                        self._record_result(
+                            run_id,
+                            "appointment",
+                            index,
+                            record.source_id,
+                            disposition,
+                            reason,
+                            detail,
+                            counts,
+                            exceptions,
+                            progress_callback,
+                        )
+                        return
                     if (
                         job.customer_id != parents.customer_identity.customer_id
                         or job.service_location_id

@@ -1,15 +1,22 @@
 import hashlib
 import json
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 from uuid import UUID, uuid4
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.financials.models import Invoice
+from app.financials.models import (
+    Estimate,
+    EstimateLineItem,
+    Invoice,
+    InvoiceLineItem,
+    Payment,
+)
 from app.financials.service import (
     FinancialService,
     FinancialValidationError,
@@ -198,6 +205,7 @@ class FinancialMigrationService:
         repair_of_run_id: UUID | None = None,
         repair_generation: int = 0,
         progress_callback: Callable[[FinancialMigrationProgress], None] | None = None,
+        reuse_targets: Mapping[tuple[str, str], UUID] | None = None,
     ) -> MigrationReport:
         source_system = self._source_system(source_system)
         if source_system == SOURCE4_SYSTEM and master_run_id is None:
@@ -255,6 +263,7 @@ class FinancialMigrationService:
                                 seen=seen["estimate"],
                                 persist=False,
                                 callback=progress_callback,
+                                reuse_targets=reuse_targets or {},
                             )
                     for index, invoice_record in enumerate(invoices, start=1):
                         async with session.begin_nested():
@@ -271,6 +280,7 @@ class FinancialMigrationService:
                                 planned=planned_invoices,
                                 persist=False,
                                 callback=progress_callback,
+                                reuse_targets=reuse_targets or {},
                             )
                     for index, payment_record in enumerate(payments, start=1):
                         async with session.begin_nested():
@@ -287,6 +297,7 @@ class FinancialMigrationService:
                                 planned=planned_invoices,
                                 persist=False,
                                 callback=progress_callback,
+                                reuse_targets=reuse_targets or {},
                             )
                     await transaction.rollback()
             else:
@@ -304,6 +315,7 @@ class FinancialMigrationService:
                             seen=seen["estimate"],
                             persist=True,
                             callback=progress_callback,
+                            reuse_targets=reuse_targets or {},
                         )
                 for index, invoice_record in enumerate(invoices, start=1):
                     async with factory() as session, session.begin():
@@ -320,6 +332,7 @@ class FinancialMigrationService:
                             planned=planned_invoices,
                             persist=True,
                             callback=progress_callback,
+                            reuse_targets=reuse_targets or {},
                         )
                 for index, payment_record in enumerate(payments, start=1):
                     async with factory() as session, session.begin():
@@ -336,6 +349,7 @@ class FinancialMigrationService:
                             planned=planned_invoices,
                             persist=True,
                             callback=progress_callback,
+                            reuse_targets=reuse_targets or {},
                         )
         except Exception:
             await self._finalize(
@@ -387,6 +401,7 @@ class FinancialMigrationService:
         seen: set[str],
         persist: bool,
         callback: Callable[[FinancialMigrationProgress], None] | None,
+        reuse_targets: Mapping[tuple[str, str], UUID],
     ) -> None:
         disposition: Disposition = "accepted"
         reason = detail = ""
@@ -419,6 +434,84 @@ class FinancialMigrationService:
                         source_system=source_system,
                         source_job_id=record.source_job_id,
                     )
+                    reuse_id = reuse_targets.get(("estimate", record.source_id))
+                    if reuse_id is not None:
+                        estimate = await session.get(Estimate, reuse_id)
+                        if (
+                            estimate is None
+                            or estimate.company_id != context.company.id
+                            or estimate.branch_id != parent.branch_id
+                            or estimate.job_id != parent.job_id
+                            or estimate.customer_id != parent.customer_id
+                            or estimate.service_location_id
+                            != parent.service_location_id
+                        ):
+                            raise ParentResolutionError(
+                                "Manifest-bound Estimate successor is outside its parent scope."
+                            )
+                        reuse_items = list(
+                            (
+                                await session.scalars(
+                                    select(EstimateLineItem)
+                                    .where(EstimateLineItem.estimate_id == estimate.id)
+                                    .order_by(EstimateLineItem.position)
+                                )
+                            ).all()
+                        )
+                        if len(reuse_items) != len(record.line_items):
+                            raise MigrationRecordError(
+                                "Manifest-bound Estimate line-item cardinality differs."
+                            )
+                        if persist:
+                            identity = EstimateSourceIdentity(
+                                id=uuid4(),
+                                company_id=context.company.id,
+                                branch_id=parent.branch_id,
+                                estimate_id=estimate.id,
+                                job_source_identity_id=parent.id,
+                                job_id=parent.job_id,
+                                customer_id=parent.customer_id,
+                                service_location_id=parent.service_location_id,
+                                source_system=source_system,
+                                source_estimate_id=record.source_id,
+                                source_status=record.status,
+                                external_metadata={
+                                    **dict(record.external_metadata or {}),
+                                    "successor_reuse": True,
+                                },
+                                first_run_id=run_id,
+                            )
+                            await self._repository.add_estimate_identity(
+                                session,
+                                identity,
+                                [
+                                    EstimateLineItemSourceIdentity(
+                                        company_id=context.company.id,
+                                        estimate_source_identity_id=identity.id,
+                                        estimate_id=estimate.id,
+                                        estimate_line_item_id=item.id,
+                                        source_system=source_system,
+                                        source_line_item_id=source.source_id,
+                                        first_run_id=run_id,
+                                    )
+                                    for source, item in zip(
+                                        record.line_items, reuse_items, strict=True
+                                    )
+                                ],
+                            )
+                        self._result(
+                            run_id,
+                            "estimate",
+                            index,
+                            record.source_id,
+                            disposition,
+                            reason,
+                            detail,
+                            counts,
+                            exceptions,
+                            callback,
+                        )
+                        return
                     estimate, items = await self._financials.stage_migrated_estimate(
                         session,
                         context=context,
@@ -509,6 +602,7 @@ class FinancialMigrationService:
         planned: dict[str, Invoice],
         persist: bool,
         callback: Callable[[FinancialMigrationProgress], None] | None,
+        reuse_targets: Mapping[tuple[str, str], UUID],
     ) -> None:
         disposition: Disposition = "accepted"
         reason = detail = ""
@@ -541,6 +635,84 @@ class FinancialMigrationService:
                         source_system=source_system,
                         source_job_id=record.source_job_id,
                     )
+                    reuse_id = reuse_targets.get(("invoice", record.source_id))
+                    if reuse_id is not None:
+                        invoice = await session.get(Invoice, reuse_id)
+                        if (
+                            invoice is None
+                            or invoice.company_id != context.company.id
+                            or invoice.branch_id != parent.branch_id
+                            or invoice.job_id != parent.job_id
+                            or invoice.customer_id != parent.customer_id
+                            or invoice.service_location_id != parent.service_location_id
+                        ):
+                            raise ParentResolutionError(
+                                "Manifest-bound Invoice successor is outside its parent scope."
+                            )
+                        reuse_items = list(
+                            (
+                                await session.scalars(
+                                    select(InvoiceLineItem)
+                                    .where(InvoiceLineItem.invoice_id == invoice.id)
+                                    .order_by(InvoiceLineItem.position)
+                                )
+                            ).all()
+                        )
+                        if len(reuse_items) != len(record.line_items):
+                            raise MigrationRecordError(
+                                "Manifest-bound Invoice line-item cardinality differs."
+                            )
+                        planned[record.source_id] = invoice
+                        if persist:
+                            identity = InvoiceSourceIdentity(
+                                id=uuid4(),
+                                company_id=context.company.id,
+                                branch_id=parent.branch_id,
+                                invoice_id=invoice.id,
+                                job_source_identity_id=parent.id,
+                                job_id=parent.job_id,
+                                customer_id=parent.customer_id,
+                                service_location_id=parent.service_location_id,
+                                source_system=source_system,
+                                source_invoice_id=record.source_id,
+                                source_status=record.status,
+                                external_metadata={
+                                    **dict(record.external_metadata or {}),
+                                    "successor_reuse": True,
+                                },
+                                first_run_id=run_id,
+                            )
+                            await self._repository.add_invoice_identity(
+                                session,
+                                identity,
+                                [
+                                    InvoiceLineItemSourceIdentity(
+                                        company_id=context.company.id,
+                                        invoice_source_identity_id=identity.id,
+                                        invoice_id=invoice.id,
+                                        invoice_line_item_id=item.id,
+                                        source_system=source_system,
+                                        source_line_item_id=source.source_id,
+                                        first_run_id=run_id,
+                                    )
+                                    for source, item in zip(
+                                        record.line_items, reuse_items, strict=True
+                                    )
+                                ],
+                            )
+                        self._result(
+                            run_id,
+                            "invoice",
+                            index,
+                            record.source_id,
+                            disposition,
+                            reason,
+                            detail,
+                            counts,
+                            exceptions,
+                            callback,
+                        )
+                        return
                     invoice, items = await self._financials.stage_migrated_invoice(
                         session,
                         context=context,
@@ -632,6 +804,7 @@ class FinancialMigrationService:
         planned: dict[str, Invoice],
         persist: bool,
         callback: Callable[[FinancialMigrationProgress], None] | None,
+        reuse_targets: Mapping[tuple[str, str], UUID],
     ) -> None:
         disposition: Disposition = "accepted"
         reason = detail = ""
@@ -676,6 +849,56 @@ class FinancialMigrationService:
                         assert invoice is not None
                         invoice_id = invoice.id
                         branch_id = invoice.branch_id
+                    reuse_id = reuse_targets.get(("payment", record.source_id))
+                    if reuse_id is not None:
+                        payment = await session.get(Payment, reuse_id)
+                        if (
+                            payment is None
+                            or payment.company_id != context.company.id
+                            or payment.branch_id != branch_id
+                            or payment.invoice_id != invoice_id
+                            or (
+                                invoice_identity is not None
+                                and payment.customer_id != invoice_identity.customer_id
+                            )
+                        ):
+                            raise ParentResolutionError(
+                                "Manifest-bound Payment successor is outside its parent scope."
+                            )
+                        if persist:
+                            assert invoice_identity is not None
+                            self._repository.add_payment_identity(
+                                session,
+                                PaymentSourceIdentity(
+                                    company_id=context.company.id,
+                                    branch_id=branch_id,
+                                    payment_id=payment.id,
+                                    invoice_source_identity_id=invoice_identity.id,
+                                    invoice_id=invoice_identity.invoice_id,
+                                    customer_id=invoice_identity.customer_id,
+                                    source_system=source_system,
+                                    source_payment_id=record.source_id,
+                                    source_status=record.status,
+                                    external_metadata={
+                                        **dict(record.external_metadata or {}),
+                                        "successor_reuse": True,
+                                    },
+                                    first_run_id=run_id,
+                                ),
+                            )
+                        self._result(
+                            run_id,
+                            "payment",
+                            index,
+                            record.source_id,
+                            disposition,
+                            reason,
+                            detail,
+                            counts,
+                            exceptions,
+                            callback,
+                        )
+                        return
                     payment = await self._financials.stage_migrated_payment(
                         session,
                         context=context,
