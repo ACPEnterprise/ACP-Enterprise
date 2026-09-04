@@ -344,6 +344,10 @@ async def run(authority: SuccessorReadAuthority) -> dict[str, object]:
             current_bindings=bindings,
             sealed_source4=sealed_identities(plan),
             parents=parents,
+            canonical_reconciliation_digest=result.report.safe_digest,
+            canonical_reconciliation_admission_allowed=(
+                result.report.admission_allowed
+            ),
         )
         write_qualified_manifest(authority.qualified_manifest_output, qualified)
     return {
