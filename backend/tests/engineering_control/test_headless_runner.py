@@ -4,6 +4,7 @@ from unittest.mock import ANY, AsyncMock
 from uuid import uuid4
 
 import pytest
+from app.engineering_control.scheduler.approved_queue import load_approved_factory_queue
 from app.engineering_control.scheduler.runner import HeadlessRunner
 
 
@@ -49,7 +50,7 @@ async def test_runner_applies_ready_items_and_never_preview_gated_work() -> None
         session,
         admin_context=admin,
         worker_context=worker,
-        expected_authority_sha="463c1ff7465e3b6b2b2f1cfffa12ded213ce8943",
+        expected_authority_sha=load_approved_factory_queue().authoritative_repository_sha,
         now=datetime.now(timezone.utc),
     )
 
