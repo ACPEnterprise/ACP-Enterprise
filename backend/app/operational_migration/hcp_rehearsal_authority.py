@@ -15,12 +15,18 @@ SOURCE4_SYSTEM = "housecall_pro_source4"
 
 
 def require_sanctioned_context(context: AuthorizationContext) -> None:
+    active_branch = context.active_branch
+    membership = context.membership
     if (
-        context.company.id != COMPANY_ID
-        or context.user.id != ACTOR_ID
-        or context.active_branch is None
-        or context.active_branch.id != BRANCH_ID
-        or not context.can_access_branch(BRANCH_ID)
+        context.company.status != "active"
+        or context.user.status != "active"
+        or membership.status != "active"
+        or membership.company_id != context.company.id
+        or membership.user_id != context.user.id
+        or active_branch is None
+        or active_branch.status != "active"
+        or active_branch.company_id != context.company.id
+        or not context.can_access_branch(active_branch.id)
         or not context.has_permission(MigrationPermission.EXECUTE_REHEARSAL)
     ):
         raise ValueError("sanctioned HCP rehearsal actor and scope are required")
