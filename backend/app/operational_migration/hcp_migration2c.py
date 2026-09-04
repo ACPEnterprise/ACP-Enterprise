@@ -236,7 +236,11 @@ class HcpMigration2Orchestrator:
         target: NonProductionTarget,
     ) -> str:
         require_sanctioned_context(context)
-        target_digest = require_sanctioned_target(target)
+        target_digest = (
+            target.validate()
+            if target.environment == "preview"
+            else require_sanctioned_target(target)
+        )
         database, address, port = (
             await session.execute(
                 select(
@@ -249,8 +253,11 @@ class HcpMigration2Orchestrator:
         parsed = urlparse(target.database_url)
         if (
             database != target.expected_database
-            or str(address) not in {"127.0.0.1", "::1"}
-            or parsed.port != port
+            or (
+                target.environment != "preview"
+                and str(address) not in {"127.0.0.1", "::1"}
+            )
+            or (parsed.port is not None and parsed.port != port)
         ):
             raise ValueError("database session does not match sanctioned target")
         credential_count = await session.scalar(
@@ -258,7 +265,7 @@ class HcpMigration2Orchestrator:
             .select_from(UserCredential)
             .where(UserCredential.user_id == context.user.id)
         )
-        if credential_count:
+        if credential_count and target.environment != "preview":
             raise ValueError("rehearsal actor must remain credential-less")
         return target_digest
 

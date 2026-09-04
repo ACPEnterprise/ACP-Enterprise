@@ -401,7 +401,10 @@ async def _schema_head(factory: async_sessionmaker[AsyncSession]) -> str:
 
 
 async def resolve_rehearsal_context(
-    session: AsyncSession, authority: ProtectedExecutionAuthority
+    session: AsyncSession,
+    authority: ProtectedExecutionAuthority,
+    *,
+    credentialed: bool = False,
 ) -> AuthorizationContext:
     user = await session.get(User, authority.actor_id)
     company = await session.get(Company, authority.company_id)
@@ -466,7 +469,7 @@ async def resolve_rehearsal_context(
         or branch is None
         or membership is None
         or branch_access is None
-        or credential is not None
+        or ((credential is None) if credentialed else (credential is not None))
         or user.status != "active"
         or company.status != "active"
         or branch.status != "active"
