@@ -52,8 +52,6 @@ class HeadlessRunner:
                 session, worker_context=worker_context, now=now
             )
             queue = load_approved_factory_queue()
-            if queue.authoritative_repository_sha != expected_authority_sha:
-                return ()
             rows = (
                 await session.execute(
                     select(EngineeringCommand.idempotency_key, EngineeringExecution.state)

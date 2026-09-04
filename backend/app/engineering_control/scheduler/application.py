@@ -3,12 +3,20 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+from pathlib import Path
+from typing import Protocol
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.engineering_control.commands import (
     ApproveEngineeringCommand,
     CreateEngineeringCommand,
+)
+from app.engineering_control.repository_operation.errors import (
+    RepositoryOperationGitError,
+)
+from app.engineering_control.repository_operation.git_adapter import (
+    ProductionBoundedGitAdapter,
 )
 from app.engineering_control.service import EngineeringControlService
 from app.engineering_execution.controlled.service import ControlledExecutionService
@@ -24,6 +32,10 @@ class HeadlessApplicationError(RuntimeError):
     pass
 
 
+class AuthorityVerifier(Protocol):
+    def verify_historical_publication(self, branch: str, commit_sha: str) -> str: ...
+
+
 class HeadlessApplicationService:
     def __init__(
         self,
@@ -31,10 +43,12 @@ class HeadlessApplicationService:
         commands: EngineeringControlService | None = None,
         executions: EngineeringExecutionService | None = None,
         controlled: ControlledExecutionService | None = None,
+        authority: AuthorityVerifier | None = None,
     ) -> None:
         self.commands = commands or EngineeringControlService()
         self.executions = executions or EngineeringExecutionService()
         self.controlled = controlled or ControlledExecutionService()
+        self.authority = authority or ProductionBoundedGitAdapter(Path.cwd())
 
     async def reconcile_stale_executions(
         self,
@@ -78,8 +92,16 @@ class HeadlessApplicationService:
                 "stale execution requires existing lease/lifecycle reconciliation"
             )
         queue = load_approved_factory_queue()
-        if queue.authoritative_repository_sha != expected_authority_sha:
-            raise HeadlessApplicationError("approved queue authority is stale")
+        try:
+            observed = self.authority.verify_historical_publication(
+                "customer-management-v1", queue.authoritative_repository_sha
+            )
+        except RepositoryOperationGitError as error:
+            raise HeadlessApplicationError(
+                "approved queue provenance is not in authoritative lineage"
+            ) from error
+        if observed != expected_authority_sha:
+            raise HeadlessApplicationError("current work authority is not attested")
         work = next(
             (item for item in queue.items if item.milestone_id == proposal.milestone_id),
             None,

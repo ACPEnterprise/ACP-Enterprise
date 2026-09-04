@@ -4,6 +4,9 @@ from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
+from app.engineering_control.repository_operation.errors import (
+    RepositoryOperationGitError,
+)
 from app.engineering_control.scheduler.application import (
     HeadlessApplicationError,
     HeadlessApplicationService,
@@ -12,6 +15,19 @@ from app.engineering_control.scheduler.approved_queue import (
     load_approved_factory_queue,
 )
 from app.engineering_control.scheduler.headless import HeadlessProposal
+
+
+class Authority:
+    def __init__(self, current: str, *, reject: bool = False):
+        self.current = current
+        self.reject = reject
+        self.calls = []
+
+    def verify_historical_publication(self, branch, commit_sha):
+        self.calls.append((branch, commit_sha))
+        if self.reject:
+            raise RepositoryOperationGitError("not_ancestor", "not ancestor")
+        return self.current
 
 
 def context(company_id):
@@ -50,7 +66,11 @@ async def test_bridge_preserves_manage_approve_and_execution_contexts() -> None:
         approve_command=AsyncMock(return_value=approved),
     )
     executions = SimpleNamespace(request_execution=AsyncMock(return_value=result))
-    service = HeadlessApplicationService(commands=commands, executions=executions)
+    current = "1258f59259580f44549ec3c09edffd7043c26d70"
+    authority = Authority(current)
+    service = HeadlessApplicationService(
+        commands=commands, executions=executions, authority=authority
+    )
 
     actual = await service.apply_proposal(
         object(),
@@ -58,7 +78,7 @@ async def test_bridge_preserves_manage_approve_and_execution_contexts() -> None:
         approve_context=approve,
         execution_context=execute,
         proposal=proposal(),
-        expected_authority_sha=queue.authoritative_repository_sha,
+        expected_authority_sha=current,
         now=datetime.now(timezone.utc),
     )
 
@@ -67,7 +87,10 @@ async def test_bridge_preserves_manage_approve_and_execution_contexts() -> None:
     assert commands.approve_command.await_args.kwargs["context"] is approve
     assert executions.request_execution.await_args.kwargs["context"] is execute
     created = commands.create_command.await_args.kwargs["command"]
-    assert created.expected_head == queue.authoritative_repository_sha
+    assert created.expected_head == current
+    assert authority.calls == [
+        ("customer-management-v1", queue.authoritative_repository_sha)
+    ]
     assert created.execution_boundary["forbidden_paths"] == [
         ".git/**",
         ".env*",
@@ -99,11 +122,14 @@ async def test_stale_reconciliation_uses_existing_authenticated_lease_lifecycle(
 
 
 @pytest.mark.asyncio
-async def test_bridge_rejects_reconciliation_retry_and_stale_authority() -> None:
+async def test_bridge_rejects_reconciliation_retry_and_unattested_authority() -> None:
     company_id = uuid4()
     contexts = [context(company_id) for _ in range(3)]
+    current = "1258f59259580f44549ec3c09edffd7043c26d70"
     service = HeadlessApplicationService(
-        commands=SimpleNamespace(), executions=SimpleNamespace()
+        commands=SimpleNamespace(),
+        executions=SimpleNamespace(),
+        authority=Authority(current),
     )
     arguments = {
         "session": object(),
@@ -118,11 +144,23 @@ async def test_bridge_rejects_reconciliation_retry_and_stale_authority() -> None
             proposal=proposal("reconcile"),
             expected_authority_sha=load_approved_factory_queue().authoritative_repository_sha,
         )
-    with pytest.raises(HeadlessApplicationError, match="authority is stale"):
+    with pytest.raises(HeadlessApplicationError, match="not attested"):
         await service.apply_proposal(
             **arguments,
             proposal=proposal(),
             expected_authority_sha="0" * 40,
+        )
+
+    rejected = HeadlessApplicationService(
+        commands=SimpleNamespace(),
+        executions=SimpleNamespace(),
+        authority=Authority(current, reject=True),
+    )
+    with pytest.raises(HeadlessApplicationError, match="not in authoritative lineage"):
+        await rejected.apply_proposal(
+            **arguments,
+            proposal=proposal(),
+            expected_authority_sha=current,
         )
 
 
