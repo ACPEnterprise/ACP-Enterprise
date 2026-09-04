@@ -419,8 +419,16 @@ describe("AdministrationRoute", () => {
   it("assigns the selected role only to a visible active Membership", async () => {
     const router = renderPage();
     const membership = await screen.findByRole("combobox", { name: "Active Membership" });
-    expect(within(membership).getByRole("option", { name: "owner" })).toBeInTheDocument();
-    expect(within(membership).queryByRole("option", { name: "former-user" })).not.toBeInTheDocument();
+    expect(
+      within(membership).getByRole("option", {
+        name: "Membership membership-active · User owner",
+      }),
+    ).toHaveValue("membership-active");
+    expect(
+      within(membership).queryByRole("option", {
+        name: "Membership membership-inactive · User former-user",
+      }),
+    ).not.toBeInTheDocument();
     await userEvent.selectOptions(membership, "membership-active");
     await userEvent.click(screen.getByRole("button", { name: "Assign selected role" }));
     expect(vi.mocked(api.assignMembershipRole).mock.calls[0]?.slice(0, 2)).toEqual([
