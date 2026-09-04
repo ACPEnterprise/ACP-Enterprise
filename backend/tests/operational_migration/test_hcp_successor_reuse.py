@@ -211,3 +211,16 @@ def test_reused_child_cannot_depend_on_new_parent() -> None:
     result = qualify_successor_admission(manifest, guards())
     assert result.orphan_risk_count == 1
     assert result.admission_allowed is False
+
+
+def test_canonical_reconciliation_rejection_is_preserved() -> None:
+    manifest = QualifiedSuccessorManifest.build(
+        company_id="company",
+        branch_id="branch",
+        entries=[entry("customer", "new", AdmissionDisposition.CREATE_NEW)],
+        canonical_reconciliation_digest="b" * 64,
+        canonical_reconciliation_admission_allowed=False,
+    )
+    result = qualify_successor_admission(manifest, guards())
+    assert "canonical_successor_reconciliation" in result.guard_failures
+    assert result.admission_allowed is False
