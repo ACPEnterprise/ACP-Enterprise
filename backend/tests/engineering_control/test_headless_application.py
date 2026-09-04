@@ -134,6 +134,12 @@ def test_reviewed_queue_tracks_actual_factory_authority_gates_and_successors() -
     admission = by_id["MIGRATION.HCP.SOURCE4.PREVIEW.ADMISSION.1"]
     assert admission.execution_mode == "preview_gated"
     assert admission.hard_boundary_operations == ("preview_data_admission",)
+    live_v2 = by_id["MIGRATION.HCP.SOURCE4.LIVE.V2.RECONCILIATION.1"]
+    assert live_v2.queue_state == "AUTHORITATIVE"
+    assert live_v2.authoritative_commit_sha == (
+        "e297f36bf4d1e4b176fa9b70aff7c771bfdb65d0"
+    )
+    assert admission.dependencies == (live_v2.milestone_id,)
     assert by_id["PRICEBOOK.ALLCOUNTY.MIGRATION.RECONCILIATION.1"].queue_state == "READY"
     assert by_id["COMMUNICATIONS.OPERATIONAL.MEASUREMENT.1"].queue_state == "READY"
     assert by_id["PRICEBOOK.OWNER.DECISION.WORKSPACE.1"].queue_state == "BLOCKED_DEPENDENCY"
