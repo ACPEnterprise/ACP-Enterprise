@@ -36,6 +36,35 @@ Bind the provider to `127.0.0.1` only. Do not expose it through Caddy, Preview, 
 
 Every request is bound to Company, node, command, execution, lease, repository, branch, expected HEAD, allowed and forbidden paths, permitted operations, validation requirements, and immutable digests. Interrupted mutation phases become `reconciliation_required`; they are never automatically re-executed.
 
+## Scoped headless factory scheduler
+
+The scheduler is a separate, non-Production, periodic control process. Install
+`com.acp.headless-factory-runner.plist.example` only after an administrator has
+activated a scoped delegation. Replace its non-secret identifiers with the exact
+Company, current authenticated worker session, protected authority, and active
+delegation identifiers. The access token is read from
+`ACP_HEADLESS_ADMIN_ACCESS_TOKEN_FILE`; that file must be mode `0600`. Do not put
+the token in `ProgramArguments`, the plist, or logs. The database connection must
+use the sanctioned internal application secret boundary and must not expose
+PostgreSQL publicly. Database configuration is inherited from the deployed
+backend's existing protected settings boundary; never copy a credential-bearing
+connection string into the plist.
+
+Launchd invokes one singleton scheduling cycle every 30 seconds. Every cycle
+reauthenticates the administrator and worker session, validates that the
+delegation is active, unexpired, unchanged, and bound to the exact authority,
+then fills eligible idle capacity. Subsequent cycles observe completed commands
+and create dependency-safe successors, providing automatic refill. An expired,
+revoked, P0-paused, reauthorized, or authority-mismatched delegation fails
+closed. Replace and reload the plist when a worker establishes a new session;
+never substitute a stale session identifier.
+
+Before loading the service, run one foreground cycle from the deployed backend
+release and confirm command creation, offer acquisition, provider start, and a
+current heartbeat. Unload the scheduler before rotating its administrator token
+or changing the delegated authority. The worker and provider services remain
+independent and must already be healthy.
+
 ## Unattended non-production publication
 
 An owner Start for a code-changing READY milestone grants the provider the bounded
