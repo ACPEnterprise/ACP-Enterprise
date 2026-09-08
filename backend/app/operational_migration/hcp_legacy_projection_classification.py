@@ -11,7 +11,7 @@ import hashlib
 import json
 from collections import Counter, defaultdict
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass, is_dataclass
 from enum import StrEnum
 
 from app.operational_migration.hcp_successor_reconciliation import (
@@ -21,7 +21,7 @@ from app.operational_migration.hcp_successor_reconciliation import (
     SealedIdentity,
 )
 
-CONTRACT = "hcp-legacy-projection-classification/v1"
+CONTRACT = "hcp-legacy-projection-classification/v2"
 SUPPORTED_DOMAINS = frozenset(
     {
         "customer",
@@ -37,11 +37,11 @@ SUPPORTED_DOMAINS = frozenset(
 
 
 class LegacyProjectionDisposition(StrEnum):
+    PROVABLY_UNRELATED = "provably_unrelated"
+    EXACT_SUCCESSOR = "exact_successor"
+    AMBIGUOUS_HOLD = "ambiguous_hold"
+    GENUINE_CONFLICT = "genuine_conflict"
     SEALED_CREATE_NEW = "sealed_create_new"
-    SEALED_REUSE_LEGACY = "sealed_reuse_legacy"
-    SEALED_ALREADY_SUCCESSOR = "sealed_already_successor"
-    LEGACY_OUTSIDE_SEALED = "legacy_outside_sealed"
-    CONFLICT = "conflict"
 
 
 @dataclass(frozen=True, order=True)
@@ -73,10 +73,163 @@ class LegacyProjectionClassification:
     report: LegacyProjectionReport
 
 
+@dataclass(frozen=True)
+class ProjectionCorrelationEvidence:
+    """Private normalized evidence for one legacy or sealed projection.
+
+    Fingerprints must represent independently acquired, domain-specific content.
+    Parent keys are canonical source keys produced by an already qualified parent
+    correlation.  Callers retain all raw values inside the protected boundary.
+    """
+
+    domain: str
+    source_id: str
+    target_id: str | None
+    content_fingerprints: tuple[str, ...] = ()
+    parent_keys: tuple[tuple[str, str], ...] = ()
+    authoritative_provider_id: str | None = None
+
+
+def classify_correlated_legacy(
+    *,
+    legacy: Iterable[ProjectionCorrelationEvidence],
+    sealed: Iterable[ProjectionCorrelationEvidence],
+) -> LegacyProjectionClassification:
+    """Classify legacy projections from provider, content, and graph evidence.
+
+    A reuse is exact only when every available unique signal agrees on one sealed
+    projection. Conflicting unique signals are genuine conflicts. Evidence with no
+    positive correlation is held unless an authoritative provider identifier proves
+    the records distinct; negative fuzzy matching is deliberately never sufficient.
+    """
+
+    old = tuple(legacy)
+    new = tuple(sealed)
+    all_rows = old + new
+    if any(
+        row.domain not in SUPPORTED_DOMAINS
+        or not row.source_id
+        or any(len(value) != 64 for value in row.content_fingerprints)
+        for row in all_rows
+    ):
+        raise ValueError("projection correlation evidence is invalid")
+    keys = [(row.domain, row.source_id) for row in new]
+    if len(keys) != len(set(keys)):
+        raise ValueError("sealed projection evidence contains duplicates")
+
+    provider: dict[tuple[str, str], set[str]] = defaultdict(set)
+    fingerprints: dict[tuple[str, str], set[str]] = defaultdict(set)
+    parents: dict[tuple[str, tuple[tuple[str, str], ...]], set[str]] = defaultdict(set)
+    sealed_by_key = {(row.domain, row.source_id): row for row in new}
+    for row in new:
+        if row.authoritative_provider_id:
+            provider[(row.domain, row.authoritative_provider_id)].add(row.source_id)
+        for value in row.content_fingerprints:
+            fingerprints[(row.domain, value)].add(row.source_id)
+        if row.parent_keys:
+            parents[(row.domain, row.parent_keys)].add(row.source_id)
+
+    records: list[LegacyProjectionRecord] = []
+    for row in sorted(old, key=lambda item: (item.domain, item.source_id)):
+        signals: list[set[str]] = []
+        if row.authoritative_provider_id:
+            signals.append(provider[(row.domain, row.authoritative_provider_id)])
+        signals.extend(
+            fingerprints[(row.domain, value)] for value in row.content_fingerprints
+        )
+        # Graph evidence constrains a positive content/provider signal; a unique
+        # child beneath a parent is not, by itself, proof that two events are equal.
+        if row.parent_keys and signals:
+            parent_candidates = parents[(row.domain, row.parent_keys)]
+            signals = [value & parent_candidates for value in signals]
+        unique = {next(iter(value)) for value in signals if len(value) == 1}
+        if len(unique) > 1:
+            disposition = LegacyProjectionDisposition.GENUINE_CONFLICT
+            successor_id = None
+            blocker = True
+        elif len(unique) == 1:
+            successor_id = next(iter(unique))
+            disposition = LegacyProjectionDisposition.EXACT_SUCCESSOR
+            blocker = False
+        elif row.authoritative_provider_id and not provider[
+            (row.domain, row.authoritative_provider_id)
+        ]:
+            successor_id = None
+            disposition = LegacyProjectionDisposition.PROVABLY_UNRELATED
+            blocker = False
+        else:
+            successor_id = None
+            disposition = LegacyProjectionDisposition.AMBIGUOUS_HOLD
+            blocker = True
+        records.append(
+            LegacyProjectionRecord(
+                domain=row.domain,
+                source_id=row.source_id,
+                disposition=disposition,
+                evidence_digest=_digest(
+                    {
+                        "legacy": row,
+                        "successor": sealed_by_key.get((row.domain, successor_id)),
+                        "disposition": disposition.value,
+                    }
+                ),
+                target_id=row.target_id,
+                canonical_blocker=blocker,
+            )
+        )
+    return _classification(tuple(records))
+
+
 def _digest(value: object) -> str:
+    def normalize(item: object) -> object:
+        if is_dataclass(item):
+            return normalize(asdict(item))
+        if isinstance(item, dict):
+            return {str(key): normalize(child) for key, child in item.items()}
+        if isinstance(item, (list, tuple)):
+            return [normalize(child) for child in item]
+        if isinstance(item, StrEnum):
+            return item.value
+        return item
+
     return hashlib.sha256(
-        json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
+        json.dumps(normalize(value), sort_keys=True, separators=(",", ":")).encode()
     ).hexdigest()
+
+
+def _classification(
+    records: tuple[LegacyProjectionRecord, ...],
+) -> LegacyProjectionClassification:
+    disposition_counts = Counter(item.disposition.value for item in records)
+    domain_counts: dict[str, Counter[str]] = defaultdict(Counter)
+    for record in records:
+        domain_counts[record.domain][record.disposition.value] += 1
+    keys = tuple(item.value for item in LegacyProjectionDisposition)
+    public_counts = {key: disposition_counts[key] for key in keys}
+    public_domains = {
+        domain: {key: counts[key] for key in keys}
+        for domain, counts in sorted(domain_counts.items())
+    }
+    blocker_count = sum(item.canonical_blocker for item in records)
+    public = {
+        "contract": CONTRACT,
+        "disposition_counts": public_counts,
+        "domain_counts": public_domains,
+        "record_count": len(records),
+        "canonical_blocker_count": blocker_count,
+    }
+    return LegacyProjectionClassification(
+        records=records,
+        report=LegacyProjectionReport(
+            contract=CONTRACT,
+            disposition_counts=public_counts,
+            domain_counts=public_domains,
+            record_count=len(records),
+            canonical_blocker_count=blocker_count,
+            canonical_admission_allowed=blocker_count == 0,
+            safe_digest=_digest(public),
+        ),
+    )
 
 
 def classify_legacy_projections(
@@ -131,29 +284,23 @@ def classify_legacy_projections(
         target: str | None = None
         blocker = False
         if len(legacy) > 1 or len(successor) > 1 or collision:
-            disposition = LegacyProjectionDisposition.CONFLICT
+            disposition = LegacyProjectionDisposition.GENUINE_CONFLICT
             blocker = True
         elif not sealed_key:
-            disposition = (
-                LegacyProjectionDisposition.LEGACY_OUTSIDE_SEALED
-                if legacy and not successor
-                else LegacyProjectionDisposition.CONFLICT
-            )
-            target = (
-                legacy[0]
-                if disposition
-                == LegacyProjectionDisposition.LEGACY_OUTSIDE_SEALED
-                else None
-            )
+            # Absence from the new provider-ID namespace is not proof that an old
+            # projection is unrelated.  Fingerprint/graph evidence must promote it
+            # to EXACT_SUCCESSOR or PROVABLY_UNRELATED; identity-only evidence holds.
+            disposition = LegacyProjectionDisposition.AMBIGUOUS_HOLD
+            target = legacy[0] if legacy and not successor else None
             blocker = True
         elif successor and legacy and successor[0] == legacy[0]:
-            disposition = LegacyProjectionDisposition.SEALED_ALREADY_SUCCESSOR
+            disposition = LegacyProjectionDisposition.EXACT_SUCCESSOR
             target = successor[0]
         elif successor:
-            disposition = LegacyProjectionDisposition.CONFLICT
+            disposition = LegacyProjectionDisposition.GENUINE_CONFLICT
             blocker = True
         elif legacy:
-            disposition = LegacyProjectionDisposition.SEALED_REUSE_LEGACY
+            disposition = LegacyProjectionDisposition.EXACT_SUCCESSOR
             target = legacy[0]
         else:
             disposition = LegacyProjectionDisposition.SEALED_CREATE_NEW
@@ -177,33 +324,4 @@ def classify_legacy_projections(
             )
         )
 
-    disposition_counts = Counter(item.disposition.value for item in records)
-    domain_counts: dict[str, Counter[str]] = defaultdict(Counter)
-    for record in records:
-        domain_counts[record.domain][record.disposition.value] += 1
-    keys = tuple(item.value for item in LegacyProjectionDisposition)
-    public_counts = {key: disposition_counts[key] for key in keys}
-    public_domains = {
-        domain: {key: counts[key] for key in keys}
-        for domain, counts in sorted(domain_counts.items())
-    }
-    blocker_count = sum(item.canonical_blocker for item in records)
-    public = {
-        "contract": CONTRACT,
-        "disposition_counts": public_counts,
-        "domain_counts": public_domains,
-        "record_count": len(records),
-        "canonical_blocker_count": blocker_count,
-    }
-    return LegacyProjectionClassification(
-        records=tuple(records),
-        report=LegacyProjectionReport(
-            contract=CONTRACT,
-            disposition_counts=public_counts,
-            domain_counts=public_domains,
-            record_count=len(records),
-            canonical_blocker_count=blocker_count,
-            canonical_admission_allowed=blocker_count == 0,
-            safe_digest=_digest(public),
-        ),
-    )
+    return _classification(tuple(records))

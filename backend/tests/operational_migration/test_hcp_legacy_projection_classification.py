@@ -1,6 +1,8 @@
 import pytest
 from app.operational_migration.hcp_legacy_projection_classification import (
     LegacyProjectionDisposition,
+    ProjectionCorrelationEvidence,
+    classify_correlated_legacy,
     classify_legacy_projections,
 )
 from app.operational_migration.hcp_successor_reconciliation import (
@@ -29,9 +31,9 @@ def test_classifies_complete_union_and_preserves_canonical_blocker() -> None:
     )
     assert [item.disposition for item in result.records] == [
         LegacyProjectionDisposition.SEALED_CREATE_NEW,
-        LegacyProjectionDisposition.SEALED_REUSE_LEGACY,
-        LegacyProjectionDisposition.LEGACY_OUTSIDE_SEALED,
-        LegacyProjectionDisposition.SEALED_ALREADY_SUCCESSOR,
+        LegacyProjectionDisposition.EXACT_SUCCESSOR,
+        LegacyProjectionDisposition.AMBIGUOUS_HOLD,
+        LegacyProjectionDisposition.EXACT_SUCCESSOR,
     ]
     assert result.report.canonical_blocker_count == 1
     assert result.report.canonical_admission_allowed is False
@@ -69,7 +71,10 @@ def test_source4_without_matching_legacy_is_a_conflict() -> None:
         ),
         sealed_source4=(SealedIdentity("payment", "source"),),
     )
-    assert result.records[0].disposition == LegacyProjectionDisposition.CONFLICT
+    assert (
+        result.records[0].disposition
+        == LegacyProjectionDisposition.GENUINE_CONFLICT
+    )
     assert result.report.canonical_blocker_count == 1
 
 
@@ -82,7 +87,7 @@ def test_target_collision_is_a_conflict() -> None:
         sealed_source4=(SealedIdentity("job", "one"), SealedIdentity("job", "two")),
     )
     assert all(
-        item.disposition == LegacyProjectionDisposition.CONFLICT
+        item.disposition == LegacyProjectionDisposition.GENUINE_CONFLICT
         for item in result.records
     )
 
@@ -118,3 +123,60 @@ def test_invalid_evidence_fails_closed(
         classify_legacy_projections(
             current_bindings=bindings, sealed_source4=sealed
         )
+
+
+def test_correlated_classification_uses_unique_content_and_holds_negative_match() -> None:
+    exact = "1" * 64
+    missing = "2" * 64
+    result = classify_correlated_legacy(
+        legacy=(
+            ProjectionCorrelationEvidence("customer", "old-a", "target-a", (exact,)),
+            ProjectionCorrelationEvidence("customer", "old-b", "target-b", (missing,)),
+        ),
+        sealed=(
+            ProjectionCorrelationEvidence("customer", "new-a", None, (exact,)),
+        ),
+    )
+    assert [item.disposition for item in result.records] == [
+        LegacyProjectionDisposition.EXACT_SUCCESSOR,
+        LegacyProjectionDisposition.AMBIGUOUS_HOLD,
+    ]
+    assert result.report.canonical_blocker_count == 1
+
+
+def test_authoritative_provider_nonmatch_proves_unrelated() -> None:
+    result = classify_correlated_legacy(
+        legacy=(
+            ProjectionCorrelationEvidence(
+                "job", "old", "target", authoritative_provider_id="provider-old"
+            ),
+        ),
+        sealed=(
+            ProjectionCorrelationEvidence(
+                "job", "new", None, authoritative_provider_id="provider-new"
+            ),
+        ),
+    )
+    assert (
+        result.records[0].disposition
+        == LegacyProjectionDisposition.PROVABLY_UNRELATED
+    )
+    assert result.report.canonical_admission_allowed is True
+
+
+def test_disagreeing_unique_signals_are_a_genuine_conflict() -> None:
+    result = classify_correlated_legacy(
+        legacy=(
+            ProjectionCorrelationEvidence(
+                "customer", "old", "target", ("1" * 64, "2" * 64)
+            ),
+        ),
+        sealed=(
+            ProjectionCorrelationEvidence("customer", "new-a", None, ("1" * 64,)),
+            ProjectionCorrelationEvidence("customer", "new-b", None, ("2" * 64,)),
+        ),
+    )
+    assert (
+        result.records[0].disposition
+        == LegacyProjectionDisposition.GENUINE_CONFLICT
+    )
