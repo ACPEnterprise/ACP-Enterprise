@@ -12,6 +12,12 @@ from app.operational_measurement.foundation import (
 from app.operational_measurement.foundation import (
     source_matrix as operational_measurement_source_matrix,
 )
+from app.operational_measurement.labor_evidence import (
+    CONTRACT_VERSION as LABOR_EVIDENCE_VERSION,
+)
+from app.operational_measurement.labor_evidence import (
+    source_readiness as labor_source_readiness,
+)
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import (
     AccountingPermission,
@@ -97,6 +103,19 @@ async def economics_measurement_foundation(context: Reader) -> dict[str, object]
         "company_id": str(context.company.id),
         "branch_id": str(context.active_branch.id) if context.active_branch else None,
         "source_matrix": operational_measurement_source_matrix(),
+        "labor_evidence": {
+            "contract_version": LABOR_EVIDENCE_VERSION,
+            "relationship": (
+                "Employee",
+                "Job",
+                "Appointment",
+                "worked interval",
+                "jobsite hours",
+                "paid hours",
+                "productive hours",
+            ),
+            "source_readiness": labor_source_readiness(),
+        },
         "time_measures": (
             "PAID_TIME",
             "AVAILABLE_TIME",
