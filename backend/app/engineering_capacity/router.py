@@ -35,6 +35,7 @@ from .schemas import (
     ExistingWorkerCapacitySetup,
     PermanentCapacityBindingRequest,
     PermanentCapacityBindingResponse,
+    PermanentCapacityRebindingRequest,
     WorkerCapacityRegister,
     WorkerCapacityResponse,
     WorkerCapacityUpdate,
@@ -188,6 +189,22 @@ async def bind_permanent_capacity(
 ) -> PermanentCapacityBindingResponse:
     try:
         return await engineering_capacity_service.bind_permanent_capacity(
+            session, context=context, data=data
+        )
+    except EngineeringCapacityError as error:
+        raise capacity_http_error(error) from error
+
+
+@router.post(
+    "/permanent-bindings/rebind", response_model=PermanentCapacityBindingResponse
+)
+async def rebind_permanent_capacity(
+    data: PermanentCapacityRebindingRequest,
+    context: ManageContext,
+    session: DatabaseSession,
+) -> PermanentCapacityBindingResponse:
+    try:
+        return await engineering_capacity_service.rebind_permanent_capacity(
             session, context=context, data=data
         )
     except EngineeringCapacityError as error:
