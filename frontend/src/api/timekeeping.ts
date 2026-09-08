@@ -55,6 +55,21 @@ export interface PunchResult {
   completed_entry: TimeEntry | null;
 }
 
+export interface AdminTimecardReviewItem {
+  employee_id: string;
+  employee_number: string;
+  display_name: string;
+  home_branch_id: string | null;
+  entry_count: number;
+  total_minutes: number;
+  exception_codes: Array<"no_time" | "unsubmitted" | "corrected" | "overlap">;
+}
+
+export interface AdminTimecardReview {
+  pay_period: PayPeriod | null;
+  items: AdminTimecardReviewItem[];
+}
+
 export type WorkdayAccessFailure =
   | "authentication_required"
   | "permission_denied"
@@ -95,6 +110,14 @@ export async function recordOwnPunch(action: PunchAction): Promise<PunchResult> 
       "/api/v1/timekeeping/me/punches",
       { action },
       { headers: { "Idempotency-Key": idempotencyKey } },
+    )
+  ).data;
+}
+
+export async function getAdminTimecardReview(): Promise<AdminTimecardReview> {
+  return (
+    await apiClient.get<AdminTimecardReview>(
+      "/api/v1/timekeeping/admin/timecard-review",
     )
   ).data;
 }

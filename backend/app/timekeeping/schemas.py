@@ -113,3 +113,20 @@ class PayrollTimeInputView(BaseModel):
     approved_revision_ids: tuple[UUID, ...]
     total_approved_minutes: int
     snapshot_digest: str
+
+
+class AdminTimecardReviewItem(BaseModel):
+    employee_id: UUID
+    employee_number: str
+    display_name: str
+    home_branch_id: UUID | None
+    entry_count: int
+    total_minutes: int
+    exception_codes: tuple[
+        Literal["no_time", "unsubmitted", "corrected", "overlap"], ...
+    ]
+
+
+class AdminTimecardReview(BaseModel):
+    pay_period: PayPeriodView | None
+    items: tuple[AdminTimecardReviewItem, ...]
