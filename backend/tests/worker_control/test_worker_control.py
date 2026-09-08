@@ -5,10 +5,11 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from app.core.config import settings
+from app.engineering_capacity.models import (
+    EngineeringCapacityMachine,
+    EngineeringWorkerCapacity,
+)
 from app.engineering_execution.service import EngineeringExecutionService
 from app.events.models import BusinessEvent
 from app.execution_providers.contracts import (
@@ -47,6 +48,9 @@ from app.worker_control.errors import (
 )
 from app.worker_control.models import WorkerHeartbeat, WorkerLease, WorkerResult
 from app.worker_control.service import RegisterWorkerCommand, WorkerControlService
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
 from tests.engineering_control.test_engineering_command_service import (
     ServiceFixture,
     context_with_permissions,
@@ -550,6 +554,94 @@ async def test_active_lease_is_unique_and_versions_fail_closed(
             )
         )
     assert lease_count == 1
+
+
+@pytest.mark.asyncio
+async def test_worker_leases_are_bounded_by_locked_configured_capacity(
+    worker_database: ServiceFixture,
+) -> None:
+    fixture = worker_database
+    service, worker, worker_context, _ = await register_available_worker(fixture)
+    now = utc_now()
+    async with fixture.factory() as session, session.begin():
+        machine = EngineeringCapacityMachine(
+            company_id=worker.company_id,
+            machine_label="multi-lease-worker",
+            enrollment_state="enrolled",
+            worker_id=worker.id,
+            created_at=now,
+            updated_at=now,
+        )
+        session.add(machine)
+        await session.flush()
+        session.add(
+            EngineeringWorkerCapacity(
+                company_id=worker.company_id,
+                worker_id=worker.id,
+                machine_id=machine.id,
+                configured_limit=2,
+                allocated_capacity=0,
+                reserved_capacity=0,
+                operational_state="available",
+                health_state="healthy",
+                created_at=now,
+                updated_at=now,
+            )
+        )
+    executions = [await disconnected_execution(fixture) for _ in range(3)]
+    offers = []
+    for execution in executions:
+        async with fixture.factory() as session:
+            offers.append(
+                await service.issue_offer(
+                    session,
+                    context=operator_context(fixture.context),
+                    execution_id=execution.execution_id,
+                    capability_required=WorkerCapability.ENGINEERING_EXECUTE,
+                    lease_seconds=60,
+                    now=now,
+                )
+            )
+    leases = []
+    for offer in offers[:2]:
+        async with fixture.factory() as session:
+            leases.append(
+                await service.acquire_lease(
+                    session,
+                    worker_context=worker_context,
+                    offer=offer,
+                    now=now + timedelta(seconds=1),
+                )
+            )
+    async with fixture.factory() as session:
+        with pytest.raises(WorkerConflictError, match="capacity is exhausted"):
+            await service.acquire_lease(
+                session,
+                worker_context=worker_context,
+                offer=offers[2],
+                now=now + timedelta(seconds=1),
+            )
+    async with fixture.factory() as session:
+        await service.release_lease(
+            session,
+            worker_context=worker_context,
+            lease_id=leases[0].id,
+            expected_version=leases[0].version,
+            now=now + timedelta(seconds=2),
+        )
+        stored_worker = await service.repository.get_worker(
+            session, company_id=worker.company_id, worker_id=worker.id
+        )
+    assert stored_worker is not None
+    assert stored_worker.lifecycle_state is WorkerLifecycleState.LEASED
+    async with fixture.factory() as session:
+        replacement = await service.acquire_lease(
+            session,
+            worker_context=worker_context,
+            offer=offers[2],
+            now=now + timedelta(seconds=3),
+        )
+    assert replacement.status is WorkerLeaseStatus.ACTIVE
 
 
 @pytest.mark.asyncio

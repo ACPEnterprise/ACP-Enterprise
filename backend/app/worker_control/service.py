@@ -3,9 +3,11 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.engineering_capacity.models import EngineeringWorkerCapacity
 from app.engineering_capacity.service import engineering_capacity_service
 from app.engineering_control.records import EngineeringApprovalState
 from app.engineering_control.repository import (
@@ -347,8 +349,25 @@ class WorkerControlService:
         worker = await self._authenticated_worker(
             session, worker_context=worker_context
         )
-        if worker.lifecycle_state != WorkerLifecycleState.AVAILABLE.value:
+        if worker.lifecycle_state not in {
+            WorkerLifecycleState.AVAILABLE.value,
+            WorkerLifecycleState.LEASED.value,
+        }:
             raise WorkerLifecycleError("Worker is not available.")
+        capacity = await session.scalar(
+            select(EngineeringWorkerCapacity)
+            .where(
+                EngineeringWorkerCapacity.company_id == worker.company_id,
+                EngineeringWorkerCapacity.worker_id == worker.id,
+            )
+            .with_for_update()
+        )
+        configured_limit = capacity.configured_limit if capacity is not None else 1
+        active_leases = await self.repository.active_lease_count(
+            session, company_id=worker.company_id, worker_id=worker.id
+        )
+        if active_leases >= configured_limit:
+            raise WorkerConflictError("Worker configured capacity is exhausted.")
         capabilities = {WorkerCapability(value) for value in worker.capabilities}
         if offer.capability_required not in capabilities:
             raise WorkerLifecycleError("Worker does not claim the required capability.")

@@ -8,11 +8,13 @@
     <string>--worker-session-id</string><string>REPLACE_CURRENT_WORKER_SESSION_ID</string>
     <string>--authority-sha</string><string>REPLACE_EXACT_PROTECTED_AUTHORITY</string>
     <string>--delegation-id</string><string>REPLACE_ACTIVE_DELEGATION_ID</string>
+    <string>--delegation-expires-at</string><string>REPLACE_DELEGATION_EXPIRATION</string>
   </array>
   <key>WorkingDirectory</key><string>REPLACE_BACKEND_DIRECTORY</string>
   <key>EnvironmentVariables</key><dict>
     <key>PYTHONPATH</key><string>REPLACE_BACKEND_DIRECTORY</string>
-    <key>ACP_HEADLESS_ADMIN_ACCESS_TOKEN_FILE</key><string>REPLACE_MODE_0600_TOKEN_FILE</string>
+    <key>ACP_HEADLESS_REFRESH_TOKEN_FILE</key><string>REPLACE_MODE_0600_REFRESH_TOKEN_FILE</string>
+    <key>ACP_CONTROL_API_URL</key><string>https://preview.allcountyhomeservices.com</string>
   </dict>
   <key>RunAtLoad</key><true/>
   <key>StartInterval</key><integer>30</integer>

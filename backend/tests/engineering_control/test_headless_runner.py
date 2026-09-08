@@ -60,8 +60,23 @@ async def test_runner_applies_ready_items_and_never_preview_gated_work() -> None
         "MOBILE.PHYSICAL.ACCEPTANCE.HANDOFF.1",
         "REVENUE.CYCLE.OFFICE.WORKFLOW.HARDENING.1",
         "ECO.OPERATIONAL.MEASUREMENT.MIGRATION.RECONCILIATION.1",
+        "PRICEBOOK.ALLCOUNTY.MIGRATION.RECONCILIATION.1",
         "COMMUNICATIONS.OPERATIONAL.MEASUREMENT.1",
     }
+    proposals = [
+        call.kwargs["proposal"] for call in application.apply_proposal.await_args_list
+    ]
+    assert len({proposal.logical_slot for proposal in proposals}) == len(proposals)
+    assert {
+        proposal.logical_slot
+        for proposal in proposals
+        if proposal.capacity_identity in {"OM1", "ECO"}
+    } == {"OM1-1", "OM1-2"}
+    assert {
+        proposal.logical_slot
+        for proposal in proposals
+        if proposal.capacity_identity == "OM2"
+    } == {"OM2-1", "OM2-2"}
     application.reconcile_stale_executions.assert_awaited_once_with(
         session, worker_context=worker, now=ANY
     )
@@ -90,9 +105,7 @@ async def test_runner_rejects_delegation_for_another_authority() -> None:
     application = SimpleNamespace()
     runner = HeadlessRunner(application)
     runner.delegations = SimpleNamespace(
-        require_live=AsyncMock(
-            return_value=SimpleNamespace(authority_sha="b" * 40)
-        )
+        require_live=AsyncMock(return_value=SimpleNamespace(authority_sha="b" * 40))
     )
 
     with pytest.raises(

@@ -137,13 +137,6 @@ class WorkerLease(Base):
             postgresql_where=text("status = 'active'"),
         ),
         Index(
-            "uq_worker_leases_active_worker",
-            "company_id",
-            "worker_id",
-            unique=True,
-            postgresql_where=text("status = 'active'"),
-        ),
-        Index(
             "ix_worker_leases_company_status_expiration",
             "company_id",
             "status",

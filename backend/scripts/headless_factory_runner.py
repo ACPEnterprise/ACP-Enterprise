@@ -20,6 +20,8 @@ from app.platform.auth.services import (
 from app.platform.permissions.authorization import authorization_service
 from app.worker_control.transport.http.dependencies import worker_transport_service
 
+from scripts.factory_credentials import FactoryRefreshCredential
+
 
 def arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
@@ -27,6 +29,10 @@ def arguments() -> argparse.Namespace:
     parser.add_argument("--worker-session-id", type=UUID, required=True)
     parser.add_argument("--authority-sha", required=True)
     parser.add_argument("--delegation-id", type=UUID, required=True)
+    parser.add_argument(
+        "--delegation-expires-at",
+        type=lambda value: datetime.fromisoformat(value.replace("Z", "+00:00")),
+    )
     return parser.parse_args()
 
 
@@ -53,30 +59,62 @@ def admin_access_token() -> str:
 
 async def run() -> int:
     options = arguments()
-    token = admin_access_token()
-    async with AsyncSessionFactory() as session:
-        claims = access_token_service.decode(token)
-        authenticated = await authentication_service.validate_access_context(
-            session, claims
+    refresh_file = os.environ.get("ACP_HEADLESS_REFRESH_TOKEN_FILE")
+    if refresh_file:
+        if options.delegation_expires_at is None:
+            raise SystemExit(
+                "--delegation-expires-at is required with renewable credentials"
+            )
+        renewed = await FactoryRefreshCredential(Path(refresh_file)).renew(
+            control_api_url=os.environ.get(
+                "ACP_CONTROL_API_URL", "https://preview.allcountyhomeservices.com"
+            ),
+            delegation_expires_at=options.delegation_expires_at,
         )
-        admin = await authorization_service.resolve(
-            session,
-            authenticated=authenticated,
-            company_id=options.company_id,
-        )
+        token = renewed.access_token
+    else:
+        token = admin_access_token()
+    # Authentication, authorization, worker authentication, and scheduling each
+    # own their transaction boundary.  In particular, AuthorizationService.resolve
+    # performs normal reads which autobegin a transaction; passing that session to
+    # authenticate_http_session (which explicitly begins its own audited worker
+    # transaction) would leak the implicit transaction into that service.
+    async with AsyncSessionFactory() as security_session:
+        try:
+            claims = access_token_service.decode(token)
+            authenticated = await authentication_service.validate_access_context(
+                security_session, claims
+            )
+            admin = await authorization_service.resolve(
+                security_session,
+                authenticated=authenticated,
+                company_id=options.company_id,
+            )
+        finally:
+            # Authorization is read-only.  End its autobegun transaction
+            # deterministically on both approval and fail-closed denial.
+            await security_session.rollback()
+
+    async with AsyncSessionFactory() as worker_session:
         worker = await worker_transport_service.authenticate_http_session(
-            session, session_id=options.worker_session_id
+            worker_session, session_id=options.worker_session_id
         )
         if worker.context.company_id != options.company_id:
             raise SystemExit("authenticated worker session belongs to another company")
-        applied = await HeadlessRunner().run_once(
-            session,
-            admin_context=admin,
-            worker_context=worker.context,
-            expected_authority_sha=options.authority_sha,
-            now=datetime.now(timezone.utc),
-            delegation_id=options.delegation_id,
-        )
+
+    async with AsyncSessionFactory() as scheduler_session:
+        try:
+            applied = await HeadlessRunner().run_once(
+                scheduler_session,
+                admin_context=admin,
+                worker_context=worker.context,
+                expected_authority_sha=options.authority_sha,
+                now=datetime.now(timezone.utc),
+                delegation_id=options.delegation_id,
+            )
+        except BaseException:
+            await scheduler_session.rollback()
+            raise
     print(json.dumps({"applied_milestone_ids": applied, "count": len(applied)}))
     return 0
 

@@ -30,6 +30,7 @@ from app.worker_control.contracts import AuthenticatedWorkerContext
 
 from .approved_queue import load_approved_factory_queue
 from .headless import HeadlessProposal
+from .slots import physical_worker_for_capacity, validate_slot
 
 
 class HeadlessApplicationError(RuntimeError):
@@ -132,6 +133,9 @@ class HeadlessApplicationService:
             raise HeadlessApplicationError(
                 "proposal capacity contradicts approved queue"
             )
+        if proposal.logical_slot is not None:
+            validate_slot(proposal.logical_slot, proposal.capacity_identity)
+        slot_key = proposal.logical_slot or proposal.capacity_identity
         command = await self.commands.create_command(
             session,
             context=manage_context,
@@ -143,11 +147,18 @@ class HeadlessApplicationService:
                 expected_head=expected_authority_sha,
                 requested_code_changes=work.requested_code_changes,
                 expires_at=now + timedelta(hours=72),
-                idempotency_key=f"{queue.queue_id}:{work.milestone_id}:{expected_authority_sha}",
+                idempotency_key=(
+                    f"{queue.queue_id}:{work.milestone_id}:{slot_key}:"
+                    f"{expected_authority_sha}"
+                ),
                 execution_boundary={
                     "allowed_repository": "acp-enterprise",
                     "allowed_branch": "customer-management-v1",
                     "expected_head": expected_authority_sha,
+                    "logical_slot": proposal.logical_slot,
+                    "physical_worker": physical_worker_for_capacity(
+                        proposal.capacity_identity
+                    ),
                     "allowed_paths": list(work.allowed_paths),
                     "forbidden_paths": [".git/**", ".env*", "**/.env*"],
                     "permitted_operations": [

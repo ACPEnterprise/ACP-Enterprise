@@ -2,7 +2,7 @@ from datetime import datetime
 from types import MappingProxyType
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.worker_control.contracts import (
@@ -170,6 +170,21 @@ class WorkerControlRepository:
         return _lease_record(entity)
 
     @staticmethod
+    async def active_lease_count(
+        session: AsyncSession, *, company_id: UUID, worker_id: UUID
+    ) -> int:
+        return int(
+            await session.scalar(
+                select(func.count(WorkerLease.id)).where(
+                    WorkerLease.company_id == company_id,
+                    WorkerLease.worker_id == worker_id,
+                    WorkerLease.status == WorkerLeaseStatus.ACTIVE.value,
+                )
+            )
+            or 0
+        )
+
+    @staticmethod
     async def get_lease_for_update(
         session: AsyncSession, *, company_id: UUID, lease_id: UUID
     ) -> WorkerLease | None:
@@ -209,7 +224,14 @@ class WorkerControlRepository:
         lease.released_at = occurred_at
         lease.version += 1
         lease.updated_at = occurred_at
-        worker.lifecycle_state = WorkerLifecycleState.AVAILABLE.value
+        remaining = await WorkerControlRepository.active_lease_count(
+            session, company_id=worker.company_id, worker_id=worker.id
+        )
+        worker.lifecycle_state = (
+            WorkerLifecycleState.LEASED.value
+            if remaining
+            else WorkerLifecycleState.AVAILABLE.value
+        )
         worker.version += 1
         worker.updated_at = occurred_at
         await session.flush()

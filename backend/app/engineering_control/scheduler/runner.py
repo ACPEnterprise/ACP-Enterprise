@@ -19,6 +19,7 @@ from .application import HeadlessApplicationService
 from .approved_queue import ApprovedWork, load_approved_factory_queue
 from .delegation import SchedulerDelegationDenied, SchedulerDelegationService
 from .headless import HeadlessProposal
+from .slots import SLOTS_BY_WORKER, first_free_slot, physical_worker_for_capacity
 
 LOCK_KEY = "ACP.72H.HEADLESS.RUNNER.V1"
 TERMINAL_SUCCESS = {"completed"}
@@ -80,22 +81,36 @@ class HeadlessRunner:
                 )
             ).all()
             await session.rollback()
-            states = self._states(queue.queue_id, rows)
+            states, assigned_slots = self._states_and_slots(queue.queue_id, rows)
             completed = frozenset(
                 milestone_id
                 for milestone_id, state in states.items()
                 if state in TERMINAL_SUCCESS
             )
-            occupied = {
-                item.capacity_identity
-                for item in queue.items
-                if states.get(item.milestone_id) in ACTIVE
-            }
+            occupied: set[str] = set()
+            for item in queue.items:
+                if states.get(item.milestone_id) not in ACTIVE:
+                    continue
+                assigned = assigned_slots.get(item.milestone_id)
+                if assigned is not None:
+                    occupied.add(assigned)
+                else:
+                    # A command created by the pre-slot runner has ambiguous
+                    # occupancy. Reserve that physical worker fail-closed until
+                    # its lifecycle becomes terminal.
+                    occupied.update(
+                        SLOTS_BY_WORKER[
+                            physical_worker_for_capacity(item.capacity_identity)
+                        ]
+                    )
             applied: list[str] = []
             for work in queue.items:
-                if work.capacity_identity in occupied or work.milestone_id in states:
+                if work.milestone_id in states:
                     continue
                 if not self._eligible(work, queue.items, completed):
+                    continue
+                slot = first_free_slot(work.capacity_identity, occupied)
+                if slot is None:
                     continue
                 await self.application.apply_proposal(
                     session,
@@ -106,6 +121,7 @@ class HeadlessRunner:
                         kind="refill" if work.dependencies else "activate",
                         milestone_id=work.milestone_id,
                         capacity_identity=work.capacity_identity,
+                        logical_slot=slot,
                         reason="reviewed 72-hour queue runner",
                     ),
                     expected_authority_sha=expected_authority_sha,
@@ -113,7 +129,7 @@ class HeadlessRunner:
                     completed_milestone_ids=completed,
                     delegation_id=delegation_id,
                 )
-                occupied.add(work.capacity_identity)
+                occupied.add(slot)
                 applied.append(work.milestone_id)
             remaining = [
                 item
@@ -140,15 +156,26 @@ class HeadlessRunner:
 
     @staticmethod
     def _states(queue_id: str, rows: Iterable[Any]) -> dict[str, str]:
+        states, _ = HeadlessRunner._states_and_slots(queue_id, rows)
+        return states
+
+    @staticmethod
+    def _states_and_slots(
+        queue_id: str, rows: Iterable[Any]
+    ) -> tuple[dict[str, str], dict[str, str]]:
         result: dict[str, str] = {}
+        slots: dict[str, str] = {}
         prefix = f"{queue_id}:"
         for key, state in rows:
             if not key.startswith(prefix):
                 continue
-            milestone_id = key[len(prefix) :].rsplit(":", 1)[0]
+            parts = key[len(prefix) :].split(":")
+            milestone_id = parts[0]
+            if len(parts) == 3:
+                slots[milestone_id] = parts[1]
             value = getattr(state, "value", state)
             result[milestone_id] = str(value)
-        return result
+        return result, slots
 
     @staticmethod
     def _eligible(
