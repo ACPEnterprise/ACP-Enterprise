@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   getOwnPunchState,
   getOwnTimecard,
+  getAdminTimecardReview,
   recordOwnPunch,
   type PunchAction,
 } from "../api/timekeeping";
@@ -11,6 +12,7 @@ export const workdayKeys = {
   all: ["workday", "me"] as const,
   state: () => [...workdayKeys.all, "state"] as const,
   timecard: () => [...workdayKeys.all, "timecard"] as const,
+  adminReview: () => ["workday", "admin-review"] as const,
 };
 
 export function useOwnWorkdayState(enabled = true) {
@@ -20,6 +22,15 @@ export function useOwnWorkdayState(enabled = true) {
     enabled,
     retry: false,
     refetchOnWindowFocus: true,
+  });
+}
+
+export function useAdminTimecardReview(enabled = true) {
+  return useQuery({
+    queryKey: workdayKeys.adminReview(),
+    queryFn: getAdminTimecardReview,
+    enabled,
+    retry: false,
   });
 }
 

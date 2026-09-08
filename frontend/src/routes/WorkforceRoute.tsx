@@ -7,6 +7,7 @@ import type { EmployeePermissionExplanation } from "../api/workforce";
 import { useAuth } from "../auth";
 import { useRoles } from "../features/administration/hooks";
 import { useEmployeeAccessMutation, useEmployeeAdministration, useWorkforceDirectory, useWorkforceEligibility, useWorkforceEmployee } from "../hooks/useWorkforce";
+import { useAdminTimecardReview } from "../hooks/useWorkdayTime";
 import { Alert, Badge, Card, Input, Spinner } from "../ui";
 
 function Readiness({ state }: { state: "READY" | "BLOCKED" | "INSUFFICIENT_EVIDENCE" }) {
@@ -32,6 +33,8 @@ export function WorkforceRoute() {
   const [selectedBranchGrant, setSelectedBranchGrant] = useState("");
   const [selectedRoleGrant, setSelectedRoleGrant] = useState("");
   const eligibility = useWorkforceEligibility();
+  const canReviewTime = permissionCodes.includes("COMPANY_TIMEKEEPING_ADMIN_READ");
+  const timeReview = useAdminTimecardReview(canReviewTime);
   const [branchId, setBranchId] = useState("");
   const [windowStart, setWindowStart] = useState("");
   const [windowEnd, setWindowEnd] = useState("");
@@ -80,6 +83,13 @@ export function WorkforceRoute() {
     <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Owner morning Employee review">
       {[['Authorized Employees', morningReview.total], ['Inactive identities', morningReview.inactive], ['Missing Workforce profile', morningReview.missingProfile], ['Readiness needs attention', morningReview.needsAttention]].map(([label, value]) => <Card key={String(label)} className="p-4"><p className="text-sm text-content-muted">{label}</p><p className="mt-1 text-2xl font-bold">{value}</p></Card>)}
     </section>
+    {canReviewTime && <Card className="p-4 sm:p-6">
+      <div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="text-lg font-semibold">Current timecard review</h3><p className="mt-1 text-sm text-content-muted">Read-only current-period evidence. Exceptions require human review; no Payroll execution occurs here.</p></div>{timeReview.data?.pay_period && <Badge variant="neutral">{timeReview.data.pay_period.period_start} – {timeReview.data.pay_period.period_end}</Badge>}</div>
+      {timeReview.isLoading && <div className="mt-4"><Spinner label="Loading timecard review"/></div>}
+      {timeReview.isError && <div className="mt-4"><Alert variant="warning" title="Timecard review unavailable">No time or Payroll state was changed. Refresh after verifying timekeeping authority.</Alert></div>}
+      {timeReview.data && !timeReview.data.pay_period && <div className="mt-4"><Alert variant="warning" title="Pay period required">Configure an authorized pay period before preparing payroll time evidence.</Alert></div>}
+      {timeReview.data?.pay_period && <div className="mt-4 overflow-x-auto"><table className="w-full min-w-[680px] text-left text-sm"><thead><tr className="border-b border-stroke text-content-muted"><th className="py-2">Employee</th><th>Entries</th><th>Recorded hours</th><th>Review state</th></tr></thead><tbody>{timeReview.data.items.map((item) => <tr className="border-b border-stroke" key={item.employee_id}><td className="py-3"><strong>{item.display_name}</strong><span className="block text-xs text-content-muted">{item.employee_number}</span></td><td>{item.entry_count}</td><td>{(item.total_minutes / 60).toFixed(2)}</td><td><div className="flex flex-wrap gap-1">{item.exception_codes.length ? item.exception_codes.map((code) => <Badge variant={code === "overlap" ? "danger" : "warning"} key={code}>{code.replaceAll("_", " ")}</Badge>) : <Badge variant="success">ready for review</Badge>}</div></td></tr>)}</tbody></table></div>}
+    </Card>}
     <div className="grid gap-6 xl:grid-cols-[minmax(20rem,0.85fr)_minmax(0,1.4fr)]">
       <Card className="min-w-0 overflow-hidden">
         <div className="space-y-3 border-b border-stroke p-4"><label className="relative block"><span className="sr-only">Search workforce</span><Search size={17} className="absolute left-3 top-3 text-content-muted"/><Input className="pl-10" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search name, number, role, capability, language"/></label><div className="grid gap-2 sm:grid-cols-3"><label className="text-xs text-content-muted">Branch<select aria-label="Filter by Branch" className="mt-1 min-h-10 w-full rounded-lg border border-stroke bg-surface px-2 text-content" value={branchFilter} onChange={(event) => setBranchFilter(event.target.value)}><option value="">All authorized</option>{(activeCompany?.branches ?? []).map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</select></label><label className="text-xs text-content-muted">Employee status<select aria-label="Filter by Employee status" className="mt-1 min-h-10 w-full rounded-lg border border-stroke bg-surface px-2 text-content" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="">All</option><option value="active">Active</option><option value="inactive">Inactive</option><option value="archived">Archived</option></select></label><label className="text-xs text-content-muted">Readiness<select aria-label="Filter by readiness" className="mt-1 min-h-10 w-full rounded-lg border border-stroke bg-surface px-2 text-content" value={readinessFilter} onChange={(event) => setReadinessFilter(event.target.value)}><option value="">All</option><option value="READY">Ready</option><option value="BLOCKED">Blocked</option><option value="INSUFFICIENT_EVIDENCE">Insufficient evidence</option></select></label></div></div>
