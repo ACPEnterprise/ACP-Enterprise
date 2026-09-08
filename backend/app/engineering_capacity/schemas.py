@@ -128,6 +128,16 @@ class PermanentCapacityBindingRequest(CapacitySchema):
     idempotency_key: str = Field(min_length=8, max_length=128)
 
 
+class PermanentCapacityRebindingRequest(CapacitySchema):
+    identity_code: Literal["OM1", "OM2", "MIG", "ECO", "LAP"]
+    worker_id: UUID
+    machine_label: str = Field(min_length=1, max_length=120)
+    expected_binding_id: UUID
+    expected_binding_version: int = Field(ge=1)
+    reason: str = Field(min_length=8, max_length=240)
+    idempotency_key: str = Field(min_length=8, max_length=128)
+
+
 class WorkerStateUpdate(CapacitySchema):
     expected_version: int = Field(ge=1)
     reason: str = Field(min_length=1, max_length=200)

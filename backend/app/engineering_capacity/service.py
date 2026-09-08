@@ -52,6 +52,7 @@ from .schemas import (
     ExistingWorkerCapacitySetup,
     PermanentCapacityBindingRequest,
     PermanentCapacityBindingResponse,
+    PermanentCapacityRebindingRequest,
     PermanentCapacityResponse,
     WorkerCapacityRegister,
     WorkerCapacityResponse,
@@ -69,6 +70,234 @@ def utc_now() -> datetime:
 
 
 class EngineeringCapacityService:
+    async def rebind_permanent_capacity(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        data: PermanentCapacityRebindingRequest,
+    ) -> PermanentCapacityBindingResponse:
+        """Atomically supersede one stale binding with a current enrolled worker."""
+        now = utc_now()
+        async with session.begin():
+            replay = await session.scalar(
+                select(EngineeringCapacityEvent).where(
+                    EngineeringCapacityEvent.company_id == context.company.id,
+                    EngineeringCapacityEvent.idempotency_key == data.idempotency_key,
+                )
+            )
+            if replay is not None:
+                if (
+                    replay.event_type != "capacity.permanent_worker_rebound"
+                    or replay.details.get("identity") != data.identity_code
+                    or replay.details.get("worker_id") != str(data.worker_id)
+                ):
+                    raise CapacityConflictError("Rebind idempotency key was reused.")
+                replay_capacity = await session.scalar(
+                    select(EngineeringWorkerCapacity).where(
+                        EngineeringWorkerCapacity.company_id == context.company.id,
+                        EngineeringWorkerCapacity.worker_id == data.worker_id,
+                    )
+                )
+                replay_binding = (
+                    await session.scalar(
+                        select(EngineeringCapacityBinding).where(
+                            EngineeringCapacityBinding.company_id
+                            == context.company.id,
+                            EngineeringCapacityBinding.worker_capacity_id
+                            == replay_capacity.id,
+                            EngineeringCapacityBinding.state == "active",
+                        )
+                    )
+                    if replay_capacity is not None
+                    else None
+                )
+                if replay_binding is None:
+                    raise CapacityConflictError("Rebound capacity history has drifted.")
+                return PermanentCapacityBindingResponse.model_validate(replay_binding)
+            permanent = await session.scalar(
+                select(EngineeringPermanentCapacity)
+                .where(
+                    EngineeringPermanentCapacity.company_id == context.company.id,
+                    EngineeringPermanentCapacity.identity_code == data.identity_code,
+                )
+                .with_for_update()
+            )
+            active = await session.scalar(
+                select(EngineeringCapacityBinding)
+                .where(
+                    EngineeringCapacityBinding.company_id == context.company.id,
+                    EngineeringCapacityBinding.id == data.expected_binding_id,
+                    EngineeringCapacityBinding.state == "active",
+                )
+                .with_for_update()
+            )
+            if permanent is None or active is None:
+                raise CapacityNotFoundError("Permanent capacity binding was not found.")
+            if (
+                active.permanent_capacity_id != permanent.id
+                or active.version != data.expected_binding_version
+            ):
+                raise CapacityConflictError("Permanent capacity binding version is stale.")
+            old_capacity = await session.scalar(
+                select(EngineeringWorkerCapacity)
+                .where(
+                    EngineeringWorkerCapacity.company_id == context.company.id,
+                    EngineeringWorkerCapacity.id == active.worker_capacity_id,
+                )
+                .with_for_update()
+            )
+            if old_capacity is None:
+                raise CapacityNotFoundError("Bound worker capacity was not found.")
+            if old_capacity.allocated_capacity or old_capacity.reserved_capacity:
+                raise CapacityConflictError("Active capacity use must be reconciled first.")
+
+            worker = await session.scalar(
+                select(EngineeringWorker)
+                .join(
+                    WorkerIdentity,
+                    WorkerIdentity.orchestration_worker_id == EngineeringWorker.id,
+                )
+                .join(WorkerCredential, WorkerCredential.identity_id == WorkerIdentity.id)
+                .where(
+                    EngineeringWorker.company_id == context.company.id,
+                    EngineeringWorker.id == data.worker_id,
+                    EngineeringWorker.lifecycle_state == "available",
+                    EngineeringWorker.last_heartbeat_at >= now - timedelta(minutes=2),
+                    WorkerIdentity.company_id == context.company.id,
+                    WorkerIdentity.state == "active",
+                    WorkerCredential.company_id == context.company.id,
+                    WorkerCredential.state == "active",
+                    WorkerCredential.expires_at > now,
+                )
+                .with_for_update()
+            )
+            if worker is None:
+                raise CapacityUnavailableError(
+                    "Only a current authenticated healthy worker may be rebound."
+                )
+            target = await session.scalar(
+                select(EngineeringWorkerCapacity)
+                .where(
+                    EngineeringWorkerCapacity.company_id == context.company.id,
+                    EngineeringWorkerCapacity.worker_id == worker.id,
+                )
+                .with_for_update()
+            )
+            if target is None:
+                machine = await session.scalar(
+                    select(EngineeringCapacityMachine)
+                    .where(
+                        EngineeringCapacityMachine.company_id == context.company.id,
+                        EngineeringCapacityMachine.machine_label == " ".join(data.machine_label.split()),
+                    )
+                    .with_for_update()
+                )
+                if machine is not None and machine.enrollment_state != "unenrolled":
+                    raise CapacityConflictError("Machine label is already enrolled.")
+                if machine is None:
+                    machine = EngineeringCapacityMachine(
+                        company_id=context.company.id,
+                        machine_label=" ".join(data.machine_label.split()),
+                        enrollment_state="enrolled",
+                        worker_id=worker.id,
+                        created_at=now,
+                        updated_at=now,
+                    )
+                    session.add(machine)
+                    await session.flush()
+                else:
+                    machine.worker_id = worker.id
+                    machine.enrollment_state = "enrolled"
+                    machine.version += 1
+                    machine.updated_at = now
+                target = EngineeringWorkerCapacity(
+                    company_id=context.company.id,
+                    worker_id=worker.id,
+                    machine_id=machine.id,
+                    configured_limit=1,
+                    operational_state="available",
+                    health_state="healthy",
+                    last_reconciled_at=worker.last_heartbeat_at,
+                    created_at=now,
+                    updated_at=now,
+                )
+                session.add(target)
+                await session.flush()
+            elif target.health_state != "healthy" or target.operational_state != "available":
+                raise CapacityUnavailableError("Target worker capacity is not healthy and available.")
+
+            conflicting = await session.scalar(
+                select(EngineeringCapacityBinding).where(
+                    EngineeringCapacityBinding.company_id == context.company.id,
+                    EngineeringCapacityBinding.worker_capacity_id == target.id,
+                    EngineeringCapacityBinding.state == "active",
+                )
+            )
+            if conflicting is not None:
+                raise CapacityConflictError("Target worker is already permanently bound.")
+            active.state = "superseded"
+            active.evidence = {
+                **dict(active.evidence),
+                "superseded_by_worker_id": str(worker.id),
+                "supersession_reason": data.reason,
+            }
+            active.version += 1
+            active.updated_at = now
+            old_capacity.operational_state = "offline"
+            old_capacity.health_state = "unknown"
+            old_capacity.version += 1
+            old_capacity.updated_at = now
+            binding = EngineeringCapacityBinding(
+                company_id=context.company.id,
+                permanent_capacity_id=permanent.id,
+                worker_capacity_id=target.id,
+                state="active",
+                evidence={
+                    "authority": "owner_authorized_permanent_capacity_rebind",
+                    "worker_id": str(worker.id),
+                    "identity": data.identity_code,
+                    "supersedes_binding_id": str(active.id),
+                    "reason": data.reason,
+                },
+                bound_by_user_id=context.user.id,
+                created_at=now,
+                updated_at=now,
+            )
+            session.add(binding)
+            permanent.state = "available"
+            permanent.reconciliation_reason = None
+            permanent.version += 1
+            permanent.updated_at = now
+            await session.flush()
+            self._event(
+                session,
+                context,
+                "capacity.permanent_worker_rebound",
+                "owner",
+                data.idempotency_key,
+                worker_capacity_id=target.id,
+                details={
+                    "identity": data.identity_code,
+                    "worker_id": str(worker.id),
+                    "superseded_binding_id": str(active.id),
+                    "reason": data.reason,
+                },
+            )
+            self._audit(
+                session,
+                context,
+                "engineering.capacity.permanent_worker_rebound",
+                binding.id,
+                {
+                    "identity": data.identity_code,
+                    "worker_id": str(worker.id),
+                    "superseded_binding_id": str(active.id),
+                    "reason": data.reason,
+                },
+            )
+        return PermanentCapacityBindingResponse.model_validate(binding)
+
     async def bind_permanent_capacity(
         self,
         session: AsyncSession,

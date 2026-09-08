@@ -4,12 +4,12 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import select, update
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from app.core.config import settings
 from app.engineering_capacity.errors import CapacityUnavailableError
-from app.engineering_capacity.models import EngineeringCapacityEvent
+from app.engineering_capacity.models import (
+    EngineeringCapacityEvent,
+    EngineeringWorkerCapacity,
+)
 from app.engineering_capacity.schemas import (
     CapacityAllocationRequest,
     CapacityBaselineRequest,
@@ -18,6 +18,7 @@ from app.engineering_capacity.schemas import (
     CapacityReleaseRequest,
     CapacityReservationRequest,
     ExistingWorkerCapacitySetup,
+    PermanentCapacityRebindingRequest,
     WorkerCapacityRegister,
     WorkerCapacityResponse,
     WorkerStateUpdate,
@@ -31,9 +32,17 @@ from app.engineering_control.mobile.roadmaps import (
     EngineeringMilestone,
     EngineeringRoadmap,
 )
+from app.engineering_control.scheduler.models import (
+    EngineeringCapacityBinding,
+    EngineeringPermanentCapacity,
+)
 from app.engineering_control.service import EngineeringControlService
+from app.platform.audit.models import AuditRecord
 from app.worker_control.models import EngineeringWorker
 from app.worker_identity.models import WorkerCredential, WorkerIdentity
+from sqlalchemy import select, update
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
 from tests.engineering_control.test_engineering_command_service import (
     ServiceFixture,
     seed_service_fixture,
@@ -234,6 +243,116 @@ async def enrolled_worker(fixture: ServiceFixture) -> EngineeringWorker:
         await session.flush()
         session.add(credential)
     return worker
+
+
+@pytest.mark.asyncio
+async def test_permanent_capacity_rebind_preserves_and_supersedes_history(
+    capacity_database: ServiceFixture,
+) -> None:
+    fixture = capacity_database
+    service = EngineeringCapacityService()
+    async with fixture.factory() as session:
+        await service.update_policy(
+            session,
+            context=fixture.context,
+            data=CapacityPolicyUpdate(
+                maximum_concurrent_workstreams=3,
+                maximum_per_worker=1,
+                reserved_capacity=0,
+            ),
+        )
+    old_worker, old_capacity_response = await configured_worker(fixture, service)
+    now = utc_now()
+    permanent = EngineeringPermanentCapacity(
+        company_id=fixture.context.company.id,
+        identity_code="OM1",
+        display_name="Office Machine 1",
+        state="available",
+        created_at=now,
+        updated_at=now,
+    )
+    async with fixture.factory() as session, session.begin():
+        session.add(permanent)
+        await session.flush()
+        old_binding = EngineeringCapacityBinding(
+            company_id=fixture.context.company.id,
+            permanent_capacity_id=permanent.id,
+            worker_capacity_id=old_capacity_response.id,
+            state="active",
+            evidence={"worker_id": str(old_worker.id)},
+            bound_by_user_id=fixture.context.user.id,
+            created_at=now,
+            updated_at=now,
+        )
+        session.add(old_binding)
+        await session.flush()
+        old_binding_id = old_binding.id
+    new_worker = await enrolled_worker(fixture)
+    request = PermanentCapacityRebindingRequest(
+        identity_code="OM1",
+        worker_id=new_worker.id,
+        machine_label="OM1 current execution node",
+        expected_binding_id=old_binding_id,
+        expected_binding_version=1,
+        reason="Replace expired historical worker credential",
+        idempotency_key=f"rebind-{new_worker.id}",
+    )
+    async with fixture.factory() as session:
+        rebound = await service.rebind_permanent_capacity(
+            session, context=fixture.context, data=request
+        )
+    async with fixture.factory() as session:
+        replay = await service.rebind_permanent_capacity(
+            session, context=fixture.context, data=request
+        )
+    async with fixture.factory() as session:
+        bindings = tuple(
+            (
+                await session.scalars(
+                    select(EngineeringCapacityBinding)
+                    .where(
+                        EngineeringCapacityBinding.permanent_capacity_id
+                        == permanent.id
+                    )
+                    .order_by(EngineeringCapacityBinding.created_at)
+                )
+            ).all()
+        )
+        old_capacity = await session.get(
+            EngineeringWorkerCapacity, old_capacity_response.id
+        )
+        events = tuple(
+            (
+                await session.scalars(
+                    select(EngineeringCapacityEvent).where(
+                        EngineeringCapacityEvent.idempotency_key
+                        == request.idempotency_key
+                    )
+                )
+            ).all()
+        )
+        audits = tuple(
+            (
+                await session.scalars(
+                    select(AuditRecord).where(
+                        AuditRecord.action
+                        == "engineering.capacity.permanent_worker_rebound",
+                        AuditRecord.resource_id == rebound.id,
+                    )
+                )
+            ).all()
+        )
+    assert rebound.state == "active"
+    assert replay.id == rebound.id
+    assert [item.state for item in bindings] == ["superseded", "active"]
+    assert bindings[0].id == old_binding_id
+    assert bindings[1].evidence["supersedes_binding_id"] == str(old_binding_id)
+    assert old_capacity is not None
+    assert old_capacity.operational_state == "offline"
+    assert len(events) == 1
+    assert events[0].event_type == "capacity.permanent_worker_rebound"
+    assert len(audits) == 1
+    assert audits[0].outcome == "success"
 
 
 @pytest.mark.asyncio
