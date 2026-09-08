@@ -24,6 +24,7 @@ from app.worker_control.transport.http.dependencies import (
 )
 from app.worker_runtime.client import Challenge, Session, WorkerRuntimeTransportError
 from app.worker_runtime.config import WorkerRuntimeConfig
+from app.worker_runtime.execution import IsolatedWorkspaceExecutionError
 from app.worker_runtime.recovery import RecoveryRecord, WorkerRecoveryJournal
 from app.worker_runtime.service import AuthenticatedWorkerRuntime, WorkerRuntimeState
 from cryptography.hazmat.primitives import serialization
@@ -358,3 +359,54 @@ def test_private_key_file_must_be_owner_only(tmp_path: Path) -> None:
     )
     with pytest.raises(PermissionError):
         config.read_private_key()
+
+
+@pytest.mark.asyncio
+async def test_three_execution_slots_are_independent_and_failure_isolated(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    private = Ed25519PrivateKey.generate()
+    client = FakeClient()
+    client.private = private
+    offer_ids = [uuid4() for _ in range(3)]
+
+    async def poll_offers(*, session_id):
+        del session_id
+        return [{"offer_id": str(offer_id)} for offer_id in offer_ids]
+
+    client.poll_offers = poll_offers  # type: ignore[attr-defined]
+    root_journal = WorkerRecoveryJournal(tmp_path / "state")
+    runtime = AuthenticatedWorkerRuntime(
+        config=WorkerRuntimeConfig(
+            base_url="https://worker.invalid",
+            worker_id=uuid4(),
+            private_key_file=tmp_path / "unused.key",
+            capabilities=(WorkerCapability.ENGINEERING_EXECUTE,),
+            workspace_root=tmp_path,
+            state_directory=tmp_path / "state",
+            max_concurrent_slots=3,
+        ),
+        client=client,  # type: ignore[arg-type]
+        private_key=private,
+        journal=root_journal,
+    )
+    await runtime.establish()
+    entered: set[str] = set()
+    release = asyncio.Event()
+
+    async def execute_slot(self: AuthenticatedWorkerRuntime) -> bool:
+        assert self.journal is not None
+        entered.add(self.journal.directory.name)
+        if len(entered) == 3:
+            release.set()
+        await asyncio.wait_for(release.wait(), timeout=1)
+        if self.journal.directory.name == str(offer_ids[1]):
+            raise IsolatedWorkspaceExecutionError("isolated slot failure")
+        return True
+
+    monkeypatch.setattr(
+        AuthenticatedWorkerRuntime, "execute_available_offer", execute_slot
+    )
+    assert await runtime.execute_available_offers() == 3
+    assert entered == {str(offer_id) for offer_id in offer_ids}
+    assert len({root_journal.for_offer(value).path for value in offer_ids}) == 3

@@ -27,6 +27,20 @@ class WorkerRecoveryJournal:
         self.path = directory / "runtime-state.json"
         self.health_path = directory / "health.json"
 
+    def for_offer(self, offer_id: UUID) -> "WorkerRecoveryJournal":
+        """Return an isolated durable journal for one concurrent execution."""
+        return WorkerRecoveryJournal(self.directory / "slots" / str(offer_id))
+
+    def active_offer_journals(self) -> tuple["WorkerRecoveryJournal", ...]:
+        slots = self.directory / "slots"
+        if not slots.exists():
+            return ()
+        return tuple(
+            WorkerRecoveryJournal(path)
+            for path in sorted(slots.iterdir())
+            if path.is_dir() and (path / "runtime-state.json").is_file()
+        )
+
     def initialize(self) -> None:
         self.directory.mkdir(mode=0o700, parents=True, exist_ok=True)
         if self.directory.stat().st_mode & 0o077:
