@@ -4,7 +4,6 @@ from unittest.mock import ANY, AsyncMock
 from uuid import uuid4
 
 import pytest
-
 from app.engineering_control.scheduler.approved_queue import load_approved_factory_queue
 from app.engineering_control.scheduler.delegation import SchedulerDelegationDenied
 from app.engineering_control.scheduler.runner import HeadlessRunner

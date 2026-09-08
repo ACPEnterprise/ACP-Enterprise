@@ -2,7 +2,6 @@ import os
 from pathlib import Path
 
 import pytest
-
 from scripts.headless_factory_runner import admin_access_token, arguments
 
 
