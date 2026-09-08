@@ -2,7 +2,7 @@ import asyncio
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from enum import StrEnum
-from typing import cast
+from typing import Any, cast
 from uuid import UUID, uuid4
 
 import httpx
@@ -59,6 +59,21 @@ class WorkerRuntimeSnapshot:
     last_heartbeat_at: datetime | None
 
 
+class _SingleOfferClient:
+    """Bind one slot to one already-polled offer while sharing its transport."""
+
+    def __init__(self, client: WorkerTransportClient, offer: dict[str, Any]) -> None:
+        self._client = client
+        self._offer = offer
+
+    async def poll_offers(self, *, session_id: UUID) -> list[dict[str, Any]]:
+        del session_id
+        return [self._offer]
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._client, name)
+
+
 class AuthenticatedWorkerRuntime:
     """Own only worker authentication, session continuity, heartbeats, and leases."""
 
@@ -75,6 +90,7 @@ class AuthenticatedWorkerRuntime:
         self.private_key = private_key
         self.journal = journal
         self._session: Session | None = None
+        self._session_owner = self
         self._state = WorkerRuntimeState.STOPPED
         self._last_heartbeat_at: datetime | None = None
         self._workstream_versions: dict[UUID, int] = {}
@@ -183,6 +199,7 @@ class AuthenticatedWorkerRuntime:
                     await self.establish()
                     delay = self.config.reconnect_min_seconds
                     while not stop.is_set():
+                        await self._recover_concurrent_journals()
                         recovery = self.journal.load() if self.journal else None
                         if recovery and recovery.phase == "reconciliation_required":
                             await self.apply_recovery_acknowledgement(recovery)
@@ -218,7 +235,7 @@ class AuthenticatedWorkerRuntime:
                             in self.config.capabilities
                         ):
                             await self.consume_workstream_control()
-                            await self.execute_available_offer()
+                            await self.execute_available_offers()
                         try:
                             await asyncio.wait_for(
                                 stop.wait(), timeout=self.config.heartbeat_seconds
@@ -369,29 +386,31 @@ class AuthenticatedWorkerRuntime:
                     payload=offered_payload,
                 )
             else:
-                sent_at = datetime.now(timezone.utc)
-                acquisition = ControlledOfferAcquisitionMessage(
-                    offer_id=UUID(str(offered["offer_id"]))
-                )
-                envelope = self._envelope(
-                    session=session,
-                    sent_at=sent_at,
-                    kind=TransportMessageKind.CONTROLLED_OFFER_ACQUISITION,
-                    payload=acquisition,
-                )
-                acquired = await self.client.acquire_offer(
-                    session_id=session.session_id,
-                    payload={
-                        "message_id": str(envelope.message_id),
-                        "session_id": str(envelope.session_id),
-                        "sequence_number": envelope.sequence_number,
-                        "sent_at": envelope.sent_at.isoformat(),
-                        "authentication_proof": envelope.authentication_proof,
-                        "key_version": envelope.key_version,
-                        "offer_id": str(acquisition.offer_id),
-                    },
-                )
-                self._advance(sent_at)
+                async with self._transport_lock:
+                    session = self._require_session()
+                    sent_at = datetime.now(timezone.utc)
+                    acquisition = ControlledOfferAcquisitionMessage(
+                        offer_id=UUID(str(offered["offer_id"]))
+                    )
+                    envelope = self._envelope(
+                        session=session,
+                        sent_at=sent_at,
+                        kind=TransportMessageKind.CONTROLLED_OFFER_ACQUISITION,
+                        payload=acquisition,
+                    )
+                    acquired = await self.client.acquire_offer(
+                        session_id=session.session_id,
+                        payload={
+                            "message_id": str(envelope.message_id),
+                            "session_id": str(envelope.session_id),
+                            "sequence_number": envelope.sequence_number,
+                            "sent_at": envelope.sent_at.isoformat(),
+                            "authentication_proof": envelope.authentication_proof,
+                            "key_version": envelope.key_version,
+                            "offer_id": str(acquisition.offer_id),
+                        },
+                    )
+                    self._advance(sent_at)
             started_at = datetime.now(timezone.utc)
             if self.journal is None:
                 raise RuntimeError("Execution-capable worker requires recovery state.")
@@ -576,6 +595,94 @@ class AuthenticatedWorkerRuntime:
                     reason_code=failure,
                 )
             return True
+
+    async def execute_available_offers(self) -> int:
+        """Run independently leased offers concurrently within configured capacity."""
+        session = self._require_session()
+        offers = await self.client.poll_offers(session_id=session.session_id)
+        active = len(self.journal.active_offer_journals()) if self.journal else 0
+        available = max(0, self.config.max_concurrent_slots - active)
+        selected = offers[:available]
+        if not selected:
+            return 0
+        if self.journal is None:
+            raise RuntimeError("Execution-capable worker requires recovery state.")
+
+        tasks: set[asyncio.Task[bool]] = set()
+        for offered in selected:
+            offer_id = UUID(str(offered["offer_id"]))
+            child = AuthenticatedWorkerRuntime(
+                config=self.config,
+                client=cast(
+                    WorkerTransportClient,
+                    _SingleOfferClient(self.client, offered),
+                ),
+                private_key=self.private_key,
+                journal=self.journal.for_offer(offer_id),
+            )
+            # Authentication identity and sequence authority remain singular;
+            # only execution state, workspace and recovery truth are per slot.
+            child._session = self._session
+            child._session_owner = self
+            child._state = self._state
+            child._transport_lock = self._transport_lock
+            child._workstream_versions = self._workstream_versions
+            child._workstream_actions = self._workstream_actions
+            tasks.add(asyncio.create_task(child.execute_available_offer()))
+
+        pending = tasks
+        while pending:
+            done, pending = await asyncio.wait(
+                pending,
+                timeout=self.config.heartbeat_seconds,
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            for task in done:
+                try:
+                    task.result()
+                except (
+                    AmbiguousProviderExecutionError,
+                    IsolatedWorkspaceExecutionError,
+                    WorkerRuntimeTransportError,
+                    httpx.HTTPError,
+                    OSError,
+                ):
+                    # Each slot has durable recovery evidence. A failed slot must
+                    # not cancel or overwrite independent executions.
+                    pass
+            if pending:
+                await self.heartbeat(WorkerHealth.HEALTHY)
+        return len(selected)
+
+    async def _recover_concurrent_journals(self) -> None:
+        """Reconcile each durable slot without allowing cross-slot overwrite."""
+        if self.journal is None:
+            return
+        for journal in self.journal.active_offer_journals():
+            recovery = journal.load()
+            if recovery is None:
+                continue
+            child = AuthenticatedWorkerRuntime(
+                config=self.config,
+                client=self.client,
+                private_key=self.private_key,
+                journal=journal,
+            )
+            child._session_owner = self
+            child._transport_lock = self._transport_lock
+            if recovery.phase == "pending_result":
+                await child._deliver_pending_result(recovery)
+            elif recovery.phase == "acquired":
+                journal.store(
+                    RecoveryRecord(
+                        phase="reconciliation_required",
+                        offer_id=recovery.offer_id,
+                        lease_id=recovery.lease_id,
+                        started_at=recovery.started_at,
+                    )
+                )
+            else:
+                await child.apply_recovery_acknowledgement(recovery)
 
     async def _maintain_execution_lease(
         self,
@@ -876,15 +983,16 @@ class AuthenticatedWorkerRuntime:
 
     def _advance(self, occurred_at: datetime) -> None:
         session = self._require_session()
-        self._session = Session(
+        self._session_owner._session = Session(
             session_id=session.session_id,
             key_version=session.key_version,
             next_sequence=session.next_sequence + 1,
             expires_at=session.expires_at,
         )
-        self._last_heartbeat_at = occurred_at
+        self._session_owner._last_heartbeat_at = occurred_at
 
     def _require_session(self) -> Session:
-        if self._session is None or self._state is not WorkerRuntimeState.CONNECTED:
+        owner = self._session_owner
+        if owner._session is None or owner._state is not WorkerRuntimeState.CONNECTED:
             raise RuntimeError("Worker runtime is not connected.")
-        return self._session
+        return owner._session

@@ -6,6 +6,8 @@ from uuid import UUID
 
 from app.worker_control.contracts import WorkerCapability
 
+MAX_CONCURRENT_EXECUTION_SLOTS = 16
+
 
 @dataclass(frozen=True)
 class WorkerRuntimeConfig:
@@ -22,6 +24,7 @@ class WorkerRuntimeConfig:
     reconnect_max_seconds: int = 30
     provider_url: str | None = None
     provider_token_file: Path | None = None
+    max_concurrent_slots: int = 1
 
     @classmethod
     def from_environment(cls) -> "WorkerRuntimeConfig":
@@ -64,6 +67,9 @@ class WorkerRuntimeConfig:
                 if "ACP_WORKER_PROVIDER_TOKEN_FILE" in os.environ
                 else None
             ),
+            max_concurrent_slots=int(
+                os.environ.get("ACP_WORKER_MAX_CONCURRENT_SLOTS", "1")
+            ),
         )
         endpoint = urlsplit(config.base_url)
         if (
@@ -81,6 +87,7 @@ class WorkerRuntimeConfig:
             <= config.reconnect_max_seconds
             <= 300
             or len(config.service_version) > 100
+            or not 1 <= config.max_concurrent_slots <= MAX_CONCURRENT_EXECUTION_SLOTS
         ):
             raise ValueError("Worker runtime configuration is invalid.")
         if WorkerCapability.ENGINEERING_EXECUTE in config.capabilities and (
