@@ -17,7 +17,7 @@ from app.worker_control.contracts import AuthenticatedWorkerContext
 
 from .application import HeadlessApplicationService
 from .approved_queue import ApprovedWork, load_approved_factory_queue
-from .delegation import SchedulerDelegationService
+from .delegation import SchedulerDelegationDenied, SchedulerDelegationService
 from .headless import HeadlessProposal
 
 LOCK_KEY = "ACP.72H.HEADLESS.RUNNER.V1"
@@ -53,9 +53,13 @@ class HeadlessRunner:
         try:
             await session.commit()
             if delegation_id is not None:
-                await self.delegations.require_live(
+                delegation = await self.delegations.require_live(
                     session, delegation_id=delegation_id, context=admin_context, now=now
                 )
+                if delegation.authority_sha != expected_authority_sha:
+                    raise SchedulerDelegationDenied(
+                        "delegation authority does not match runner authority"
+                    )
             await self.application.reconcile_stale_executions(
                 session, worker_context=worker_context, now=now
             )

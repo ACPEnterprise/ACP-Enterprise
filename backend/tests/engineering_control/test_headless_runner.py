@@ -4,7 +4,9 @@ from unittest.mock import ANY, AsyncMock
 from uuid import uuid4
 
 import pytest
+
 from app.engineering_control.scheduler.approved_queue import load_approved_factory_queue
+from app.engineering_control.scheduler.delegation import SchedulerDelegationDenied
 from app.engineering_control.scheduler.runner import HeadlessRunner
 
 
@@ -78,3 +80,33 @@ def test_state_parser_supports_idempotent_completion_refill() -> None:
         ],
     )
     assert states == {"COMMUNICATIONS.OPERATIONAL.MEASUREMENT.1": "completed"}
+
+
+@pytest.mark.asyncio
+async def test_runner_rejects_delegation_for_another_authority() -> None:
+    session = SimpleNamespace(
+        scalar=AsyncMock(return_value=True),
+        commit=AsyncMock(),
+    )
+    application = SimpleNamespace()
+    runner = HeadlessRunner(application)
+    runner.delegations = SimpleNamespace(
+        require_live=AsyncMock(
+            return_value=SimpleNamespace(authority_sha="b" * 40)
+        )
+    )
+
+    with pytest.raises(
+        SchedulerDelegationDenied,
+        match="delegation authority does not match runner authority",
+    ):
+        await runner.run_once(
+            session,
+            admin_context=object(),
+            worker_context=object(),
+            expected_authority_sha="a" * 40,
+            now=datetime.now(timezone.utc),
+            delegation_id=uuid4(),
+        )
+
+    runner.delegations.require_live.assert_awaited_once()
