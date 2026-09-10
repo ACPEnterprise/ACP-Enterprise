@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   getPayrollOperationsSummary,
   listComplianceSchemas,
+  listPayrollOperatingRegisters,
   listPayrollReports,
 } from "../api/payroll";
 
@@ -14,3 +15,6 @@ export const usePayrollReports = (enabled = true) =>
 
 export const useComplianceSchemas = (enabled = true) =>
   useQuery({ queryKey: ["payroll", "compliance-schemas"], queryFn: listComplianceSchemas, enabled });
+
+export const usePayrollOperatingRegisters = (enabled = true) =>
+  useQuery({ queryKey: ["payroll", "operating-registers"], queryFn: listPayrollOperatingRegisters, enabled });

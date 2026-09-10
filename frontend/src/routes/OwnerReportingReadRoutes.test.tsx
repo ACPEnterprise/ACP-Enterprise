@@ -29,6 +29,7 @@ vi.mock("../hooks/usePayroll", () => ({
     },
   }),
   usePayrollReports: () => ({ isPending: false, isError: false, data: [] }),
+  usePayrollOperatingRegisters: () => ({ isPending: false, isError: false, data: [] }),
   useComplianceSchemas: () => ({ isPending: false, isError: false, data: [] }),
 }));
 vi.mock("../hooks/useAccountsPayable", () => ({
