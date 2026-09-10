@@ -1,8 +1,8 @@
 from dataclasses import replace
 from pathlib import Path
+from uuid import UUID
 
 import pytest
-
 from app.operational_migration.hcp_migration2_plan import (
     BUILDER_VERSION,
     HcpMigration2ExecutionPlanBuilder,
@@ -88,15 +88,13 @@ def test_complete_source4_plan_is_deterministic_and_reconciled(
     assert capsys.readouterr().out == ""
 
 
-def test_wrong_builder_scope_fails_without_protected_output(
+def test_zero_builder_scope_fails_without_protected_output(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    from uuid import uuid4
-
     with pytest.raises(ValueError) as captured:
         _builder().build(
             baseline_counts={},
-            company_id=uuid4(),
+            company_id=UUID(int=0),
         )
     assert "PRIVATE" not in str(captured.value)
     assert capsys.readouterr().out == ""

@@ -6,7 +6,9 @@ import argparse
 import asyncio
 import json
 import os
+import stat
 from datetime import datetime, timezone
+from pathlib import Path
 from uuid import UUID
 
 from app.database.session import AsyncSessionFactory
@@ -24,14 +26,34 @@ def arguments() -> argparse.Namespace:
     parser.add_argument("--company-id", type=UUID, required=True)
     parser.add_argument("--worker-session-id", type=UUID, required=True)
     parser.add_argument("--authority-sha", required=True)
+    parser.add_argument("--delegation-id", type=UUID, required=True)
     return parser.parse_args()
+
+
+def admin_access_token() -> str:
+    """Load the scheduler principal without placing its token in argv or logs."""
+
+    token_file = os.environ.get("ACP_HEADLESS_ADMIN_ACCESS_TOKEN_FILE")
+    if token_file:
+        path = Path(token_file).expanduser().resolve(strict=True)
+        if not path.is_file() or stat.S_IMODE(path.stat().st_mode) != 0o600:
+            raise SystemExit(
+                "ACP_HEADLESS_ADMIN_ACCESS_TOKEN_FILE must be a mode-0600 file"
+            )
+        token = path.read_text(encoding="utf-8").strip()
+    else:
+        token = os.environ.get("ACP_HEADLESS_ADMIN_ACCESS_TOKEN", "").strip()
+    if not token:
+        raise SystemExit(
+            "ACP_HEADLESS_ADMIN_ACCESS_TOKEN_FILE or "
+            "ACP_HEADLESS_ADMIN_ACCESS_TOKEN is required"
+        )
+    return token
 
 
 async def run() -> int:
     options = arguments()
-    token = os.environ.get("ACP_HEADLESS_ADMIN_ACCESS_TOKEN")
-    if not token:
-        raise SystemExit("ACP_HEADLESS_ADMIN_ACCESS_TOKEN is required")
+    token = admin_access_token()
     async with AsyncSessionFactory() as session:
         claims = access_token_service.decode(token)
         authenticated = await authentication_service.validate_access_context(
@@ -53,6 +75,7 @@ async def run() -> int:
             worker_context=worker.context,
             expected_authority_sha=options.authority_sha,
             now=datetime.now(timezone.utc),
+            delegation_id=options.delegation_id,
         )
     print(json.dumps({"applied_milestone_ids": applied, "count": len(applied)}))
     return 0
