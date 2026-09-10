@@ -92,6 +92,8 @@ export interface IdentityOnboardingPlan {
   membership_action: string;
   employee_action: string;
   branch_action: string;
+  employee_number_prefix: string;
+  employee_number_width: number;
   role_codes: string[];
   additional_permission_codes: string[];
   readiness_stages: Record<string, string>;
