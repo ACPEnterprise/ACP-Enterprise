@@ -48,6 +48,44 @@ export interface ComplianceSchemaMetadata {
   schema_digest: string;
 }
 
+export interface PayrollRegisterMember {
+  employee_id: string;
+  employee_number: string;
+  employee_name: string;
+  status: string;
+  blockers: string[];
+  accepted_minutes: number | null;
+  regular_minutes: number | null;
+  overtime_minutes: number | null;
+  compensation_authority_id: string | null;
+  earnings: Array<Record<string, unknown>>;
+  withholdings_deductions_liabilities: Array<Record<string, unknown>>;
+  gross: string | null;
+  employee_taxes: string | null;
+  deductions: string | null;
+  net_pay: string | null;
+  employer_liabilities: string | null;
+  tax_rule_version: string | null;
+  money_version: string | null;
+  calculation_digest: string | null;
+  job_labor_allocation: string | null;
+}
+
+export interface PayrollOperatingRegister {
+  run_id: string;
+  period_start: string;
+  period_end: string;
+  processing_date: string;
+  payday: string;
+  lifecycle: string;
+  review_state: string;
+  currency: string;
+  members: PayrollRegisterMember[];
+  liability_totals: Record<string, string>;
+  manual_tax_filing_payment_required: boolean;
+  run_digest: string;
+}
+
 export async function getPayrollOperationsSummary(): Promise<PayrollOperationsSummary> {
   return (await apiClient.get<PayrollOperationsSummary>("/api/v1/payroll/operations/summary")).data;
 }
@@ -58,4 +96,8 @@ export async function listPayrollReports(): Promise<PayrollReportMetadata[]> {
 
 export async function listComplianceSchemas(): Promise<ComplianceSchemaMetadata[]> {
   return (await apiClient.get<ComplianceSchemaMetadata[]>("/api/v1/payroll/compliance/schemas")).data;
+}
+
+export async function listPayrollOperatingRegisters(): Promise<PayrollOperatingRegister[]> {
+  return (await apiClient.get<PayrollOperatingRegister[]>("/api/v1/payroll/operations/registers")).data;
 }

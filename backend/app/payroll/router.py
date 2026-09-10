@@ -258,6 +258,13 @@ async def payroll_operations_summary(context: ReportingRead, session: Session) -
     return {"run_counts": value.run_counts, "member_dispositions": value.member_dispositions, "payment_counts": value.payment_counts, "remittance_counts": value.remittance_counts, "reporting_counts": value.reporting_counts, "statement_counts": value.statement_counts, "adjustment_counts": value.adjustment_counts, "history_ready": value.history_ready, "aggregate_approved_gross": str(value.aggregate_approved_gross), "aggregate_approved_net": str(value.aggregate_approved_net), "blocker_count": value.blocker_count, "reconciliation_state": value.reconciliation_state, "provider_readiness": {"filing": value.filing_provider_state, "payment": value.payment_provider_state, "remittance": value.remittance_provider_state}}
 
 
+@router.get("/operations/registers", response_model=list[dict[str, object]])
+async def payroll_operating_registers(
+    context: ReportingRead, session: Session
+) -> list[dict[str, object]]:
+    return list(await PayrollOperationsService().registers(session, context=context))
+
+
 @router.get("/compliance/schemas", response_model=list[ComplianceSchemaMetadata])
 async def compliance_schemas(
     context: ReportingRead,
