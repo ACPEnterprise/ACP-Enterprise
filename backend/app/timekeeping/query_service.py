@@ -1,6 +1,5 @@
 """Read model for self-service and manager Workday Time APIs."""
 
-from datetime import datetime, timezone
 from collections import defaultdict
 from datetime import date, datetime, timezone
 from itertools import pairwise
