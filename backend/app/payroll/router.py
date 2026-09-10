@@ -307,6 +307,11 @@ async def payroll_period_operations(
         employees=[PayrollPeriodEmployeeMetadata(**asdict(item)) for item in value.employees],
         limitations=list(value.limitations),
     )
+@router.get("/operations/registers", response_model=list[dict[str, object]])
+async def payroll_operating_registers(
+    context: ReportingRead, session: Session
+) -> list[dict[str, object]]:
+    return list(await PayrollOperationsService().registers(session, context=context))
 
 
 @router.get("/compliance/schemas", response_model=list[ComplianceSchemaMetadata])

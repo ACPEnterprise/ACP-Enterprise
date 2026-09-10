@@ -649,6 +649,7 @@ class PayrollRunMemberRecord(Base):
     tax_result_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
     tax_result_digest: Mapped[str | None] = mapped_column(String(64))
     blocker_evidence_digest: Mapped[str | None] = mapped_column(String(64))
+    blocker_codes: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
     disposition_authority_digest: Mapped[str | None] = mapped_column(String(64))
     membership_digest: Mapped[str] = mapped_column(String(64), nullable=False)
 

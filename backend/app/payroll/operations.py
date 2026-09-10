@@ -10,7 +10,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.platform.employees.models import Employee
 from app.platform.permissions.authorization import AuthorizationContext
-from app.timekeeping.models import PayPeriod, WorkdayTimeEntryRevision
+from app.timekeeping.models import (
+    PayPeriod,
+    PayrollTimeInputRecord,
+    WorkdayTimeEntryRevision,
+)
 from app.timekeeping.permissions import TimekeepingPermission
 
 from .contracts import PayrollAuthorizationError
@@ -280,6 +284,142 @@ class PayrollOperationsService:
                 "This projection cannot transmit Payroll, move money, or post Accounting.",
             ),
         )
+    async def registers(
+        self, session: AsyncSession, *, context: AuthorizationContext
+    ) -> tuple[dict[str, object], ...]:
+        """Project existing immutable run evidence into an owner operating register."""
+        if not context.has_permission(PayrollPermission.REPORTING_READ):
+            raise PayrollAuthorizationError("Payroll reporting permission denied")
+        runs = tuple(
+            (
+                await session.scalars(
+                    select(PayrollRunRecord)
+                    .where(PayrollRunRecord.company_id == context.company.id)
+                    .order_by(PayrollRunRecord.assembled_at.desc(), PayrollRunRecord.id)
+                    .limit(50)
+                )
+            ).all()
+        )
+        result: list[dict[str, object]] = []
+        for run in runs:
+            period = await session.scalar(
+                select(PayPeriod).where(
+                    PayPeriod.company_id == context.company.id,
+                    PayPeriod.id == run.pay_period_id,
+                )
+            )
+            if period is None:
+                continue
+            members = tuple(
+                (
+                    await session.scalars(
+                        select(PayrollRunMemberRecord)
+                        .where(
+                            PayrollRunMemberRecord.company_id == context.company.id,
+                            PayrollRunMemberRecord.run_id == run.id,
+                        )
+                        .order_by(PayrollRunMemberRecord.employee_id)
+                    )
+                ).all()
+            )
+            rows: list[dict[str, object]] = []
+            for member in members:
+                employee = await session.scalar(
+                    select(Employee).where(
+                        Employee.company_id == context.company.id,
+                        Employee.id == member.employee_id,
+                    )
+                )
+                gross = (
+                    await session.scalar(
+                        select(PayrollGrossCalculationResultRecord).where(
+                            PayrollGrossCalculationResultRecord.company_id == context.company.id,
+                            PayrollGrossCalculationResultRecord.id == member.gross_result_id,
+                        )
+                    )
+                    if member.gross_result_id
+                    else None
+                )
+                tax = (
+                    await session.scalar(
+                        select(PayrollTaxDeductionResultRecord).where(
+                            PayrollTaxDeductionResultRecord.company_id == context.company.id,
+                            PayrollTaxDeductionResultRecord.id == member.tax_result_id,
+                        )
+                    )
+                    if member.tax_result_id
+                    else None
+                )
+                time = (
+                    await session.scalar(
+                        select(PayrollTimeInputRecord).where(
+                            PayrollTimeInputRecord.company_id == context.company.id,
+                            PayrollTimeInputRecord.employee_id == member.employee_id,
+                            PayrollTimeInputRecord.pay_period_id == run.pay_period_id,
+                            PayrollTimeInputRecord.snapshot_identity == gross.time_snapshot_id,
+                        )
+                    )
+                    if gross and gross.time_snapshot_id
+                    else None
+                )
+                earning = gross.earning_components if gross else []
+                regular_minutes = sum(
+                    int(item.get("payable_minutes", 0))
+                    for item in earning
+                    if item.get("kind") == "regular"
+                )
+                overtime_minutes = sum(
+                    int(item.get("payable_minutes", 0))
+                    for item in earning
+                    if item.get("kind") == "overtime_premium"
+                )
+                rows.append(
+                    {
+                        "employee_id": str(member.employee_id),
+                        "employee_number": employee.employee_number if employee else "unavailable",
+                        "employee_name": employee.display_name if employee else "Employee unavailable",
+                        "status": "BLOCKED_FOR_PAYROLL" if member.disposition == "blocked" else member.disposition.upper(),
+                        "blockers": member.blocker_codes,
+                        "accepted_minutes": time.total_approved_minutes if time else None,
+                        "regular_minutes": regular_minutes if gross else None,
+                        "overtime_minutes": overtime_minutes if gross else None,
+                        "compensation_authority_id": str(gross.compensation_authority_id) if gross else None,
+                        "compensation_authority_digest": gross.compensation_digest if gross else None,
+                        "earnings": earning,
+                        "withholdings_deductions_liabilities": tax.components if tax else [],
+                        "gross": str(tax.gross_pay) if tax else None,
+                        "employee_taxes": str(tax.employee_tax_total) if tax else None,
+                        "deductions": str(tax.employee_deduction_total) if tax else None,
+                        "net_pay": str(tax.net_pay_candidate) if tax else None,
+                        "employer_liabilities": str(tax.employer_contribution_total) if tax else None,
+                        "tax_rule_version": tax.calculation_version if tax else None,
+                        "money_version": tax.money_version if tax else None,
+                        "calculation_digest": tax.calculation_digest if tax else None,
+                        "job_labor_allocation": "UNAVAILABLE_NO_AUTHORITATIVE_JOB_ALLOCATION" if gross else None,
+                    }
+                )
+            result.append(
+                {
+                    "run_id": str(run.id),
+                    "period_start": period.period_start.isoformat(),
+                    "period_end": period.period_end.isoformat(),
+                    "processing_date": period.processing_date.isoformat(),
+                    "payday": period.payday.isoformat(),
+                    "lifecycle": run.lifecycle,
+                    "review_state": run.review_state,
+                    "currency": run.currency,
+                    "members": rows,
+                    "liability_totals": {
+                        "employee_taxes": str(run.aggregate_employee_taxes),
+                        "employee_deductions": str(run.aggregate_employee_deductions),
+                        "employer_liabilities": str(run.aggregate_employer_contributions),
+                        "net_pay": str(run.aggregate_net_pay),
+                    },
+                    "manual_tax_filing_payment_required": True,
+                    "run_digest": run.run_digest,
+                }
+            )
+        return tuple(result)
 
     async def summary(
         self, session: AsyncSession, *, context: AuthorizationContext
