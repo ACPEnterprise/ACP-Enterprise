@@ -83,6 +83,60 @@ export interface AdminTimecardReview {
   items: AdminTimecardReviewItem[];
 }
 
+export interface AdminTimecardInterval {
+  entry_id: string;
+  revision_id: string;
+  revision_number: number;
+  work_date: string;
+  start_at: string | null;
+  end_at: string | null;
+  supported_minutes: number;
+  job_id: string | null;
+  job_number: string | null;
+  job_minutes: number | null;
+  non_job_supported_minutes: number | null;
+  attribution_state: "ATTRIBUTED" | "NON_JOB" | "UNCLASSIFIED";
+  provenance: string;
+  entry_state: string;
+  corrected: boolean;
+  overlap: boolean;
+  review_state: "ACCEPTED" | "NEEDS_REVIEW";
+  audit_digest: string;
+}
+
+export interface AdminEmployeeTimecard {
+  employee_id: string;
+  employee_number: string;
+  display_name: string;
+  home_branch_id: string | null;
+  punch_state: PunchState;
+  active_open_clock: boolean;
+  missing_clock_out: boolean;
+  days: Array<{
+    work_date: string;
+    intervals: AdminTimecardInterval[];
+    total_supported_minutes: number;
+    job_minutes: number | null;
+    non_job_supported_minutes: number | null;
+    unclassified_minutes: number;
+    has_overlap: boolean;
+    has_correction: boolean;
+    review_state: "ACCEPTED" | "NEEDS_REVIEW";
+  }>;
+  total_supported_minutes: number;
+  accepted_minutes: number;
+  exception_codes: string[];
+  review_state: "ACCEPTED" | "NEEDS_REVIEW";
+}
+
+export interface AdminTimecardOperations {
+  contract_version: "WORKFORCE.TIMECARD.OPERATIONS.v1";
+  pay_period: PayPeriod;
+  employees: AdminEmployeeTimecard[];
+  job_attribution_readiness: "PARTIAL";
+  limitations: string[];
+}
+
 export type WorkdayAccessFailure =
   | "authentication_required"
   | "permission_denied"
@@ -141,4 +195,20 @@ export async function correctTimeEntry(revisionId: string, input: TimeCorrection
     input,
     { headers: { "Idempotency-Key": crypto.randomUUID() } },
   )).data;
+}
+
+export async function getCurrentPayPeriod(): Promise<PayPeriod | null> {
+  return (await apiClient.get<PayPeriod | null>("/api/v1/timekeeping/pay-periods/current")).data;
+}
+
+export async function getPayPeriods(): Promise<PayPeriod[]> {
+  return (await apiClient.get<PayPeriod[]>("/api/v1/timekeeping/pay-periods", { params: { limit: 26 } })).data;
+}
+
+export async function getAdminTimecardOperations(payPeriodId: string): Promise<AdminTimecardOperations> {
+  return (
+    await apiClient.get<AdminTimecardOperations>(
+      `/api/v1/timekeeping/admin/pay-periods/${payPeriodId}/timecards`,
+    )
+  ).data;
 }

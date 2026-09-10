@@ -14,9 +14,11 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 from itertools import pairwise
-from uuid import UUID
+from uuid import UUID, uuid5
 
 CONTRACT_VERSION = "timekeeping.job-participation-reconciliation.v1"
+INTERVAL_CONTRACT_VERSION = "timekeeping.job-worked-interval.v1"
+INTERVAL_NAMESPACE = UUID("79d5c21e-061c-4a94-99dc-0d8ce811e250")
 
 
 class JobParticipationError(ValueError):
@@ -27,6 +29,191 @@ class ParticipationKind(StrEnum):
     JOB = "job"
     TRAVEL = "travel"
     NONPRODUCTIVE = "nonproductive"
+
+
+class JobClockKind(StrEnum):
+    START = "start"
+    STOP = "stop"
+
+
+class WorkedIntervalSource(StrEnum):
+    EMPLOYEE_CLOCK = "employee_clock"
+    AUTHORIZED_MANUAL = "authorized_manual"
+
+
+class CorrectionState(StrEnum):
+    ORIGINAL = "original"
+    CORRECTED = "corrected"
+    SUPERSEDED = "superseded"
+
+
+class IntervalValidity(StrEnum):
+    VALID = "valid"
+    CORRECTION_REQUIRED = "correction_required"
+
+
+class IntervalConfidence(StrEnum):
+    AUTHORITATIVE = "authoritative"
+    DISPUTED = "disputed"
+
+
+@dataclass(frozen=True, slots=True)
+class JobClockEvent:
+    event_id: UUID
+    idempotency_key: str
+    request_digest: str
+    company_id: UUID
+    branch_id: UUID | None
+    employee_id: UUID
+    job_id: UUID
+    appointment_id: UUID | None
+    kind: JobClockKind
+    occurred_at: datetime
+    recorded_by_user_id: UUID
+    source: WorkedIntervalSource = WorkedIntervalSource.EMPLOYEE_CLOCK
+
+
+@dataclass(frozen=True, slots=True)
+class JobWorkedInterval:
+    interval_id: UUID
+    revision_id: UUID
+    revision_number: int
+    company_id: UUID
+    branch_id: UUID | None
+    employee_id: UUID
+    job_id: UUID
+    appointment_id: UUID | None
+    start_at: datetime
+    stop_at: datetime
+    duration_minutes: int
+    source: WorkedIntervalSource
+    correction_state: CorrectionState
+    supersedes_revision_id: UUID | None
+    audit_lineage: tuple[UUID, ...]
+    source_event_ids: tuple[UUID, ...]
+    validity: IntervalValidity
+    confidence: IntervalConfidence
+    evidence_digest: str
+    correction_reason: str | None = None
+
+
+def derive_job_worked_intervals(
+    events: tuple[JobClockEvent, ...],
+) -> tuple[JobWorkedInterval, ...]:
+    """Pair authoritative Job clock events without consulting schedules or paid time."""
+
+    replay: dict[tuple[UUID, UUID, str], JobClockEvent] = {}
+    event_ids: dict[UUID, str] = {}
+    for event in events:
+        _validate_clock_event(event)
+        previous_digest = event_ids.setdefault(event.event_id, event.request_digest)
+        if previous_digest != event.request_digest:
+            raise JobParticipationError("contradictory clock event replay")
+        key = (event.company_id, event.recorded_by_user_id, event.idempotency_key)
+        previous = replay.get(key)
+        if previous is not None and previous.request_digest != event.request_digest:
+            raise JobParticipationError("contradictory idempotency replay")
+        replay.setdefault(key, event)
+
+    ordered = sorted(
+        replay.values(), key=lambda value: (value.occurred_at, str(value.event_id))
+    )
+    active: dict[tuple[UUID, UUID], JobClockEvent] = {}
+    intervals: list[JobWorkedInterval] = []
+    for event in ordered:
+        employee_scope = (event.company_id, event.employee_id)
+        if event.kind is JobClockKind.START:
+            if employee_scope in active:
+                raise JobParticipationError(
+                    "employee already has an active Job interval"
+                )
+            active[employee_scope] = event
+            continue
+        start = active.pop(employee_scope, None)
+        if start is None:
+            raise JobParticipationError("Job clock stop has no active interval")
+        if (start.job_id, start.appointment_id, start.branch_id) != (
+            event.job_id,
+            event.appointment_id,
+            event.branch_id,
+        ):
+            raise JobParticipationError("Job clock stop scope does not match start")
+        if event.occurred_at <= start.occurred_at:
+            raise JobParticipationError("Job clock stop must follow start")
+        interval_id = uuid5(
+            INTERVAL_NAMESPACE,
+            f"{start.company_id}:{start.employee_id}:{start.event_id}:{event.event_id}",
+        )
+        revision_id = uuid5(INTERVAL_NAMESPACE, f"{interval_id}:1")
+        intervals.append(
+            _seal_interval(
+                interval_id=interval_id,
+                revision_id=revision_id,
+                revision_number=1,
+                company_id=start.company_id,
+                branch_id=start.branch_id,
+                employee_id=start.employee_id,
+                job_id=start.job_id,
+                appointment_id=start.appointment_id,
+                start_at=start.occurred_at,
+                stop_at=event.occurred_at,
+                source=start.source,
+                correction_state=CorrectionState.ORIGINAL,
+                supersedes_revision_id=None,
+                audit_lineage=(revision_id,),
+                source_event_ids=(start.event_id, event.event_id),
+                validity=IntervalValidity.VALID,
+                confidence=IntervalConfidence.AUTHORITATIVE,
+            )
+        )
+    if active:
+        raise JobParticipationError("one or more Job intervals remain active")
+    _assert_no_overlap(tuple(intervals))
+    return tuple(intervals)
+
+
+def correct_job_worked_interval(
+    current: JobWorkedInterval,
+    *,
+    start_at: datetime,
+    stop_at: datetime,
+    reason: str,
+    corrected_by_user_id: UUID,
+    other_current_intervals: tuple[JobWorkedInterval, ...] = (),
+) -> tuple[JobWorkedInterval, JobWorkedInterval]:
+    """Return unchanged original evidence and its corrected successor revision."""
+
+    if current.correction_state is CorrectionState.SUPERSEDED:
+        raise JobParticipationError("only a current interval can be corrected")
+    if not reason.strip():
+        raise JobParticipationError("correction reason is required")
+    revision_number = current.revision_number + 1
+    revision_id = uuid5(
+        INTERVAL_NAMESPACE,
+        f"{current.interval_id}:{revision_number}:{corrected_by_user_id}",
+    )
+    corrected = _seal_interval(
+        interval_id=current.interval_id,
+        revision_id=revision_id,
+        revision_number=revision_number,
+        company_id=current.company_id,
+        branch_id=current.branch_id,
+        employee_id=current.employee_id,
+        job_id=current.job_id,
+        appointment_id=current.appointment_id,
+        start_at=start_at,
+        stop_at=stop_at,
+        source=WorkedIntervalSource.AUTHORIZED_MANUAL,
+        correction_state=CorrectionState.CORRECTED,
+        supersedes_revision_id=current.revision_id,
+        audit_lineage=(*current.audit_lineage, revision_id),
+        source_event_ids=current.source_event_ids,
+        validity=IntervalValidity.VALID,
+        confidence=current.confidence,
+        correction_reason=reason.strip(),
+    )
+    _assert_no_overlap((*other_current_intervals, corrected))
+    return current, corrected
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,68 +241,6 @@ class ParticipationAssertion:
     end_at: datetime
     job_id: UUID | None
     approved: bool
-
-
-@dataclass(frozen=True, slots=True)
-class ParticipationCorrection:
-    predecessor_assertion_id: UUID
-    successor: ParticipationAssertion
-    correction_kind: str
-    reason: str
-    reviewed_by_user_id: UUID
-    evidence_digest: str
-
-
-def correct_participation(
-    *,
-    predecessor: ParticipationAssertion,
-    successor_id: UUID,
-    replacement_job_id: UUID,
-    reason: str,
-    reviewed_by_user_id: UUID,
-) -> ParticipationCorrection:
-    """Create immutable successor evidence for an incorrect Job attribution."""
-
-    _validate_assertion_shape(predecessor)
-    if predecessor.kind is not ParticipationKind.JOB:
-        raise JobParticipationError("only Job participation has Job attribution")
-    if not reason.strip():
-        raise JobParticipationError("correction reason is required")
-    if replacement_job_id == predecessor.job_id:
-        raise JobParticipationError("replacement Job must differ from predecessor")
-    canonical = {
-        "contract": CONTRACT_VERSION,
-        "predecessor_assertion_id": str(predecessor.assertion_id),
-        "predecessor_digest": predecessor.evidence_digest,
-        "successor_id": str(successor_id),
-        "replacement_job_id": str(replacement_job_id),
-        "reason": reason.strip(),
-        "reviewed_by_user_id": str(reviewed_by_user_id),
-    }
-    digest = hashlib.sha256(
-        json.dumps(canonical, sort_keys=True, separators=(",", ":")).encode()
-    ).hexdigest()
-    successor = ParticipationAssertion(
-        assertion_id=successor_id,
-        evidence_digest=digest,
-        paid_time_revision_id=predecessor.paid_time_revision_id,
-        company_id=predecessor.company_id,
-        branch_id=predecessor.branch_id,
-        employee_id=predecessor.employee_id,
-        kind=ParticipationKind.JOB,
-        start_at=predecessor.start_at,
-        end_at=predecessor.end_at,
-        job_id=replacement_job_id,
-        approved=True,
-    )
-    return ParticipationCorrection(
-        predecessor.assertion_id,
-        successor,
-        "incorrect_job",
-        reason.strip(),
-        reviewed_by_user_id,
-        digest,
-    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -284,3 +409,60 @@ def _digest_valid(value: str) -> bool:
     except ValueError:
         return False
     return True
+
+
+def _validate_clock_event(value: JobClockEvent) -> None:
+    if value.occurred_at.tzinfo is None:
+        raise JobParticipationError("Job clock timestamp must be timezone-aware")
+    if not value.idempotency_key.strip() or not _digest_valid(value.request_digest):
+        raise JobParticipationError("Job clock replay evidence is invalid")
+
+
+def _seal_interval(**values: object) -> JobWorkedInterval:
+    start_at = values["start_at"]
+    stop_at = values["stop_at"]
+    assert isinstance(start_at, datetime) and isinstance(stop_at, datetime)
+    duration = _minutes(start_at, stop_at)
+    canonical = {
+        "contract": INTERVAL_CONTRACT_VERSION,
+        **{
+            key: (
+                value.isoformat()
+                if isinstance(value, datetime)
+                else value.value
+                if isinstance(value, StrEnum)
+                else tuple(str(item) for item in value)
+                if isinstance(value, tuple)
+                else str(value)
+                if isinstance(value, UUID)
+                else value
+            )
+            for key, value in values.items()
+        },
+        "duration_minutes": duration,
+    }
+    return JobWorkedInterval(
+        **values,  # type: ignore[arg-type]
+        duration_minutes=duration,
+        evidence_digest=hashlib.sha256(
+            json.dumps(canonical, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest(),
+    )
+
+
+def _assert_no_overlap(values: tuple[JobWorkedInterval, ...]) -> None:
+    current = sorted(
+        (
+            item
+            for item in values
+            if item.correction_state is not CorrectionState.SUPERSEDED
+        ),
+        key=lambda item: (item.company_id, item.employee_id, item.start_at),
+    )
+    for previous, candidate in pairwise(current):
+        same_employee = (
+            previous.company_id == candidate.company_id
+            and previous.employee_id == candidate.employee_id
+        )
+        if same_employee and candidate.start_at < previous.stop_at:
+            raise JobParticipationError("Job worked intervals overlap")

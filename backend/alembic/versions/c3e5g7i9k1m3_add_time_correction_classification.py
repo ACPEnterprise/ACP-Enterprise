@@ -1,7 +1,7 @@
 """Add replay-safe audited Timekeeping correction classification.
 
 Revision ID: c3e5g7i9k1m3
-Revises: a1c3e5g7i9k1
+Revises: c2e4g6i8k0m2
 """
 
 import sqlalchemy as sa
@@ -9,7 +9,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "c3e5g7i9k1m3"
-down_revision = "a1c3e5g7i9k1"
+down_revision = "c2e4g6i8k0m2"
 branch_labels = None
 depends_on = None
 

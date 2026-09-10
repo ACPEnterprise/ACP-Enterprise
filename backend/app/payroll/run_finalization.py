@@ -116,6 +116,7 @@ class PayrollRunMember:
     net_pay: Decimal
     employer_contributions: Decimal
     membership_digest: str
+    blocker_codes: tuple[str, ...] = ()
 
     def canonical_content(self) -> dict[str, object]:
         return {
@@ -376,6 +377,7 @@ class PayrollRunService:
                     tax_result_id=member.tax_result_id,
                     tax_result_digest=member.tax_result_digest,
                     blocker_evidence_digest=member.blocker_evidence_digest,
+                    blocker_codes=list(member.blocker_codes),
                     disposition_authority_digest=member.disposition_authority_digest,
                     membership_digest=member.membership_digest,
                 )
@@ -496,6 +498,7 @@ class PayrollRunService:
             net_pay=fields[9],
             employer_contributions=fields[10],
             membership_digest="",
+            blocker_codes=tuple(admission.blockers) if value.disposition is PayrollRunDisposition.BLOCKED and admission else (),
         )
         return replace(provisional, membership_digest=canonical_digest(provisional.canonical_content()))
 
@@ -562,6 +565,7 @@ class PayrollRunService:
                 net_pay=net,
                 employer_contributions=employer,
                 membership_digest=record.membership_digest,
+                blocker_codes=tuple(record.blocker_codes),
             )
             if canonical_digest(member.canonical_content()) != record.membership_digest:
                 raise PayrollConflictError("persisted Payroll membership was tampered")

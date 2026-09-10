@@ -7,7 +7,12 @@ import type { EmployeePermissionExplanation } from "../api/workforce";
 import { useAuth } from "../auth";
 import { useRoles } from "../features/administration/hooks";
 import { useEmployeeAccessMutation, useEmployeeAdministration, useWorkforceDirectory, useWorkforceEligibility, useWorkforceEmployee } from "../hooks/useWorkforce";
-import { useAdminTimecardReview, useTimeCorrection } from "../hooks/useWorkdayTime";
+import {
+  useAdminTimecardOperations,
+  useAdminTimecardReview,
+  usePayPeriods,
+  useTimeCorrection,
+} from "../hooks/useWorkdayTime";
 import { Alert, Badge, Card, Input, Spinner } from "../ui";
 
 function Readiness({ state }: { state: "READY" | "BLOCKED" | "INSUFFICIENT_EVIDENCE" }) {
@@ -42,6 +47,10 @@ export function WorkforceRoute() {
   const [correctionStart, setCorrectionStart] = useState("");
   const [correctionEnd, setCorrectionEnd] = useState("");
   const [correctionReason, setCorrectionReason] = useState("");
+  const payPeriods = usePayPeriods(canReviewTime);
+  const [selectedPayPeriodId, setSelectedPayPeriodId] = useState("");
+  const effectivePayPeriodId = selectedPayPeriodId || timeReview.data?.pay_period?.id || payPeriods.data?.[0]?.id || null;
+  const timecards = useAdminTimecardOperations(effectivePayPeriodId, canReviewTime);
   const [branchId, setBranchId] = useState("");
   const [windowStart, setWindowStart] = useState("");
   const [windowEnd, setWindowEnd] = useState("");
@@ -104,6 +113,20 @@ export function WorkforceRoute() {
         <div className="flex gap-2 md:col-span-2"><button type="submit" disabled={timeCorrection.isPending} className="rounded-lg bg-action-primary px-4 py-2 font-semibold text-white disabled:opacity-50">{timeCorrection.isPending ? "Saving…" : "Create audited revision"}</button><button type="button" className="rounded-lg border border-stroke px-4 py-2" onClick={() => setCorrectionRevision("")}>Cancel</button></div>
         {timeCorrection.isError && <div className="md:col-span-2"><Alert variant="danger" title="Correction not applied">Refresh the current revision and verify the interval, Branch authority, and overlap evidence.</Alert></div>}
       </form>}
+      <div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="text-lg font-semibold">Timecard operations</h3><p className="mt-1 text-sm text-content-muted">Read-only daily and pay-period evidence. Exceptions require human review; no Payroll execution occurs here.</p></div><label className="text-sm font-medium">Pay period<select aria-label="Timecard pay period" className="ml-2 min-h-10 rounded-lg border border-stroke bg-surface px-2" value={effectivePayPeriodId ?? ""} onChange={(event) => setSelectedPayPeriodId(event.target.value)}>{(payPeriods.data ?? []).map((period) => <option key={period.id} value={period.id}>{period.period_start} – {period.period_end}</option>)}</select></label></div>
+      {timeReview.isLoading && <div className="mt-4"><Spinner label="Loading timecard review"/></div>}
+      {timeReview.isError && <div className="mt-4"><Alert variant="warning" title="Timecard review unavailable">No time or Payroll state was changed. Refresh after verifying timekeeping authority.</Alert></div>}
+      {timeReview.data && !timeReview.data.pay_period && <div className="mt-4"><Alert variant="warning" title="Pay period required">Configure an authorized pay period before preparing payroll time evidence.</Alert></div>}
+      {timeReview.data?.pay_period && <div className="mt-4 overflow-x-auto"><table className="w-full min-w-[680px] text-left text-sm"><thead><tr className="border-b border-stroke text-content-muted"><th className="py-2">Employee</th><th>Entries</th><th>Recorded hours</th><th>Review state</th></tr></thead><tbody>{timeReview.data.items.map((item) => <tr className="border-b border-stroke" key={item.employee_id}><td className="py-3"><strong>{item.display_name}</strong><span className="block text-xs text-content-muted">{item.employee_number}</span></td><td>{item.entry_count}</td><td>{(item.total_minutes / 60).toFixed(2)}</td><td><div className="flex flex-wrap gap-1">{item.exception_codes.length ? item.exception_codes.map((code) => <Badge variant={code === "overlap" ? "danger" : "warning"} key={code}>{code.replaceAll("_", " ")}</Badge>) : <Badge variant="success">ready for review</Badge>}</div></td></tr>)}</tbody></table></div>}
+      {timecards.isLoading && <div className="mt-4"><Spinner label="Loading detailed Employee timecards"/></div>}
+      {timecards.isError && <div className="mt-4"><Alert variant="warning" title="Timecard detail unavailable">The current summary remains available. No time evidence was changed.</Alert></div>}
+      {timecards.data && <div id="timecard-operations" className="mt-5 space-y-3">
+        <Alert variant="information" title="Job attribution is partial">Paid-time evidence is shown exactly as recorded. Hours without explicit Job evidence remain unclassified rather than being assigned to a Job.</Alert>
+        {timecards.data.employees.map((employee) => <details className="rounded-xl border border-stroke p-3" key={employee.employee_id}>
+          <summary className="cursor-pointer list-none"><div className="flex flex-wrap items-center justify-between gap-3"><div><strong>{employee.display_name}</strong><span className="ml-2 text-xs text-content-muted">{employee.employee_number}</span><p className="text-xs text-content-muted">{(employee.accepted_minutes / 60).toFixed(2)} accepted / {(employee.total_supported_minutes / 60).toFixed(2)} supported hours</p></div><div className="flex flex-wrap gap-1">{employee.active_open_clock && <Badge variant="warning">open clock</Badge>}{employee.missing_clock_out && <Badge variant="danger">missing clock-out</Badge>}<Badge variant={employee.review_state === "ACCEPTED" ? "success" : "warning"}>{employee.review_state.replaceAll("_", " ")}</Badge></div></div></summary>
+          <div className="mt-4 space-y-4">{employee.days.length ? employee.days.map((day) => <section key={day.work_date}><div className="mb-2 flex flex-wrap justify-between gap-2"><h4 className="font-semibold">{day.work_date}</h4><span className="text-sm text-content-muted">{(day.total_supported_minutes / 60).toFixed(2)} hours · {day.unclassified_minutes ? `${(day.unclassified_minutes / 60).toFixed(2)} unclassified` : "classified"}</span></div><div className="overflow-x-auto"><table className="w-full min-w-[760px] text-left text-sm"><thead><tr className="text-content-muted"><th>Worked interval</th><th>Job</th><th>Hours</th><th>Evidence</th><th>Review</th><th>Audit</th></tr></thead><tbody>{day.intervals.map((entry) => <tr className="border-t border-stroke" key={entry.revision_id}><td className="py-2">{entry.start_at && entry.end_at ? `${new Date(entry.start_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} – ${new Date(entry.end_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : "Supported duration"}</td><td>{entry.job_number ?? "Not attributed"}</td><td>{(entry.supported_minutes / 60).toFixed(2)}</td><td><div className="flex gap-1">{entry.corrected && <Badge variant="warning">corrected</Badge>}{entry.overlap && <Badge variant="danger">overlap</Badge>}<Badge variant="neutral">{entry.provenance.replaceAll("_", " ")}</Badge></div></td><td>{entry.review_state.replaceAll("_", " ")}</td><td title={entry.audit_digest}>verified</td></tr>)}</tbody></table></div></section>) : <p className="text-sm text-content-muted">No supported time entries in this pay period.</p>}</div>
+        </details>)}
+      </div>}
     </Card>}
     <div className="grid gap-6 xl:grid-cols-[minmax(20rem,0.85fr)_minmax(0,1.4fr)]">
       <Card className="min-w-0 overflow-hidden">

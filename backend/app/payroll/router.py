@@ -1,5 +1,6 @@
 """Authenticated employee and Payroll-admin boundary."""
 
+from dataclasses import asdict
 from datetime import date
 from pathlib import Path
 from typing import Annotated
@@ -118,6 +119,32 @@ class ComplianceSchemaMetadata(BaseModel):
     legal_content_slots: list[str]
     lifecycle: str
     schema_digest: str
+
+
+class PayrollPeriodEmployeeMetadata(BaseModel):
+    employee_id: UUID
+    employee_number: str
+    display_name: str
+    home_branch_id: UUID | None
+    accepted_minutes: int
+    regular_candidate_minutes: int | None
+    overtime_candidate_minutes: int | None
+    compensation_readiness: str
+    withholding_readiness: str
+    gross_pay_readiness: str
+    exception_codes: list[str]
+    payroll_review_status: str
+    time_evidence_revision_ids: list[UUID]
+
+
+class PayrollPeriodOperationsMetadata(BaseModel):
+    contract_version: str
+    pay_period_id: UUID
+    period_start: date
+    period_end: date
+    policy_readiness: str
+    employees: list[PayrollPeriodEmployeeMetadata]
+    limitations: list[str]
 
 
 class FilingPackagePrepare(BaseModel):
@@ -256,6 +283,35 @@ async def list_payroll_reporting(
 async def payroll_operations_summary(context: ReportingRead, session: Session) -> dict[str, object]:
     value = await PayrollOperationsService().summary(session, context=context)
     return {"run_counts": value.run_counts, "member_dispositions": value.member_dispositions, "payment_counts": value.payment_counts, "remittance_counts": value.remittance_counts, "reporting_counts": value.reporting_counts, "statement_counts": value.statement_counts, "adjustment_counts": value.adjustment_counts, "history_ready": value.history_ready, "aggregate_approved_gross": str(value.aggregate_approved_gross), "aggregate_approved_net": str(value.aggregate_approved_net), "blocker_count": value.blocker_count, "reconciliation_state": value.reconciliation_state, "provider_readiness": {"filing": value.filing_provider_state, "payment": value.payment_provider_state, "remittance": value.remittance_provider_state}}
+
+
+@router.get(
+    "/operations/pay-periods/{pay_period_id}",
+    response_model=PayrollPeriodOperationsMetadata,
+)
+async def payroll_period_operations(
+    pay_period_id: UUID, context: ReportingRead, session: Session
+) -> PayrollPeriodOperationsMetadata:
+    try:
+        value = await PayrollOperationsService().period(
+            session, context=context, pay_period_id=pay_period_id
+        )
+    except (PayrollAuthorizationError, ValueError) as error:
+        raise _error(error) from error
+    return PayrollPeriodOperationsMetadata(
+        contract_version=value.contract_version,
+        pay_period_id=value.pay_period_id,
+        period_start=value.period_start,
+        period_end=value.period_end,
+        policy_readiness=value.policy_readiness,
+        employees=[PayrollPeriodEmployeeMetadata(**asdict(item)) for item in value.employees],
+        limitations=list(value.limitations),
+    )
+@router.get("/operations/registers", response_model=list[dict[str, object]])
+async def payroll_operating_registers(
+    context: ReportingRead, session: Session
+) -> list[dict[str, object]]:
+    return list(await PayrollOperationsService().registers(session, context=context))
 
 
 @router.get("/compliance/schemas", response_model=list[ComplianceSchemaMetadata])

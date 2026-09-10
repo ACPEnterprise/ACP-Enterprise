@@ -1,6 +1,8 @@
 """Read model for self-service and manager Workday Time APIs."""
 
 from datetime import datetime, timezone
+from collections import defaultdict
+from datetime import date, datetime, timezone
 from itertools import pairwise
 from uuid import UUID
 from zoneinfo import ZoneInfo
@@ -15,6 +17,10 @@ from .contracts import PunchKind, WorkdayAuthorizationError, WorkdayTimeError
 from .models import PayPeriod, WorkdayPunchEvent, WorkdayTimeEntryRevision
 from .repository import TimekeepingRepository, timekeeping_repository
 from .schemas import (
+    AdminEmployeeTimecard,
+    AdminTimecardDay,
+    AdminTimecardInterval,
+    AdminTimecardOperations,
     AdminTimecardReview,
     AdminTimecardReviewItem,
     PayPeriodView,
@@ -93,6 +99,24 @@ class WorkdayTimeQueryService:
             entries=tuple(self.entry_view(value) for value in revisions),
         )
 
+    async def admin_pay_periods(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        limit: int,
+    ) -> tuple[PayPeriodView, ...]:
+        """Return a bounded Company-owned period index for office navigation."""
+        periods = (
+            await session.scalars(
+                select(PayPeriod)
+                .where(PayPeriod.company_id == context.company.id)
+                .order_by(PayPeriod.period_end.desc(), PayPeriod.id)
+                .limit(limit)
+            )
+        ).all()
+        return tuple(self.pay_period_view(period) for period in periods)
+
     async def admin_review(
         self, session: AsyncSession, *, context: AuthorizationContext
     ) -> AdminTimecardReview:
@@ -108,7 +132,14 @@ class WorkdayTimeQueryService:
         )
         if period is None:
             return AdminTimecardReview(pay_period=None, items=())
-        branch_ids = context.authorized_branch_ids
+        branch_ids = (
+            frozenset({context.active_branch.id})
+            if context.active_branch is not None
+            else context.authorized_branch_ids
+        )
+        employee_scope = Employee.home_branch_id.in_(branch_ids)
+        if context.active_branch is None:
+            employee_scope = employee_scope | Employee.home_branch_id.is_(None)
         employees = tuple(
             (
                 await session.scalars(
@@ -116,15 +147,11 @@ class WorkdayTimeQueryService:
                     .where(
                         Employee.company_id == context.company.id,
                         Employee.status == "active",
+                        employee_scope,
                     )
                     .order_by(Employee.display_name, Employee.id)
                 )
             ).all()
-        )
-        employees = tuple(
-            item
-            for item in employees
-            if item.home_branch_id is None or item.home_branch_id in branch_ids
         )
         employee_ids = tuple(item.id for item in employees)
         revisions = (
@@ -153,7 +180,9 @@ class WorkdayTimeQueryService:
             current.setdefault(revision.entry_id, revision)
         by_employee: dict[UUID, list[WorkdayTimeEntryRevision]] = {}
         for revision in current.values():
-            if revision.branch_id is None or revision.branch_id in branch_ids:
+            if revision.branch_id in branch_ids or (
+                context.active_branch is None and revision.branch_id is None
+            ):
                 by_employee.setdefault(revision.employee_id, []).append(revision)
         items: list[AdminTimecardReviewItem] = []
         for employee in employees:
@@ -202,6 +231,274 @@ class WorkdayTimeQueryService:
         return AdminTimecardReview(
             pay_period=self.pay_period_view(period), items=tuple(items)
         )
+
+    async def admin_operations(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        pay_period_id: UUID,
+        observed_at: datetime | None = None,
+    ) -> AdminTimecardOperations:
+        """Detailed, read-only period evidence without inventing Job attribution."""
+        period = await self._repository.pay_period_by_id(
+            session, company_id=context.company.id, pay_period_id=pay_period_id
+        )
+        if period is None:
+            raise WorkdayTimeError("pay period does not exist in this Company")
+        now = observed_at or datetime.now(timezone.utc)
+        branch_ids = (
+            frozenset({context.active_branch.id})
+            if context.active_branch is not None
+            else context.authorized_branch_ids
+        )
+        employee_scope = Employee.home_branch_id.in_(branch_ids)
+        if context.active_branch is None:
+            employee_scope = employee_scope | Employee.home_branch_id.is_(None)
+        employees = tuple(
+            (
+                await session.scalars(
+                    select(Employee)
+                    .where(
+                        Employee.company_id == context.company.id,
+                        Employee.status == "active",
+                        employee_scope,
+                    )
+                    .order_by(Employee.display_name, Employee.id)
+                )
+            ).all()
+        )
+        employee_ids = tuple(item.id for item in employees)
+        revisions = (
+            tuple(
+                (
+                    await session.scalars(
+                        select(WorkdayTimeEntryRevision)
+                        .where(
+                            WorkdayTimeEntryRevision.company_id == context.company.id,
+                            WorkdayTimeEntryRevision.employee_id.in_(employee_ids),
+                            WorkdayTimeEntryRevision.work_date >= period.period_start,
+                            WorkdayTimeEntryRevision.work_date <= period.period_end,
+                        )
+                        .order_by(
+                            WorkdayTimeEntryRevision.entry_id,
+                            WorkdayTimeEntryRevision.revision_number.desc(),
+                        )
+                    )
+                ).all()
+            )
+            if employee_ids
+            else ()
+        )
+        current: dict[UUID, WorkdayTimeEntryRevision] = {}
+        for revision in revisions:
+            current.setdefault(revision.entry_id, revision)
+        by_employee: dict[UUID, list[WorkdayTimeEntryRevision]] = defaultdict(list)
+        for revision in current.values():
+            if revision.branch_id in branch_ids or (
+                context.active_branch is None and revision.branch_id is None
+            ):
+                by_employee[revision.employee_id].append(revision)
+        punch_states = await self._admin_punch_states(
+            session,
+            company_id=context.company.id,
+            employee_ids=employee_ids,
+            observed_at=now,
+        )
+        rows: list[AdminEmployeeTimecard] = []
+        for employee in employees:
+            values = sorted(
+                by_employee[employee.id],
+                key=lambda item: (item.work_date, item.start_at or item.created_at, item.id),
+            )
+            punch_state, active_clock_in = punch_states[employee.id]
+            local_today = now.astimezone(ZoneInfo(period.timezone)).date()
+            missing_clock_out = bool(
+                punch_state.state != "not_clocked_in"
+                and active_clock_in is not None
+                and active_clock_in.astimezone(ZoneInfo(period.timezone)).date()
+                < local_today
+            )
+            days = self._operation_days(values)
+            exceptions = {
+                code
+                for day in days
+                for code, present in (
+                    ("overlap", day.has_overlap),
+                    ("corrected", day.has_correction),
+                    ("unreviewed", day.review_state == "NEEDS_REVIEW"),
+                )
+                if present
+            }
+            if punch_state.state != "not_clocked_in":
+                exceptions.add("open_clock")
+            if missing_clock_out:
+                exceptions.add("missing_clock_out")
+            total = sum(day.total_supported_minutes for day in days)
+            accepted = sum(
+                interval.supported_minutes
+                for day in days
+                for interval in day.intervals
+                if interval.review_state == "ACCEPTED"
+            )
+            rows.append(
+                AdminEmployeeTimecard(
+                    employee_id=employee.id,
+                    employee_number=employee.employee_number,
+                    display_name=employee.display_name,
+                    home_branch_id=employee.home_branch_id,
+                    punch_state=punch_state,
+                    active_open_clock=punch_state.state != "not_clocked_in",
+                    missing_clock_out=missing_clock_out,
+                    days=days,
+                    total_supported_minutes=total,
+                    accepted_minutes=accepted,
+                    exception_codes=tuple(sorted(exceptions)),
+                    review_state="NEEDS_REVIEW" if exceptions else "ACCEPTED",
+                )
+            )
+        return AdminTimecardOperations(
+            contract_version="WORKFORCE.TIMECARD.OPERATIONS.v1",
+            pay_period=self.pay_period_view(period),
+            employees=tuple(rows),
+            job_attribution_readiness="PARTIAL",
+            limitations=(
+                "Timekeeping currently proves Employee paid-time intervals, not Job attribution.",
+                "Unclassified supported time is not silently assigned to a Job or labeled non-Job time.",
+                "Regular and overtime candidates remain Payroll policy outputs.",
+            ),
+        )
+
+    async def _admin_punch_states(
+        self,
+        session: AsyncSession,
+        *,
+        company_id: UUID,
+        employee_ids: tuple[UUID, ...],
+        observed_at: datetime,
+    ) -> dict[UUID, tuple[PunchState, datetime | None]]:
+        if not employee_ids:
+            return {}
+        latest = tuple(
+            (
+                await session.scalars(
+                    select(WorkdayPunchEvent)
+                    .where(
+                        WorkdayPunchEvent.company_id == company_id,
+                        WorkdayPunchEvent.employee_id.in_(employee_ids),
+                    )
+                    .distinct(WorkdayPunchEvent.employee_id)
+                    .order_by(
+                        WorkdayPunchEvent.employee_id,
+                        WorkdayPunchEvent.occurred_at.desc(),
+                        WorkdayPunchEvent.id.desc(),
+                    )
+                )
+            ).all()
+        )
+        clock_ins = tuple(
+            (
+                await session.scalars(
+                    select(WorkdayPunchEvent)
+                    .where(
+                        WorkdayPunchEvent.company_id == company_id,
+                        WorkdayPunchEvent.employee_id.in_(employee_ids),
+                        WorkdayPunchEvent.kind == PunchKind.CLOCK_IN.value,
+                    )
+                    .distinct(WorkdayPunchEvent.employee_id)
+                    .order_by(
+                        WorkdayPunchEvent.employee_id,
+                        WorkdayPunchEvent.occurred_at.desc(),
+                        WorkdayPunchEvent.id.desc(),
+                    )
+                )
+            ).all()
+        )
+        latest_by_employee = {item.employee_id: item for item in latest}
+        clock_in_by_employee = {item.employee_id: item for item in clock_ins}
+        return {
+            employee_id: (
+                self._punch_state(
+                    latest_by_employee.get(employee_id),
+                    clock_in_by_employee.get(employee_id),
+                    observed_at,
+                ),
+                (
+                    clock_in_by_employee[employee_id].occurred_at
+                    if employee_id in clock_in_by_employee
+                    and latest_by_employee.get(employee_id) is not None
+                    and latest_by_employee[employee_id].kind != PunchKind.CLOCK_OUT.value
+                    else None
+                ),
+            )
+            for employee_id in employee_ids
+        }
+
+    @classmethod
+    def _operation_days(
+        cls, values: list[WorkdayTimeEntryRevision]
+    ) -> tuple[AdminTimecardDay, ...]:
+        grouped: dict[date, list[WorkdayTimeEntryRevision]] = defaultdict(list)
+        for value in values:
+            grouped[value.work_date].append(value)
+        days: list[AdminTimecardDay] = []
+        for work_date, entries in sorted(grouped.items()):
+            entries.sort(key=lambda item: (item.start_at or item.created_at, item.id))
+            overlap_ids: set[UUID] = set()
+            timed = [item for item in entries if item.start_at and item.end_at]
+            for left, right in pairwise(timed):
+                if left.end_at is not None and right.start_at is not None and left.end_at > right.start_at:
+                    overlap_ids.update((left.id, right.id))
+            intervals: list[AdminTimecardInterval] = []
+            for item in entries:
+                minutes = cls._minutes(item)
+                accepted = item.state == "approved" or item.approved_at is not None
+                intervals.append(
+                    AdminTimecardInterval(
+                        entry_id=item.entry_id,
+                        revision_id=item.id,
+                        revision_number=item.revision_number,
+                        work_date=item.work_date,
+                        start_at=item.start_at,
+                        end_at=item.end_at,
+                        supported_minutes=minutes,
+                        attribution_state="UNCLASSIFIED",
+                        provenance=item.provenance,
+                        entry_state=item.state,
+                        corrected=item.revision_number > 1 or item.correction_reason is not None,
+                        overlap=item.id in overlap_ids,
+                        review_state="ACCEPTED" if accepted else "NEEDS_REVIEW",
+                        audit_digest=item.evidence_digest,
+                    )
+                )
+            total = sum(item.supported_minutes for item in intervals)
+            days.append(
+                AdminTimecardDay(
+                    work_date=work_date,
+                    intervals=tuple(intervals),
+                    total_supported_minutes=total,
+                    job_minutes=None,
+                    non_job_supported_minutes=None,
+                    unclassified_minutes=total,
+                    has_overlap=bool(overlap_ids),
+                    has_correction=any(item.corrected for item in intervals),
+                    review_state=(
+                        "ACCEPTED"
+                        if all(item.review_state == "ACCEPTED" for item in intervals)
+                        and not overlap_ids
+                        else "NEEDS_REVIEW"
+                    ),
+                )
+            )
+        return tuple(days)
+
+    @staticmethod
+    def _minutes(value: WorkdayTimeEntryRevision) -> int:
+        if value.approved_duration_minutes is not None:
+            return value.approved_duration_minutes
+        if value.start_at is not None and value.end_at is not None:
+            return int((value.end_at - value.start_at).total_seconds() // 60)
+        return 0
 
     @staticmethod
     def entry_view(value: WorkdayTimeEntryRevision) -> TimeEntryView:

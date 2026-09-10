@@ -2,7 +2,7 @@ import { AxiosHeaders } from "axios";
 import { describe, expect, it, vi } from "vitest";
 
 import { apiClient } from "../../api/client";
-import { assignMembershipRole, createRole, disconnectQuickBooksSandbox, getQuickBooksSandboxConnection, launchQuickBooksProduction, launchQuickBooksSandbox, listMemberships } from "./api";
+import { assignMembershipRole, claimIdentityOnboardingForOwner, createRole, disconnectQuickBooksSandbox, getQuickBooksSandboxConnection, launchQuickBooksProduction, launchQuickBooksSandbox, listMemberships } from "./api";
 
 describe("Company role administration API", () => {
   it("uses only the audited Company-admin role and Membership boundaries", async () => {
@@ -19,6 +19,19 @@ describe("Company role administration API", () => {
     });
     expect(get).toHaveBeenCalledWith("/api/v1/company-admin/memberships");
     expect(put).toHaveBeenCalledWith("/api/v1/company-admin/memberships/membership-1/roles/role-1");
+  });
+
+  it("claims protected activation through the audited single-use endpoint", async () => {
+    const post = vi.spyOn(apiClient, "post").mockResolvedValue({
+      data: { activation_token: "synthetic-secret-never-rendered" },
+    });
+
+    expect(await claimIdentityOnboardingForOwner("request-1")).toBe(
+      "synthetic-secret-never-rendered",
+    );
+    expect(post).toHaveBeenCalledWith(
+      "/api/v1/identity-onboarding/request-1/owner-claim",
+    );
   });
 });
 
