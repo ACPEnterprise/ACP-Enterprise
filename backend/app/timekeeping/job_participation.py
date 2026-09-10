@@ -181,7 +181,7 @@ def correct_job_worked_interval(
     corrected_by_user_id: UUID,
     other_current_intervals: tuple[JobWorkedInterval, ...] = (),
 ) -> tuple[JobWorkedInterval, JobWorkedInterval]:
-    """Return immutable superseded evidence and its corrected successor revision."""
+    """Return unchanged original evidence and its corrected successor revision."""
 
     if current.correction_state is CorrectionState.SUPERSEDED:
         raise JobParticipationError("only a current interval can be corrected")

@@ -152,9 +152,23 @@ def upgrade() -> None:
         "timekeeping_job_interval_revisions",
         ["company_id", "employee_id", "start_at"],
     )
+    for table in (
+        "timekeeping_job_clock_events",
+        "timekeeping_job_interval_revisions",
+    ):
+        op.execute(
+            f"CREATE TRIGGER trg_{table}_immutable "
+            f"BEFORE UPDATE OR DELETE ON {table} "
+            "FOR EACH ROW EXECUTE FUNCTION reject_timekeeping_authority_mutation()"
+        )
 
 
 def downgrade() -> None:
+    for table in (
+        "timekeeping_job_interval_revisions",
+        "timekeeping_job_clock_events",
+    ):
+        op.execute(f"DROP TRIGGER IF EXISTS trg_{table}_immutable ON {table}")
     op.drop_index(
         "ix_job_interval_employee_time", table_name="timekeeping_job_interval_revisions"
     )
