@@ -18,6 +18,12 @@ from app.operational_measurement.labor_evidence import (
 from app.operational_measurement.labor_evidence import (
     source_readiness as labor_source_readiness,
 )
+from app.operational_measurement.productive_hour_readiness import (
+    CONTRACT_VERSION as PRODUCTIVE_HOUR_READINESS_VERSION,
+)
+from app.operational_measurement.productive_hour_readiness import (
+    downstream_contract as productive_hour_downstream_contract,
+)
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import (
     AccountingPermission,
@@ -115,6 +121,12 @@ async def economics_measurement_foundation(context: Reader) -> dict[str, object]
                 "productive hours",
             ),
             "source_readiness": labor_source_readiness(),
+        },
+        "productive_hour_readiness": {
+            "contract_version": PRODUCTIVE_HOUR_READINESS_VERSION,
+            "dimensions": ("COMPANY", "BRANCH", "EMPLOYEE", "JOB"),
+            "states": ("AVAILABLE", "PARTIAL", "ABSENT", "CONFLICTING"),
+            "downstream_contract": productive_hour_downstream_contract(),
         },
         "time_measures": (
             "PAID_TIME",
