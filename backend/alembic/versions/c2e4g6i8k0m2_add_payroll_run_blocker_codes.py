@@ -1,7 +1,7 @@
 """Preserve exact Payroll run-member blocker codes.
 
 Revision ID: c2e4g6i8k0m2
-Revises: a1c3e5g7i9k1
+Revises: b2d4f6h8j0m3
 """
 
 from collections.abc import Sequence
@@ -12,7 +12,7 @@ from sqlalchemy.dialects import postgresql
 from alembic import op
 
 revision: str = "c2e4g6i8k0m2"
-down_revision: str | Sequence[str] | None = "a1c3e5g7i9k1"
+down_revision: str | Sequence[str] | None = "b2d4f6h8j0m3"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
