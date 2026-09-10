@@ -67,6 +67,7 @@ class LaunchRoleCode(StrEnum):
     SUPPORT = "SUPPORT"
     SERVICE_CSR = "SERVICE_CSR"
     OWN_DATA_ROLE = "OWN_DATA_ROLE"
+    ACP_EMPLOYEE_MOBILE = "ACP_EMPLOYEE_MOBILE"
 
 
 @dataclass(frozen=True, slots=True)
@@ -187,6 +188,22 @@ LAUNCH_ROLE_MATRIX = (
                 TimekeepingPermission.OWN_PUNCH,
                 TimekeepingPermission.OWN_READ,
                 PayrollPermission.STATEMENT_OWN_READ,
+            }
+        ),
+    ),
+    LaunchRoleDefinition(
+        code=LaunchRoleCode.ACP_EMPLOYEE_MOBILE,
+        purpose=(
+            "Use ACP Employee for own-day work, Timekeeping, and assigned Job "
+            "execution without office or Payroll authority."
+        ),
+        permission_codes=frozenset(
+            {
+                EmployeeOperationsPermission.OWN_DAY_READ,
+                TimekeepingPermission.OWN_PUNCH,
+                TimekeepingPermission.OWN_READ,
+                JobPermission.READ,
+                JobPermission.EXECUTE,
             }
         ),
     ),

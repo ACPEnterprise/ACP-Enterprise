@@ -92,6 +92,8 @@ export interface IdentityOnboardingPlan {
   membership_action: string;
   employee_action: string;
   branch_action: string;
+  employee_number_prefix: string;
+  employee_number_width: number;
   role_codes: string[];
   additional_permission_codes: string[];
   readiness_stages: Record<string, string>;
@@ -111,6 +113,10 @@ export interface IdentityOnboardingDeliveryView {
   created_at: string | null;
   submitted_at: string | null;
   delivered_at: string | null;
+}
+
+interface IdentityOnboardingOwnerClaimView {
+  activation_token: string;
 }
 
 const ADMIN_PATH = "/api/v1/company-admin";
@@ -376,6 +382,16 @@ export async function getIdentityOnboardingDelivery(
       `/api/v1/identity-onboarding/${requestId}/delivery`,
     )
   ).data;
+}
+
+export async function claimIdentityOnboardingForOwner(
+  requestId: string,
+): Promise<string> {
+  return (
+    await apiClient.post<IdentityOnboardingOwnerClaimView>(
+      `/api/v1/identity-onboarding/${requestId}/owner-claim`,
+    )
+  ).data.activation_token;
 }
 
 export async function reissueIdentityOnboarding(
