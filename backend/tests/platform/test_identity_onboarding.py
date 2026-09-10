@@ -10,10 +10,6 @@ from uuid import UUID, uuid4
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import select, text, update
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-
 from app.core.config import Settings, settings
 from app.payroll.contracts import PayrollAdmissionState, evaluate_payroll_admission
 from app.platform.audit.models import AuditRecord
@@ -48,6 +44,9 @@ from app.platform.permissions.models import (
 )
 from app.platform.users.models import User, UserCredential
 from app.timekeeping.repository import timekeeping_repository
+from sqlalchemy import select, text, update
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 
 class Context:
@@ -215,6 +214,8 @@ async def test_onboarding_plan_detects_new_and_duplicate_identity_without_mutati
         )
         assert plan.classification == "NEW_EMPLOYEE_CANDIDATE"
         assert plan.safe_to_apply
+        assert plan.employee_number_prefix == "EMP-"
+        assert plan.employee_number_width == 4
         assert plan.readiness_stages["INVITATION"] == "PROVIDER_REQUIRED"
         assert not await session.scalar(
             select(User.id).where(User.normalized_email == email)

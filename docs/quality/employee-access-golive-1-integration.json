@@ -1,0 +1,27 @@
+{
+  "milestone": "EMPLOYEE.ACCESS.GOLIVE.1",
+  "environment": "NON_PRODUCTION_ONLY",
+  "canonical_role": {
+    "code": "ACP_EMPLOYEE_MOBILE",
+    "branch_scoped": true,
+    "permissions": [
+      "COMPANY_TIMEKEEPING_OWN_READ",
+      "COMPANY_TIMEKEEPING_OWN_PUNCH",
+      "COMPANY_EMPLOYEE_OPERATIONS_OWN_DAY_READ",
+      "COMPANY_JOB_READ",
+      "COMPANY_JOB_EXECUTE"
+    ]
+  },
+  "owner_claim": {
+    "single_use": true,
+    "token_rendered": false,
+    "token_persisted": false,
+    "same_device_activation": true
+  },
+  "required_branch": "MAIN",
+  "forbidden_branch": "SYNMAIN",
+  "real_employee_created": false,
+  "password_created_by_owner": false,
+  "preview_deployed": false,
+  "production_touched": false
+}
