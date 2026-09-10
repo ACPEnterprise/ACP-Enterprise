@@ -37,7 +37,19 @@ export interface TimeEntry {
   state: "recorded" | "submitted" | "approved" | "corrected";
   supersedes_revision_id: string | null;
   correction_reason: string | null;
+  correction_kind: TimeCorrectionKind | null;
+  reviewed_by_user_id: string;
   approved_at: string | null;
+}
+
+export type TimeCorrectionKind = "missing_clock_out" | "incorrect_job" | "missing_interval" | "overlapping_intervals" | "incorrect_start" | "incorrect_stop";
+
+export interface TimeCorrectionInput {
+  start_at: string | null;
+  end_at: string | null;
+  approved_duration_minutes: number | null;
+  reason: string;
+  correction_kind: TimeCorrectionKind;
 }
 
 export interface Timecard {
@@ -53,6 +65,22 @@ export interface PunchResult {
   occurred_at: string;
   state: PunchState;
   completed_entry: TimeEntry | null;
+}
+
+export interface AdminTimecardReviewItem {
+  employee_id: string;
+  employee_number: string;
+  display_name: string;
+  home_branch_id: string | null;
+  entry_count: number;
+  total_minutes: number;
+  exception_codes: Array<"no_time" | "unsubmitted" | "corrected" | "overlap">;
+  entries: TimeEntry[];
+}
+
+export interface AdminTimecardReview {
+  pay_period: PayPeriod | null;
+  items: AdminTimecardReviewItem[];
 }
 
 export type WorkdayAccessFailure =
@@ -97,4 +125,20 @@ export async function recordOwnPunch(action: PunchAction): Promise<PunchResult> 
       { headers: { "Idempotency-Key": idempotencyKey } },
     )
   ).data;
+}
+
+export async function getAdminTimecardReview(): Promise<AdminTimecardReview> {
+  return (
+    await apiClient.get<AdminTimecardReview>(
+      "/api/v1/timekeeping/admin/timecard-review",
+    )
+  ).data;
+}
+
+export async function correctTimeEntry(revisionId: string, input: TimeCorrectionInput): Promise<TimeEntry> {
+  return (await apiClient.post<TimeEntry>(
+    `/api/v1/timekeeping/entries/${revisionId}/corrections`,
+    input,
+    { headers: { "Idempotency-Key": crypto.randomUUID() } },
+  )).data;
 }

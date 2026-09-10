@@ -1,17 +1,27 @@
 """Read model for self-service and manager Workday Time APIs."""
 
 from datetime import datetime, timezone
+from itertools import pairwise
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.platform.employees.models import Employee
 from app.platform.permissions.authorization import AuthorizationContext
 
 from .contracts import PunchKind, WorkdayAuthorizationError, WorkdayTimeError
 from .models import PayPeriod, WorkdayPunchEvent, WorkdayTimeEntryRevision
 from .repository import TimekeepingRepository, timekeeping_repository
-from .schemas import PayPeriodView, PunchState, TimecardView, TimeEntryView
+from .schemas import (
+    AdminTimecardReview,
+    AdminTimecardReviewItem,
+    PayPeriodView,
+    PunchState,
+    TimecardView,
+    TimeEntryView,
+)
 
 
 class WorkdayTimeQueryService:
@@ -20,9 +30,7 @@ class WorkdayTimeQueryService:
     ) -> None:
         self._repository = repository
 
-    async def self_employee(
-        self, session: AsyncSession, context: AuthorizationContext
-    ):
+    async def self_employee(self, session: AsyncSession, context: AuthorizationContext):
         employee = await self._repository.employee_for_membership(
             session,
             company_id=context.company.id,
@@ -85,6 +93,116 @@ class WorkdayTimeQueryService:
             entries=tuple(self.entry_view(value) for value in revisions),
         )
 
+    async def admin_review(
+        self, session: AsyncSession, *, context: AuthorizationContext
+    ) -> AdminTimecardReview:
+        """Return a read-only, Branch-scoped current-period exception queue."""
+        timezone_name = (
+            context.active_branch.timezone
+            if context.active_branch is not None
+            else context.company.timezone
+        )
+        today = datetime.now(timezone.utc).astimezone(ZoneInfo(timezone_name)).date()
+        period = await self._repository.pay_period_for_date(
+            session, company_id=context.company.id, work_date=today
+        )
+        if period is None:
+            return AdminTimecardReview(pay_period=None, items=())
+        branch_ids = context.authorized_branch_ids
+        employees = tuple(
+            (
+                await session.scalars(
+                    select(Employee)
+                    .where(
+                        Employee.company_id == context.company.id,
+                        Employee.status == "active",
+                    )
+                    .order_by(Employee.display_name, Employee.id)
+                )
+            ).all()
+        )
+        employees = tuple(
+            item
+            for item in employees
+            if item.home_branch_id is None or item.home_branch_id in branch_ids
+        )
+        employee_ids = tuple(item.id for item in employees)
+        revisions = (
+            tuple(
+                (
+                    await session.scalars(
+                        select(WorkdayTimeEntryRevision)
+                        .where(
+                            WorkdayTimeEntryRevision.company_id == context.company.id,
+                            WorkdayTimeEntryRevision.employee_id.in_(employee_ids),
+                            WorkdayTimeEntryRevision.work_date >= period.period_start,
+                            WorkdayTimeEntryRevision.work_date <= period.period_end,
+                        )
+                        .order_by(
+                            WorkdayTimeEntryRevision.entry_id,
+                            WorkdayTimeEntryRevision.revision_number.desc(),
+                        )
+                    )
+                ).all()
+            )
+            if employee_ids
+            else ()
+        )
+        current: dict[UUID, WorkdayTimeEntryRevision] = {}
+        for revision in revisions:
+            current.setdefault(revision.entry_id, revision)
+        by_employee: dict[UUID, list[WorkdayTimeEntryRevision]] = {}
+        for revision in current.values():
+            if revision.branch_id is None or revision.branch_id in branch_ids:
+                by_employee.setdefault(revision.employee_id, []).append(revision)
+        items: list[AdminTimecardReviewItem] = []
+        for employee in employees:
+            entries = sorted(
+                by_employee.get(employee.id, []),
+                key=lambda item: (item.start_at or item.created_at, item.id),
+            )
+            exceptions: set[str] = set()
+            if not entries:
+                exceptions.add("no_time")
+            if any(item.state not in {"submitted", "approved"} for item in entries):
+                exceptions.add("unsubmitted")
+            if any(
+                item.state == "corrected" or item.correction_reason is not None
+                for item in entries
+            ):
+                exceptions.add("corrected")
+            timed = [item for item in entries if item.start_at and item.end_at]
+            if any(
+                left.end_at is not None
+                and right.start_at is not None
+                and left.end_at > right.start_at
+                for left, right in pairwise(timed)
+            ):
+                exceptions.add("overlap")
+            total = sum(
+                item.approved_duration_minutes
+                if item.approved_duration_minutes is not None
+                else int((item.end_at - item.start_at).total_seconds() // 60)
+                if item.start_at is not None and item.end_at is not None
+                else 0
+                for item in entries
+            )
+            items.append(
+                AdminTimecardReviewItem(
+                    employee_id=employee.id,
+                    employee_number=employee.employee_number,
+                    display_name=employee.display_name,
+                    home_branch_id=employee.home_branch_id,
+                    entry_count=len(entries),
+                    total_minutes=total,
+                    exception_codes=tuple(sorted(exceptions)),  # type: ignore[arg-type]
+                    entries=tuple(self.entry_view(value) for value in entries),
+                )
+            )
+        return AdminTimecardReview(
+            pay_period=self.pay_period_view(period), items=tuple(items)
+        )
+
     @staticmethod
     def entry_view(value: WorkdayTimeEntryRevision) -> TimeEntryView:
         return TimeEntryView(
@@ -100,6 +218,8 @@ class WorkdayTimeQueryService:
             state=value.state,
             supersedes_revision_id=value.supersedes_revision_id,
             correction_reason=value.correction_reason,
+            correction_kind=value.correction_kind,
+            reviewed_by_user_id=value.responsible_user_id,
             approved_at=value.approved_at,
         )
 
