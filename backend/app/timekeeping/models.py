@@ -302,6 +302,12 @@ class WorkdayTimeEntryRevision(Base):
             "(provenance = 'authorized_manual_entry' AND manual_reason IS NOT NULL)",
             name="ck_time_entry_manual_reason",
         ),
+        CheckConstraint(
+            "correction_kind IS NULL OR correction_kind IN ("
+            "'missing_clock_out','missing_interval',"
+            "'overlapping_intervals','incorrect_start','incorrect_stop')",
+            name="ck_time_entry_correction_kind",
+        ),
         UniqueConstraint(
             "company_id", "entry_id", "revision_number", name="uq_time_entry_revision"
         ),
@@ -321,6 +327,14 @@ class WorkdayTimeEntryRevision(Base):
             postgresql_where=text(
                 "revision_number = 1 AND origin_idempotency_key IS NOT NULL"
             ),
+        ),
+        Index(
+            "uq_time_correction_idempotency",
+            "company_id",
+            "responsible_user_id",
+            "correction_idempotency_key",
+            unique=True,
+            postgresql_where=text("correction_idempotency_key IS NOT NULL"),
         ),
     )
     id: Mapped[UUID] = mapped_column(
@@ -367,6 +381,9 @@ class WorkdayTimeEntryRevision(Base):
     )
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     correction_reason: Mapped[str | None] = mapped_column(Text)
+    correction_kind: Mapped[str | None] = mapped_column(String(32))
+    correction_idempotency_key: Mapped[str | None] = mapped_column(String(128))
+    correction_request_digest: Mapped[str | None] = mapped_column(String(64))
     evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now

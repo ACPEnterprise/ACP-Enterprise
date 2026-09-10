@@ -149,6 +149,22 @@ class TimekeepingRepository:
             .limit(1)
         )
 
+    async def correction_by_idempotency_key(
+        self,
+        session: AsyncSession,
+        *,
+        company_id: UUID,
+        responsible_user_id: UUID,
+        idempotency_key: str,
+    ) -> WorkdayTimeEntryRevision | None:
+        return await session.scalar(
+            select(WorkdayTimeEntryRevision).where(
+                WorkdayTimeEntryRevision.company_id == company_id,
+                WorkdayTimeEntryRevision.responsible_user_id == responsible_user_id,
+                WorkdayTimeEntryRevision.correction_idempotency_key == idempotency_key,
+            )
+        )
+
     async def current_employee_revisions(
         self,
         session: AsyncSession,

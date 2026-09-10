@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from uuid import UUID
 
-from .contracts import PunchKind
+from .contracts import PunchKind, TimeCorrectionKind
 
 
 @dataclass(frozen=True)
@@ -38,6 +38,8 @@ class CorrectTimeEntry:
     end_at: datetime | None
     approved_duration_minutes: int | None
     reason: str
+    correction_kind: TimeCorrectionKind
+    idempotency_key: str
 
 
 @dataclass(frozen=True)

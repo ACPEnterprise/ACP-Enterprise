@@ -6,6 +6,16 @@ from uuid import UUID, uuid4
 
 import pytest
 import pytest_asyncio
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy import delete, update
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
+
 from app.core.config import settings
 from app.customers.models import Customer, ServiceLocation  # noqa: F401
 from app.database.session import get_database_session
@@ -26,6 +36,7 @@ from app.timekeeping.commands import (
 )
 from app.timekeeping.contracts import (
     PunchKind,
+    TimeCorrectionKind,
     TimeEntryProvenance,
     WorkdayAuthorizationError,
     WorkdayConflictError,
@@ -41,15 +52,6 @@ from app.timekeeping.models import (
 )
 from app.timekeeping.permissions import TimekeepingPermission
 from app.timekeeping.service import WorkdayTimeService
-from httpx import ASGITransport, AsyncClient
-from sqlalchemy import delete, update
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import (
-    AsyncEngine,
-    AsyncSession,
-    async_sessionmaker,
-    create_async_engine,
-)
 
 NOW = datetime(2026, 8, 29, 8, 0, tzinfo=timezone.utc)
 
@@ -75,6 +77,17 @@ def test_missing_approved_time_never_seals_as_zero() -> None:
             period_end=date(2026, 9, 4),
             approved_entries=(),
         )
+
+
+def test_required_exception_correction_catalog_is_explicit() -> None:
+    assert {value.value for value in TimeCorrectionKind} == {
+        "missing_clock_out",
+        "incorrect_job",
+        "missing_interval",
+        "overlapping_intervals",
+        "incorrect_start",
+        "incorrect_stop",
+    }
 
 
 @dataclass(frozen=True)
@@ -116,6 +129,10 @@ class FakeContext:
 
     def can_access_branch(self, branch_id: UUID) -> bool:
         return branch_id in self._branch_ids
+
+    @property
+    def authorized_branch_ids(self) -> frozenset[UUID]:
+        return frozenset(self._branch_ids)
 
 
 @pytest_asyncio.fixture
@@ -247,7 +264,9 @@ async def test_manual_entry_requires_authority_and_punch_is_employee_owned(
     async with factory() as session:
         with pytest.raises(WorkdayAuthorizationError):
             await service.record_manual_time(
-                session, context=no_permissions, command=manual  # type: ignore[arg-type]
+                session,
+                context=no_permissions,
+                command=manual,  # type: ignore[arg-type]
             )
     punch_context = FakeContext(seed, {TimekeepingPermission.OWN_PUNCH})
     async with factory() as session:
@@ -467,8 +486,45 @@ async def test_mixed_manual_and_punch_time_approval_correction_and_snapshot(
                 end_at=NOW + timedelta(hours=5),
                 approved_duration_minutes=None,
                 reason="Manager-approved missed-punch correction",
+                correction_kind=TimeCorrectionKind.MISSING_CLOCK_OUT,
+                idempotency_key="correct-missed-punch",
             ),
         )
+        assert corrected.correction_kind == "missing_clock_out"
+        assert corrected.responsible_user_id == seed.manager_user_id
+        assert corrected.supersedes_revision_id == approved_manual.id
+        correction_replay = await service.correct(
+            session,
+            context=manager_context,  # type: ignore[arg-type]
+            command=CorrectTimeEntry(
+                revision_id=approved_manual.id,
+                start_at=NOW,
+                end_at=NOW + timedelta(hours=5),
+                approved_duration_minutes=None,
+                reason="Manager-approved missed-punch correction",
+                correction_kind=TimeCorrectionKind.MISSING_CLOCK_OUT,
+                idempotency_key="correct-missed-punch",
+            ),
+        )
+        assert correction_replay.id == corrected.id
+        with pytest.raises(WorkdayConflictError, match="different correction"):
+            await service.correct(
+                session,
+                context=manager_context,  # type: ignore[arg-type]
+                command=CorrectTimeEntry(
+                    revision_id=approved_manual.id,
+                    start_at=NOW,
+                    end_at=NOW + timedelta(hours=6),
+                    approved_duration_minutes=None,
+                    reason="Contradictory retry",
+                    correction_kind=TimeCorrectionKind.INCORRECT_STOP,
+                    idempotency_key="correct-missed-punch",
+                ),
+            )
+        original = await session.get(WorkdayTimeEntryRevision, approved_manual.id)
+        assert original is not None
+        assert original.end_at == NOW + timedelta(hours=4)
+        assert original.correction_reason is None
         resubmitted = await service.submit(
             session,
             context=manager_context,  # type: ignore[arg-type]
@@ -568,6 +624,15 @@ async def test_phone_safe_api_manual_first_idempotency_and_payroll_snapshot(
     transport = ASGITransport(app=app)
     try:
         async with AsyncClient(transport=transport, base_url="http://test") as client:
+            initial_review = await client.get(
+                "/api/v1/timekeeping/admin/timecard-review"
+            )
+            assert initial_review.status_code == 200
+            assert len(initial_review.json()["items"]) == 2
+            assert all(
+                item["exception_codes"] == ["no_time"]
+                for item in initial_review.json()["items"]
+            )
             manual_payload = {
                 "employee_id": str(seed.employee_id),
                 "work_date": (today - timedelta(days=1)).isoformat(),
@@ -593,6 +658,16 @@ async def test_phone_safe_api_manual_first_idempotency_and_payroll_snapshot(
                 f"/api/v1/timekeeping/entries/{manual.json()['revision_id']}/submit"
             )
             assert submitted_manual.status_code == 200
+
+            review = await client.get("/api/v1/timekeeping/admin/timecard-review")
+            employee = next(
+                item
+                for item in review.json()["items"]
+                if item["employee_id"] == str(seed.employee_id)
+            )
+            assert employee["entry_count"] == 1
+            assert employee["total_minutes"] == 120
+            assert employee["exception_codes"] == []
 
             selected_context["value"] = employee_context
             before = datetime.now(timezone.utc)
@@ -684,7 +759,9 @@ async def test_phone_safe_api_manual_first_idempotency_and_payroll_snapshot(
                 f"/api/v1/timekeeping/pay-periods/{period.id}/employees/"
                 f"{seed.employee_id}/payroll-time-input"
             )
-            assert replay.json()["snapshot_digest"] == snapshot.json()["snapshot_digest"]
+            assert (
+                replay.json()["snapshot_digest"] == snapshot.json()["snapshot_digest"]
+            )
 
             foreign_context = FakeContext(
                 seed, {TimekeepingPermission.OWN_PUNCH, TimekeepingPermission.OWN_READ}

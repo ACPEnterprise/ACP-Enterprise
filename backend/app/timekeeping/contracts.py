@@ -33,6 +33,14 @@ class TimeEntryState(StrEnum):
     CORRECTED = "corrected"
 
 
+class TimeCorrectionKind(StrEnum):
+    MISSING_CLOCK_OUT = "missing_clock_out"
+    MISSING_INTERVAL = "missing_interval"
+    OVERLAPPING_INTERVALS = "overlapping_intervals"
+    INCORRECT_START = "incorrect_start"
+    INCORRECT_STOP = "incorrect_stop"
+
+
 class WorkdayTimeError(ValueError):
     pass
 

@@ -27,6 +27,7 @@ from .permissions import TimekeepingPermission
 from .query_service import workday_time_queries
 from .repository import timekeeping_repository
 from .schemas import (
+    AdminTimecardReview,
     CorrectionInput,
     ManualTimeInput,
     PayPeriodView,
@@ -48,7 +49,8 @@ OwnRead = Annotated[
     AuthorizationContext, Depends(require_permission(TimekeepingPermission.OWN_READ))
 ]
 ManualEntry = Annotated[
-    AuthorizationContext, Depends(require_permission(TimekeepingPermission.MANUAL_ENTRY))
+    AuthorizationContext,
+    Depends(require_permission(TimekeepingPermission.MANUAL_ENTRY)),
 ]
 Correct = Annotated[
     AuthorizationContext, Depends(require_permission(TimekeepingPermission.CORRECT))
@@ -195,6 +197,7 @@ async def manual_entry(
 async def correct_entry(
     revision_id: UUID,
     payload: CorrectionInput,
+    idempotency_key: IdempotencyKey,
     context: Correct,
     session: Session,
 ) -> TimeEntryView:
@@ -208,6 +211,8 @@ async def correct_entry(
                 end_at=payload.end_at,
                 approved_duration_minutes=payload.approved_duration_minutes,
                 reason=payload.reason,
+                correction_kind=payload.correction_kind,
+                idempotency_key=idempotency_key,
             ),
         )
         return workday_time_queries.entry_view(result)
@@ -246,13 +251,22 @@ async def approve_entry(
 
 
 @router.get("/pay-periods/current", response_model=PayPeriodView | None)
-async def current_pay_period(context: AdminRead, session: Session) -> PayPeriodView | None:
+async def current_pay_period(
+    context: AdminRead, session: Session
+) -> PayPeriodView | None:
     _, timezone_name = _branch_and_timezone(context)
     today = datetime.now(timezone.utc).astimezone(ZoneInfo(timezone_name)).date()
     value = await timekeeping_repository.pay_period_for_date(
         session, company_id=context.company.id, work_date=today
     )
     return workday_time_queries.pay_period_view(value) if value is not None else None
+
+
+@router.get("/admin/timecard-review", response_model=AdminTimecardReview)
+async def admin_timecard_review(
+    context: AdminRead, session: Session
+) -> AdminTimecardReview:
+    return await workday_time_queries.admin_review(session, context=context)
 
 
 @router.get("/pay-periods/{pay_period_id}", response_model=PayPeriodView)
