@@ -12,6 +12,12 @@ vi.mock("../hooks/useWorkdayTime", () => ({
     isLoading: false,
     isError: false,
   }),
+  useAdminTimecardOperations: () => ({
+    data: undefined,
+    isLoading: false,
+    isError: false,
+  }),
+  usePayPeriods: () => ({ data: [], isLoading: false, isError: false }),
 }));
 vi.mock("../features/administration/hooks", () => ({
   useRoles: () => ({ data: [], isLoading: false, isError: false }),

@@ -30,6 +30,11 @@ vi.mock("../hooks/usePayroll", () => ({
   }),
   usePayrollReports: () => ({ isPending: false, isError: false, data: [] }),
   useComplianceSchemas: () => ({ isPending: false, isError: false, data: [] }),
+  usePayrollPeriodOperations: () => ({ isLoading: false, isError: false, data: undefined }),
+}));
+vi.mock("../hooks/useWorkdayTime", () => ({
+  useCurrentPayPeriod: () => ({ isLoading: false, isError: false, data: undefined }),
+  usePayPeriods: () => ({ isLoading: false, isError: false, data: [] }),
 }));
 vi.mock("../hooks/useAccountsPayable", () => ({
   useAPAging: apMocks.aging,
