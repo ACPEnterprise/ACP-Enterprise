@@ -198,6 +198,7 @@ async def manual_entry(
 async def correct_entry(
     revision_id: UUID,
     payload: CorrectionInput,
+    idempotency_key: IdempotencyKey,
     context: Correct,
     session: Session,
 ) -> TimeEntryView:
@@ -211,6 +212,8 @@ async def correct_entry(
                 end_at=payload.end_at,
                 approved_duration_minutes=payload.approved_duration_minutes,
                 reason=payload.reason,
+                correction_kind=payload.correction_kind,
+                idempotency_key=idempotency_key,
             ),
         )
         return workday_time_queries.entry_view(result)

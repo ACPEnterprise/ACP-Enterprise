@@ -335,8 +335,31 @@ class WorkdayTimeService:
         command: CorrectTimeEntry,
     ) -> WorkdayTimeEntryRevision:
         self._require_permission(context, TimekeepingPermission.CORRECT)
+        self._validate_idempotency_key(command.idempotency_key)
         if not command.reason.strip():
             raise WorkdayTimeError("correction reason is required")
+        request_digest = canonical_digest(
+            {
+                "revision_id": str(command.revision_id),
+                "start_at": command.start_at.isoformat() if command.start_at else None,
+                "end_at": command.end_at.isoformat() if command.end_at else None,
+                "approved_duration_minutes": command.approved_duration_minutes,
+                "reason": command.reason.strip(),
+                "correction_kind": command.correction_kind.value,
+            }
+        )
+        existing = await self._repository.correction_by_idempotency_key(
+            session,
+            company_id=context.company.id,
+            responsible_user_id=context.user.id,
+            idempotency_key=command.idempotency_key,
+        )
+        if existing is not None:
+            if existing.correction_request_digest != request_digest:
+                raise WorkdayConflictError(
+                    "idempotency key was used for a different correction"
+                )
+            return existing
         duration_minutes(
             command.start_at, command.end_at, command.approved_duration_minutes
         )
@@ -359,6 +382,9 @@ class WorkdayTimeService:
                 end_at=command.end_at,
                 approved_duration_minutes=command.approved_duration_minutes,
                 correction_reason=command.reason.strip(),
+                correction_kind=command.correction_kind.value,
+                correction_idempotency_key=command.idempotency_key,
+                correction_request_digest=request_digest,
                 approval_id=None,
                 approved_at=None,
                 replace_time=True,
@@ -388,8 +414,22 @@ class WorkdayTimeService:
                     payload={"successor_revision_id": str(result.id)},
                 ),
             )
-        await session.commit()
-        return result
+        try:
+            await session.commit()
+            return result
+        except IntegrityError:
+            await session.rollback()
+            existing = await self._repository.correction_by_idempotency_key(
+                session,
+                company_id=context.company.id,
+                responsible_user_id=context.user.id,
+                idempotency_key=command.idempotency_key,
+            )
+            if existing is None or existing.correction_request_digest != request_digest:
+                raise WorkdayConflictError(
+                    "concurrent correction could not be reconciled"
+                )
+            return existing
 
     async def create_pay_period(
         self,
@@ -570,6 +610,9 @@ class WorkdayTimeService:
         end_at: datetime | None = None,
         approved_duration_minutes: int | None = None,
         correction_reason: str | None = None,
+        correction_kind: str | None = None,
+        correction_idempotency_key: str | None = None,
+        correction_request_digest: str | None = None,
         approval_id: UUID | None = None,
         approved_at: datetime | None = None,
         replace_time: bool = False,
@@ -595,6 +638,9 @@ class WorkdayTimeService:
             "approval_id": str(approval_id) if approval_id else None,
             "approved_at": approved_at.isoformat() if approved_at else None,
             "correction_reason": correction_reason,
+            "correction_kind": correction_kind,
+            "correction_idempotency_key": correction_idempotency_key,
+            "correction_request_digest": correction_request_digest,
             "prior_digest": prior.evidence_digest,
         }
         return WorkdayTimeEntryRevision(
@@ -623,6 +669,9 @@ class WorkdayTimeService:
             approved_by_user_id=actor_user_id if approval_id else None,
             approved_at=approved_at,
             correction_reason=correction_reason,
+            correction_kind=correction_kind,
+            correction_idempotency_key=correction_idempotency_key,
+            correction_request_digest=correction_request_digest,
             evidence_digest=canonical_digest(values),
         )
 
@@ -857,7 +906,9 @@ class WorkdayTimeService:
         try:
             ZoneInfo(timezone_name)
         except (ZoneInfoNotFoundError, ValueError) as exc:
-            raise WorkdayTimeError("timekeeping timezone must be a valid IANA zone") from exc
+            raise WorkdayTimeError(
+                "timekeeping timezone must be a valid IANA zone"
+            ) from exc
 
 
 workday_time_service = WorkdayTimeService()

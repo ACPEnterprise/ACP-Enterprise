@@ -39,6 +39,8 @@ const entry = (overrides: Partial<workdayApi.TimeEntry> = {}): workdayApi.TimeEn
   state: "approved",
   supersedes_revision_id: null,
   correction_reason: null,
+  correction_kind: null,
+  reviewed_by_user_id: "reviewer-1",
   approved_at: "2026-08-28T15:00:00Z",
   ...overrides,
 });

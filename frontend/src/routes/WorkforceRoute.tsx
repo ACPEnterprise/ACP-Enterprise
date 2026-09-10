@@ -7,7 +7,12 @@ import type { EmployeePermissionExplanation } from "../api/workforce";
 import { useAuth } from "../auth";
 import { useRoles } from "../features/administration/hooks";
 import { useEmployeeAccessMutation, useEmployeeAdministration, useWorkforceDirectory, useWorkforceEligibility, useWorkforceEmployee } from "../hooks/useWorkforce";
-import { useAdminTimecardOperations, useAdminTimecardReview, usePayPeriods } from "../hooks/useWorkdayTime";
+import {
+  useAdminTimecardOperations,
+  useAdminTimecardReview,
+  usePayPeriods,
+  useTimeCorrection,
+} from "../hooks/useWorkdayTime";
 import { Alert, Badge, Card, Input, Spinner } from "../ui";
 
 function Readiness({ state }: { state: "READY" | "BLOCKED" | "INSUFFICIENT_EVIDENCE" }) {
@@ -35,6 +40,13 @@ export function WorkforceRoute() {
   const eligibility = useWorkforceEligibility();
   const canReviewTime = permissionCodes.includes("COMPANY_TIMEKEEPING_ADMIN_READ");
   const timeReview = useAdminTimecardReview(canReviewTime);
+  const canCorrectTime = permissionCodes.includes("COMPANY_TIMEKEEPING_CORRECT");
+  const timeCorrection = useTimeCorrection();
+  const [correctionRevision, setCorrectionRevision] = useState("");
+  const [correctionKind, setCorrectionKind] = useState<"missing_clock_out" | "incorrect_job" | "missing_interval" | "overlapping_intervals" | "incorrect_start" | "incorrect_stop">("missing_clock_out");
+  const [correctionStart, setCorrectionStart] = useState("");
+  const [correctionEnd, setCorrectionEnd] = useState("");
+  const [correctionReason, setCorrectionReason] = useState("");
   const payPeriods = usePayPeriods(canReviewTime);
   const [selectedPayPeriodId, setSelectedPayPeriodId] = useState("");
   const effectivePayPeriodId = selectedPayPeriodId || timeReview.data?.pay_period?.id || payPeriods.data?.[0]?.id || null;
@@ -88,6 +100,19 @@ export function WorkforceRoute() {
       {[['Authorized Employees', morningReview.total], ['Inactive identities', morningReview.inactive], ['Missing Workforce profile', morningReview.missingProfile], ['Readiness needs attention', morningReview.needsAttention]].map(([label, value]) => <Card key={String(label)} className="p-4"><p className="text-sm text-content-muted">{label}</p><p className="mt-1 text-2xl font-bold">{value}</p></Card>)}
     </section>
     {canReviewTime && <Card className="p-4 sm:p-6">
+      <div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="text-lg font-semibold">Current timecard review</h3><p className="mt-1 text-sm text-content-muted">Read-only current-period evidence. Exceptions require human review; no Payroll execution occurs here.</p></div>{timeReview.data?.pay_period && <Badge variant="neutral">{timeReview.data.pay_period.period_start} – {timeReview.data.pay_period.period_end}</Badge>}</div>
+      {timeReview.isLoading && <div className="mt-4"><Spinner label="Loading timecard review"/></div>}
+      {timeReview.isError && <div className="mt-4"><Alert variant="warning" title="Timecard review unavailable">No time or Payroll state was changed. Refresh after verifying timekeeping authority.</Alert></div>}
+      {timeReview.data && !timeReview.data.pay_period && <div className="mt-4"><Alert variant="warning" title="Pay period required">Configure an authorized pay period before preparing payroll time evidence.</Alert></div>}
+      {timeReview.data?.pay_period && <div className="mt-4 overflow-x-auto"><table className="w-full min-w-[760px] text-left text-sm"><thead><tr className="border-b border-stroke text-content-muted"><th className="py-2">Employee</th><th>Entries</th><th>Recorded hours</th><th>Review state</th><th>Action</th></tr></thead><tbody>{timeReview.data.items.map((item) => <tr className="border-b border-stroke" key={item.employee_id}><td className="py-3"><strong>{item.display_name}</strong><span className="block text-xs text-content-muted">{item.employee_number}</span></td><td>{item.entry_count}</td><td>{(item.total_minutes / 60).toFixed(2)}</td><td><div className="flex flex-wrap gap-1">{item.exception_codes.length ? item.exception_codes.map((code) => <Badge variant={code === "overlap" ? "danger" : "warning"} key={code}>{code.replaceAll("_", " ")}</Badge>) : <Badge variant="success">ready for review</Badge>}</div></td><td>{canCorrectTime && item.entries.length > 0 ? <button type="button" className="rounded-lg border border-stroke px-3 py-2 font-medium" onClick={() => { const entry = item.entries[item.entries.length - 1]; setCorrectionRevision(entry.revision_id); setCorrectionStart(entry.start_at?.slice(0, 16) ?? ""); setCorrectionEnd(entry.end_at?.slice(0, 16) ?? ""); }}>Review correction</button> : <span className="text-content-muted">Read only</span>}</td></tr>)}</tbody></table></div>}
+      {correctionRevision && <form className="mt-5 grid gap-3 rounded-xl border border-stroke p-4 md:grid-cols-2" onSubmit={(event) => { event.preventDefault(); timeCorrection.mutate({ revisionId: correctionRevision, input: { correction_kind: correctionKind, start_at: correctionStart ? new Date(correctionStart).toISOString() : null, end_at: correctionEnd ? new Date(correctionEnd).toISOString() : null, approved_duration_minutes: null, reason: correctionReason } }, { onSuccess: () => { setCorrectionRevision(""); setCorrectionReason(""); } }); }}>
+        <label className="text-sm"><span className="mb-1 block font-medium">Correction case</span><select className="min-h-10 w-full rounded-lg border border-stroke bg-surface px-2" value={correctionKind} onChange={(event) => setCorrectionKind(event.target.value as typeof correctionKind)}><option value="missing_clock_out">Missing clock-out</option><option value="incorrect_job">Incorrect Job attribution</option><option value="missing_interval">Missing interval</option><option value="overlapping_intervals">Overlapping intervals</option><option value="incorrect_start">Incorrect start</option><option value="incorrect_stop">Incorrect stop</option></select></label>
+        <label className="text-sm"><span className="mb-1 block font-medium">Reviewer explanation</span><Input required value={correctionReason} onChange={(event) => setCorrectionReason(event.target.value)} placeholder="Explain the evidence supporting this correction"/></label>
+        <label className="text-sm"><span className="mb-1 block font-medium">Corrected start</span><Input required type="datetime-local" value={correctionStart} onChange={(event) => setCorrectionStart(event.target.value)}/></label>
+        <label className="text-sm"><span className="mb-1 block font-medium">Corrected stop</span><Input required type="datetime-local" value={correctionEnd} onChange={(event) => setCorrectionEnd(event.target.value)}/></label>
+        <div className="flex gap-2 md:col-span-2"><button type="submit" disabled={timeCorrection.isPending} className="rounded-lg bg-action-primary px-4 py-2 font-semibold text-white disabled:opacity-50">{timeCorrection.isPending ? "Saving…" : "Create audited revision"}</button><button type="button" className="rounded-lg border border-stroke px-4 py-2" onClick={() => setCorrectionRevision("")}>Cancel</button></div>
+        {timeCorrection.isError && <div className="md:col-span-2"><Alert variant="danger" title="Correction not applied">Refresh the current revision and verify the interval, Branch authority, and overlap evidence.</Alert></div>}
+      </form>}
       <div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="text-lg font-semibold">Timecard operations</h3><p className="mt-1 text-sm text-content-muted">Read-only daily and pay-period evidence. Exceptions require human review; no Payroll execution occurs here.</p></div><label className="text-sm font-medium">Pay period<select aria-label="Timecard pay period" className="ml-2 min-h-10 rounded-lg border border-stroke bg-surface px-2" value={effectivePayPeriodId ?? ""} onChange={(event) => setSelectedPayPeriodId(event.target.value)}>{(payPeriods.data ?? []).map((period) => <option key={period.id} value={period.id}>{period.period_start} – {period.period_end}</option>)}</select></label></div>
       {timeReview.isLoading && <div className="mt-4"><Spinner label="Loading timecard review"/></div>}
       {timeReview.isError && <div className="mt-4"><Alert variant="warning" title="Timecard review unavailable">No time or Payroll state was changed. Refresh after verifying timekeeping authority.</Alert></div>}

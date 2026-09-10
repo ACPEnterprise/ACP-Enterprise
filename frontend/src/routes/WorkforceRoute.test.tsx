@@ -12,6 +12,11 @@ vi.mock("../hooks/useWorkdayTime", () => ({
     isLoading: false,
     isError: false,
   }),
+  useTimeCorrection: () => ({
+    isPending: false,
+    isError: false,
+    mutate: vi.fn(),
+  }),
   useAdminTimecardOperations: () => ({
     data: undefined,
     isLoading: false,

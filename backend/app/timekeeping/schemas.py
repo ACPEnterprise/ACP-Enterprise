@@ -6,7 +6,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from .contracts import PunchKind
+from .contracts import PunchKind, TimeCorrectionKind
 
 
 class PunchInput(BaseModel):
@@ -43,6 +43,7 @@ class CorrectionInput(BaseModel):
     end_at: datetime | None = None
     approved_duration_minutes: int | None = Field(default=None, ge=0)
     reason: str = Field(min_length=1, max_length=2000)
+    correction_kind: TimeCorrectionKind
 
     @model_validator(mode="after")
     def require_time_shape(self) -> "CorrectionInput":
@@ -74,6 +75,8 @@ class TimeEntryView(BaseModel):
     state: str
     supersedes_revision_id: UUID | None
     correction_reason: str | None
+    correction_kind: str | None
+    reviewed_by_user_id: UUID
     approved_at: datetime | None
 
 
@@ -125,6 +128,7 @@ class AdminTimecardReviewItem(BaseModel):
     exception_codes: tuple[
         Literal["no_time", "unsubmitted", "corrected", "overlap"], ...
     ]
+    entries: tuple[TimeEntryView, ...]
 
 
 class AdminTimecardReview(BaseModel):

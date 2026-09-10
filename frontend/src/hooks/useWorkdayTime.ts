@@ -4,11 +4,13 @@ import {
   getOwnPunchState,
   getOwnTimecard,
   getAdminTimecardReview,
+  correctTimeEntry,
   getAdminTimecardOperations,
   getCurrentPayPeriod,
   getPayPeriods,
   recordOwnPunch,
   type PunchAction,
+  type TimeCorrectionInput,
 } from "../api/timekeeping";
 
 export const workdayKeys = {
@@ -28,6 +30,16 @@ export function useOwnWorkdayState(enabled = true) {
     enabled,
     retry: false,
     refetchOnWindowFocus: true,
+  });
+}
+
+export function useTimeCorrection() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ revisionId, input }: { revisionId: string; input: TimeCorrectionInput }) => correctTimeEntry(revisionId, input),
+    onSuccess: async () => {
+      await client.invalidateQueries({ queryKey: workdayKeys.adminReview() });
+    },
   });
 }
 

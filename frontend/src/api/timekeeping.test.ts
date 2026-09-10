@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { apiClient } from "./client";
-import { getAdminTimecardReview, getOwnPunchState, getOwnTimecard, recordOwnPunch } from "./timekeeping";
+import { correctTimeEntry, getAdminTimecardReview, getOwnPunchState, getOwnTimecard, recordOwnPunch } from "./timekeeping";
 
 describe("Workday Time API client", () => {
   it("uses self-scoped endpoints and sends only an action with a fresh idempotency key", async () => {
@@ -74,5 +74,34 @@ describe("Workday Time API client", () => {
     expect(adapter.mock.calls[0]?.[0].url).toBe(
       "/api/v1/timekeeping/admin/timecard-review",
     );
+  });
+
+  it("sends a classified correction with retry identity and no reviewer identity", async () => {
+    const adapter = vi.fn(async (config) => {
+      expect(config.url).toBe("/api/v1/timekeeping/entries/revision-1/corrections");
+      expect(config.headers.get("Idempotency-Key")).toBeTruthy();
+      expect(JSON.parse(String(config.data))).toEqual({
+        correction_kind: "incorrect_stop",
+        start_at: "2026-08-28T13:00:00Z",
+        end_at: "2026-08-28T14:30:00Z",
+        approved_duration_minutes: null,
+        reason: "Verified against dispatch evidence",
+      });
+      expect(String(config.data)).not.toMatch(/reviewer|user_id/i);
+      return { data: {}, status: 200, statusText: "OK", headers: {}, config };
+    });
+    const original = apiClient.defaults.adapter;
+    apiClient.defaults.adapter = adapter;
+    try {
+      await correctTimeEntry("revision-1", {
+        correction_kind: "incorrect_stop",
+        start_at: "2026-08-28T13:00:00Z",
+        end_at: "2026-08-28T14:30:00Z",
+        approved_duration_minutes: null,
+        reason: "Verified against dispatch evidence",
+      });
+    } finally {
+      apiClient.defaults.adapter = original;
+    }
   });
 });

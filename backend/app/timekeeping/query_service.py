@@ -224,6 +224,7 @@ class WorkdayTimeQueryService:
                     entry_count=len(entries),
                     total_minutes=total,
                     exception_codes=tuple(sorted(exceptions)),  # type: ignore[arg-type]
+                    entries=tuple(self.entry_view(value) for value in entries),
                 )
             )
         return AdminTimecardReview(
@@ -513,6 +514,8 @@ class WorkdayTimeQueryService:
             state=value.state,
             supersedes_revision_id=value.supersedes_revision_id,
             correction_reason=value.correction_reason,
+            correction_kind=value.correction_kind,
+            reviewed_by_user_id=value.responsible_user_id,
             approved_at=value.approved_at,
         )
 
