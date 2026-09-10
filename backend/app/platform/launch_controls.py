@@ -59,6 +59,10 @@ COMPANY_ADMINISTRATOR_OWNER_READ_PERMISSIONS = frozenset(
 
 
 class LaunchRoleCode(StrEnum):
+    OWNER = "OWNER"
+    MANAGER = "MANAGER"
+    ADMIN = "ADMIN"
+    CSR = "CSR"
     COMPANY_ADMINISTRATOR = "COMPANY_ADMINISTRATOR"
     OFFICE_MANAGER = "OFFICE_MANAGER"
     DISPATCHER = "DISPATCHER"
@@ -80,6 +84,46 @@ class LaunchRoleDefinition:
 
 
 LAUNCH_ROLE_MATRIX = (
+    LaunchRoleDefinition(
+        code=LaunchRoleCode.OWNER,
+        purpose="Own the Company and administer its access and operating evidence.",
+        permission_codes=COMPANY_ADMINISTRATOR_OWNER_READ_PERMISSIONS,
+    ),
+    LaunchRoleDefinition(
+        code=LaunchRoleCode.ADMIN,
+        purpose="Administer Company access and inspect operating evidence.",
+        permission_codes=COMPANY_ADMINISTRATOR_OWNER_READ_PERMISSIONS,
+    ),
+    LaunchRoleDefinition(
+        code=LaunchRoleCode.MANAGER,
+        purpose="Manage branch operations using the canonical office-manager bundle.",
+        permission_codes=frozenset(
+            {
+                CustomerPermission.READ, CustomerPermission.MANAGE,
+                SchedulingPermission.READ, SchedulingPermission.MANAGE,
+                JobPermission.READ, JobPermission.MANAGE,
+                DispatchPermission.READ, DispatchPermission.MANAGE,
+                PriceBookPermission.READ, PriceBookPermission.MANAGE,
+                AnalyticsPermission.READ, LaunchPlatformPermission.AUDIT_READ,
+                InventoryPermission.READ, InventoryPermission.MANAGE,
+                InventoryPermission.MOVE, InventoryPermission.RESERVE,
+                PurchasingPermission.READ, PurchasingPermission.MANAGE,
+            }
+        ),
+    ),
+    LaunchRoleDefinition(
+        code=LaunchRoleCode.CSR,
+        purpose="Serve Customers without financial execution or administrative authority.",
+        permission_codes=frozenset(
+            {
+                CustomerPermission.READ, CustomerPermission.MANAGE,
+                EstimatePermission.READ, EstimatePermission.MANAGE,
+                SchedulingPermission.READ, JobPermission.READ, DispatchPermission.READ,
+                InvoicePermission.READ, PaymentPermission.READ,
+                CommunicationsPermission.READ,
+            }
+        ),
+    ),
     LaunchRoleDefinition(
         code=LaunchRoleCode.COMPANY_ADMINISTRATOR,
         purpose="Company-owned tenant and access-policy administration.",
@@ -132,13 +176,19 @@ LAUNCH_ROLE_MATRIX = (
     ),
     LaunchRoleDefinition(
         code=LaunchRoleCode.TECHNICIAN,
-        purpose="Read assigned operational context and execute Job lifecycle work.",
+        purpose=(
+            "Use ACP Employee for own-day work, Timekeeping, and assigned Job "
+            "execution without office, administrative, or Payroll authority."
+        ),
         permission_codes=frozenset(
             {
                 CustomerPermission.READ,
                 SchedulingPermission.READ,
                 JobPermission.READ,
                 JobPermission.EXECUTE,
+                EmployeeOperationsPermission.OWN_DAY_READ,
+                TimekeepingPermission.OWN_READ,
+                TimekeepingPermission.OWN_PUNCH,
             }
         ),
     ),
