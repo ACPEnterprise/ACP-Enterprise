@@ -113,6 +113,10 @@ export interface IdentityOnboardingDeliveryView {
   delivered_at: string | null;
 }
 
+interface IdentityOnboardingOwnerClaimView {
+  activation_token: string;
+}
+
 const ADMIN_PATH = "/api/v1/company-admin";
 const QBO_SANDBOX_AUTHORIZE_PATH = "/api/v1/integrations/qbo/oauth/authorize";
 const QBO_SANDBOX_CONNECTION_PATH = "/api/v1/integrations/qbo/connection";
@@ -376,6 +380,16 @@ export async function getIdentityOnboardingDelivery(
       `/api/v1/identity-onboarding/${requestId}/delivery`,
     )
   ).data;
+}
+
+export async function claimIdentityOnboardingForOwner(
+  requestId: string,
+): Promise<string> {
+  return (
+    await apiClient.post<IdentityOnboardingOwnerClaimView>(
+      `/api/v1/identity-onboarding/${requestId}/owner-claim`,
+    )
+  ).data.activation_token;
 }
 
 export async function reissueIdentityOnboarding(

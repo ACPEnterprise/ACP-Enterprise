@@ -4,6 +4,9 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
+from fastapi import HTTPException
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
 from app.core.config import settings
 from app.customers import models as customer_models  # noqa: F401
 from app.employee_operations.permissions import EmployeeOperationsPermission
@@ -47,8 +50,6 @@ from app.platform.permissions.codes import (
 )
 from app.scheduling import models as scheduling_models  # noqa: F401
 from app.timekeeping.permissions import TimekeepingPermission
-from fastapi import HTTPException
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 
 @pytest_asyncio.fixture
@@ -172,6 +173,28 @@ def test_own_data_role_has_no_broad_tenant_or_administrative_authority() -> None
     assert role.permission_codes.isdisjoint(
         frozenset(PayrollPermission.ALL) - {PayrollPermission.STATEMENT_OWN_READ}
     )
+
+
+def test_acp_employee_mobile_role_has_only_approved_field_authority() -> None:
+    role = next(
+        value
+        for value in LAUNCH_ROLE_MATRIX
+        if value.code is LaunchRoleCode.ACP_EMPLOYEE_MOBILE
+    )
+    assert role.branch_access_required is True
+    assert role.permission_codes == frozenset(
+        {
+            EmployeeOperationsPermission.OWN_DAY_READ,
+            TimekeepingPermission.OWN_PUNCH,
+            TimekeepingPermission.OWN_READ,
+            JobPermission.READ,
+            JobPermission.EXECUTE,
+        }
+    )
+    assert role.permission_codes.isdisjoint(CustomerPermission.ALL)
+    assert role.permission_codes.isdisjoint(AdministrationPermission.ALL)
+    assert role.permission_codes.isdisjoint(AccountingPermission.ALL)
+    assert role.permission_codes.isdisjoint(PayrollPermission.ALL)
 
 
 def test_audit_permission_fails_closed_without_explicit_grant() -> None:

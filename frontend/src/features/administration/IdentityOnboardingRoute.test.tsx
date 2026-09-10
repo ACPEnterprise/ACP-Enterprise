@@ -122,6 +122,9 @@ describe("IdentityOnboardingRoute", () => {
       submitted_at: null,
       delivered_at: null,
     });
+    vi.mocked(api.claimIdentityOnboardingForOwner).mockRejectedValue(
+      new Error("navigation is not exercised in this component test"),
+    );
   });
 
   it("prepares a protected Employee identity with an explicit Branch and role", async () => {
@@ -179,6 +182,19 @@ describe("IdentityOnboardingRoute", () => {
     await user.click(screen.getByRole("button", { name: "Review Employee plan" }));
     expect(await screen.findByText("DUPLICATE CONFLICT")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Apply reviewed Employee onboarding" })).not.toBeInTheDocument();
+  });
+
+  it("offers the audited owner claim only after an invitation exists", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await user.type(await screen.findByLabelText("Employee login address"), "synthetic@example.invalid");
+    await user.type(screen.getByLabelText("First name"), "Synthetic");
+    await user.type(screen.getByLabelText("Last name"), "Technician");
+    await user.click(screen.getByRole("button", { name: "Review Employee plan" }));
+    await user.click(screen.getByRole("button", { name: "Apply reviewed Employee onboarding" }));
+    await user.click(await screen.findByRole("button", { name: "Activate in ACP Employee on this device" }));
+    expect(api.claimIdentityOnboardingForOwner).toHaveBeenCalledWith("request-1");
+    expect(await screen.findByText("Protected activation could not be opened. No activation material was displayed.")).toBeInTheDocument();
   });
 
   it("fails closed without onboarding authority", () => {

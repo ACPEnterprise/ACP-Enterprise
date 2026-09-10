@@ -28,6 +28,7 @@ import {
   type IdentityOnboardingPlan,
   type IdentityOnboardingView,
   type PermissionDefinition,
+  claimIdentityOnboardingForOwner,
 } from "./api";
 
 const ONBOARDING_PERMISSION = "COMPANY_IDENTITY_ONBOARDING_MANAGE";
@@ -213,6 +214,21 @@ export function IdentityOnboardingRoute() {
     }
   };
 
+  const openActivationOnThisDevice = async () => {
+    if (!onboarding) return;
+    setSubmitting(true);
+    setErrorMessage("");
+    try {
+      const token = await claimIdentityOnboardingForOwner(onboarding.id);
+      const target = `acpemployee://activate?token=${encodeURIComponent(token)}`;
+      window.location.replace(target);
+    } catch {
+      setErrorMessage("Protected activation could not be opened. No activation material was displayed.");
+      setResult("error");
+      setSubmitting(false);
+    }
+  };
+
   return (
     <div className="mx-auto w-full max-w-2xl space-y-ui-5 pb-ui-8">
       <header>
@@ -371,6 +387,11 @@ export function IdentityOnboardingRoute() {
               </Alert>
             )}
             <div className="flex flex-wrap gap-ui-3">
+              {onboarding.status === "invited" && (
+                <Button loading={submitting} onClick={() => void openActivationOnThisDevice()}>
+                  Activate in ACP Employee on this device
+                </Button>
+              )}
               <Button variant="secondary" loading={submitting} onClick={() => void updateInvitation("reissue")}>
                 Reissue invitation
               </Button>
@@ -378,6 +399,11 @@ export function IdentityOnboardingRoute() {
                 Revoke invitation
               </Button>
             </div>
+            <Alert variant="information">
+              The protected owner claim is single-use and available only outside Production.
+              Open it only on the device being handed to the Employee; the Employee enters
+              their own password directly in ACP Employee.
+            </Alert>
           </CardContent>
         </Card>
       )}
