@@ -2,9 +2,14 @@ import { useState } from "react";
 import { useHasPermission } from "../auth";
 import { Link } from "react-router";
 
-import { useComplianceSchemas, usePayrollOperationsSummary, usePayrollPeriodOperations, usePayrollReports } from "../hooks/usePayroll";
+import {
+  useComplianceSchemas,
+  usePayrollOperatingRegisters,
+  usePayrollOperationsSummary,
+  usePayrollPeriodOperations,
+  usePayrollReports,
+} from "../hooks/usePayroll";
 import { useCurrentPayPeriod, usePayPeriods } from "../hooks/useWorkdayTime";
-import { useComplianceSchemas, usePayrollOperatingRegisters, usePayrollOperationsSummary, usePayrollReports } from "../hooks/usePayroll";
 import { Alert, Card, CardContent, CardDescription, CardHeader, CardTitle, Spinner } from "../ui";
 
 const label = (value: string) => value.replaceAll("_", " ").replaceAll(":", " · ");

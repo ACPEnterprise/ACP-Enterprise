@@ -10,9 +10,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.platform.employees.models import Employee
 from app.platform.permissions.authorization import AuthorizationContext
-from app.timekeeping.models import PayPeriod, WorkdayTimeEntryRevision
+from app.timekeeping.models import (
+    PayPeriod,
+    PayrollTimeInputRecord,
+    WorkdayTimeEntryRevision,
+)
 from app.timekeeping.permissions import TimekeepingPermission
-from app.timekeeping.models import PayPeriod, PayrollTimeInputRecord
 
 from .contracts import PayrollAuthorizationError
 from .models import (

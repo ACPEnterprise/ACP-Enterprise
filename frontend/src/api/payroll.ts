@@ -72,6 +72,8 @@ export interface PayrollPeriodOperations {
   policy_readiness: string;
   employees: PayrollPeriodEmployee[];
   limitations: string[];
+}
+
 export interface PayrollRegisterMember {
   employee_id: string;
   employee_number: string;
@@ -128,6 +130,8 @@ export async function getPayrollPeriodOperations(payPeriodId: string): Promise<P
       `/api/v1/payroll/operations/pay-periods/${payPeriodId}`,
     )
   ).data;
+}
+
 export async function listPayrollOperatingRegisters(): Promise<PayrollOperatingRegister[]> {
   return (await apiClient.get<PayrollOperatingRegister[]>("/api/v1/payroll/operations/registers")).data;
 }
