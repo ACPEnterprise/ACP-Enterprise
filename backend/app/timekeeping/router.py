@@ -5,7 +5,7 @@ from typing import Annotated
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_database_session
@@ -27,6 +27,8 @@ from .permissions import TimekeepingPermission
 from .query_service import workday_time_queries
 from .repository import timekeeping_repository
 from .schemas import (
+    AdminTimecardOperations,
+    AdminTimecardReview,
     CorrectionInput,
     ManualTimeInput,
     PayPeriodView,
@@ -48,7 +50,8 @@ OwnRead = Annotated[
     AuthorizationContext, Depends(require_permission(TimekeepingPermission.OWN_READ))
 ]
 ManualEntry = Annotated[
-    AuthorizationContext, Depends(require_permission(TimekeepingPermission.MANUAL_ENTRY))
+    AuthorizationContext,
+    Depends(require_permission(TimekeepingPermission.MANUAL_ENTRY)),
 ]
 Correct = Annotated[
     AuthorizationContext, Depends(require_permission(TimekeepingPermission.CORRECT))
@@ -246,13 +249,48 @@ async def approve_entry(
 
 
 @router.get("/pay-periods/current", response_model=PayPeriodView | None)
-async def current_pay_period(context: AdminRead, session: Session) -> PayPeriodView | None:
+async def current_pay_period(
+    context: AdminRead, session: Session
+) -> PayPeriodView | None:
     _, timezone_name = _branch_and_timezone(context)
     today = datetime.now(timezone.utc).astimezone(ZoneInfo(timezone_name)).date()
     value = await timekeeping_repository.pay_period_for_date(
         session, company_id=context.company.id, work_date=today
     )
     return workday_time_queries.pay_period_view(value) if value is not None else None
+
+
+@router.get("/pay-periods", response_model=tuple[PayPeriodView, ...])
+async def pay_periods(
+    context: AdminRead,
+    session: Session,
+    limit: Annotated[int, Query(ge=1, le=52)] = 26,
+) -> tuple[PayPeriodView, ...]:
+    return await workday_time_queries.admin_pay_periods(
+        session, context=context, limit=limit
+    )
+
+
+@router.get("/admin/timecard-review", response_model=AdminTimecardReview)
+async def admin_timecard_review(
+    context: AdminRead, session: Session
+) -> AdminTimecardReview:
+    return await workday_time_queries.admin_review(session, context=context)
+
+
+@router.get(
+    "/admin/pay-periods/{pay_period_id}/timecards",
+    response_model=AdminTimecardOperations,
+)
+async def admin_pay_period_timecards(
+    pay_period_id: UUID, context: AdminRead, session: Session
+) -> AdminTimecardOperations:
+    try:
+        return await workday_time_queries.admin_operations(
+            session, context=context, pay_period_id=pay_period_id
+        )
+    except (WorkdayTimeError, WorkdayAuthorizationError) as error:
+        raise _error(error) from error
 
 
 @router.get("/pay-periods/{pay_period_id}", response_model=PayPeriodView)

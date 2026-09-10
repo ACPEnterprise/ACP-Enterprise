@@ -1,17 +1,26 @@
 """Safe Company-scoped Payroll operations and observability projection."""
 
 from dataclasses import dataclass
+from datetime import date
 from decimal import Decimal
+from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.platform.employees.models import Employee
 from app.platform.permissions.authorization import AuthorizationContext
-from app.timekeeping.models import PayPeriod, PayrollTimeInputRecord
+from app.timekeeping.models import (
+    PayPeriod,
+    PayrollTimeInputRecord,
+    WorkdayTimeEntryRevision,
+)
+from app.timekeeping.permissions import TimekeepingPermission
 
 from .contracts import PayrollAuthorizationError
 from .models import (
+    CompanyPayrollPolicyVersion,
+    EmployeeCompensationAuthorityVersion,
     PayrollAdjustmentAuthorityRecord,
     PayrollFilingPackageRecord,
     PayrollGrossCalculationResultRecord,
@@ -49,7 +58,232 @@ class PayrollOperationsSummary:
     remittance_provider_state: str = "provider_not_configured"
 
 
+@dataclass(frozen=True, slots=True)
+class PayrollPeriodEmployee:
+    employee_id: UUID
+    employee_number: str
+    display_name: str
+    home_branch_id: UUID | None
+    accepted_minutes: int
+    regular_candidate_minutes: int | None
+    overtime_candidate_minutes: int | None
+    compensation_readiness: str
+    withholding_readiness: str
+    gross_pay_readiness: str
+    exception_codes: tuple[str, ...]
+    payroll_review_status: str
+    time_evidence_revision_ids: tuple[UUID, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class PayrollPeriodOperations:
+    contract_version: str
+    pay_period_id: UUID
+    period_start: date
+    period_end: date
+    policy_readiness: str
+    employees: tuple[PayrollPeriodEmployee, ...]
+    limitations: tuple[str, ...]
+
+
 class PayrollOperationsService:
+    async def period(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        pay_period_id: UUID,
+    ) -> PayrollPeriodOperations:
+        if not context.has_permission(PayrollPermission.REPORTING_READ) or not context.has_permission(
+            TimekeepingPermission.ADMIN_READ
+        ):
+            raise PayrollAuthorizationError(
+                "Payroll period operations require Payroll and Timekeeping read authority"
+            )
+        company_id = context.company.id
+        period = await session.scalar(
+            select(PayPeriod).where(
+                PayPeriod.company_id == company_id, PayPeriod.id == pay_period_id
+            )
+        )
+        if period is None:
+            raise ValueError("pay period does not exist in this Company")
+        branch_ids = (
+            frozenset({context.active_branch.id})
+            if context.active_branch is not None
+            else context.authorized_branch_ids
+        )
+        employee_scope = Employee.home_branch_id.in_(branch_ids)
+        if context.active_branch is None:
+            employee_scope = employee_scope | Employee.home_branch_id.is_(None)
+        employees = tuple(
+            (
+                await session.scalars(
+                    select(Employee)
+                    .where(
+                        Employee.company_id == company_id,
+                        Employee.status == "active",
+                        employee_scope,
+                    )
+                    .order_by(Employee.display_name, Employee.id)
+                )
+            ).all()
+        )
+        employee_ids = tuple(item.id for item in employees)
+        revisions = await self._current_revisions(
+            session, company_id, employee_ids, period.period_start, period.period_end
+        )
+        compensation_candidates = await self._rows_by_employee(
+            session,
+            select(EmployeeCompensationAuthorityVersion).where(
+                EmployeeCompensationAuthorityVersion.company_id == company_id,
+                EmployeeCompensationAuthorityVersion.employee_id.in_(employee_ids),
+                EmployeeCompensationAuthorityVersion.lifecycle.in_(("approved", "superseded")),
+                EmployeeCompensationAuthorityVersion.effective_start <= period.period_start,
+                or_(
+                    EmployeeCompensationAuthorityVersion.effective_end.is_(None),
+                    EmployeeCompensationAuthorityVersion.effective_end > period.period_end,
+                ),
+            ),
+        )
+        compensations = {
+            employee_id: self._remove_superseded(values, "supersedes_authority_id")
+            for employee_id, values in compensation_candidates.items()
+        }
+        gross = await self._latest_by_employee(
+            session,
+            PayrollGrossCalculationResultRecord,
+            company_id,
+            pay_period_id,
+            ("calculated", "under_review", "approved"),
+        )
+        tax = await self._latest_by_employee(
+            session,
+            PayrollTaxDeductionResultRecord,
+            company_id,
+            pay_period_id,
+            ("calculated", "under_review", "approved"),
+        )
+        run = await session.scalar(
+            select(PayrollRunRecord)
+            .where(
+                PayrollRunRecord.company_id == company_id,
+                PayrollRunRecord.pay_period_id == pay_period_id,
+                PayrollRunRecord.lifecycle.in_(("assembled", "under_review", "reviewed", "approved")),
+            )
+            .order_by(PayrollRunRecord.created_at.desc())
+        )
+        members: dict[UUID, PayrollRunMemberRecord] = {}
+        if run is not None:
+            members = {
+                item.employee_id: item
+                for item in (
+                    await session.scalars(
+                        select(PayrollRunMemberRecord).where(
+                            PayrollRunMemberRecord.company_id == company_id,
+                            PayrollRunMemberRecord.run_id == run.id,
+                            PayrollRunMemberRecord.employee_id.in_(employee_ids),
+                        )
+                    )
+                ).all()
+            }
+        policy_candidates = tuple(
+            (
+                await session.scalars(
+                    select(CompanyPayrollPolicyVersion).where(
+                    CompanyPayrollPolicyVersion.company_id == company_id,
+                    CompanyPayrollPolicyVersion.lifecycle.in_(("approved", "superseded")),
+                    CompanyPayrollPolicyVersion.effective_start <= period.period_start,
+                    or_(
+                        CompanyPayrollPolicyVersion.effective_end.is_(None),
+                        CompanyPayrollPolicyVersion.effective_end > period.period_end,
+                    ),
+                    )
+                )
+            ).all()
+        )
+        policy_count = len(
+            self._remove_superseded(policy_candidates, "supersedes_policy_id")
+        )
+        policy_readiness = (
+            "READY"
+            if policy_count == 1
+            else "CONFLICTING"
+            if policy_count
+            else "MISSING_CONFIGURATION"
+        )
+        rows: list[PayrollPeriodEmployee] = []
+        for employee in employees:
+            current = tuple(
+                item
+                for item in revisions.get(employee.id, ())
+                if item.branch_id in branch_ids
+                or (context.active_branch is None and item.branch_id is None)
+            )
+            accepted = tuple(
+                item for item in current if item.state == "approved" or item.approved_at is not None
+            )
+            accepted_minutes = sum(self._revision_minutes(item) for item in accepted)
+            comp_count = len(compensations.get(employee.id, ()))
+            comp_state = "READY" if comp_count == 1 else "CONFLICTING" if comp_count else "MISSING_CONFIGURATION"
+            gross_value = gross.get(employee.id)
+            tax_value = tax.get(employee.id)
+            regular, overtime = self._earning_minutes(gross_value)
+            exceptions: set[str] = set()
+            if not current:
+                exceptions.add("TIME_EVIDENCE_MISSING")
+            elif len(accepted) != len(current):
+                exceptions.add("TIME_REVIEW_INCOMPLETE")
+            if comp_state != "READY":
+                exceptions.add("COMPENSATION_" + comp_state)
+            if policy_readiness != "READY":
+                exceptions.add("PAYROLL_POLICY_" + policy_readiness)
+            if gross_value is None:
+                exceptions.add("GROSS_PAY_NOT_CALCULATED")
+            if tax_value is None:
+                exceptions.add("WITHHOLDING_NOT_CALCULATED")
+            member = members.get(employee.id)
+            review = (
+                member.disposition.upper()
+                if member is not None
+                else gross_value.review_state.upper()
+                if gross_value is not None
+                else "NOT_STARTED"
+            )
+            rows.append(
+                PayrollPeriodEmployee(
+                    employee.id,
+                    employee.employee_number,
+                    employee.display_name,
+                    employee.home_branch_id,
+                    accepted_minutes,
+                    regular,
+                    overtime,
+                    comp_state,
+                    tax_value.lifecycle.upper()
+                    if tax_value is not None
+                    else "MISSING_CONFIGURATION_OR_CALCULATION",
+                    gross_value.lifecycle.upper()
+                    if gross_value is not None
+                    else "NOT_CALCULATED",
+                    tuple(sorted(exceptions)),
+                    review,
+                    tuple(item.id for item in accepted),
+                )
+            )
+        return PayrollPeriodOperations(
+            "PAYROLL.PERIOD.OFFICE.UX.v1",
+            period.id,
+            period.period_start,
+            period.period_end,
+            policy_readiness,
+            tuple(rows),
+            (
+                "Regular and overtime minutes appear only from persisted Payroll calculation evidence.",
+                "Missing compensation, withholding, policy, or time authority remains visible and is never inferred.",
+                "This projection cannot transmit Payroll, move money, or post Accounting.",
+            ),
+        )
     async def registers(
         self, session: AsyncSession, *, context: AuthorizationContext
     ) -> tuple[dict[str, object], ...]:
@@ -325,3 +559,92 @@ class PayrollOperationsService:
             )
         ).all()
         return {str(state): int(count) for state, count in values}
+
+    @staticmethod
+    async def _current_revisions(session, company_id, employee_ids, start, end):
+        if not employee_ids:
+            return {}
+        values = tuple(
+            (
+                await session.scalars(
+                    select(WorkdayTimeEntryRevision)
+                    .where(
+                        WorkdayTimeEntryRevision.company_id == company_id,
+                        WorkdayTimeEntryRevision.employee_id.in_(employee_ids),
+                        WorkdayTimeEntryRevision.work_date >= start,
+                        WorkdayTimeEntryRevision.work_date <= end,
+                    )
+                    .order_by(
+                        WorkdayTimeEntryRevision.entry_id,
+                        WorkdayTimeEntryRevision.revision_number.desc(),
+                    )
+                )
+            ).all()
+        )
+        current = {}
+        for item in values:
+            current.setdefault(item.entry_id, item)
+        grouped = {}
+        for item in current.values():
+            grouped.setdefault(item.employee_id, []).append(item)
+        return {key: tuple(value) for key, value in grouped.items()}
+
+    @staticmethod
+    async def _rows_by_employee(session, query):
+        values = (await session.scalars(query)).all()
+        grouped = {}
+        for item in values:
+            grouped.setdefault(item.employee_id, []).append(item)
+        return {key: tuple(value) for key, value in grouped.items()}
+
+    @staticmethod
+    async def _latest_by_employee(session, model, company_id, pay_period_id, lifecycles):
+        values = (
+            await session.scalars(
+                select(model)
+                .where(
+                    model.company_id == company_id,
+                    model.pay_period_id == pay_period_id,
+                    model.lifecycle.in_(lifecycles),
+                )
+                .order_by(model.created_at.desc(), model.id.desc())
+            )
+        ).all()
+        return {item.employee_id: item for item in reversed(values)}
+
+    @staticmethod
+    def _revision_minutes(value) -> int:
+        if value.approved_duration_minutes is not None:
+            return value.approved_duration_minutes
+        if value.start_at is not None and value.end_at is not None:
+            return int((value.end_at - value.start_at).total_seconds() // 60)
+        return 0
+
+    @staticmethod
+    def _earning_minutes(value) -> tuple[int | None, int | None]:
+        if value is None:
+            return None, None
+        regular = 0
+        overtime = 0
+        found_regular = False
+        found_overtime = False
+        for component in value.earning_components:
+            minutes = component.get("payable_minutes")
+            if not isinstance(minutes, int):
+                continue
+            if component.get("component_type") == "regular":
+                regular += minutes
+                found_regular = True
+            elif component.get("component_type") == "overtime_premium":
+                overtime += minutes
+                found_overtime = True
+        return regular if found_regular else None, overtime if found_overtime else 0
+
+    @staticmethod
+    def _remove_superseded(values, predecessor_field):
+        predecessor_ids = {
+            getattr(item, predecessor_field)
+            for item in values
+            if getattr(item, predecessor_field) is not None
+        }
+        return tuple(item for item in values if item.id not in predecessor_ids)

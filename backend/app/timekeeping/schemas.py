@@ -113,3 +113,76 @@ class PayrollTimeInputView(BaseModel):
     approved_revision_ids: tuple[UUID, ...]
     total_approved_minutes: int
     snapshot_digest: str
+
+
+class AdminTimecardReviewItem(BaseModel):
+    employee_id: UUID
+    employee_number: str
+    display_name: str
+    home_branch_id: UUID | None
+    entry_count: int
+    total_minutes: int
+    exception_codes: tuple[
+        Literal["no_time", "unsubmitted", "corrected", "overlap"], ...
+    ]
+
+
+class AdminTimecardReview(BaseModel):
+    pay_period: PayPeriodView | None
+    items: tuple[AdminTimecardReviewItem, ...]
+
+
+class AdminTimecardInterval(BaseModel):
+    entry_id: UUID
+    revision_id: UUID
+    revision_number: int
+    work_date: date
+    start_at: datetime | None
+    end_at: datetime | None
+    supported_minutes: int
+    job_id: UUID | None = None
+    job_number: str | None = None
+    job_minutes: int | None = None
+    non_job_supported_minutes: int | None = None
+    attribution_state: Literal["ATTRIBUTED", "NON_JOB", "UNCLASSIFIED"]
+    provenance: str
+    entry_state: str
+    corrected: bool
+    overlap: bool
+    review_state: Literal["ACCEPTED", "NEEDS_REVIEW"]
+    audit_digest: str
+
+
+class AdminTimecardDay(BaseModel):
+    work_date: date
+    intervals: tuple[AdminTimecardInterval, ...]
+    total_supported_minutes: int
+    job_minutes: int | None
+    non_job_supported_minutes: int | None
+    unclassified_minutes: int
+    has_overlap: bool
+    has_correction: bool
+    review_state: Literal["ACCEPTED", "NEEDS_REVIEW"]
+
+
+class AdminEmployeeTimecard(BaseModel):
+    employee_id: UUID
+    employee_number: str
+    display_name: str
+    home_branch_id: UUID | None
+    punch_state: PunchState
+    active_open_clock: bool
+    missing_clock_out: bool
+    days: tuple[AdminTimecardDay, ...]
+    total_supported_minutes: int
+    accepted_minutes: int
+    exception_codes: tuple[str, ...]
+    review_state: Literal["ACCEPTED", "NEEDS_REVIEW"]
+
+
+class AdminTimecardOperations(BaseModel):
+    contract_version: Literal["WORKFORCE.TIMECARD.OPERATIONS.v1"]
+    pay_period: PayPeriodView
+    employees: tuple[AdminEmployeeTimecard, ...]
+    job_attribution_readiness: Literal["PARTIAL"]
+    limitations: tuple[str, ...]

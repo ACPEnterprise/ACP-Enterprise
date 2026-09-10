@@ -117,6 +117,10 @@ class FakeContext:
     def can_access_branch(self, branch_id: UUID) -> bool:
         return branch_id in self._branch_ids
 
+    @property
+    def authorized_branch_ids(self) -> frozenset[UUID]:
+        return frozenset(self._branch_ids)
+
 
 @pytest_asyncio.fixture
 async def timekeeping_database() -> AsyncIterator[
@@ -247,7 +251,9 @@ async def test_manual_entry_requires_authority_and_punch_is_employee_owned(
     async with factory() as session:
         with pytest.raises(WorkdayAuthorizationError):
             await service.record_manual_time(
-                session, context=no_permissions, command=manual  # type: ignore[arg-type]
+                session,
+                context=no_permissions,
+                command=manual,  # type: ignore[arg-type]
             )
     punch_context = FakeContext(seed, {TimekeepingPermission.OWN_PUNCH})
     async with factory() as session:
@@ -568,6 +574,15 @@ async def test_phone_safe_api_manual_first_idempotency_and_payroll_snapshot(
     transport = ASGITransport(app=app)
     try:
         async with AsyncClient(transport=transport, base_url="http://test") as client:
+            initial_review = await client.get(
+                "/api/v1/timekeeping/admin/timecard-review"
+            )
+            assert initial_review.status_code == 200
+            assert len(initial_review.json()["items"]) == 2
+            assert all(
+                item["exception_codes"] == ["no_time"]
+                for item in initial_review.json()["items"]
+            )
             manual_payload = {
                 "employee_id": str(seed.employee_id),
                 "work_date": (today - timedelta(days=1)).isoformat(),
@@ -593,6 +608,16 @@ async def test_phone_safe_api_manual_first_idempotency_and_payroll_snapshot(
                 f"/api/v1/timekeeping/entries/{manual.json()['revision_id']}/submit"
             )
             assert submitted_manual.status_code == 200
+
+            review = await client.get("/api/v1/timekeeping/admin/timecard-review")
+            employee = next(
+                item
+                for item in review.json()["items"]
+                if item["employee_id"] == str(seed.employee_id)
+            )
+            assert employee["entry_count"] == 1
+            assert employee["total_minutes"] == 120
+            assert employee["exception_codes"] == []
 
             selected_context["value"] = employee_context
             before = datetime.now(timezone.utc)
@@ -684,7 +709,9 @@ async def test_phone_safe_api_manual_first_idempotency_and_payroll_snapshot(
                 f"/api/v1/timekeeping/pay-periods/{period.id}/employees/"
                 f"{seed.employee_id}/payroll-time-input"
             )
-            assert replay.json()["snapshot_digest"] == snapshot.json()["snapshot_digest"]
+            assert (
+                replay.json()["snapshot_digest"] == snapshot.json()["snapshot_digest"]
+            )
 
             foreign_context = FakeContext(
                 seed, {TimekeepingPermission.OWN_PUNCH, TimekeepingPermission.OWN_READ}

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { apiClient } from "./client";
-import { getOwnPunchState, getOwnTimecard, recordOwnPunch } from "./timekeeping";
+import { getAdminTimecardReview, getOwnPunchState, getOwnTimecard, recordOwnPunch } from "./timekeeping";
 
 describe("Workday Time API client", () => {
   it("uses self-scoped endpoints and sends only an action with a fresh idempotency key", async () => {
@@ -54,5 +54,25 @@ describe("Workday Time API client", () => {
       "/api/v1/timekeeping/me/state",
       "/api/v1/timekeeping/me/timecard",
     ]);
+  });
+
+  it("uses the permission-gated administration review endpoint", async () => {
+    const adapter = vi.fn(async (config) => ({
+      data: { pay_period: null, items: [] },
+      status: 200,
+      statusText: "OK",
+      headers: {},
+      config,
+    }));
+    const original = apiClient.defaults.adapter;
+    apiClient.defaults.adapter = adapter;
+    try {
+      await getAdminTimecardReview();
+    } finally {
+      apiClient.defaults.adapter = original;
+    }
+    expect(adapter.mock.calls[0]?.[0].url).toBe(
+      "/api/v1/timekeeping/admin/timecard-review",
+    );
   });
 });

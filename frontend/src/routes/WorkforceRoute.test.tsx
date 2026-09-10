@@ -6,6 +6,19 @@ import * as workforceHooks from "../hooks/useWorkforce";
 import { WorkforceRoute } from "./WorkforceRoute";
 
 vi.mock("../hooks/useWorkforce");
+vi.mock("../hooks/useWorkdayTime", () => ({
+  useAdminTimecardReview: () => ({
+    data: undefined,
+    isLoading: false,
+    isError: false,
+  }),
+  useAdminTimecardOperations: () => ({
+    data: undefined,
+    isLoading: false,
+    isError: false,
+  }),
+  usePayPeriods: () => ({ data: [], isLoading: false, isError: false }),
+}));
 vi.mock("../features/administration/hooks", () => ({
   useRoles: () => ({ data: [], isLoading: false, isError: false }),
 }));

@@ -1,5 +1,15 @@
+import { useState } from "react";
 import { useHasPermission } from "../auth";
-import { useComplianceSchemas, usePayrollOperatingRegisters, usePayrollOperationsSummary, usePayrollReports } from "../hooks/usePayroll";
+import { Link } from "react-router";
+
+import {
+  useComplianceSchemas,
+  usePayrollOperatingRegisters,
+  usePayrollOperationsSummary,
+  usePayrollPeriodOperations,
+  usePayrollReports,
+} from "../hooks/usePayroll";
+import { useCurrentPayPeriod, usePayPeriods } from "../hooks/useWorkdayTime";
 import { Alert, Card, CardContent, CardDescription, CardHeader, CardTitle, Spinner } from "../ui";
 
 const label = (value: string) => value.replaceAll("_", " ").replaceAll(":", " · ");
@@ -16,6 +26,12 @@ export function PayrollRoute() {
   const operations = usePayrollOperationsSummary(canRead);
   const reports = usePayrollReports(canRead);
   const schemas = useComplianceSchemas(canRead);
+  const canReadTime = useHasPermission("COMPANY_TIMEKEEPING_ADMIN_READ");
+  const currentPeriod = useCurrentPayPeriod(canRead && canReadTime);
+  const payPeriods = usePayPeriods(canRead && canReadTime);
+  const [selectedPayPeriodId, setSelectedPayPeriodId] = useState("");
+  const effectivePayPeriodId = selectedPayPeriodId || currentPeriod.data?.id || payPeriods.data?.[0]?.id || null;
+  const periodOperations = usePayrollPeriodOperations(effectivePayPeriodId, canRead && canReadTime);
   const registers = usePayrollOperatingRegisters(canRead);
   if (!canRead) return <Alert variant="danger">You are not authorized to view Payroll Administration.</Alert>;
   if (operations.isPending || reports.isPending || schemas.isPending || registers.isPending) return <Spinner label="Loading Payroll Administration" />;
@@ -24,6 +40,15 @@ export function PayrollRoute() {
   return <div className="mx-auto max-w-7xl space-y-6 pb-12">
     <header><p className="text-sm font-semibold text-action-primary">Financial Operations</p><h1 className="mt-1 text-2xl font-bold sm:text-3xl">Payroll Administration</h1><p className="mt-2 text-content-muted">Readiness, reconciliation, reporting, payment, remittance, statements, and correction evidence. Provider execution and filing remain disabled.</p></header>
     <Alert variant={value.blocker_count ? "warning" : "information"} title={value.blocker_count ? "Payroll attention required" : "Payroll evidence reconciled"}>{value.blocker_count ? `${value.blocker_count} Employee disposition blocker(s) remain explicit.` : "No unexplained Employee blocker is present in the admitted run population."} History: {value.history_ready ? "complete authority available" : "incomplete—YTD remains unavailable"}.</Alert>
+    <Card><CardHeader><CardTitle>Current pay-period review</CardTitle><CardDescription>Accepted time through compensation, withholding, and gross-pay readiness. This view does not calculate or transmit Payroll.</CardDescription></CardHeader><CardContent>
+      {!canReadTime && <Alert variant="warning" title="Time evidence permission required">Payroll reporting is available, but detailed Employee time requires Timekeeping Administration read authority.</Alert>}
+      {canReadTime && currentPeriod.isLoading && <Spinner label="Loading current pay period"/>}
+      {canReadTime && currentPeriod.isError && <Alert variant="danger" title="Pay period unavailable">No Payroll value was inferred or changed.</Alert>}
+      {canReadTime && currentPeriod.data === null && <Alert variant="warning" title="No current pay period">Configure authoritative pay-period dates before office review.</Alert>}
+      {periodOperations.isLoading && <Spinner label="Loading Payroll period readiness"/>}
+      {periodOperations.isError && <Alert variant="danger" title="Payroll period readiness unavailable">Supporting evidence could not be composed safely. No Payroll action was taken.</Alert>}
+      {periodOperations.data && <div className="space-y-4"><div className="flex flex-wrap items-center justify-between gap-2"><label className="font-semibold">Pay period<select aria-label="Payroll pay period" className="ml-2 min-h-10 rounded-lg border border-stroke bg-surface px-2 font-normal" value={effectivePayPeriodId ?? ""} onChange={(event) => setSelectedPayPeriodId(event.target.value)}>{(payPeriods.data ?? []).map((period) => <option key={period.id} value={period.id}>{period.period_start} – {period.period_end}</option>)}</select></label><span className="text-sm">Payroll policy: <strong>{label(periodOperations.data.policy_readiness)}</strong></span></div><div className="overflow-x-auto"><table className="w-full min-w-[1050px] text-left text-sm"><thead><tr className="text-content-muted"><th className="pb-2">Employee</th><th>Accepted hours</th><th>Regular-rate candidate</th><th>Overtime premium candidate</th><th>Compensation</th><th>Withholding</th><th>Gross pay</th><th>Review</th><th>Exceptions</th><th>Evidence</th></tr></thead><tbody>{periodOperations.data.employees.map((employee) => <tr className="border-t border-stroke align-top" key={employee.employee_id}><td className="py-3"><strong>{employee.display_name}</strong><p className="text-xs text-content-muted">{employee.employee_number}</p></td><td>{(employee.accepted_minutes / 60).toFixed(2)}</td><td>{employee.regular_candidate_minutes === null ? "Not calculated" : (employee.regular_candidate_minutes / 60).toFixed(2)}</td><td>{employee.overtime_candidate_minutes === null ? "Not calculated" : (employee.overtime_candidate_minutes / 60).toFixed(2)}</td><td>{label(employee.compensation_readiness)}</td><td>{label(employee.withholding_readiness)}</td><td>{label(employee.gross_pay_readiness)}</td><td>{label(employee.payroll_review_status)}</td><td>{employee.exception_codes.length ? <ul className="space-y-1">{employee.exception_codes.map((item) => <li key={item}>{label(item)}</li>)}</ul> : "None"}</td><td><Link className="font-semibold text-action-primary underline" to={`/workforce?employee=${employee.employee_id}#timecard-operations`}>View timecard</Link></td></tr>)}</tbody></table></div><p className="text-xs text-content-muted">Regular-rate and overtime-premium candidates appear only after the accepted Payroll engine persists them. Missing configuration is never treated as zero.</p></div>}
+    </CardContent></Card>
     <section aria-label="Payroll readiness" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
       <Card><CardHeader><CardTitle>Approved gross</CardTitle><CardDescription>Accepted Payroll runs only</CardDescription></CardHeader><CardContent className="text-2xl font-bold tabular-nums">{value.aggregate_approved_gross}</CardContent></Card>
       <Card><CardHeader><CardTitle>Approved net</CardTitle><CardDescription>Before payment execution</CardDescription></CardHeader><CardContent className="text-2xl font-bold tabular-nums">{value.aggregate_approved_net}</CardContent></Card>
