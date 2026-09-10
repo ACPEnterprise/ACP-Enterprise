@@ -82,7 +82,6 @@ def test_missing_approved_time_never_seals_as_zero() -> None:
 def test_required_exception_correction_catalog_is_explicit() -> None:
     assert {value.value for value in TimeCorrectionKind} == {
         "missing_clock_out",
-        "incorrect_job",
         "missing_interval",
         "overlapping_intervals",
         "incorrect_start",

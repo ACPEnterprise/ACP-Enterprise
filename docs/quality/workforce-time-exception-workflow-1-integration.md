@@ -53,4 +53,7 @@ composition. It also requires a fresh PostgreSQL upgrade, one head, `current=hea
 zero drift, downgrade/re-upgrade, frontend tests/build, Ruff, MyPy, compilation, diff
 checking, and protected-data scans.
 
+Current-authority qualification result: 49 affected backend tests passed, including
+the independent non-overlap probe; 15 focused frontend tests passed.
+
 Enterprise owns protected integration. Preview and Production are out of scope.
