@@ -47,6 +47,8 @@ class OnboardingPlanResponse(BaseModel):
     membership_action: str
     employee_action: str
     branch_action: str
+    employee_number_prefix: str
+    employee_number_width: int
     role_codes: tuple[str, ...]
     additional_permission_codes: tuple[str, ...]
     readiness_stages: dict[str, str]

@@ -121,6 +121,151 @@ class WorkdayPunchEvent(Base):
     )
 
 
+class JobWorkedClockEvent(Base):
+    """Immutable, replay-safe field evidence for starting or stopping Job work."""
+
+    __tablename__ = "timekeeping_job_clock_events"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "employee_id"],
+            ["employees.company_id", "employees.id"],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "branch_id", "job_id"],
+            ["jobs.company_id", "jobs.branch_id", "jobs.id"],
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint("kind IN ('start','stop')", name="ck_job_clock_event_kind"),
+        CheckConstraint(
+            "source IN ('employee_clock','authorized_manual')",
+            name="ck_job_clock_event_source",
+        ),
+        UniqueConstraint("company_id", "id", name="uq_job_clock_event_company"),
+        UniqueConstraint(
+            "company_id",
+            "recorded_by_user_id",
+            "idempotency_key",
+            name="uq_job_clock_event_idempotency",
+        ),
+        Index(
+            "ix_job_clock_event_employee_time",
+            "company_id",
+            "employee_id",
+            "occurred_at",
+        ),
+    )
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    employee_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    job_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    appointment_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("appointments.id", ondelete="RESTRICT")
+    )
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    source: Mapped[str] = mapped_column(String(32), nullable=False)
+    recorded_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    request_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    event_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
+class JobWorkedIntervalRevision(Base):
+    """Immutable revisions of actual worked-time attribution to a Job."""
+
+    __tablename__ = "timekeeping_job_interval_revisions"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["company_id", "employee_id"],
+            ["employees.company_id", "employees.id"],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "branch_id", "job_id"],
+            ["jobs.company_id", "jobs.branch_id", "jobs.id"],
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint("stop_at > start_at", name="ck_job_interval_time_order"),
+        CheckConstraint("duration_minutes > 0", name="ck_job_interval_duration"),
+        CheckConstraint("revision_number >= 1", name="ck_job_interval_revision"),
+        CheckConstraint(
+            "source IN ('employee_clock','authorized_manual')",
+            name="ck_job_interval_source",
+        ),
+        CheckConstraint(
+            "correction_state IN ('original','corrected','superseded')",
+            name="ck_job_interval_correction_state",
+        ),
+        CheckConstraint(
+            "validity IN ('valid','correction_required')",
+            name="ck_job_interval_validity",
+        ),
+        CheckConstraint(
+            "confidence IN ('authoritative','disputed')",
+            name="ck_job_interval_confidence",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "interval_id",
+            "revision_number",
+            name="uq_job_interval_revision",
+        ),
+        UniqueConstraint("company_id", "id", name="uq_job_interval_revision_company"),
+        Index("ix_job_interval_job_time", "company_id", "job_id", "start_at"),
+        Index("ix_job_interval_employee_time", "company_id", "employee_id", "start_at"),
+    )
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    interval_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    revision_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    supersedes_revision_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("timekeeping_job_interval_revisions.id", ondelete="RESTRICT"),
+    )
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    employee_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    job_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    appointment_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("appointments.id", ondelete="RESTRICT")
+    )
+    start_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    stop_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    duration_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
+    source: Mapped[str] = mapped_column(String(32), nullable=False)
+    correction_state: Mapped[str] = mapped_column(String(24), nullable=False)
+    audit_lineage: Mapped[list[str]] = mapped_column(
+        JSONB, nullable=False, default=list
+    )
+    source_event_ids: Mapped[list[str]] = mapped_column(
+        JSONB, nullable=False, default=list
+    )
+    validity: Mapped[str] = mapped_column(String(32), nullable=False)
+    confidence: Mapped[str] = mapped_column(String(24), nullable=False)
+    correction_reason: Mapped[str | None] = mapped_column(Text)
+    corrected_by_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT")
+    )
+    evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
 class WorkdayTimeEntryRevision(Base):
     __tablename__ = "timekeeping_entry_revisions"
     __table_args__ = (

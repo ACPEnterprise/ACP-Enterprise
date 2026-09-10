@@ -15,6 +15,7 @@ from app.payroll.contracts import (
 )
 from app.payroll.finalization import GrossReviewDecision, PayrollGrossResultService
 from app.payroll.models import EmployeeCompensationAuthorityVersion
+from app.payroll.operations import PayrollOperationsService
 from app.payroll.permissions import PayrollPermission
 from app.payroll.run_finalization import (
     PayrollPopulationEvidence,
@@ -186,6 +187,16 @@ async def test_assembly_totals_replay_review_approval_and_safe_handoffs(
         assert events and audits
         assert all("net_pay" not in str(item.payload) and "aggregate" not in str(item.payload) for item in events)
         assert all("net_pay" not in str(item.details) and "aggregate" not in str(item.details) for item in audits)
+        reporting = FakeContext(values["company_id"], values["reviewer_id"], {PayrollPermission.REPORTING_READ})
+        registers = await PayrollOperationsService().registers(session, context=reporting)
+        assert len(registers) == 1
+        assert registers[0]["liability_totals"] == {
+            "employee_taxes": str(first.aggregate_employee_taxes),
+            "employee_deductions": str(first.aggregate_employee_deductions),
+            "employer_liabilities": str(first.aggregate_employer_contributions),
+            "net_pay": str(first.aggregate_net_pay),
+        }
+        assert all(item["calculation_digest"] for item in registers[0]["members"])
 
 
 @pytest.mark.asyncio
@@ -209,6 +220,11 @@ async def test_population_completeness_blocked_evidence_and_company_scope(
             await service.assemble_candidate(session, context=assemble, population=evidence, member_inputs=(ready,), currency="USD", assembled_at=NOW)
         candidate_value = await service.assemble_candidate(session, context=assemble, population=evidence, member_inputs=(ready, blocked_member), currency="USD", assembled_at=NOW)
         persisted = await service.persist_candidate(session, context=assemble, candidate=candidate_value)
+        reporting = FakeContext(values["company_id"], values["actor_id"], {PayrollPermission.REPORTING_READ})
+        register = (await PayrollOperationsService().registers(session, context=reporting))[0]
+        blocked_row = next(item for item in register["members"] if item["employee_id"] == str(blocked_id))
+        assert blocked_row["status"] == "BLOCKED_FOR_PAYROLL"
+        assert blocked_row["blockers"] == ["synthetic:missing"]
         assert len(candidate_value.members) == 2 and candidate_value.aggregate_net_pay == tax.net_pay_candidate
         other = FakeContext(values["other_company_id"], values["actor_id"], {PayrollPermission.RUN_READ})
         with pytest.raises(PayrollConflictError, match="not found"):

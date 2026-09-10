@@ -162,6 +162,11 @@ class IdentityOnboardingService:
         user = await session.scalar(select(User).where(User.normalized_email == email))
         membership = None
         employee = None
+        employee_number_policy = await session.scalar(
+            select(EmployeeNumberPolicy).where(
+                EmployeeNumberPolicy.company_id == context.company.id
+            )
+        )
         classification = "NEW_EMPLOYEE_CANDIDATE"
         user_action = "CREATE_USER"
         membership_action = "CREATE_MEMBERSHIP"
@@ -210,6 +215,12 @@ class IdentityOnboardingService:
             membership_action=membership_action,
             employee_action=employee_action,
             branch_action="GRANT_EXPLICIT_BRANCH" if branch is not None else "BLOCKED",
+            employee_number_prefix=(
+                employee_number_policy.prefix if employee_number_policy else "EMP-"
+            ),
+            employee_number_width=(
+                employee_number_policy.width if employee_number_policy else 4
+            ),
             role_codes=tuple(sorted(role.code for role in roles)),
             additional_permission_codes=tuple(
                 sorted(permission.code for permission in permissions)

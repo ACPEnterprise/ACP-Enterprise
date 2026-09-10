@@ -5,6 +5,15 @@ from uuid import UUID, uuid4
 
 import pytest
 import pytest_asyncio
+from pydantic import ValidationError
+from sqlalchemy import func, select, text
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
+
 from app.core.config import Settings, settings
 from app.core.database import Base
 from app.customers import models as customer_models  # noqa: F401
@@ -46,14 +55,6 @@ from app.platform.permissions.models import (
 )
 from app.platform.users.models import User, UserCredential
 from app.scheduling import models as scheduling_models  # noqa: F401
-from pydantic import ValidationError
-from sqlalchemy import func, select, text
-from sqlalchemy.ext.asyncio import (
-    AsyncEngine,
-    AsyncSession,
-    async_sessionmaker,
-    create_async_engine,
-)
 
 
 @dataclass(frozen=True)
@@ -229,7 +230,7 @@ async def test_first_bootstrap_creates_complete_authorization_graph(
 
 
 @pytest.mark.asyncio
-async def test_bootstrap_provisions_approved_service_and_own_data_roles(
+async def test_bootstrap_provisions_approved_employee_service_roles(
     bootstrap_database: BootstrapDatabase,
 ) -> None:
     await run_bootstrap(
@@ -240,7 +241,12 @@ async def test_bootstrap_provisions_approved_service_and_own_data_roles(
     expected = {
         definition.code.value: definition.permission_codes
         for definition in LAUNCH_ROLE_MATRIX
-        if definition.code in {LaunchRoleCode.SERVICE_CSR, LaunchRoleCode.OWN_DATA_ROLE}
+        if definition.code
+        in {
+            LaunchRoleCode.SERVICE_CSR,
+            LaunchRoleCode.OWN_DATA_ROLE,
+            LaunchRoleCode.ACP_EMPLOYEE_MOBILE,
+        }
     }
     async with bootstrap_database.sessions() as session:
         roles = (

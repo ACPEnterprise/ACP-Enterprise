@@ -37,3 +37,21 @@ def test_catalog_contains_no_real_provider_or_production_execution() -> None:
     assert "production" not in serialized
     assert "real_qbo" not in serialized
     assert "real_provider" not in serialized
+
+
+def test_employee_time_payroll_scenario_reuses_bounded_authoritative_proofs() -> None:
+    scenario = next(
+        value
+        for value in SCENARIOS
+        if value.scenario_id == "employee_time_payroll_crossdomain"
+    )
+    serialized = " ".join(scenario.test_nodes)
+    assert "test_authorization_service.py" in serialized
+    assert "test_jobs_api.py" in serialized
+    assert "test_workday_authority.py" in serialized
+    assert "test_labor_evidence.py" in serialized
+    assert "test_gross_pay_calculation.py" in serialized
+    assert "test_tax_deduction_calculation.py" in serialized
+    assert "test_reporting.py" in serialized
+    assert "payment_execution" not in serialized
+    assert "payment_release" not in serialized
