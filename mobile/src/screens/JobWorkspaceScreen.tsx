@@ -8,6 +8,8 @@ import type { NetworkMonitor } from "../network/networkMonitor";
 import { useFieldWorkspace } from "../field/useFieldWorkspace";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { useFieldContext } from "../field/useFieldContext";
+import type { TimekeepingService } from "../api/timekeeping";
+import { JobClockPanel } from "../components/JobClockPanel";
 
 function lifecycleAction(status: string | null) {
   if (status === "ready" || status === "active") return { action: "start" as const, label: "Start Work" };
@@ -64,7 +66,7 @@ function Detail({ assignment, timezone, stale, onDirections }: { assignment: Day
   </View>;
 }
 
-export function JobWorkspaceScreen({ appointmentId, initialAssignment, initialTimezone, businessDate, service, fieldService, network, canReadField = false, canExecuteField = false, canReadAssets = false, canReadEstimates = false }: { appointmentId: string; initialAssignment: DayAssignment | null; initialTimezone: string; businessDate?: string; service: EmployeeOperationsService; fieldService: FieldService; network: NetworkMonitor; canReadField?: boolean; canExecuteField?: boolean; canReadAssets?: boolean; canReadEstimates?: boolean }) {
+export function JobWorkspaceScreen({ appointmentId, initialAssignment, initialTimezone, businessDate, service, fieldService, timekeeping, network, canReadField = false, canExecuteField = false, canPunch = false, canReadAssets = false, canReadEstimates = false }: { appointmentId: string; initialAssignment: DayAssignment | null; initialTimezone: string; businessDate?: string; service: EmployeeOperationsService; fieldService: FieldService; timekeeping?: TimekeepingService; network: NetworkMonitor; canReadField?: boolean; canExecuteField?: boolean; canPunch?: boolean; canReadAssets?: boolean; canReadEstimates?: boolean }) {
   const detail = useAssignmentDetail(service, network, appointmentId, initialAssignment);
   const [directionsError, setDirectionsError] = useState(false);
   const [summary, setSummary] = useState("");
@@ -113,6 +115,7 @@ export function JobWorkspaceScreen({ appointmentId, initialAssignment, initialTi
       {field.mutationResult === "uncertain" && <Text accessibilityRole="alert" style={styles.stale}>We couldn't confirm that action yet. Do not tap again until refresh shows the latest Job.</Text>}
       {field.item && <><Text>Travel status: {field.item.arrival_state.replaceAll("_", " ")}</Text><Text>Assignment: {field.item.assignment_status}</Text></>}
       {field.job && <><Text>Work summary: {field.job.work_summary_recorded ? "Recorded" : "Required"}</Text><Text>Customer outcome: {field.job.customer_disposition ?? "Not recorded"}</Text><Text style={styles.sectionTitle}>{field.job.completion_ready ? "Ready to complete" : "Before completion"}</Text>{!field.job.completion_ready && (field.job.missing_requirements.length ? field.job.missing_requirements : ["requirements pending"]).map((requirement) => <Text key={requirement} style={styles.line}>• {requirementLabels[requirement] ?? "Complete the remaining required Job information"}</Text>)}<Text>Invoice handoff: {field.job.invoice_handoff_status ?? "Not available"}</Text></>}
+      {timekeeping && field.item?.job_id && <JobClockPanel service={timekeeping} network={network} jobId={field.item.job_id} appointmentId={appointmentId} enabled={canExecuteField && canPunch} />}
       {canExecuteField && field.item && field.item.job_id && field.item.job_version && <View style={styles.section}>
         {field.item.arrival_state === "pending" && <PrimaryButton label="On My Way" accessibilityLabel="Confirm On My Way with ACP" disabled={field.status !== "ready"} onPress={() => void field.mutate(() => fieldService.arrival(appointmentId, "en_route", field.item!.assignment_version))} />}
         {field.item.arrival_state === "en_route" && <PrimaryButton label="Mark Arrived" disabled={field.status !== "ready"} onPress={() => void field.mutate(() => fieldService.arrival(appointmentId, "arrived", field.item!.assignment_version))} />}
