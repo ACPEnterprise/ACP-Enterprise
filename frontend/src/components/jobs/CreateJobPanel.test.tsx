@@ -38,4 +38,13 @@ describe("CreateJobPanel", () => {
     expect(screen.getByRole("combobox", { name: /^Service Location/ })).toHaveValue("location-1");
     expect(screen.getByText(/Showing 1 of 1 admitted Customers/)).toBeInTheDocument();
   });
+  it("pages through the admitted Customer population during Job creation", async () => {
+    vi.mocked(useCustomerSearch).mockReturnValue({ isLoading: false, isError: false, data: { items: [{ id: "customer-1", display_name: "First Page" }], page: 1, page_size: 25, total_count: 51, total_pages: 3 } } as never);
+    render(<MemoryRouter><CreateJobPanel onCancel={vi.fn()} /></MemoryRouter>);
+    expect(screen.getByText(/Showing 1 of 51 admitted Customers · page 1 of 3/)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Next Customers" }));
+
+    expect(useCustomerSearch).toHaveBeenLastCalledWith(expect.objectContaining({ page: 2, page_size: 25 }));
+  });
 });
