@@ -58,7 +58,21 @@ class PostmarkIdentityProvider:
                 raise NotificationProviderTransportError("postmark_authentication_failed", retryable=False, submission_possible=False) from error
             if error.code == 429 or error.code >= 500:
                 raise NotificationProviderTransportError("postmark_temporarily_unavailable", retryable=True, submission_possible=method == "POST") from error
-            raise NotificationProviderTransportError("postmark_request_rejected", retryable=False, submission_possible=method == "POST") from error
+            provider_code = None
+            try:
+                response = json.loads(error.read().decode())
+                value = response.get("ErrorCode") if isinstance(response, dict) else None
+                provider_code = value if isinstance(value, int) else None
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                pass
+            safe_code = f"postmark_request_rejected_{error.code}"
+            if provider_code is not None:
+                safe_code += f"_code_{provider_code}"
+            # Postmark HTTP 4xx responses are definitive request rejections: the
+            # provider did not accept a message and no delivery can follow.
+            raise NotificationProviderTransportError(
+                safe_code, retryable=False, submission_possible=False
+            ) from error
         except (OSError, TimeoutError) as error:
             raise NotificationProviderTransportError("postmark_transport_uncertain", retryable=False, submission_possible=method == "POST") from error
 
