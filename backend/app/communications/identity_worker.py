@@ -23,7 +23,10 @@ from app.platform.onboarding.models import (
     IdentityOnboardingInvitation,
     IdentityOnboardingRequest,
 )
-from app.platform.onboarding.service import IdentityOnboardingService
+from app.platform.onboarding.service import (
+    IdentityOnboardingService,
+    OnboardingConflictError,
+)
 from app.platform.users.models import User
 
 DELIVERABLE_IDENTITY_TYPES = frozenset({"identity.onboarding_invitation"})
@@ -93,13 +96,26 @@ class IdentityOutboxWorker:
                 record = await session.get(NotificationOutbox, record_id)
                 if record is None or record.status != "claimed":
                     continue
-                result = await self.delivery.deliver_claimed(
-                    session,
-                    record=record,
-                    provider=self.provider,
-                    resolver=self.resolver,
-                    now=datetime.now(timezone.utc),
-                )
+                try:
+                    result = await self.delivery.deliver_claimed(
+                        session,
+                        record=record,
+                        provider=self.provider,
+                        resolver=self.resolver,
+                        now=datetime.now(timezone.utc),
+                    )
+                except (OnboardingConflictError, ValueError):
+                    if record.claim_token is None:
+                        raise RuntimeError("Claimed identity notification lost its token.")
+                    await NotificationOutboxRepository.mark_failed(
+                        session,
+                        notification_id=record.id,
+                        claim_token=record.claim_token,
+                        error_code="identity_delivery_authority_unavailable",
+                        error_category="permanent",
+                        failed_at=datetime.now(timezone.utc),
+                    )
+                    continue
             if result.outcome in {"accepted", "delivered"}:
                 invitation_id = UUID(str(record.payload["invitation_id"]))
                 async with AsyncSessionFactory() as session:
