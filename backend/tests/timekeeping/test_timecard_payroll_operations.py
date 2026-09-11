@@ -7,7 +7,14 @@ from app.main import app
 from app.payroll.contracts import PayrollConflictError
 from app.payroll.finalization import PayrollGrossResultService
 from app.payroll.operations import PayrollOperationsService
+from app.timekeeping.job_participation import (
+    CorrectionState,
+    IntervalConfidence,
+    IntervalValidity,
+    WorkedIntervalSource,
+)
 from app.timekeeping.query_service import WorkdayTimeQueryService
+from app.timekeeping.schemas import JobWorkedIntervalView, PayPeriodView
 
 
 def revision(
@@ -87,8 +94,12 @@ def test_period_operations_are_bounded_read_only_routes() -> None:
     paths = app.openapi()["paths"]
     timecard = paths["/api/v1/timekeeping/admin/pay-periods/{pay_period_id}/timecards"]
     payroll = paths["/api/v1/payroll/operations/pay-periods/{pay_period_id}"]
+    labor = paths[
+        "/api/v1/timekeeping/admin/pay-periods/{pay_period_id}/job-labor-actuals"
+    ]
     assert set(timecard) == {"get"}
     assert set(payroll) == {"get"}
+    assert set(labor) == {"get"}
 
 
 class _ScalarRows:
@@ -129,3 +140,63 @@ async def test_payroll_snapshot_fails_closed_when_current_time_evidence_changes(
         period_end=date(2026, 9, 7),
         snapshot=snapshot,  # type: ignore[arg-type]
     )
+
+
+@pytest.mark.asyncio
+async def test_job_labor_queue_preserves_actual_and_paid_time_distinction() -> None:
+    employee_id, job_id, interval_id, revision_id = uuid4(), uuid4(), uuid4(), uuid4()
+    start = datetime(2026, 9, 7, 8, tzinfo=timezone.utc)
+    actual = JobWorkedIntervalView(
+        interval_id=interval_id,
+        revision_id=revision_id,
+        revision_number=1,
+        employee_id=employee_id,
+        job_id=job_id,
+        appointment_id=None,
+        start_at=start,
+        stop_at=start + timedelta(hours=2),
+        duration_seconds=7200,
+        source=WorkedIntervalSource.EMPLOYEE_CLOCK,
+        correction_state=CorrectionState.ORIGINAL,
+        supersedes_revision_id=None,
+        audit_lineage=(revision_id,),
+        source_event_ids=(uuid4(), uuid4()),
+        validity=IntervalValidity.VALID,
+        confidence=IntervalConfidence.AUTHORITATIVE,
+        evidence_digest="a" * 64,
+        correction_reason=None,
+        corrected_by_user_id=None,
+    )
+    operations = SimpleNamespace(
+        pay_period=PayPeriodView(
+            id=uuid4(),
+            period_start=date(2026, 9, 7),
+            period_end=date(2026, 9, 13),
+            processing_date=date(2026, 9, 14),
+            payday=date(2026, 9, 18),
+            timezone="America/New_York",
+            schedule_definition_id="synthetic-weekly",
+            schedule_version=1,
+        ),
+        employees=(
+            SimpleNamespace(
+                employee_id=employee_id,
+                employee_number="SYN-1",
+                display_name="Synthetic Employee",
+                job_intervals=(actual,),
+                days=(),
+            ),
+        ),
+    )
+
+    class Queries(WorkdayTimeQueryService):
+        async def admin_operations(self, *args: object, **kwargs: object) -> object:
+            return operations
+
+    queue = await Queries(None).job_labor_actuals(  # type: ignore[arg-type]
+        None, context=SimpleNamespace(), pay_period_id=operations.pay_period.id  # type: ignore[arg-type]
+    )
+    assert queue.accepted_interval_count == 1
+    assert queue.total_accepted_seconds == 7200
+    assert queue.items[0].paid_time_reconciliation == "PAID_TIME_UNAVAILABLE"
+    assert "PAID_TIME_UNAVAILABLE" in queue.items[0].exception_codes

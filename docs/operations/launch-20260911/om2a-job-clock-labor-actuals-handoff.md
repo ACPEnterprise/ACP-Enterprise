@@ -24,6 +24,10 @@ live environment.
 - Current Timecard views expose Job intervals separately from paid-time entries.
   Corrections expose the correcting user and reason while retaining the original
   revision and complete lineage.
+- `GET /api/v1/timekeeping/admin/pay-periods/{pay_period_id}/job-labor-actuals`
+  supplies the bounded office queue. It admits only current valid, authoritative Job
+  intervals as accepted labor actuals and separately reports overlap with accepted
+  paid-time evidence. Missing overlap remains visible and never creates payable time.
 
 ## Time and Payroll evidence safety
 

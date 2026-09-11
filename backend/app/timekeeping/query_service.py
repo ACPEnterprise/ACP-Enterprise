@@ -3,6 +3,7 @@
 from collections import defaultdict
 from datetime import date, datetime, timedelta, timezone
 from itertools import pairwise
+from typing import Literal
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
@@ -36,6 +37,8 @@ from .schemas import (
     AdminTimecardOperations,
     AdminTimecardReview,
     AdminTimecardReviewItem,
+    JobLaborActualItem,
+    JobLaborActualsQueue,
     JobWorkedIntervalView,
     PayPeriodView,
     PunchState,
@@ -469,6 +472,96 @@ class WorkdayTimeQueryService:
                 "Job worked intervals and paid-time entries remain independent evidence.",
                 "Paid minutes are not silently assigned to a Job; reconciliation remains explicit.",
                 "Regular and overtime candidates remain Payroll policy outputs.",
+            ),
+        )
+
+    async def job_labor_actuals(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        pay_period_id: UUID,
+    ) -> JobLaborActualsQueue:
+        """Project current Job intervals and their paid-time reconciliation."""
+        operations = await self.admin_operations(
+            session, context=context, pay_period_id=pay_period_id
+        )
+        items: list[JobLaborActualItem] = []
+        for employee in operations.employees:
+            paid = tuple(
+                (interval.start_at, interval.end_at)
+                for day in employee.days
+                for interval in day.intervals
+                if interval.review_state == "ACCEPTED"
+                and interval.start_at is not None
+                and interval.end_at is not None
+            )
+            for interval in employee.job_intervals:
+                accepted = (
+                    interval.validity is IntervalValidity.VALID
+                    and interval.confidence is IntervalConfidence.AUTHORITATIVE
+                )
+                overlap_seconds = sum(
+                    max(
+                        0,
+                        int(
+                            (min(interval.stop_at, stop) - max(interval.start_at, start)).total_seconds()
+                        ),
+                    )
+                    for start, stop in paid
+                )
+                reconciliation: Literal[
+                    "WITHIN_ACCEPTED_PAID_TIME",
+                    "PARTIAL_ACCEPTED_PAID_OVERLAP",
+                    "OUTSIDE_ACCEPTED_PAID_TIME",
+                    "PAID_TIME_UNAVAILABLE",
+                ] = (
+                    "PAID_TIME_UNAVAILABLE"
+                    if not paid
+                    else "WITHIN_ACCEPTED_PAID_TIME"
+                    if overlap_seconds >= interval.duration_seconds
+                    else "PARTIAL_ACCEPTED_PAID_OVERLAP"
+                    if overlap_seconds > 0
+                    else "OUTSIDE_ACCEPTED_PAID_TIME"
+                )
+                exceptions: list[str] = []
+                if not accepted:
+                    exceptions.append("JOB_INTERVAL_REVIEW_REQUIRED")
+                if reconciliation != "WITHIN_ACCEPTED_PAID_TIME":
+                    exceptions.append(reconciliation)
+                items.append(
+                    JobLaborActualItem(
+                        employee_id=employee.employee_id,
+                        employee_number=employee.employee_number,
+                        employee_name=employee.display_name,
+                        interval=interval,
+                        evidence_state="ACCEPTED" if accepted else "NEEDS_REVIEW",
+                        paid_time_reconciliation=reconciliation,
+                        exception_codes=tuple(exceptions),
+                    )
+                )
+        ordered = tuple(
+            sorted(
+                items,
+                key=lambda item: (
+                    item.interval.start_at,
+                    str(item.employee_id),
+                    str(item.interval.interval_id),
+                ),
+            )
+        )
+        accepted_items = tuple(item for item in ordered if item.evidence_state == "ACCEPTED")
+        return JobLaborActualsQueue(
+            contract_version="WORKFORCE.JOB.LABOR.ACTUALS.v1",
+            pay_period=operations.pay_period,
+            accepted_interval_count=len(accepted_items),
+            review_interval_count=len(ordered) - len(accepted_items),
+            total_accepted_seconds=sum(item.interval.duration_seconds for item in accepted_items),
+            items=ordered,
+            limitations=(
+                "Job worked time is actual attribution evidence, not payable-time authority.",
+                "Paid-time overlap is reconciliation evidence and never creates Job identity.",
+                "Scheduled duration is not substituted for worked duration.",
             ),
         )
 
