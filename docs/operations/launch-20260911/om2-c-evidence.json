@@ -5,7 +5,7 @@
     "file_sha256": "03b74b5f065694b487268bdee531d8d50620f2816f30c91d8b665f9d5b3e9dfc"
   },
   "starting_protected_authority": "42a4f68087d76247269bd4c8388f556dd62a8b5c",
-  "protected_authority": "f3d886d88f432953ea187d989583e068c46ff228",
+  "protected_authority": "d7222d0fb8b9419a7df4c8331dc6d2c7d162724d",
   "schema_head": "d4f6h8j0l2n4",
   "fixture_qualification": {
     "classification": "QUALIFIED_SYNTHETIC_ONLY",
@@ -41,6 +41,17 @@
     "database_backed_onboarding": "NOT_EXECUTED_POSTGRES_HOST_UNAVAILABLE",
     "product_failures": 0
   },
+  "latest_contract_delta_qualification": {
+    "backend_passed": 7,
+    "frontend_files_passed": 5,
+    "frontend_tests_passed": 16,
+    "eslint": "PASS",
+    "typescript_production_build": "PASS",
+    "ruff": "PASS",
+    "postgres_crossdomain": "NOT_EXECUTED_LOCAL_DOCKER_STOPPED",
+    "mypy": "FAIL_15_ATTR_DEFINED_MIGRATION_BINDING_TYPE",
+    "defect_owner": "OM1_MIGRATION"
+  },
   "preview": {
     "health": "HEALTHY",
     "database": "CONNECTED",
@@ -68,7 +79,12 @@
   },
   "actual_source_acceptance": {
     "customer_population": "UNVERIFIED_NO_CURRENT_ADMISSION_PACKET",
-    "source4": "CLASSIFICATION_RUNNER_INTEGRATED_ADMISSION_NOT_PROVEN",
+    "source4": "ACTUAL_PREVIEW_CLASSIFIED_CANONICAL_ADMISSION_FALSE",
+    "source4_exact_successors": 5121,
+    "source4_ambiguous_holds": 1389,
+    "source4_conflicts": 0,
+    "source4_classification_digest": "ddf33badaa56e18948718946d52ca30203935c971396e34d86db9b49811f3be7",
+    "source4_currentness": "STALE_VERSUS_2026_09_11_GET_ONLY_REFRESH",
     "qbo": "BLOCKED_EXTERNAL_LIVE_AUTHORIZATION",
     "employee_graph": "ACTUAL_PREVIEW_EVIDENCE_REPORTED_BY_OM1_PHONE",
     "employee_delivery": "DEFINITIVE_PROVIDER_REJECTION_NO_ACCEPTANCE_ONE_RETRY_ELIGIBLE",

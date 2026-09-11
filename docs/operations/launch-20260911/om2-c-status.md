@@ -8,7 +8,7 @@ Updated: 2026-09-10 America/New_York
 - Mission commit: `0c08f1e3634f38a7fb82970932dea5de7a4cf24f`
 - Mission file SHA-256: `03b74b5f065694b487268bdee531d8d50620f2816f30c91d8b665f9d5b3e9dfc`
 - Starting protected base: `42a4f68087d76247269bd4c8388f556dd62a8b5c`
-- Current protected base: `f3d886d88f432953ea187d989583e068c46ff228`
+- Current protected base: `d7222d0fb8b9419a7df4c8331dc6d2c7d162724d`
 - Isolated branch: `work/om2c-launch-20260911-e2e-acceptance-1`
 - Mission activation evidence: mission commit at 2026-09-10 21:36:32 -0400.
 - Mission authorization expiry: 2026-09-13 21:36:32 -0400, unless earlier
@@ -48,6 +48,16 @@ Current-authority qualification on fresh PostgreSQL databases:
   is unavailable while local Docker is stopped; that environment failure is excluded
   from product results. The owning lane's integrated packet reports its isolated
   database qualification, but OM2-C does not substitute that for an independent run.
+- After the protected advance through `d7222d0`, focused QBO-response and Migration
+  classification checks passed 7 backend tests; Timekeeping/QBO/Payroll/Workforce UI
+  checks passed 5 files / 16 tests; frontend ESLint, TypeScript and production build,
+  plus focused Ruff, passed. The PostgreSQL-dependent Job-clock/Timecard/Payroll rerun
+  remains pending because local Docker is stopped.
+- Focused MyPy found 15 `attr-defined` failures in the protected Migration-owned
+  `backend/app/operational_migration/hcp_legacy_projection_preview_command.py`: its
+  `bindings` parameter is annotated as `tuple[object, ...]` while the implementation
+  reads binding attributes. This is routed to **OM1 Migration** and is not repaired in
+  OM2-C.
 
 These are **synthetic fixture and isolated-database results**, not deployed or real-
 source acceptance.
@@ -58,7 +68,7 @@ Preview URL: `https://preview.allcountyhomeservices.com`.
 
 - `/backend-health` is healthy and reports Preview PostgreSQL and Redis connected.
 - The backend reports release `00e0d5f0faad31f6ff0b85cdde903857a78b70fc`, not
-  current protected authority `f3d886d88f432953ea187d989583e068c46ff228`.
+  current protected authority `d7222d0fb8b9419a7df4c8331dc6d2c7d162724d`.
 - Preview index SHA-256 is now
   `91b425a67105bafaa4d8817e13d786160d3f1c812bbcc0ba6e646a67d56ce425`.
 - Current protected frontend build index SHA-256 is now
@@ -88,7 +98,7 @@ Preview URL: `https://preview.allcountyhomeservices.com`.
 
 Exact failed transition:
 
-`protected f3d886d release → coherent backend release attestation → authenticated
+`protected d7222d0 release → coherent backend release attestation → authenticated
 operator journey`
 
 The frontend and route-presence checkpoints advanced, but the backend release identity
@@ -105,6 +115,15 @@ after that checkpoint.
   runner that can produce a qualified Enterprise admission packet. Its own contract
   explicitly never admits data. No executed packet or admission result is available to
   OM2-C, so actual-source acceptance remains gated rather than inferred from code.
+- OM1 Migration's integrated read-only Preview packet reports 4,970 known identity
+  projections plus 1,540 native Locations examined: 5,121 exact successors, 1,389
+  ambiguous holds, and zero conflicts. Canonical admission is explicitly false; report
+  digest `ddf33badaa56e18948718946d52ca30203935c971396e34d86db9b49811f3be7`.
+  This is actual Preview classification evidence reported by the owning lane, not an
+  OM2-C fixture result or post-admission operational pass.
+- The September 11 GET-only HCP refresh also proves the August 27 SOURCE.4 seal is not
+  current: it reports source changes including 50 added Customers and 48 added Jobs.
+  OM2-C therefore cannot present SOURCE.4 as the current Customer → Appointment graph.
 - QBO: OM1 ECO's published candidate explicitly classifies live connection/readability
   as `BLOCKED_EXTERNAL`; no production client, token, exact-company binding, verified
   realm marker or sealed production run was available. Existing reports are historical
