@@ -136,6 +136,22 @@ describe("SchedulingRoute", () => {
     ).toBeInTheDocument();
   });
 
+  it("exposes CSR booking only with Customer read plus Scheduling and Job manage authority", () => {
+    vi.mocked(useAppointments).mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: { items: [], total_count: 0, page: 1, page_size: 100 },
+    } as never);
+    render(<MemoryRouter><SchedulingRoute /></MemoryRouter>);
+    expect(screen.queryByRole("button", { name: "Book customer work" })).not.toBeInTheDocument();
+
+    permissions.add("COMPANY_SCHEDULING_MANAGE");
+    permissions.add("COMPANY_JOB_MANAGE");
+    permissions.add("COMPANY_CUSTOMER_READ");
+    render(<MemoryRouter><SchedulingRoute /></MemoryRouter>);
+    expect(screen.getByRole("button", { name: "Book customer work" })).toBeVisible();
+  });
+
   it("offers a planning week and accessible non-drag calendar controls", async () => {
     vi.mocked(useAppointments).mockReturnValue({
       isLoading: false,
