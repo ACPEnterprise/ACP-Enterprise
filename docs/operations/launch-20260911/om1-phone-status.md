@@ -86,16 +86,14 @@ activation, and login. Provider acceptance is not human receipt or activation.
 - Postmark adapter: 3 tests passed.
 - ACP Employee Mobile: 14 suites, 118 tests passed; TypeScript, ESLint, and Preview
   configuration validation passed. Production remains inactive.
-- Database-backed onboarding/outbox tests could not run on OM1 because the existing
-  test configuration resolves PostgreSQL only inside the container network. They
-  were not run against Preview because destructive test fixtures are prohibited.
-  A separate provider-only test run passed; the earlier mixed run's database errors
-  are environment failures, not asserted product failures.
+- Database-backed onboarding/outbox tests ran against a fresh, isolated local
+  PostgreSQL 16 database after a complete migration to current head: 38/38 passed.
+  The disposable database was then removed. No test was pointed at Preview.
 - Retry candidate: focused Ruff passed, MyPy passed for four changed source files,
-  API mutation/idempotency registry 10/10 passed, and 38 database-backed onboarding
-  and outbox tests collect successfully. The new database execution test covers
+  API mutation/idempotency registry 10/10 passed, and database-backed onboarding
+  and outbox tests passed 38/38. The new execution test covers
   scheduling, lifecycle constraint state, actor/reason evidence, audit details, and
-  second-retry rejection; execution remains an Enterprise isolated-PostgreSQL gate.
+  second-retry rejection.
 
 Current live role readiness is intentionally not mutated: the owner-selected
 `OFFICE_MANAGER` assignment remains, `ACP_EMPLOYEE_MOBILE` exists and contains
