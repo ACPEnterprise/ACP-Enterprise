@@ -62,7 +62,7 @@
     "health": "HEALTHY",
     "database": "CONNECTED",
     "redis": "CONNECTED",
-    "reported_backend_release": "00e0d5f0faad31f6ff0b85cdde903857a78b70fc",
+    "reported_backend_release": "0b74c7654fde500529da824bdce604e01575cec1",
     "frontend_index_sha256": "cdd6bed341a63b5f8ed853a71d73f0a1f219c44a8ca95aca2c17cf40c289dd85",
     "qualified_frontend_index_sha256": "cdd6bed341a63b5f8ed853a71d73f0a1f219c44a8ca95aca2c17cf40c289dd85",
     "qualified_route_assets_match": {
@@ -77,11 +77,16 @@
     "non_authoritative_guessed_plural_routes_status": 404,
     "qbo_source_evidence_route_status": 401,
     "operations_post_route_read_only_get_status": 405,
+    "deployment_recovery": {
+      "transient_status": 502,
+      "recovered_within_seconds": 45,
+      "recovered_health": "HEALTHY_CURRENT_AUTHORITY_DATABASE_AND_REDIS_CONNECTED"
+    },
     "checkpoint_sequence": [
       "FRONTEND_OLD_AND_JOB_CLOCK_ROUTE_ABSENT",
       "FRONTEND_CURRENT_AND_JOB_CLOCK_ROUTE_AUTHENTICATED"
     ],
-    "classification": "BACKEND_RELEASE_ATTESTATION_AND_AUTHENTICATED_ACCEPTANCE_REQUIRED"
+    "classification": "AUTHENTICATED_AND_SOURCE_ADMISSION_ACCEPTANCE_REQUIRED"
   },
   "actual_source_acceptance": {
     "customer_population": "UNVERIFIED_NO_CURRENT_ADMISSION_PACKET",

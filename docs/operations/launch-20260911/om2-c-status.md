@@ -16,7 +16,7 @@ Updated: 2026-09-10 America/New_York
 
 ## Current checkpoint
 
-State: **WORKING — CURRENT PROTECTED DEPLOYMENT AND AUTHENTICATED ACCEPTANCE REQUIRED**.
+State: **WORKING — AUTHENTICATED AND SOURCE-ADMISSION ACCEPTANCE REQUIRED**.
 
 The protected authority now includes the Job-clock backend, operator Month/calendar
 workflow, Customer roster/navigation, CSR service-request booking, QBO source-evidence
@@ -70,8 +70,8 @@ source acceptance.
 Preview URL: `https://preview.allcountyhomeservices.com`.
 
 - `/backend-health` is healthy and reports Preview PostgreSQL and Redis connected.
-- The backend reports release `00e0d5f0faad31f6ff0b85cdde903857a78b70fc`, not
-  current protected authority `0b74c7654fde500529da824bdce604e01575cec1`.
+- The backend now reports exact current protected authority
+  `0b74c7654fde500529da824bdce604e01575cec1`, with PostgreSQL and Redis connected.
 - Preview index SHA-256 is now
   `cdd6bed341a63b5f8ed853a71d73f0a1f219c44a8ca95aca2c17cf40c289dd85`.
 - Current protected frontend build index SHA-256 is now
@@ -101,13 +101,19 @@ Preview URL: `https://preview.allcountyhomeservices.com`.
 
 Exact failed transition:
 
-`protected 0b74c76 release → coherent backend release attestation → authenticated
-operator journey`
+`coherent deployed 0b74c76 → sanctioned authenticated CSR/Employee sessions and
+admitted current source graph → operator journey`
 
-The frontend and route-presence checkpoints advanced, but the backend release identity
-still contradicts protected authority. Route release attestation, migration, backup and
-rollback verification to **OM1 Enterprise**. OM2-C must rerun with sanctioned sessions
-after that checkpoint.
+Frontend, backend release identity, and protected route presence now align. The deployed
+routes all project the same bounded unauthenticated `401`; no sanctioned Preview
+credential/session variable is available to this lane. Identity activation/login and
+source admission remain owned dependencies. OM2-C must rerun immediately when sanctioned
+sessions and admissible source facts exist.
+
+During deployment monitoring, `/backend-health` returned one `502`; 45 seconds later it
+recovered healthy on exact authority `0b74c76` with PostgreSQL and Redis connected. This
+is bounded restart/recovery evidence, not an operator pass or a persistent product
+failure.
 
 ## Source-data evidence boundary
 
