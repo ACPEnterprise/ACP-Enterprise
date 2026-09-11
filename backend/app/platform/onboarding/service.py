@@ -23,6 +23,7 @@ from app.platform.auth.tokens import SecurityTokenService
 from app.platform.branch.models import Branch
 from app.platform.company.membership_models import Membership, MembershipBranchAccess
 from app.platform.employees.models import Employee
+from app.platform.notifications.models import NotificationOutbox
 from app.platform.notifications.repository import NotificationOutboxRepository
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import AdministrationPermission
@@ -873,6 +874,108 @@ class IdentityOnboardingService:
             context=context,
             request_id=request_id,
         )
+
+    async def retry_definitive_invitation_rejection(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        request_id: UUID,
+    ) -> tuple[IdentityOnboardingInvitation, NotificationOutbox]:
+        """Schedule one Preview-only retry of the original rejected invitation."""
+        self._require_admin(context)
+        if self.configuration.environment not in {"development", "test", "preview"}:
+            raise OnboardingConflictError("Invitation delivery retry is unavailable.")
+        now = datetime.now(timezone.utc)
+        async with session.begin():
+            request = await session.scalar(
+                select(IdentityOnboardingRequest)
+                .where(
+                    IdentityOnboardingRequest.id == request_id,
+                    IdentityOnboardingRequest.company_id == context.company.id,
+                    IdentityOnboardingRequest.status == "invited",
+                )
+                .with_for_update()
+            )
+            if request is None or not context.can_access_branch(request.branch_id):
+                raise OnboardingConflictError("Invitation delivery retry is unavailable.")
+            invitation = await session.scalar(
+                select(IdentityOnboardingInvitation)
+                .where(
+                    IdentityOnboardingInvitation.onboarding_request_id == request.id,
+                    IdentityOnboardingInvitation.status == "pending",
+                )
+                .with_for_update()
+            )
+            envelope = (
+                await session.scalar(
+                    select(ProtectedInvitationDeliveryEnvelope)
+                    .where(
+                        ProtectedInvitationDeliveryEnvelope.invitation_id
+                        == invitation.id
+                    )
+                    .with_for_update()
+                )
+                if invitation is not None
+                else None
+            )
+            user = await session.get(User, request.user_id)
+            if (
+                invitation is None
+                or invitation.expires_at <= now
+                or envelope is None
+                or envelope.status not in {"pending", "claimed"}
+                or not envelope.ciphertext
+                or not envelope.nonce
+                or user is None
+            ):
+                raise OnboardingConflictError("Invitation delivery retry is unavailable.")
+            message = await session.scalar(
+                select(NotificationOutbox).where(
+                    NotificationOutbox.company_id == context.company.id,
+                    NotificationOutbox.branch_id == request.branch_id,
+                    NotificationOutbox.recipient_reference
+                    == f"invitation:{invitation.id}",
+                    NotificationOutbox.recipient == user.normalized_email,
+                )
+            )
+            if message is None:
+                raise OnboardingConflictError("Invitation delivery retry is unavailable.")
+            reason_digest = _digest(
+                {
+                    "action": "owner_authorized_definitive_rejection_retry",
+                    "request_id": str(request.id),
+                    "invitation_id": str(invitation.id),
+                    "message_id": str(message.id),
+                }
+            )
+            retried = await NotificationOutboxRepository.authorize_definitive_rejection_retry(
+                session,
+                notification_id=message.id,
+                company_id=context.company.id,
+                branch_id=request.branch_id,
+                actor_user_id=context.user.id,
+                retried_at=now,
+                reason_digest=reason_digest,
+            )
+            if retried is None:
+                raise OnboardingConflictError("Invitation delivery retry is unavailable.")
+            audit_service.stage(
+                session,
+                AuditEntry(
+                    action="identity.onboarding_delivery_retry_scheduled",
+                    resource_type="identity_onboarding",
+                    resource_id=request.id,
+                    actor_user_id=context.user.id,
+                    company_id=request.company_id,
+                    branch_id=request.branch_id,
+                    details={
+                        "invitation_id": str(invitation.id),
+                        "message_id": str(retried.id),
+                    },
+                ),
+            )
+        return invitation, retried
 
     async def complete_protected_delivery(
         self, session: AsyncSession, *, invitation_id: UUID

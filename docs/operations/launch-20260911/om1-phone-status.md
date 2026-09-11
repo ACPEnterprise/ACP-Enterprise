@@ -40,6 +40,28 @@ invitation remains valid, or run a competing consumer. Enterprise should either:
    invitation validity, appends recovery evidence, and schedules the original
    outbox identity once.
 
+OM1 Phone has now prepared option 2 on this branch. The candidate adds a
+Preview-only, onboarding-admin endpoint that reopens only the original
+`identity.onboarding_invitation` outbox identity after a definitive Postmark 4xx.
+It verifies current invited/pending/unexpired state, Company/Branch access, exact
+recorded recipient, recoverable envelope, terminal failure, and absence of provider
+submission/reference. It appends actor-bound recovery evidence and an audit record.
+A durable recovery marker permanently prevents a second administrative retry for
+the same outbox identity. It cannot retry ambiguous, accepted, delivered, expired,
+consumed, superseded, cross-tenant, cross-Branch, recipient-mismatched, or Production
+delivery.
+
+Enterprise action after protected integration and Preview deployment:
+
+1. pause or otherwise coordinate the single identity consumer;
+2. invoke `POST /api/v1/identity-onboarding/{request_id}/delivery/retry-definitive-rejection`
+   as an authenticated administrator with `IDENTITY_ONBOARDING_MANAGE` and current
+   MAIN access;
+3. let the existing worker claim the original outbox identity exactly once;
+4. record provider MessageID/accepted response separately from webhook delivery and
+   human receipt;
+5. do not invoke reissue unless the invitation expires before this operation.
+
 After Enterprise executes, record separately: outbox claim, provider submission,
 Postmark MessageID/accepted response, webhook delivery if available, human receipt,
 activation, and login. Provider acceptance is not human receipt or activation.
@@ -69,6 +91,11 @@ activation, and login. Provider acceptance is not human receipt or activation.
   were not run against Preview because destructive test fixtures are prohibited.
   A separate provider-only test run passed; the earlier mixed run's database errors
   are environment failures, not asserted product failures.
+- Retry candidate: focused Ruff passed, MyPy passed for four changed source files,
+  API mutation/idempotency registry 10/10 passed, and 38 database-backed onboarding
+  and outbox tests collect successfully. The new database execution test covers
+  scheduling, lifecycle constraint state, actor/reason evidence, audit details, and
+  second-retry rejection; execution remains an Enterprise isolated-PostgreSQL gate.
 
 Current live role readiness is intentionally not mutated: the owner-selected
 `OFFICE_MANAGER` assignment remains, `ACP_EMPLOYEE_MOBILE` exists and contains
