@@ -4,7 +4,6 @@ from types import SimpleNamespace
 from uuid import UUID, uuid4
 
 import pytest
-
 from app.timekeeping.commands import CorrectJobWorkedInterval, RecordJobClock
 from app.timekeeping.contracts import WorkdayAuthorizationError, WorkdayConflictError
 from app.timekeeping.job_participation import JobClockKind
@@ -48,12 +47,13 @@ class FakeRepository:
         self.employee_id = employee_id
         self.events: list[JobWorkedClockEvent] = []
         self.intervals: list[JobWorkedIntervalRevision] = []
+        self.scope_exists = True
 
     async def employee_for_membership(self, *args: object, **kwargs: object) -> object:
         return SimpleNamespace(id=self.employee_id)
 
     async def job_scope_exists(self, *args: object, **kwargs: object) -> bool:
-        return True
+        return self.scope_exists
 
     async def lock_employee_job_clock(self, *args: object, **kwargs: object) -> None:
         return None
@@ -215,6 +215,23 @@ async def test_clock_start_stop_visibility_precision_and_lost_response_replay() 
             job_id=job_id,
         ),
     )
+    assert recovered_event.id == stop_event.id
+    assert recovered is not None and recovered.id == completed.id
+
+    inactive = await WorkdayTimeQueryService(repository).active_job_clock(
+        session, context=ctx, employee_id=employee_id, observed_at=NOW + timedelta(minutes=3)
+    )
+    assert inactive.active is False
+    assert inactive.latest_action is JobClockKind.STOP
+    assert inactive.latest_event_id == stop_event.id
+    assert inactive.latest_completed_interval_id == completed.interval_id
+
+    # Mutable scheduling scope may change after a committed write. Exact replay
+    # must still recover the immutable response rather than admit a new event.
+    repository.scope_exists = False
+    recovered_event, recovered = await service.record_job_clock(
+        session, context=ctx, command=stop
+    )  # type: ignore[arg-type]
     assert recovered_event.id == stop_event.id
     assert recovered is not None and recovered.id == completed.id
 
