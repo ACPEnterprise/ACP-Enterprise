@@ -3,7 +3,7 @@
 - Mission: `origin/work/launch-20260911-mission` at
   `0c08f1e3634f38a7fb82970932dea5de7a4cf24f`; file SHA-256
   `03b74b5f065694b487268bdee531d8d50620f2816f30c91d8b665f9d5b3e9dfc`.
-- Current protected base: `0b74c7654fde500529da824bdce604e01575cec1`.
+- Current protected base: `31c76c64c1ab0a0ec05ac2767391b2a8221307cd`.
 - Protected integration already present: OM1-ECO PR #201 as `d8999fc8` and
   OM2-B PR #206 as `9b7dd10b`.
 - Successor branch: `work/qbo-contract-successor-1`.
@@ -76,3 +76,14 @@ changing the source-to-projection result.
 
 No QBO mutation, Accounting posting, ledger creation, money movement, Production
 deployment, repricing, or policy value is introduced by this probe.
+
+## Preview deployment evidence
+
+Read-only public-boundary verification on 2026-09-10 America/New_York found the
+Preview source-evidence route present and correctly authentication-protected
+(`401`, `Cache-Control: private, no-store`). The served frontend bundle
+`index-K-kwAz4Q.js` (SHA-256
+`869c07c8d8a022d619a854fb456d42412f8822e35655ed16951ad03eed7a86e5`) did not
+contain the OM2-B QBO route or screen markers. This proves neither an authenticated
+financial response nor deployed QBO UI acceptance. Current state remains
+`PROTECTED_CANDIDATE`, not `PREVIEW_DEPLOYED` or `DEPLOYED_ACCEPTANCE_PASSED`.
