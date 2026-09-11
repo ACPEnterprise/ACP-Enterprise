@@ -1,0 +1,44 @@
+{
+  "program": "MOBILE.OVERNIGHT.PHONE.QUALIFICATION.1",
+  "authority": "36cae7427d65130cbba38b77e66b881ddc8c828f",
+  "branch": "work/mobile-overnight-phone-1",
+  "scope": "ACP Employee client qualification and deploy-readiness evidence",
+  "source_changes": [],
+  "schema_changes": [],
+  "preview_mutation": false,
+  "production_operation": false,
+  "automated": {
+    "jest_suites": 14,
+    "jest_tests": 119,
+    "typescript": "passed",
+    "eslint": "passed",
+    "expo_config": "passed",
+    "ios_hermes_export": "passed",
+    "android_hermes_export": "passed",
+    "fixture_dry_run": "passed_no_mutation"
+  },
+  "simulator": {
+    "xcode": "26.6 (17F113)",
+    "sdk": "iphonesimulator26.5",
+    "unsigned_build": "passed",
+    "install": "passed",
+    "launch": "passed"
+  },
+  "physical_device": {
+    "transport": "paired_available_local_network",
+    "installed_development_app_launch": "passed",
+    "fresh_employee_flow": "owner_observation_required",
+    "distribution_ready": false
+  },
+  "coordination": {
+    "enterprise": "protected integration and Preview fixture/deployment authority",
+    "om1_phone": "sanctioned Preview identity and office/server consistency authority",
+    "om2_a": "assignment-scoped Asset/Fleet fixture and projection authority"
+  },
+  "external_gates": [
+    "sanctioned live Preview employee and assigned-Job fixture",
+    "owner-observed physical acceptance",
+    "Apple signing/provisioning/App Store Connect/TestFlight",
+    "live AASA hosting"
+  ]
+}
