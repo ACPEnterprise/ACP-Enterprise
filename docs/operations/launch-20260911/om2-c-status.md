@@ -7,7 +7,8 @@ Updated: 2026-09-10 America/New_York
 - Mission ref: `origin/work/launch-20260911-mission`
 - Mission commit: `0c08f1e3634f38a7fb82970932dea5de7a4cf24f`
 - Mission file SHA-256: `03b74b5f065694b487268bdee531d8d50620f2816f30c91d8b665f9d5b3e9dfc`
-- Current protected base: `42a4f68087d76247269bd4c8388f556dd62a8b5c`
+- Starting protected base: `42a4f68087d76247269bd4c8388f556dd62a8b5c`
+- Current protected base: `e9377e72672edd5308c8181f45e172c22888cc5e`
 - Isolated branch: `work/om2c-launch-20260911-e2e-acceptance-1`
 - Mission activation evidence: mission commit at 2026-09-10 21:36:32 -0400.
 - Mission authorization expiry: 2026-09-13 21:36:32 -0400, unless earlier
@@ -15,12 +16,13 @@ Updated: 2026-09-10 America/New_York
 
 ## Current checkpoint
 
-State: **WORKING — RELEASE ATTESTATION AND AUTHENTICATED ACCEPTANCE REQUIRED**.
+State: **WORKING — CURRENT PROTECTED DEPLOYMENT AND AUTHENTICATED ACCEPTANCE REQUIRED**.
 
 The protected authority now includes the Job-clock backend, operator Month/calendar
-workflow, and Customer roster navigation. OM2-C extended the existing Enterprise
-operational acceptance scenario to select the landed Job-clock tests; no second
-harness or shared runtime implementation was created.
+workflow, Customer roster/navigation, CSR service-request booking, QBO source-evidence
+projection, and the fail-closed SOURCE.4 successor-classification runner. OM2-C
+extended the existing Enterprise operational acceptance scenario to select the landed
+Job-clock tests; no second harness or shared runtime implementation was created.
 
 Current-authority qualification on fresh PostgreSQL databases:
 
@@ -32,6 +34,10 @@ Current-authority qualification on fresh PostgreSQL databases:
 - ESLint, TypeScript production build and runtime dependency audit: passed; runtime
   audit reports zero vulnerabilities.
 - Focused Ruff, MyPy, Python compilation and `git diff --check`: passed.
+- After the protected advance through `e9377e7`, the newly integrated QBO projection,
+  SOURCE.4 classification, break-even readiness, Customer booking, Scheduling/Month,
+  and Dispatch presentation checks passed: 31 backend tests and 8 frontend files / 45
+  tests. Frontend ESLint, TypeScript and production build also passed.
 
 These are **synthetic fixture and isolated-database results**, not deployed or real-
 source acceptance.
@@ -42,15 +48,15 @@ Preview URL: `https://preview.allcountyhomeservices.com`.
 
 - `/backend-health` is healthy and reports Preview PostgreSQL and Redis connected.
 - The backend reports release `00e0d5f0faad31f6ff0b85cdde903857a78b70fc`, not
-  current protected authority `42a4f68087d76247269bd4c8388f556dd62a8b5c`.
+  current protected authority `e9377e72672edd5308c8181f45e172c22888cc5e`.
 - Preview index SHA-256 is now
   `5ffe996047bbddc8ff3b18a4c517b0529ad378741334738e47d70c30abd49895`.
-- Current protected frontend build index SHA-256 is
-  `5ffe996047bbddc8ff3b18a4c517b0529ad378741334738e47d70c30abd49895`.
-- The deployed entrypoint and current Customer, Scheduling/Month, Workday and Payroll
-  route bundles are byte-for-byte identical to the qualified local production build.
-  This proves those static artifacts were deployed; it is not rendered or authenticated
-  operator acceptance.
+- Current protected frontend build index SHA-256 is now
+  `e12f719c358904ce2693843071f1ea95d6e4e91de0cb4f22516449f10db7da37`.
+- The deployed `5ffe...` frontend previously matched the qualified `42a4f68` build,
+  including Customer, Scheduling/Month, Workday and Payroll route bundles. It no longer
+  matches current protected `e9377e7`; the newly integrated Customer booking/context
+  changes therefore remain undeployed at this checkpoint.
 - `GET /api/v1/timekeeping/me/job-clock` initially returned `404`, then advanced to
   the same bounded `401` authentication response as other protected APIs. This proves
   the route landed between checkpoints, but not Employee identity, authorization or
@@ -65,10 +71,14 @@ Preview URL: `https://preview.allcountyhomeservices.com`.
   `/api/v1/payroll/operations/registers`, `/api/v1/payroll/reporting`, and
   `/api/v1/payroll/me/payroll-status`. Guessed plural paths outside the router returned
   `404` and are not classified as product or deployment failures.
+- The newly protected QBO evidence route
+  `GET /api/v1/accounting/source-evidence/qbo?basis=cash` returns `404` in Preview.
+  A read-only `GET` against the POST-only Operations service-request route returns
+  `405`, which proves route presence but neither authenticated booking nor mutation.
 
 Exact failed transition:
 
-`protected 42a4f680 release → Preview current coherent deployment → authenticated
+`protected e9377e7 release → Preview current coherent deployment → authenticated
 operator journey`
 
 The frontend and route-presence checkpoints advanced, but the backend release identity
@@ -81,6 +91,10 @@ after that checkpoint.
 - Customer/HCP population: no admitted current population/as-of packet was available
   to this lane at this checkpoint. Fixture roster pagination is qualified; actual
   completeness is unverified.
+- SOURCE.4: protected authority contains a read-only Preview successor-classification
+  runner that can produce a qualified Enterprise admission packet. Its own contract
+  explicitly never admits data. No executed packet or admission result is available to
+  OM2-C, so actual-source acceptance remains gated rather than inferred from code.
 - QBO: OM1 ECO's published candidate explicitly classifies live connection/readability
   as `BLOCKED_EXTERNAL`; no production client, token, exact-company binding, verified
   realm marker or sealed production run was available. Existing reports are historical
