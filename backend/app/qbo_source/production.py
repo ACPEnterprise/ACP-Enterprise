@@ -35,6 +35,8 @@ from .runtime import (
 from .secrets import ProtectedProductionSecretProvider
 
 PRODUCTION_ACQUISITION_SCOPE = tuple(EntityKind)
+PRODUCTION_READ_PROBE_SCOPE = (EntityKind.COMPANY_INFO,)
+PRODUCTION_READ_PROBE_PREFIX = "company-info-probe-"
 
 
 @dataclass(frozen=True)
@@ -50,6 +52,38 @@ async def execute_production_acquisition(
     configuration: Settings = settings,
 ) -> AcquisitionResult:
     """Execute one sealed GET-only real-company snapshot after owner authorization."""
+    if command.run_id.startswith(PRODUCTION_READ_PROBE_PREFIX):
+        raise ValueError("full acquisition cannot reuse a read-probe identity")
+    return await _execute_production_acquisition(
+        command,
+        configuration,
+        entity_kinds=PRODUCTION_ACQUISITION_SCOPE,
+        bounded_snapshot=True,
+    )
+
+
+async def execute_production_read_probe(
+    command: ProductionAcquisitionCommand,
+    configuration: Settings = settings,
+) -> AcquisitionResult:
+    """Seal a CompanyInfo-only GET proving current real-provider readability."""
+    if not command.run_id.startswith(PRODUCTION_READ_PROBE_PREFIX):
+        raise ValueError("read-probe identity requires company-info-probe- prefix")
+    return await _execute_production_acquisition(
+        command,
+        configuration,
+        entity_kinds=PRODUCTION_READ_PROBE_SCOPE,
+        bounded_snapshot=False,
+    )
+
+
+async def _execute_production_acquisition(
+    command: ProductionAcquisitionCommand,
+    configuration: Settings,
+    *,
+    entity_kinds: tuple[EntityKind, ...],
+    bounded_snapshot: bool,
+) -> AcquisitionResult:
     if not configuration.qbo_production_enabled:
         raise SandboxRuntimeError("production_acquisition_disabled")
     root = _production_runtime_root(configuration)
@@ -69,7 +103,9 @@ async def execute_production_acquisition(
         raise SandboxRuntimeError("production_realm_not_verified")
     evidence_root = Path(str(configuration.qbo_production_evidence_root)).resolve()
     store = ProtectedFilesystemEvidenceStore(
-        root=evidence_root, repository_root=repository, bounded_snapshot=True
+        root=evidence_root,
+        repository_root=repository,
+        bounded_snapshot=bounded_snapshot,
     )
     transport = IntuitHttpTransport()
     oauth = IntuitOAuthClient(
@@ -125,12 +161,15 @@ async def execute_production_acquisition(
         snapshot = requested_snapshot
     request = AcquisitionRequest(
         snapshot=snapshot,
-        entity_kinds=PRODUCTION_ACQUISITION_SCOPE,
+        entity_kinds=entity_kinds,
         page_size=command.page_size,
     )
-    return await AcquisitionRunner(provider=adapter, evidence_store=store).run(
-        run_id=command.run_id, request=request, company_name=expected_name
-    )
+    try:
+        return await AcquisitionRunner(provider=adapter, evidence_store=store).run(
+            run_id=command.run_id, request=request, company_name=expected_name
+        )
+    finally:
+        await transport.client.aclose()
 
 
 def _read_verified_marker(registry: SandboxConnectionRegistry) -> dict[str, object]:
@@ -147,14 +186,24 @@ def run(command: ProductionAcquisitionCommand) -> AcquisitionResult:
     return asyncio.run(execute_production_acquisition(command))
 
 
+def run_read_probe(command: ProductionAcquisitionCommand) -> AcquisitionResult:
+    return asyncio.run(execute_production_read_probe(command))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Seal one authorized QBO read-only snapshot"
     )
     parser.add_argument("--run-id", required=True)
     parser.add_argument("--cutoff", required=True, type=date.fromisoformat)
+    parser.add_argument(
+        "--company-info-only",
+        action="store_true",
+        help="Seal only the production CompanyInfo GET as a current-read probe.",
+    )
     arguments = parser.parse_args()
-    result = run(ProductionAcquisitionCommand(arguments.run_id, arguments.cutoff))
+    command = ProductionAcquisitionCommand(arguments.run_id, arguments.cutoff)
+    result = run_read_probe(command) if arguments.company_info_only else run(command)
     print(
         json.dumps(
             {
@@ -164,6 +213,11 @@ def main() -> None:
                 "manifest_sha256": result.manifest_sha256,
                 "failure_code": result.failure_code,
                 "bounded_snapshot": result.bounded_snapshot,
+                "acquisition_scope": (
+                    "company_info_read_probe"
+                    if arguments.company_info_only
+                    else "full_production_catalog"
+                ),
             },
             sort_keys=True,
         )

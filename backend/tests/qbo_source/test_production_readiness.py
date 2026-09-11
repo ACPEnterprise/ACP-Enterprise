@@ -7,8 +7,6 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
-from fastapi.testclient import TestClient
-
 from app.core.config import Settings
 from app.main import app
 from app.qbo_source.contracts import EntityKind
@@ -23,8 +21,11 @@ from app.qbo_source.intuit import (
 )
 from app.qbo_source.production import (
     PRODUCTION_ACQUISITION_SCOPE,
+    PRODUCTION_READ_PROBE_PREFIX,
+    PRODUCTION_READ_PROBE_SCOPE,
     ProductionAcquisitionCommand,
     execute_production_acquisition,
+    execute_production_read_probe,
 )
 from app.qbo_source.router import PRODUCTION_CALLBACK_PATH
 from app.qbo_source.runtime import (
@@ -37,6 +38,15 @@ from app.qbo_source.secrets import (
     ProtectedProductionSecretProvider,
     ProtectedSandboxSecretProvider,
 )
+from fastapi.testclient import TestClient
+
+
+class _Closable:
+    def __init__(self) -> None:
+        self.closed = False
+
+    async def aclose(self) -> None:
+        self.closed = True
 
 
 class _Transport:
@@ -47,6 +57,25 @@ class _Transport:
     async def request(self, **values: object) -> HttpResponse:
         self.urls.append(str(values["url"]))
         return self.response
+
+
+class _ProductionProbeTransport(_Transport):
+    def __init__(self) -> None:
+        super().__init__(
+            HttpResponse(
+                200,
+                {},
+                json.dumps(
+                    {
+                        "CompanyInfo": {
+                            "Id": "native-company-id",
+                            "CompanyName": "Exact Company",
+                        }
+                    }
+                ).encode(),
+            )
+        )
+        self.client = _Closable()
 
 
 def _token(realm_id: str = "123456789") -> OAuthToken:
@@ -196,6 +225,114 @@ async def test_acquisition_requires_verified_connection_before_any_query(
 
 def test_production_scope_is_exact_existing_contract_catalog() -> None:
     assert PRODUCTION_ACQUISITION_SCOPE == tuple(EntityKind)
+    assert PRODUCTION_READ_PROBE_SCOPE == (EntityKind.COMPANY_INFO,)
+
+
+@pytest.mark.asyncio
+async def test_read_probe_requires_verified_connection_before_companyinfo(
+    tmp_path: Path,
+) -> None:
+    configuration = Settings(
+        environment="test",
+        qbo_production_enabled=True,
+        qbo_production_callback_uri=(
+            "https://preview.allcountyhomeservices.com"
+            "/api/v1/integrations/qbo/production/oauth/callback"
+        ),
+        qbo_production_runtime_root=str(tmp_path / "runtime"),
+        qbo_production_evidence_root=str(tmp_path / "evidence"),
+        qbo_repository_root=str(tmp_path / "repository"),
+    )
+    Path(configuration.qbo_repository_root).mkdir()
+    binding = ProtectedSandboxCompanyBinding(
+        Path(configuration.qbo_production_runtime_root) / "configuration"
+    )
+    os.chmod(Path(configuration.qbo_production_runtime_root), 0o700)
+    binding.path.write_text("Exact Company")
+    os.chmod(binding.path, 0o600)
+
+    with pytest.raises(SandboxRuntimeError, match="connection_not_verified"):
+        await execute_production_read_probe(
+            ProductionAcquisitionCommand(
+                f"{PRODUCTION_READ_PROBE_PREFIX}20260911-001",
+                date(2026, 9, 11),
+            ),
+            configuration,
+        )
+
+    assert not Path(configuration.qbo_production_evidence_root).exists()
+
+
+@pytest.mark.asyncio
+async def test_read_probe_and_full_acquisition_cannot_share_run_namespace() -> None:
+    with pytest.raises(ValueError, match="requires company-info-probe"):
+        await execute_production_read_probe(
+            ProductionAcquisitionCommand("full-run", date(2026, 9, 11))
+        )
+
+
+@pytest.mark.asyncio
+async def test_read_probe_seals_only_companyinfo_without_false_empty_families(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.qbo_source import production
+
+    repository = tmp_path / "repository"
+    repository.mkdir()
+    runtime = tmp_path / "runtime"
+    evidence = tmp_path / "evidence"
+    configuration = Settings(
+        environment="test",
+        qbo_production_enabled=True,
+        qbo_production_callback_uri=(
+            "https://preview.allcountyhomeservices.com"
+            "/api/v1/integrations/qbo/production/oauth/callback"
+        ),
+        qbo_production_runtime_root=str(runtime),
+        qbo_production_evidence_root=str(evidence),
+        qbo_repository_root=str(repository),
+    )
+    company = ProtectedSandboxCompanyBinding(runtime / "configuration")
+    os.chmod(runtime, 0o700)
+    company.path.write_text("Exact Company")
+    os.chmod(company.path, 0o600)
+    SandboxConnectionRegistry(runtime / "connections", "production").record_verified(
+        realm_id="123456789",
+        company_info_id="native-company-id",
+        company_name="Exact Company",
+        minor_version=75,
+    )
+    provider = ProtectedProductionSecretProvider(
+        root=runtime / "secrets", repository_root=repository
+    )
+    await provider.put_token(
+        provider.TOKEN_REFERENCE, _token(), expected_generation=None
+    )
+    transport = _ProductionProbeTransport()
+    monkeypatch.setattr(production, "IntuitHttpTransport", lambda: transport)
+
+    run_id = f"{PRODUCTION_READ_PROBE_PREFIX}20260911-actual-read"
+    result = await execute_production_read_probe(
+        ProductionAcquisitionCommand(run_id, date(2026, 9, 11)), configuration
+    )
+
+    manifest = json.loads((evidence / "runs" / run_id / "manifest.json").read_text())
+    assert result.state.value == "complete"
+    assert result.envelope_count == 1
+    assert result.bounded_snapshot is None
+    assert manifest["entity_counts"] == {"company_info": 1}
+    assert not (evidence / "runs" / run_id / "bounded-manifest.json").exists()
+    assert transport.urls == [
+        "https://quickbooks.api.intuit.com/v3/company/123456789/companyinfo/123456789?minorversion=75"
+    ]
+    assert transport.client.closed is True
+    with pytest.raises(ValueError, match="cannot reuse a read-probe"):
+        await execute_production_acquisition(
+            ProductionAcquisitionCommand(
+                f"{PRODUCTION_READ_PROBE_PREFIX}20260911-001",
+                date(2026, 9, 11),
+            )
+        )
 
 
 def test_production_callback_query_logging_is_suppressed() -> None:
@@ -205,7 +342,10 @@ def test_production_callback_query_logging_is_suppressed() -> None:
         "location = /api/v1/integrations/qbo/production/oauth/callback {", maxsplit=1
     )[1].split("}", maxsplit=1)[0]
     assert "access_log off;" in location
-    assert "rewrite ^ /api/v1/integrations/qbo/production/oauth/callback? break;" in location
+    assert (
+        "rewrite ^ /api/v1/integrations/qbo/production/oauth/callback? break;"
+        in location
+    )
     assert "X-ACP-QBO-Code $qbo_code" in location
     caddy = (repository / "docs/deployment/mission-control-preview.caddy").read_text()
     assert "/api/v1/integrations/qbo/production/oauth/callback" in caddy
