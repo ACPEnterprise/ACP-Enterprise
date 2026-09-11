@@ -59,6 +59,7 @@ const timecard = (entries: workdayApi.TimeEntry[] = []): workdayApi.Timecard => 
     schedule_version: 1,
   },
   entries,
+  job_intervals: [],
 });
 
 const auth = (permissions = ["COMPANY_TIMEKEEPING_OWN_READ", "COMPANY_TIMEKEEPING_OWN_PUNCH"]): AuthenticationContextValue => ({

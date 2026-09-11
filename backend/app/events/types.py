@@ -23,6 +23,8 @@ class EventType(str, Enum):
     WORKDAY_TIME_APPROVED = "timekeeping.time_approved"
     WORKDAY_TIME_CORRECTED = "timekeeping.time_corrected"
     WORKDAY_TIME_SUPERSEDED = "timekeeping.time_superseded"
+    JOB_WORK_CLOCK_RECORDED = "timekeeping.job_work_clock_recorded"
+    JOB_WORK_INTERVAL_CORRECTED = "timekeeping.job_work_interval_corrected"
     PAYROLL_POLICY_DRAFTED = "payroll.policy_drafted"
     PAYROLL_POLICY_APPROVED = "payroll.policy_approved"
     PAYROLL_POLICY_SUPERSEDED = "payroll.policy_superseded"

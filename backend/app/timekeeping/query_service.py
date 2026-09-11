@@ -1,27 +1,41 @@
 """Read model for self-service and manager Workday Time APIs."""
 
 from collections import defaultdict
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from itertools import pairwise
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.platform.employees.models import Employee
 from app.platform.permissions.authorization import AuthorizationContext
 
 from .contracts import PunchKind, WorkdayAuthorizationError, WorkdayTimeError
-from .models import PayPeriod, WorkdayPunchEvent, WorkdayTimeEntryRevision
+from .job_participation import (
+    CorrectionState,
+    IntervalConfidence,
+    IntervalValidity,
+    WorkedIntervalSource,
+)
+from .models import (
+    JobWorkedIntervalRevision,
+    PayPeriod,
+    WorkdayPunchEvent,
+    WorkdayTimeEntryRevision,
+)
 from .repository import TimekeepingRepository, timekeeping_repository
 from .schemas import (
+    ActiveJobClockView,
     AdminEmployeeTimecard,
     AdminTimecardDay,
     AdminTimecardInterval,
     AdminTimecardOperations,
     AdminTimecardReview,
     AdminTimecardReviewItem,
+    JobWorkedIntervalView,
     PayPeriodView,
     PunchState,
     TimecardView,
@@ -46,6 +60,35 @@ class WorkdayTimeQueryService:
                 "authenticated membership is not linked to an active Employee"
             )
         return employee
+
+    async def active_job_clock(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        employee_id: UUID,
+        observed_at: datetime | None = None,
+    ) -> ActiveJobClockView:
+        now = observed_at or datetime.now(timezone.utc)
+        latest = await self._repository.latest_job_clock_event(
+            session, company_id=context.company.id, employee_id=employee_id
+        )
+        if latest is None or latest.kind == "stop":
+            return ActiveJobClockView(
+                active=False, employee_id=employee_id, server_observed_at=now
+            )
+        if now < latest.occurred_at:
+            raise WorkdayTimeError("active Job clock starts after observation time")
+        return ActiveJobClockView(
+            active=True,
+            event_id=latest.id,
+            employee_id=employee_id,
+            job_id=latest.job_id,
+            appointment_id=latest.appointment_id,
+            started_at=latest.occurred_at,
+            server_observed_at=now,
+            elapsed_seconds=int((now - latest.occurred_at).total_seconds()),
+        )
 
     async def state(
         self,
@@ -89,6 +132,18 @@ class WorkdayTimeQueryService:
             start_date=start_date,
             end_date=end_date,
         )
+        zone = ZoneInfo(timezone_name)
+        interval_start = datetime.combine(start_date, datetime.min.time(), zone)
+        interval_stop = datetime.combine(
+            end_date + timedelta(days=1), datetime.min.time(), zone
+        )
+        job_intervals = await self._repository.current_job_intervals(
+            session,
+            company_id=context.company.id,
+            employee_ids=(employee.id,),
+            start_at=interval_start,
+            stop_at=interval_stop,
+        )
         return TimecardView(
             employee_id=employee.id,
             punch_state=await self.state(
@@ -96,6 +151,9 @@ class WorkdayTimeQueryService:
             ),
             pay_period=self.pay_period_view(period) if period is not None else None,
             entries=tuple(self.entry_view(value) for value in revisions),
+            job_intervals=tuple(
+                self.job_interval_view(value) for value in job_intervals
+            ),
         )
 
     async def admin_pay_periods(
@@ -136,7 +194,7 @@ class WorkdayTimeQueryService:
             if context.active_branch is not None
             else context.authorized_branch_ids
         )
-        employee_scope = Employee.home_branch_id.in_(branch_ids)
+        employee_scope: ColumnElement[bool] = Employee.home_branch_id.in_(branch_ids)
         if context.active_branch is None:
             employee_scope = employee_scope | Employee.home_branch_id.is_(None)
         employees = tuple(
@@ -251,7 +309,7 @@ class WorkdayTimeQueryService:
             if context.active_branch is not None
             else context.authorized_branch_ids
         )
-        employee_scope = Employee.home_branch_id.in_(branch_ids)
+        employee_scope: ColumnElement[bool] = Employee.home_branch_id.in_(branch_ids)
         if context.active_branch is None:
             employee_scope = employee_scope | Employee.home_branch_id.is_(None)
         employees = tuple(
@@ -304,11 +362,31 @@ class WorkdayTimeQueryService:
             employee_ids=employee_ids,
             observed_at=now,
         )
+        zone = ZoneInfo(period.timezone)
+        job_intervals = await self._repository.current_job_intervals(
+            session,
+            company_id=context.company.id,
+            employee_ids=employee_ids,
+            start_at=datetime.combine(period.period_start, datetime.min.time(), zone),
+            stop_at=datetime.combine(
+                period.period_end + timedelta(days=1), datetime.min.time(), zone
+            ),
+        )
+        job_intervals_by_employee: dict[UUID, list[JobWorkedIntervalRevision]] = (
+            defaultdict(list)
+        )
+        for interval in job_intervals:
+            if interval.branch_id in branch_ids:
+                job_intervals_by_employee[interval.employee_id].append(interval)
         rows: list[AdminEmployeeTimecard] = []
         for employee in employees:
             values = sorted(
                 by_employee[employee.id],
-                key=lambda item: (item.work_date, item.start_at or item.created_at, item.id),
+                key=lambda item: (
+                    item.work_date,
+                    item.start_at or item.created_at,
+                    item.id,
+                ),
             )
             punch_state, active_clock_in = punch_states[employee.id]
             local_today = now.astimezone(ZoneInfo(period.timezone)).date()
@@ -349,6 +427,13 @@ class WorkdayTimeQueryService:
                     punch_state=punch_state,
                     active_open_clock=punch_state.state != "not_clocked_in",
                     missing_clock_out=missing_clock_out,
+                    job_intervals=tuple(
+                        self.job_interval_view(value)
+                        for value in sorted(
+                            job_intervals_by_employee[employee.id],
+                            key=lambda item: (item.start_at, item.id),
+                        )
+                    ),
                     days=days,
                     total_supported_minutes=total,
                     accepted_minutes=accepted,
@@ -360,10 +445,10 @@ class WorkdayTimeQueryService:
             contract_version="WORKFORCE.TIMECARD.OPERATIONS.v1",
             pay_period=self.pay_period_view(period),
             employees=tuple(rows),
-            job_attribution_readiness="PARTIAL",
+            job_attribution_readiness="AVAILABLE",
             limitations=(
-                "Timekeeping currently proves Employee paid-time intervals, not Job attribution.",
-                "Unclassified supported time is not silently assigned to a Job or labeled non-Job time.",
+                "Job worked intervals and paid-time entries remain independent evidence.",
+                "Paid minutes are not silently assigned to a Job; reconciliation remains explicit.",
                 "Regular and overtime candidates remain Payroll policy outputs.",
             ),
         )
@@ -426,7 +511,8 @@ class WorkdayTimeQueryService:
                     clock_in_by_employee[employee_id].occurred_at
                     if employee_id in clock_in_by_employee
                     and latest_by_employee.get(employee_id) is not None
-                    and latest_by_employee[employee_id].kind != PunchKind.CLOCK_OUT.value
+                    and latest_by_employee[employee_id].kind
+                    != PunchKind.CLOCK_OUT.value
                     else None
                 ),
             )
@@ -446,7 +532,11 @@ class WorkdayTimeQueryService:
             overlap_ids: set[UUID] = set()
             timed = [item for item in entries if item.start_at and item.end_at]
             for left, right in pairwise(timed):
-                if left.end_at is not None and right.start_at is not None and left.end_at > right.start_at:
+                if (
+                    left.end_at is not None
+                    and right.start_at is not None
+                    and left.end_at > right.start_at
+                ):
                     overlap_ids.update((left.id, right.id))
             intervals: list[AdminTimecardInterval] = []
             for item in entries:
@@ -464,7 +554,8 @@ class WorkdayTimeQueryService:
                         attribution_state="UNCLASSIFIED",
                         provenance=item.provenance,
                         entry_state=item.state,
-                        corrected=item.revision_number > 1 or item.correction_reason is not None,
+                        corrected=item.revision_number > 1
+                        or item.correction_reason is not None,
                         overlap=item.id in overlap_ids,
                         review_state="ACCEPTED" if accepted else "NEEDS_REVIEW",
                         audit_digest=item.evidence_digest,
@@ -530,6 +621,29 @@ class WorkdayTimeQueryService:
             timezone=value.timezone,
             schedule_definition_id=value.schedule_definition_id,
             schedule_version=value.schedule_version,
+        )
+
+    @staticmethod
+    def job_interval_view(value: JobWorkedIntervalRevision) -> JobWorkedIntervalView:
+        return JobWorkedIntervalView(
+            interval_id=value.interval_id,
+            revision_id=value.id,
+            revision_number=value.revision_number,
+            employee_id=value.employee_id,
+            job_id=value.job_id,
+            appointment_id=value.appointment_id,
+            start_at=value.start_at,
+            stop_at=value.stop_at,
+            duration_seconds=value.duration_seconds,
+            source=WorkedIntervalSource(value.source),
+            correction_state=CorrectionState(value.correction_state),
+            supersedes_revision_id=value.supersedes_revision_id,
+            audit_lineage=tuple(UUID(item) for item in value.audit_lineage),
+            source_event_ids=tuple(UUID(item) for item in value.source_event_ids),
+            validity=IntervalValidity(value.validity),
+            confidence=IntervalConfidence(value.confidence),
+            evidence_digest=value.evidence_digest,
+            correction_reason=value.correction_reason,
         )
 
     @staticmethod

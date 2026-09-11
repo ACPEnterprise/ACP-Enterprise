@@ -1,15 +1,171 @@
 """Company-scoped persistence queries for Workday Time."""
 
-from datetime import date
+from datetime import date, datetime
 from uuid import UUID
 
-from sqlalchemy import exists, select
+from sqlalchemy import exists, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .models import PayPeriod, WorkdayPunchEvent, WorkdayTimeEntryRevision
+from .models import (
+    JobWorkedClockEvent,
+    JobWorkedIntervalRevision,
+    PayPeriod,
+    WorkdayPunchEvent,
+    WorkdayTimeEntryRevision,
+)
 
 
 class TimekeepingRepository:
+    async def lock_employee_job_clock(
+        self, session: AsyncSession, *, company_id: UUID, employee_id: UUID
+    ) -> None:
+        lock_key = (company_id.int ^ employee_id.int) & ((1 << 63) - 1)
+        await session.execute(select(func.pg_advisory_xact_lock(lock_key)))
+
+    async def job_scope_exists(
+        self,
+        session: AsyncSession,
+        *,
+        company_id: UUID,
+        branch_id: UUID,
+        job_id: UUID,
+        appointment_id: UUID | None,
+    ) -> bool:
+        from app.jobs.models import Job, JobAppointmentLink
+
+        if not await session.scalar(
+            select(
+                exists().where(
+                    Job.company_id == company_id,
+                    Job.branch_id == branch_id,
+                    Job.id == job_id,
+                )
+            )
+        ):
+            return False
+        if appointment_id is None:
+            return True
+        return bool(
+            await session.scalar(
+                select(
+                    exists().where(
+                        JobAppointmentLink.company_id == company_id,
+                        JobAppointmentLink.branch_id == branch_id,
+                        JobAppointmentLink.job_id == job_id,
+                        JobAppointmentLink.appointment_id == appointment_id,
+                    )
+                )
+            )
+        )
+
+    async def latest_job_clock_event(
+        self, session: AsyncSession, *, company_id: UUID, employee_id: UUID
+    ) -> JobWorkedClockEvent | None:
+        return await session.scalar(
+            select(JobWorkedClockEvent)
+            .where(
+                JobWorkedClockEvent.company_id == company_id,
+                JobWorkedClockEvent.employee_id == employee_id,
+            )
+            .order_by(
+                JobWorkedClockEvent.occurred_at.desc(), JobWorkedClockEvent.id.desc()
+            )
+            .limit(1)
+        )
+
+    async def job_clock_by_idempotency_key(
+        self,
+        session: AsyncSession,
+        *,
+        company_id: UUID,
+        recorded_by_user_id: UUID,
+        idempotency_key: str,
+    ) -> JobWorkedClockEvent | None:
+        return await session.scalar(
+            select(JobWorkedClockEvent).where(
+                JobWorkedClockEvent.company_id == company_id,
+                JobWorkedClockEvent.recorded_by_user_id == recorded_by_user_id,
+                JobWorkedClockEvent.idempotency_key == idempotency_key,
+            )
+        )
+
+    async def interval_for_job_clock_event(
+        self, session: AsyncSession, *, company_id: UUID, event_id: UUID
+    ) -> JobWorkedIntervalRevision | None:
+        return await session.scalar(
+            select(JobWorkedIntervalRevision)
+            .where(
+                JobWorkedIntervalRevision.company_id == company_id,
+                JobWorkedIntervalRevision.source_event_ids.contains([str(event_id)]),
+            )
+            .order_by(JobWorkedIntervalRevision.revision_number.desc())
+            .limit(1)
+        )
+
+    async def latest_job_interval_revision(
+        self, session: AsyncSession, *, company_id: UUID, revision_id: UUID
+    ) -> JobWorkedIntervalRevision | None:
+        base = await session.scalar(
+            select(JobWorkedIntervalRevision).where(
+                JobWorkedIntervalRevision.company_id == company_id,
+                JobWorkedIntervalRevision.id == revision_id,
+            )
+        )
+        if base is None:
+            return None
+        return await session.scalar(
+            select(JobWorkedIntervalRevision)
+            .where(
+                JobWorkedIntervalRevision.company_id == company_id,
+                JobWorkedIntervalRevision.interval_id == base.interval_id,
+            )
+            .order_by(JobWorkedIntervalRevision.revision_number.desc())
+            .limit(1)
+        )
+
+    async def job_interval_correction_by_idempotency_key(
+        self,
+        session: AsyncSession,
+        *,
+        company_id: UUID,
+        corrected_by_user_id: UUID,
+        idempotency_key: str,
+    ) -> JobWorkedIntervalRevision | None:
+        return await session.scalar(
+            select(JobWorkedIntervalRevision).where(
+                JobWorkedIntervalRevision.company_id == company_id,
+                JobWorkedIntervalRevision.corrected_by_user_id == corrected_by_user_id,
+                JobWorkedIntervalRevision.correction_idempotency_key == idempotency_key,
+            )
+        )
+
+    async def current_job_intervals(
+        self,
+        session: AsyncSession,
+        *,
+        company_id: UUID,
+        employee_ids: tuple[UUID, ...],
+        start_at: datetime,
+        stop_at: datetime,
+    ) -> tuple[JobWorkedIntervalRevision, ...]:
+        if not employee_ids:
+            return ()
+        newer = JobWorkedIntervalRevision.__table__.alias("newer_job_interval")
+        values = await session.scalars(
+            select(JobWorkedIntervalRevision).where(
+                JobWorkedIntervalRevision.company_id == company_id,
+                JobWorkedIntervalRevision.employee_id.in_(employee_ids),
+                JobWorkedIntervalRevision.stop_at > start_at,
+                JobWorkedIntervalRevision.start_at < stop_at,
+                ~exists().where(
+                    newer.c.company_id == JobWorkedIntervalRevision.company_id,
+                    newer.c.interval_id == JobWorkedIntervalRevision.interval_id,
+                    newer.c.revision_number > JobWorkedIntervalRevision.revision_number,
+                ),
+            )
+        )
+        return tuple(values.all())
+
     async def employee_for_membership(
         self, session: AsyncSession, *, company_id: UUID, membership_id: UUID
     ):

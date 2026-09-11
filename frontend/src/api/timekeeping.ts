@@ -57,6 +57,49 @@ export interface Timecard {
   punch_state: PunchState;
   pay_period: PayPeriod | null;
   entries: TimeEntry[];
+  job_intervals: JobWorkedInterval[];
+}
+
+export type JobClockAction = "start" | "stop";
+
+export interface JobWorkedInterval {
+  interval_id: string;
+  revision_id: string;
+  revision_number: number;
+  employee_id: string;
+  job_id: string;
+  appointment_id: string | null;
+  start_at: string;
+  stop_at: string;
+  duration_seconds: number;
+  source: "employee_clock" | "authorized_manual";
+  correction_state: "original" | "corrected" | "superseded";
+  supersedes_revision_id: string | null;
+  audit_lineage: string[];
+  source_event_ids: string[];
+  validity: "valid" | "correction_required";
+  confidence: "authoritative" | "disputed";
+  evidence_digest: string;
+  correction_reason: string | null;
+}
+
+export interface ActiveJobClock {
+  active: boolean;
+  event_id: string | null;
+  employee_id: string;
+  job_id: string | null;
+  appointment_id: string | null;
+  started_at: string | null;
+  server_observed_at: string;
+  elapsed_seconds: number | null;
+}
+
+export interface JobClockResult {
+  event_id: string;
+  action: JobClockAction;
+  occurred_at: string;
+  state: ActiveJobClock;
+  completed_interval: JobWorkedInterval | null;
 }
 
 export interface PunchResult {
@@ -112,6 +155,7 @@ export interface AdminEmployeeTimecard {
   punch_state: PunchState;
   active_open_clock: boolean;
   missing_clock_out: boolean;
+  job_intervals: JobWorkedInterval[];
   days: Array<{
     work_date: string;
     intervals: AdminTimecardInterval[];
@@ -133,7 +177,7 @@ export interface AdminTimecardOperations {
   contract_version: "WORKFORCE.TIMECARD.OPERATIONS.v1";
   pay_period: PayPeriod;
   employees: AdminEmployeeTimecard[];
-  job_attribution_readiness: "PARTIAL";
+  job_attribution_readiness: "AVAILABLE";
   limitations: string[];
 }
 
@@ -170,8 +214,10 @@ export async function getOwnTimecard(): Promise<Timecard> {
   return (await apiClient.get<Timecard>("/api/v1/timekeeping/me/timecard")).data;
 }
 
-export async function recordOwnPunch(action: PunchAction): Promise<PunchResult> {
-  const idempotencyKey = crypto.randomUUID();
+export async function recordOwnPunch(
+  action: PunchAction,
+  idempotencyKey = crypto.randomUUID(),
+): Promise<PunchResult> {
   return (
     await apiClient.post<PunchResult>(
       "/api/v1/timekeeping/me/punches",
@@ -185,6 +231,25 @@ export async function getAdminTimecardReview(): Promise<AdminTimecardReview> {
   return (
     await apiClient.get<AdminTimecardReview>(
       "/api/v1/timekeeping/admin/timecard-review",
+    )
+  ).data;
+}
+
+export async function getOwnActiveJobClock(): Promise<ActiveJobClock> {
+  return (await apiClient.get<ActiveJobClock>("/api/v1/timekeeping/me/job-clock")).data;
+}
+
+export async function recordOwnJobClock(
+  action: JobClockAction,
+  jobId: string,
+  appointmentId: string | null,
+  idempotencyKey: string,
+): Promise<JobClockResult> {
+  return (
+    await apiClient.post<JobClockResult>(
+      "/api/v1/timekeeping/me/job-clock",
+      { action, job_id: jobId, appointment_id: appointmentId },
+      { headers: { "Idempotency-Key": idempotencyKey } },
     )
   ).data;
 }
