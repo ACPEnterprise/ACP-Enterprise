@@ -50,6 +50,7 @@ _CALLBACK_URI = (
     "https://preview.allcountyhomeservices.com/api/v1/integrations/qbo/oauth/callback"
 )
 PRODUCTION_AUTHORIZE_PATH = "/api/v1/integrations/qbo/production/oauth/authorize"
+PRODUCTION_CONNECTION_PATH = "/api/v1/integrations/qbo/production/connection"
 PRODUCTION_CALLBACK_PATH = "/api/v1/integrations/qbo/production/oauth/callback"
 ACCOUNTING_EVIDENCE_PATH = "/api/v1/accounting/source-evidence/qbo"
 _PRODUCTION_CALLBACK_URI = (
@@ -127,6 +128,36 @@ def _production_response(status_code: int, result: str) -> JSONResponse:
         status_code=status_code,
         content={"status": "qbo_production_oauth_callback", "result": result},
         headers=_SAFE_HEADERS,
+    )
+
+
+@router.get(PRODUCTION_CONNECTION_PATH, name="qbo-production-connection-evidence")
+async def qbo_production_connection_evidence(
+    authorization: _Administer,
+) -> JSONResponse:
+    """Expose safe production authority/readability evidence; never query QBO."""
+    del authorization
+    try:
+        evidence = await get_production_oauth_runtime().connection_evidence()
+    except (SandboxRuntimeError, SandboxSecretStoreError, OSError, ValueError):
+        evidence = {
+            "connection_state": "unavailable",
+            "provider_environment": "production",
+            "company_identity_sha256": None,
+            "company_info_verified_at": None,
+            "company_info_readability": "unverified",
+            "credential_state": "unverified",
+            "token_realm_binding": "unverified",
+            "refresh_authority": "unverified",
+            "acquisition_eligible": False,
+        }
+    return JSONResponse(
+        content={
+            "status": "qbo_production_connection",
+            **evidence,
+            "mutation_authority": "none",
+        },
+        headers={"Cache-Control": "private, no-store"},
     )
 
 

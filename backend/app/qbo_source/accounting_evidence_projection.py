@@ -7,6 +7,12 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Literal
 
+from .bounded_evidence import (
+    BoundedEvidenceError,
+    latest_bounded_evidence,
+    load_bounded_raw_rows,
+)
+
 Basis = Literal["cash", "accrual"]
 _MAX_ROWS_PER_FAMILY = 2000
 
@@ -66,17 +72,25 @@ def project_latest_qbo_workspace(
         return unavailable_qbo_workspace(
             basis=basis, limitation="production_qbo_evidence_unavailable"
         )
-    run = _latest_sealed_run(root)
+    try:
+        run = latest_bounded_evidence(root)
+    except BoundedEvidenceError as error:
+        raise QboEvidenceProjectionError(str(error)) from error
     if run is None:
         return unavailable_qbo_workspace(
             basis=basis, limitation="sealed_production_snapshot_unavailable"
         )
-    manifest_path, manifest = run
+    manifest_path, manifest = run.manifest_path, run.manifest
     snapshot = manifest.get("snapshot")
     if not isinstance(snapshot, Mapping) or snapshot.get("environment") != "production":
         raise QboEvidenceProjectionError("non_production_snapshot_rejected")
     state = str(manifest.get("state"))
-    rows, truncated = _load_rows(root, manifest)
+    try:
+        rows, truncated = load_bounded_raw_rows(
+            run, maximum_per_family=_MAX_ROWS_PER_FAMILY
+        )
+    except BoundedEvidenceError as error:
+        raise QboEvidenceProjectionError(str(error)) from error
     authorization_marker = _verify_current_authorization(
         runtime_root=runtime_root,
         manifest=manifest,
@@ -106,6 +120,11 @@ def project_latest_qbo_workspace(
     catalog_dispositions = _catalog_dispositions(
         manifest.get("catalog_dispositions", [])
     )
+    reports, incompatible_report_date = _report_controls(
+        root, basis, as_of=_text(snapshot.get("accounting_date_cutoff"))
+    )
+    if incompatible_report_date:
+        limitations.add("incompatible_report_date_excluded")
     return {
         "contract_version": "qbo-accounting-evidence/v1",
         "source": "quickbooks_online",
@@ -160,7 +179,7 @@ def project_latest_qbo_workspace(
         "payments": payments,
         "vendors": vendors,
         "bills": bills,
-        "reports": _report_controls(root, basis),
+        "reports": reports,
         "mutation_authority": "none",
     }
 
@@ -258,49 +277,6 @@ def _catalog_dispositions(value: object) -> list[dict[str, str]]:
     return sorted(result, key=lambda item: item.get("entity_kind", ""))
 
 
-def _latest_sealed_run(root: Path) -> tuple[Path, dict[str, object]] | None:
-    candidates: list[tuple[str, Path, dict[str, object]]] = []
-    for path in (root / "runs").glob("*/manifest.json"):
-        document = _read_json(path)
-        ended_at = document.get("ended_at")
-        if document.get("state") in {"complete", "partial"} and isinstance(
-            ended_at, str
-        ):
-            candidates.append((ended_at, path, document))
-    if not candidates:
-        return None
-    _, path, document = max(candidates, key=lambda item: item[0])
-    return path, document
-
-
-def _load_rows(
-    root: Path, manifest: Mapping[str, object]
-) -> tuple[dict[str, list[dict[str, object]]], bool]:
-    entities = manifest.get("entities")
-    if not isinstance(entities, list):
-        raise QboEvidenceProjectionError("manifest_entities_invalid")
-    rows: dict[str, list[dict[str, object]]] = {}
-    truncated = False
-    for entity in entities:
-        if not isinstance(entity, Mapping):
-            raise QboEvidenceProjectionError("manifest_entity_invalid")
-        kind, digest = _text(entity.get("entity_kind")), _text(entity.get("raw_sha256"))
-        if not kind or not digest or len(digest) != 64:
-            raise QboEvidenceProjectionError("manifest_entity_invalid")
-        family = rows.setdefault(kind, [])
-        if len(family) >= _MAX_ROWS_PER_FAMILY:
-            truncated = True
-            continue
-        content = (root / "blobs" / digest[:2] / digest).read_bytes()
-        if hashlib.sha256(content).hexdigest() != digest:
-            raise QboEvidenceProjectionError("source_blob_digest_conflict")
-        row = json.loads(content)
-        if not isinstance(row, dict):
-            raise QboEvidenceProjectionError("source_blob_invalid")
-        family.append(row)
-    return rows, truncated
-
-
 def _account(row: Mapping[str, object]) -> dict[str, object]:
     currency = _currency(row)
     return {
@@ -362,15 +338,20 @@ def _bill(row: Mapping[str, object]) -> dict[str, object]:
     }
 
 
-def _report_controls(root: Path, basis: Basis) -> list[dict[str, object]]:
+def _report_controls(
+    root: Path, basis: Basis, *, as_of: str | None
+) -> tuple[list[dict[str, object]], bool]:
     reports = []
+    incompatible_date = False
     for path in sorted((root / "controls").glob("*.json")):
         control = _read_json(path)
         control_basis = str(control.get("accounting_basis", "")).lower()
-        if (
-            control.get("schema_version") == "qbo-control-registration/v1"
-            and control_basis == basis
-        ):
+        if control.get("schema_version") != "qbo-control-registration/v1":
+            continue
+        if control_basis == basis and control.get("report_end_date") != as_of:
+            incompatible_date = True
+            continue
+        if control_basis == basis:
             reports.append(
                 {
                     "report_key": control.get("control_id"),
@@ -383,7 +364,7 @@ def _report_controls(root: Path, basis: Basis) -> list[dict[str, object]]:
                     "limitation": "registered_source_report_not_posted_acp_ledger",
                 }
             )
-    return reports
+    return reports, incompatible_date
 
 
 def _sum_amounts(rows: list[dict[str, object]], field: str) -> dict[str, object]:
