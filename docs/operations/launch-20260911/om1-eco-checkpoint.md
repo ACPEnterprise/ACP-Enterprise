@@ -8,6 +8,7 @@
   credentials or authorization.
 - Lane/worktree: OM1-ECO,
   `/Users/michaelbfouse/Development/ACP-Enterprise-qbo-source-projection-1`.
+- Enterprise review handoff: PR #201.
 - Protected base: `42a4f68087d76247269bd4c8388f556dd62a8b5c`.
 - Reconciled evidence contract: `60a1cb87` (content from qualified `ecfada39`).
 - Backend implementation head: `e1b29a05a39abe2192fb4ee419ca8e1c4a868d06`.
@@ -15,8 +16,9 @@
   Preview-deployed, or deployed-accepted.
 - Pairing dependency: OM2-B candidate `02cf4632` consumes
   `GET /api/v1/accounting/source-evidence/qbo?basis=cash|accrual`.
-- Qualification: 152 QBO/source-projection tests passed; focused Ruff, MyPy,
-  Python compilation, and diff checks passed.
+- Qualification: 377 combined QBO/source-projection/Economics tests and 279
+  Economics/operational-measurement tests passed at the latest relevant
+  checkpoints; focused Ruff, MyPy, Python compilation, and diff checks passed.
 - Live source state: `LIVE_QBO_AUTHORIZATION_BLOCKED`. No production QBO runtime
   configuration, protected client/token, exact-company binding, verified realm
   marker, or production evidence root was available to this session. This does
@@ -25,8 +27,8 @@
 - Runtime requirement: explicit ACP Company UUID binding, protected production
   runtime/evidence roots, exact expected CompanyInfo name, production client and
   token, verified Intuit realm, and a sealed production acquisition manifest.
-- Next action: push the successor for Enterprise/OM2-B review; when credentials
-  become available, verify CompanyInfo through the production GET-only adapter,
+- Next action: Enterprise review/integration with OM2-B; when credentials become
+  available, verify CompanyInfo through the production GET-only adapter,
   run bounded acquisition, publish manifest/completeness evidence, and verify the
   paired UI. Otherwise continue the approved Economics break-even input and
   productive-hour evidence readiness without policy values.
@@ -35,12 +37,12 @@
   keeps workforce cost partial pending actual compensation/employer-cost evidence,
   and records the mission-authorized OM1-ECO/OM2-B QBO boundary as an external
   OAuth/realm/snapshot gate rather than the superseded Migration ownership collision.
-- Evidence hardening in progress after `e2b44319`: the projection now requires
+- Evidence hardening after `e2b44319`: the projection now requires
   the protected production marker to match the snapshot realm, exact CompanyInfo
   identity/name and API minor version before describing current authorization.
   With a preserved production snapshot but no current marker it reports `stale`
   historical evidence; any contradiction fails closed.
-- Break-even successor in progress after `4af40074`: a deterministic Company
+- Break-even successor at `b930c8aa`: a deterministic Company
   input packet now composes paid, worked and productive minutes with accepted
   labor/material/direct-cost/overhead-pool/revenue-comparison evidence while
   retaining four unresolved policy gates and producing no rate, model output or
