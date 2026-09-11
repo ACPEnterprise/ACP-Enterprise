@@ -1,0 +1,50 @@
+{
+  "program": "OM2C.OVERNIGHT.INTEGRATED.OPERATOR.ACCEPTANCE.1",
+  "protected_authority": "36cae7427d65130cbba38b77e66b881ddc8c828f",
+  "execution_date": "2026-09-10",
+  "preview": {
+    "url": "https://preview.allcountyhomeservices.com",
+    "health_status": "healthy",
+    "environment": "preview",
+    "database": "connected",
+    "redis": "connected",
+    "backend_reported_version": "00e0d5f0faad31f6ff0b85cdde903857a78b70fc",
+    "reported_version_behind_protected_commits": 160,
+    "frontend_index_sha256": "249f83bb04ca137f1a4fc1cbec85483b2d61a071dcd063ec355d1e33c9baab9c",
+    "frontend_matches_current_local_build": true,
+    "unauthenticated_failure_status": 401,
+    "unauthenticated_failure_body_sha256": "939105e98aac00284684c1aaaecd5e23cf2cad658671d815360b0b4aae84c6a9",
+    "authenticated_credentials_available_to_lane": false,
+    "classification": "BLOCKED_RELEASE_IDENTITY_MISMATCH"
+  },
+  "fixture_qualification": {
+    "data_classification": "SYNTHETIC_ONLY",
+    "postgresql_schema_head": "c3e5g7i9k1m3",
+    "frontend_test_files_passed": 24,
+    "frontend_tests_passed": 98,
+    "frontend_lint": "PASS",
+    "frontend_typescript_production_build": "PASS",
+    "frontend_runtime_dependency_audit": "PASS_0_VULNERABILITIES",
+    "backend_passed": 375,
+    "backend_failed": 1,
+    "backend_failure": "tests/jobs/test_jobs_persistence.py::test_jobs_migration_objects_and_triggers_exist expected 6 Job-named triggers; current schema contains 8",
+    "backend_failure_classification": "STALE_TEST_ASSERTION",
+    "product_runtime_failures": 0
+  },
+  "transition_results": [
+    {"transition": "owner_or_csr_customer_location_job_calendar", "fixture": "PASS", "deployed_source": "BLOCKED_AUTH_AND_RELEASE_IDENTITY"},
+    {"transition": "month_view_navigation", "fixture": "PASS", "deployed_source": "BLOCKED_AUTH_AND_RELEASE_IDENTITY"},
+    {"transition": "employee_identity_activation", "fixture": "PASS", "deployed_source": "BLOCKED_AUTH_AND_RELEASE_IDENTITY"},
+    {"transition": "job_clocks", "fixture": "BLOCKED_ACTIVE_OWNING_LANE", "deployed_source": "BLOCKED_NOT_IN_PROTECTED_AUTHORITY"},
+    {"transition": "office_timecards", "fixture": "PASS", "deployed_source": "BLOCKED_AUTH_AND_RELEASE_IDENTITY"},
+    {"transition": "qbo_evidence_presentation", "fixture": "PASS_PARTIAL_SOURCE_TRUTH", "deployed_source": "BLOCKED_AUTH_AND_RELEASE_IDENTITY"}
+  ],
+  "mutation": {
+    "preview": false,
+    "production": false,
+    "customer": false,
+    "employee": false,
+    "time_punch": false,
+    "qbo": false
+  }
+}
