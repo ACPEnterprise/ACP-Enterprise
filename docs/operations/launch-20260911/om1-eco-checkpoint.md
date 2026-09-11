@@ -49,6 +49,12 @@
   recommendation. The underlying Company paid-time aggregation was corrected to
   use Employee paid evidence rather than Job overlap, so unassigned paid time is
   no longer silently omitted or assigned to a Job.
+- OM2-B integration support after `d6b87706`: the HTTP contract now exposes
+  current provider-authorization state separately from historical snapshot mode,
+  plus manifest completeness, per-family entity/page counts, provider catalog
+  dispositions and conflicts. OM2-B must not render its unconditional
+  “Verified real-company” heading when `provider_authorization=unverified` or
+  `evidence_mode=historical_snapshot`.
 - Boundaries: no QBO writes, Accounting posting, money movement, Customer-master
   creation, HCP/QBO auto-merge, autonomous Luminary action, Preview mutation, or
   Production action.

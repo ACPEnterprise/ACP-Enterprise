@@ -26,6 +26,13 @@ def unavailable_qbo_workspace(*, basis: Basis, limitation: str) -> dict[str, obj
         "as_of": None,
         "acquired_at": None,
         "refresh_state": "unavailable",
+        "provider_authorization": "unverified",
+        "evidence_mode": "unavailable",
+        "completeness": "unavailable",
+        "entity_counts": {},
+        "page_counts": {},
+        "catalog_dispositions": [],
+        "conflicts": [],
         "snapshot_id": None,
         "snapshot_digest": None,
         "is_live": False,
@@ -89,6 +96,11 @@ def project_latest_qbo_workspace(
     bills = [_bill(row) for row in rows.get("bill", [])]
     company_rows = rows.get("company_info", [])
     company = company_rows[0] if company_rows else {}
+    entity_counts = _nonnegative_counts(manifest.get("entity_counts", {}))
+    page_counts = _page_counts(manifest.get("pages", []))
+    catalog_dispositions = _catalog_dispositions(
+        manifest.get("catalog_dispositions", [])
+    )
     return {
         "contract_version": "qbo-accounting-source-evidence/v1",
         "source": "quickbooks_online",
@@ -105,6 +117,19 @@ def project_latest_qbo_workspace(
             if state == "partial" and current_authorization
             else "stale"
         ),
+        "provider_authorization": (
+            "verified_current" if current_authorization else "unverified"
+        ),
+        "evidence_mode": (
+            "current_authorized_snapshot"
+            if current_authorization
+            else "historical_snapshot"
+        ),
+        "completeness": state,
+        "entity_counts": entity_counts,
+        "page_counts": page_counts,
+        "catalog_dispositions": catalog_dispositions,
+        "conflicts": [],
         "snapshot_id": snapshot.get("snapshot_id"),
         "snapshot_digest": hashlib.sha256(manifest_path.read_bytes()).hexdigest(),
         "is_live": False,
@@ -157,6 +182,48 @@ def _verify_current_authorization(
     ):
         raise QboEvidenceProjectionError("production_authorization_conflict")
     return True
+
+
+def _nonnegative_counts(value: object) -> dict[str, int]:
+    if not isinstance(value, Mapping):
+        raise QboEvidenceProjectionError("manifest_entity_counts_invalid")
+    counts = {str(kind): int(str(count)) for kind, count in value.items()}
+    if any(count < 0 for count in counts.values()):
+        raise QboEvidenceProjectionError("manifest_entity_counts_invalid")
+    return dict(sorted(counts.items()))
+
+
+def _page_counts(value: object) -> dict[str, int]:
+    if not isinstance(value, list):
+        raise QboEvidenceProjectionError("manifest_pages_invalid")
+    counts: dict[str, int] = {}
+    for page in value:
+        if not isinstance(page, Mapping):
+            raise QboEvidenceProjectionError("manifest_page_invalid")
+        kind = _text(page.get("entity_kind"))
+        if not kind:
+            raise QboEvidenceProjectionError("manifest_page_invalid")
+        counts[kind] = counts.get(kind, 0) + 1
+    return dict(sorted(counts.items()))
+
+
+def _catalog_dispositions(value: object) -> list[dict[str, str]]:
+    if not isinstance(value, list):
+        raise QboEvidenceProjectionError("manifest_catalog_invalid")
+    keys = (
+        "entity_kind",
+        "requirement",
+        "disposition",
+        "provider_status_classification",
+        "error_classification",
+        "observed_at",
+    )
+    result = []
+    for item in value:
+        if not isinstance(item, Mapping):
+            raise QboEvidenceProjectionError("manifest_catalog_invalid")
+        result.append({key: str(item[key]) for key in keys if key in item})
+    return sorted(result, key=lambda item: item.get("entity_kind", ""))
 
 
 def _latest_sealed_run(root: Path) -> tuple[Path, dict[str, object]] | None:

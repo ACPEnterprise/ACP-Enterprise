@@ -105,6 +105,26 @@ def _evidence_root(tmp_path: Path) -> tuple[Path, Path]:
             },
             "company_name": "All County Example",
             "entities": entities,
+            "entity_counts": {
+                "account": 1,
+                "bill": 1,
+                "company_info": 1,
+                "invoice": 1,
+                "payment": 1,
+                "vendor": 1,
+            },
+            "pages": [
+                {"entity_kind": "account", "page": 1},
+                {"entity_kind": "invoice", "page": 1},
+                {"entity_kind": "payment", "page": 1},
+            ],
+            "catalog_dispositions": [
+                {
+                    "entity_kind": "time_activity",
+                    "requirement": "OPTIONAL_PROVIDER_DEPENDENT",
+                    "disposition": "PROVIDER_FAMILY_UNAVAILABLE",
+                }
+            ],
         },
     )
     _write_json(
@@ -142,6 +162,12 @@ def test_projection_matches_om2b_contract_without_promoting_accounting_truth(
     assert result["source_company_label"] == "All County Example"
     assert result["source_company_id_masked"] == "…3456"
     assert result["refresh_state"] == "available"
+    assert result["provider_authorization"] == "verified_current"
+    assert result["evidence_mode"] == "current_authorized_snapshot"
+    assert result["completeness"] == "complete"
+    assert result["entity_counts"]["invoice"] == 1
+    assert result["page_counts"]["invoice"] == 1
+    assert result["catalog_dispositions"][0]["entity_kind"] == "time_activity"
     assert result["is_live"] is False
     assert result["mutation_authority"] == "none"
     assert result["accounts"][0]["balance"]["amount"] == "10.00"
@@ -184,6 +210,8 @@ def test_preserved_snapshot_is_stale_not_live_when_current_oauth_is_absent(
     root, _ = _evidence_root(tmp_path)
     result = project_latest_qbo_workspace(evidence_root=root, basis="cash")
     assert result["refresh_state"] == "stale"
+    assert result["provider_authorization"] == "unverified"
+    assert result["evidence_mode"] == "historical_snapshot"
     assert (
         "current_provider_authorization_unverified_historical_snapshot"
         in result["limitations"]
