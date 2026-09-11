@@ -5,33 +5,34 @@ Updated: 2026-09-11 02:00 UTC
 - Mission commit: `0c08f1e3634f38a7fb82970932dea5de7a4cf24f`
 - Mission file SHA-256: `03b74b5f065694b487268bdee531d8d50620f2816f30c91d8b665f9d5b3e9dfc`
 - Implementation base: `42a4f68087d76247269bd4c8388f556dd62a8b5c`
-- Candidate: `fcaecf35ed488464713e4a0e471c5853e70b7845`
+- Candidate: `56e38fcc6d321e4f92daa311b70cd82a0ebef352`
 - Pull request: #198
 
 ## Current Preview classification
 
 The current fail-closed dry-run inspected the single actual restored Preview legacy
-scope in a read-only transaction. It balanced all 4,970 known projections:
+scope in a read-only transaction. It balanced all 4,970 known identity projections
+plus all 1,540 native Locations owned by that Customer population:
 
 | Domain | Exact successor | Ambiguous hold | Conflict |
 | --- | ---: | ---: | ---: |
 | Customer | 1,806 | 263 | 0 |
 | Contact | 1,800 | 19 | 0 |
+| Service Location | 1,515 | 25 | 0 |
 | Job | 0 | 305 | 0 |
 | Appointment | 0 | 266 | 0 |
 | Invoice | 0 | 253 | 0 |
 | Payment | 0 | 258 | 0 |
-| **Total** | **3,606** | **1,364** | **0** |
+| **Total** | **5,121** | **1,389** | **0** |
 
 Canonical report digest:
-`6c680a0df23b4d761ed3771225554a452d43aab48906d9b6225f48601984e9d8`.
-Canonical admission is false. No admission packet may be executed while the 1,364
-holds remain. A separate graph analysis found 1,533 exact Customer-bounded Location
-fingerprints, but those results are not promoted into the manifest until the complete
-Location/native-truth population is represented by the runner.
+`ddf33badaa56e18948718946d52ca30203935c971396e34d86db9b49811f3be7`.
+Canonical admission is false. No admission packet may be executed while the 1,389
+holds remain. Customer-bounded Location fingerprints are now part of the record-level
+manifest rather than separate advisory evidence.
 
 The replay packet with digest
-`0367433ce36e9cce70a7b0317b60a259437b5bc5fa0db121c686f47c872060fc`
+`9c6980d9ce1d0b868b25e8f97db8c059e4071b017c465797c5a487d6db5f1c3d`
 is retained on the Preview host as protected operator evidence. It names Enterprise
 as execution owner and records `canonical_admission_allowed=false`.
 
