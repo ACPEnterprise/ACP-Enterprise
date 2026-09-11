@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
+
 from app.operational_migration.hcp_legacy_projection_classification import (
     LegacyProjectionDisposition,
     LegacyProjectionRecord,
