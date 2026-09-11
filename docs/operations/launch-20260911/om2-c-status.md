@@ -8,7 +8,7 @@ Updated: 2026-09-10 America/New_York
 - Mission commit: `0c08f1e3634f38a7fb82970932dea5de7a4cf24f`
 - Mission file SHA-256: `03b74b5f065694b487268bdee531d8d50620f2816f30c91d8b665f9d5b3e9dfc`
 - Starting protected base: `42a4f68087d76247269bd4c8388f556dd62a8b5c`
-- Current protected base: `d7222d0fb8b9419a7df4c8331dc6d2c7d162724d`
+- Current protected base: `0b74c7654fde500529da824bdce604e01575cec1`
 - Isolated branch: `work/om2c-launch-20260911-e2e-acceptance-1`
 - Mission activation evidence: mission commit at 2026-09-10 21:36:32 -0400.
 - Mission authorization expiry: 2026-09-13 21:36:32 -0400, unless earlier
@@ -58,6 +58,9 @@ Current-authority qualification on fresh PostgreSQL databases:
   `bindings` parameter is annotated as `tuple[object, ...]` while the implementation
   reads binding attributes. This is routed to **OM1 Migration** and is not repaired in
   OM2-C.
+- After office Timecard integration at `0b74c76`, the affected Payroll, Workforce and
+  Timecard-navigation checks passed 3 frontend files / 8 tests; frontend ESLint,
+  TypeScript and production build passed.
 
 These are **synthetic fixture and isolated-database results**, not deployed or real-
 source acceptance.
@@ -68,12 +71,12 @@ Preview URL: `https://preview.allcountyhomeservices.com`.
 
 - `/backend-health` is healthy and reports Preview PostgreSQL and Redis connected.
 - The backend reports release `00e0d5f0faad31f6ff0b85cdde903857a78b70fc`, not
-  current protected authority `d7222d0fb8b9419a7df4c8331dc6d2c7d162724d`.
+  current protected authority `0b74c7654fde500529da824bdce604e01575cec1`.
 - Preview index SHA-256 is now
-  `91b425a67105bafaa4d8817e13d786160d3f1c812bbcc0ba6e646a67d56ce425`.
+  `cdd6bed341a63b5f8ed853a71d73f0a1f219c44a8ca95aca2c17cf40c289dd85`.
 - Current protected frontend build index SHA-256 is now
-  `91b425a67105bafaa4d8817e13d786160d3f1c812bbcc0ba6e646a67d56ce425`.
-- The deployed index exactly matches the qualified `9b7dd10` production build. This
+  `cdd6bed341a63b5f8ed853a71d73f0a1f219c44a8ca95aca2c17cf40c289dd85`.
+- The deployed index exactly matches the qualified `0b74c76` production build. This
   proves current static artifact deployment, not rendering, session authorization, or
   operator acceptance.
 - `GET /api/v1/timekeeping/me/job-clock` initially returned `404`, then advanced to
@@ -98,7 +101,7 @@ Preview URL: `https://preview.allcountyhomeservices.com`.
 
 Exact failed transition:
 
-`protected d7222d0 release → coherent backend release attestation → authenticated
+`protected 0b74c76 release → coherent backend release attestation → authenticated
 operator journey`
 
 The frontend and route-presence checkpoints advanced, but the backend release identity

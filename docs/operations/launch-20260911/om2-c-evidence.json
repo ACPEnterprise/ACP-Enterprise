@@ -5,7 +5,7 @@
     "file_sha256": "03b74b5f065694b487268bdee531d8d50620f2816f30c91d8b665f9d5b3e9dfc"
   },
   "starting_protected_authority": "42a4f68087d76247269bd4c8388f556dd62a8b5c",
-  "protected_authority": "d7222d0fb8b9419a7df4c8331dc6d2c7d162724d",
+  "protected_authority": "0b74c7654fde500529da824bdce604e01575cec1",
   "schema_head": "d4f6h8j0l2n4",
   "fixture_qualification": {
     "classification": "QUALIFIED_SYNTHETIC_ONLY",
@@ -52,19 +52,25 @@
     "mypy": "FAIL_15_ATTR_DEFINED_MIGRATION_BINDING_TYPE",
     "defect_owner": "OM1_MIGRATION"
   },
+  "office_timecard_ui_qualification": {
+    "frontend_files_passed": 3,
+    "frontend_tests_passed": 8,
+    "eslint": "PASS",
+    "typescript_production_build": "PASS"
+  },
   "preview": {
     "health": "HEALTHY",
     "database": "CONNECTED",
     "redis": "CONNECTED",
     "reported_backend_release": "00e0d5f0faad31f6ff0b85cdde903857a78b70fc",
-    "frontend_index_sha256": "91b425a67105bafaa4d8817e13d786160d3f1c812bbcc0ba6e646a67d56ce425",
-    "qualified_frontend_index_sha256": "91b425a67105bafaa4d8817e13d786160d3f1c812bbcc0ba6e646a67d56ce425",
+    "frontend_index_sha256": "cdd6bed341a63b5f8ed853a71d73f0a1f219c44a8ca95aca2c17cf40c289dd85",
+    "qualified_frontend_index_sha256": "cdd6bed341a63b5f8ed853a71d73f0a1f219c44a8ca95aca2c17cf40c289dd85",
     "qualified_route_assets_match": {
       "customers": true,
       "scheduling_month_dispatch": true,
       "workday": true,
       "payroll": true,
-      "classification": "CURRENT_9B7DD10_INDEX_MATCH"
+      "classification": "CURRENT_0B74C76_INDEX_MATCH"
     },
     "job_clock_route_status": 401,
     "registered_timecard_payroll_route_status": 401,
