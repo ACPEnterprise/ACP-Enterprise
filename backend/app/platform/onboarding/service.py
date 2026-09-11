@@ -291,7 +291,9 @@ class IdentityOnboardingService:
             envelope_runtime="delivery_runtime_ready",
             external_provider=(
                 "configured"
-                if provider and provider != "protected-envelope-qualification"
+                if provider == "postmark"
+                and self.configuration.identity_email_postmark_token_file
+                and self.configuration.identity_email_sender
                 else "external_delivery_provider_configuration_required"
             ),
         )

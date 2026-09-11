@@ -76,6 +76,8 @@ class Settings(BaseSettings):
     identity_onboarding_delivery_key_file: str | None = None
     identity_onboarding_active_delivery_kid: str | None = None
     identity_onboarding_delivery_provider: str | None = None
+    identity_email_postmark_token_file: str | None = None
+    identity_email_sender: str | None = None
     communications_delivery_enabled: bool = False
     communications_email_provider_identity: str | None = None
     communications_email_credential_reference: str | None = None
@@ -178,6 +180,18 @@ class Settings(BaseSettings):
                 raise ValueError(
                     "Real Communications delivery is restricted to admitted environments"
                 )
+        if self.identity_onboarding_delivery_provider == "postmark":
+            if self.environment != "preview":
+                raise ValueError("Postmark identity delivery is admitted for Preview only")
+            if not self.identity_email_postmark_token_file or not Path(
+                self.identity_email_postmark_token_file
+            ).is_absolute():
+                raise ValueError("Postmark identity delivery requires a secret file")
+            if (
+                self.identity_email_sender
+                != "ACP Employee <no-reply@allcountyhomeservices.com>"
+            ):
+                raise ValueError("Postmark identity sender is not owner-approved")
         if self.qbo_sandbox_enabled:
             expected_callback = (
                 "https://preview.allcountyhomeservices.com"
