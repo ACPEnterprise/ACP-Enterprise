@@ -4,8 +4,8 @@ Updated: 2026-09-11 02:00 UTC
 
 - Mission commit: `0c08f1e3634f38a7fb82970932dea5de7a4cf24f`
 - Mission file SHA-256: `03b74b5f065694b487268bdee531d8d50620f2816f30c91d8b665f9d5b3e9dfc`
-- Implementation base: `42a4f68087d76247269bd4c8388f556dd62a8b5c`
-- Candidate: `56e38fcc6d321e4f92daa311b70cd82a0ebef352`
+- Current protected authority: `9b7dd10bb85d36d5ceaeb1064248d5c36ea26942`
+- Rebased functional candidate: `2e56690217f8c89178f51d205eeb19749bbcee89`
 - Pull request: #198
 
 ## Current Preview classification
@@ -47,10 +47,26 @@ added Employee. The 48 added Jobs include 11 scheduled, 2 needs-scheduling, 2 in
 progress, 31 completed, and 2 provider-cancelled records. SOURCE.4 is therefore not a
 current-through-September-11 population and must not be presented as one.
 
+The bounded per-Job GET refresh then inspected all 310 added or changed Jobs. Its
+immutable manifest digest is
+`2ca72931b3986c31eba9341bc06cc48477bdf511f5436ce5033b4ec7c8559f46`.
+It accounts for 268 successful appointment relationship responses and 42 explicit
+provider HTTP 400 holds; no response was silently discarded. The successful reads
+returned 360 Appointments, including three dated September 11 and seven later
+Appointments through September 18. Arrival windows are 354 at 120 minutes, three at
+240 minutes, one at 60 minutes, and two at zero minutes. Technician disposition is
+172 fully mapped, 187 with at least one identifier absent from the current eight-
+employee authority, and one unassigned. The corrected calendar addendum derives its
+dates from provider `start_time` because provider `start_date` is null in this response
+set; its digest is
+`f578b25ba3792218f729ce880a27be31ab8c4200edd451be040b1ad31a5a06b7`.
+
 ## Next action and gates
 
-Enterprise may integrate the runner but must not execute Preview admission. OM1
-Migration next owns complete Location classification and any mechanically supported
-operational graph correlations. Post-admission Customer/Location/Job/Appointment and
-calendar-lane verification remains pending because SOURCE.4 is not admitted. No
-Production, HCP mutation, destructive replacement, or financial posting occurred.
+Enterprise may integrate the runner but must not execute Preview admission. Complete
+Location classification is present in PR #198. Operational graph analysis found no
+mechanically sufficient Job match beyond the already reported Customer/Location
+parents, so the 305 Job holds and their dependent records remain intact. Post-admission
+Customer/Location/Job/Appointment and calendar-lane verification remains pending
+because SOURCE.4 is not admitted. No Production, HCP mutation, destructive
+replacement, or financial posting occurred.
