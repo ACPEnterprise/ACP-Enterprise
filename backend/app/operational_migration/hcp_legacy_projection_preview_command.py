@@ -12,14 +12,17 @@ import asyncio
 import hashlib
 import json
 import os
+import re
 import stat
 import tempfile
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from uuid import UUID
 
-from sqlalchemy import text
+from sqlalchemy import select, text
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.customers.models import Customer, CustomerContact, ServiceLocation
 from app.database.session import AsyncSessionFactory
 from app.operational_migration.hcp_legacy_projection_classification import (
     LegacyProjectionDisposition,
@@ -58,6 +61,184 @@ CLASSIFIED_DOMAINS = frozenset(
         "payment",
     }
 )
+
+
+def _normalized(value: object) -> str | None:
+    result = re.sub(r"[^a-z0-9]+", "", str(value or "").lower())
+    return result or None
+
+
+def _phone(value: object) -> str | None:
+    result = re.sub(r"\D", "", str(value or ""))
+    return result[-10:] if len(result) >= 10 else (result or None)
+
+
+def _fingerprint(kind: str, value: object) -> str | None:
+    normalized = _normalized(value)
+    return (
+        hashlib.sha256(f"{kind}:{normalized}".encode()).hexdigest()
+        if normalized
+        else None
+    )
+
+
+def _address_fingerprint(value: object) -> str | None:
+    keys = ("address", "address_line_2", "city", "state", "postal_code")
+    if isinstance(value, dict):
+        parts = [value.get(key) for key in keys]
+    else:
+        parts = [getattr(value, key) for key in keys]
+    return _fingerprint("address", "|".join(str(item or "") for item in parts))
+
+
+async def customer_correlation_evidence(
+    session: AsyncSession,
+    *,
+    plan: object,
+    bindings: tuple[object, ...],
+) -> tuple[
+    tuple[ProjectionCorrelationEvidence, ...],
+    tuple[ProjectionCorrelationEvidence, ...],
+]:
+    """Build private Customer/contact evidence from exact normalized fields."""
+
+    sealed: list[ProjectionCorrelationEvidence] = []
+    aggregates = plan.customers.reviewed.aggregates  # type: ignore[attr-defined]
+    for aggregate in aggregates:
+        customer = json.loads(aggregate.customer_json)
+        contact = json.loads(aggregate.contact_json) if aggregate.contact_json else None
+        fingerprints = [
+            _fingerprint("customer_name", customer.get("display_name")),
+            _fingerprint("email", contact.get("email") if contact else None),
+            _fingerprint(
+                "mobile", _phone(contact.get("mobile_phone")) if contact else None
+            ),
+            _fingerprint(
+                "office", _phone(contact.get("office_phone")) if contact else None
+            ),
+            *(
+                _address_fingerprint(json.loads(location))
+                for location in aggregate.service_location_json
+            ),
+        ]
+        sealed.append(
+            ProjectionCorrelationEvidence(
+                "customer",
+                aggregate.source_identity,
+                None,
+                tuple(sorted({item for item in fingerprints if item})),
+            )
+        )
+        if contact:
+            contact_name = _fingerprint(
+                "contact_name",
+                f"{contact.get('first_name')}|{contact.get('last_name')}",
+            )
+            sealed.append(
+                ProjectionCorrelationEvidence(
+                    "contact",
+                    aggregate.source_identity,
+                    None,
+                    (contact_name,) if contact_name else (),
+                    (("customer", aggregate.source_identity),),
+                )
+            )
+
+    customer_bindings = [
+        item
+        for item in bindings
+        if item.source_system == LEGACY_SOURCE_SYSTEM and item.domain == "customer"
+    ]
+    customer_ids = [UUID(item.target_id) for item in customer_bindings]
+    customers = {
+        item.id: item
+        for item in (
+            await session.scalars(select(Customer).where(Customer.id.in_(customer_ids)))
+        ).all()
+    }
+    contacts = {
+        item.customer_id: item
+        for item in (
+            await session.scalars(
+                select(CustomerContact).where(
+                    CustomerContact.customer_id.in_(customer_ids),
+                    CustomerContact.is_preferred.is_(True),
+                    CustomerContact.archived_at.is_(None),
+                )
+            )
+        ).all()
+    }
+    locations: dict[UUID, list[ServiceLocation]] = {}
+    for item in (
+        await session.scalars(
+            select(ServiceLocation).where(
+                ServiceLocation.customer_id.in_(customer_ids),
+                ServiceLocation.archived_at.is_(None),
+            )
+        )
+    ).all():
+        locations.setdefault(item.customer_id, []).append(item)
+
+    customer_legacy: list[ProjectionCorrelationEvidence] = []
+    for binding in customer_bindings:
+        customer = customers[UUID(binding.target_id)]
+        contact = contacts.get(customer.id)
+        fingerprints = [
+            _fingerprint("customer_name", customer.display_name),
+            _fingerprint("email", contact.email if contact else None),
+            _fingerprint("mobile", _phone(contact.mobile_phone) if contact else None),
+            _fingerprint("office", _phone(contact.office_phone) if contact else None),
+            *(
+                _address_fingerprint(location)
+                for location in locations.get(customer.id, [])
+            ),
+        ]
+        evidence = ProjectionCorrelationEvidence(
+            "customer",
+            binding.source_id,
+            binding.target_id,
+            tuple(sorted({item for item in fingerprints if item})),
+        )
+        customer_legacy.append(evidence)
+
+    customer_result = classify_correlated_legacy(
+        legacy=customer_legacy,
+        sealed=(item for item in sealed if item.domain == "customer"),
+    )
+    exact_parent = {
+        item.target_id: item.successor_source_id
+        for item in customer_result.records
+        if item.disposition == LegacyProjectionDisposition.EXACT_SUCCESSOR
+    }
+    contact_bindings = [
+        item
+        for item in bindings
+        if item.source_system == LEGACY_SOURCE_SYSTEM and item.domain == "contact"
+    ]
+    contact_legacy: list[ProjectionCorrelationEvidence] = []
+    for binding in contact_bindings:
+        contact = next(
+            (item for item in contacts.values() if str(item.id) == binding.target_id),
+            None,
+        )
+        parent = exact_parent.get(
+            str(contact.customer_id) if contact is not None else None
+        )
+        contact_name = (
+            _fingerprint("contact_name", f"{contact.first_name}|{contact.last_name}")
+            if contact is not None and parent is not None
+            else None
+        )
+        contact_legacy.append(
+            ProjectionCorrelationEvidence(
+                "contact",
+                binding.source_id,
+                binding.target_id,
+                (contact_name,) if contact_name else (),
+                (("customer", parent),) if parent else (),
+            )
+        )
+    return tuple(customer_legacy + contact_legacy), tuple(sealed)
 
 
 def _digest(value: object) -> str:
@@ -197,22 +378,28 @@ async def run(authority: PreviewClassificationAuthority) -> dict[str, object]:
         actor_id=source.actor_id,
     )
     sealed = sealed_identities(plan)
-    sealed_evidence = tuple(
-        ProjectionCorrelationEvidence(item.domain, item.source_id, None)
-        for item in sealed
-        if item.domain in CLASSIFIED_DOMAINS
-    )
     async with AsyncSessionFactory() as session:
         await session.execute(text("SET TRANSACTION READ ONLY"))
         bindings = await load_preview_bindings(
             session, company_id=source.company_id, branch_id=source.branch_id
         )
+        customer_legacy, customer_sealed = await customer_correlation_evidence(
+            session, plan=plan, bindings=bindings
+        )
         await session.rollback()
-    legacy_evidence = tuple(
+    remaining_legacy = tuple(
         ProjectionCorrelationEvidence(item.domain, item.source_id, item.target_id)
         for item in bindings
         if item.source_system == LEGACY_SOURCE_SYSTEM
         and item.domain in CLASSIFIED_DOMAINS
+        and item.domain not in {"customer", "contact"}
+    )
+    legacy_evidence = customer_legacy + remaining_legacy
+    sealed_evidence = customer_sealed + tuple(
+        ProjectionCorrelationEvidence(item.domain, item.source_id, None)
+        for item in sealed
+        if item.domain in CLASSIFIED_DOMAINS
+        and item.domain not in {"customer", "contact"}
     )
     if (
         authority.expected_legacy_projection_count <= 0
