@@ -85,6 +85,7 @@ class JobWorkedInterval:
     appointment_id: UUID | None
     start_at: datetime
     stop_at: datetime
+    duration_seconds: int
     duration_minutes: int
     source: WorkedIntervalSource
     correction_state: CorrectionState
@@ -138,6 +139,8 @@ def derive_job_worked_intervals(
             event.branch_id,
         ):
             raise JobParticipationError("Job clock stop scope does not match start")
+        if event.source is not start.source:
+            raise JobParticipationError("Job clock stop source does not match start")
         if event.occurred_at <= start.occurred_at:
             raise JobParticipationError("Job clock stop must follow start")
         interval_id = uuid5(
@@ -190,7 +193,8 @@ def correct_job_worked_interval(
     revision_number = current.revision_number + 1
     revision_id = uuid5(
         INTERVAL_NAMESPACE,
-        f"{current.interval_id}:{revision_number}:{corrected_by_user_id}",
+        f"{current.interval_id}:{revision_number}:{corrected_by_user_id}:"
+        f"{start_at.isoformat()}:{stop_at.isoformat()}:{reason.strip()}",
     )
     corrected = _seal_interval(
         interval_id=current.interval_id,
@@ -422,7 +426,10 @@ def _seal_interval(**values: object) -> JobWorkedInterval:
     start_at = values["start_at"]
     stop_at = values["stop_at"]
     assert isinstance(start_at, datetime) and isinstance(stop_at, datetime)
-    duration = _minutes(start_at, stop_at)
+    duration_seconds = int((stop_at - start_at).total_seconds())
+    if duration_seconds <= 0:
+        raise JobParticipationError("Job worked interval duration must be positive")
+    duration = duration_seconds // 60
     canonical = {
         "contract": INTERVAL_CONTRACT_VERSION,
         **{
@@ -440,9 +447,11 @@ def _seal_interval(**values: object) -> JobWorkedInterval:
             for key, value in values.items()
         },
         "duration_minutes": duration,
+        "duration_seconds": duration_seconds,
     }
     return JobWorkedInterval(
         **values,  # type: ignore[arg-type]
+        duration_seconds=duration_seconds,
         duration_minutes=duration,
         evidence_digest=hashlib.sha256(
             json.dumps(canonical, sort_keys=True, separators=(",", ":")).encode()

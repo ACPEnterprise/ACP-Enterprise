@@ -7,6 +7,13 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .contracts import PunchKind, TimeCorrectionKind
+from .job_participation import (
+    CorrectionState,
+    IntervalConfidence,
+    IntervalValidity,
+    JobClockKind,
+    WorkedIntervalSource,
+)
 
 
 class PunchInput(BaseModel):
@@ -14,6 +21,70 @@ class PunchInput(BaseModel):
 
     action: PunchKind
     device_reference: str | None = Field(default=None, max_length=200)
+
+
+class JobClockInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    action: JobClockKind
+    job_id: UUID
+    appointment_id: UUID | None = None
+
+
+class JobWorkedIntervalView(BaseModel):
+    interval_id: UUID
+    revision_id: UUID
+    revision_number: int
+    employee_id: UUID
+    job_id: UUID
+    appointment_id: UUID | None
+    start_at: datetime
+    stop_at: datetime
+    duration_seconds: int
+    source: WorkedIntervalSource
+    correction_state: CorrectionState
+    supersedes_revision_id: UUID | None
+    audit_lineage: tuple[UUID, ...]
+    source_event_ids: tuple[UUID, ...]
+    validity: IntervalValidity
+    confidence: IntervalConfidence
+    evidence_digest: str
+    correction_reason: str | None
+
+
+class ActiveJobClockView(BaseModel):
+    active: bool
+    event_id: UUID | None = None
+    employee_id: UUID
+    job_id: UUID | None = None
+    appointment_id: UUID | None = None
+    started_at: datetime | None = None
+    server_observed_at: datetime
+    elapsed_seconds: int | None = None
+
+
+class JobClockResult(BaseModel):
+    event_id: UUID
+    action: JobClockKind
+    occurred_at: datetime
+    state: ActiveJobClockView
+    completed_interval: JobWorkedIntervalView | None
+
+
+class JobWorkedIntervalCorrectionInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    start_at: datetime
+    stop_at: datetime
+    reason: str = Field(min_length=1, max_length=2000)
+
+    @model_validator(mode="after")
+    def valid_interval(self) -> "JobWorkedIntervalCorrectionInput":
+        if self.start_at.tzinfo is None or self.stop_at.tzinfo is None:
+            raise ValueError("Job worked timestamps must be timezone-aware")
+        if self.stop_at <= self.start_at:
+            raise ValueError("stop_at must follow start_at")
+        return self
 
 
 class ManualTimeInput(BaseModel):
@@ -96,6 +167,7 @@ class TimecardView(BaseModel):
     punch_state: PunchState
     pay_period: PayPeriodView | None
     entries: tuple[TimeEntryView, ...]
+    job_intervals: tuple[JobWorkedIntervalView, ...] = ()
 
 
 class PunchResult(BaseModel):
@@ -177,6 +249,7 @@ class AdminEmployeeTimecard(BaseModel):
     punch_state: PunchState
     active_open_clock: bool
     missing_clock_out: bool
+    job_intervals: tuple[JobWorkedIntervalView, ...] = ()
     days: tuple[AdminTimecardDay, ...]
     total_supported_minutes: int
     accepted_minutes: int
@@ -188,5 +261,5 @@ class AdminTimecardOperations(BaseModel):
     contract_version: Literal["WORKFORCE.TIMECARD.OPERATIONS.v1"]
     pay_period: PayPeriodView
     employees: tuple[AdminEmployeeTimecard, ...]
-    job_attribution_readiness: Literal["PARTIAL"]
+    job_attribution_readiness: Literal["AVAILABLE"]
     limitations: tuple[str, ...]

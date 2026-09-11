@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { apiClient } from "./client";
-import { correctTimeEntry, getAdminTimecardReview, getOwnPunchState, getOwnTimecard, recordOwnPunch } from "./timekeeping";
+import { correctTimeEntry, getAdminTimecardReview, getOwnActiveJobClock, getOwnPunchState, getOwnTimecard, recordOwnJobClock, recordOwnPunch } from "./timekeeping";
 
 describe("Workday Time API client", () => {
   it("uses self-scoped endpoints and sends only an action with a fresh idempotency key", async () => {
@@ -74,6 +74,45 @@ describe("Workday Time API client", () => {
     expect(adapter.mock.calls[0]?.[0].url).toBe(
       "/api/v1/timekeeping/admin/timecard-review",
     );
+  });
+
+  it("keeps Job clock identity server-owned and reuses the caller retry key", async () => {
+    const adapter = vi.fn(async (config) => {
+      expect(config.url).toBe("/api/v1/timekeeping/me/job-clock");
+      expect(config.headers.get("Idempotency-Key")).toBe("phone-persisted-key");
+      expect(JSON.parse(String(config.data))).toEqual({
+        action: "start",
+        job_id: "job-1",
+        appointment_id: "appointment-1",
+      });
+      expect(String(config.data)).not.toMatch(/employee|timestamp|duration/i);
+      return { data: {}, status: 200, statusText: "OK", headers: {}, config };
+    });
+    const original = apiClient.defaults.adapter;
+    apiClient.defaults.adapter = adapter;
+    try {
+      await recordOwnJobClock("start", "job-1", "appointment-1", "phone-persisted-key");
+    } finally {
+      apiClient.defaults.adapter = original;
+    }
+  });
+
+  it("reads active Job clock state independently from paid punch state", async () => {
+    const adapter = vi.fn(async (config) => ({
+      data: { active: false, employee_id: "employee" },
+      status: 200,
+      statusText: "OK",
+      headers: {},
+      config,
+    }));
+    const original = apiClient.defaults.adapter;
+    apiClient.defaults.adapter = adapter;
+    try {
+      await getOwnActiveJobClock();
+    } finally {
+      apiClient.defaults.adapter = original;
+    }
+    expect(adapter.mock.calls[0]?.[0].url).toBe("/api/v1/timekeeping/me/job-clock");
   });
 
   it("sends a classified correction with retry identity and no reviewer identity", async () => {

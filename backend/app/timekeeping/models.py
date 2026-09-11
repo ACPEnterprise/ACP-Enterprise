@@ -199,7 +199,10 @@ class JobWorkedIntervalRevision(Base):
             ondelete="RESTRICT",
         ),
         CheckConstraint("stop_at > start_at", name="ck_job_interval_time_order"),
-        CheckConstraint("duration_minutes > 0", name="ck_job_interval_duration"),
+        CheckConstraint(
+            "duration_seconds > 0", name="ck_job_interval_duration_seconds"
+        ),
+        CheckConstraint("duration_minutes >= 0", name="ck_job_interval_duration"),
         CheckConstraint("revision_number >= 1", name="ck_job_interval_revision"),
         CheckConstraint(
             "source IN ('employee_clock','authorized_manual')",
@@ -226,6 +229,14 @@ class JobWorkedIntervalRevision(Base):
         UniqueConstraint("company_id", "id", name="uq_job_interval_revision_company"),
         Index("ix_job_interval_job_time", "company_id", "job_id", "start_at"),
         Index("ix_job_interval_employee_time", "company_id", "employee_id", "start_at"),
+        Index(
+            "uq_job_interval_correction_idempotency",
+            "company_id",
+            "corrected_by_user_id",
+            "correction_idempotency_key",
+            unique=True,
+            postgresql_where=text("correction_idempotency_key IS NOT NULL"),
+        ),
     )
     id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), primary_key=True, default=uuid4
@@ -245,6 +256,7 @@ class JobWorkedIntervalRevision(Base):
     )
     start_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     stop_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    duration_seconds: Mapped[int] = mapped_column(Integer, nullable=False)
     duration_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
     source: Mapped[str] = mapped_column(String(32), nullable=False)
     correction_state: Mapped[str] = mapped_column(String(24), nullable=False)
@@ -260,6 +272,8 @@ class JobWorkedIntervalRevision(Base):
     corrected_by_user_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT")
     )
+    correction_idempotency_key: Mapped[str | None] = mapped_column(String(128))
+    correction_request_digest: Mapped[str | None] = mapped_column(String(64))
     evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now

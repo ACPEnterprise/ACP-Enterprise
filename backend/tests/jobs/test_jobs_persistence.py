@@ -6,6 +6,15 @@ from uuid import UUID, uuid4
 
 import pytest
 import pytest_asyncio
+from sqlalchemy import delete, select, text
+from sqlalchemy.exc import DBAPIError, IntegrityError
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
+
 from app.core.config import settings
 from app.customers.models import Customer, ServiceLocation
 from app.events.models import BusinessEvent
@@ -23,14 +32,6 @@ from app.platform.permissions import models as permission_models  # noqa: F401
 from app.platform.users import identity_models  # noqa: F401
 from app.platform.users.models import User
 from app.scheduling.models import Appointment
-from sqlalchemy import delete, select, text
-from sqlalchemy.exc import DBAPIError, IntegrityError
-from sqlalchemy.ext.asyncio import (
-    AsyncEngine,
-    AsyncSession,
-    async_sessionmaker,
-    create_async_engine,
-)
 
 
 def utc_now() -> datetime:
@@ -1034,5 +1035,5 @@ async def test_jobs_migration_objects_and_triggers_exist(
             or 0
         )
         assert tables == {"job_number_sequences", "jobs", "job_appointment_links"}
-        assert triggers == 6
+        assert triggers == 8
         assert functions == 6
