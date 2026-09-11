@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -12,6 +12,7 @@ import {
 import { SchedulingRoute } from "./SchedulingRoute";
 
 let permissions = new Set(["COMPANY_SCHEDULING_READ"]);
+const rescheduleMutate = vi.hoisted(() => vi.fn());
 vi.mock("../auth", () => ({
   useAuth: () => ({
     activeCompany: { branches: [{ id: "branch-1", name: "Main Branch" }] },
@@ -55,7 +56,7 @@ describe("SchedulingRoute", () => {
       isPending: false,
       isError: false,
       isSuccess: false,
-      mutate: vi.fn(),
+      mutate: rescheduleMutate,
     } as never);
   });
 
@@ -89,9 +90,7 @@ describe("SchedulingRoute", () => {
     ).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Day calendar" })).toBeVisible();
     expect(screen.getByRole("region", { name: "Day agenda" })).toBeVisible();
-    expect(screen.getAllByRole("button", { name: /APT-000001/ })).toHaveLength(
-      2,
-    );
+    expect(screen.getAllByRole("button", { name: /APT-000001/ })).toHaveLength(3);
   });
 
   it("applies Branch and status filters to the authoritative query", async () => {
@@ -177,6 +176,47 @@ describe("SchedulingRoute", () => {
       screen.getByRole("region", { name: "Dispatch timeline" }),
     ).toBeVisible();
     expect(screen.getByText(/review-only/i)).toBeVisible();
+  });
+
+  it("opens directly in the Dispatch calendar perspective", () => {
+    vi.mocked(useAppointments).mockReturnValue({ isLoading: false, isError: false, data: { items: [appointment], total_count: 1, page: 1, page_size: 100 } } as never);
+    render(<MemoryRouter initialEntries={["/scheduling?perspective=dispatch"]}><SchedulingRoute /></MemoryRouter>);
+    expect(screen.getByRole("region", { name: "Dispatch timeline" })).toBeVisible();
+  });
+
+  it("uses Month as an operating calendar and requires confirmation before moving work", async () => {
+    permissions.add("COMPANY_SCHEDULING_MANAGE");
+    vi.mocked(useAppointments).mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: { items: [appointment], total_count: 1, page: 1, page_size: 100 },
+    } as never);
+    render(<MemoryRouter><SchedulingRoute /></MemoryRouter>);
+    const date = screen.getByLabelText("Service date");
+    await userEvent.clear(date);
+    await userEvent.type(date, "2026-08-13");
+    await userEvent.click(screen.getByRole("button", { name: "Month" }));
+    await userEvent.click(within(screen.getByRole("region", { name: "Month calendar" })).getByRole("button", { name: /APT-000001.*UNASSIGNED/i }));
+    expect(screen.getByRole("link", { name: "Open Customer" })).toHaveAttribute("href", "/customers/customer-1");
+    expect(screen.getAllByText("Customer context unavailable").at(-1)).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: "Review new time" }));
+    expect(rescheduleMutate).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog", { name: "Move this appointment?" })).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: "Confirm new time" }));
+    expect(rescheduleMutate).toHaveBeenCalledOnce();
+  });
+
+  it("surfaces appointment-level assignment gaps in Unassigned", async () => {
+    vi.mocked(useAppointments).mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: { items: [appointment], total_count: 1, page: 1, page_size: 100 },
+    } as never);
+    render(<MemoryRouter><SchedulingRoute /></MemoryRouter>);
+    await userEvent.click(screen.getByRole("button", { name: "Unassigned" }));
+    expect(screen.getByRole("heading", { name: "Appointments needing assignment or time" })).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: /APT-000001/ }));
+    expect(screen.getByText("Customer context unavailable")).toBeVisible();
   });
 
   it("offers Unassigned as an explicit projection without a second engine", async () => {
