@@ -77,6 +77,11 @@ class IdentityOutboxWorker:
     async def run_once(self) -> int:
         now = datetime.now(timezone.utc)
         async with AsyncSessionFactory() as session, session.begin():
+            await NotificationOutboxRepository.recover_misclassified_definitive_rejections(
+                session,
+                recovered_at=now,
+                notification_types=DELIVERABLE_IDENTITY_TYPES,
+            )
             await NotificationOutboxRepository.release_abandoned_claims(
                 session,
                 claimed_before=now - timedelta(minutes=5),

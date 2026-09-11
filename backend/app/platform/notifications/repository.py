@@ -591,6 +591,56 @@ class NotificationOutboxRepository:
         return len(records)
 
     @staticmethod
+    async def recover_misclassified_definitive_rejections(
+        session: AsyncSession,
+        *,
+        recovered_at: datetime,
+        notification_types: frozenset[str],
+    ) -> int:
+        """Requeue only legacy Postmark 4xx outcomes recorded as uncertain.
+
+        The former adapter emitted this exact safe code only after receiving an
+        HTTP response, with no provider reference. Postmark 4xx is a definitive
+        rejection, so these rows are safe to retry once through their original
+        idempotent outbox identity.
+        """
+        if not notification_types:
+            return 0
+        records = tuple(
+            (
+                await session.scalars(
+                    select(NotificationOutbox)
+                    .where(
+                        NotificationOutbox.notification_type.in_(notification_types),
+                        NotificationOutbox.status == "ambiguous",
+                        NotificationOutbox.last_error_code == "postmark_request_rejected",
+                        NotificationOutbox.provider_reference.is_(None),
+                    )
+                    .with_for_update(skip_locked=True)
+                )
+            ).all()
+        )
+        for record in records:
+            await NotificationOutboxRepository._evidence(
+                session,
+                record,
+                "recovered",
+                recovered_at,
+                error_code="postmark_definitive_rejection_reclassified",
+                error_category="provider_rejection",
+            )
+            record.status = "retry_scheduled"
+            record.retry_count += 1
+            record.scheduled_at = recovered_at
+            record.submitted_at = None
+            record.ambiguous_at = None
+            record.last_error_code = "postmark_definitive_rejection_reclassified"
+            record.last_error_category = "provider_rejection"
+            record.updated_at = recovered_at
+        await session.flush()
+        return len(records)
+
+    @staticmethod
     async def cleanup_completed_notifications(
         session: AsyncSession,
         *,
