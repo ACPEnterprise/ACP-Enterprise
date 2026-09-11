@@ -15,7 +15,7 @@ published. The earlier authorization/completeness hardening was already content-
 equivalent in protected authority, so its cherry-pick was correctly empty. This
 successor contains only the missing consumer-contract convergence.
 
-The endpoint now returns OM2-B's required `mode`, provider environment, hashed
+The financial endpoint now returns OM2-B's required `mode`, provider environment, hashed
 company identity, CompanyInfo verification time, source-manifest digest,
 completeness, bills and conflicts, while retaining explicit provider authorization,
 historical/current evidence mode, entity/page counts and catalog dispositions.
@@ -25,7 +25,7 @@ is `blocked`. No QBO or Accounting mutation exists.
 
 Combined qualification on current protected composition:
 
-- QBO, source projection, Economics and operational measurement: 442 passed.
+- QBO, source projection, Economics and operational measurement: 447 passed.
 - OM2-B QBO API/component/route tests: 3 files, 5 tests passed.
 - Backend focused Ruff/MyPy/compilation and frontend TypeScript/ESLint passed.
 - No migration or schema change.
@@ -81,6 +81,26 @@ content-addressed source envelopes. Missing bounded evidence returns no assessme
 excluded purchases or other post-cutoff records cannot become contribution inputs.
 All resulting assertions remain source-reported, partial, unreconciled, and without
 policy or posting authority.
+
+## Production connection evidence contract
+
+An authenticated Company administrator can read:
+
+```text
+GET /api/v1/integrations/qbo/production/connection
+```
+
+The response distinguishes `connected`, `not_connected`, inconsistent, and
+`unavailable` local authority states. A connected response includes only a
+deterministic SHA-256 Company identity, the provider `CompanyInfo` verification
+timestamp, `verified_at_oauth_connection` readability, validated production-client
+presence, exact token-to-realm binding, refresh/access authority state, and derived
+acquisition eligibility. A missing/invalid client, token conflict, or expired refresh
+authority cannot silently remain acquisition-eligible.
+It never exposes the realm, Company name, native CompanyInfo ID, OAuth credential, or
+token. Missing configuration returns explicit unavailable/unverified evidence instead
+of being called disconnected or live. The endpoint is cache-protected, has
+`mutation_authority=none`, and performs no QBO request or write.
 
 No QBO mutation, Accounting posting, ledger creation, money movement, Production
 deployment, repricing, or policy value is introduced by this probe.

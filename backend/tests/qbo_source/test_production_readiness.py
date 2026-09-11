@@ -5,12 +5,16 @@ import os
 import stat
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
+from typing import cast
 
 import pytest
 from fastapi.testclient import TestClient
 
 from app.core.config import Settings
 from app.main import app
+from app.platform.permissions.authorization import AuthorizationContext
+from app.qbo_source import router as qbo_router_module
 from app.qbo_source.contracts import EntityKind
 from app.qbo_source.intuit import (
     ACCOUNTING_SCOPE,
@@ -34,6 +38,7 @@ from app.qbo_source.runtime import (
     ProtectedSandboxCompanyBinding,
     SandboxCompanyInfoVerifier,
     SandboxConnectionRegistry,
+    SandboxOAuthRuntime,
     SandboxRuntimeError,
 )
 from app.qbo_source.secrets import (
@@ -77,6 +82,21 @@ class _ProductionProbeTransport(_Transport):
             )
         )
         self.client = _Closable()
+
+
+class _ConnectionEvidenceRuntime:
+    async def connection_evidence(self) -> dict[str, object]:
+        return {
+            "connection_state": "connected",
+            "provider_environment": "production",
+            "company_identity_sha256": "a" * 64,
+            "company_info_verified_at": "2026-09-11T02:00:00+00:00",
+            "company_info_readability": "verified_at_oauth_connection",
+            "credential_state": "verified_production_client",
+            "token_realm_binding": "verified",
+            "refresh_authority": "access_token_current",
+            "acquisition_eligible": True,
+        }
 
 
 def _token(realm_id: str = "123456789") -> OAuthToken:
@@ -178,6 +198,180 @@ def test_production_callback_fails_closed_until_external_configuration() -> None
         "result": "production_not_configured",
     }
     assert "synthetic" not in response.text
+
+
+def test_production_connection_evidence_requires_authentication() -> None:
+    response = TestClient(app).get(qbo_router_module.PRODUCTION_CONNECTION_PATH)
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Authentication required."}
+
+
+@pytest.mark.asyncio
+async def test_production_connection_evidence_surfaces_verified_readability(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        qbo_router_module,
+        "get_production_oauth_runtime",
+        lambda: _ConnectionEvidenceRuntime(),
+    )
+
+    response = await qbo_router_module.qbo_production_connection_evidence(
+        cast(AuthorizationContext, SimpleNamespace())
+    )
+
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "private, no-store"
+    assert json.loads(response.body) == {
+        "status": "qbo_production_connection",
+        "connection_state": "connected",
+        "provider_environment": "production",
+        "company_identity_sha256": "a" * 64,
+        "company_info_verified_at": "2026-09-11T02:00:00+00:00",
+        "company_info_readability": "verified_at_oauth_connection",
+        "credential_state": "verified_production_client",
+        "token_realm_binding": "verified",
+        "refresh_authority": "access_token_current",
+        "acquisition_eligible": True,
+        "mutation_authority": "none",
+    }
+
+
+@pytest.mark.asyncio
+async def test_production_connection_evidence_surfaces_missing_authority(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def unavailable() -> object:
+        raise SandboxRuntimeError("production_oauth_runtime_disabled")
+
+    monkeypatch.setattr(qbo_router_module, "get_production_oauth_runtime", unavailable)
+
+    response = await qbo_router_module.qbo_production_connection_evidence(
+        cast(AuthorizationContext, SimpleNamespace())
+    )
+
+    assert json.loads(response.body) == {
+        "status": "qbo_production_connection",
+        "connection_state": "unavailable",
+        "provider_environment": "production",
+        "company_identity_sha256": None,
+        "company_info_verified_at": None,
+        "company_info_readability": "unverified",
+        "credential_state": "unverified",
+        "token_realm_binding": "unverified",
+        "refresh_authority": "unverified",
+        "acquisition_eligible": False,
+        "mutation_authority": "none",
+    }
+
+
+@pytest.mark.asyncio
+async def test_runtime_connection_evidence_hashes_exact_verified_company(
+    tmp_path: Path,
+) -> None:
+    repository = tmp_path / "repository"
+    repository.mkdir()
+    provider = ProtectedProductionSecretProvider(
+        root=tmp_path / "secrets", repository_root=repository
+    )
+    provider.client_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "qbo-production-client/v1",
+                "environment": "production",
+                "client_id": "synthetic-client",
+                "client_secret": "synthetic-secret",
+            }
+        )
+    )
+    os.chmod(provider.client_path, 0o600)
+    await provider.put_token(
+        provider.TOKEN_REFERENCE, _token("realm-123"), expected_generation=None
+    )
+    registry = SandboxConnectionRegistry(tmp_path / "connections", "production")
+    registry.record_verified(
+        realm_id="realm-123",
+        company_info_id="company-456",
+        company_name="Exact Company",
+        minor_version=75,
+    )
+    verifier = SimpleNamespace(
+        secrets_provider=provider,
+        registry=registry,
+        environment=IntuitEnvironment.PRODUCTION,
+    )
+    runtime = SandboxOAuthRuntime(
+        callback=cast(object, SimpleNamespace()),
+        verifier=cast(SandboxCompanyInfoVerifier, verifier),
+        coordinator=cast(
+            object,
+            SimpleNamespace(
+                oauth=SimpleNamespace(credential_reference=provider.CLIENT_REFERENCE)
+            ),
+        ),
+        diagnostics=cast(object, SimpleNamespace()),
+        token_reference=provider.TOKEN_REFERENCE,
+    )
+
+    evidence = await runtime.connection_evidence()
+
+    assert evidence["connection_state"] == "connected"
+    assert evidence["company_info_readability"] == "verified_at_oauth_connection"
+    assert evidence["acquisition_eligible"] is True
+    assert evidence["credential_state"] == "verified_production_client"
+    assert evidence["token_realm_binding"] == "verified"
+    assert evidence["refresh_authority"] == "access_token_current"
+    assert len(str(evidence["company_identity_sha256"])) == 64
+    assert "Exact Company" not in json.dumps(evidence)
+
+
+@pytest.mark.asyncio
+async def test_runtime_connection_evidence_rejects_token_realm_conflict(
+    tmp_path: Path,
+) -> None:
+    token_path = tmp_path / "token.json"
+    token_path.write_text("present")
+
+    class Secrets:
+        async def get_client_credential(self, reference: str) -> object:
+            assert reference == "qbo-production/client"
+            return object()
+
+        async def get_token(self, reference: str) -> OAuthToken:
+            assert reference == "qbo-production/token"
+            return _token("different-realm")
+
+    registry = SandboxConnectionRegistry(tmp_path / "connections", "production")
+    registry.record_verified(
+        realm_id="realm-123",
+        company_info_id="company-456",
+        company_name="Exact Company",
+        minor_version=75,
+    )
+    secrets = Secrets()
+    secrets.token_path = token_path  # type: ignore[attr-defined]
+    runtime = SandboxOAuthRuntime(
+        callback=cast(object, SimpleNamespace()),
+        verifier=cast(
+            SandboxCompanyInfoVerifier,
+            SimpleNamespace(
+                secrets_provider=secrets,
+                registry=registry,
+                environment=IntuitEnvironment.PRODUCTION,
+            ),
+        ),
+        coordinator=cast(
+            object,
+            SimpleNamespace(
+                oauth=SimpleNamespace(credential_reference="qbo-production/client")
+            ),
+        ),
+        diagnostics=cast(object, SimpleNamespace()),
+        token_reference="qbo-production/token",
+    )
+
+    with pytest.raises(SandboxRuntimeError, match="token_realm_conflict"):
+        await runtime.connection_evidence()
 
 
 def test_production_configuration_requires_exact_isolated_preview_contract(

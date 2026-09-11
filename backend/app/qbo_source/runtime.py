@@ -209,6 +209,31 @@ class SandboxConnectionRegistry:
     def is_verified(self) -> bool:
         return self.verified_path.is_file()
 
+    def verified_evidence(self) -> dict[str, object]:
+        try:
+            document = json.loads(self.verified_path.read_text(encoding="utf-8"))
+        except (FileNotFoundError, json.JSONDecodeError, UnicodeDecodeError) as error:
+            raise SandboxRuntimeError("connection_marker_invalid") from error
+        required_text = (
+            "realm_id",
+            "company_info_id",
+            "company_name",
+            "company_info_verified_at",
+        )
+        if (
+            not isinstance(document, dict)
+            or document.get("schema_version") != f"qbo-{self.environment}-connection/v2"
+            or document.get("environment") != self.environment
+            or document.get("acquisition_eligible") is not True
+            or not all(
+                isinstance(document.get(key), str) and document.get(key)
+                for key in required_text
+            )
+            or not isinstance(document.get("api_minor_version"), int)
+        ):
+            raise SandboxRuntimeError("connection_marker_invalid")
+        return document
+
     @property
     def disconnect_claim_path(self) -> Path:
         return self.root / ".disconnecting"
@@ -294,6 +319,62 @@ class SandboxOAuthRuntime:
         if not token_exists and not marker_exists:
             return "not_connected"
         return "disconnect_failed"
+
+    async def connection_evidence(self) -> dict[str, object]:
+        """Return safe local authority evidence without exposing provider secrets."""
+        state = self.connection_state()
+        result: dict[str, object] = {
+            "connection_state": state,
+            "provider_environment": self.verifier.environment.value,
+            "company_identity_sha256": None,
+            "company_info_verified_at": None,
+            "company_info_readability": "unverified",
+            "credential_state": "unverified",
+            "token_realm_binding": "unverified",
+            "refresh_authority": "unverified",
+            "acquisition_eligible": False,
+        }
+        if state != "connected":
+            return result
+        marker = self.verifier.registry.verified_evidence()
+        await self.verifier.secrets_provider.get_client_credential(
+            self.coordinator.oauth.credential_reference
+        )
+        token = await self.verifier.secrets_provider.get_token(self.token_reference)
+        if token.realm_id != marker["realm_id"]:
+            raise SandboxRuntimeError("connection_token_realm_conflict")
+        now = datetime.now(timezone.utc)
+        if token.access_expires_at > now:
+            refresh_authority = "access_token_current"
+        elif token.refresh_expires_at is None:
+            refresh_authority = "refresh_expiry_unreported"
+        elif token.refresh_expires_at > now:
+            refresh_authority = "refresh_token_current"
+        else:
+            refresh_authority = "expired"
+        identity = {
+            key: marker[key]
+            for key in (
+                "environment",
+                "realm_id",
+                "company_info_id",
+                "company_name",
+            )
+        }
+        result.update(
+            {
+                "company_identity_sha256": hashlib.sha256(
+                    json.dumps(identity, sort_keys=True, separators=(",", ":")).encode()
+                ).hexdigest(),
+                "company_info_verified_at": marker["company_info_verified_at"],
+                "company_info_readability": "verified_at_oauth_connection",
+                "credential_state": "verified_production_client",
+                "token_realm_binding": "verified",
+                "refresh_authority": refresh_authority,
+                "acquisition_eligible": refresh_authority != "expired",
+            }
+        )
+        return result
 
     async def disconnect(self) -> str:
         state = self.connection_state()
