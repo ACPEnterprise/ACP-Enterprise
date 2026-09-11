@@ -136,6 +136,22 @@ describe("SchedulingRoute", () => {
     ).toBeInTheDocument();
   });
 
+  it("exposes CSR booking only with Customer read plus Scheduling and Job manage authority", () => {
+    vi.mocked(useAppointments).mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: { items: [], total_count: 0, page: 1, page_size: 100 },
+    } as never);
+    render(<MemoryRouter><SchedulingRoute /></MemoryRouter>);
+    expect(screen.queryByRole("button", { name: "Book customer work" })).not.toBeInTheDocument();
+
+    permissions.add("COMPANY_SCHEDULING_MANAGE");
+    permissions.add("COMPANY_JOB_MANAGE");
+    permissions.add("COMPANY_CUSTOMER_READ");
+    render(<MemoryRouter><SchedulingRoute /></MemoryRouter>);
+    expect(screen.getByRole("button", { name: "Book customer work" })).toBeVisible();
+  });
+
   it("offers a planning week and accessible non-drag calendar controls", async () => {
     vi.mocked(useAppointments).mockReturnValue({
       isLoading: false,
@@ -204,6 +220,35 @@ describe("SchedulingRoute", () => {
     expect(screen.getByRole("dialog", { name: "Move this appointment?" })).toBeVisible();
     await userEvent.click(screen.getByRole("button", { name: "Confirm new time" }));
     expect(rescheduleMutate).toHaveBeenCalledOnce();
+  });
+
+  it("opens every appointment on a crowded Month day through an accessible day drill-down", async () => {
+    const crowded = Array.from({ length: 5 }, (_, index) => ({
+      ...appointment,
+      id: `appointment-${index + 1}`,
+      appointment_number: `APT-00000${index + 1}`,
+    }));
+    vi.mocked(useAppointments).mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: { items: crowded, total_count: 5, page: 1, page_size: 100 },
+    } as never);
+    render(<MemoryRouter><SchedulingRoute /></MemoryRouter>);
+    const date = screen.getByLabelText("Service date");
+    await userEvent.clear(date);
+    await userEvent.type(date, "2026-08-13");
+    await userEvent.click(screen.getByRole("button", { name: "Month" }));
+
+    const month = screen.getByRole("region", { name: "Month calendar" });
+    const overflow = within(month).getByRole("button", { name: /Open all 5 appointments/ });
+    expect(overflow).toHaveTextContent("+2 more");
+    expect(within(month).getAllByRole("button", { name: /APT-00000/ })).toHaveLength(3);
+
+    await userEvent.click(overflow);
+    expect(screen.getByRole("region", { name: "Day calendar" })).toBeVisible();
+    for (const item of crowded) {
+      expect(screen.getAllByRole("button", { name: new RegExp(item.appointment_number) })).not.toHaveLength(0);
+    }
   });
 
   it("surfaces appointment-level assignment gaps in Unassigned", async () => {

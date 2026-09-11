@@ -42,6 +42,7 @@ from app.platform.permissions.dependencies import (
 from app.platform.reliability.correlation import current_correlation_id
 from app.platform.reliability.failures import ClientRecovery, FailureCode, SafeFailure
 
+from .break_even_readiness import break_even_input_contract
 from .capability_readiness import capability_readiness_matrix
 from .cash_operational_service import CashOperationalEconomicsService
 from .operational_sources import OperationalSourceEconomicsService
@@ -128,6 +129,7 @@ async def economics_measurement_foundation(context: Reader) -> dict[str, object]
             "states": ("AVAILABLE", "PARTIAL", "ABSENT", "CONFLICTING"),
             "downstream_contract": productive_hour_downstream_contract(),
         },
+        "break_even_input_readiness": break_even_input_contract(),
         "time_measures": (
             "PAID_TIME",
             "AVAILABLE_TIME",

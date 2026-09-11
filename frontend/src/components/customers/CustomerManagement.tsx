@@ -5,9 +5,10 @@ import { Link, useNavigate } from "react-router";
 import { getOperatorApiError } from "../../api/errors";
 import { useHasPermission } from "../../auth";
 import { useCustomerMutations, useCustomerSearch } from "../../hooks/useCustomers";
+import { useMigrationReadiness } from "../../features/administration/hooks";
 import { customerDetailPath } from "../../routing/paths";
 import { formatCustomerSource, type CustomerInput, type DuplicateMatch } from "../../types/customers";
-import { Alert, Button, Card, EmptyState, Input, Spinner } from "../../ui";
+import { Alert, Badge, Button, Card, EmptyState, Input, Spinner } from "../../ui";
 import { CustomerForm } from "./CustomerForm";
 
 const PAGE_SIZE = 20;
@@ -15,6 +16,7 @@ const PAGE_SIZE = 20;
 export function CustomerManagement() {
   const navigate = useNavigate();
   const canManage = useHasPermission("COMPANY_CUSTOMER_MANAGE");
+  const canReviewSource = useHasPermission("COMPANY_ADMINISTER");
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
@@ -32,6 +34,8 @@ export function CustomerManagement() {
     page_size: PAGE_SIZE,
   });
   const mutations = useCustomerMutations();
+  const migration = useMigrationReadiness(canReviewSource);
+  const sourceCounts = (migration.data?.counts ?? []).filter((item) => ["Customers", "Contacts", "Locations"].includes(item.domain));
 
   const submitSearch = (event: FormEvent) => {
     event.preventDefault();
@@ -47,6 +51,8 @@ export function CustomerManagement() {
       <div className="min-w-0"><p className="text-sm font-medium text-action-primary">CRM</p><h2 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">Customers</h2><p className="mt-2 text-content-muted">Search the admitted Customer roster and continue into locations, contacts, and related work.</p></div>
       {canManage && <Button type="button" onClick={() => { setDuplicateWarnings([]); setIsCreating(true); }} leadingIcon={<Plus size={18} />}>New customer</Button>}
     </section>
+
+    {canReviewSource && <Card className="p-ui-4 sm:p-ui-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-sm font-medium text-action-primary">Migration source accounting</p><h3 className="mt-1 text-lg font-semibold">Population availability</h3></div>{migration.data && <Badge variant={migration.data.stale ? "warning" : "neutral"}>{migration.data.stale ? "Stale source projection" : migration.data.overall_status.replaceAll("_", " ")}</Badge>}</div>{migration.isLoading && <div className="mt-4"><Spinner label="Loading source accounting" /></div>}{migration.isError && <div className="mt-4"><Alert variant="warning">Source accounting is unavailable. The native roster remains usable, but population completeness is unverified.</Alert></div>}{migration.data && <><p className="mt-2 text-sm text-content-muted">Source evidence through {migration.data.historical_window.ends_on || "an unavailable date"}. Source totals reconcile only when each row’s delta is zero.</p><div className="mt-4 grid gap-3 sm:grid-cols-3">{sourceCounts.map((item) => <div key={item.domain} className="rounded-lg border border-stroke p-3"><p className="font-semibold">{item.domain}</p><p className="mt-1 text-sm">{item.migrated.toLocaleString()} admitted / {item.source.toLocaleString()} source</p><p className="mt-1 text-xs text-content-muted">{item.held.toLocaleString()} held · {item.exception.toLocaleString()} exception · {item.unresolved.toLocaleString()} unresolved · delta {item.delta.toLocaleString()}</p></div>)}</div><p className="mt-3 text-xs text-content-muted">Held, exception, deferred, and unresolved source records remain Migration evidence and are never presented as native Customers.</p></> }</Card>}
 
     {canManage && isCreating && <Card className="p-ui-4 sm:p-ui-6"><h3 className="text-xl font-semibold">Create customer</h3><p className="mt-1 text-sm text-content-muted">Create the Customer record first, then add Service Locations and Contacts.</p><div className="mt-6"><CustomerForm duplicateWarnings={duplicateWarnings} isSaving={mutations.create.isPending} isCheckingDuplicates={mutations.duplicateCheck.isPending} error={mutations.create.error ?? mutations.duplicateCheck.error} onCancel={() => setIsCreating(false)} onCheckDuplicates={(input) => mutations.duplicateCheck.mutate({ first_name: input.first_name, last_name: input.last_name, business_name: input.business_name, phone: input.primary_phone, email: input.email }, { onSuccess: setDuplicateWarnings })} onSubmit={(input: CustomerInput) => mutations.create.mutate(input, { onSuccess: (result) => { setDuplicateWarnings(result.duplicate_warnings); setIsCreating(false); navigate(customerDetailPath(result.customer.id)); } })} /></div></Card>}
 

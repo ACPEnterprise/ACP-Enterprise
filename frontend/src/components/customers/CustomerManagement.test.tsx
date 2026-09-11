@@ -1,11 +1,14 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as customerHooks from "../../hooks/useCustomers";
+import * as administrationHooks from "../../features/administration/hooks";
 import { CustomerManagement } from "./CustomerManagement";
 
 vi.mock("../../hooks/useCustomers");
+vi.mock("../../features/administration/hooks");
 const permissions = new Set<string>();
 vi.mock("../../auth", () => ({
   useHasPermission: (code: string) => permissions.has(code),
@@ -22,6 +25,7 @@ describe("CustomerManagement", () => {
     vi.resetAllMocks();
     permissions.clear();
     permissions.add("COMPANY_CUSTOMER_MANAGE");
+    vi.mocked(administrationHooks.useMigrationReadiness).mockReturnValue({ isLoading: false, isError: false, data: undefined } as never);
     vi.mocked(customerHooks.useCustomerMutations).mockReturnValue({
       create: mutation,
       duplicateCheck: mutation,
@@ -168,5 +172,45 @@ describe("CustomerManagement", () => {
 
     expect(screen.getByText("This roster page is no longer available.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Return to first page" })).toBeInTheDocument();
+  });
+
+  it("keeps held source records distinct from admitted Customers and shows the source date", () => {
+    permissions.add("COMPANY_ADMINISTER");
+    vi.mocked(administrationHooks.useMigrationReadiness).mockReturnValue({
+      isLoading: false, isError: false,
+      data: { overall_status: "PARTIAL", stale: false, historical_window: { ends_on: "2026-09-10" }, counts: [{ domain: "Customers", source: 100, migrated: 90, held: 5, exception: 3, non_applicable: 0, deferred: 1, unresolved: 1, delta: 0 }] },
+    } as never);
+    vi.mocked(customerHooks.useCustomerSearch).mockReturnValue({ isLoading: false, isError: false, data: { items: [], total_count: 0, page: 1, page_size: 20, total_pages: 0 } } as never);
+
+    render(<MemoryRouter><CustomerManagement /></MemoryRouter>);
+
+    expect(screen.getByText(/Source evidence through 2026-09-10/)).toBeInTheDocument();
+    expect(screen.getByText("90 admitted / 100 source")).toBeInTheDocument();
+    expect(screen.getByText(/5 held · 3 exception · 1 unresolved · delta 0/)).toBeInTheDocument();
+    expect(screen.getByText(/never presented as native Customers/)).toBeInTheDocument();
+  });
+
+  it("requests every roster page instead of treating the first page as complete", async () => {
+    vi.mocked(customerHooks.useCustomerSearch).mockReturnValue({
+      isLoading: false, isError: false,
+      data: { items: [{ id: "customer-1", display_name: "First Page", customer_type: "residential", first_name: null, last_name: null, business_name: "First Page", primary_phone: "", email: null, status: "active", source: "unknown", is_vip: false }], total_count: 41, page: 1, page_size: 20, total_pages: 3 },
+    } as never);
+
+    render(<MemoryRouter><CustomerManagement /></MemoryRouter>);
+    expect(screen.getByText(/Showing 1–20 of 41 admitted Customers/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Next" }));
+
+    expect(customerHooks.useCustomerSearch).toHaveBeenLastCalledWith(expect.objectContaining({ page: 2, page_size: 20 }));
+  });
+
+  it("sends supported search fields to authoritative server search", async () => {
+    vi.mocked(customerHooks.useCustomerSearch).mockReturnValue({ isLoading: false, isError: false, data: { items: [], total_count: 0, page: 1, page_size: 20, total_pages: 0 } } as never);
+    render(<MemoryRouter><CustomerManagement /></MemoryRouter>);
+
+    await userEvent.type(screen.getByRole("textbox", { name: "Search customers" }), "10 Main");
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Customer status" }), "active");
+    await userEvent.click(screen.getByRole("button", { name: "Search" }));
+
+    expect(customerHooks.useCustomerSearch).toHaveBeenLastCalledWith(expect.objectContaining({ query: "10 Main", status: "active", page: 1 }));
   });
 });
