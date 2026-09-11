@@ -35,6 +35,12 @@ office Timecard, and operating-register acceptance.
   Alembic head `d4f6h8j0l2n4`. The complete Payroll + Timekeeping suites pass 135
   tests, and the complete QBO source suite passes 142 tests. The focused combined
   QBO packet/Timecard/Payroll persistence battery passes 13 tests.
+- Read-only Preview inspection still reports backend release
+  `00e0d5f0faad31f6ff0b85cdde903857a78b70fc`, not protected authority
+  `42a4f68087d76247269bd4c8388f556dd62a8b5c`. The proposed QBO evidence endpoint
+  returns `404`; the existing Payroll summary correctly rejects unauthenticated
+  access with `401`. Deployed current-authority acceptance therefore remains
+  blocked on Enterprise's coherent integration/deployment and sanctioned login.
 
 ## Remaining checks / next action
 
