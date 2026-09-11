@@ -322,14 +322,16 @@ def build_qualified_manifest(
 ) -> QualifiedSuccessorManifest:
     report = classification.report  # type: ignore[attr-defined]
     exact = {
-        item.successor_source_id: item
+        (item.domain, item.successor_source_id): item
         for item in classification.records  # type: ignore[attr-defined]
         if item.disposition == LegacyProjectionDisposition.EXACT_SUCCESSOR
         and item.successor_source_id is not None
     }
     entries = []
     for source in sealed:
-        match = exact.get(source.source_id)  # type: ignore[attr-defined]
+        match = exact.get(  # type: ignore[attr-defined]
+            (source.domain, source.source_id)  # type: ignore[attr-defined]
+        )
         entries.append(
             SuccessorManifestEntry(
                 domain=source.domain,  # type: ignore[attr-defined]

@@ -27,11 +27,17 @@ def test_builds_blocked_replay_manifest_with_exact_reuse() -> None:
         target_id=str(uuid4()),
         successor_source_id="sealed",
     )
+    exact_contact = LegacyProjectionRecord(
+        domain="contact",
+        source_id="legacy",
+        disposition=LegacyProjectionDisposition.EXACT_SUCCESSOR,
+        evidence_digest="3" * 64,
+        target_id=str(uuid4()),
+        successor_source_id="sealed",
+    )
     classification = SimpleNamespace(
-        records=(exact,),
-        report=SimpleNamespace(
-            safe_digest="2" * 64, canonical_admission_allowed=False
-        ),
+        records=(exact, exact_contact),
+        report=SimpleNamespace(safe_digest="2" * 64, canonical_admission_allowed=False),
     )
     result = build_qualified_manifest(
         company_id=uuid4(),
@@ -39,13 +45,18 @@ def test_builds_blocked_replay_manifest_with_exact_reuse() -> None:
         classification=classification,
         sealed=(
             SealedIdentity("customer", "sealed"),
+            SealedIdentity("contact", "sealed"),
             SealedIdentity("job", "new-job"),
         ),
     )
     assert [item.disposition for item in result.entries] == [
         AdmissionDisposition.REUSE_EXACT_SUCCESSOR,
+        AdmissionDisposition.REUSE_EXACT_SUCCESSOR,
         AdmissionDisposition.CREATE_NEW,
     ]
+    native = {item.domain: item.native_id for item in result.entries}
+    assert native["customer"] == exact.target_id
+    assert native["contact"] == exact_contact.target_id
     assert result.canonical_reconciliation_admission_allowed is False
 
 
