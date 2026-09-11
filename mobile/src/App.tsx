@@ -22,11 +22,12 @@ import { PrivacyShield } from "./components/PrivacyShield";
 import { createPayrollService } from "./api/payroll";
 import { createFieldService } from "./api/fieldService";
 import { activationTokenFromLink } from "./linking/linking";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 
 export default function App() {
   const [configuration] = useState<{ environment: AppEnvironment | null; error: boolean }>(() => { try { return { environment: readEnvironment(), error: false }; } catch { return { environment: null, error: true }; } });
-  if (configuration.error || !configuration.environment) return <Screen><Text accessibilityRole="alert">ACP Employee is not configured. Contact support.</Text></Screen>;
-  return <PrivacyShield><RuntimeApp environment={configuration.environment} /></PrivacyShield>;
+  if (configuration.error || !configuration.environment) return <SafeAreaProvider><Screen><Text accessibilityRole="alert">ACP Employee is not configured. Contact support.</Text></Screen></SafeAreaProvider>;
+  return <SafeAreaProvider><PrivacyShield><RuntimeApp environment={configuration.environment} /></PrivacyShield></SafeAreaProvider>;
 }
 
 type RuntimeState = "boot" | "restore_error" | "anonymous" | "authenticated" | "onboarding_incomplete" | "access_limited";

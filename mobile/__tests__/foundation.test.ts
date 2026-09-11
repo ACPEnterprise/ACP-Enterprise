@@ -46,4 +46,17 @@ describe("authoritative punch contract", () => {
     expect(init.headers).toEqual({ "Idempotency-Key": "opaque-key" });
     expect(JSON.parse(init.body)).toEqual({ action: "clock_in" });
   });
+  it("uses the authoritative self Job-clock contract without Employee identity or device time", async () => {
+    const request = jest.fn()
+      .mockResolvedValueOnce({ active: false, event_id: null, employee_id: "synthetic", job_id: null, appointment_id: null, started_at: null, server_observed_at: "2026-09-11T01:00:00Z", elapsed_seconds: null })
+      .mockResolvedValueOnce({ event_id: "event", action: "start", occurred_at: "2026-09-11T01:00:00Z", state: { active: true, event_id: "event", employee_id: "synthetic", job_id: "job", appointment_id: "appointment", started_at: "2026-09-11T01:00:00Z", server_observed_at: "2026-09-11T01:00:01Z", elapsed_seconds: 1 }, completed_interval: null });
+    const service = createTimekeepingService({ request } as never);
+    await service.jobClockState(); await service.jobClock("start", "job", "appointment", "opaque-job-key");
+    expect(request.mock.calls[0]?.[0]).toBe("/api/v1/timekeeping/me/job-clock");
+    expect(request.mock.calls[1]?.[0]).toBe("/api/v1/timekeeping/me/job-clock");
+    const options = request.mock.calls[1]?.[2] as RequestInit;
+    expect(options.headers).toEqual({ "Idempotency-Key": "opaque-job-key" });
+    expect(JSON.parse(String(options.body))).toEqual({ action: "start", job_id: "job", appointment_id: "appointment" });
+    expect(String(options.body)).not.toMatch(/employee|occurred_at|timestamp/);
+  });
 });
