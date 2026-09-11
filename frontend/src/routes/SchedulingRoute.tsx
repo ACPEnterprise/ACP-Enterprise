@@ -13,6 +13,7 @@ import { getOperatorApiError } from "../api/errors";
 import { useAuth, useHasPermission } from "../auth";
 import { DispatchAssignmentPanel } from "../components/dispatch/DispatchAssignmentPanel";
 import { DispatchRecommendationPanel } from "../components/dispatch/DispatchRecommendationPanel";
+import { BookCustomerWorkPanel } from "../components/scheduling/BookCustomerWorkPanel";
 import {
   dayRange,
   localDateValue,
@@ -38,6 +39,7 @@ import { Alert, Badge, Button, Card, ConfirmationDialog, Input, Select, Spinner 
 const START_HOUR = 7;
 const END_HOUR = 19;
 const MINUTES_VISIBLE = (END_HOUR - START_HOUR) * 60;
+const MONTH_VISIBLE_APPOINTMENTS = 3;
 const statuses: readonly AppointmentStatus[] = [
   "draft",
   "scheduled",
@@ -130,6 +132,8 @@ export function SchedulingRoute({
   const canDispatch = useHasPermission("COMPANY_DISPATCH_READ");
   const canDispatchManage = useHasPermission("COMPANY_DISPATCH_MANAGE");
   const canReadJobs = useHasPermission("COMPANY_JOB_READ");
+  const canManageJobs = useHasPermission("COMPANY_JOB_MANAGE");
+  const canReadCustomers = useHasPermission("COMPANY_CUSTOMER_READ");
   const [searchParams] = useSearchParams();
   const [date, setDate] = useState(() => localDateValue(new Date()));
   const [perspective, setPerspective] = useState<Perspective>(() =>
@@ -143,6 +147,7 @@ export function SchedulingRoute({
   const [technician, setTechnician] = useState("");
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<AppointmentDetail | null>(null);
+  const [booking, setBooking] = useState(false);
   const displayTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const range = calendarRange(date, view);
   const appointments = useAppointments(
@@ -262,7 +267,10 @@ export function SchedulingRoute({
             or assignment.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          {canManage && canManageJobs && canReadCustomers && (
+            <Button onClick={() => setBooking(true)}>Book customer work</Button>
+          )}
           <Link
             className="inline-flex min-h-11 items-center rounded-lg border border-stroke px-4 font-semibold"
             to="/jobs"
@@ -277,6 +285,7 @@ export function SchedulingRoute({
           </Link>
         </div>
       </header>
+      {booking && <BookCustomerWorkPanel onClose={() => setBooking(false)} />}
       <Card className="space-y-4 p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
@@ -809,12 +818,22 @@ function MonthCalendar({
         return (
           <Card className={`min-h-36 p-2 ${day.getMonth() === selected.getMonth() ? "" : "opacity-50"}`} key={day.toISOString()}>
             <button type="button" className="w-full text-left text-sm font-semibold hover:text-action-primary" onClick={() => onOpenDay(day)} aria-label={`Open ${day.toLocaleDateString()} day schedule`}>{day.toLocaleDateString([], { weekday: "short", day: "numeric" })}</button>
-            <div className="mt-2 max-h-48 space-y-1 overflow-y-auto">
-              {rows.map((item) => {
+            <div className="mt-2 space-y-1">
+              {rows.slice(0, MONTH_VISIBLE_APPOINTMENTS).map((item) => {
                 const dispatch = dispatchByAppointment.get(item.id);
                 const job = dispatch?.job_id ? jobsById.get(dispatch.job_id) : undefined;
                 return <button type="button" className="block w-full rounded border border-stroke p-1.5 text-left text-xs hover:border-action-primary" onClick={() => onSelect(item)} key={item.id} aria-label={`${item.appointment_number}, ${time(item.arrival_window_start_at)}, ${appointmentState(item, dispatch, job)}`}><strong className="block truncate">{time(item.arrival_window_start_at)} · {job?.job_number ?? item.appointment_number}</strong><span className="block truncate">{job?.customer_display_name ?? "Customer unavailable"}</span><span className="block truncate text-content-muted">{dispatch?.assignment?.primary_employee_name ?? "Unassigned"} · {appointmentState(item, dispatch, job)}</span></button>;
               })}
+              {rows.length > MONTH_VISIBLE_APPOINTMENTS && (
+                <button
+                  type="button"
+                  className="min-h-9 w-full rounded border border-dashed border-stroke px-2 text-left text-xs font-semibold text-action-primary hover:border-action-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus"
+                  onClick={() => onOpenDay(day)}
+                  aria-label={`Open all ${rows.length} appointments for ${day.toLocaleDateString()}`}
+                >
+                  +{rows.length - MONTH_VISIBLE_APPOINTMENTS} more
+                </button>
+              )}
               {!rows.length && <p className="text-xs text-content-muted">No appointments</p>}
             </div>
           </Card>

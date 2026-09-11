@@ -1,0 +1,22 @@
+import type { JobPriority } from "./jobs";
+
+export interface ServiceRequestCreateInput {
+  request_id: string;
+  branch_id: string;
+  customer_id: string;
+  service_location_id: string;
+  arrival_window_start_at: string;
+  arrival_window_end_at: string;
+  expected_duration_minutes: number;
+  capacity_units: string;
+  job_type_code: string | null;
+  priority: JobPriority;
+  customer_reported_problem: string | null;
+  internal_description: string | null;
+}
+
+export interface ServiceRequestResult {
+  request_id: string;
+  appointment: { id: string; appointment_number: string };
+  job: { id: string; job_number: string };
+}

@@ -51,6 +51,7 @@ class LegacyProjectionRecord:
     disposition: LegacyProjectionDisposition
     evidence_digest: str
     target_id: str | None = None
+    successor_source_id: str | None = None
     canonical_blocker: bool = False
 
 
@@ -174,6 +175,7 @@ def classify_correlated_legacy(
                     }
                 ),
                 target_id=row.target_id,
+                successor_source_id=successor_id,
                 canonical_blocker=blocker,
             )
         )
@@ -320,6 +322,11 @@ def classify_legacy_projections(
                 disposition,
                 evidence,
                 target_id=target,
+                successor_source_id=(
+                    source_id
+                    if disposition == LegacyProjectionDisposition.EXACT_SUCCESSOR
+                    else None
+                ),
                 canonical_blocker=blocker,
             )
         )

@@ -169,7 +169,7 @@ def build_productive_hour_readiness(
             {item.branch_id for item in jobs if item.branch_id is not None}, key=str
         )
     )
-    company = _aggregate_scope("COMPANY", labor.company_id, None, jobs)
+    company = _company_scope(labor.company_id, jobs, employees)
     downstream = downstream_contract()
     canonical = {
         "contract_version": CONTRACT_VERSION,
@@ -321,6 +321,23 @@ def _aggregate_scope(
         _aggregate_measure(measure, children) for measure in ProductiveHourMeasure
     )
     return _scope(scope, company_id, branch_id, None, None, None, measures)
+
+
+def _company_scope(
+    company_id: UUID,
+    jobs: tuple[ScopeReadiness, ...],
+    employees: tuple[ScopeReadiness, ...],
+) -> ScopeReadiness:
+    """Keep total paid time Employee-bound instead of assigning it to Jobs."""
+    employee_measures = {
+        ProductiveHourMeasure.PAID_MINUTES,
+        ProductiveHourMeasure.UNCLASSIFIED_PAID_MINUTES,
+    }
+    measures = tuple(
+        _aggregate_measure(measure, employees if measure in employee_measures else jobs)
+        for measure in ProductiveHourMeasure
+    )
+    return _scope("COMPANY", company_id, None, None, None, None, measures)
 
 
 def _aggregate_measure(

@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { useCustomerDetail, useCustomerList } from "../../hooks/useCustomers";
+import { useCustomerDetail, useCustomerSearch } from "../../hooks/useCustomers";
 import { useCreateJob } from "../../hooks/useJobs";
 import { CreateJobPanel } from "./CreateJobPanel";
 
@@ -14,7 +14,7 @@ const mutate = vi.fn();
 describe("CreateJobPanel", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(useCustomerList).mockReturnValue({ isLoading: false, isError: false, data: { items: [{ id: "customer-1", first_name: "Alex", last_name: "Taylor", business_name: null }], total: 1 } } as never);
+    vi.mocked(useCustomerSearch).mockReturnValue({ isLoading: false, isError: false, data: { items: [{ id: "customer-1", first_name: "Alex", last_name: "Taylor", business_name: null }], page: 1, page_size: 25, total_count: 1, total_pages: 1 } } as never);
     vi.mocked(useCustomerDetail).mockReturnValue({ isLoading: false, data: { properties: [{ id: "location-1", address_line_1: "10 Main Street", city: "Albany" }] } } as never);
     vi.mocked(useCreateJob).mockReturnValue({ mutate, isPending: false, error: null } as never);
   });
@@ -31,5 +31,20 @@ describe("CreateJobPanel", () => {
     vi.mocked(useCreateJob).mockReturnValue({ mutate, isPending: true, error: null } as never);
     render(<MemoryRouter><CreateJobPanel onCancel={vi.fn()} /></MemoryRouter>);
     expect(screen.getByRole("button", { name: /Create Job/ })).toBeDisabled();
+  });
+  it("preserves Customer and Location context from Customer detail navigation", () => {
+    render(<MemoryRouter><CreateJobPanel onCancel={vi.fn()} initialCustomerId="customer-1" initialLocationId="location-1" /></MemoryRouter>);
+    expect(screen.getByRole("combobox", { name: /^Customer/ })).toHaveValue("customer-1");
+    expect(screen.getByRole("combobox", { name: /^Service Location/ })).toHaveValue("location-1");
+    expect(screen.getByText(/Showing 1 of 1 admitted Customers/)).toBeInTheDocument();
+  });
+  it("pages through the admitted Customer population during Job creation", async () => {
+    vi.mocked(useCustomerSearch).mockReturnValue({ isLoading: false, isError: false, data: { items: [{ id: "customer-1", display_name: "First Page" }], page: 1, page_size: 25, total_count: 51, total_pages: 3 } } as never);
+    render(<MemoryRouter><CreateJobPanel onCancel={vi.fn()} /></MemoryRouter>);
+    expect(screen.getByText(/Showing 1 of 51 admitted Customers · page 1 of 3/)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Next Customers" }));
+
+    expect(useCustomerSearch).toHaveBeenLastCalledWith(expect.objectContaining({ page: 2, page_size: 25 }));
   });
 });
