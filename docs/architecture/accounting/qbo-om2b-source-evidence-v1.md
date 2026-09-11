@@ -16,12 +16,15 @@ manifest digest, per-entity counts, per-entity page counts, provider catalog
 dispositions, report basis/end/generated timestamps, and explicit limitations.
 Raw provider data remains in the protected content-addressed evidence store.
 
-The paired HTTP workspace additionally exposes `provider_authorization` and
-`evidence_mode`. Only an exact protected marker/snapshot realm, CompanyInfo name
+The paired HTTP workspace exposes OM2-B's `mode`, `provider_environment`, hashed
+company identity, CompanyInfo verification time and source-manifest digest, plus
+the more explicit `provider_authorization` and `evidence_mode`. Only an exact
+protected marker/snapshot realm, CompanyInfo name
 and ID, and API-version match yields `verified_current` and
 `current_authorized_snapshot`. Without a current marker, preserved production
 evidence is `historical_snapshot` with `refresh_state=stale`; it must not be
-rendered as a currently verified company connection. `completeness`, entity/page
+rendered as a currently verified company connection or `mode=live`.
+`completeness`, entity/page
 counts, catalog dispositions and conflicts remain separate from row values.
 
 Financial records are QBO source-reported assertions pending Enterprise acceptance.

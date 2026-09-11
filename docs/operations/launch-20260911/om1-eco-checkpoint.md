@@ -55,6 +55,13 @@
   dispositions and conflicts. OM2-B must not render its unconditional
   “Verified real-company” heading when `provider_authorization=unverified` or
   `evidence_mode=historical_snapshot`.
+- OM2-B contract reconciliation after `ae2634f4`: consumer head `c1d1f7e5`
+  replaced its provisional shape with `mode`, provider environment, hashed
+  company identity, CompanyInfo verification time, manifest digest, bills and
+  conflict packets. The backend now emits that exact required shape while
+  retaining explicit authorization/completeness metadata. Only a currently
+  matching protected production marker yields `mode=live`; missing authority is
+  `historical` or `blocked` according to preserved evidence.
 - Boundaries: no QBO writes, Accounting posting, money movement, Customer-master
   creation, HCP/QBO auto-merge, autonomous Luminary action, Preview mutation, or
   Production action.

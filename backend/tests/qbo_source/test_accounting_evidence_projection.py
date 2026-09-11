@@ -146,6 +146,7 @@ def _evidence_root(tmp_path: Path) -> tuple[Path, Path]:
             "company_name": "All County Example",
             "company_info_id": "company-123456",
             "api_minor_version": 75,
+            "company_info_verified_at": "2026-09-10T19:59:00+00:00",
         },
     )
     return root, runtime
@@ -159,6 +160,12 @@ def test_projection_matches_om2b_contract_without_promoting_accounting_truth(
         evidence_root=root, runtime_root=runtime, basis="cash"
     )
     assert result["source"] == "quickbooks_online"
+    assert result["contract_version"] == "qbo-accounting-evidence/v1"
+    assert result["mode"] == "live"
+    assert result["provider_environment"] == "production"
+    assert len(result["company_identity_sha256"]) == 64
+    assert result["company_info_verified_at"] == "2026-09-10T19:59:00+00:00"
+    assert result["source_manifest_sha256"] == result["snapshot_digest"]
     assert result["source_company_label"] == "All County Example"
     assert result["source_company_id_masked"] == "…3456"
     assert result["refresh_state"] == "available"
@@ -202,6 +209,7 @@ def test_absent_evidence_is_unknown_not_zero_or_live(tmp_path: Path) -> None:
     )
     assert result["ar"]["total_open"]["amount"] is None
     assert result["is_live"] is False
+    assert result["mode"] == "blocked"
 
 
 def test_preserved_snapshot_is_stale_not_live_when_current_oauth_is_absent(
@@ -210,6 +218,8 @@ def test_preserved_snapshot_is_stale_not_live_when_current_oauth_is_absent(
     root, _ = _evidence_root(tmp_path)
     result = project_latest_qbo_workspace(evidence_root=root, basis="cash")
     assert result["refresh_state"] == "stale"
+    assert result["mode"] == "historical"
+    assert result["company_info_verified_at"] is None
     assert result["provider_authorization"] == "unverified"
     assert result["evidence_mode"] == "historical_snapshot"
     assert (
