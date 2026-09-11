@@ -29,8 +29,9 @@ def _source(root: Path, kind: str, row: dict[str, object]) -> dict[str, str]:
     return {"entity_kind": kind, "native_id": str(row["Id"]), "raw_sha256": digest}
 
 
-def _evidence_root(tmp_path: Path) -> Path:
+def _evidence_root(tmp_path: Path) -> tuple[Path, Path]:
     root = tmp_path / "protected"
+    runtime = tmp_path / "runtime"
     entities = [
         _source(
             root,
@@ -98,8 +99,11 @@ def _evidence_root(tmp_path: Path) -> Path:
             "snapshot": {
                 "environment": "production",
                 "snapshot_id": "run-1",
+                "realm_id": "realm-1",
+                "api_minor_version": 75,
                 "accounting_date_cutoff": "2026-09-10",
             },
+            "company_name": "All County Example",
             "entities": entities,
         },
     )
@@ -113,14 +117,26 @@ def _evidence_root(tmp_path: Path) -> Path:
             "report_end_date": "2026-09-10",
         },
     )
-    return root
+    _write_json(
+        runtime / "connections" / "verified.json",
+        {
+            "environment": "production",
+            "acquisition_eligible": True,
+            "realm_id": "realm-1",
+            "company_name": "All County Example",
+            "company_info_id": "company-123456",
+            "api_minor_version": 75,
+        },
+    )
+    return root, runtime
 
 
 def test_projection_matches_om2b_contract_without_promoting_accounting_truth(
     tmp_path: Path,
 ) -> None:
+    root, runtime = _evidence_root(tmp_path)
     result = project_latest_qbo_workspace(
-        evidence_root=_evidence_root(tmp_path), basis="cash"
+        evidence_root=root, runtime_root=runtime, basis="cash"
     )
     assert result["source"] == "quickbooks_online"
     assert result["source_company_label"] == "All County Example"
@@ -140,13 +156,15 @@ def test_projection_matches_om2b_contract_without_promoting_accounting_truth(
 
 
 def test_nonproduction_snapshot_is_rejected(tmp_path: Path) -> None:
-    root = _evidence_root(tmp_path)
+    root, runtime = _evidence_root(tmp_path)
     path = root / "runs" / "run-1" / "manifest.json"
     manifest = json.loads(path.read_text())
     manifest["snapshot"]["environment"] = "sandbox"
     _write_json(path, manifest)
     with pytest.raises(QboEvidenceProjectionError, match="non_production"):
-        project_latest_qbo_workspace(evidence_root=root, basis="cash")
+        project_latest_qbo_workspace(
+            evidence_root=root, runtime_root=runtime, basis="cash"
+        )
 
 
 def test_absent_evidence_is_unknown_not_zero_or_live(tmp_path: Path) -> None:
@@ -158,3 +176,27 @@ def test_absent_evidence_is_unknown_not_zero_or_live(tmp_path: Path) -> None:
     )
     assert result["ar"]["total_open"]["amount"] is None
     assert result["is_live"] is False
+
+
+def test_preserved_snapshot_is_stale_not_live_when_current_oauth_is_absent(
+    tmp_path: Path,
+) -> None:
+    root, _ = _evidence_root(tmp_path)
+    result = project_latest_qbo_workspace(evidence_root=root, basis="cash")
+    assert result["refresh_state"] == "stale"
+    assert (
+        "current_provider_authorization_unverified_historical_snapshot"
+        in result["limitations"]
+    )
+
+
+def test_verified_realm_conflict_fails_closed(tmp_path: Path) -> None:
+    root, runtime = _evidence_root(tmp_path)
+    marker_path = runtime / "connections" / "verified.json"
+    marker = json.loads(marker_path.read_text())
+    marker["realm_id"] = "other-realm"
+    _write_json(marker_path, marker)
+    with pytest.raises(QboEvidenceProjectionError, match="authorization_conflict"):
+        project_latest_qbo_workspace(
+            evidence_root=root, runtime_root=runtime, basis="cash"
+        )

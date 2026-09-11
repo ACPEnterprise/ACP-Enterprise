@@ -86,7 +86,13 @@ async def qbo_accounting_source_evidence(
     else:
         try:
             workspace = project_latest_qbo_workspace(
-                evidence_root=Path(settings.qbo_production_evidence_root), basis=basis
+                evidence_root=Path(settings.qbo_production_evidence_root),
+                basis=basis,
+                runtime_root=(
+                    Path(settings.qbo_production_runtime_root)
+                    if settings.qbo_production_runtime_root
+                    else None
+                ),
             )
         except (OSError, ValueError, QboEvidenceProjectionError):
             workspace = unavailable_qbo_workspace(

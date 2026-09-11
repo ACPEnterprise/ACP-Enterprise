@@ -46,7 +46,7 @@ def unavailable_qbo_workspace(*, basis: Basis, limitation: str) -> dict[str, obj
 
 
 def project_latest_qbo_workspace(
-    *, evidence_root: Path, basis: Basis
+    *, evidence_root: Path, basis: Basis, runtime_root: Path | None = None
 ) -> dict[str, object]:
     """Project a bounded sealed production snapshot without creating native truth."""
     root = evidence_root.expanduser().resolve()
@@ -65,6 +65,11 @@ def project_latest_qbo_workspace(
         raise QboEvidenceProjectionError("non_production_snapshot_rejected")
     state = str(manifest.get("state"))
     rows, truncated = _load_rows(root, manifest)
+    current_authorization = _verify_current_authorization(
+        runtime_root=runtime_root,
+        manifest=manifest,
+        company_rows=rows.get("company_info", []),
+    )
     limitations = {
         "qbo_source_reported_not_posted_acp_ledger",
         "payment_does_not_duplicate_revenue",
@@ -75,6 +80,8 @@ def project_latest_qbo_workspace(
         limitations.add("source_acquisition_incomplete")
     if truncated:
         limitations.add("response_family_limit_reached_2000")
+    if not current_authorization:
+        limitations.add("current_provider_authorization_unverified_historical_snapshot")
     accounts = [_account(row) for row in rows.get("account", [])]
     invoices = [_invoice(row) for row in rows.get("invoice", [])]
     payments = [_payment(row) for row in rows.get("payment", [])]
@@ -91,7 +98,13 @@ def project_latest_qbo_workspace(
         "accounting_basis": basis,
         "as_of": snapshot.get("accounting_date_cutoff"),
         "acquired_at": manifest.get("ended_at"),
-        "refresh_state": "available" if state == "complete" else "partial",
+        "refresh_state": (
+            "available"
+            if state == "complete" and current_authorization
+            else "partial"
+            if state == "partial" and current_authorization
+            else "stale"
+        ),
         "snapshot_id": snapshot.get("snapshot_id"),
         "snapshot_digest": hashlib.sha256(manifest_path.read_bytes()).hexdigest(),
         "is_live": False,
@@ -109,6 +122,41 @@ def project_latest_qbo_workspace(
         "reports": _report_controls(root, basis),
         "mutation_authority": "none",
     }
+
+
+def _verify_current_authorization(
+    *,
+    runtime_root: Path | None,
+    manifest: Mapping[str, object],
+    company_rows: list[dict[str, object]],
+) -> bool:
+    if runtime_root is None:
+        return False
+    marker_path = runtime_root.expanduser().resolve() / "connections" / "verified.json"
+    if not marker_path.is_file():
+        return False
+    marker = _read_json(marker_path)
+    snapshot = manifest.get("snapshot")
+    company = company_rows[0] if company_rows else None
+    expected = (
+        marker.get("environment") == "production",
+        marker.get("acquisition_eligible") is True,
+        isinstance(snapshot, Mapping),
+        isinstance(company, Mapping),
+    )
+    if not all(expected):
+        raise QboEvidenceProjectionError("production_authorization_invalid")
+    assert isinstance(snapshot, Mapping)
+    assert isinstance(company, Mapping)
+    if (
+        marker.get("realm_id") != snapshot.get("realm_id")
+        or marker.get("company_name") != manifest.get("company_name")
+        or marker.get("company_name") != company.get("CompanyName")
+        or marker.get("company_info_id") != company.get("Id")
+        or marker.get("api_minor_version") != snapshot.get("api_minor_version")
+    ):
+        raise QboEvidenceProjectionError("production_authorization_conflict")
+    return True
 
 
 def _latest_sealed_run(root: Path) -> tuple[Path, dict[str, object]] | None:

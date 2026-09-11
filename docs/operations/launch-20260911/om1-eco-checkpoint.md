@@ -35,6 +35,11 @@
   keeps workforce cost partial pending actual compensation/employer-cost evidence,
   and records the mission-authorized OM1-ECO/OM2-B QBO boundary as an external
   OAuth/realm/snapshot gate rather than the superseded Migration ownership collision.
+- Evidence hardening in progress after `e2b44319`: the projection now requires
+  the protected production marker to match the snapshot realm, exact CompanyInfo
+  identity/name and API minor version before describing current authorization.
+  With a preserved production snapshot but no current marker it reports `stale`
+  historical evidence; any contradiction fails closed.
 - Boundaries: no QBO writes, Accounting posting, money movement, Customer-master
   creation, HCP/QBO auto-merge, autonomous Luminary action, Preview mutation, or
   Production action.
