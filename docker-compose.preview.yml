@@ -22,6 +22,7 @@ x-backend-environment: &backend-environment
   IDENTITY_ONBOARDING_DELIVERY_PROVIDER: ${IDENTITY_ONBOARDING_DELIVERY_PROVIDER:-owner-mediated-preview}
   IDENTITY_EMAIL_POSTMARK_TOKEN_FILE: ${IDENTITY_EMAIL_POSTMARK_TOKEN_FILE:-/run/secrets/acp/postmark-server-token}
   IDENTITY_EMAIL_SENDER: ${IDENTITY_EMAIL_SENDER:-ACP Employee <no-reply@allcountyhomeservices.com>}
+  IDENTITY_EMAIL_ACTIVATION_ORIGIN: https://preview.allcountyhomeservices.com
   SECURITY_HEADERS_ENABLED: "true"
   HSTS_ENABLED: "true"
   TRUST_FORWARDED_HEADERS: "true"
@@ -119,6 +120,22 @@ services:
       timeout: 5s
       start_period: 10s
       retries: 12
+    restart: unless-stopped
+    networks:
+      preview:
+
+  identity-delivery-worker:
+    logging: *default-logging
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.preview
+    environment:
+      <<: *backend-environment
+      IDENTITY_OUTBOX_WORKER_ENABLED: "true"
+    command: ["python", "-m", "app.communications.identity_worker"]
+    volumes:
+      - ${IDENTITY_ONBOARDING_DELIVERY_SECRET_DIR_HOST:?Set IDENTITY_ONBOARDING_DELIVERY_SECRET_DIR_HOST in .env.preview}:/run/secrets/acp:ro
+      - ${REDIS_SECRET_DIR_HOST:?Set REDIS_SECRET_DIR_HOST in .env.preview}:/run/secrets/redis:ro
     restart: unless-stopped
     networks:
       preview:

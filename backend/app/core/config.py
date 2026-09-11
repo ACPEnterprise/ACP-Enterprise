@@ -78,6 +78,9 @@ class Settings(BaseSettings):
     identity_onboarding_delivery_provider: str | None = None
     identity_email_postmark_token_file: str | None = None
     identity_email_sender: str | None = None
+    identity_email_activation_origin: str = "https://preview.allcountyhomeservices.com"
+    identity_outbox_worker_enabled: bool = False
+    identity_outbox_worker_poll_seconds: float = 2.0
     communications_delivery_enabled: bool = False
     communications_email_provider_identity: str | None = None
     communications_email_credential_reference: str | None = None
