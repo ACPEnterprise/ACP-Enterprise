@@ -7,16 +7,23 @@ the existing `/financial-reports` navigation destination. Native ACP Accounting
 statements remain in their own section and continue to derive exclusively from
 posted ACP General Ledger entries.
 
-The UI requires OM1 ECO's company-scoped, report-read-authorized endpoint:
+The UI proposes this company-scoped, report-read-authorized projection endpoint
+for final reconciliation with OM1 ECO:
 
 `GET /api/v1/accounting/source-evidence/qbo?basis=cash|accrual`
 
-The exact response contract is represented by
-`frontend/src/api/qboAccountingEvidence.ts`. It carries source-company identity,
-explicit accounting basis, source as-of/acquisition time, refresh state, sealed
-snapshot identity/digest, limitations, nullable amount evidence, accounts,
-Invoice/AR, payment/application evidence, and available source reports.
-`mutation_authority` must equal `none` and `is_live` must equal `false`.
+`frontend/src/api/qboAccountingEvidence.ts` is a clearly labeled consumer
+projection, not yet an authoritative ECO HTTP contract. It composes the accepted
+`qbo-om2b-source-evidence/v1` packet fields with the still-required bounded row
+projections: explicit accounting basis, source as-of/acquisition time, refresh
+state, sealed snapshot identity/digest, limitations, nullable amount evidence,
+accounts, Invoice/AR, bills/AP, payment/application evidence, cross-source
+conflicts, and available reports. `mutation_authority` must equal `none`.
+
+OM1 ECO candidate `ecfada3984beb8298b68c2df0d7a200c07a084a5` supplies the
+packet authority but not this HTTP/row projection. Preview currently returns
+`404` for the proposed endpoint. Enterprise must not deploy or describe this UI
+as live/agreed until ECO publishes or explicitly accepts a compatible endpoint.
 
 ## Truth and safety invariants
 
@@ -33,7 +40,7 @@ Invoice/AR, payment/application evidence, and available source reports.
 
 ## Enterprise sequence
 
-1. Integrate the OM1 ECO backend candidate that implements the endpoint above.
+1. Integrate the OM1 ECO packet candidate and its future compatible row endpoint.
 2. Reconcile this UI commit onto the same protected-authority descendant.
 3. Run the focused frontend tests, full ESLint, TypeScript, production build, and
    ECO backend contract/authorization/privacy tests.
