@@ -15,7 +15,14 @@ from app.events.types import EventType
 from app.platform.audit.service import AuditEntry, AuditService, audit_service
 from app.platform.permissions.authorization import AuthorizationContext
 
-from .commands import CorrectTimeEntry, CreatePayPeriod, RecordManualTime, RecordPunch
+from .commands import (
+    CorrectJobWorkedInterval,
+    CorrectTimeEntry,
+    CreatePayPeriod,
+    RecordJobClock,
+    RecordManualTime,
+    RecordPunch,
+)
 from .contracts import (
     ApprovedWorkdayTimeFact,
     PunchKind,
@@ -29,6 +36,8 @@ from .contracts import (
     seal_payroll_time_input,
 )
 from .models import (
+    JobWorkedClockEvent,
+    JobWorkedIntervalRevision,
     PayPeriod,
     PayrollTimeInputRecord,
     WorkdayPunchEvent,
@@ -47,6 +56,316 @@ class WorkdayTimeService:
     ) -> None:
         self._repository = repository
         self._audit = audit
+
+    async def record_job_clock(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        command: RecordJobClock,
+    ) -> tuple[JobWorkedClockEvent, JobWorkedIntervalRevision | None]:
+        self._require_permission(context, TimekeepingPermission.OWN_PUNCH)
+        self._require_branch(context, command.branch_id)
+        self._validate_idempotency_key(command.idempotency_key)
+        if command.occurred_at.tzinfo is None:
+            raise WorkdayTimeError("Job clock timestamp must be timezone-aware")
+        employee = await self._repository.employee_for_membership(
+            session,
+            company_id=context.company.id,
+            membership_id=context.membership.id,
+        )
+        if employee is None or employee.id != command.employee_id:
+            raise WorkdayAuthorizationError(
+                "an employee may clock only their own Job work"
+            )
+        if not await self._repository.job_scope_exists(
+            session,
+            company_id=context.company.id,
+            branch_id=command.branch_id,
+            job_id=command.job_id,
+            appointment_id=command.appointment_id,
+        ):
+            raise WorkdayTimeError("Job or Appointment scope is invalid")
+        request_digest = canonical_digest(
+            {
+                "company_id": str(context.company.id),
+                "branch_id": str(command.branch_id),
+                "employee_id": str(command.employee_id),
+                "job_id": str(command.job_id),
+                "appointment_id": str(command.appointment_id)
+                if command.appointment_id
+                else None,
+                "kind": command.kind.value,
+            }
+        )
+        existing = await self._repository.job_clock_by_idempotency_key(
+            session,
+            company_id=context.company.id,
+            recorded_by_user_id=context.user.id,
+            idempotency_key=command.idempotency_key,
+        )
+        if existing is not None:
+            if existing.request_digest != request_digest:
+                raise WorkdayConflictError(
+                    "idempotency key was used for a different Job clock"
+                )
+            return existing, await self._repository.interval_for_job_clock_event(
+                session, company_id=context.company.id, event_id=existing.id
+            )
+        async with session.begin_nested():
+            await self._repository.lock_employee_job_clock(
+                session, company_id=context.company.id, employee_id=command.employee_id
+            )
+            latest = await self._repository.latest_job_clock_event(
+                session, company_id=context.company.id, employee_id=command.employee_id
+            )
+            if command.kind.value == "start":
+                if latest is not None and latest.kind == "start":
+                    raise WorkdayConflictError(
+                        "employee already has an active Job clock"
+                    )
+            else:
+                if latest is None or latest.kind != "start":
+                    raise WorkdayConflictError("Job clock stop has no active start")
+                if (latest.job_id, latest.appointment_id, latest.branch_id) != (
+                    command.job_id,
+                    command.appointment_id,
+                    command.branch_id,
+                ):
+                    raise WorkdayConflictError(
+                        "Job clock stop scope differs from active start"
+                    )
+                if command.occurred_at <= latest.occurred_at:
+                    raise WorkdayConflictError(
+                        "Job clock stop must follow active start"
+                    )
+            event_id = uuid4()
+            event_values = {
+                "event_id": str(event_id),
+                "request_digest": request_digest,
+                "occurred_at": command.occurred_at.isoformat(),
+                "recorded_by_user_id": str(context.user.id),
+            }
+            event = JobWorkedClockEvent(
+                id=event_id,
+                company_id=context.company.id,
+                branch_id=command.branch_id,
+                employee_id=command.employee_id,
+                job_id=command.job_id,
+                appointment_id=command.appointment_id,
+                kind=command.kind.value,
+                occurred_at=command.occurred_at,
+                source="employee_clock",
+                recorded_by_user_id=context.user.id,
+                idempotency_key=command.idempotency_key,
+                request_digest=request_digest,
+                event_digest=canonical_digest(event_values),
+            )
+            session.add(event)
+            interval = None
+            if latest is not None and command.kind.value == "stop":
+                duration_seconds = int(
+                    (command.occurred_at - latest.occurred_at).total_seconds()
+                )
+                interval_id, revision_id = uuid4(), uuid4()
+                values = {
+                    "interval_id": str(interval_id),
+                    "revision_id": str(revision_id),
+                    "employee_id": str(command.employee_id),
+                    "job_id": str(command.job_id),
+                    "appointment_id": str(command.appointment_id)
+                    if command.appointment_id
+                    else None,
+                    "start_at": latest.occurred_at.isoformat(),
+                    "stop_at": command.occurred_at.isoformat(),
+                    "source_event_ids": (str(latest.id), str(event.id)),
+                }
+                interval = JobWorkedIntervalRevision(
+                    id=revision_id,
+                    interval_id=interval_id,
+                    revision_number=1,
+                    supersedes_revision_id=None,
+                    company_id=context.company.id,
+                    branch_id=command.branch_id,
+                    employee_id=command.employee_id,
+                    job_id=command.job_id,
+                    appointment_id=command.appointment_id,
+                    start_at=latest.occurred_at,
+                    stop_at=command.occurred_at,
+                    duration_seconds=duration_seconds,
+                    duration_minutes=duration_seconds // 60,
+                    source="employee_clock",
+                    correction_state="original",
+                    audit_lineage=[str(revision_id)],
+                    source_event_ids=[str(latest.id), str(event.id)],
+                    validity="valid",
+                    confidence="authoritative",
+                    correction_reason=None,
+                    corrected_by_user_id=None,
+                    correction_idempotency_key=None,
+                    correction_request_digest=None,
+                    evidence_digest=canonical_digest(values),
+                )
+                session.add(interval)
+            self._stage_action(
+                session,
+                context=context,
+                event_type=EventType.JOB_WORK_CLOCK_RECORDED,
+                entity_id=event.id,
+                action="timekeeping.job_clock.recorded",
+                branch_id=command.branch_id,
+                details={
+                    "employee_id": str(command.employee_id),
+                    "job_id": str(command.job_id),
+                    "kind": command.kind.value,
+                },
+            )
+        try:
+            await session.commit()
+            return event, interval
+        except IntegrityError:
+            await session.rollback()
+            existing = await self._repository.job_clock_by_idempotency_key(
+                session,
+                company_id=context.company.id,
+                recorded_by_user_id=context.user.id,
+                idempotency_key=command.idempotency_key,
+            )
+            if existing is None or existing.request_digest != request_digest:
+                raise WorkdayConflictError(
+                    "concurrent Job clock request could not be reconciled"
+                )
+            return existing, await self._repository.interval_for_job_clock_event(
+                session, company_id=context.company.id, event_id=existing.id
+            )
+
+    async def correct_job_interval(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        command: CorrectJobWorkedInterval,
+    ) -> JobWorkedIntervalRevision:
+        self._require_permission(context, TimekeepingPermission.CORRECT)
+        self._validate_idempotency_key(command.idempotency_key)
+        if (
+            not command.reason.strip()
+            or command.start_at.tzinfo is None
+            or command.stop_at.tzinfo is None
+        ):
+            raise WorkdayTimeError(
+                "valid correction reason and timezone-aware interval are required"
+            )
+        if command.stop_at <= command.start_at:
+            raise WorkdayTimeError("corrected stop must follow start")
+        request_digest = canonical_digest(
+            {
+                "revision_id": str(command.revision_id),
+                "start_at": command.start_at.isoformat(),
+                "stop_at": command.stop_at.isoformat(),
+                "reason": command.reason.strip(),
+            }
+        )
+        existing = await self._repository.job_interval_correction_by_idempotency_key(
+            session,
+            company_id=context.company.id,
+            corrected_by_user_id=context.user.id,
+            idempotency_key=command.idempotency_key,
+        )
+        if existing is not None:
+            if existing.correction_request_digest != request_digest:
+                raise WorkdayConflictError(
+                    "idempotency key was used for a different Job correction"
+                )
+            return existing
+        prior = await self._repository.latest_job_interval_revision(
+            session, company_id=context.company.id, revision_id=command.revision_id
+        )
+        if prior is None:
+            raise WorkdayTimeError("Job worked interval does not exist")
+        self._require_branch(context, prior.branch_id)
+        async with session.begin_nested():
+            await self._repository.lock_employee_job_clock(
+                session, company_id=context.company.id, employee_id=prior.employee_id
+            )
+            others = await self._repository.current_job_intervals(
+                session,
+                company_id=context.company.id,
+                employee_ids=(prior.employee_id,),
+                start_at=command.start_at,
+                stop_at=command.stop_at,
+            )
+            if any(value.interval_id != prior.interval_id for value in others):
+                raise WorkdayConflictError(
+                    "corrected Job worked interval overlaps current evidence"
+                )
+            revision_id = uuid4()
+            duration_seconds = int((command.stop_at - command.start_at).total_seconds())
+            values = {
+                "revision_id": str(revision_id),
+                "prior_digest": prior.evidence_digest,
+                "start_at": command.start_at.isoformat(),
+                "stop_at": command.stop_at.isoformat(),
+                "request_digest": request_digest,
+            }
+            result = JobWorkedIntervalRevision(
+                id=revision_id,
+                interval_id=prior.interval_id,
+                revision_number=prior.revision_number + 1,
+                supersedes_revision_id=prior.id,
+                company_id=prior.company_id,
+                branch_id=prior.branch_id,
+                employee_id=prior.employee_id,
+                job_id=prior.job_id,
+                appointment_id=prior.appointment_id,
+                start_at=command.start_at,
+                stop_at=command.stop_at,
+                duration_seconds=duration_seconds,
+                duration_minutes=duration_seconds // 60,
+                source="authorized_manual",
+                correction_state="corrected",
+                audit_lineage=[*prior.audit_lineage, str(revision_id)],
+                source_event_ids=list(prior.source_event_ids),
+                validity="valid",
+                confidence=prior.confidence,
+                correction_reason=command.reason.strip(),
+                corrected_by_user_id=context.user.id,
+                correction_idempotency_key=command.idempotency_key,
+                correction_request_digest=request_digest,
+                evidence_digest=canonical_digest(values),
+            )
+            session.add(result)
+            self._stage_action(
+                session,
+                context=context,
+                event_type=EventType.JOB_WORK_INTERVAL_CORRECTED,
+                entity_id=result.id,
+                action="timekeeping.job_interval.corrected",
+                branch_id=result.branch_id,
+                details={
+                    "employee_id": str(result.employee_id),
+                    "job_id": str(result.job_id),
+                    "supersedes_revision_id": str(prior.id),
+                },
+            )
+        try:
+            await session.commit()
+            return result
+        except IntegrityError:
+            await session.rollback()
+            existing = (
+                await self._repository.job_interval_correction_by_idempotency_key(
+                    session,
+                    company_id=context.company.id,
+                    corrected_by_user_id=context.user.id,
+                    idempotency_key=command.idempotency_key,
+                )
+            )
+            if existing is None or existing.correction_request_digest != request_digest:
+                raise WorkdayConflictError(
+                    "concurrent Job correction could not be reconciled"
+                )
+            return existing
 
     async def record_punch(
         self,

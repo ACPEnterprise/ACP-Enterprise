@@ -2291,6 +2291,36 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     },
     {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "engineering_scheduler",
+      "mechanism": "single active delegation authority with transactional state transition",
+      "method": "POST",
+      "operation_id": "activate_api_v1_engineering_scheduler_delegations_activate_post",
+      "path": "/api/v1/engineering-scheduler/delegations/activate",
+      "reason": "Activation converges on the single current scheduler delegation authority.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "engineering_scheduler",
+      "mechanism": "delegation identity and terminal state transition",
+      "method": "POST",
+      "operation_id": "deactivate_api_v1_engineering_scheduler_delegations__delegation_id__deactivate_post",
+      "path": "/api/v1/engineering-scheduler/delegations/{delegation_id}/deactivate",
+      "reason": "Deactivation converges on the requested terminal delegation state.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "engineering_capacity",
+      "mechanism": "permanent binding identity and transactional successor replacement",
+      "method": "POST",
+      "operation_id": "rebind_permanent_capacity_api_v1_engineering_capacity_permanent_bindings_rebind_post",
+      "path": "/api/v1/engineering/capacity/permanent-bindings/rebind",
+      "reason": "Rebinding converges on one current permanent worker binding.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
       "classification": "EXPLICIT_EXEMPTION",
       "domain": "timekeeping",
       "mechanism": "legacy compatibility boundary; no shared durable receipt asserted",
@@ -2318,6 +2348,26 @@
       "operation_id": "submit_entry_api_v1_timekeeping_entries__revision_id__submit_post",
       "path": "/api/v1/timekeeping/entries/{revision_id}/submit",
       "reason": "Existing public mutation lacks a proven cross-network replay receipt; PLAT.008 documents rather than breaking or redesigning this domain.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "timekeeping",
+      "mechanism": "domain durable command/receipt identity and request digest",
+      "method": "POST",
+      "operation_id": "record_own_job_clock_api_v1_timekeeping_me_job_clock_post",
+      "path": "/api/v1/timekeeping/me/job-clock",
+      "reason": "Authenticated Employee Job clock replay returns the original event and completed interval.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "timekeeping",
+      "mechanism": "append-only correction successor and request digest",
+      "method": "POST",
+      "operation_id": "correct_job_worked_interval_api_v1_timekeeping_job_intervals__revision_id__corrections_post",
+      "path": "/api/v1/timekeeping/job-intervals/{revision_id}/corrections",
+      "reason": "Correction retry converges on one immutable successor revision.",
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     },
     {
@@ -2769,6 +2819,6 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "39a208d45baf73c22e64095101299c0989802ddc25606acca59e29b1b61b1ad6",
+  "fingerprint": "39f5da1f75cefbb65bfa7fa507695484ceec6ecc6f375ddc573cea8fea7a4218",
   "schema_version": "1"
 }
