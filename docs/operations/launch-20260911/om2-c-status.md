@@ -59,6 +59,12 @@ Preview URL: `https://preview.allcountyhomeservices.com`.
   Migration readiness endpoints consistently return the bounded unauthenticated
   `401` response. This proves authentication enforcement only; it does not prove the
   rendered operator workflow or its source data.
+- The registered Timecard/Payroll routes checked were
+  `/api/v1/timekeeping/me/timecard`, `/api/v1/timekeeping/admin/timecard-review`,
+  `/api/v1/timekeeping/pay-periods`, `/api/v1/payroll/operations/summary`,
+  `/api/v1/payroll/operations/registers`, `/api/v1/payroll/reporting`, and
+  `/api/v1/payroll/me/payroll-status`. Guessed plural paths outside the router returned
+  `404` and are not classified as product or deployment failures.
 
 Exact failed transition:
 
@@ -80,15 +86,21 @@ after that checkpoint.
   realm marker or sealed production run was available. Existing reports are historical
   evidence, not live acquisition. OM2-B has a compatible evidence candidate not yet in
   protected authority. Route acquisition to **OM1 ECO**, presentation to **OM2-B**, and
-  rerun to OM2-C after protected integration/deployment. OM2-B candidate
-  `e0210ef414b574f9e573cde4de7939d230be5e80` also preserves unavailable Payroll totals
-  and office Timecard navigation but remains outside protected authority.
+  rerun to OM2-C after protected integration/deployment. Latest observed OM2-B
+  candidate `37597155167a04fed2a38af5b1387e745bf0fc00` preserves unavailable Payroll
+  totals, office Timecard navigation, and consumes OM1 ECO's packet, but both
+  candidates remain outside protected authority. OM1 ECO still reports that a
+  company-scoped HTTP read model for source accounts, Invoices, Payments, bills/AP,
+  balances, and report rows is unpublished.
 - Employee access: OM1 Phone's read-only Preview checkpoint reports the existing Lianne
   User/Membership/Employee/MAIN Branch graph intact, invitation valid and unconsumed,
   and delivery definitively failed without provider acceptance. This is actual Preview
-  administrative evidence, but it is not OM2-C login/activation acceptance. Retry is
-  owned by **OM1 Enterprise/OM1 Phone**; human receipt, activation and login remain
-  separate subsequent checkpoints.
+  administrative evidence, but it is not OM2-C login/activation acceptance. The
+  latest observed OM1 Phone candidate
+  `4c4fb1fd373c7fe151047e1343d2b51ccc2a1cb1` prepares a tightly bounded audited retry
+  for the original definitively rejected outbox identity, but it is not protected or
+  deployed. Retry remains owned by **OM1 Enterprise/OM1 Phone**; provider acceptance,
+  human receipt, activation and login remain separate subsequent checkpoints.
 - Job clocks and Payroll: current fixtures prove Job clock evidence remains explicitly
   non-payable until accepted Workday Time and Payroll inputs exist. No real or payable
   test punch was made. Actual employee-to-office consistency remains pending a
@@ -96,12 +108,15 @@ after that checkpoint.
 
 Additional handoffs observed but not substituted for deployed acceptance:
 
-- Laptop1-B candidate `c13f6c97893e26110fdf6bf7c15d24996443778b`
-  adds complete Customer population traversal and booking-context checks; it is three
-  commits ahead of protected authority.
-- OM1 Phone candidate `ee6fb2ee1870f7632f813edeaa4a8b5767dbe03d`
-  confirms the invitation remains valid/unconsumed and records Postmark server live
-  readiness, but human receipt, activation and login remain pending.
+- Latest observed Laptop1-B candidate
+  `5f3e66b0248a22744bc4262c606f669e726952e0` adds deterministic page-one-to-page-two
+  Customer roster and Job-selector traversal. Its own packet still requires protected
+  integration, a coherent Preview deployment, and Migration's source admission packet.
+- Latest observed OM1 Phone candidate
+  `4c4fb1fd373c7fe151047e1343d2b51ccc2a1cb1` confirms the invitation remains valid and
+  unconsumed and records Postmark server live readiness, but provider retry acceptance,
+  human receipt, activation, login, and the post-activation mobile permission assignment
+  remain pending.
 
 ## Operator rerun matrix
 

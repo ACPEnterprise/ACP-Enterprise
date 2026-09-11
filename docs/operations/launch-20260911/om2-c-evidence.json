@@ -33,6 +33,8 @@
       "payroll": true
     },
     "job_clock_route_status": 401,
+    "registered_timecard_payroll_route_status": 401,
+    "non_authoritative_guessed_plural_routes_status": 404,
     "checkpoint_sequence": [
       "FRONTEND_OLD_AND_JOB_CLOCK_ROUTE_ABSENT",
       "FRONTEND_CURRENT_AND_JOB_CLOCK_ROUTE_AUTHENTICATED"
@@ -46,6 +48,13 @@
     "employee_delivery": "DEFINITIVE_PROVIDER_REJECTION_NO_ACCEPTANCE_ONE_RETRY_ELIGIBLE",
     "employee_activation_login": "UNVERIFIED",
     "job_clock_timecard_payroll": "UNVERIFIED_NO_SANCTIONED_NONPAYABLE_DEPLOYED_RUN"
+  },
+  "latest_observed_external_candidates": {
+    "customer_navigation": "5f3e66b0248a22744bc4262c606f669e726952e0",
+    "identity_definitive_rejection_retry": "4c4fb1fd373c7fe151047e1343d2b51ccc2a1cb1",
+    "qbo_payroll_evidence_ui": "37597155167a04fed2a38af5b1387e745bf0fc00",
+    "qbo_source_evidence": "ecfada3984beb8298b68c2df0d7a200c07a084a5",
+    "all_integrated_in_protected_authority": false
   },
   "mutations": {
     "preview": false,
