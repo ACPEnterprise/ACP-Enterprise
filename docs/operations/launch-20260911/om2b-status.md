@@ -6,7 +6,7 @@
 - Activated: 2026-09-10 21:36 America/New_York
 - Authorized continuation expiry: 2026-09-13 21:36 America/New_York
 - Initial implementation base: `42a4f68087d76247269bd4c8388f556dd62a8b5c`
-- Current reconciled protected authority: `e9377e72672edd5308c8181f45e172c22888cc5e`
+- Current reconciled protected authority: `f3d886d88f432953ea187d989583e068c46ff228`
 - Lane branch: `work/qbo-accounting-evidence-ui-1`
 
 ## Current task
@@ -41,21 +41,21 @@ office Timecard, and operating-register acceptance.
   backend suites pass 282 tests against the isolated PostgreSQL database.
 - Read-only Preview inspection still reports backend release
   `00e0d5f0faad31f6ff0b85cdde903857a78b70fc`, not protected authority
-  `42a4f68087d76247269bd4c8388f556dd62a8b5c`. The proposed QBO evidence endpoint
-  returns `404`; the existing Payroll summary correctly rejects unauthenticated
-  access with `401`. Deployed current-authority acceptance therefore remains
-  blocked on Enterprise's coherent integration/deployment and sanctioned login.
+  `f3d886d88f432953ea187d989583e068c46ff228`. The QBO evidence endpoint now
+  correctly rejects unauthenticated access with `401`; this proves the
+  authentication boundary, not source-data acceptance. Deployed
+  current-authority acceptance remains blocked on Enterprise's coherent
+  deployment, sanctioned login, and real-company QBO authorization.
 
 ## Remaining checks / next action
 
-1. Reconcile the QBO UI to the final OM1 ECO HTTP contract when published; do not
-   deploy the provisional row client as if it were agreed or live.
-2. Complete Payroll/Timecard UI tests for missing calculations, office drill-down,
-   partial/empty/error recovery, and source-date preservation.
-3. Run QBO packet, Payroll, Timekeeping, authorization, frontend, migration, and
-   static qualification against current authority.
-4. Push the updated candidate and hand Enterprise exact dependencies and deployed
-   acceptance steps. Enterprise alone deploys Preview.
+1. Enterprise integrates the later fail-closed QBO consumer hardening from this
+   lane; protected already contains the earlier QBO/Payroll/Timecard UI packet.
+2. Enterprise performs one coherent current-authority Preview deployment.
+3. With sanctioned authentication and real-company QBO authorization, execute
+   cash/accrual source-date, completeness, conflict, and unavailable-state checks.
+4. Keep historical snapshots labeled stale/unverified and do not infer missing
+   balances, Payroll inputs, posting authority, or live-source acceptance.
 
 ## Boundaries
 
