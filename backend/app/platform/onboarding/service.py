@@ -800,7 +800,7 @@ class IdentityOnboardingService:
                 or invitation.status != "pending"
                 or invitation.expires_at <= now
                 or envelope is None
-                or envelope.status != "pending"
+                or envelope.status not in {"pending", "claimed"}
             ):
                 raise OnboardingConflictError("Protected delivery is unavailable.")
             encoded = self._delivery_keyring().get(envelope.key_id)

@@ -185,6 +185,7 @@ class NotificationOutboxRepository:
         claim_ttl: timedelta = timedelta(minutes=5),
         company_id: UUID | None = None,
         branch_id: UUID | None = None,
+        notification_types: frozenset[str] | None = None,
     ) -> list[NotificationOutbox]:
         statement = (
             select(NotificationOutbox)
@@ -204,6 +205,12 @@ class NotificationOutboxRepository:
             statement = statement.where(NotificationOutbox.company_id == company_id)
         if branch_id is not None:
             statement = statement.where(NotificationOutbox.branch_id == branch_id)
+        if notification_types is not None:
+            if not notification_types:
+                return []
+            statement = statement.where(
+                NotificationOutbox.notification_type.in_(notification_types)
+            )
         records = list((await session.scalars(statement)).all())
         for record in records:
             record.status = "claimed"
@@ -524,17 +531,25 @@ class NotificationOutboxRepository:
         *,
         claimed_before: datetime,
         release_at: datetime,
+        notification_types: frozenset[str] | None = None,
     ) -> int:
+        statement = (
+            select(NotificationOutbox)
+            .where(
+                NotificationOutbox.status == "claimed",
+                NotificationOutbox.claimed_at <= claimed_before,
+            )
+            .with_for_update(skip_locked=True)
+        )
+        if notification_types is not None:
+            if not notification_types:
+                return 0
+            statement = statement.where(
+                NotificationOutbox.notification_type.in_(notification_types)
+            )
         records = tuple(
             (
-                await session.scalars(
-                    select(NotificationOutbox)
-                    .where(
-                        NotificationOutbox.status == "claimed",
-                        NotificationOutbox.claimed_at <= claimed_before,
-                    )
-                    .with_for_update(skip_locked=True)
-                )
+                await session.scalars(statement)
             ).all()
         )
         for record in records:

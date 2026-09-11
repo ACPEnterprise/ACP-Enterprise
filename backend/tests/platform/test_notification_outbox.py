@@ -5,12 +5,6 @@ from uuid import UUID, uuid4
 
 import pytest
 import pytest_asyncio
-from app.core.config import settings
-from app.platform.notifications.models import (
-    NotificationDeliveryEvidence,
-    NotificationOutbox,
-)
-from app.platform.notifications.repository import NotificationOutboxRepository
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -18,6 +12,13 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
+
+from app.core.config import settings
+from app.platform.notifications.models import (
+    NotificationDeliveryEvidence,
+    NotificationOutbox,
+)
+from app.platform.notifications.repository import NotificationOutboxRepository
 
 
 def utc_now() -> datetime:
@@ -174,6 +175,41 @@ async def test_claiming_is_ordered_and_exclusive_across_workers(
     assert second_ids == [record.id for record in records[2:]]
     assert set(first_ids).isdisjoint(second_ids)
     assert all(record.claim_token is not None for record in first + second)
+
+
+@pytest.mark.asyncio
+async def test_identity_worker_claim_filter_never_claims_customer_messages(
+    outbox_database: tuple[AsyncEngine, async_sessionmaker[AsyncSession]],
+) -> None:
+    _, factory = outbox_database
+    identity = await enqueue_fixture(factory)
+    now = utc_now()
+    async with factory() as session, session.begin():
+        customer, _ = await NotificationOutboxRepository.enqueue(
+            session,
+            notification_type="appointment_reminder",
+            template_identifier="appointment-reminder-v1",
+            recipient="customer@example.test",
+            payload={},
+            correlation_id=uuid4(),
+            idempotency_key=f"customer:{uuid4()}",
+            scheduled_at=now,
+            now=now,
+            company_id=uuid4(),
+        )
+    async with factory() as session, session.begin():
+        claimed = await NotificationOutboxRepository.claim_batch(
+            session,
+            worker_id="identity-worker",
+            now=utc_now(),
+            limit=10,
+            notification_types=frozenset({"identity.email_change_verification"}),
+        )
+    assert [record.id for record in claimed] == [identity.id]
+    async with factory() as session:
+        untouched = await session.get(NotificationOutbox, customer.id)
+        assert untouched is not None
+        assert untouched.status == "pending"
 
 
 @pytest.mark.asyncio
