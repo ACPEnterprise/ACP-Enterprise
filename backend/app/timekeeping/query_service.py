@@ -18,6 +18,7 @@ from .job_participation import (
     CorrectionState,
     IntervalConfidence,
     IntervalValidity,
+    JobClockKind,
     WorkedIntervalSource,
 )
 from .models import (
@@ -74,8 +75,23 @@ class WorkdayTimeQueryService:
             session, company_id=context.company.id, employee_id=employee_id
         )
         if latest is None or latest.kind == "stop":
+            completed = (
+                await self._repository.interval_for_job_clock_event(
+                    session, company_id=context.company.id, event_id=latest.id
+                )
+                if latest is not None
+                else None
+            )
             return ActiveJobClockView(
-                active=False, employee_id=employee_id, server_observed_at=now
+                active=False,
+                employee_id=employee_id,
+                server_observed_at=now,
+                latest_action=JobClockKind(latest.kind) if latest is not None else None,
+                latest_event_id=latest.id if latest is not None else None,
+                latest_occurred_at=latest.occurred_at if latest is not None else None,
+                latest_completed_interval_id=(
+                    completed.interval_id if completed is not None else None
+                ),
             )
         if now < latest.occurred_at:
             raise WorkdayTimeError("active Job clock starts after observation time")
@@ -88,6 +104,9 @@ class WorkdayTimeQueryService:
             started_at=latest.occurred_at,
             server_observed_at=now,
             elapsed_seconds=int((now - latest.occurred_at).total_seconds()),
+            latest_action=JobClockKind(latest.kind),
+            latest_event_id=latest.id,
+            latest_occurred_at=latest.occurred_at,
         )
 
     async def state(
@@ -644,6 +663,7 @@ class WorkdayTimeQueryService:
             confidence=IntervalConfidence(value.confidence),
             evidence_digest=value.evidence_digest,
             correction_reason=value.correction_reason,
+            corrected_by_user_id=value.corrected_by_user_id,
         )
 
     @staticmethod

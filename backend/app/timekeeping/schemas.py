@@ -50,6 +50,7 @@ class JobWorkedIntervalView(BaseModel):
     confidence: IntervalConfidence
     evidence_digest: str
     correction_reason: str | None
+    corrected_by_user_id: UUID | None
 
 
 class ActiveJobClockView(BaseModel):
@@ -61,6 +62,10 @@ class ActiveJobClockView(BaseModel):
     started_at: datetime | None = None
     server_observed_at: datetime
     elapsed_seconds: int | None = None
+    latest_action: JobClockKind | None = None
+    latest_event_id: UUID | None = None
+    latest_occurred_at: datetime | None = None
+    latest_completed_interval_id: UUID | None = None
 
 
 class JobClockResult(BaseModel):

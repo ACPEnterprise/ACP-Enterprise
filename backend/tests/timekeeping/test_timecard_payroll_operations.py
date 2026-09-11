@@ -2,7 +2,10 @@ from datetime import date, datetime, timedelta, timezone
 from types import SimpleNamespace
 from uuid import uuid4
 
+import pytest
 from app.main import app
+from app.payroll.contracts import PayrollConflictError
+from app.payroll.finalization import PayrollGrossResultService
 from app.payroll.operations import PayrollOperationsService
 from app.timekeeping.query_service import WorkdayTimeQueryService
 
@@ -86,3 +89,43 @@ def test_period_operations_are_bounded_read_only_routes() -> None:
     payroll = paths["/api/v1/payroll/operations/pay-periods/{pay_period_id}"]
     assert set(timecard) == {"get"}
     assert set(payroll) == {"get"}
+
+
+class _ScalarRows:
+    def __init__(self, values: tuple[object, ...]) -> None:
+        self._values = values
+
+    def all(self) -> tuple[object, ...]:
+        return self._values
+
+
+class _SnapshotSession:
+    def __init__(self, values: tuple[object, ...]) -> None:
+        self._values = values
+
+    async def scalars(self, statement: object) -> _ScalarRows:
+        return _ScalarRows(self._values)
+
+
+@pytest.mark.asyncio
+async def test_payroll_snapshot_fails_closed_when_current_time_evidence_changes() -> None:
+    original_id, corrected_id = uuid4(), uuid4()
+    snapshot = SimpleNamespace(approved_revision_ids=[str(original_id)])
+    with pytest.raises(PayrollConflictError, match="stale"):
+        await PayrollGrossResultService._require_current_time_snapshot(
+            _SnapshotSession((corrected_id,)),  # type: ignore[arg-type]
+            company_id=uuid4(),
+            employee_id=uuid4(),
+            period_start=date(2026, 9, 1),
+            period_end=date(2026, 9, 7),
+            snapshot=snapshot,  # type: ignore[arg-type]
+        )
+
+    await PayrollGrossResultService._require_current_time_snapshot(
+        _SnapshotSession((original_id,)),  # type: ignore[arg-type]
+        company_id=uuid4(),
+        employee_id=uuid4(),
+        period_start=date(2026, 9, 1),
+        period_end=date(2026, 9, 7),
+        snapshot=snapshot,  # type: ignore[arg-type]
+    )
