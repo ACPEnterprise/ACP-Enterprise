@@ -81,6 +81,7 @@ export interface JobWorkedInterval {
   confidence: "authoritative" | "disputed";
   evidence_digest: string;
   correction_reason: string | null;
+  corrected_by_user_id: string | null;
 }
 
 export interface ActiveJobClock {
@@ -92,6 +93,10 @@ export interface ActiveJobClock {
   started_at: string | null;
   server_observed_at: string;
   elapsed_seconds: number | null;
+  latest_action: JobClockAction | null;
+  latest_event_id: string | null;
+  latest_occurred_at: string | null;
+  latest_completed_interval_id: string | null;
 }
 
 export interface JobClockResult {

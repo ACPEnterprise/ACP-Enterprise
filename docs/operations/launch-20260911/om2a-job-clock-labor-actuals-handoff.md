@@ -50,6 +50,8 @@ synthetic identities only.
 - Focused Job-clock/office tests: 8 passed.
 - Affected Timekeeping, Payroll, labor evidence, and productive-hour tests: 71 passed.
 - Affected Ruff and MyPy: passed.
+- Shared frontend Timekeeping API tests: 6 passed.
+- Frontend ESLint, TypeScript, and production build: passed.
 
 Enterprise owns protected integration and Preview deployment. After deployment,
 acceptance must verify authenticated start, active refresh, stop, inactive reconnect,

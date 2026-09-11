@@ -98,8 +98,16 @@ describe("Workday Time API client", () => {
   });
 
   it("reads active Job clock state independently from paid punch state", async () => {
+    const stopped = {
+      active: false,
+      employee_id: "employee",
+      latest_action: "stop",
+      latest_event_id: "event-2",
+      latest_occurred_at: "2026-09-10T12:05:00Z",
+      latest_completed_interval_id: "interval-1",
+    };
     const adapter = vi.fn(async (config) => ({
-      data: { active: false, employee_id: "employee" },
+      data: stopped,
       status: 200,
       statusText: "OK",
       headers: {},
@@ -108,7 +116,7 @@ describe("Workday Time API client", () => {
     const original = apiClient.defaults.adapter;
     apiClient.defaults.adapter = adapter;
     try {
-      await getOwnActiveJobClock();
+      expect(await getOwnActiveJobClock()).toEqual(stopped);
     } finally {
       apiClient.defaults.adapter = original;
     }
