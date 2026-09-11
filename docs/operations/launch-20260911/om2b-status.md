@@ -30,9 +30,11 @@ office Timecard, and operating-register acceptance.
   blocked registers do not render zero liabilities without admitted calculations.
 - Payroll-to-office-Timecard navigation now opens the requested Employee record.
 - Frontend qualification: 112 files / 394 tests pass; ESLint, TypeScript, and the
-  production Vite build pass. Focused backend contract/non-database checks passed
-  10 tests; three PostgreSQL Payroll finalization cases remain environment-gated
-  because the default `postgres` hostname is not available on this host.
+  production Vite build pass.
+- A fresh isolated PostgreSQL 16 database upgraded from base to the single current
+  Alembic head `d4f6h8j0l2n4`. The complete Payroll + Timekeeping suites pass 135
+  tests, and the complete QBO source suite passes 142 tests. The focused combined
+  QBO packet/Timecard/Payroll persistence battery passes 13 tests.
 
 ## Remaining checks / next action
 
