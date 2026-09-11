@@ -8,7 +8,7 @@ Updated: 2026-09-10 America/New_York
 - Mission commit: `0c08f1e3634f38a7fb82970932dea5de7a4cf24f`
 - Mission file SHA-256: `03b74b5f065694b487268bdee531d8d50620f2816f30c91d8b665f9d5b3e9dfc`
 - Starting protected base: `42a4f68087d76247269bd4c8388f556dd62a8b5c`
-- Current protected base: `e9377e72672edd5308c8181f45e172c22888cc5e`
+- Current protected base: `9b7dd10bb85d36d5ceaeb1064248d5c36ea26942`
 - Isolated branch: `work/om2c-launch-20260911-e2e-acceptance-1`
 - Mission activation evidence: mission commit at 2026-09-10 21:36:32 -0400.
 - Mission authorization expiry: 2026-09-13 21:36:32 -0400, unless earlier
@@ -20,7 +20,8 @@ State: **WORKING — CURRENT PROTECTED DEPLOYMENT AND AUTHENTICATED ACCEPTANCE R
 
 The protected authority now includes the Job-clock backend, operator Month/calendar
 workflow, Customer roster/navigation, CSR service-request booking, QBO source-evidence
-projection, and the fail-closed SOURCE.4 successor-classification runner. OM2-C
+projection/presentation, Payroll/Timecard operating UI, and the fail-closed SOURCE.4
+successor-classification runner. OM2-C
 extended the existing Enterprise operational acceptance scenario to select the landed
 Job-clock tests; no second harness or shared runtime implementation was created.
 
@@ -38,6 +39,9 @@ Current-authority qualification on fresh PostgreSQL databases:
   SOURCE.4 classification, break-even readiness, Customer booking, Scheduling/Month,
   and Dispatch presentation checks passed: 31 backend tests and 8 frontend files / 45
   tests. Frontend ESLint, TypeScript and production build also passed.
+- After OM2-B UI integration at `9b7dd10`, its affected QBO evidence,
+  Financial Reports, Payroll, Workforce and Timecard-navigation suite passed: 6 frontend
+  files / 13 tests. Frontend ESLint, TypeScript and production build also passed.
 
 These are **synthetic fixture and isolated-database results**, not deployed or real-
 source acceptance.
@@ -48,15 +52,14 @@ Preview URL: `https://preview.allcountyhomeservices.com`.
 
 - `/backend-health` is healthy and reports Preview PostgreSQL and Redis connected.
 - The backend reports release `00e0d5f0faad31f6ff0b85cdde903857a78b70fc`, not
-  current protected authority `e9377e72672edd5308c8181f45e172c22888cc5e`.
+  current protected authority `9b7dd10bb85d36d5ceaeb1064248d5c36ea26942`.
 - Preview index SHA-256 is now
-  `5ffe996047bbddc8ff3b18a4c517b0529ad378741334738e47d70c30abd49895`.
+  `91b425a67105bafaa4d8817e13d786160d3f1c812bbcc0ba6e646a67d56ce425`.
 - Current protected frontend build index SHA-256 is now
-  `e12f719c358904ce2693843071f1ea95d6e4e91de0cb4f22516449f10db7da37`.
-- The deployed `5ffe...` frontend previously matched the qualified `42a4f68` build,
-  including Customer, Scheduling/Month, Workday and Payroll route bundles. It no longer
-  matches current protected `e9377e7`; the newly integrated Customer booking/context
-  changes therefore remain undeployed at this checkpoint.
+  `91b425a67105bafaa4d8817e13d786160d3f1c812bbcc0ba6e646a67d56ce425`.
+- The deployed index exactly matches the qualified `9b7dd10` production build. This
+  proves current static artifact deployment, not rendering, session authorization, or
+  operator acceptance.
 - `GET /api/v1/timekeeping/me/job-clock` initially returned `404`, then advanced to
   the same bounded `401` authentication response as other protected APIs. This proves
   the route landed between checkpoints, but not Employee identity, authorization or
@@ -72,13 +75,14 @@ Preview URL: `https://preview.allcountyhomeservices.com`.
   `/api/v1/payroll/me/payroll-status`. Guessed plural paths outside the router returned
   `404` and are not classified as product or deployment failures.
 - The newly protected QBO evidence route
-  `GET /api/v1/accounting/source-evidence/qbo?basis=cash` returns `404` in Preview.
+  `GET /api/v1/accounting/source-evidence/qbo?basis=cash` advanced from `404` to the
+  common bounded `401` in Preview, proving route deployment and authentication only.
   A read-only `GET` against the POST-only Operations service-request route returns
   `405`, which proves route presence but neither authenticated booking nor mutation.
 
 Exact failed transition:
 
-`protected e9377e7 release → Preview current coherent deployment → authenticated
+`protected 9b7dd10 release → coherent backend release attestation → authenticated
 operator journey`
 
 The frontend and route-presence checkpoints advanced, but the backend release identity
