@@ -270,7 +270,7 @@ describe("PayrollRoute authorization", () => {
     ).toBeGreaterThan(0);
     expect(screen.getByRole("link", { name: "View timecard" })).toHaveAttribute(
       "href",
-      "/workforce?employee=employee-1#timecard-operations",
+      "/workforce?employee=employee-1#timecard-employee-1",
     );
   });
 });
