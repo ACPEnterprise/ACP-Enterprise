@@ -129,6 +129,21 @@ async def customer_correlation_evidence(
                 tuple(sorted({item for item in fingerprints if item})),
             )
         )
+        for source_id, location_json in zip(
+            aggregate.service_location_source_identities,
+            aggregate.service_location_json,
+            strict=True,
+        ):
+            location_fingerprint = _address_fingerprint(json.loads(location_json))
+            sealed.append(
+                ProjectionCorrelationEvidence(
+                    "service_location",
+                    source_id,
+                    None,
+                    (location_fingerprint,) if location_fingerprint else (),
+                    (("customer", aggregate.source_identity),),
+                )
+            )
         if contact:
             contact_name = _fingerprint(
                 "contact_name",
@@ -238,7 +253,30 @@ async def customer_correlation_evidence(
                 (("customer", parent),) if parent else (),
             )
         )
-    return tuple(customer_legacy + contact_legacy), tuple(sealed)
+    location_source_ids = {
+        item.target_id: item.source_id
+        for item in bindings
+        if item.source_system == LEGACY_SOURCE_SYSTEM
+        and item.domain == "service_location"
+    }
+    location_legacy: list[ProjectionCorrelationEvidence] = []
+    for customer_id, customer_locations in locations.items():
+        parent = exact_parent.get(str(customer_id))
+        for location in customer_locations:
+            location_fingerprint = (
+                _address_fingerprint(location) if parent is not None else None
+            )
+            target_id = str(location.id)
+            location_legacy.append(
+                ProjectionCorrelationEvidence(
+                    "service_location",
+                    location_source_ids.get(target_id, f"native:{target_id}"),
+                    target_id,
+                    (location_fingerprint,) if location_fingerprint else (),
+                    (("customer", parent),) if parent else (),
+                )
+            )
+    return tuple(customer_legacy + contact_legacy + location_legacy), tuple(sealed)
 
 
 def _digest(value: object) -> str:
@@ -394,14 +432,14 @@ async def run(authority: PreviewClassificationAuthority) -> dict[str, object]:
         for item in bindings
         if item.source_system == LEGACY_SOURCE_SYSTEM
         and item.domain in CLASSIFIED_DOMAINS
-        and item.domain not in {"customer", "contact"}
+        and item.domain not in {"customer", "contact", "service_location"}
     )
     legacy_evidence = customer_legacy + remaining_legacy
     sealed_evidence = customer_sealed + tuple(
         ProjectionCorrelationEvidence(item.domain, item.source_id, None)
         for item in sealed
         if item.domain in CLASSIFIED_DOMAINS
-        and item.domain not in {"customer", "contact"}
+        and item.domain not in {"customer", "contact", "service_location"}
     )
     if (
         authority.expected_legacy_projection_count <= 0
