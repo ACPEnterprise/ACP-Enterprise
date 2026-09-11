@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 
 import pytest
+
 from app.qbo_source.accounting_evidence_projection import (
     QboEvidenceProjectionError,
     project_latest_qbo_workspace,
