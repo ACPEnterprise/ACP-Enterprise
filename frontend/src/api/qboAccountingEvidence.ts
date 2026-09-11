@@ -89,13 +89,78 @@ export interface QboAccountingEvidenceWorkspace {
   mutation_authority: "none";
 }
 
+const allAmounts = (value: QboAccountingEvidenceWorkspace): QboAmount[] => [
+  ...value.accounts.map((item) => item.balance),
+  ...value.invoices.flatMap((item) => [item.total, item.open_balance]),
+  ...value.bills.flatMap((item) => [item.total, item.open_balance]),
+  value.ar.total_open,
+  value.ar.current,
+  value.ar.overdue,
+  ...value.payments.map((item) => item.amount),
+];
+
+export function validateQboAccountingEvidence(
+  value: QboAccountingEvidenceWorkspace,
+  requestedBasis: "cash" | "accrual",
+): QboAccountingEvidenceWorkspace {
+  if (
+    value.source !== "quickbooks_online" ||
+    value.mutation_authority !== "none" ||
+    value.accounting_basis !== requestedBasis
+  ) {
+    throw new Error("QBO evidence authority is invalid.");
+  }
+  if (
+    value.mode === "live" &&
+    (value.provider_environment !== "production" ||
+      !value.company_identity_sha256 ||
+      !value.company_info_verified_at ||
+      !value.source_manifest_sha256 ||
+      !value.acquired_at)
+  ) {
+    throw new Error("Live QBO evidence is not verified and sealed.");
+  }
+  if (
+    value.completeness === "complete" &&
+    (!value.source_manifest_sha256 || !value.acquired_at)
+  ) {
+    throw new Error("Complete QBO evidence requires a sealed acquisition.");
+  }
+  if (
+    value.reports.some(
+      (report) => report.basis !== null && report.basis !== requestedBasis,
+    )
+  ) {
+    throw new Error("QBO report basis does not match the requested basis.");
+  }
+  if (
+    allAmounts(value).some(
+      (item) =>
+        (item.amount === null && item.state === "available") ||
+        (item.amount !== null && item.state === "unavailable"),
+    )
+  ) {
+    throw new Error("QBO amount availability is inconsistent.");
+  }
+  if (
+    value.conflicts.some(
+      (conflict) =>
+        new Set(conflict.source_assertions.map((item) => item.source)).size < 2,
+    )
+  ) {
+    throw new Error("Cross-source conflict evidence is incomplete.");
+  }
+  return value;
+}
+
 export async function getQboAccountingEvidence(
   basis: "cash" | "accrual",
 ): Promise<QboAccountingEvidenceWorkspace> {
-  return (
+  const value = (
     await apiClient.get<QboAccountingEvidenceWorkspace>(
       "/api/v1/accounting/source-evidence/qbo",
       { params: { basis } },
     )
   ).data;
+  return validateQboAccountingEvidence(value, basis);
 }
