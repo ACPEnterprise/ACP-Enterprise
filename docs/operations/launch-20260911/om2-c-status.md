@@ -8,7 +8,7 @@ Updated: 2026-09-10 America/New_York
 - Mission commit: `0c08f1e3634f38a7fb82970932dea5de7a4cf24f`
 - Mission file SHA-256: `03b74b5f065694b487268bdee531d8d50620f2816f30c91d8b665f9d5b3e9dfc`
 - Starting protected base: `42a4f68087d76247269bd4c8388f556dd62a8b5c`
-- Current protected base: `31c76c64c1ab0a0ec05ac2767391b2a8221307cd`
+- Current protected base: `132cded360525e10a5d9029b25fff2bd8a45b81b`
 - Isolated branch: `work/om2c-launch-20260911-e2e-acceptance-1`
 - Mission activation evidence: mission commit at 2026-09-10 21:36:32 -0400.
 - Mission authorization expiry: 2026-09-13 21:36:32 -0400, unless earlier
@@ -24,6 +24,8 @@ projection/presentation, Payroll/Timecard operating UI, and the fail-closed SOUR
 successor-classification runner. OM2-C
 extended the existing Enterprise operational acceptance scenario to select the landed
 Job-clock tests; no second harness or shared runtime implementation was created.
+That OM2-C harness extension and its initial evidence packet are now protected at
+`132cded`; reconciliation retained this lane's newer superset evidence files.
 
 Current-authority qualification on fresh PostgreSQL databases:
 
@@ -77,9 +79,10 @@ Preview URL: `https://preview.allcountyhomeservices.com`.
 
 - `/backend-health` is healthy and reports Preview PostgreSQL and Redis connected.
 - The backend reports `0b74c7654fde500529da824bdce604e01575cec1`, one Mobile-only
-  protected commit behind current authority `31c76c64c1ab0a0ec05ac2767391b2a8221307cd`,
-  with PostgreSQL and Redis connected. The server/web source delta is empty for that
-  commit, but release identity is still recorded literally rather than called exact.
+  release plus one Mobile-only and one acceptance-evidence protected commit behind
+  current authority `132cded360525e10a5d9029b25fff2bd8a45b81b`, with PostgreSQL
+  and Redis connected. The server/web runtime delta is empty for those commits, but
+  release identity is still recorded literally rather than called exact.
 - Preview index SHA-256 is now
   `cdd6bed341a63b5f8ed853a71d73f0a1f219c44a8ca95aca2c17cf40c289dd85`.
 - Current protected frontend build index SHA-256 is now
@@ -109,7 +112,7 @@ Preview URL: `https://preview.allcountyhomeservices.com`.
 
 Exact failed transition:
 
-`deployed server/web 0b74c76 + protected Mobile 31c76c6 → sanctioned authenticated
+`deployed server/web 0b74c76 + protected Mobile/acceptance 132cded → sanctioned authenticated
 CSR/Employee sessions and physical Mobile client →
 admitted current source graph → operator journey`
 
