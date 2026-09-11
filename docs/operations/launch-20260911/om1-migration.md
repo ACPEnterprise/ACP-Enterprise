@@ -4,7 +4,8 @@ Updated: 2026-09-11 02:25 UTC
 
 - Mission commit: `0c08f1e3634f38a7fb82970932dea5de7a4cf24f`
 - Mission file SHA-256: `03b74b5f065694b487268bdee531d8d50620f2816f30c91d8b665f9d5b3e9dfc`
-- Current protected authority and deployed Preview version:
+- Current protected authority: `132cded360525e10a5d9029b25fff2bd8a45b81b`
+- Deployed Preview classification authority:
   `0b74c7654fde500529da824bdce604e01575cec1`
 - Native Location classifier integration: `681a7595` (PR #208)
 - Pull request: #198
