@@ -81,3 +81,13 @@ parents, so the 305 Job holds and their dependent records remain intact. Post-ad
 Customer/Location/Job/Appointment and calendar-lane verification remains pending
 because SOURCE.4 is not admitted. No Production, HCP mutation, destructive
 replacement, or financial posting occurred.
+
+A final correlation-exhaustion pass confirms that the held legacy keys are control,
+spreadsheet, or synthetic projection identifiers rather than SOURCE.4 provider IDs;
+they cannot safely be promoted to authoritative provider identifiers. Among content-
+correlated domains, the 263 held Customers comprise 259 with no positive candidate
+and four with only non-unique candidates; the 19 held Contacts have no positive
+candidate; and the 25 held Locations comprise seven with no positive candidate and
+18 with only non-unique candidates. Converting any of these holds to unrelated or
+exact would therefore require new authoritative evidence, not another deterministic
+pass over the current inputs.
