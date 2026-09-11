@@ -15,7 +15,7 @@ Updated: 2026-09-10 America/New_York
 
 ## Current checkpoint
 
-State: **WORKING — PREVIEW DEPLOYMENT REQUIRED**.
+State: **WORKING — RELEASE ATTESTATION AND AUTHENTICATED ACCEPTANCE REQUIRED**.
 
 The protected authority now includes the Job-clock backend, operator Month/calendar
 workflow, and Customer roster navigation. OM2-C extended the existing Enterprise
@@ -43,13 +43,14 @@ Preview URL: `https://preview.allcountyhomeservices.com`.
 - `/backend-health` is healthy and reports Preview PostgreSQL and Redis connected.
 - The backend reports release `00e0d5f0faad31f6ff0b85cdde903857a78b70fc`, not
   current protected authority `42a4f68087d76247269bd4c8388f556dd62a8b5c`.
-- Preview index SHA-256 is
-  `249f83bb04ca137f1a4fc1cbec85483b2d61a071dcd063ec355d1e33c9baab9c`.
+- Preview index SHA-256 is now
+  `5ffe996047bbddc8ff3b18a4c517b0529ad378741334738e47d70c30abd49895`.
 - Current protected frontend build index SHA-256 is
   `5ffe996047bbddc8ff3b18a4c517b0529ad378741334738e47d70c30abd49895`.
-- `GET /api/v1/timekeeping/me/job-clock` returns `404` on Preview. The landed current
-  route authenticates before returning Employee state, so the deployed endpoint is
-  absent rather than merely unauthorized.
+- `GET /api/v1/timekeeping/me/job-clock` initially returned `404`, then advanced to
+  the same bounded `401` authentication response as other protected APIs. This proves
+  the route landed between checkpoints, but not Employee identity, authorization or
+  Job-clock behavior.
 - Existing protected Customer, Scheduling, office Timecard, Payroll register and
   Migration readiness endpoints consistently return the bounded unauthenticated
   `401` response. This proves authentication enforcement only; it does not prove the
@@ -60,8 +61,10 @@ Exact failed transition:
 `protected 42a4f680 release → Preview current coherent deployment → authenticated
 operator journey`
 
-It fails at the coherent-deployment step. Route deployment, migration, backup and
-rollback verification to **OM1 Enterprise**. OM2-C must rerun after that checkpoint.
+The frontend and route-presence checkpoints advanced, but the backend release identity
+still contradicts protected authority. Route release attestation, migration, backup and
+rollback verification to **OM1 Enterprise**. OM2-C must rerun with sanctioned sessions
+after that checkpoint.
 
 ## Source-data evidence boundary
 
@@ -73,7 +76,9 @@ rollback verification to **OM1 Enterprise**. OM2-C must rerun after that checkpo
   realm marker or sealed production run was available. Existing reports are historical
   evidence, not live acquisition. OM2-B has a compatible evidence candidate not yet in
   protected authority. Route acquisition to **OM1 ECO**, presentation to **OM2-B**, and
-  rerun to OM2-C after protected integration/deployment.
+  rerun to OM2-C after protected integration/deployment. OM2-B candidate
+  `e0210ef414b574f9e573cde4de7939d230be5e80` also preserves unavailable Payroll totals
+  and office Timecard navigation but remains outside protected authority.
 - Employee access: OM1 Phone's read-only Preview checkpoint reports the existing Lianne
   User/Membership/Employee/MAIN Branch graph intact, invitation valid and unconsumed,
   and delivery definitively failed without provider acceptance. This is actual Preview
@@ -84,6 +89,15 @@ rollback verification to **OM1 Enterprise**. OM2-C must rerun after that checkpo
   non-payable until accepted Workday Time and Payroll inputs exist. No real or payable
   test punch was made. Actual employee-to-office consistency remains pending a
   sanctioned segregated fixture and current Preview deployment.
+
+Additional handoffs observed but not substituted for deployed acceptance:
+
+- Laptop1-B candidate `c13f6c97893e26110fdf6bf7c15d24996443778b`
+  adds complete Customer population traversal and booking-context checks; it is three
+  commits ahead of protected authority.
+- OM1 Phone candidate `ee6fb2ee1870f7632f813edeaa4a8b5767dbe03d`
+  confirms the invitation remains valid/unconsumed and records Postmark server live
+  readiness, but human receipt, activation and login remain pending.
 
 ## Operator rerun matrix
 

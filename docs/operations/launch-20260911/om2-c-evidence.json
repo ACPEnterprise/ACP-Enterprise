@@ -24,16 +24,20 @@
     "database": "CONNECTED",
     "redis": "CONNECTED",
     "reported_backend_release": "00e0d5f0faad31f6ff0b85cdde903857a78b70fc",
-    "frontend_index_sha256": "249f83bb04ca137f1a4fc1cbec85483b2d61a071dcd063ec355d1e33c9baab9c",
+    "frontend_index_sha256": "5ffe996047bbddc8ff3b18a4c517b0529ad378741334738e47d70c30abd49895",
     "qualified_frontend_index_sha256": "5ffe996047bbddc8ff3b18a4c517b0529ad378741334738e47d70c30abd49895",
-    "job_clock_route_status": 404,
-    "classification": "BLOCKED_COHERENT_DEPLOYMENT"
+    "job_clock_route_status": 401,
+    "checkpoint_sequence": [
+      "FRONTEND_OLD_AND_JOB_CLOCK_ROUTE_ABSENT",
+      "FRONTEND_CURRENT_AND_JOB_CLOCK_ROUTE_AUTHENTICATED"
+    ],
+    "classification": "RELEASE_ATTESTATION_AND_AUTHENTICATED_ACCEPTANCE_REQUIRED"
   },
   "actual_source_acceptance": {
     "customer_population": "UNVERIFIED_NO_CURRENT_ADMISSION_PACKET",
     "qbo": "BLOCKED_EXTERNAL_LIVE_AUTHORIZATION",
     "employee_graph": "ACTUAL_PREVIEW_EVIDENCE_REPORTED_BY_OM1_PHONE",
-    "employee_delivery": "DEFINITIVE_PROVIDER_REJECTION_NO_ACCEPTANCE",
+    "employee_delivery": "DEFINITIVE_PROVIDER_REJECTION_NO_ACCEPTANCE_ONE_RETRY_ELIGIBLE",
     "employee_activation_login": "UNVERIFIED",
     "job_clock_timecard_payroll": "UNVERIFIED_NO_SANCTIONED_NONPAYABLE_DEPLOYED_RUN"
   },
