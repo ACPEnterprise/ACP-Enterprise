@@ -641,6 +641,75 @@ class NotificationOutboxRepository:
         return len(records)
 
     @staticmethod
+    async def authorize_definitive_rejection_retry(
+        session: AsyncSession,
+        *,
+        notification_id: UUID,
+        company_id: UUID,
+        branch_id: UUID,
+        actor_user_id: UUID,
+        retried_at: datetime,
+        reason_digest: str,
+    ) -> NotificationOutbox | None:
+        """Schedule one audited retry after a definitive provider rejection.
+
+        This deliberately excludes ambiguous submissions and provider-accepted
+        messages. The evidence marker makes the administrative retry single-use
+        for the lifetime of the original outbox identity, even if the retry is
+        rejected again.
+        """
+        if len(reason_digest) != 64:
+            raise ValueError("Notification retry reason must be SHA-256.")
+        record = await session.scalar(
+            select(NotificationOutbox)
+            .where(
+                NotificationOutbox.id == notification_id,
+                NotificationOutbox.company_id == company_id,
+                NotificationOutbox.branch_id == branch_id,
+                NotificationOutbox.notification_type
+                == "identity.onboarding_invitation",
+                NotificationOutbox.status == "failed",
+                NotificationOutbox.terminal_failure.is_(True),
+                NotificationOutbox.provider_reference.is_(None),
+                NotificationOutbox.submitted_at.is_(None),
+                NotificationOutbox.last_error_code.like(
+                    "postmark_request_rejected_4%"
+                ),
+            )
+            .with_for_update()
+        )
+        if record is None:
+            return None
+        prior_retry = await session.scalar(
+            select(NotificationDeliveryEvidence.id).where(
+                NotificationDeliveryEvidence.outbox_id == record.id,
+                NotificationDeliveryEvidence.error_code
+                == "owner_authorized_definitive_rejection_retry",
+            )
+        )
+        if prior_retry is not None:
+            return None
+        await NotificationOutboxRepository._evidence(
+            session,
+            record,
+            "recovered",
+            retried_at,
+            error_code="owner_authorized_definitive_rejection_retry",
+            error_category="provider_rejection",
+            actor_user_id=actor_user_id,
+            reason_digest=reason_digest,
+        )
+        record.status = "retry_scheduled"
+        record.terminal_failure = False
+        record.failed_at = None
+        record.scheduled_at = retried_at
+        record.last_error_code = "owner_authorized_definitive_rejection_retry"
+        record.last_error_category = "provider_rejection"
+        record.updated_at = retried_at
+        await session.flush()
+        return record
+
+    @staticmethod
     async def cleanup_completed_notifications(
         session: AsyncSession,
         *,
