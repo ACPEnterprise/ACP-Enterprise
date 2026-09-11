@@ -47,7 +47,16 @@ from app.operational_migration.hcp_successor_reuse import (
 
 COMMAND_VERSION = "hcp-legacy-projection-preview-run/v1"
 CLASSIFIED_DOMAINS = frozenset(
-    {"customer", "contact", "job", "appointment", "estimate", "invoice", "payment"}
+    {
+        "customer",
+        "contact",
+        "service_location",
+        "job",
+        "appointment",
+        "estimate",
+        "invoice",
+        "payment",
+    }
 )
 
 
@@ -60,6 +69,7 @@ def _digest(value: object) -> str:
 @dataclass(frozen=True)
 class PreviewClassificationAuthority:
     reconciliation: SuccessorReadAuthority
+    expected_legacy_projection_count: int
     classification_output: Path
     qualified_manifest_output: Path
     admission_packet_output: Path
@@ -82,6 +92,9 @@ class PreviewClassificationAuthority:
             _write_once(nested, nested_payload)
             return cls(
                 reconciliation=SuccessorReadAuthority.load(nested),
+                expected_legacy_projection_count=int(
+                    value["expected_legacy_projection_count"]
+                ),
                 classification_output=Path(value["classification_output"]),
                 qualified_manifest_output=Path(value["qualified_manifest_output"]),
                 admission_packet_output=Path(value["admission_packet_output"]),
@@ -201,6 +214,19 @@ async def run(authority: PreviewClassificationAuthority) -> dict[str, object]:
         if item.source_system == LEGACY_SOURCE_SYSTEM
         and item.domain in CLASSIFIED_DOMAINS
     )
+    if (
+        authority.expected_legacy_projection_count <= 0
+        or len(legacy_evidence) != authority.expected_legacy_projection_count
+    ):
+        raise SafeEvidenceError(
+            "legacy_projection_population_mismatch",
+            _digest(
+                {
+                    "expected": authority.expected_legacy_projection_count,
+                    "observed": len(legacy_evidence),
+                }
+            ),
+        )
     classification = classify_correlated_legacy(
         legacy=legacy_evidence, sealed=sealed_evidence
     )
