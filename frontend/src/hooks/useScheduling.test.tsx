@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import * as schedulingApi from "../api/scheduling";
-import { appointmentKeys, useAppointment, useAppointments } from "./useScheduling";
+import { appointmentKeys, useAppointment, useAppointments, useRescheduleAppointment } from "./useScheduling";
 
 vi.mock("../api/scheduling");
 
@@ -27,5 +27,27 @@ describe("Scheduling hooks", () => {
     await waitFor(() => expect(result.result.current.isSuccess).toBe(true));
     expect(appointmentKeys.list(query)).toEqual(["appointments", "list", query]);
     expect(schedulingApi.listAppointments).toHaveBeenCalledWith(query);
+  });
+  it("refreshes Schedule, Appointment detail, and Dispatch after a confirmed reschedule", async () => {
+    vi.mocked(schedulingApi.rescheduleAppointment).mockResolvedValue({ id: "appointment-1" } as never);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidate = vi.spyOn(client, "invalidateQueries");
+    const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+    const result = renderHook(() => useRescheduleAppointment(), { wrapper });
+    result.result.current.mutate({
+      appointmentId: "appointment-1",
+      input: {
+        expected_version: 2,
+        arrival_window_start_at: "2026-08-13T14:00:00Z",
+        arrival_window_end_at: "2026-08-13T16:00:00Z",
+        expected_duration_minutes: 120,
+        capacity_units: "1.000",
+        reason_code: "operational_adjustment",
+      },
+    });
+    await waitFor(() => expect(result.result.current.isSuccess).toBe(true));
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: appointmentKeys.lists() });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: appointmentKeys.detail("appointment-1") });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["dispatch"] });
   });
 });
