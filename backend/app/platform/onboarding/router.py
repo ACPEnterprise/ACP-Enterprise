@@ -16,6 +16,7 @@ from app.platform.reliability.failures import ClientRecovery, FailureCode, SafeF
 from .models import IdentityOnboardingInvitation
 from .schemas import (
     OnboardingActivateRequest,
+    OnboardingDeliveryRetryView,
     OnboardingDeliveryView,
     OnboardingInitiateRequest,
     OnboardingOwnerClaimView,
@@ -148,6 +149,30 @@ async def reissue(
     except (OnboardingAuthorizationError, OnboardingConflictError) as error:
         raise _safe_error(error) from error
     return OnboardingView.model_validate(record)
+
+
+@router.post(
+    "/{request_id}/delivery/retry-definitive-rejection",
+    response_model=OnboardingDeliveryRetryView,
+)
+async def retry_definitive_rejection(
+    request_id: UUID, context: OnboardingAdmin, session: Session
+) -> OnboardingDeliveryRetryView:
+    try:
+        invitation, message = (
+            await identity_onboarding_service.retry_definitive_invitation_rejection(
+                session, context=context, request_id=request_id
+            )
+        )
+    except (OnboardingAuthorizationError, OnboardingConflictError) as error:
+        raise _safe_error(error) from error
+    return OnboardingDeliveryRetryView(
+        request_id=request_id,
+        invitation_id=invitation.id,
+        message_id=message.id,
+        delivery_status=message.status,
+        retry_count=message.retry_count,
+    )
 
 
 @router.post(
