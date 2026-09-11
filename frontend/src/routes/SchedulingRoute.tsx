@@ -13,6 +13,7 @@ import { getOperatorApiError } from "../api/errors";
 import { useAuth, useHasPermission } from "../auth";
 import { DispatchAssignmentPanel } from "../components/dispatch/DispatchAssignmentPanel";
 import { DispatchRecommendationPanel } from "../components/dispatch/DispatchRecommendationPanel";
+import { BookCustomerWorkPanel } from "../components/scheduling/BookCustomerWorkPanel";
 import {
   dayRange,
   localDateValue,
@@ -131,6 +132,8 @@ export function SchedulingRoute({
   const canDispatch = useHasPermission("COMPANY_DISPATCH_READ");
   const canDispatchManage = useHasPermission("COMPANY_DISPATCH_MANAGE");
   const canReadJobs = useHasPermission("COMPANY_JOB_READ");
+  const canManageJobs = useHasPermission("COMPANY_JOB_MANAGE");
+  const canReadCustomers = useHasPermission("COMPANY_CUSTOMER_READ");
   const [searchParams] = useSearchParams();
   const [date, setDate] = useState(() => localDateValue(new Date()));
   const [perspective, setPerspective] = useState<Perspective>(() =>
@@ -144,6 +147,7 @@ export function SchedulingRoute({
   const [technician, setTechnician] = useState("");
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<AppointmentDetail | null>(null);
+  const [booking, setBooking] = useState(false);
   const displayTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const range = calendarRange(date, view);
   const appointments = useAppointments(
@@ -263,7 +267,10 @@ export function SchedulingRoute({
             or assignment.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          {canManage && canManageJobs && canReadCustomers && (
+            <Button onClick={() => setBooking(true)}>Book customer work</Button>
+          )}
           <Link
             className="inline-flex min-h-11 items-center rounded-lg border border-stroke px-4 font-semibold"
             to="/jobs"
@@ -278,6 +285,7 @@ export function SchedulingRoute({
           </Link>
         </div>
       </header>
+      {booking && <BookCustomerWorkPanel onClose={() => setBooking(false)} />}
       <Card className="space-y-4 p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">

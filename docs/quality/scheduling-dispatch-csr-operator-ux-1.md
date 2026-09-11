@@ -21,6 +21,12 @@ protected integrations through `42a4f68087d76247269bd4c8388f556dd62a8b5c`.
   invalidates Schedule, Appointment detail, and Dispatch projections so the
   authoritative saved state is re-read.
 - Dispatch Intelligence proposals remain review-only and non-mutating.
+- Authorized CSR/office users can book Customer work through the existing
+  atomic Operations service-request command. Customer search is bounded,
+  Service Location and Branch are server-validated, the time window is shown
+  in local time, and a separate confirmation is required before the Appointment
+  and related draft Job are persisted. Technician assignment remains a
+  separate, human-confirmed Dispatch command.
 - Date input tolerates its transient empty state without crashing. The UI names
   the device timezone and preserves appointment instants; truncated range
   results are explicitly partial. Local half-open date ranges retain their
@@ -29,15 +35,21 @@ protected integrations through `42a4f68087d76247269bd4c8388f556dd62a8b5c`.
 
 ## Qualification
 
-- Frontend full suite: 109 files, 391 tests passed before the added DST case;
-  affected final suite: 3 files, 19 tests passed.
+- Frontend full suite: 111 files, 395 tests passed.
+- CSR booking, crowded Month drill-down, DST boundaries, and post-reschedule
+  projection reconciliation focused suite: 5 files, 22 tests passed.
 - Crowded Month drill-down and post-reschedule projection reconciliation:
   2 files, 16 tests passed.
 - Frontend ESLint: passed.
 - TypeScript and Vite production build: passed.
+- Operations Ruff, Operations/Scheduling/Dispatch MyPy, and backend Python
+  compilation: passed. A wider pre-existing Ruff check still reports only the
+  import ordering in `app/scheduling/query.py`; this frontend capability does
+  not rewrite that authoritative backend file.
 - Fresh PostgreSQL zero-to-head migration: passed at the single head
   `c3e5g7i9k1m3`.
-- Backend Scheduling/Dispatch suites: 88 passed, with four pre-existing
+- Backend Operations/Scheduling/Dispatch suites: 92 passed against a fresh
+  zero-to-head PostgreSQL database, with four pre-existing
   SQLAlchemy transaction-deassociation warnings and no failures.
 - `git diff --check`: passed.
 - Credential/private-key pattern scan: passed.
