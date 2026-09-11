@@ -108,6 +108,20 @@ Fresh physical acceptance of Clock On/Off and office consistency remains
 `HUMAN_ACCEPTANCE_PENDING`. A Metro-dependent development installation is not a signed
 distributable build and must not be labeled employee-distribution-ready.
 
+### Install/distribution classification
+
+| Boundary | Current evidence | Classification |
+|---|---|---|
+| iOS simulator | Unsigned build, install, launch, Hermes and large-text inset check | `QUALIFIED` |
+| Physical development device | Existing app launched and current Metro bundle reloaded; full flow not re-observed | `DEVELOPMENT_DEVICE_PARTIAL` |
+| Signed independent install | No authorized signing/profile/archive | `APPLE_GATE` |
+| TestFlight/employee distribution | No upload, processing, tester or install evidence | `APPLE_GATE` |
+| Fleet/device-management distribution | No accepted MDM/fleet contract inspected or configured | `NOT_CLAIMED` |
+
+The existing authenticated browser route `/workday` is an explicitly labeled interim
+option for employee Workday Clock In/Out and current-period time evidence. It does not
+provide native My Day or Job Workspace and is not a substitute for ACP Employee.
+
 ## Cross-lane handoff
 
 ### Enterprise
