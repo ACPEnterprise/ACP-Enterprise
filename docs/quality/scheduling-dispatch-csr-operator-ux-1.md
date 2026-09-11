@@ -35,9 +35,10 @@ protected integrations through `42a4f68087d76247269bd4c8388f556dd62a8b5c`.
 
 ## Qualification
 
-- Frontend full suite: 111 files, 395 tests passed.
+- Frontend full suite: 111 files, 396 tests passed.
 - CSR booking, crowded Month drill-down, DST boundaries, and post-reschedule
-  projection reconciliation focused suite: 5 files, 22 tests passed.
+  projection reconciliation and permission gating focused suite: 5 files,
+  23 tests passed.
 - Crowded Month drill-down and post-reschedule projection reconciliation:
   2 files, 16 tests passed.
 - Frontend ESLint: passed.
