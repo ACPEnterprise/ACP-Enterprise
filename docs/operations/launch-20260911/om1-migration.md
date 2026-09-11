@@ -1,11 +1,12 @@
 # OM1 Migration checkpoint
 
-Updated: 2026-09-11 02:00 UTC
+Updated: 2026-09-11 02:25 UTC
 
 - Mission commit: `0c08f1e3634f38a7fb82970932dea5de7a4cf24f`
 - Mission file SHA-256: `03b74b5f065694b487268bdee531d8d50620f2816f30c91d8b665f9d5b3e9dfc`
-- Current protected authority: `9b7dd10bb85d36d5ceaeb1064248d5c36ea26942`
-- Rebased functional candidate: `2e56690217f8c89178f51d205eeb19749bbcee89`
+- Current protected authority and deployed Preview version:
+  `0b74c7654fde500529da824bdce604e01575cec1`
+- Native Location classifier integration: `681a7595` (PR #208)
 - Pull request: #198
 
 ## Current Preview classification
@@ -31,10 +32,20 @@ Canonical admission is false. No admission packet may be executed while the 1,38
 holds remain. Customer-bounded Location fingerprints are now part of the record-level
 manifest rather than separate advisory evidence.
 
-The replay packet with digest
-`9c6980d9ce1d0b868b25e8f97db8c059e4071b017c465797c5a487d6db5f1c3d`
-is retained on the Preview host as protected operator evidence. It names Enterprise
-as execution owner and records `canonical_admission_allowed=false`.
+After Enterprise deployed the integrated runner, a fresh protected-authority run
+reproduced the same report digest and qualified-manifest digest
+`2b7ecaa001a433eb6e57bab1a4d3c1547ed04f00efc2df42e552f24ae2039853`.
+Its new replay packet digest is
+`f012b45f15e9ce33744d90c3d5625c700271b30b48172c5b44cd88ca38d23395`.
+The immutable host artifacts are retained under
+`preview-run-20260911-protected-0b74c765`; file SHA-256 values are:
+
+- admission packet: `b04fd46ac84aec6e0fd99af42742cfed56278bd0b11013fd40f18c2fd4e4b0f8`;
+- record-level classification: `6c949d2a9f18d0c4f6646b8f7da724bd62170ebd5a3216ced906f9f4ed9673bb`;
+- qualified successor manifest: `d907ea11c1473e7c52ad599393b54491c816c503216fb2cfb4536015e0b9d3d4`.
+
+The packet names Enterprise as execution owner and records
+`canonical_admission_allowed=false`; the admission executor was not invoked.
 
 ## Source currentness
 
@@ -63,8 +74,8 @@ set; its digest is
 
 ## Next action and gates
 
-Enterprise may integrate the runner but must not execute Preview admission. Complete
-Location classification is present in PR #198. Operational graph analysis found no
+Enterprise has integrated and deployed the complete Location classifier but must not
+execute Preview admission. Operational graph analysis found no
 mechanically sufficient Job match beyond the already reported Customer/Location
 parents, so the 305 Job holds and their dependent records remain intact. Post-admission
 Customer/Location/Job/Appointment and calendar-lane verification remains pending
