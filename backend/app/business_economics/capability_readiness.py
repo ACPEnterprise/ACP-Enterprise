@@ -6,7 +6,7 @@ import json
 from hashlib import sha256
 from typing import Final
 
-CAPABILITY_MATRIX_VERSION: Final = "economics.capability-readiness.v2"
+CAPABILITY_MATRIX_VERSION: Final = "economics.capability-readiness.v3"
 
 _CAPABILITIES: Final = (
     ("source_readiness", "AUTHORITATIVE", "business_economics", ()),
@@ -31,8 +31,8 @@ _CAPABILITIES: Final = (
     (
         "workforce_cost_composition",
         "PARTIAL",
-        "payroll",
-        ("explicit_employee_job_attribution",),
+        "payroll_business_economics",
+        ("accepted_actual_compensation", "accepted_employer_cost_components"),
     ),
     (
         "material_cost_composition",
@@ -68,9 +68,9 @@ _CAPABILITIES: Final = (
     ),
     (
         "capacity_utilization_economics",
-        "SOURCE_REQUIRED",
-        "scheduling_workforce",
-        ("accepted_capacity_measurement_contract",),
+        "PARTIAL",
+        "operational_measurement",
+        ("authoritative_available_capacity", "complete_travel_and_constraint_evidence"),
     ),
     (
         "cash_working_capital",
@@ -107,9 +107,9 @@ _CAPABILITIES: Final = (
     ),
     (
         "real_qbo_evidence",
-        "ACTIVE_OWNER_COLLISION",
-        "migration",
-        ("migration_owned_acquisition",),
+        "EXTERNAL_GATE",
+        "qbo_source_om1_eco",
+        ("production_oauth", "verified_all_county_realm", "sealed_production_snapshot"),
     ),
 )
 
@@ -131,5 +131,5 @@ def capability_readiness_matrix() -> dict[str, object]:
             json.dumps(canonical, sort_keys=True, separators=(",", ":")).encode()
         ).hexdigest(),
         "mutation_authority": "none",
-        "real_qbo_boundary": "migration_owned",
+        "real_qbo_boundary": "om1_eco_acquisition_om2b_read_models",
     }

@@ -2,6 +2,7 @@ from functools import lru_cache
 from ipaddress import ip_network
 from pathlib import Path
 from typing import Literal
+from uuid import UUID
 
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -44,6 +45,7 @@ class Settings(BaseSettings):
     qbo_production_callback_uri: str | None = None
     qbo_production_runtime_root: str | None = None
     qbo_production_evidence_root: str | None = None
+    qbo_production_acp_company_id: UUID | None = None
     qbo_production_api_minor_version: int = 75
     qbo_repository_root: str = "/app"
 
@@ -185,10 +187,13 @@ class Settings(BaseSettings):
                 )
         if self.identity_onboarding_delivery_provider == "postmark":
             if self.environment != "preview":
-                raise ValueError("Postmark identity delivery is admitted for Preview only")
-            if not self.identity_email_postmark_token_file or not Path(
-                self.identity_email_postmark_token_file
-            ).is_absolute():
+                raise ValueError(
+                    "Postmark identity delivery is admitted for Preview only"
+                )
+            if (
+                not self.identity_email_postmark_token_file
+                or not Path(self.identity_email_postmark_token_file).is_absolute()
+            ):
                 raise ValueError("Postmark identity delivery requires a secret file")
             if (
                 self.identity_email_sender
