@@ -18,8 +18,13 @@ class QboEvidenceProjectionError(RuntimeError):
 def unavailable_qbo_workspace(*, basis: Basis, limitation: str) -> dict[str, object]:
     unavailable = {"amount": None, "currency": None, "state": "unavailable"}
     return {
-        "contract_version": "qbo-accounting-source-evidence/v1",
+        "contract_version": "qbo-accounting-evidence/v1",
         "source": "quickbooks_online",
+        "mode": "blocked",
+        "provider_environment": "production",
+        "company_identity_sha256": None,
+        "company_info_verified_at": None,
+        "source_manifest_sha256": None,
         "source_company_label": "Real company not verified",
         "source_company_id_masked": "unavailable",
         "accounting_basis": basis,
@@ -72,7 +77,7 @@ def project_latest_qbo_workspace(
         raise QboEvidenceProjectionError("non_production_snapshot_rejected")
     state = str(manifest.get("state"))
     rows, truncated = _load_rows(root, manifest)
-    current_authorization = _verify_current_authorization(
+    authorization_marker = _verify_current_authorization(
         runtime_root=runtime_root,
         manifest=manifest,
         company_rows=rows.get("company_info", []),
@@ -87,7 +92,7 @@ def project_latest_qbo_workspace(
         limitations.add("source_acquisition_incomplete")
     if truncated:
         limitations.add("response_family_limit_reached_2000")
-    if not current_authorization:
+    if authorization_marker is None:
         limitations.add("current_provider_authorization_unverified_historical_snapshot")
     accounts = [_account(row) for row in rows.get("account", [])]
     invoices = [_invoice(row) for row in rows.get("invoice", [])]
@@ -102,8 +107,19 @@ def project_latest_qbo_workspace(
         manifest.get("catalog_dispositions", [])
     )
     return {
-        "contract_version": "qbo-accounting-source-evidence/v1",
+        "contract_version": "qbo-accounting-evidence/v1",
         "source": "quickbooks_online",
+        "mode": "live" if authorization_marker is not None else "historical",
+        "provider_environment": "production",
+        "company_identity_sha256": _company_identity_sha256(snapshot, company),
+        "company_info_verified_at": (
+            authorization_marker.get("company_info_verified_at")
+            if authorization_marker is not None
+            else None
+        ),
+        "source_manifest_sha256": hashlib.sha256(
+            manifest_path.read_bytes()
+        ).hexdigest(),
         "source_company_label": _text(company.get("CompanyName"))
         or "Verified QBO company",
         "source_company_id_masked": _masked(_text(company.get("Id"))),
@@ -112,17 +128,17 @@ def project_latest_qbo_workspace(
         "acquired_at": manifest.get("ended_at"),
         "refresh_state": (
             "available"
-            if state == "complete" and current_authorization
+            if state == "complete" and authorization_marker is not None
             else "partial"
-            if state == "partial" and current_authorization
+            if state == "partial" and authorization_marker is not None
             else "stale"
         ),
         "provider_authorization": (
-            "verified_current" if current_authorization else "unverified"
+            "verified_current" if authorization_marker is not None else "unverified"
         ),
         "evidence_mode": (
             "current_authorized_snapshot"
-            if current_authorization
+            if authorization_marker is not None
             else "historical_snapshot"
         ),
         "completeness": state,
@@ -154,12 +170,12 @@ def _verify_current_authorization(
     runtime_root: Path | None,
     manifest: Mapping[str, object],
     company_rows: list[dict[str, object]],
-) -> bool:
+) -> Mapping[str, object] | None:
     if runtime_root is None:
-        return False
+        return None
     marker_path = runtime_root.expanduser().resolve() / "connections" / "verified.json"
     if not marker_path.is_file():
-        return False
+        return None
     marker = _read_json(marker_path)
     snapshot = manifest.get("snapshot")
     company = company_rows[0] if company_rows else None
@@ -181,7 +197,23 @@ def _verify_current_authorization(
         or marker.get("api_minor_version") != snapshot.get("api_minor_version")
     ):
         raise QboEvidenceProjectionError("production_authorization_conflict")
-    return True
+    return marker
+
+
+def _company_identity_sha256(
+    snapshot: Mapping[str, object], company: Mapping[str, object]
+) -> str:
+    canonical = {
+        "environment": snapshot.get("environment"),
+        "realm_id": snapshot.get("realm_id"),
+        "company_info_id": company.get("Id"),
+        "company_name": company.get("CompanyName"),
+    }
+    if not all(isinstance(value, str) and value for value in canonical.values()):
+        raise QboEvidenceProjectionError("production_company_identity_incomplete")
+    return hashlib.sha256(
+        json.dumps(canonical, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
 
 
 def _nonnegative_counts(value: object) -> dict[str, int]:
