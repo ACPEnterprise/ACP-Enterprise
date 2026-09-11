@@ -1,0 +1,35 @@
+# OM1-ECO launch checkpoint
+
+- Mission: `origin/work/launch-20260911-mission` at
+  `0c08f1e3634f38a7fb82970932dea5de7a4cf24f`; mission file SHA-256
+  `03b74b5f065694b487268bdee531d8d50620f2816f30c91d8b665f9d5b3e9dfc`.
+- Activation observed: 2026-09-10 America/New_York. Mission expiry is bounded by
+  the owner instruction to 72 hours from activation; this record does not extend
+  credentials or authorization.
+- Lane/worktree: OM1-ECO,
+  `/Users/michaelbfouse/Development/ACP-Enterprise-qbo-source-projection-1`.
+- Protected base: `42a4f68087d76247269bd4c8388f556dd62a8b5c`.
+- Reconciled evidence contract: `60a1cb87` (content from qualified `ecfada39`).
+- Backend implementation head: `e1b29a05a39abe2192fb4ee419ca8e1c4a868d06`.
+- Task state: IMPLEMENTED and locally QUALIFIED; not protected-integrated,
+  Preview-deployed, or deployed-accepted.
+- Pairing dependency: OM2-B candidate `02cf4632` consumes
+  `GET /api/v1/accounting/source-evidence/qbo?basis=cash|accrual`.
+- Qualification: 152 QBO/source-projection tests passed; focused Ruff, MyPy,
+  Python compilation, and diff checks passed.
+- Live source state: `LIVE_QBO_AUTHORIZATION_BLOCKED`. No production QBO runtime
+  configuration, protected client/token, exact-company binding, verified realm
+  marker, or production evidence root was available to this session. This does
+  not prove the intended company disconnected. Historical controls remain
+  historical and snapshots remain explicitly not live synchronization.
+- Runtime requirement: explicit ACP Company UUID binding, protected production
+  runtime/evidence roots, exact expected CompanyInfo name, production client and
+  token, verified Intuit realm, and a sealed production acquisition manifest.
+- Next action: push the successor for Enterprise/OM2-B review; when credentials
+  become available, verify CompanyInfo through the production GET-only adapter,
+  run bounded acquisition, publish manifest/completeness evidence, and verify the
+  paired UI. Otherwise continue the approved Economics break-even input and
+  productive-hour evidence readiness without policy values.
+- Boundaries: no QBO writes, Accounting posting, money movement, Customer-master
+  creation, HCP/QBO auto-merge, autonomous Luminary action, Preview mutation, or
+  Production action.
