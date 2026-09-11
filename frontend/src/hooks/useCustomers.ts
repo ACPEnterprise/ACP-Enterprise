@@ -13,15 +13,23 @@ import {
   listCustomerConsents,
   recordCustomerConsent,
   restoreCustomer,
+  searchCustomers,
   updateCustomer,
   updateCustomerContact,
   updateCustomerProperty,
 } from "../api/customers";
+import type { CustomerSearchCriteria } from "../types/customers";
 
 export function useCustomerList(search: string, limit: number, offset: number) {
   return useQuery({
     queryKey: ["customers", search, limit, offset],
     queryFn: () => listCustomers(search, limit, offset),
+  });
+}
+export function useCustomerSearch(criteria: CustomerSearchCriteria) {
+  return useQuery({
+    queryKey: ["customers", "search", criteria],
+    queryFn: () => searchCustomers(criteria),
   });
 }
 export function useCustomerDetail(customerId: string | null, enabled = true) {

@@ -17,7 +17,13 @@ from app.platform.permissions.dependencies import (
 from app.platform.reliability.correlation import current_correlation_id
 from app.platform.reliability.failures import ClientRecovery, FailureCode, SafeFailure
 
-from .commands import CorrectTimeEntry, RecordManualTime, RecordPunch
+from .commands import (
+    CorrectJobWorkedInterval,
+    CorrectTimeEntry,
+    RecordJobClock,
+    RecordManualTime,
+    RecordPunch,
+)
 from .contracts import (
     WorkdayAuthorizationError,
     WorkdayConflictError,
@@ -27,9 +33,14 @@ from .permissions import TimekeepingPermission
 from .query_service import workday_time_queries
 from .repository import timekeeping_repository
 from .schemas import (
+    ActiveJobClockView,
     AdminTimecardOperations,
     AdminTimecardReview,
     CorrectionInput,
+    JobClockInput,
+    JobClockResult,
+    JobWorkedIntervalCorrectionInput,
+    JobWorkedIntervalView,
     ManualTimeInput,
     PayPeriodView,
     PayrollTimeInputView,
@@ -153,6 +164,88 @@ async def own_state(context: OwnRead, session: Session) -> PunchState:
         return await workday_time_queries.state(
             session, context=context, employee_id=employee.id
         )
+    except (WorkdayTimeError, WorkdayAuthorizationError) as error:
+        raise _error(error) from error
+
+
+@router.post("/me/job-clock", response_model=JobClockResult)
+async def record_own_job_clock(
+    payload: JobClockInput,
+    idempotency_key: IdempotencyKey,
+    context: OwnPunch,
+    session: Session,
+) -> JobClockResult:
+    try:
+        employee = await workday_time_queries.self_employee(session, context)
+        if context.active_branch is None:
+            raise WorkdayTimeError("active Branch is required for Job clock")
+        event, completed = await workday_time_service.record_job_clock(
+            session,
+            context=context,
+            command=RecordJobClock(
+                employee_id=employee.id,
+                branch_id=context.active_branch.id,
+                job_id=payload.job_id,
+                appointment_id=payload.appointment_id,
+                kind=payload.action,
+                occurred_at=datetime.now(timezone.utc),
+                idempotency_key=idempotency_key,
+            ),
+        )
+        return JobClockResult(
+            event_id=event.id,
+            action=payload.action,
+            occurred_at=event.occurred_at,
+            state=await workday_time_queries.active_job_clock(
+                session, context=context, employee_id=employee.id
+            ),
+            completed_interval=(
+                workday_time_queries.job_interval_view(completed)
+                if completed is not None
+                else None
+            ),
+        )
+    except (WorkdayTimeError, WorkdayAuthorizationError) as error:
+        raise _error(error) from error
+
+
+@router.get("/me/job-clock", response_model=ActiveJobClockView)
+async def own_active_job_clock(
+    context: OwnRead, session: Session
+) -> ActiveJobClockView:
+    try:
+        employee = await workday_time_queries.self_employee(session, context)
+        return await workday_time_queries.active_job_clock(
+            session, context=context, employee_id=employee.id
+        )
+    except (WorkdayTimeError, WorkdayAuthorizationError) as error:
+        raise _error(error) from error
+
+
+@router.post(
+    "/job-intervals/{revision_id}/corrections",
+    response_model=JobWorkedIntervalView,
+)
+async def correct_job_worked_interval(
+    revision_id: UUID,
+    payload: JobWorkedIntervalCorrectionInput,
+    idempotency_key: IdempotencyKey,
+    context: Correct,
+    session: Session,
+) -> JobWorkedIntervalView:
+    try:
+        result = await workday_time_service.correct_job_interval(
+            session,
+            context=context,
+            command=CorrectJobWorkedInterval(
+                revision_id=revision_id,
+                start_at=payload.start_at,
+                stop_at=payload.stop_at,
+                reason=payload.reason,
+                idempotency_key=idempotency_key,
+            ),
+        )
+        return workday_time_queries.job_interval_view(result)
     except (WorkdayTimeError, WorkdayAuthorizationError) as error:
         raise _error(error) from error
 

@@ -7,7 +7,7 @@ import {
   UserRound,
 } from "lucide-react";
 import { useMemo, useState, type FormEvent } from "react";
-import { Link } from "react-router";
+import { Link, useSearchParams } from "react-router";
 
 import { getOperatorApiError } from "../api/errors";
 import { useAuth, useHasPermission } from "../auth";
@@ -25,11 +25,15 @@ import {
   useAppointments,
   useRescheduleAppointment,
 } from "../hooks/useScheduling";
-import { appointmentDetailPath, jobDetailPath } from "../routing/paths";
+import {
+  appointmentDetailPath,
+  customerDetailPath,
+  jobDetailPath,
+} from "../routing/paths";
 import type { DispatchBoardItem } from "../types/dispatch";
 import type { JobListItem } from "../types/jobs";
 import type { AppointmentDetail, AppointmentStatus } from "../types/scheduling";
-import { Alert, Badge, Button, Card, Input, Select, Spinner } from "../ui";
+import { Alert, Badge, Button, Card, ConfirmationDialog, Input, Select, Spinner } from "../ui";
 
 const START_HOUR = 7;
 const END_HOUR = 19;
@@ -81,15 +85,18 @@ function weekRange(date: string) {
 }
 
 function calendarRange(date: string, view: View) {
-  if (view === "day" || view === "unassigned") return dayRange(date);
+  const safeDate = /^\d{4}-\d{2}-\d{2}$/.test(date)
+    ? date
+    : localDateValue(new Date());
+  if (view === "day" || view === "unassigned") return dayRange(safeDate);
   if (view === "month") {
-    const selected = new Date(`${date}T12:00:00`);
+    const selected = new Date(`${safeDate}T12:00:00`);
     return {
       startAt: new Date(selected.getFullYear(), selected.getMonth(), 1).toISOString(),
       endAt: new Date(selected.getFullYear(), selected.getMonth() + 1, 1).toISOString(),
     };
   }
-  return weekRange(date);
+  return weekRange(safeDate);
 }
 
 function appointmentState(
@@ -123,14 +130,20 @@ export function SchedulingRoute({
   const canDispatch = useHasPermission("COMPANY_DISPATCH_READ");
   const canDispatchManage = useHasPermission("COMPANY_DISPATCH_MANAGE");
   const canReadJobs = useHasPermission("COMPANY_JOB_READ");
+  const [searchParams] = useSearchParams();
   const [date, setDate] = useState(() => localDateValue(new Date()));
-  const [perspective, setPerspective] = useState<Perspective>(initialPerspective);
+  const [perspective, setPerspective] = useState<Perspective>(() =>
+    searchParams.get("perspective") === "dispatch"
+      ? "dispatch"
+      : initialPerspective,
+  );
   const [view, setView] = useState<View>("day");
   const [branchId, setBranchId] = useState("");
   const [status, setStatus] = useState<AppointmentStatus | "">("");
   const [technician, setTechnician] = useState("");
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<AppointmentDetail | null>(null);
+  const displayTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const range = calendarRange(date, view);
   const appointments = useAppointments(
     {
@@ -389,7 +402,13 @@ export function SchedulingRoute({
             </span>
           </label>
         </div>
+        <p className="text-xs text-content-muted">Times are shown in this device&apos;s {displayTimeZone} timezone. Appointment source windows remain stored as authoritative instants.</p>
       </Card>
+      {appointments.data && appointments.data.total_count > appointments.data.items.length && (
+        <Alert variant="warning" title="Calendar result is partial">
+          Showing {appointments.data.items.length} of {appointments.data.total_count} appointments in this range. Narrow the Branch, status, technician, or date scope before making an operational decision.
+        </Alert>
+      )}
       {(appointments.isLoading || dispatch.isLoading) && (
         <Card className="p-8">
           <Spinner label="Loading calendar" />
@@ -408,7 +427,7 @@ export function SchedulingRoute({
       {!appointments.isLoading &&
         !appointments.isError &&
         (view === "unassigned" ? (
-          <UnscheduledQueue jobs={jobs.data?.items ?? []} />
+          <UnscheduledQueue jobs={jobs.data?.items ?? []} appointments={visible} dispatchByAppointment={dispatchByAppointment} onSelect={setSelected} />
         ) : view === "day" && perspective === "schedule" ? (
           <DayCalendar
             items={visible}
@@ -430,6 +449,10 @@ export function SchedulingRoute({
             dispatchByAppointment={dispatchByAppointment}
             jobsById={jobsById}
             onSelect={setSelected}
+            onOpenDay={(day) => {
+              setDate(localDateValue(day));
+              setView("day");
+            }}
           />
         ) : (
           <WeekCalendar
@@ -442,7 +465,7 @@ export function SchedulingRoute({
           />
         ))}
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_24rem]">
-        {view !== "unassigned" && <UnscheduledQueue jobs={jobs.data?.items ?? []} />}
+        {view !== "unassigned" && <UnscheduledQueue jobs={jobs.data?.items ?? []} appointments={visible} dispatchByAppointment={dispatchByAppointment} onSelect={setSelected} />}
         {selected ? (
           <AppointmentPanel
             appointment={selected}
@@ -761,12 +784,14 @@ function MonthCalendar({
   dispatchByAppointment,
   jobsById,
   onSelect,
+  onOpenDay,
 }: {
   readonly date: string;
   readonly items: readonly AppointmentDetail[];
   readonly dispatchByAppointment: Map<string, DispatchBoardItem>;
   readonly jobsById: Map<string, JobListItem>;
   readonly onSelect: (item: AppointmentDetail) => void;
+  readonly onOpenDay: (day: Date) => void;
 }) {
   const selected = new Date(`${date}T12:00:00`);
   const first = new Date(selected.getFullYear(), selected.getMonth(), 1);
@@ -782,15 +807,15 @@ function MonthCalendar({
       {days.map((day) => {
         const rows = items.filter((item) => item.arrival_window_start_at && new Date(item.arrival_window_start_at).toDateString() === day.toDateString());
         return (
-          <Card className={`min-h-28 p-2 ${day.getMonth() === selected.getMonth() ? "" : "opacity-50"}`} key={day.toISOString()}>
-            <h2 className="text-sm font-semibold">{day.toLocaleDateString([], { weekday: "short", day: "numeric" })}</h2>
-            <div className="mt-2 space-y-1">
-              {rows.slice(0, 3).map((item) => {
+          <Card className={`min-h-36 p-2 ${day.getMonth() === selected.getMonth() ? "" : "opacity-50"}`} key={day.toISOString()}>
+            <button type="button" className="w-full text-left text-sm font-semibold hover:text-action-primary" onClick={() => onOpenDay(day)} aria-label={`Open ${day.toLocaleDateString()} day schedule`}>{day.toLocaleDateString([], { weekday: "short", day: "numeric" })}</button>
+            <div className="mt-2 max-h-48 space-y-1 overflow-y-auto">
+              {rows.map((item) => {
                 const dispatch = dispatchByAppointment.get(item.id);
                 const job = dispatch?.job_id ? jobsById.get(dispatch.job_id) : undefined;
-                return <button type="button" className="block w-full truncate rounded border border-stroke p-1 text-left text-xs" onClick={() => onSelect(item)} key={item.id}>{time(item.arrival_window_start_at)} · {job?.job_number ?? item.appointment_number}</button>;
+                return <button type="button" className="block w-full rounded border border-stroke p-1.5 text-left text-xs hover:border-action-primary" onClick={() => onSelect(item)} key={item.id} aria-label={`${item.appointment_number}, ${time(item.arrival_window_start_at)}, ${appointmentState(item, dispatch, job)}`}><strong className="block truncate">{time(item.arrival_window_start_at)} · {job?.job_number ?? item.appointment_number}</strong><span className="block truncate">{job?.customer_display_name ?? "Customer unavailable"}</span><span className="block truncate text-content-muted">{dispatch?.assignment?.primary_employee_name ?? "Unassigned"} · {appointmentState(item, dispatch, job)}</span></button>;
               })}
-              {rows.length > 3 && <p className="text-xs text-content-muted">+{rows.length - 3} more</p>}
+              {!rows.length && <p className="text-xs text-content-muted">No appointments</p>}
             </div>
           </Card>
         );
@@ -877,8 +902,17 @@ function WeekCalendar({
   );
 }
 
-function UnscheduledQueue({ jobs }: { readonly jobs: readonly JobListItem[] }) {
+function UnscheduledQueue({ jobs, appointments, dispatchByAppointment, onSelect }: {
+  readonly jobs: readonly JobListItem[];
+  readonly appointments: readonly AppointmentDetail[];
+  readonly dispatchByAppointment: Map<string, DispatchBoardItem>;
+  readonly onSelect: (item: AppointmentDetail) => void;
+}) {
   const rows = jobs.filter((job) => !job.earliest_appointment_start_at);
+  const unassignedAppointments = appointments.filter((appointment) => {
+    const assignment = dispatchByAppointment.get(appointment.id)?.assignment;
+    return appointment.status === "draft" || !appointment.arrival_window_start_at || !assignment || assignment.status === "released";
+  });
   return (
     <Card className="p-4">
       <div className="flex items-center justify-between gap-3">
@@ -888,8 +922,9 @@ function UnscheduledQueue({ jobs }: { readonly jobs: readonly JobListItem[] }) {
             Authorized Jobs with no known Appointment time.
           </p>
         </div>
-        <Badge>{rows.length}</Badge>
+        <Badge>{rows.length + unassignedAppointments.length}</Badge>
       </div>
+      {unassignedAppointments.length > 0 && <div className="mt-3 space-y-2"><h3 className="text-sm font-semibold">Appointments needing assignment or time</h3>{unassignedAppointments.slice(0, 12).map((appointment) => <button type="button" className="w-full rounded-lg border border-stroke p-3 text-left hover:border-action-primary" onClick={() => onSelect(appointment)} key={appointment.id}><strong>{appointment.appointment_number}</strong><span className="block text-sm text-content-muted">{appointment.arrival_window_start_at ? time(appointment.arrival_window_start_at) : "Time not established"} · {appointment.status === "draft" ? "Needs scheduling" : "Unassigned"}</span></button>)}</div>}
       <div className="mt-3 grid gap-2 sm:grid-cols-2">
         {rows.slice(0, 12).map((job) => (
           <Link
@@ -906,7 +941,7 @@ function UnscheduledQueue({ jobs }: { readonly jobs: readonly JobListItem[] }) {
             </span>
           </Link>
         ))}
-        {!rows.length && (
+        {!rows.length && !unassignedAppointments.length && (
           <p className="text-sm text-content-muted">
             No unscheduled Jobs in this scope.
           </p>
@@ -941,21 +976,28 @@ function AppointmentPanel({
   const [duration, setDuration] = useState(
     appointment.expected_duration_minutes ?? 60,
   );
-  const submit = (event: FormEvent) => {
+  const [confirmMove, setConfirmMove] = useState(false);
+  const requestMove = (event: FormEvent) => {
     event.preventDefault();
+    setConfirmMove(true);
+  };
+  const submit = () => {
     const startAt = new Date(start);
     const endAt = new Date(startAt.getTime() + duration * 60000);
-    mutation.mutate({
-      appointmentId: appointment.id,
-      input: {
-        expected_version: appointment.concurrency_version,
-        arrival_window_start_at: startAt.toISOString(),
-        arrival_window_end_at: endAt.toISOString(),
-        expected_duration_minutes: duration,
-        capacity_units: appointment.capacity_units ?? "1.00",
-        reason_code: "operational_adjustment",
+    mutation.mutate(
+      {
+        appointmentId: appointment.id,
+        input: {
+          expected_version: appointment.concurrency_version,
+          arrival_window_start_at: startAt.toISOString(),
+          arrival_window_end_at: endAt.toISOString(),
+          expected_duration_minutes: duration,
+          capacity_units: appointment.capacity_units ?? "1.00",
+          reason_code: "operational_adjustment",
+        },
       },
-    });
+      { onSuccess: () => setConfirmMove(false) },
+    );
   };
   return (
     <Card className="p-4">
@@ -1011,11 +1053,17 @@ function AppointmentPanel({
             Open Job
           </Link>
         )}
+        <Link
+          className="inline-flex min-h-11 items-center rounded-lg border border-stroke px-3"
+          to={customerDetailPath(appointment.customer_id)}
+        >
+          Open Customer
+        </Link>
       </div>
       {canManage && appointment.status !== "cancelled" && (
         <form
           className="mt-5 space-y-3 border-t border-stroke pt-4"
-          onSubmit={submit}
+          onSubmit={requestMove}
         >
           <h3 className="font-semibold">Move appointment</h3>
           <p className="text-xs text-content-muted">
@@ -1054,9 +1102,23 @@ function AppointmentPanel({
             </Alert>
           )}
           <Button type="submit" loading={mutation.isPending}>
-            Confirm new time
+            Review new time
           </Button>
         </form>
+      )}
+      {confirmMove && (
+        <ConfirmationDialog
+          title="Move this appointment?"
+          description="Scheduling will revalidate Branch, capacity, conflicts, and the current appointment version before saving."
+          confirmLabel="Confirm new time"
+          pending={mutation.isPending}
+          onCancel={() => setConfirmMove(false)}
+          onConfirm={submit}
+        >
+          <p><strong>{appointment.appointment_number}</strong></p>
+          <p>{new Date(start).toLocaleString()} · {duration} minutes</p>
+          <p>No Dispatch Intelligence proposal is accepted automatically.</p>
+        </ConfirmationDialog>
       )}
     </Card>
   );
