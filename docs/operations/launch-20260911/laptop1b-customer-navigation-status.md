@@ -6,6 +6,10 @@
 - Candidate: `40765d535ed41c0e2733c87d51ef7b5230b0becb`
 - State: `QUALIFIED_HANDOFF_PUSHED`
 - Prior Customer roster integration: PR #197 / `42a4f68087d76247269bd4c8388f556dd62a8b5c`
+- Independent acceptance coordination: OM2-C candidate `c2984e7` confirms the
+  protected Customer/search routes enforce authentication, but classifies actual
+  source-population and rendered operator acceptance as unverified until a current
+  coherent Preview deployment and Migration admission packet exist.
 
 ## Implemented boundary
 
@@ -43,6 +47,11 @@ records remain Migration evidence and are never selectable as native Customers.
    pagination/search, source accounting, detail, and Customer-to-Job context.
 4. Reconcile displayed source counts and as-of date against Migration's final
    current-source packet; a partial source population remains partial.
+
+Deterministic qualification now explicitly traverses page 1 to page 2 for both the
+Customer roster and the Customer selector used during Job creation, asserting the
+server query page changes. A first-page response or pagination label alone is not
+accepted as completeness proof.
 
 No real Customer mutation, Customer communication, Preview deployment, or
 Production operation is authorized to this lane.
