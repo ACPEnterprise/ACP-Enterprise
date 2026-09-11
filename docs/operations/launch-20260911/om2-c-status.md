@@ -16,7 +16,7 @@ Updated: 2026-09-10 America/New_York
 
 ## Current checkpoint
 
-State: **WORKING — AUTHENTICATED AND SOURCE-ADMISSION ACCEPTANCE REQUIRED**.
+State: **DEPENDENCY GATED — LOCALLY EXHAUSTED AT CURRENT CHECKPOINT**.
 
 The protected authority now includes the Job-clock backend, operator Month/calendar
 workflow, Customer roster/navigation, CSR service-request booking, QBO source-evidence
@@ -213,3 +213,20 @@ Monitor protected authority and Preview release identity. When Enterprise deploy
 coherent checkpoint, rerun the deployed matrix immediately. Meanwhile, reconcile any
 new QBO, Customer population, identity-delivery or Payroll evidence packets without
 duplicating their owners' implementations.
+
+At this checkpoint, protected authority and the deployed server/web source are
+reconciled as far as read-only evidence permits. Completion is externally gated by:
+
+1. **OM1 Migration** resolving the 1,389 holds/current-source boundary and the focused
+   MyPy defect before any SOURCE.4 admission claim.
+2. **OM1 Enterprise/OM1 Phone** executing the governed identity retry and separately
+   proving provider acceptance, human receipt, activation and login.
+3. **Enterprise** supplying sanctioned authenticated CSR and Employee sessions and a
+   non-payable test protocol; **Laptop1 Phone** owns physical-device acceptance.
+4. **OM1 ECO** supplying verified live QBO authorization/company evidence, or retaining
+   the truthful external block.
+5. Local Docker/PostgreSQL availability for OM2-C's independent rerun of the latest
+   Job-clock/Timecard/Payroll database intersections.
+
+No actual operator journey is claimed from static assets, route presence, HTTP 200/401,
+fixture tests, or owning-lane reports.

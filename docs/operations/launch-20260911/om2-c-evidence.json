@@ -128,5 +128,13 @@
     "payable_punch": false,
     "payroll": false,
     "accounting": false
+  },
+  "final_checkpoint": {
+    "classification": "DEPENDENCY_GATED_LOCALLY_EXHAUSTED",
+    "authenticated_operator_acceptance": "NOT_EXECUTED_NO_SANCTIONED_SESSION",
+    "source_backed_crossdomain_acceptance": "NOT_EXECUTED_ADMISSION_PROHIBITED",
+    "physical_mobile_acceptance": "NOT_EXECUTED_OWNED_BY_LAPTOP1_PHONE",
+    "preview_mutated": false,
+    "production_touched": false
   }
 }
