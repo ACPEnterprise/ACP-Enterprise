@@ -1473,6 +1473,16 @@
     {
       "classification": "EXPLICIT_EXEMPTION",
       "domain": "identity_onboarding",
+      "mechanism": "single-use audited recovery evidence with row locking and fail-closed replay rejection",
+      "method": "POST",
+      "operation_id": "retry_definitive_rejection_api_v1_identity_onboarding__request_id__delivery_retry_definitive_rejection_post",
+      "path": "/api/v1/identity-onboarding/{request_id}/delivery/retry-definitive-rejection",
+      "reason": "The original outbox identity may be reopened only once after a definitive provider rejection; repeated or ambiguous delivery attempts are intentionally rejected.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "EXPLICIT_EXEMPTION",
+      "domain": "identity_onboarding",
       "mechanism": "single-use encrypted envelope claim with row locking and fail-closed replay rejection",
       "method": "POST",
       "operation_id": "owner_claim_api_v1_identity_onboarding__request_id__owner_claim_post",
@@ -2819,6 +2829,6 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "39f5da1f75cefbb65bfa7fa507695484ceec6ecc6f375ddc573cea8fea7a4218",
+  "fingerprint": "2d6af8a04830852d7102587c7d40406fe88e0d8ef7c1a653c5effc9490309e53",
   "schema_version": "1"
 }

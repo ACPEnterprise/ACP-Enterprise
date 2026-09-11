@@ -97,3 +97,13 @@ class OnboardingDeliveryView(BaseModel):
     delivered_at: datetime | None
 
     model_config = ConfigDict(extra="forbid")
+
+
+class OnboardingDeliveryRetryView(BaseModel):
+    request_id: UUID
+    invitation_id: UUID
+    message_id: UUID
+    delivery_status: str
+    retry_count: int
+
+    model_config = ConfigDict(extra="forbid")
