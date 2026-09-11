@@ -23,6 +23,10 @@ office Timecard, and operating-register acceptance.
   completeness, counts, pagination, conflicts/limitations, and immutable digests.
   A company-scoped HTTP read model for individual accounts, Invoices, Payments,
   bills/AP, balances, and report rows has not yet been published.
+- The prepared consumer projection now covers accounts/balances, Invoice/AR,
+  bills/AP, Payments/applications, reports, ECO mode/completeness/manifest fields,
+  and dated QBO/HCP/ACP conflicts without choosing a source winner. It remains a
+  labeled proposed projection until OM1 ECO accepts or publishes the HTTP shape.
 - Protected authority contains Job-clock backend completion (`f4fa8fe`) and the
   integrated Payroll-period/Timecard office/register foundations (`567556e`,
   `fc23148`). OM2-B is qualifying and repairing the existing UI, not rebuilding it.

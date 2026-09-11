@@ -24,6 +24,28 @@ export interface QboInvoiceEvidence {
   total: QboAmount;
   open_balance: QboAmount;
 }
+export interface QboBillEvidence {
+  source_id: string;
+  document_number: string | null;
+  vendor_label: string | null;
+  transaction_date: string | null;
+  due_date: string | null;
+  source_status: string | null;
+  total: QboAmount;
+  open_balance: QboAmount;
+}
+export interface QboSourceConflict {
+  conflict_id: string;
+  subject_label: string;
+  fact_name: string;
+  state: "conflicting" | "unresolved";
+  source_assertions: Array<{
+    source: "qbo" | "hcp" | "acp";
+    value: string | null;
+    source_date: string | null;
+  }>;
+  limitation: string;
+}
 export interface QboPaymentEvidence {
   source_id: string;
   transaction_date: string | null;
@@ -44,21 +66,26 @@ export interface QboReportEvidence {
 export interface QboAccountingEvidenceWorkspace {
   contract_version: string;
   source: "quickbooks_online";
-  source_company_label: string;
-  source_company_id_masked: string;
+  mode: "live" | "historical" | "blocked";
+  provider_environment: "production" | "historical_control";
+  company_identity_sha256: string | null;
+  company_info_verified_at: string | null;
+  source_manifest_sha256: string | null;
+  completeness: "complete" | "partial" | "unavailable";
   accounting_basis: "cash" | "accrual";
   as_of: string | null;
   acquired_at: string | null;
   refresh_state: QboEvidenceState;
   snapshot_id: string | null;
   snapshot_digest: string | null;
-  is_live: false;
   limitations: string[];
   accounts: QboAccountEvidence[];
   invoices: QboInvoiceEvidence[];
+  bills: QboBillEvidence[];
   ar: { total_open: QboAmount; current: QboAmount; overdue: QboAmount };
   payments: QboPaymentEvidence[];
   reports: QboReportEvidence[];
+  conflicts: QboSourceConflict[];
   mutation_authority: "none";
 }
 
