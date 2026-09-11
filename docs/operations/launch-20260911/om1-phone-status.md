@@ -54,5 +54,44 @@ activation, and login. Provider acceptance is not human receipt or activation.
 - Hand Laptop1 Phone the Preview client contract without credentials or activation
   secrets. Physical-device ownership remains Laptop1 Phone.
 
+## Qualification checkpoint
+
+- Postmark `/server`: authenticated HTTP 200; `DeliveryType=Live`. The server
+  response does not expose a separate approval flag, so the owner's approval report
+  plus the next actual provider response is the accepted verification boundary.
+- Preview health and `/activate` page: HTTP 200.
+- Frontend activation and Identity Onboarding: 2 suites, 6 tests passed.
+- Postmark adapter: 3 tests passed.
+- ACP Employee Mobile: 14 suites, 118 tests passed; TypeScript, ESLint, and Preview
+  configuration validation passed. Production remains inactive.
+- Database-backed onboarding/outbox tests could not run on OM1 because the existing
+  test configuration resolves PostgreSQL only inside the container network. They
+  were not run against Preview because destructive test fixtures are prohibited.
+  A separate provider-only test run passed; the earlier mixed run's database errors
+  are environment failures, not asserted product failures.
+
+Current live role readiness is intentionally not mutated: the owner-selected
+`OFFICE_MANAGER` assignment remains, `ACP_EMPLOYEE_MOBILE` exists and contains
+exactly the required five permissions, but it is not assigned to the invited
+Membership. One of the five permissions is currently effective through the existing
+role; My Day, Job execution, and own-Timekeeping permissions remain pending the
+post-activation sanctioned role assignment.
+
+## Laptop1 Phone handoff
+
+- Client: existing ACP Employee development client owned by Laptop1 Phone.
+- Runtime: Preview, `https://preview.allcountyhomeservices.com`; Production inactive.
+- Login identity: Lianne's exact unique onboarding email, delivered privately by the
+  owner; never place it or her password in Git/task logs.
+- Human sequence: open the single-use invitation, establish her own password, then
+  sign in through the ACP Employee login screen. Human receipt, activation, and
+  successful login require direct evidence and are currently pending.
+- Before My Day/Jobs/Timekeeping acceptance, an authorized administrator must add
+  `ACP_EMPLOYEE_MOBILE` to the newly active Membership while preserving
+  `OFFICE_MANAGER` and MAIN. Verify all five effective permissions after the
+  authorization refresh.
+- Physical acceptance remains on Laptop1 Phone. OM1 Phone must not request or move
+  the iPhone, alter Laptop1's runtime, or claim a physical pass from automated tests.
+
 No Production, Apple signing/TestFlight, Customer communication, shared password,
 or real employee mutation was performed by OM1 Phone in this checkpoint.
