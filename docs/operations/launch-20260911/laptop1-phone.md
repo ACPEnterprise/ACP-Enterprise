@@ -8,7 +8,7 @@ Last meaningful progress: 2026-09-10 21:57 America/New_York.
 - Mission commit: `0c08f1e3634f38a7fb82970932dea5de7a4cf24f`
 - Mission file SHA-256: `03b74b5f065694b487268bdee531d8d50620f2816f30c91d8b665f9d5b3e9dfc`
 - Protected implementation base: `42a4f68087d76247269bd4c8388f556dd62a8b5c`
-- Last reconciled protected authority: `9b7dd10bb85d36d5ceaeb1064248d5c36ea26942`
+- Last reconciled protected authority: `f3d886d88f432953ea187d989583e068c46ff228`
 - Mobile semantic candidate: `9af2a1113bed49d96cc93073768fa94deb0cac07`
 - Owning branch: `work/mobile-overnight-phone-1`
 - Worktree: `/Users/michaelfouse/Development/ACP-Enterprise-mobile-overnight-phone-1`
@@ -72,10 +72,15 @@ My Time punch, and Job lifecycle remain three independent authorities.
   timecard projection.
 - Existing login/session, My Day, Job, Workday punch/break, stale 502, permission,
   logout, and secure-storage regressions remain green.
+- Current protected backend Job clock, Job participation, and My Day projection:
+  36 tests passed in a Python 3.12 dependency-complete container using an ephemeral
+  read-only source copy. The copy was removed after qualification; the running service
+  and databases were not altered.
 
-The host Python is 3.9 and cannot collect the current Python 3.11+ backend suite. No
-fresh backend pytest pass is claimed. The authoritative OM2-A packet records 18 focused
-and 290 affected backend tests passing before protected integration.
+The host Python remains 3.9 and cannot collect the current Python 3.11+ backend suite
+directly. The dependency-complete container closes the focused compatibility gap. The
+authoritative OM2-A packet separately records 18 focused and 290 affected backend tests
+passing before protected integration.
 
 ### Simulator/native
 
@@ -117,6 +122,10 @@ authorized.
 protected ancestry through `8a9f4d8`. Confirm one sanctioned Preview acceptance identity
 is active and linked without exposing its password or activation secret. Real Employee
 activation remains OM1 Phone/Enterprise work; Laptop1 Phone must not impersonate Lianne.
+The current OM1 Phone checkpoint confirms the intended real invitation remains pending,
+the live Membership does not yet have `ACP_EMPLOYEE_MOBILE`, and the definitive-delivery
+retry awaits Enterprise deployment/execution. These facts gate real-Employee physical
+acceptance only; they do not invalidate synthetic client qualification.
 
 ### OM2-A
 
