@@ -82,9 +82,9 @@ export function DispatchRoute() {
         </div>
         <Link
           className="inline-flex min-h-11 items-center rounded-lg bg-action-primary px-4 font-semibold text-white"
-          to="/scheduling"
+          to="/scheduling?perspective=dispatch"
         >
-          Open calendar
+          Open Dispatch calendar
         </Link>
       </header>
       <DispatchScopeControls
