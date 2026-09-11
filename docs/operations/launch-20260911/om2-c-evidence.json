@@ -1,0 +1,123 @@
+{
+  "program": "OM2C.LAUNCH.20260911.E2E.ACCEPTANCE.1",
+  "mission": {
+    "commit": "0c08f1e3634f38a7fb82970932dea5de7a4cf24f",
+    "file_sha256": "03b74b5f065694b487268bdee531d8d50620f2816f30c91d8b665f9d5b3e9dfc"
+  },
+  "starting_protected_authority": "42a4f68087d76247269bd4c8388f556dd62a8b5c",
+  "protected_authority": "0b74c7654fde500529da824bdce604e01575cec1",
+  "schema_head": "d4f6h8j0l2n4",
+  "fixture_qualification": {
+    "classification": "QUALIFIED_SYNTHETIC_ONLY",
+    "focused_crossdomain_passed": 21,
+    "backend_intersections_passed": 441,
+    "frontend_files_passed": 109,
+    "frontend_tests_passed": 389,
+    "eslint": "PASS",
+    "typescript_production_build": "PASS",
+    "runtime_dependency_vulnerabilities": 0,
+    "ruff": "PASS",
+    "mypy": "PASS",
+    "python_compile": "PASS"
+  },
+  "current_authority_delta_qualification": {
+    "backend_passed": 31,
+    "frontend_files_passed": 8,
+    "frontend_tests_passed": 45,
+    "eslint": "PASS",
+    "typescript_production_build": "PASS"
+  },
+  "om2b_integrated_ui_qualification": {
+    "frontend_files_passed": 6,
+    "frontend_tests_passed": 13,
+    "eslint": "PASS",
+    "typescript_production_build": "PASS"
+  },
+  "identity_retry_integration_qualification": {
+    "idempotency_tests_passed": 10,
+    "ruff": "PASS",
+    "mypy": "PASS",
+    "python_compile": "PASS",
+    "database_backed_onboarding": "NOT_EXECUTED_POSTGRES_HOST_UNAVAILABLE",
+    "product_failures": 0
+  },
+  "latest_contract_delta_qualification": {
+    "backend_passed": 7,
+    "frontend_files_passed": 5,
+    "frontend_tests_passed": 16,
+    "eslint": "PASS",
+    "typescript_production_build": "PASS",
+    "ruff": "PASS",
+    "postgres_crossdomain": "NOT_EXECUTED_LOCAL_DOCKER_STOPPED",
+    "mypy": "FAIL_15_ATTR_DEFINED_MIGRATION_BINDING_TYPE",
+    "defect_owner": "OM1_MIGRATION"
+  },
+  "office_timecard_ui_qualification": {
+    "frontend_files_passed": 3,
+    "frontend_tests_passed": 8,
+    "eslint": "PASS",
+    "typescript_production_build": "PASS"
+  },
+  "preview": {
+    "health": "HEALTHY",
+    "database": "CONNECTED",
+    "redis": "CONNECTED",
+    "reported_backend_release": "0b74c7654fde500529da824bdce604e01575cec1",
+    "frontend_index_sha256": "cdd6bed341a63b5f8ed853a71d73f0a1f219c44a8ca95aca2c17cf40c289dd85",
+    "qualified_frontend_index_sha256": "cdd6bed341a63b5f8ed853a71d73f0a1f219c44a8ca95aca2c17cf40c289dd85",
+    "qualified_route_assets_match": {
+      "customers": true,
+      "scheduling_month_dispatch": true,
+      "workday": true,
+      "payroll": true,
+      "classification": "CURRENT_0B74C76_INDEX_MATCH"
+    },
+    "job_clock_route_status": 401,
+    "registered_timecard_payroll_route_status": 401,
+    "non_authoritative_guessed_plural_routes_status": 404,
+    "qbo_source_evidence_route_status": 401,
+    "operations_post_route_read_only_get_status": 405,
+    "deployment_recovery": {
+      "transient_status": 502,
+      "recovered_within_seconds": 45,
+      "recovered_health": "HEALTHY_CURRENT_AUTHORITY_DATABASE_AND_REDIS_CONNECTED"
+    },
+    "checkpoint_sequence": [
+      "FRONTEND_OLD_AND_JOB_CLOCK_ROUTE_ABSENT",
+      "FRONTEND_CURRENT_AND_JOB_CLOCK_ROUTE_AUTHENTICATED"
+    ],
+    "classification": "AUTHENTICATED_AND_SOURCE_ADMISSION_ACCEPTANCE_REQUIRED"
+  },
+  "actual_source_acceptance": {
+    "customer_population": "UNVERIFIED_NO_CURRENT_ADMISSION_PACKET",
+    "source4": "ACTUAL_PREVIEW_CLASSIFIED_CANONICAL_ADMISSION_FALSE",
+    "source4_exact_successors": 5121,
+    "source4_ambiguous_holds": 1389,
+    "source4_conflicts": 0,
+    "source4_classification_digest": "ddf33badaa56e18948718946d52ca30203935c971396e34d86db9b49811f3be7",
+    "source4_currentness": "STALE_VERSUS_2026_09_11_GET_ONLY_REFRESH",
+    "qbo": "BLOCKED_EXTERNAL_LIVE_AUTHORIZATION",
+    "employee_graph": "ACTUAL_PREVIEW_EVIDENCE_REPORTED_BY_OM1_PHONE",
+    "employee_delivery": "DEFINITIVE_PROVIDER_REJECTION_NO_ACCEPTANCE_ONE_RETRY_ELIGIBLE",
+    "employee_activation_login": "UNVERIFIED",
+    "job_clock_timecard_payroll": "UNVERIFIED_NO_SANCTIONED_NONPAYABLE_DEPLOYED_RUN"
+  },
+  "latest_observed_external_candidates": {
+    "customer_navigation": "5f3e66b0248a22744bc4262c606f669e726952e0",
+    "identity_definitive_rejection_retry": "4c4fb1fd373c7fe151047e1343d2b51ccc2a1cb1",
+    "qbo_payroll_evidence_ui": "37597155167a04fed2a38af5b1387e745bf0fc00",
+    "qbo_source_evidence": "ecfada3984beb8298b68c2df0d7a200c07a084a5",
+    "all_integrated_in_protected_authority": true,
+    "note": "Candidate identities are retained for provenance; equivalent Customer, QBO source, OM2-B UI, and identity retry work is protected through f3d886d. Execution and deployed acceptance remain separate."
+  },
+  "mutations": {
+    "preview": false,
+    "production": false,
+    "hcp": false,
+    "qbo": false,
+    "employee": false,
+    "payable_punch": false,
+    "payroll": false,
+    "accounting": false
+  }
+}
