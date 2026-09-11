@@ -3,6 +3,8 @@
   "mission_commit": "0c08f1e3634f38a7fb82970932dea5de7a4cf24f",
   "mission_sha256": "03b74b5f065694b487268bdee531d8d50620f2816f30c91d8b665f9d5b3e9dfc",
   "protected_base": "42a4f68087d76247269bd4c8388f556dd62a8b5c",
+  "last_reconciled_authority": "9b7dd10bb85d36d5ceaeb1064248d5c36ea26942",
+  "mobile_semantic_candidate": "9af2a1113bed49d96cc93073768fa94deb0cac07",
   "branch": "work/mobile-overnight-phone-1",
   "scope": "ACP Employee Job clock composition, recovery, device safety, and launch evidence",
   "backend_changes": [],
@@ -23,7 +25,7 @@
     "ios_hermes_export": "passed",
     "android_hermes_export": "passed",
     "ios_unsigned_simulator_build": "passed",
-    "physical_development_app": "launched_and_current_metro_reloaded",
+    "physical_development_app": "launched_and_current_metro_reloaded_then_device_unavailable",
     "physical_employee_flow": "human_acceptance_pending"
   },
   "repairs": [

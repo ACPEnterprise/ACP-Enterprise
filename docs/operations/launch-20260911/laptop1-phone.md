@@ -8,6 +8,8 @@ Last meaningful progress: 2026-09-10 21:57 America/New_York.
 - Mission commit: `0c08f1e3634f38a7fb82970932dea5de7a4cf24f`
 - Mission file SHA-256: `03b74b5f065694b487268bdee531d8d50620f2816f30c91d8b665f9d5b3e9dfc`
 - Protected implementation base: `42a4f68087d76247269bd4c8388f556dd62a8b5c`
+- Last reconciled protected authority: `9b7dd10bb85d36d5ceaeb1064248d5c36ea26942`
+- Mobile semantic candidate: `9af2a1113bed49d96cc93073768fa94deb0cac07`
 - Owning branch: `work/mobile-overnight-phone-1`
 - Worktree: `/Users/michaelfouse/Development/ACP-Enterprise-mobile-overnight-phone-1`
 
@@ -90,10 +92,12 @@ does not prove an authenticated mutation or office projection.
 
 ### Physical device
 
-The paired device named `Michael's 13 promax` is currently available over USB; Apple
-mechanically reports model `iPhone18,2` / iPhone 17 Pro Max. The existing development
-installation remains running, received a current Metro reload, and retained its device
-storage. No session was cleared and no additional punch or Job mutation was performed.
+The paired device named `Michael's 13 promax` was available over USB during
+qualification; Apple mechanically reports model `iPhone18,2` / iPhone 17 Pro Max. The
+existing development installation launched, received a current Metro reload, and
+retained its device storage. At the final reconciliation check the device had become
+unavailable, so no later physical claim is made. No session was cleared and no
+additional punch or Job mutation was performed.
 
 Fresh physical acceptance of Clock On/Off and office consistency remains
 `HUMAN_ACCEPTANCE_PENDING`. A Metro-dependent development installation is not a signed
