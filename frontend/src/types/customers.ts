@@ -54,9 +54,31 @@ export interface CustomerInput {
 }
 export interface CustomerSummary extends CustomerInput {
   id: string;
+  customer_number?: string;
+  display_name?: string;
   created_at: string;
   updated_at: string;
   archived_at: string | null;
+}
+
+export interface CustomerSearchCriteria {
+  query?: string;
+  status?: "prospect" | "active" | "inactive";
+  customer_type?: Exclude<CustomerType, "individual" | "business">;
+  has_preferred_contact?: boolean;
+  has_active_service_locations?: boolean;
+  sort_by?: "customer_number" | "display_name" | "created_at" | "updated_at" | "status";
+  sort_direction?: "asc" | "desc";
+  page: number;
+  page_size: number;
+}
+
+export interface CustomerSearchResponse {
+  items: CustomerSummary[];
+  page: number;
+  page_size: number;
+  total_count: number;
+  total_pages: number;
 }
 
 export interface CustomerPropertyInput {
