@@ -8,7 +8,7 @@ Updated: 2026-09-10 America/New_York
 - Mission commit: `0c08f1e3634f38a7fb82970932dea5de7a4cf24f`
 - Mission file SHA-256: `03b74b5f065694b487268bdee531d8d50620f2816f30c91d8b665f9d5b3e9dfc`
 - Starting protected base: `42a4f68087d76247269bd4c8388f556dd62a8b5c`
-- Current protected base: `0b74c7654fde500529da824bdce604e01575cec1`
+- Current protected base: `31c76c64c1ab0a0ec05ac2767391b2a8221307cd`
 - Isolated branch: `work/om2c-launch-20260911-e2e-acceptance-1`
 - Mission activation evidence: mission commit at 2026-09-10 21:36:32 -0400.
 - Mission authorization expiry: 2026-09-13 21:36:32 -0400, unless earlier
@@ -61,6 +61,12 @@ Current-authority qualification on fresh PostgreSQL databases:
 - After office Timecard integration at `0b74c76`, the affected Payroll, Workforce and
   Timecard-navigation checks passed 3 frontend files / 8 tests; frontend ESLint,
   TypeScript and production build passed.
+- After Mobile Job-clock client integration at `31c76c6`, the affected Foundation,
+  Job-clock, navigation and Time-clock suites passed: 4 suites / 46 tests. Mobile
+  TypeScript and ESLint passed after installing the exact lockfile dependencies. The
+  install audit reports 17 moderate dependency vulnerabilities; no automated fix or
+  dependency mutation was attempted. Jest emitted existing asynchronous VirtualizedList
+  `act(...)` warnings, with no failed assertions.
 
 These are **synthetic fixture and isolated-database results**, not deployed or real-
 source acceptance.
@@ -70,8 +76,10 @@ source acceptance.
 Preview URL: `https://preview.allcountyhomeservices.com`.
 
 - `/backend-health` is healthy and reports Preview PostgreSQL and Redis connected.
-- The backend now reports exact current protected authority
-  `0b74c7654fde500529da824bdce604e01575cec1`, with PostgreSQL and Redis connected.
+- The backend reports `0b74c7654fde500529da824bdce604e01575cec1`, one Mobile-only
+  protected commit behind current authority `31c76c64c1ab0a0ec05ac2767391b2a8221307cd`,
+  with PostgreSQL and Redis connected. The server/web source delta is empty for that
+  commit, but release identity is still recorded literally rather than called exact.
 - Preview index SHA-256 is now
   `cdd6bed341a63b5f8ed853a71d73f0a1f219c44a8ca95aca2c17cf40c289dd85`.
 - Current protected frontend build index SHA-256 is now
@@ -101,11 +109,13 @@ Preview URL: `https://preview.allcountyhomeservices.com`.
 
 Exact failed transition:
 
-`coherent deployed 0b74c76 → sanctioned authenticated CSR/Employee sessions and
+`deployed server/web 0b74c76 + protected Mobile 31c76c6 → sanctioned authenticated
+CSR/Employee sessions and physical Mobile client →
 admitted current source graph → operator journey`
 
-Frontend, backend release identity, and protected route presence now align. The deployed
-routes all project the same bounded unauthenticated `401`; no sanctioned Preview
+Frontend, server source and protected route presence align through `0b74c76`; the next
+protected commit changes only Mobile/docs. The deployed routes all project the same
+bounded unauthenticated `401`; no sanctioned Preview
 credential/session variable is available to this lane. Identity activation/login and
 source admission remain owned dependencies. OM2-C must rerun immediately when sanctioned
 sessions and admissible source facts exist.
