@@ -120,8 +120,11 @@ The backend Job-clock authority is in protected ancestry through `f4fa8fe`, and 
 deployed endpoint exists. After client integration, run the sanctioned phone → server →
 office check: active clock visibility, clock-off interval, exact persisted seconds,
 single logical events after response loss, and correction lineage. The current office
-`WorkdayRoute` types receive `job_intervals` but do not render them; OM2-A owns that
-office visibility gap. Do not substitute scheduled time or payable Workday punches.
+employee `WorkdayRoute` does not separately render raw Job intervals, while the office
+`WorkforceRoute` already renders reconciled worked intervals with Job attribution,
+review state, and audit evidence. OM2-A should verify that existing office projection
+against the phone interval rather than add a duplicate surface. Do not substitute
+scheduled time or payable Workday punches.
 
 ### OM2-C
 
@@ -146,8 +149,8 @@ Preview fixture:
    exists.
 
 Remaining gates: protected integration, coherent Preview deployment, sanctioned
-assigned fixture/identity, office Job-interval rendering or equivalent accepted office
-inspection, and owner/OM2-C physical observation. Apple signing, provisioning,
+assigned fixture/identity, phone-to-office interval inspection, and owner/OM2-C
+physical observation. Apple signing, provisioning,
 App Store Connect, live AASA, and TestFlight remain unauthorized external gates.
 
 Preview data was not mutated. Production, Apple signing, TestFlight, real Customer
