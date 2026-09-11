@@ -30,6 +30,11 @@
   run bounded acquisition, publish manifest/completeness evidence, and verify the
   paired UI. Otherwise continue the approved Economics break-even input and
   productive-hour evidence readiness without policy values.
+- Economics successor: capability-readiness v3 now composes the protected
+  productive-hour authority instead of reporting its capacity contract absent,
+  keeps workforce cost partial pending actual compensation/employer-cost evidence,
+  and records the mission-authorized OM1-ECO/OM2-B QBO boundary as an external
+  OAuth/realm/snapshot gate rather than the superseded Migration ownership collision.
 - Boundaries: no QBO writes, Accounting posting, money movement, Customer-master
   creation, HCP/QBO auto-merge, autonomous Luminary action, Preview mutation, or
   Production action.
