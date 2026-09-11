@@ -5,11 +5,11 @@ Payroll run, calculate tax/net pay, authorize payment, or post Accounting.
 """
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from enum import StrEnum
 from uuid import UUID, uuid4
 
-from sqlalchemy import Select, func, select, text
+from sqlalchemy import Select, exists, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.events.schemas import BusinessEventCreate
@@ -17,7 +17,7 @@ from app.events.service import BusinessEventService
 from app.events.types import EventType
 from app.platform.audit.service import AuditEntry, AuditService, audit_service
 from app.platform.permissions.authorization import AuthorizationContext
-from app.timekeeping.models import PayrollTimeInputRecord
+from app.timekeeping.models import PayrollTimeInputRecord, WorkdayTimeEntryRevision
 
 from .calculation import GrossPayCalculationResult
 from .contracts import (
@@ -120,6 +120,14 @@ class PayrollGrossResultService:
             )
             if time_input is None:
                 raise PayrollConflictError("gross-pay time evidence is unavailable")
+            await self._require_current_time_snapshot(
+                session,
+                company_id=context.company.id,
+                employee_id=candidate.employee_id,
+                period_start=candidate.pay_period.period_start,
+                period_end=candidate.pay_period.period_end,
+                snapshot=time_input,
+            )
         await self._subject_lock(
             session,
             company_id=context.company.id,
@@ -240,6 +248,7 @@ class PayrollGrossResultService:
     ) -> PayrollGrossCalculationReviewRecord:
         self._require(context, PayrollPermission.CALCULATION_REVIEW)
         value = await self._locked_result(session, context, result_id)
+        await self._require_result_time_current(session, value)
         if value.lifecycle not in {
             GrossResultLifecycle.CALCULATED.value,
             GrossResultLifecycle.APPROVED.value,
@@ -288,6 +297,7 @@ class PayrollGrossResultService:
         ):
             raise PayrollConflictError("gross-pay result is not under review")
         if decision is GrossReviewDecision.ACCEPTED:
+            await self._require_result_time_current(session, value)
             value.lifecycle = GrossResultLifecycle.APPROVED.value
             value.review_state = GrossResultReviewState.ACCEPTED.value
             event_type = EventType.PAYROLL_GROSS_REVIEW_ACCEPTED
@@ -406,6 +416,63 @@ class PayrollGrossResultService:
             .order_by(PayrollGrossCalculationResultRecord.created_at)
         )
         return tuple(values.all())
+
+    async def _require_result_time_current(
+        self, session: AsyncSession, value: PayrollGrossCalculationResultRecord
+    ) -> None:
+        if value.time_snapshot_id is None:
+            return
+        snapshot = await session.scalar(
+            select(PayrollTimeInputRecord).where(
+                PayrollTimeInputRecord.company_id == value.company_id,
+                PayrollTimeInputRecord.employee_id == value.employee_id,
+                PayrollTimeInputRecord.pay_period_id == value.pay_period_id,
+                PayrollTimeInputRecord.snapshot_identity == value.time_snapshot_id,
+                PayrollTimeInputRecord.snapshot_digest == value.time_snapshot_digest,
+            )
+        )
+        if snapshot is None:
+            raise PayrollConflictError("gross-pay time evidence is unavailable")
+        await self._require_current_time_snapshot(
+            session,
+            company_id=value.company_id,
+            employee_id=value.employee_id,
+            period_start=value.period_start,
+            period_end=value.period_end,
+            snapshot=snapshot,
+        )
+
+    @staticmethod
+    async def _require_current_time_snapshot(
+        session: AsyncSession,
+        *,
+        company_id: UUID,
+        employee_id: UUID,
+        period_start: date,
+        period_end: date,
+        snapshot: PayrollTimeInputRecord,
+    ) -> None:
+        newer = WorkdayTimeEntryRevision.__table__.alias("newer_time_revision")
+        values = await session.scalars(
+            select(WorkdayTimeEntryRevision.id).where(
+                WorkdayTimeEntryRevision.company_id == company_id,
+                WorkdayTimeEntryRevision.employee_id == employee_id,
+                WorkdayTimeEntryRevision.work_date >= period_start,
+                WorkdayTimeEntryRevision.work_date <= period_end,
+                ~exists().where(
+                    newer.c.company_id == WorkdayTimeEntryRevision.company_id,
+                    newer.c.entry_id == WorkdayTimeEntryRevision.entry_id,
+                    newer.c.revision_number > WorkdayTimeEntryRevision.revision_number,
+                ),
+                WorkdayTimeEntryRevision.state == "approved",
+            )
+        )
+        current_ids = frozenset(values.all())
+        sealed_ids = frozenset(UUID(item) for item in snapshot.approved_revision_ids)
+        if current_ids != sealed_ids:
+            raise PayrollConflictError(
+                "gross-pay time evidence is stale; seal and calculate a successor"
+            )
 
     async def _locked_result(
         self, session: AsyncSession, context: AuthorizationContext, result_id: UUID

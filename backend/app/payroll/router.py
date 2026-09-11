@@ -135,6 +135,8 @@ class PayrollPeriodEmployeeMetadata(BaseModel):
     exception_codes: list[str]
     payroll_review_status: str
     time_evidence_revision_ids: list[UUID]
+    time_snapshot_state: str
+    gross_calculation_state: str
 
 
 class PayrollPeriodOperationsMetadata(BaseModel):

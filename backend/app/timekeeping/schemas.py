@@ -50,6 +50,7 @@ class JobWorkedIntervalView(BaseModel):
     confidence: IntervalConfidence
     evidence_digest: str
     correction_reason: str | None
+    corrected_by_user_id: UUID | None
 
 
 class ActiveJobClockView(BaseModel):
@@ -61,6 +62,10 @@ class ActiveJobClockView(BaseModel):
     started_at: datetime | None = None
     server_observed_at: datetime
     elapsed_seconds: int | None = None
+    latest_action: JobClockKind | None = None
+    latest_event_id: UUID | None = None
+    latest_occurred_at: datetime | None = None
+    latest_completed_interval_id: UUID | None = None
 
 
 class JobClockResult(BaseModel):
@@ -262,4 +267,29 @@ class AdminTimecardOperations(BaseModel):
     pay_period: PayPeriodView
     employees: tuple[AdminEmployeeTimecard, ...]
     job_attribution_readiness: Literal["AVAILABLE"]
+    limitations: tuple[str, ...]
+
+
+class JobLaborActualItem(BaseModel):
+    employee_id: UUID
+    employee_number: str
+    employee_name: str
+    interval: JobWorkedIntervalView
+    evidence_state: Literal["ACCEPTED", "NEEDS_REVIEW"]
+    paid_time_reconciliation: Literal[
+        "WITHIN_ACCEPTED_PAID_TIME",
+        "PARTIAL_ACCEPTED_PAID_OVERLAP",
+        "OUTSIDE_ACCEPTED_PAID_TIME",
+        "PAID_TIME_UNAVAILABLE",
+    ]
+    exception_codes: tuple[str, ...]
+
+
+class JobLaborActualsQueue(BaseModel):
+    contract_version: Literal["WORKFORCE.JOB.LABOR.ACTUALS.v1"]
+    pay_period: PayPeriodView
+    accepted_interval_count: int
+    review_interval_count: int
+    total_accepted_seconds: int
+    items: tuple[JobLaborActualItem, ...]
     limitations: tuple[str, ...]

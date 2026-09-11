@@ -78,14 +78,6 @@ class WorkdayTimeService:
             raise WorkdayAuthorizationError(
                 "an employee may clock only their own Job work"
             )
-        if not await self._repository.job_scope_exists(
-            session,
-            company_id=context.company.id,
-            branch_id=command.branch_id,
-            job_id=command.job_id,
-            appointment_id=command.appointment_id,
-        ):
-            raise WorkdayTimeError("Job or Appointment scope is invalid")
         request_digest = canonical_digest(
             {
                 "company_id": str(context.company.id),
@@ -112,6 +104,17 @@ class WorkdayTimeService:
             return existing, await self._repository.interval_for_job_clock_event(
                 session, company_id=context.company.id, event_id=existing.id
             )
+        # An exact retry recovers immutable evidence even if the mutable Job or
+        # Appointment relationship changed after the original response was lost.
+        # Current scope is required only before admitting a new clock event.
+        if not await self._repository.job_scope_exists(
+            session,
+            company_id=context.company.id,
+            branch_id=command.branch_id,
+            job_id=command.job_id,
+            appointment_id=command.appointment_id,
+        ):
+            raise WorkdayTimeError("Job or Appointment scope is invalid")
         async with session.begin_nested():
             await self._repository.lock_employee_job_clock(
                 session, company_id=context.company.id, employee_id=command.employee_id

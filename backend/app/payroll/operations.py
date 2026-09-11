@@ -7,6 +7,7 @@ from uuid import UUID
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.platform.employees.models import Employee
 from app.platform.permissions.authorization import AuthorizationContext
@@ -73,6 +74,8 @@ class PayrollPeriodEmployee:
     exception_codes: tuple[str, ...]
     payroll_review_status: str
     time_evidence_revision_ids: tuple[UUID, ...]
+    time_snapshot_state: str
+    gross_calculation_state: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -113,7 +116,7 @@ class PayrollOperationsService:
             if context.active_branch is not None
             else context.authorized_branch_ids
         )
-        employee_scope = Employee.home_branch_id.in_(branch_ids)
+        employee_scope: ColumnElement[bool] = Employee.home_branch_id.in_(branch_ids)
         if context.active_branch is None:
             employee_scope = employee_scope | Employee.home_branch_id.is_(None)
         employees = tuple(
@@ -163,6 +166,9 @@ class PayrollOperationsService:
             company_id,
             pay_period_id,
             ("calculated", "under_review", "approved"),
+        )
+        time_snapshots = await self._latest_time_snapshots(
+            session, company_id, pay_period_id, employee_ids
         )
         run = await session.scalar(
             select(PayrollRunRecord)
@@ -228,6 +234,30 @@ class PayrollOperationsService:
             comp_state = "READY" if comp_count == 1 else "CONFLICTING" if comp_count else "MISSING_CONFIGURATION"
             gross_value = gross.get(employee.id)
             tax_value = tax.get(employee.id)
+            snapshot = time_snapshots.get(employee.id)
+            accepted_ids = tuple(item.id for item in accepted)
+            snapshot_ids = (
+                frozenset(UUID(item) for item in snapshot.approved_revision_ids)
+                if snapshot is not None
+                else frozenset()
+            )
+            time_snapshot_state = (
+                "MISSING"
+                if snapshot is None
+                else "CURRENT"
+                if snapshot_ids == frozenset(accepted_ids)
+                else "STALE_TIME_EVIDENCE"
+            )
+            gross_calculation_state = (
+                "NOT_CALCULATED"
+                if gross_value is None
+                else "CURRENT"
+                if snapshot is not None
+                and time_snapshot_state == "CURRENT"
+                and gross_value.time_snapshot_id == snapshot.snapshot_identity
+                and gross_value.time_snapshot_digest == snapshot.snapshot_digest
+                else "STALE_TIME_EVIDENCE"
+            )
             regular, overtime = self._earning_minutes(gross_value)
             exceptions: set[str] = set()
             if not current:
@@ -240,6 +270,10 @@ class PayrollOperationsService:
                 exceptions.add("PAYROLL_POLICY_" + policy_readiness)
             if gross_value is None:
                 exceptions.add("GROSS_PAY_NOT_CALCULATED")
+            elif gross_calculation_state != "CURRENT":
+                exceptions.add("GROSS_PAY_STALE_TIME_EVIDENCE")
+            if time_snapshot_state == "STALE_TIME_EVIDENCE":
+                exceptions.add("PAYROLL_TIME_SNAPSHOT_STALE")
             if tax_value is None:
                 exceptions.add("WITHHOLDING_NOT_CALCULATED")
             member = members.get(employee.id)
@@ -268,7 +302,9 @@ class PayrollOperationsService:
                     else "NOT_CALCULATED",
                     tuple(sorted(exceptions)),
                     review,
-                    tuple(item.id for item in accepted),
+                    accepted_ids,
+                    time_snapshot_state,
+                    gross_calculation_state,
                 )
             )
         return PayrollPeriodOperations(
@@ -284,6 +320,36 @@ class PayrollOperationsService:
                 "This projection cannot transmit Payroll, move money, or post Accounting.",
             ),
         )
+
+    @staticmethod
+    async def _latest_time_snapshots(
+        session: AsyncSession,
+        company_id: UUID,
+        pay_period_id: UUID,
+        employee_ids: tuple[UUID, ...],
+    ) -> dict[UUID, PayrollTimeInputRecord]:
+        if not employee_ids:
+            return {}
+        values = tuple(
+            (
+                await session.scalars(
+                    select(PayrollTimeInputRecord)
+                    .where(
+                        PayrollTimeInputRecord.company_id == company_id,
+                        PayrollTimeInputRecord.pay_period_id == pay_period_id,
+                        PayrollTimeInputRecord.employee_id.in_(employee_ids),
+                    )
+                    .order_by(
+                        PayrollTimeInputRecord.created_at.desc(),
+                        PayrollTimeInputRecord.id.desc(),
+                    )
+                )
+            ).all()
+        )
+        result: dict[UUID, PayrollTimeInputRecord] = {}
+        for value in values:
+            result.setdefault(value.employee_id, value)
+        return result
     async def registers(
         self, session: AsyncSession, *, context: AuthorizationContext
     ) -> tuple[dict[str, object], ...]:

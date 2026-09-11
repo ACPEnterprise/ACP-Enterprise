@@ -39,6 +39,7 @@ from .schemas import (
     CorrectionInput,
     JobClockInput,
     JobClockResult,
+    JobLaborActualsQueue,
     JobWorkedIntervalCorrectionInput,
     JobWorkedIntervalView,
     ManualTimeInput,
@@ -383,6 +384,21 @@ async def admin_pay_period_timecards(
 ) -> AdminTimecardOperations:
     try:
         return await workday_time_queries.admin_operations(
+            session, context=context, pay_period_id=pay_period_id
+        )
+    except (WorkdayTimeError, WorkdayAuthorizationError) as error:
+        raise _error(error) from error
+
+
+@router.get(
+    "/admin/pay-periods/{pay_period_id}/job-labor-actuals",
+    response_model=JobLaborActualsQueue,
+)
+async def admin_job_labor_actuals(
+    pay_period_id: UUID, context: AdminRead, session: Session
+) -> JobLaborActualsQueue:
+    try:
+        return await workday_time_queries.job_labor_actuals(
             session, context=context, pay_period_id=pay_period_id
         )
     except (WorkdayTimeError, WorkdayAuthorizationError) as error:
