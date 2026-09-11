@@ -5,6 +5,7 @@ from datetime import date, datetime
 from uuid import UUID
 
 from .contracts import PunchKind, TimeCorrectionKind
+from .job_participation import JobClockKind
 
 
 @dataclass(frozen=True)
@@ -51,3 +52,23 @@ class CreatePayPeriod:
     timezone: str
     schedule_definition_id: str
     schedule_version: int
+
+
+@dataclass(frozen=True)
+class RecordJobClock:
+    employee_id: UUID
+    branch_id: UUID
+    job_id: UUID
+    appointment_id: UUID | None
+    kind: JobClockKind
+    occurred_at: datetime
+    idempotency_key: str
+
+
+@dataclass(frozen=True)
+class CorrectJobWorkedInterval:
+    revision_id: UUID
+    start_at: datetime
+    stop_at: datetime
+    reason: str
+    idempotency_key: str

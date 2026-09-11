@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 import pytest
+
 from app.timekeeping.job_participation import (
     ApprovedPaidTimeEvidence,
     CorrectionState,
