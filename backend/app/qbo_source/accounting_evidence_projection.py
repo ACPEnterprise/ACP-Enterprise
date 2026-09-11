@@ -7,6 +7,12 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Literal
 
+from .bounded_evidence import (
+    BoundedEvidenceError,
+    latest_bounded_evidence,
+    load_bounded_raw_rows,
+)
+
 Basis = Literal["cash", "accrual"]
 _MAX_ROWS_PER_FAMILY = 2000
 
@@ -66,17 +72,25 @@ def project_latest_qbo_workspace(
         return unavailable_qbo_workspace(
             basis=basis, limitation="production_qbo_evidence_unavailable"
         )
-    run = _latest_sealed_run(root)
+    try:
+        run = latest_bounded_evidence(root)
+    except BoundedEvidenceError as error:
+        raise QboEvidenceProjectionError(str(error)) from error
     if run is None:
         return unavailable_qbo_workspace(
             basis=basis, limitation="sealed_production_snapshot_unavailable"
         )
-    manifest_path, manifest, bounded = run
+    manifest_path, manifest = run.manifest_path, run.manifest
     snapshot = manifest.get("snapshot")
     if not isinstance(snapshot, Mapping) or snapshot.get("environment") != "production":
         raise QboEvidenceProjectionError("non_production_snapshot_rejected")
     state = str(manifest.get("state"))
-    rows, truncated = _load_rows(root, bounded)
+    try:
+        rows, truncated = load_bounded_raw_rows(
+            run, maximum_per_family=_MAX_ROWS_PER_FAMILY
+        )
+    except BoundedEvidenceError as error:
+        raise QboEvidenceProjectionError(str(error)) from error
     authorization_marker = _verify_current_authorization(
         runtime_root=runtime_root,
         manifest=manifest,
@@ -261,79 +275,6 @@ def _catalog_dispositions(value: object) -> list[dict[str, str]]:
             raise QboEvidenceProjectionError("manifest_catalog_invalid")
         result.append({key: str(item[key]) for key in keys if key in item})
     return sorted(result, key=lambda item: item.get("entity_kind", ""))
-
-
-def _latest_sealed_run(
-    root: Path,
-) -> tuple[Path, dict[str, object], dict[str, object]] | None:
-    candidates: list[tuple[str, Path, dict[str, object], dict[str, object]]] = []
-    for path in (root / "runs").glob("*/manifest.json"):
-        document = _read_json(path)
-        ended_at = document.get("ended_at")
-        bounded_path = path.with_name("bounded-manifest.json")
-        bounded_digest = document.get("bounded_snapshot_sha256")
-        if not bounded_path.is_file() and bounded_digest is None:
-            # A CompanyInfo read probe is sealed evidence, but not a financial
-            # population and therefore is never a workspace candidate.
-            continue
-        if document.get("state") != "complete" or not isinstance(ended_at, str):
-            raise QboEvidenceProjectionError("bounded_source_manifest_invalid")
-        if not bounded_path.is_file() or not isinstance(bounded_digest, str):
-            raise QboEvidenceProjectionError("bounded_source_manifest_invalid")
-        bounded_bytes = bounded_path.read_bytes()
-        if hashlib.sha256(bounded_bytes).hexdigest() != bounded_digest:
-            raise QboEvidenceProjectionError("bounded_snapshot_digest_conflict")
-        bounded = _read_json(bounded_path)
-        snapshot = document.get("snapshot")
-        if (
-            isinstance(snapshot, Mapping)
-            and snapshot.get("environment") != "production"
-        ):
-            raise QboEvidenceProjectionError("non_production_snapshot_rejected")
-        if not isinstance(snapshot, Mapping) or (
-            bounded.get("state") != "BOUNDED_COMPLETE"
-            or bounded.get("source_run_id") != document.get("run_id")
-            or bounded.get("environment") != snapshot.get("environment")
-            or bounded.get("realm_id") != snapshot.get("realm_id")
-            or bounded.get("accounting_date_cutoff")
-            != snapshot.get("accounting_date_cutoff")
-            or bounded.get("snapshot_policy_version")
-            != document.get("snapshot_policy_version")
-        ):
-            raise QboEvidenceProjectionError("bounded_snapshot_identity_conflict")
-        candidates.append((ended_at, path, document, bounded))
-    if not candidates:
-        return None
-    _, path, document, bounded = max(candidates, key=lambda item: item[0])
-    return path, document, bounded
-
-
-def _load_rows(
-    root: Path, bounded: Mapping[str, object]
-) -> tuple[dict[str, list[dict[str, object]]], bool]:
-    entities = bounded.get("included_entities")
-    if not isinstance(entities, list):
-        raise QboEvidenceProjectionError("manifest_entities_invalid")
-    rows: dict[str, list[dict[str, object]]] = {}
-    truncated = False
-    for entity in entities:
-        if not isinstance(entity, Mapping):
-            raise QboEvidenceProjectionError("manifest_entity_invalid")
-        kind, digest = _text(entity.get("entity_kind")), _text(entity.get("raw_sha256"))
-        if not kind or not digest or len(digest) != 64:
-            raise QboEvidenceProjectionError("manifest_entity_invalid")
-        family = rows.setdefault(kind, [])
-        if len(family) >= _MAX_ROWS_PER_FAMILY:
-            truncated = True
-            continue
-        content = (root / "blobs" / digest[:2] / digest).read_bytes()
-        if hashlib.sha256(content).hexdigest() != digest:
-            raise QboEvidenceProjectionError("source_blob_digest_conflict")
-        row = json.loads(content)
-        if not isinstance(row, dict):
-            raise QboEvidenceProjectionError("source_blob_invalid")
-        family.append(row)
-    return rows, truncated
 
 
 def _account(row: Mapping[str, object]) -> dict[str, object]:

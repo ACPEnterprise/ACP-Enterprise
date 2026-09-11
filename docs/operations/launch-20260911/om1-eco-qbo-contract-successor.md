@@ -3,7 +3,7 @@
 - Mission: `origin/work/launch-20260911-mission` at
   `0c08f1e3634f38a7fb82970932dea5de7a4cf24f`; file SHA-256
   `03b74b5f065694b487268bdee531d8d50620f2816f30c91d8b665f9d5b3e9dfc`.
-- Current protected base: `31c76c64c1ab0a0ec05ac2767391b2a8221307cd`.
+- Current protected base: `132cded360525e10a5d9029b25fff2bd8a45b81b`.
 - Protected integration already present: OM1-ECO PR #201 as `d8999fc8` and
   OM2-B PR #206 as `9b7dd10b`.
 - Successor branch: `work/qbo-contract-successor-1`.
@@ -25,7 +25,7 @@ is `blocked`. No QBO or Accounting mutation exists.
 
 Combined qualification on current protected composition:
 
-- QBO, source projection, Economics and operational measurement: 440 passed.
+- QBO, source projection, Economics and operational measurement: 442 passed.
 - OM2-B QBO API/component/route tests: 3 files, 5 tests passed.
 - Backend focused Ruff/MyPy/compilation and frontend TypeScript/ESLint passed.
 - No migration or schema change.
@@ -73,6 +73,14 @@ their accounting basis and report end date match the requested bounded snapshot;
 date-incompatible controls are excluded with an explicit limitation. This prevents a
 newer readability probe, post-cutoff transaction, or older report from silently
 changing the source-to-projection result.
+
+The same bounded-evidence reader now supplies the Economics adapter. Economics no
+longer needs a caller to reconstruct a supposedly complete QBO envelope set: it can
+load the latest digest-bound financial packet and assess only its cutoff-included,
+content-addressed source envelopes. Missing bounded evidence returns no assessment;
+excluded purchases or other post-cutoff records cannot become contribution inputs.
+All resulting assertions remain source-reported, partial, unreconciled, and without
+policy or posting authority.
 
 No QBO mutation, Accounting posting, ledger creation, money movement, Production
 deployment, repricing, or policy value is introduced by this probe.

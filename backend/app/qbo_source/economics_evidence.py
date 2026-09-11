@@ -6,8 +6,10 @@ import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import Enum
+from pathlib import Path
 from types import MappingProxyType
 
+from .bounded_evidence import latest_bounded_evidence, load_bounded_envelopes
 from .contracts import QboSourceEnvelope
 
 _SHA256 = re.compile(r"^[a-f0-9]{64}$")
@@ -103,6 +105,20 @@ _CATEGORY_BY_ENTITY: dict[str, EconomicsEvidenceCategory] = {
     "deposit": EconomicsEvidenceCategory.GL_RECONCILIATION_ASSERTION,
     "transfer": EconomicsEvidenceCategory.GL_RECONCILIATION_ASSERTION,
 }
+
+
+def assess_latest_bounded_qbo_economics_evidence(
+    *, evidence_root: Path
+) -> QboEconomicsEvidenceAssessment | None:
+    """Build Economics assertions only from the latest bounded QBO population."""
+    packet = latest_bounded_evidence(evidence_root)
+    if packet is None:
+        return None
+    return assess_qbo_economics_evidence(
+        source_manifest_sha256=packet.manifest_sha256,
+        source_manifest_state="complete",
+        envelopes=load_bounded_envelopes(packet),
+    )
 
 
 def assess_qbo_economics_evidence(

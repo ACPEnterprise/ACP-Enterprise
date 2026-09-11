@@ -7,6 +7,8 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
+from fastapi.testclient import TestClient
+
 from app.core.config import Settings
 from app.main import app
 from app.qbo_source.contracts import EntityKind
@@ -38,7 +40,6 @@ from app.qbo_source.secrets import (
     ProtectedProductionSecretProvider,
     ProtectedSandboxSecretProvider,
 )
-from fastapi.testclient import TestClient
 
 
 class _Closable:

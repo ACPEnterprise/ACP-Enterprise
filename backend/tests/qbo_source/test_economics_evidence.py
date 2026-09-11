@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timezone
+from pathlib import Path
 
 import pytest
 
@@ -9,8 +10,10 @@ from app.qbo_source.economics_evidence import (
     EconomicsEvidenceCategory,
     EconomicsEvidenceState,
     ProfitabilityComponent,
+    assess_latest_bounded_qbo_economics_evidence,
     assess_qbo_economics_evidence,
 )
+from app.qbo_source.evidence import ProtectedFilesystemEvidenceStore, RunState
 
 
 def _envelope(
@@ -141,3 +144,67 @@ def test_invalid_or_unsealed_manifest_is_rejected() -> None:
             source_manifest_state="in_progress",
             envelopes=(),
         )
+
+
+def test_economics_loader_admits_only_cutoff_included_bounded_envelopes(
+    tmp_path: Path,
+) -> None:
+    repository = tmp_path / "repository"
+    repository.mkdir()
+    evidence_root = tmp_path / "evidence"
+    store = ProtectedFilesystemEvidenceStore(
+        root=evidence_root,
+        repository_root=repository,
+        bounded_snapshot=True,
+    )
+    store.begin_run(
+        run_id="synthetic-snapshot",
+        snapshot=_envelope("invoice", "seed", {"Id": "seed"}).snapshot,
+        company_name="Exact Company",
+    )
+    store.store_envelope(
+        run_id="synthetic-snapshot",
+        envelope=_envelope(
+            "invoice",
+            "included-invoice",
+            {"Id": "included-invoice", "TxnDate": "2026-08-24", "TotalAmt": 10},
+        ),
+    )
+    store.store_envelope(
+        run_id="synthetic-snapshot",
+        envelope=_envelope(
+            "purchase",
+            "post-cutoff-purchase",
+            {
+                "Id": "post-cutoff-purchase",
+                "TxnDate": "2026-08-26",
+                "TotalAmt": 999,
+            },
+        ),
+    )
+    source_digest = store.finish_run(
+        run_id="synthetic-snapshot",
+        state=RunState.COMPLETE,
+        ended_at=datetime(2026, 8, 27, 1, tzinfo=timezone.utc),
+    )
+
+    result = assess_latest_bounded_qbo_economics_evidence(evidence_root=evidence_root)
+
+    assert result is not None
+    assert result.source_manifest_sha256 == source_digest
+    assert [
+        (item.native_entity_type, item.native_id) for item in result.assertions
+    ] == [("invoice", "included-invoice")]
+    assert result.assertions[0].category is EconomicsEvidenceCategory.REVENUE_ASSERTION
+
+
+def test_economics_loader_returns_none_without_bounded_financial_population(
+    tmp_path: Path,
+) -> None:
+    evidence_root = tmp_path / "empty-evidence"
+    (evidence_root / "runs").mkdir(parents=True)
+
+    assert (
+        assess_latest_bounded_qbo_economics_evidence(evidence_root=evidence_root)
+        is None
+    )
