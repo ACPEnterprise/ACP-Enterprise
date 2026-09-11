@@ -1,17 +1,28 @@
 from __future__ import annotations
 
 import hashlib
+from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, Query, Request, status
 from fastapi.responses import JSONResponse
 
+from app.core.config import settings
 from app.platform.auth.errors import RateLimitExceededError, RateLimitUnavailableError
 from app.platform.auth.rate_limit import AuthenticationRateLimiter
 from app.platform.permissions.authorization import AuthorizationContext
-from app.platform.permissions.codes import AdministrationPermission
+from app.platform.permissions.codes import (
+    AccountingPermission,
+    AdministrationPermission,
+)
 from app.platform.permissions.dependencies import require_permission
 
+from .accounting_evidence_projection import (
+    Basis,
+    QboEvidenceProjectionError,
+    project_latest_qbo_workspace,
+    unavailable_qbo_workspace,
+)
 from .callback import CALLBACK_PATH
 from .intuit import IntuitAuthenticationError, IntuitProtocolError
 from .runtime import (
@@ -27,6 +38,10 @@ _Administer = Annotated[
     AuthorizationContext,
     Depends(require_permission(AdministrationPermission.COMPANY_ADMINISTER)),
 ]
+_ReportRead = Annotated[
+    AuthorizationContext,
+    Depends(require_permission(AccountingPermission.REPORT_READ)),
+]
 
 AUTHORIZE_PATH = "/api/v1/integrations/qbo/oauth/authorize"
 CONNECTION_PATH = "/api/v1/integrations/qbo/connection"
@@ -36,6 +51,7 @@ _CALLBACK_URI = (
 )
 PRODUCTION_AUTHORIZE_PATH = "/api/v1/integrations/qbo/production/oauth/authorize"
 PRODUCTION_CALLBACK_PATH = "/api/v1/integrations/qbo/production/oauth/callback"
+ACCOUNTING_EVIDENCE_PATH = "/api/v1/accounting/source-evidence/qbo"
 _PRODUCTION_CALLBACK_URI = (
     "https://preview.allcountyhomeservices.com"
     "/api/v1/integrations/qbo/production/oauth/callback"
@@ -46,6 +62,39 @@ _SAFE_HEADERS = {
     "Pragma": "no-cache",
     "Referrer-Policy": "no-referrer",
 }
+
+
+@router.get(ACCOUNTING_EVIDENCE_PATH, name="qbo-accounting-source-evidence")
+async def qbo_accounting_source_evidence(
+    basis: Basis,
+    authorization: _ReportRead,
+) -> JSONResponse:
+    """Return sealed QBO evidence; never query QBO or create Accounting truth."""
+    if (
+        not settings.qbo_production_acp_company_id
+        or settings.qbo_production_acp_company_id != authorization.company.id
+    ):
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={"detail": "QBO source evidence is not available."},
+            headers={"Cache-Control": "private, no-store"},
+        )
+    if not settings.qbo_production_evidence_root:
+        workspace = unavailable_qbo_workspace(
+            basis=basis, limitation="live_qbo_authorization_blocked"
+        )
+    else:
+        try:
+            workspace = project_latest_qbo_workspace(
+                evidence_root=Path(settings.qbo_production_evidence_root), basis=basis
+            )
+        except (OSError, ValueError, QboEvidenceProjectionError):
+            workspace = unavailable_qbo_workspace(
+                basis=basis, limitation="protected_qbo_evidence_invalid"
+            )
+    return JSONResponse(
+        content=workspace, headers={"Cache-Control": "private, no-store"}
+    )
 
 
 def _safe_response(status_code: int, code: str) -> JSONResponse:
