@@ -143,7 +143,7 @@ export function PayrollRoute() {
                           )}
                         </td>
                         <td>
-                          <Link className="font-semibold text-action-primary underline" to={`/workforce?employee=${employee.employee_id}#timecard-operations`}>
+                          <Link className="font-semibold text-action-primary underline" to={`/workforce?employee=${employee.employee_id}#timecard-${employee.employee_id}`}>
                             View timecard
                           </Link>
                         </td>

@@ -148,6 +148,9 @@ describe("WorkforceRoute", () => {
       ),
     ).toBeInTheDocument();
     expect(screen.getByText(/Trade credential/)).toBeInTheDocument();
+    expect(screen.getAllByText(/Authorized Branch/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Active/).length).toBeGreaterThan(0);
+    expect(screen.getByRole("navigation", { name: "Employee detail" })).toBeVisible();
     expect(
       screen.queryByText(/compensation|net pay|tax election/i),
     ).not.toBeInTheDocument();

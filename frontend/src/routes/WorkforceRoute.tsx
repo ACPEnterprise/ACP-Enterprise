@@ -3,6 +3,7 @@ import { Award, Languages, Search, ShieldCheck, UserRoundCheck, UsersRound } fro
 import { Link, useSearchParams } from "react-router";
 
 import { getOperatorApiError } from "../api/errors";
+import type { AdminEmployeeTimecard } from "../api/timekeeping";
 import type { EmployeePermissionExplanation } from "../api/workforce";
 import { useAuth } from "../auth";
 import { useRoles } from "../features/administration/hooks";
@@ -12,6 +13,20 @@ import { Alert, Badge, Card, Input, Spinner } from "../ui";
 
 function Readiness({ state }: { state: "READY" | "BLOCKED" | "INSUFFICIENT_EVIDENCE" }) {
   return <Badge variant={state === "READY" ? "success" : state === "BLOCKED" ? "danger" : "neutral"}>{state.replaceAll("_", " ")}</Badge>;
+}
+
+function weeklyTimecardSummaries(employee: AdminEmployeeTimecard, periodStart: string) {
+  const start = Date.parse(`${periodStart}T00:00:00Z`);
+  const weeks = new Map<number, { supported: number; accepted: number; needsReview: boolean }>();
+  for (const day of employee.days) {
+    const week = Math.max(0, Math.floor((Date.parse(`${day.work_date}T00:00:00Z`) - start) / 604_800_000));
+    const summary = weeks.get(week) ?? { supported: 0, accepted: 0, needsReview: false };
+    summary.supported += day.total_supported_minutes;
+    summary.accepted += day.review_state === "ACCEPTED" ? day.total_supported_minutes : 0;
+    summary.needsReview ||= day.review_state === "NEEDS_REVIEW";
+    weeks.set(week, summary);
+  }
+  return [...weeks.entries()].sort(([left], [right]) => left - right);
 }
 
 export function WorkforceRoute() {
@@ -74,14 +89,17 @@ export function WorkforceRoute() {
     }),
     [directory.data],
   );
+  const branchName = (branchId: string | null) =>
+    activeCompany?.branches?.find((branch) => branch.id === branchId)?.name ??
+    (branchId ? "Authorized Branch" : "Company-wide / unassigned");
 
   return (
     <div className="space-y-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-sm font-medium text-action-primary">Workforce operations</p>
-          <h2 className="mt-1 text-2xl font-bold sm:text-3xl">Employee readiness</h2>
-          <p className="mt-2 text-content-muted">Operational identity, capability, credential, language, and Branch evidence. Payroll data is excluded.</p>
+          <p className="text-sm font-medium text-action-primary">Team</p>
+          <h2 className="mt-1 text-2xl font-bold sm:text-3xl">Employees &amp; Time</h2>
+          <p className="mt-2 text-content-muted">Employee readiness, access, accepted worked time, and Payroll-period review in one office workflow.</p>
         </div>
         {permissionCodes.includes("COMPANY_IDENTITY_ONBOARDING_MANAGE") && (
           <Link className="rounded-lg bg-action-primary px-4 py-2 font-semibold text-white" to="/administration/identity-onboarding">
@@ -89,6 +107,11 @@ export function WorkforceRoute() {
           </Link>
         )}
       </header>
+      <nav aria-label="Team workspace" className="flex flex-wrap gap-2 rounded-xl border border-stroke bg-surface p-2">
+        <a className="rounded-lg bg-action-primary px-4 py-2 font-semibold text-white" href="#employee-roster">Employees</a>
+        {canReviewTime && <a className="rounded-lg px-4 py-2 font-semibold text-action-primary hover:bg-surface-subtle" href="#timecard-operations">Time &amp; Attendance</a>}
+        {permissionCodes.includes("COMPANY_PAYROLL_REPORTING_READ") && <Link className="rounded-lg px-4 py-2 font-semibold text-action-primary hover:bg-surface-subtle" to="/payroll">Payroll</Link>}
+      </nav>
       <Card className="p-4 sm:p-6">
         <h3 className="text-lg font-semibold">Assignment eligibility</h3>
         <p className="mt-1 text-sm text-content-muted">Evaluate explicit Branch, availability, capability, language, restriction, and assignment evidence. This does not assign work.</p>
@@ -176,7 +199,7 @@ export function WorkforceRoute() {
       </section>
       {canReviewTime && (
         <Card className="p-4 sm:p-6">
-          <div className="flex flex-wrap items-start justify-between gap-3">
+          <div id="timecard-operations" className="flex flex-wrap items-start justify-between gap-3 scroll-mt-4">
             <div>
               <h3 className="text-lg font-semibold">Current timecard review</h3>
               <p className="mt-1 text-sm text-content-muted">Read-only current-period evidence. Exceptions require human review; no Payroll execution occurs here.</p>
@@ -334,16 +357,19 @@ export function WorkforceRoute() {
               <h3 className="text-lg font-semibold">Timecard operations</h3>
               <p className="mt-1 text-sm text-content-muted">Read-only daily and pay-period evidence. Exceptions require human review; no Payroll execution occurs here.</p>
             </div>
-            <label className="text-sm font-medium">
-              Pay period
-              <select aria-label="Timecard pay period" className="ml-2 min-h-10 rounded-lg border border-stroke bg-surface px-2" value={effectivePayPeriodId ?? ""} onChange={(event) => setSelectedPayPeriodId(event.target.value)}>
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="text-sm font-medium">
+                Pay period
+                <select aria-label="Timecard pay period" className="ml-2 min-h-10 rounded-lg border border-stroke bg-surface px-2" value={effectivePayPeriodId ?? ""} onChange={(event) => setSelectedPayPeriodId(event.target.value)}>
                 {(payPeriods.data ?? []).map((period) => (
                   <option key={period.id} value={period.id}>
                     {period.period_start} – {period.period_end}
                   </option>
                 ))}
-              </select>
-            </label>
+                </select>
+              </label>
+              {permissionCodes.includes("COMPANY_PAYROLL_REPORTING_READ") && <Link className="rounded-lg border border-stroke px-3 py-2 text-sm font-semibold" to="/payroll">Review Payroll period</Link>}
+            </div>
           </div>
           {timeReview.isLoading && (
             <div className="mt-4">
@@ -416,12 +442,12 @@ export function WorkforceRoute() {
             </div>
           )}
           {timecards.data && (
-            <div id="timecard-operations" className="mt-5 space-y-3">
+            <div className="mt-5 space-y-3">
               <Alert variant="information" title="Job attribution is partial">
                 Paid-time evidence is shown exactly as recorded. Hours without explicit Job evidence remain unclassified rather than being assigned to a Job.
               </Alert>
               {timecards.data.employees.map((employee) => (
-                <details className="rounded-xl border border-stroke p-3" key={employee.employee_id} open={linkedEmployeeId === employee.employee_id}>
+                <details id={`timecard-${employee.employee_id}`} className="scroll-mt-4 rounded-xl border border-stroke p-3" key={employee.employee_id} open={linkedEmployeeId === employee.employee_id}>
                   <summary className="cursor-pointer list-none">
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div>
@@ -439,6 +465,24 @@ export function WorkforceRoute() {
                     </div>
                   </summary>
                   <div className="mt-4 space-y-4">
+                    {employee.days.length > 0 && (
+                      <section aria-label={`${employee.display_name} weekly timecard totals`}>
+                        <h4 className="mb-2 font-semibold">Weekly totals</h4>
+                        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                          {weeklyTimecardSummaries(employee, timecards.data.pay_period.period_start).map(([week, summary]) => (
+                            <div className="rounded-lg bg-surface-subtle p-3 text-sm" key={week}>
+                              <div className="flex items-center justify-between gap-2">
+                                <strong>Week {week + 1}</strong>
+                                <Badge variant={summary.needsReview ? "warning" : "success"}>{summary.needsReview ? "needs review" : "accepted"}</Badge>
+                              </div>
+                              <p className="mt-1 text-content-muted">
+                                {(summary.supported / 60).toFixed(2)} supported · {(summary.accepted / 60).toFixed(2)} accepted hours
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      </section>
+                    )}
                     {employee.days.length ? (
                       employee.days.map((day) => (
                         <section key={day.work_date}>
@@ -474,7 +518,7 @@ export function WorkforceRoute() {
                                       </div>
                                     </td>
                                     <td>{entry.review_state.replaceAll("_", " ")}</td>
-                                    <td title={entry.audit_digest}>verified</td>
+                                    <td title={entry.audit_digest}>Revision {entry.revision_number} · verified</td>
                                   </tr>
                                 ))}
                               </tbody>
@@ -492,7 +536,7 @@ export function WorkforceRoute() {
           )}
         </Card>
       )}
-      <div className="grid gap-6 xl:grid-cols-[minmax(20rem,0.85fr)_minmax(0,1.4fr)]">
+      <div id="employee-roster" className="grid scroll-mt-4 gap-6 xl:grid-cols-[minmax(20rem,0.85fr)_minmax(0,1.4fr)]">
         <Card className="min-w-0 overflow-hidden">
           <div className="space-y-3 border-b border-stroke p-4">
             <label className="relative block">
@@ -556,6 +600,9 @@ export function WorkforceRoute() {
                   <span className="block truncate text-xs text-content-muted">
                     {employee.employee_number} · {employee.job_title ?? employee.employee_type}
                   </span>
+                  <span className="mt-1 block truncate text-xs text-content-muted">
+                    {branchName(employee.home_branch_id)} · {employee.employee_status === "active" ? "Active" : "Disabled"}
+                  </span>
                 </span>
                 <Readiness state={employee.readiness_state} />
               </button>
@@ -589,6 +636,19 @@ export function WorkforceRoute() {
               </div>
               <Readiness state={detail.data.readiness_state} />
             </div>
+            <nav aria-label="Employee detail" className="mt-4 flex flex-wrap gap-2 border-b border-stroke pb-3 text-sm font-semibold">
+              <a className="text-action-primary underline" href="#employee-personal">Personal</a>
+              <a className="text-action-primary underline" href="#employee-access-heading">Role / Permissions</a>
+              {canReviewTime && <a className="text-action-primary underline" href={`#timecard-${detail.data.employee_id}`}>Time / Attendance</a>}
+              {permissionCodes.includes("COMPANY_PAYROLL_REPORTING_READ") && <Link className="text-action-primary underline" to={`/payroll?employee=${detail.data.employee_id}`}>Pay</Link>}
+            </nav>
+            <section id="employee-personal" className="mt-4 scroll-mt-4" aria-label="Employee personal and work identity">
+              <dl className="grid gap-3 text-sm sm:grid-cols-3">
+                <div><dt className="text-content-muted">Standard role</dt><dd className="font-medium">{detail.data.job_title ?? detail.data.employee_type}</dd></div>
+                <div><dt className="text-content-muted">Branch</dt><dd className="font-medium">{branchName(detail.data.home_branch_id)}</dd></div>
+                <div><dt className="text-content-muted">Status</dt><dd className="font-medium">{detail.data.employee_status === "active" ? "Active" : "Disabled"}</dd></div>
+              </dl>
+            </section>
             {detail.data.readiness_blockers.length > 0 && (
               <section className="mt-5 rounded-xl border border-status-warning/40 bg-status-warning/5 p-4">
                 <h4 className="font-semibold">Assignment readiness blockers</h4>

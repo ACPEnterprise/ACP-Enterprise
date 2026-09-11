@@ -63,6 +63,11 @@ vi.mock("../hooks/useWorkdayTime", () => ({
   }),
   useAdminTimecardOperations: () => ({
     data: {
+      pay_period: {
+        id: "period-1",
+        period_start: "2026-09-06",
+        period_end: "2026-09-12",
+      },
       employees: [
         {
           employee_id: "employee-1",
@@ -73,7 +78,34 @@ vi.mock("../hooks/useWorkdayTime", () => ({
           active_open_clock: false,
           missing_clock_out: false,
           review_state: "ACCEPTED",
-          days: [],
+          days: [
+            {
+              work_date: "2026-09-06",
+              total_supported_minutes: 480,
+              accepted_minutes: 480,
+              job_minutes: 480,
+              non_job_supported_minutes: 0,
+              unclassified_minutes: 0,
+              has_overlap: false,
+              has_correction: true,
+              review_state: "ACCEPTED",
+              intervals: [
+                {
+                  revision_id: "revision-2",
+                  revision_number: 2,
+                  start_at: "2026-09-06T13:00:00Z",
+                  end_at: "2026-09-06T21:00:00Z",
+                  job_number: "JOB-1001",
+                  supported_minutes: 480,
+                  corrected: true,
+                  overlap: false,
+                  provenance: "authorized_manual_entry",
+                  review_state: "ACCEPTED",
+                  audit_digest: "safe-digest",
+                },
+              ],
+            },
+          ],
         },
       ],
     },
@@ -95,8 +127,11 @@ describe("Workforce timecard navigation", () => {
       .getByText("Sanctioned Employee")
       .closest("details");
     expect(disclosure).toHaveAttribute("open");
-    expect(
-      screen.getByText(/No supported time entries in this pay period/i),
-    ).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Weekly totals" })).toBeVisible();
+    expect(screen.getByText("8.00 supported · 8.00 accepted hours")).toBeVisible();
+    expect(screen.getByText("Revision 2 · verified")).toBeVisible();
+    expect(screen.getByRole("navigation", { name: "Team workspace" })).toBeVisible();
+    expect(screen.getByRole("link", { name: "Employees" })).toHaveAttribute("href", "#employee-roster");
+    expect(screen.getByRole("link", { name: "Time & Attendance" })).toHaveAttribute("href", "#timecard-operations");
   });
 });
