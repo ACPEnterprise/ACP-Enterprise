@@ -71,12 +71,12 @@ def project_latest_qbo_workspace(
         return unavailable_qbo_workspace(
             basis=basis, limitation="sealed_production_snapshot_unavailable"
         )
-    manifest_path, manifest = run
+    manifest_path, manifest, bounded = run
     snapshot = manifest.get("snapshot")
     if not isinstance(snapshot, Mapping) or snapshot.get("environment") != "production":
         raise QboEvidenceProjectionError("non_production_snapshot_rejected")
     state = str(manifest.get("state"))
-    rows, truncated = _load_rows(root, manifest)
+    rows, truncated = _load_rows(root, bounded)
     authorization_marker = _verify_current_authorization(
         runtime_root=runtime_root,
         manifest=manifest,
@@ -106,6 +106,11 @@ def project_latest_qbo_workspace(
     catalog_dispositions = _catalog_dispositions(
         manifest.get("catalog_dispositions", [])
     )
+    reports, incompatible_report_date = _report_controls(
+        root, basis, as_of=_text(snapshot.get("accounting_date_cutoff"))
+    )
+    if incompatible_report_date:
+        limitations.add("incompatible_report_date_excluded")
     return {
         "contract_version": "qbo-accounting-evidence/v1",
         "source": "quickbooks_online",
@@ -160,7 +165,7 @@ def project_latest_qbo_workspace(
         "payments": payments,
         "vendors": vendors,
         "bills": bills,
-        "reports": _report_controls(root, basis),
+        "reports": reports,
         "mutation_authority": "none",
     }
 
@@ -258,25 +263,55 @@ def _catalog_dispositions(value: object) -> list[dict[str, str]]:
     return sorted(result, key=lambda item: item.get("entity_kind", ""))
 
 
-def _latest_sealed_run(root: Path) -> tuple[Path, dict[str, object]] | None:
-    candidates: list[tuple[str, Path, dict[str, object]]] = []
+def _latest_sealed_run(
+    root: Path,
+) -> tuple[Path, dict[str, object], dict[str, object]] | None:
+    candidates: list[tuple[str, Path, dict[str, object], dict[str, object]]] = []
     for path in (root / "runs").glob("*/manifest.json"):
         document = _read_json(path)
         ended_at = document.get("ended_at")
-        if document.get("state") in {"complete", "partial"} and isinstance(
-            ended_at, str
+        bounded_path = path.with_name("bounded-manifest.json")
+        bounded_digest = document.get("bounded_snapshot_sha256")
+        if not bounded_path.is_file() and bounded_digest is None:
+            # A CompanyInfo read probe is sealed evidence, but not a financial
+            # population and therefore is never a workspace candidate.
+            continue
+        if document.get("state") != "complete" or not isinstance(ended_at, str):
+            raise QboEvidenceProjectionError("bounded_source_manifest_invalid")
+        if not bounded_path.is_file() or not isinstance(bounded_digest, str):
+            raise QboEvidenceProjectionError("bounded_source_manifest_invalid")
+        bounded_bytes = bounded_path.read_bytes()
+        if hashlib.sha256(bounded_bytes).hexdigest() != bounded_digest:
+            raise QboEvidenceProjectionError("bounded_snapshot_digest_conflict")
+        bounded = _read_json(bounded_path)
+        snapshot = document.get("snapshot")
+        if (
+            isinstance(snapshot, Mapping)
+            and snapshot.get("environment") != "production"
         ):
-            candidates.append((ended_at, path, document))
+            raise QboEvidenceProjectionError("non_production_snapshot_rejected")
+        if not isinstance(snapshot, Mapping) or (
+            bounded.get("state") != "BOUNDED_COMPLETE"
+            or bounded.get("source_run_id") != document.get("run_id")
+            or bounded.get("environment") != snapshot.get("environment")
+            or bounded.get("realm_id") != snapshot.get("realm_id")
+            or bounded.get("accounting_date_cutoff")
+            != snapshot.get("accounting_date_cutoff")
+            or bounded.get("snapshot_policy_version")
+            != document.get("snapshot_policy_version")
+        ):
+            raise QboEvidenceProjectionError("bounded_snapshot_identity_conflict")
+        candidates.append((ended_at, path, document, bounded))
     if not candidates:
         return None
-    _, path, document = max(candidates, key=lambda item: item[0])
-    return path, document
+    _, path, document, bounded = max(candidates, key=lambda item: item[0])
+    return path, document, bounded
 
 
 def _load_rows(
-    root: Path, manifest: Mapping[str, object]
+    root: Path, bounded: Mapping[str, object]
 ) -> tuple[dict[str, list[dict[str, object]]], bool]:
-    entities = manifest.get("entities")
+    entities = bounded.get("included_entities")
     if not isinstance(entities, list):
         raise QboEvidenceProjectionError("manifest_entities_invalid")
     rows: dict[str, list[dict[str, object]]] = {}
@@ -362,15 +397,20 @@ def _bill(row: Mapping[str, object]) -> dict[str, object]:
     }
 
 
-def _report_controls(root: Path, basis: Basis) -> list[dict[str, object]]:
+def _report_controls(
+    root: Path, basis: Basis, *, as_of: str | None
+) -> tuple[list[dict[str, object]], bool]:
     reports = []
+    incompatible_date = False
     for path in sorted((root / "controls").glob("*.json")):
         control = _read_json(path)
         control_basis = str(control.get("accounting_basis", "")).lower()
-        if (
-            control.get("schema_version") == "qbo-control-registration/v1"
-            and control_basis == basis
-        ):
+        if control.get("schema_version") != "qbo-control-registration/v1":
+            continue
+        if control_basis == basis and control.get("report_end_date") != as_of:
+            incompatible_date = True
+            continue
+        if control_basis == basis:
             reports.append(
                 {
                     "report_key": control.get("control_id"),
@@ -383,7 +423,7 @@ def _report_controls(root: Path, basis: Basis) -> list[dict[str, object]]:
                     "limitation": "registered_source_report_not_posted_acp_ledger",
                 }
             )
-    return reports
+    return reports, incompatible_date
 
 
 def _sum_amounts(rows: list[dict[str, object]], field: str) -> dict[str, object]:

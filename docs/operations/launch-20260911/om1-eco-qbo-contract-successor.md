@@ -25,7 +25,7 @@ is `blocked`. No QBO or Accounting mutation exists.
 
 Combined qualification on current protected composition:
 
-- QBO, source projection, Economics and operational measurement: 433 passed.
+- QBO, source projection, Economics and operational measurement: 440 passed.
 - OM2-B QBO API/component/route tests: 3 files, 5 tests passed.
 - Backend focused Ruff/MyPy/compilation and frontend TypeScript/ESLint passed.
 - No migration or schema change.
@@ -64,6 +64,15 @@ or a live OM2-B projection. Unqueried entity families are not recorded as
 `EMPTY_CONFIRMED`. A full catalog acquisition remains required for live financial
 evidence. Any provider/OAuth failure remains explicit failed evidence and must not be
 relabeled live.
+
+The OM2-B financial projection admits only a complete full-catalog manifest with a
+matching, digest-verified `BOUNDED_COMPLETE` snapshot. It ignores non-bounded probe
+manifests when selecting the latest financial snapshot and loads only the bounded
+snapshot's included entities. Registered source reports are composed only when both
+their accounting basis and report end date match the requested bounded snapshot;
+date-incompatible controls are excluded with an explicit limitation. This prevents a
+newer readability probe, post-cutoff transaction, or older report from silently
+changing the source-to-projection result.
 
 No QBO mutation, Accounting posting, ledger creation, money movement, Production
 deployment, repricing, or policy value is introduced by this probe.
