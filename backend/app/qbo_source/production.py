@@ -94,6 +94,11 @@ async def _execute_production_acquisition(
     )
     registry = SandboxConnectionRegistry(root / "connections", environment="production")
     marker = _read_verified_marker(registry)
+    if (
+        marker.get("api_minor_version")
+        != configuration.qbo_production_api_minor_version
+    ):
+        raise SandboxRuntimeError("production_api_version_not_verified")
     expected_name = ProtectedSandboxCompanyBinding(root / "configuration").read()
     if marker.get("company_name") != expected_name or not marker.get(
         "acquisition_eligible"
@@ -175,12 +180,9 @@ async def _execute_production_acquisition(
 
 def _read_verified_marker(registry: SandboxConnectionRegistry) -> dict[str, object]:
     try:
-        value = json.loads(registry.verified_path.read_text(encoding="utf-8"))
-    except (FileNotFoundError, json.JSONDecodeError) as error:
+        return registry.verified_evidence()
+    except SandboxRuntimeError as error:
         raise SandboxRuntimeError("production_connection_not_verified") from error
-    if not isinstance(value, dict) or value.get("environment") != "production":
-        raise SandboxRuntimeError("production_connection_not_verified")
-    return value
 
 
 def run(command: ProductionAcquisitionCommand) -> AcquisitionResult:

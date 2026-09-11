@@ -301,6 +301,7 @@ async def test_runtime_connection_evidence_hashes_exact_verified_company(
         secrets_provider=provider,
         registry=registry,
         environment=IntuitEnvironment.PRODUCTION,
+        minor_version=75,
     )
     runtime = SandboxOAuthRuntime(
         callback=cast(object, SimpleNamespace()),
@@ -325,6 +326,13 @@ async def test_runtime_connection_evidence_hashes_exact_verified_company(
     assert evidence["refresh_authority"] == "access_token_current"
     assert len(str(evidence["company_identity_sha256"])) == 64
     assert "Exact Company" not in json.dumps(evidence)
+
+    marker = json.loads(registry.verified_path.read_text())
+    marker["api_minor_version"] = 74
+    registry.verified_path.write_text(json.dumps(marker))
+    os.chmod(registry.verified_path, 0o600)
+    with pytest.raises(SandboxRuntimeError, match="api_version_conflict"):
+        await runtime.connection_evidence()
 
 
 @pytest.mark.asyncio
@@ -360,6 +368,7 @@ async def test_runtime_connection_evidence_rejects_token_realm_conflict(
                 secrets_provider=secrets,
                 registry=registry,
                 environment=IntuitEnvironment.PRODUCTION,
+                minor_version=75,
             ),
         ),
         coordinator=cast(
@@ -418,6 +427,46 @@ async def test_acquisition_requires_verified_connection_before_any_query(
         )
 
     assert not Path(configuration.qbo_production_evidence_root).exists()
+
+
+@pytest.mark.asyncio
+async def test_acquisition_rejects_api_version_drift_before_any_query(
+    tmp_path: Path,
+) -> None:
+    repository = tmp_path / "repository"
+    repository.mkdir()
+    runtime = tmp_path / "runtime"
+    evidence = tmp_path / "evidence"
+    configuration = Settings(
+        environment="test",
+        qbo_production_enabled=True,
+        qbo_production_callback_uri=(
+            "https://preview.allcountyhomeservices.com"
+            "/api/v1/integrations/qbo/production/oauth/callback"
+        ),
+        qbo_production_runtime_root=str(runtime),
+        qbo_production_evidence_root=str(evidence),
+        qbo_repository_root=str(repository),
+        qbo_production_api_minor_version=75,
+    )
+    binding = ProtectedSandboxCompanyBinding(runtime / "configuration")
+    os.chmod(runtime, 0o700)
+    binding.path.write_text("Exact Company")
+    os.chmod(binding.path, 0o600)
+    SandboxConnectionRegistry(runtime / "connections", "production").record_verified(
+        realm_id="realm-123",
+        company_info_id="company-456",
+        company_name="Exact Company",
+        minor_version=74,
+    )
+
+    with pytest.raises(SandboxRuntimeError, match="api_version_not_verified"):
+        await execute_production_acquisition(
+            ProductionAcquisitionCommand("version-drift", date(2026, 9, 11)),
+            configuration,
+        )
+
+    assert not evidence.exists()
 
 
 def test_production_scope_is_exact_existing_contract_catalog() -> None:

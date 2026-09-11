@@ -25,7 +25,7 @@ is `blocked`. No QBO or Accounting mutation exists.
 
 Combined qualification on current protected composition:
 
-- QBO, source projection, Economics and operational measurement: 449 passed.
+- QBO, source projection, Economics and operational measurement: 450 passed.
 - OM2-B QBO API/component/route tests: 3 files, 5 tests passed.
 - Backend focused Ruff/MyPy/compilation and frontend TypeScript/ESLint passed.
 - No migration or schema change.
@@ -102,6 +102,9 @@ timestamp, `verified_at_oauth_connection` readability, validated production-clie
 presence, exact token-to-realm binding, refresh/access authority state, and derived
 acquisition eligibility. A missing/invalid client, token conflict, or expired refresh
 authority cannot silently remain acquisition-eligible.
+The verified marker's Intuit API minor version must also match current protected
+configuration. Version drift fails before evidence-root creation or any provider
+query, so it cannot produce a snapshot that the downstream projection must reject.
 It never exposes the realm, Company name, native CompanyInfo ID, OAuth credential, or
 token. Missing configuration returns explicit unavailable/unverified evidence instead
 of being called disconnected or live. The endpoint is cache-protected, has

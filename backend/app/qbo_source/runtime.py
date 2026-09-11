@@ -337,6 +337,8 @@ class SandboxOAuthRuntime:
         if state != "connected":
             return result
         marker = self.verifier.registry.verified_evidence()
+        if marker["api_minor_version"] != self.verifier.minor_version:
+            raise SandboxRuntimeError("connection_api_version_conflict")
         await self.verifier.secrets_provider.get_client_credential(
             self.coordinator.oauth.credential_reference
         )
