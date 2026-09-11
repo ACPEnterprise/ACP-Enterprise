@@ -47,6 +47,10 @@ Preview URL: `https://preview.allcountyhomeservices.com`.
   `5ffe996047bbddc8ff3b18a4c517b0529ad378741334738e47d70c30abd49895`.
 - Current protected frontend build index SHA-256 is
   `5ffe996047bbddc8ff3b18a4c517b0529ad378741334738e47d70c30abd49895`.
+- The deployed entrypoint and current Customer, Scheduling/Month, Workday and Payroll
+  route bundles are byte-for-byte identical to the qualified local production build.
+  This proves those static artifacts were deployed; it is not rendered or authenticated
+  operator acceptance.
 - `GET /api/v1/timekeeping/me/job-clock` initially returned `404`, then advanced to
   the same bounded `401` authentication response as other protected APIs. This proves
   the route landed between checkpoints, but not Employee identity, authorization or

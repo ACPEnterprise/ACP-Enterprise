@@ -26,6 +26,12 @@
     "reported_backend_release": "00e0d5f0faad31f6ff0b85cdde903857a78b70fc",
     "frontend_index_sha256": "5ffe996047bbddc8ff3b18a4c517b0529ad378741334738e47d70c30abd49895",
     "qualified_frontend_index_sha256": "5ffe996047bbddc8ff3b18a4c517b0529ad378741334738e47d70c30abd49895",
+    "qualified_route_assets_match": {
+      "customers": true,
+      "scheduling_month_dispatch": true,
+      "workday": true,
+      "payroll": true
+    },
     "job_clock_route_status": 401,
     "checkpoint_sequence": [
       "FRONTEND_OLD_AND_JOB_CLOCK_ROUTE_ABSENT",
