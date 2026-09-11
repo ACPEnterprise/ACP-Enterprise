@@ -3,7 +3,8 @@
 - Mission authority: `0c08f1e3634f38a7fb82970932dea5de7a4cf24f`
 - Product base: `42a4f68087d76247269bd4c8388f556dd62a8b5c`
 - Lane: `work/customer-office-navigation-acceptance-1`
-- State: `QUALIFICATION_IN_PROGRESS`
+- Candidate: `40765d535ed41c0e2733c87d51ef7b5230b0becb`
+- State: `QUALIFIED_HANDOFF_PUSHED`
 - Prior Customer roster integration: PR #197 / `42a4f68087d76247269bd4c8388f556dd62a8b5c`
 
 ## Implemented boundary
@@ -35,8 +36,9 @@ records remain Migration evidence and are never selectable as native Customers.
 
 ## Remaining acceptance
 
-1. Finish full frontend regression and changed-boundary security checks.
-2. Push the qualified continuation commit and hand it to Enterprise.
+1. Enterprise protected-integrates the qualified candidate.
+2. Enterprise deploys a coherent Preview release newer than the currently observed
+   `00e0d5f0faad31f6ff0b85cdde903857a78b70fc`.
 3. After protected integration and Preview deployment, verify authenticated roster
    pagination/search, source accounting, detail, and Customer-to-Job context.
 4. Reconcile displayed source counts and as-of date against Migration's final
