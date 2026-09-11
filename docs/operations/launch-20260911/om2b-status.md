@@ -5,7 +5,8 @@
 - Mission file: `docs/operations/launch-20260911/mission.md`
 - Activated: 2026-09-10 21:36 America/New_York
 - Authorized continuation expiry: 2026-09-13 21:36 America/New_York
-- Implementation base at reconciliation: `42a4f68087d76247269bd4c8388f556dd62a8b5c`
+- Initial implementation base: `42a4f68087d76247269bd4c8388f556dd62a8b5c`
+- Current reconciled protected authority: `e9377e72672edd5308c8181f45e172c22888cc5e`
 - Lane branch: `work/qbo-accounting-evidence-ui-1`
 
 ## Current task
@@ -19,26 +20,25 @@ office Timecard, and operating-register acceptance.
   defines `qbo-om2b-source-evidence/v1` and is reconciled into this lane.
 - OM1 proved no sanctioned real-company OAuth/runtime/evidence configuration was
   available. Live QBO evidence remains `LIVE_QBO_AUTHORIZATION_BLOCKED`.
-- The ECO packet supplies source identity, dates, basis-specific report controls,
-  completeness, counts, pagination, conflicts/limitations, and immutable digests.
-  A company-scoped HTTP read model for individual accounts, Invoices, Payments,
-  bills/AP, balances, and report rows has not yet been published.
-- The prepared consumer projection now covers accounts/balances, Invoice/AR,
-  bills/AP, Payments/applications, reports, ECO mode/completeness/manifest fields,
-  and dated QBO/HCP/ACP conflicts without choosing a source winner. It remains a
-  labeled proposed projection until OM1 ECO accepts or publishes the HTTP shape.
+- Protected commit `d8999fc` now supplies the company-scoped
+  `qbo-accounting-source-evidence/v1` HTTP read model for accounts/balances,
+  Invoice/AR, vendors, bills/AP, Payments/applications, reports, completeness,
+  pagination/catalog state, and conflicts. The UI has been reconciled to its
+  exact provider-authorization and evidence-mode vocabulary.
 - Protected authority contains Job-clock backend completion (`f4fa8fe`) and the
   integrated Payroll-period/Timecard office/register foundations (`567556e`,
   `fc23148`). OM2-B is qualifying and repairing the existing UI, not rebuilding it.
 - Payroll aggregate cards now remain `Unavailable` when no approved run exists;
   blocked registers do not render zero liabilities without admitted calculations.
 - Payroll-to-office-Timecard navigation now opens the requested Employee record.
-- Frontend qualification: 112 files / 394 tests pass; ESLint, TypeScript, and the
+- Frontend qualification: 114 files / 409 tests pass; ESLint, TypeScript, and the
   production Vite build pass.
 - A fresh isolated PostgreSQL 16 database upgraded from base to the single current
   Alembic head `d4f6h8j0l2n4`. The complete Payroll + Timekeeping suites pass 135
   tests, and the complete QBO source suite passes 142 tests. The focused combined
   QBO packet/Timecard/Payroll persistence battery passes 13 tests.
+- After protected ECO integration, the combined QBO + Payroll + Timekeeping
+  backend suites pass 282 tests against the isolated PostgreSQL database.
 - Read-only Preview inspection still reports backend release
   `00e0d5f0faad31f6ff0b85cdde903857a78b70fc`, not protected authority
   `42a4f68087d76247269bd4c8388f556dd62a8b5c`. The proposed QBO evidence endpoint

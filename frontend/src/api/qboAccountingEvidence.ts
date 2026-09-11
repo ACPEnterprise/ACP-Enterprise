@@ -46,6 +46,12 @@ export interface QboSourceConflict {
   }>;
   limitation: string;
 }
+export interface QboVendorEvidence {
+  source_id: string;
+  display_name: string | null;
+  active: boolean | null;
+  source_evidence_only: true;
+}
 export interface QboPaymentEvidence {
   source_id: string;
   transaction_date: string | null;
@@ -66,24 +72,29 @@ export interface QboReportEvidence {
 export interface QboAccountingEvidenceWorkspace {
   contract_version: string;
   source: "quickbooks_online";
-  mode: "live" | "historical" | "blocked";
-  provider_environment: "production" | "historical_control";
-  company_identity_sha256: string | null;
-  company_info_verified_at: string | null;
-  source_manifest_sha256: string | null;
+  source_company_label: string;
+  source_company_id_masked: string;
+  provider_authorization: "verified_current" | "unverified";
+  evidence_mode:
+    "current_authorized_snapshot" | "historical_snapshot" | "unavailable";
   completeness: "complete" | "partial" | "unavailable";
+  entity_counts: Record<string, number>;
+  page_counts: Record<string, number>;
+  catalog_dispositions: Array<Record<string, string>>;
   accounting_basis: "cash" | "accrual";
   as_of: string | null;
   acquired_at: string | null;
   refresh_state: QboEvidenceState;
   snapshot_id: string | null;
   snapshot_digest: string | null;
+  is_live: false;
   limitations: string[];
   accounts: QboAccountEvidence[];
   invoices: QboInvoiceEvidence[];
   bills: QboBillEvidence[];
   ar: { total_open: QboAmount; current: QboAmount; overdue: QboAmount };
   payments: QboPaymentEvidence[];
+  vendors: QboVendorEvidence[];
   reports: QboReportEvidence[];
   conflicts: QboSourceConflict[];
   mutation_authority: "none";
@@ -104,27 +115,37 @@ export function validateQboAccountingEvidence(
   requestedBasis: "cash" | "accrual",
 ): QboAccountingEvidenceWorkspace {
   if (
+    value.contract_version !== "qbo-accounting-source-evidence/v1" ||
     value.source !== "quickbooks_online" ||
     value.mutation_authority !== "none" ||
+    value.is_live !== false ||
     value.accounting_basis !== requestedBasis
   ) {
     throw new Error("QBO evidence authority is invalid.");
   }
   if (
-    value.mode === "live" &&
-    (value.provider_environment !== "production" ||
-      !value.company_identity_sha256 ||
-      !value.company_info_verified_at ||
-      !value.source_manifest_sha256 ||
+    value.provider_authorization === "verified_current" &&
+    (value.evidence_mode !== "current_authorized_snapshot" ||
+      value.source_company_id_masked === "unavailable" ||
+      value.source_company_label === "Real company not verified" ||
+      !value.snapshot_digest ||
       !value.acquired_at)
   ) {
     throw new Error("Live QBO evidence is not verified and sealed.");
   }
   if (
     value.completeness === "complete" &&
-    (!value.source_manifest_sha256 || !value.acquired_at)
+    (!value.snapshot_digest || !value.acquired_at)
   ) {
     throw new Error("Complete QBO evidence requires a sealed acquisition.");
+  }
+  if (
+    (value.evidence_mode === "current_authorized_snapshot" &&
+      value.provider_authorization !== "verified_current") ||
+    (value.evidence_mode === "historical_snapshot" &&
+      value.refresh_state !== "stale")
+  ) {
+    throw new Error("QBO provider authorization and snapshot mode conflict.");
   }
   if (
     value.reports.some(

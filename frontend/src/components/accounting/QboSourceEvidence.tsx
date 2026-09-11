@@ -44,9 +44,9 @@ function Workspace({ value }: { value: QboAccountingEvidenceWorkspace }) {
         title={`Source snapshot ${value.refresh_state}`}
       >
         <p>
-          QuickBooks Online {value.mode} source-reported evidence ·{" "}
-          {value.accounting_basis} basis · as of {when(value.as_of)} · acquired{" "}
-          {when(value.acquired_at)}.
+          QuickBooks Online {value.evidence_mode.replaceAll("_", " ")}{" "}
+          source-reported evidence · {value.accounting_basis} basis · as of{" "}
+          {when(value.as_of)} · acquired {when(value.acquired_at)}.
         </p>
         <p className="mt-2">
           This is a sealed snapshot, not live synchronization and not posted ACP
@@ -57,9 +57,11 @@ function Workspace({ value }: { value: QboAccountingEvidenceWorkspace }) {
         <div>
           <dt className="text-content-muted">Source company</dt>
           <dd>
-            {value.company_identity_sha256
-              ? `${value.mode === "live" ? "Verified real company" : "Historical company evidence"} · ${value.company_identity_sha256.slice(0, 12)}`
-              : "Company identity unavailable"}
+            {value.provider_authorization === "verified_current"
+              ? `${value.source_company_label} · ${value.source_company_id_masked} · currently verified`
+              : value.evidence_mode === "historical_snapshot"
+                ? `${value.source_company_label} · ${value.source_company_id_masked} · historical snapshot`
+                : "Real company not verified"}
           </dd>
         </div>
         <div>
@@ -364,8 +366,8 @@ function Workspace({ value }: { value: QboAccountingEvidenceWorkspace }) {
       <p className="break-all text-xs text-content-muted">
         Contract {value.contract_version} · snapshot{" "}
         {value.snapshot_id ?? "unavailable"} · digest{" "}
-        {value.snapshot_digest ?? "unavailable"} · source manifest{" "}
-        {value.source_manifest_sha256 ?? "unavailable"} · read-only evidence
+        {value.snapshot_digest ?? "unavailable"} · provider authorization{" "}
+        {value.provider_authorization.replaceAll("_", " ")} · read-only evidence
       </p>
     </div>
   );

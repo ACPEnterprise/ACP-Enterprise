@@ -13,20 +13,23 @@ const unavailable = {
   state: "unavailable" as const,
 };
 const value = {
-  contract_version: "qbo-accounting-evidence/v1",
+  contract_version: "qbo-accounting-source-evidence/v1",
   source: "quickbooks_online" as const,
-  mode: "historical" as const,
-  provider_environment: "historical_control" as const,
-  company_identity_sha256: "c".repeat(64),
-  company_info_verified_at: "2026-09-10T11:59:00Z",
-  source_manifest_sha256: "d".repeat(64),
+  source_company_label: "Sanctioned company",
+  source_company_id_masked: "…1234",
+  provider_authorization: "unverified" as const,
+  evidence_mode: "historical_snapshot" as const,
   completeness: "partial" as const,
+  entity_counts: { account: 1 },
+  page_counts: { account: 1 },
+  catalog_dispositions: [],
   accounting_basis: "cash" as const,
   as_of: "2026-09-10T12:00:00Z",
   acquired_at: "2026-09-10T12:05:00Z",
   refresh_state: "stale" as const,
   snapshot_id: "snapshot-1",
   snapshot_digest: "a".repeat(64),
+  is_live: false as const,
   limitations: ["HCP reconciliation remains separate."],
   accounts: [
     {
@@ -41,6 +44,7 @@ const value = {
   bills: [],
   ar: { total_open: unavailable, current: unavailable, overdue: unavailable },
   payments: [],
+  vendors: [],
   conflicts: [
     {
       conflict_id: "conflict-1",

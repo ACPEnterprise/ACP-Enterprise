@@ -21,20 +21,23 @@ describe("QBO accounting source evidence API", () => {
   });
 
   const packet = (): QboAccountingEvidenceWorkspace => ({
-    contract_version: "qbo-accounting-evidence/v1",
+    contract_version: "qbo-accounting-source-evidence/v1",
     source: "quickbooks_online",
-    mode: "blocked",
-    provider_environment: "historical_control",
-    company_identity_sha256: null,
-    company_info_verified_at: null,
-    source_manifest_sha256: null,
+    source_company_label: "Real company not verified",
+    source_company_id_masked: "unavailable",
+    provider_authorization: "unverified",
+    evidence_mode: "unavailable",
     completeness: "unavailable",
+    entity_counts: {},
+    page_counts: {},
+    catalog_dispositions: [],
     accounting_basis: "cash",
     as_of: null,
     acquired_at: null,
     refresh_state: "unavailable",
     snapshot_id: null,
     snapshot_digest: null,
+    is_live: false,
     limitations: ["production_oauth_authority_unavailable"],
     accounts: [],
     invoices: [],
@@ -45,6 +48,7 @@ describe("QBO accounting source evidence API", () => {
       overdue: { amount: null, currency: null, state: "unavailable" },
     },
     payments: [],
+    vendors: [],
     reports: [],
     conflicts: [],
     mutation_authority: "none",
@@ -65,7 +69,11 @@ describe("QBO accounting source evidence API", () => {
   it("rejects unsealed live claims and inconsistent missing amounts", () => {
     expect(() =>
       validateQboAccountingEvidence(
-        { ...packet(), mode: "live", provider_environment: "production" },
+        {
+          ...packet(),
+          provider_authorization: "verified_current",
+          evidence_mode: "current_authorized_snapshot",
+        },
         "cash",
       ),
     ).toThrow(/not verified and sealed/i);
