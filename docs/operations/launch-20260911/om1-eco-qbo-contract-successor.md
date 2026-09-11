@@ -25,7 +25,7 @@ is `blocked`. No QBO or Accounting mutation exists.
 
 Combined qualification on current protected composition:
 
-- QBO, source projection, Economics and operational measurement: 447 passed.
+- QBO, source projection, Economics and operational measurement: 449 passed.
 - OM2-B QBO API/component/route tests: 3 files, 5 tests passed.
 - Backend focused Ruff/MyPy/compilation and frontend TypeScript/ESLint passed.
 - No migration or schema change.
@@ -64,6 +64,11 @@ or a live OM2-B projection. Unqueried entity families are not recorded as
 `EMPTY_CONFIRMED`. A full catalog acquisition remains required for live financial
 evidence. Any provider/OAuth failure remains explicit failed evidence and must not be
 relabeled live.
+
+The operator command returns process status `0` only for a sealed `complete` result.
+A provider, authorization, validation, or pagination failure still seals its partial
+evidence and prints the structured failure packet, but returns status `2` so release
+automation cannot mistake an incomplete refresh for success.
 
 The OM2-B financial projection admits only a complete full-catalog manifest with a
 matching, digest-verified `BOUNDED_COMPLETE` snapshot. It ignores non-bounded probe

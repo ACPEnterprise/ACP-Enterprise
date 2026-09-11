@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -190,7 +191,7 @@ def run_read_probe(command: ProductionAcquisitionCommand) -> AcquisitionResult:
     return asyncio.run(execute_production_read_probe(command))
 
 
-def main() -> None:
+def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Seal one authorized QBO read-only snapshot"
     )
@@ -201,7 +202,7 @@ def main() -> None:
         action="store_true",
         help="Seal only the production CompanyInfo GET as a current-read probe.",
     )
-    arguments = parser.parse_args()
+    arguments = parser.parse_args(argv)
     command = ProductionAcquisitionCommand(arguments.run_id, arguments.cutoff)
     result = run_read_probe(command) if arguments.company_info_only else run(command)
     print(
@@ -222,7 +223,8 @@ def main() -> None:
             sort_keys=True,
         )
     )
+    return 0 if result.state.value == "complete" else 2
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

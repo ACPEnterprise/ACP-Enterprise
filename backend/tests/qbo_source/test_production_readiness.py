@@ -16,6 +16,7 @@ from app.main import app
 from app.platform.permissions.authorization import AuthorizationContext
 from app.qbo_source import router as qbo_router_module
 from app.qbo_source.contracts import EntityKind
+from app.qbo_source.evidence import RunState
 from app.qbo_source.intuit import (
     ACCOUNTING_SCOPE,
     AuthorizedRealm,
@@ -34,6 +35,7 @@ from app.qbo_source.production import (
     execute_production_read_probe,
 )
 from app.qbo_source.router import PRODUCTION_CALLBACK_PATH
+from app.qbo_source.runner import AcquisitionResult
 from app.qbo_source.runtime import (
     ProtectedSandboxCompanyBinding,
     SandboxCompanyInfoVerifier,
@@ -528,6 +530,72 @@ async def test_read_probe_seals_only_companyinfo_without_false_empty_families(
                 date(2026, 9, 11),
             )
         )
+
+
+def test_operator_cli_returns_nonzero_for_sealed_partial_evidence(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from app.qbo_source import production
+
+    monkeypatch.setattr(
+        production,
+        "run_read_probe",
+        lambda command: AcquisitionResult(
+            run_id=command.run_id,
+            state=RunState.PARTIAL,
+            envelope_count=0,
+            manifest_sha256="a" * 64,
+            failure_code="api_authorization_rejected",
+        ),
+    )
+
+    status_code = production.main(
+        [
+            "--run-id",
+            f"{PRODUCTION_READ_PROBE_PREFIX}partial",
+            "--cutoff",
+            "2026-09-11",
+            "--company-info-only",
+        ]
+    )
+
+    output = json.loads(capsys.readouterr().out)
+    assert status_code == 2
+    assert output["state"] == "partial"
+    assert output["failure_code"] == "api_authorization_rejected"
+
+
+def test_operator_cli_returns_zero_only_for_complete_evidence(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from app.qbo_source import production
+
+    monkeypatch.setattr(
+        production,
+        "run_read_probe",
+        lambda command: AcquisitionResult(
+            run_id=command.run_id,
+            state=RunState.COMPLETE,
+            envelope_count=1,
+            manifest_sha256="b" * 64,
+            failure_code=None,
+        ),
+    )
+
+    status_code = production.main(
+        [
+            "--run-id",
+            f"{PRODUCTION_READ_PROBE_PREFIX}complete",
+            "--cutoff",
+            "2026-09-11",
+            "--company-info-only",
+        ]
+    )
+
+    output = json.loads(capsys.readouterr().out)
+    assert status_code == 0
+    assert output["state"] == "complete"
+    assert output["failure_code"] is None
 
 
 def test_production_callback_query_logging_is_suppressed() -> None:
