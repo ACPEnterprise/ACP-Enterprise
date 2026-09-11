@@ -44,6 +44,13 @@ import { RouteErrorBoundary } from "./RouteErrorBoundary";
 
 export const appRoutes: RouteObject[] = [
   {
+    path: "/activate",
+    lazy: async () => {
+      const module = await import("../routes/ActivationRoute");
+      return { Component: module.ActivationRoute };
+    },
+  },
+  {
     path: "/login",
     lazy: async () => {
       const module = await import("../routes/LoginRoute");
