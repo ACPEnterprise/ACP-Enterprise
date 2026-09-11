@@ -49,6 +49,7 @@ def test_employee_time_payroll_scenario_reuses_bounded_authoritative_proofs() ->
     assert "test_authorization_service.py" in serialized
     assert "test_jobs_api.py" in serialized
     assert "test_workday_authority.py" in serialized
+    assert "test_job_clock_operations.py" in serialized
     assert "test_labor_evidence.py" in serialized
     assert "test_gross_pay_calculation.py" in serialized
     assert "test_tax_deduction_calculation.py" in serialized

@@ -1,0 +1,50 @@
+{
+  "program": "OM2C.LAUNCH.20260911.E2E.ACCEPTANCE.1",
+  "mission": {
+    "commit": "0c08f1e3634f38a7fb82970932dea5de7a4cf24f",
+    "file_sha256": "03b74b5f065694b487268bdee531d8d50620f2816f30c91d8b665f9d5b3e9dfc"
+  },
+  "protected_authority": "42a4f68087d76247269bd4c8388f556dd62a8b5c",
+  "schema_head": "d4f6h8j0l2n4",
+  "fixture_qualification": {
+    "classification": "QUALIFIED_SYNTHETIC_ONLY",
+    "focused_crossdomain_passed": 21,
+    "backend_intersections_passed": 441,
+    "frontend_files_passed": 109,
+    "frontend_tests_passed": 389,
+    "eslint": "PASS",
+    "typescript_production_build": "PASS",
+    "runtime_dependency_vulnerabilities": 0,
+    "ruff": "PASS",
+    "mypy": "PASS",
+    "python_compile": "PASS"
+  },
+  "preview": {
+    "health": "HEALTHY",
+    "database": "CONNECTED",
+    "redis": "CONNECTED",
+    "reported_backend_release": "00e0d5f0faad31f6ff0b85cdde903857a78b70fc",
+    "frontend_index_sha256": "249f83bb04ca137f1a4fc1cbec85483b2d61a071dcd063ec355d1e33c9baab9c",
+    "qualified_frontend_index_sha256": "5ffe996047bbddc8ff3b18a4c517b0529ad378741334738e47d70c30abd49895",
+    "job_clock_route_status": 404,
+    "classification": "BLOCKED_COHERENT_DEPLOYMENT"
+  },
+  "actual_source_acceptance": {
+    "customer_population": "UNVERIFIED_NO_CURRENT_ADMISSION_PACKET",
+    "qbo": "BLOCKED_EXTERNAL_LIVE_AUTHORIZATION",
+    "employee_graph": "ACTUAL_PREVIEW_EVIDENCE_REPORTED_BY_OM1_PHONE",
+    "employee_delivery": "DEFINITIVE_PROVIDER_REJECTION_NO_ACCEPTANCE",
+    "employee_activation_login": "UNVERIFIED",
+    "job_clock_timecard_payroll": "UNVERIFIED_NO_SANCTIONED_NONPAYABLE_DEPLOYED_RUN"
+  },
+  "mutations": {
+    "preview": false,
+    "production": false,
+    "hcp": false,
+    "qbo": false,
+    "employee": false,
+    "payable_punch": false,
+    "payroll": false,
+    "accounting": false
+  }
+}
