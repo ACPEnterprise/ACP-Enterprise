@@ -38,12 +38,13 @@ export function useCanonicalRoleSync() {
   });
 }
 
-export function useMigrationReadiness() {
+export function useMigrationReadiness(enabled = true) {
   return useQuery({
     queryKey: administrationKeys.migration,
     queryFn: api.getMigrationReadiness,
     retry: shouldRetryApiQuery,
     staleTime: 60_000,
+    enabled,
   });
 }
 

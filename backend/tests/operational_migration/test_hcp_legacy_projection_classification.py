@@ -1,4 +1,5 @@
 import pytest
+
 from app.operational_migration.hcp_legacy_projection_classification import (
     LegacyProjectionDisposition,
     ProjectionCorrelationEvidence,
@@ -141,6 +142,8 @@ def test_correlated_classification_uses_unique_content_and_holds_negative_match(
         LegacyProjectionDisposition.EXACT_SUCCESSOR,
         LegacyProjectionDisposition.AMBIGUOUS_HOLD,
     ]
+    assert result.records[0].successor_source_id == "new-a"
+    assert result.records[1].successor_source_id is None
     assert result.report.canonical_blocker_count == 1
 
 

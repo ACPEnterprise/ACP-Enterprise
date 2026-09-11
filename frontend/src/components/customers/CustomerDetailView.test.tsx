@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as customerHooks from "../../hooks/useCustomers";
@@ -58,6 +59,11 @@ describe("CustomerDetailView", () => {
       isSuccess: true,
       data: [],
     } as never);
+    vi.mocked(customerHooks.useCustomerMutations).mockReturnValue({
+      archive: mutation(), restore: mutation(), update: mutation(), addNote: mutation(),
+      recordConsent: mutation(), duplicateCheck: mutation(), addProperty: mutation(),
+      updateProperty: mutation(), addContact: mutation(), updateContact: mutation(),
+    } as never);
     vi.mocked(customerHooks.useCustomerTimeline).mockReturnValue({
       isLoading: false,
       isError: false,
@@ -74,6 +80,18 @@ describe("CustomerDetailView", () => {
         page: 1, page_size: 50, total_count: 1, total_pages: 1,
       },
     } as never);
+  });
+
+  it("offers permission-gated Job creation with Customer and Location context", () => {
+    permissions.add("COMPANY_JOB_MANAGE");
+    vi.mocked(customerHooks.useCustomerDetail).mockReturnValue({
+      isLoading: false, isError: false,
+      data: { ...customer, properties: [{ id: "location-1", customer_id: customer.id, address_line_1: "10 Main", address_line_2: null, city: "Albany", state: "NY", postal_code: "12207", property_type: "single_family", gate_access_instructions: null, water_shutoff_location: null, sewer_septic: "sewer", property_notes: null, is_primary: true, created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", archived_at: null }] },
+    } as never);
+
+    render(<MemoryRouter><CustomerDetailView customerId={customer.id} onBack={vi.fn()} /></MemoryRouter>);
+
+    expect(screen.getByRole("link", { name: "Create Job for this Location" })).toHaveAttribute("href", "/jobs?create=1&customerId=customer-1&locationId=location-1");
   });
 
   it("uses the shared accessible confirmation before archiving", async () => {

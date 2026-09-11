@@ -2,6 +2,7 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
+
 from app.business_economics.capability_readiness import capability_readiness_matrix
 from app.business_economics.router import economics_capabilities
 
@@ -16,9 +17,11 @@ def test_capability_matrix_is_deterministic_and_preserves_authority_boundaries()
     assert states["overhead_allocation_authority"] == "AUTHORITATIVE"
     assert states["allocated_job_profitability"] == "POLICY_REQUIRED"
     assert states["callback_warranty_economics"] == "SOURCE_REQUIRED"
-    assert states["real_qbo_evidence"] == "ACTIVE_OWNER_COLLISION"
+    assert states["real_qbo_evidence"] == "EXTERNAL_GATE"
+    assert states["capacity_utilization_economics"] == "PARTIAL"
+    assert states["workforce_cost_composition"] == "PARTIAL"
     assert first["mutation_authority"] == "none"
-    assert first["real_qbo_boundary"] == "migration_owned"
+    assert first["real_qbo_boundary"] == "om1_eco_acquisition_om2b_read_models"
 
 
 def test_capability_matrix_has_no_false_completion_for_gated_work() -> None:
