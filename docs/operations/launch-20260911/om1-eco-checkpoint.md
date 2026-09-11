@@ -40,6 +40,13 @@
   identity/name and API minor version before describing current authorization.
   With a preserved production snapshot but no current marker it reports `stale`
   historical evidence; any contradiction fails closed.
+- Break-even successor in progress after `4af40074`: a deterministic Company
+  input packet now composes paid, worked and productive minutes with accepted
+  labor/material/direct-cost/overhead-pool/revenue-comparison evidence while
+  retaining four unresolved policy gates and producing no rate, model output or
+  recommendation. The underlying Company paid-time aggregation was corrected to
+  use Employee paid evidence rather than Job overlap, so unassigned paid time is
+  no longer silently omitted or assigned to a Job.
 - Boundaries: no QBO writes, Accounting posting, money movement, Customer-master
   creation, HCP/QBO auto-merge, autonomous Luminary action, Preview mutation, or
   Production action.

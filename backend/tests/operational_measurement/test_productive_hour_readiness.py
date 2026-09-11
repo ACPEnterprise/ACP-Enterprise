@@ -2,6 +2,7 @@ from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
+
 from app.operational_measurement.labor_evidence import (
     EmployeeJobLink,
     IntervalKind,
@@ -134,6 +135,12 @@ def test_complete_evidence_is_distinct_at_all_measurement_scopes():
     assert job_values[ProductiveHourMeasure.TRAVEL_MINUTES].minutes == 45
     assert len(packet.branches) == 1
     assert packet.company.company_id == company
+    company_values = measures(packet.company)
+    assert company_values[ProductiveHourMeasure.PAID_MINUTES].minutes == 480
+    assert (
+        company_values[ProductiveHourMeasure.UNCLASSIFIED_PAID_MINUTES].minutes == 180
+    )
+    assert company_values[ProductiveHourMeasure.PRODUCTIVE_JOB_MINUTES].minutes == 240
     assert packet.employees[0].employee_id == employee
 
 
