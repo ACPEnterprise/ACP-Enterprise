@@ -8,7 +8,7 @@ Updated: 2026-09-10 America/New_York
 - Mission commit: `0c08f1e3634f38a7fb82970932dea5de7a4cf24f`
 - Mission file SHA-256: `03b74b5f065694b487268bdee531d8d50620f2816f30c91d8b665f9d5b3e9dfc`
 - Starting protected base: `42a4f68087d76247269bd4c8388f556dd62a8b5c`
-- Current protected base: `9b7dd10bb85d36d5ceaeb1064248d5c36ea26942`
+- Current protected base: `f3d886d88f432953ea187d989583e068c46ff228`
 - Isolated branch: `work/om2c-launch-20260911-e2e-acceptance-1`
 - Mission activation evidence: mission commit at 2026-09-10 21:36:32 -0400.
 - Mission authorization expiry: 2026-09-13 21:36:32 -0400, unless earlier
@@ -42,6 +42,12 @@ Current-authority qualification on fresh PostgreSQL databases:
 - After OM2-B UI integration at `9b7dd10`, its affected QBO evidence,
   Financial Reports, Payroll, Workforce and Timecard-navigation suite passed: 6 frontend
   files / 13 tests. Frontend ESLint, TypeScript and production build also passed.
+- After identity-retry integration at `f3d886d`, 10 path-correct idempotency standard
+  tests, focused Ruff, MyPy and Python compilation passed. The database-backed
+  onboarding cases could not execute because the repository-required `postgres` host
+  is unavailable while local Docker is stopped; that environment failure is excluded
+  from product results. The owning lane's integrated packet reports its isolated
+  database qualification, but OM2-C does not substitute that for an independent run.
 
 These are **synthetic fixture and isolated-database results**, not deployed or real-
 source acceptance.
@@ -52,7 +58,7 @@ Preview URL: `https://preview.allcountyhomeservices.com`.
 
 - `/backend-health` is healthy and reports Preview PostgreSQL and Redis connected.
 - The backend reports release `00e0d5f0faad31f6ff0b85cdde903857a78b70fc`, not
-  current protected authority `9b7dd10bb85d36d5ceaeb1064248d5c36ea26942`.
+  current protected authority `f3d886d88f432953ea187d989583e068c46ff228`.
 - Preview index SHA-256 is now
   `91b425a67105bafaa4d8817e13d786160d3f1c812bbcc0ba6e646a67d56ce425`.
 - Current protected frontend build index SHA-256 is now
@@ -82,7 +88,7 @@ Preview URL: `https://preview.allcountyhomeservices.com`.
 
 Exact failed transition:
 
-`protected 9b7dd10 release → coherent backend release attestation → authenticated
+`protected f3d886d release → coherent backend release attestation → authenticated
 operator journey`
 
 The frontend and route-presence checkpoints advanced, but the backend release identity
@@ -114,10 +120,9 @@ after that checkpoint.
   User/Membership/Employee/MAIN Branch graph intact, invitation valid and unconsumed,
   and delivery definitively failed without provider acceptance. This is actual Preview
   administrative evidence, but it is not OM2-C login/activation acceptance. The
-  latest observed OM1 Phone candidate
-  `4c4fb1fd373c7fe151047e1343d2b51ccc2a1cb1` prepares a tightly bounded audited retry
-  for the original definitively rejected outbox identity, but it is not protected or
-  deployed. Retry remains owned by **OM1 Enterprise/OM1 Phone**; provider acceptance,
+  audited retry for the original definitively rejected outbox identity is now protected
+  at `f3d886d`, but execution/deployment is not established. Retry remains owned by
+  **OM1 Enterprise/OM1 Phone**; provider acceptance,
   human receipt, activation and login remain separate subsequent checkpoints.
 - Job clocks and Payroll: current fixtures prove Job clock evidence remains explicitly
   non-payable until accepted Workday Time and Payroll inputs exist. No real or payable
@@ -130,9 +135,8 @@ Additional handoffs observed but not substituted for deployed acceptance:
   `5f3e66b0248a22744bc4262c606f669e726952e0` adds deterministic page-one-to-page-two
   Customer roster and Job-selector traversal. Its own packet still requires protected
   integration, a coherent Preview deployment, and Migration's source admission packet.
-- Latest observed OM1 Phone candidate
-  `4c4fb1fd373c7fe151047e1343d2b51ccc2a1cb1` confirms the invitation remains valid and
-  unconsumed and records Postmark server live readiness, but provider retry acceptance,
+- The protected OM1 Phone packet confirms the invitation remains valid and unconsumed
+  and records Postmark server live readiness, but provider retry acceptance,
   human receipt, activation, login, and the post-activation mobile permission assignment
   remain pending.
 

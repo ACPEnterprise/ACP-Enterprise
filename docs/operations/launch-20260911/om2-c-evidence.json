@@ -5,7 +5,7 @@
     "file_sha256": "03b74b5f065694b487268bdee531d8d50620f2816f30c91d8b665f9d5b3e9dfc"
   },
   "starting_protected_authority": "42a4f68087d76247269bd4c8388f556dd62a8b5c",
-  "protected_authority": "9b7dd10bb85d36d5ceaeb1064248d5c36ea26942",
+  "protected_authority": "f3d886d88f432953ea187d989583e068c46ff228",
   "schema_head": "d4f6h8j0l2n4",
   "fixture_qualification": {
     "classification": "QUALIFIED_SYNTHETIC_ONLY",
@@ -32,6 +32,14 @@
     "frontend_tests_passed": 13,
     "eslint": "PASS",
     "typescript_production_build": "PASS"
+  },
+  "identity_retry_integration_qualification": {
+    "idempotency_tests_passed": 10,
+    "ruff": "PASS",
+    "mypy": "PASS",
+    "python_compile": "PASS",
+    "database_backed_onboarding": "NOT_EXECUTED_POSTGRES_HOST_UNAVAILABLE",
+    "product_failures": 0
   },
   "preview": {
     "health": "HEALTHY",
@@ -72,8 +80,8 @@
     "identity_definitive_rejection_retry": "4c4fb1fd373c7fe151047e1343d2b51ccc2a1cb1",
     "qbo_payroll_evidence_ui": "37597155167a04fed2a38af5b1387e745bf0fc00",
     "qbo_source_evidence": "ecfada3984beb8298b68c2df0d7a200c07a084a5",
-    "all_integrated_in_protected_authority": false,
-    "note": "Earlier candidate identities are retained for provenance; equivalent Customer and QBO source work is now protected through e9377e7, while identity retry and OM2-B UI are not."
+    "all_integrated_in_protected_authority": true,
+    "note": "Candidate identities are retained for provenance; equivalent Customer, QBO source, OM2-B UI, and identity retry work is protected through f3d886d. Execution and deployed acceptance remain separate."
   },
   "mutations": {
     "preview": false,
