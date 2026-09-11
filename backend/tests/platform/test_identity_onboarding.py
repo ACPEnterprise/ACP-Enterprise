@@ -20,7 +20,11 @@ from app.platform.branch.models import Branch
 from app.platform.company.membership_models import Membership
 from app.platform.company.models import Company
 from app.platform.employees.models import Employee
-from app.platform.notifications.models import NotificationOutbox
+from app.platform.notifications.models import (
+    NotificationDeliveryEvidence,
+    NotificationOutbox,
+)
+from app.platform.notifications.repository import NotificationOutboxRepository
 from app.platform.onboarding.delivery import ProtectedEnvelopeQualificationDelivery
 from app.platform.onboarding.models import (
     IdentityOnboardingInvitation,
@@ -590,6 +594,94 @@ async def test_owner_claim_requires_permission_scope_and_non_production(
         )
         with pytest.raises(OnboardingConflictError):
             await production.claim_protected_delivery_for_owner(
+                session, context=context, request_id=request_id
+            )
+
+
+@pytest.mark.asyncio
+async def test_owner_can_schedule_one_definitive_invitation_rejection_retry(
+    onboarding_db: tuple[
+        async_sessionmaker[AsyncSession], Context, IdentityOnboardingService
+    ],
+) -> None:
+    factory, context, service = onboarding_db
+    async with factory() as session:
+        request = await service.initiate(
+            session,
+            context=context,
+            command=command(
+                context,
+                request_key=f"definitive-retry-{uuid4()}",
+                email=f"definitive-retry-{uuid4()}@example.test",
+            ),
+        )
+        request_id = request.id
+        message = await session.scalar(
+            select(NotificationOutbox).where(
+                NotificationOutbox.company_id == context.company.id,
+                NotificationOutbox.branch_id == context.active_branch.id,
+                NotificationOutbox.notification_type
+                == "identity.onboarding_invitation",
+            )
+        )
+        assert message is not None
+        message_id = message.id
+        await session.rollback()
+        async with session.begin():
+            claimed = await NotificationOutboxRepository.claim_batch(
+                session,
+                worker_id="synthetic-postmark",
+                now=datetime.now(timezone.utc),
+                limit=1,
+                company_id=context.company.id,
+                branch_id=context.active_branch.id,
+                notification_types=frozenset({"identity.onboarding_invitation"}),
+            )
+            assert len(claimed) == 1 and claimed[0].claim_token is not None
+            assert await NotificationOutboxRepository.mark_failed(
+                session,
+                notification_id=message_id,
+                claim_token=claimed[0].claim_token,
+                error_code="postmark_request_rejected_422_code_412",
+                error_category="permanent",
+                failed_at=datetime.now(timezone.utc),
+            )
+
+        invitation, retried = await service.retry_definitive_invitation_rejection(
+            session, context=context, request_id=request_id
+        )
+        assert retried.id == message_id
+        assert retried.status == "retry_scheduled"
+        assert not retried.terminal_failure and retried.failed_at is None
+        evidence = list(
+            (
+                await session.scalars(
+                    select(NotificationDeliveryEvidence)
+                    .where(NotificationDeliveryEvidence.outbox_id == message_id)
+                    .order_by(NotificationDeliveryEvidence.sequence)
+                )
+            ).all()
+        )
+        recovery = evidence[-1]
+        assert recovery.outcome == "recovered"
+        assert recovery.actor_user_id == context.user.id
+        assert recovery.reason_digest is not None
+        assert recovery.error_code == "owner_authorized_definitive_rejection_retry"
+        audit = await session.scalar(
+            select(AuditRecord).where(
+                AuditRecord.action
+                == "identity.onboarding_delivery_retry_scheduled",
+                AuditRecord.resource_id == request_id,
+            )
+        )
+        assert audit is not None
+        assert audit.details == {
+            "invitation_id": str(invitation.id),
+            "message_id": str(message_id),
+        }
+        await session.rollback()
+        with pytest.raises(OnboardingConflictError):
+            await service.retry_definitive_invitation_rejection(
                 session, context=context, request_id=request_id
             )
 
