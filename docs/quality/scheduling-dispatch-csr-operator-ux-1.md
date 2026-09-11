@@ -23,11 +23,14 @@ protected integrations through `42a4f68087d76247269bd4c8388f556dd62a8b5c`.
 - Dispatch Intelligence proposals remain review-only and non-mutating.
 - Date input tolerates its transient empty state without crashing. The UI names
   the device timezone and preserves appointment instants; truncated range
-  results are explicitly partial.
+  results are explicitly partial. Local half-open date ranges retain their
+  calendar boundaries across spring/fall daylight-saving transitions without
+  assuming that every local day is exactly 24 hours.
 
 ## Qualification
 
-- Frontend full suite: 109 files, 391 tests passed.
+- Frontend full suite: 109 files, 391 tests passed before the added DST case;
+  affected final suite: 3 files, 19 tests passed.
 - Crowded Month drill-down and post-reschedule projection reconciliation:
   2 files, 16 tests passed.
 - Frontend ESLint: passed.
