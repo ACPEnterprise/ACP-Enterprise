@@ -105,6 +105,8 @@ export function CustomerDetailView({ customerId, onBack }: CustomerDetailViewPro
               <span className={`rounded-full px-3 py-1 ${archived ? "bg-red-950 text-red-300" : "bg-emerald-950 text-emerald-300"}`}>{archived ? "archived" : customer.status.replaceAll("_", " ")}</span>
               <span className="rounded-full bg-blue-950 px-3 py-1 text-blue-300">Source: {formatCustomerSource(customer.source)}</span>
             </div>
+            <p className="mt-3 text-xs text-content-muted">{customer.customer_number || "Customer number unavailable"} · Native record created {customer.created_at ? new Date(customer.created_at).toLocaleString() : "date unavailable"} · updated {customer.updated_at ? new Date(customer.updated_at).toLocaleString() : "date unavailable"}</p>
+            <p className="mt-1 text-xs text-content-muted">Source provenance is shown only when admitted by Migration authority; the marketing source label above is not migration-completeness evidence.</p>
           </div>
           {canManage && (!archived ? (
             <div className="grid w-full gap-3 sm:flex sm:w-auto">
@@ -190,6 +192,7 @@ export function CustomerDetailView({ customerId, onBack }: CustomerDetailViewPro
       <Card className="p-ui-4 sm:p-ui-6">
         <p className="text-sm text-action-primary">Customer history</p>
         <h3 className="mt-1 text-xl font-semibold">Authoritative timeline</h3>
+        {timeline.data && <p className="mt-2 text-xs text-content-muted">Showing {timeline.data.items.length} of {timeline.data.total_count} recorded events · page {timeline.data.page} of {timeline.data.total_pages || 1}</p>}
         {timeline.isError && <Alert variant="danger" title="Timeline unavailable">{getApiErrorMessage(timeline.error)}</Alert>}
         {timeline.isLoading && <p className="mt-4 text-sm text-content-muted">Loading customer history…</p>}
         <ol className="mt-5 space-y-3" aria-label="Customer timeline">

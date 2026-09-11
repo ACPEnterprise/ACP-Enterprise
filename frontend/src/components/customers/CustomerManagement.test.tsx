@@ -29,7 +29,7 @@ describe("CustomerManagement", () => {
   });
 
   it("renders phone-safe customer links to durable detail routes", () => {
-    vi.mocked(customerHooks.useCustomerList).mockReturnValue({
+    vi.mocked(customerHooks.useCustomerSearch).mockReturnValue({
       isLoading: false,
       isError: false,
       data: {
@@ -53,9 +53,10 @@ describe("CustomerManagement", () => {
             archived_at: null,
           },
         ],
-        total: 1,
-        limit: 20,
-        offset: 0,
+        total_count: 1,
+        page: 1,
+        page_size: 20,
+        total_pages: 1,
       },
     } as never);
 
@@ -72,7 +73,7 @@ describe("CustomerManagement", () => {
   });
 
   it("distinguishes authentication failure from an empty customer list", () => {
-    vi.mocked(customerHooks.useCustomerList).mockReturnValue({
+    vi.mocked(customerHooks.useCustomerSearch).mockReturnValue({
       isLoading: false,
       isError: true,
       error: { isAxiosError: true, response: { status: 401 } },
@@ -92,7 +93,7 @@ describe("CustomerManagement", () => {
   });
 
   it("renders a safe source label when a migrated response contains null", () => {
-    vi.mocked(customerHooks.useCustomerList).mockReturnValue({
+    vi.mocked(customerHooks.useCustomerSearch).mockReturnValue({
       isLoading: false,
       isError: false,
       data: {
@@ -110,7 +111,7 @@ describe("CustomerManagement", () => {
             is_vip: false,
           },
         ],
-        total: 1,
+        total_count: 1, page: 1, page_size: 20, total_pages: 1,
       },
     } as never);
 
@@ -120,13 +121,13 @@ describe("CustomerManagement", () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByText("business · unknown")).toBeInTheDocument();
+    expect(screen.getByText(/business · unknown/)).toBeInTheDocument();
   });
 
   it("keeps authorized customer evidence visible without exposing manage controls", () => {
     permissions.clear();
     permissions.add("COMPANY_CUSTOMER_READ");
-    vi.mocked(customerHooks.useCustomerList).mockReturnValue({
+    vi.mocked(customerHooks.useCustomerSearch).mockReturnValue({
       isLoading: false,
       isError: false,
       data: {
@@ -135,7 +136,7 @@ describe("CustomerManagement", () => {
           last_name: "Rivera", business_name: null, primary_phone: "555-0100",
           email: null, status: "active", source: "referral", is_vip: false,
         }],
-        total: 1,
+        total_count: 1, page: 1, page_size: 20, total_pages: 1,
       },
     } as never);
 
@@ -143,5 +144,29 @@ describe("CustomerManagement", () => {
 
     expect(screen.getByRole("link", { name: /Alex Rivera/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "New customer" })).not.toBeInTheDocument();
+  });
+
+  it("does not claim an empty upstream source when no native records are admitted", () => {
+    vi.mocked(customerHooks.useCustomerSearch).mockReturnValue({
+      isLoading: false, isError: false,
+      data: { items: [], total_count: 0, page: 1, page_size: 20, total_pages: 0 },
+    } as never);
+
+    render(<MemoryRouter><CustomerManagement /></MemoryRouter>);
+
+    expect(screen.getByText("No Customer records are currently admitted.")).toBeInTheDocument();
+    expect(screen.getByText(/not proof that upstream source data is empty or complete/i)).toBeInTheDocument();
+  });
+
+  it("recovers safely when a changed result set leaves the current page empty", () => {
+    vi.mocked(customerHooks.useCustomerSearch).mockReturnValue({
+      isLoading: false, isError: false,
+      data: { items: [], total_count: 21, page: 2, page_size: 20, total_pages: 2 },
+    } as never);
+
+    render(<MemoryRouter><CustomerManagement /></MemoryRouter>);
+
+    expect(screen.getByText("This roster page is no longer available.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Return to first page" })).toBeInTheDocument();
   });
 });

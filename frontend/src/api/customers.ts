@@ -12,6 +12,8 @@ import type {
   CustomerProperty,
   CustomerPropertyInput,
   CustomerSummary,
+  CustomerSearchCriteria,
+  CustomerSearchResponse,
   CustomerTimelineResponse,
   DuplicateCheckInput,
   DuplicateMatch,
@@ -124,6 +126,8 @@ function normalizeCustomerSummary(
   const name = customerDisplayName(customer);
   return {
     id: stringValue(customer.id),
+    customer_number: stringValue(customer.customer_number),
+    display_name: name || "Unnamed customer",
     customer_type: stringValue(
       customer.customer_type,
       "residential",
@@ -147,6 +151,18 @@ function normalizeCustomerSummary(
     created_at: stringValue(customer.created_at),
     updated_at: stringValue(customer.updated_at),
     archived_at: optionalString(customer.archived_at),
+  };
+}
+
+export async function searchCustomers(
+  criteria: CustomerSearchCriteria,
+): Promise<CustomerSearchResponse> {
+  const response = await apiClient.get<
+    Omit<CustomerSearchResponse, "items"> & { items: CustomerSummaryResponse[] }
+  >("/api/v1/customers/search", { params: criteria });
+  return {
+    ...response.data,
+    items: response.data.items.map(normalizeCustomerSummary),
   };
 }
 

@@ -8,6 +8,7 @@ import {
   createCustomer,
   getCustomer,
   listCustomers,
+  searchCustomers,
   updateCustomer,
 } from "./customers";
 
@@ -52,6 +53,20 @@ describe("customer response normalization", () => {
 
     const response = await listCustomers("", 20, 0);
 
+    expect(response.items[0]?.source).toBe("unknown");
+  });
+
+  it("uses authoritative server search and preserves total pagination evidence", async () => {
+    const get = vi.spyOn(apiClient, "get").mockResolvedValue({
+      data: { items: [customerResponse], page: 2, page_size: 20, total_count: 41, total_pages: 3 },
+    } as never);
+
+    const response = await searchCustomers({ query: "Rivera", status: "active", page: 2, page_size: 20 });
+
+    expect(get).toHaveBeenCalledWith("/api/v1/customers/search", {
+      params: { query: "Rivera", status: "active", page: 2, page_size: 20 },
+    });
+    expect(response).toMatchObject({ page: 2, total_count: 41, total_pages: 3 });
     expect(response.items[0]?.source).toBe("unknown");
   });
 
