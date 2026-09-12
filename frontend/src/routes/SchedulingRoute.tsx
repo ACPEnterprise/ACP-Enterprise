@@ -14,6 +14,7 @@ import { useAuth, useHasPermission } from "../auth";
 import { DispatchAssignmentPanel } from "../components/dispatch/DispatchAssignmentPanel";
 import { DispatchRecommendationPanel } from "../components/dispatch/DispatchRecommendationPanel";
 import { BookCustomerWorkPanel } from "../components/scheduling/BookCustomerWorkPanel";
+import { NeedsSchedulingQueue, type QueueAssignmentFilter, type QueueSort } from "../components/scheduling/NeedsSchedulingQueue";
 import {
   dayRange,
   localDateValue,
@@ -34,7 +35,7 @@ import {
   withSchedulingReturn,
 } from "../routing/paths";
 import type { DispatchBoardItem } from "../types/dispatch";
-import type { JobListItem } from "../types/jobs";
+import type { JobListItem, JobPriority, JobStatus } from "../types/jobs";
 import type { AppointmentDetail, AppointmentStatus } from "../types/scheduling";
 import { Alert, Badge, Button, Card, ConfirmationDialog, Input, Select, Spinner } from "../ui";
 
@@ -149,6 +150,10 @@ export function SchedulingRoute({
   const [status, setStatus] = useState<AppointmentStatus | "">(() => statuses.includes(searchParams.get("status") as AppointmentStatus) ? searchParams.get("status") as AppointmentStatus : "");
   const [technician, setTechnician] = useState(() => searchParams.get("technician") ?? "");
   const [search, setSearch] = useState(() => searchParams.get("search") ?? "");
+  const [queueJobStatus, setQueueJobStatus] = useState<JobStatus | "">(() => (operationalJobStatuses as readonly JobStatus[]).includes(searchParams.get("jobStatus") as JobStatus) ? searchParams.get("jobStatus") as JobStatus : "");
+  const [queuePriority, setQueuePriority] = useState<JobPriority | "">(() => ["low", "normal", "high", "urgent", "emergency"].includes(searchParams.get("priority") ?? "") ? searchParams.get("priority") as JobPriority : "");
+  const [queueAssignment, setQueueAssignment] = useState<QueueAssignmentFilter>(() => ["needs_attention", "scheduled_unassigned", "assigned", "all"].includes(searchParams.get("queue") ?? "") ? searchParams.get("queue") as QueueAssignmentFilter : "needs_attention");
+  const [queueSort, setQueueSort] = useState<QueueSort>(() => ["oldest", "newest", "priority"].includes(searchParams.get("order") ?? "") ? searchParams.get("order") as QueueSort : "oldest");
   const [selectedId, setSelectedId] = useState<string | null>(() => searchParams.get("appointment"));
   const [booking, setBooking] = useState(false);
   const displayTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -243,9 +248,13 @@ export function SchedulingRoute({
     if (status) params.set("status", status);
     if (technician) params.set("technician", technician);
     if (search.trim()) params.set("search", search.trim());
+    if (queueJobStatus) params.set("jobStatus", queueJobStatus);
+    if (queuePriority) params.set("priority", queuePriority);
+    if (queueAssignment !== "needs_attention") params.set("queue", queueAssignment);
+    if (queueSort !== "oldest") params.set("order", queueSort);
     if (selectedId) params.set("appointment", selectedId);
     return params;
-  }, [branchId, date, perspective, search, selectedId, status, technician, view]);
+  }, [branchId, date, perspective, queueAssignment, queueJobStatus, queuePriority, queueSort, search, selectedId, status, technician, view]);
   const returnTo = `${schedulingPath()}?${routeState.toString()}`;
 
   useEffect(() => {
@@ -475,7 +484,7 @@ export function SchedulingRoute({
       {!appointments.isLoading &&
         !appointments.isError &&
         (view === "unassigned" ? (
-          <UnscheduledQueue jobs={jobs.data?.items ?? []} appointments={visible} dispatchByAppointment={dispatchByAppointment} onSelect={selectAppointment} />
+          <NeedsSchedulingQueue jobs={jobs.data?.items ?? []} appointments={visible} dispatchByAppointment={dispatchByAppointment} jobsById={jobsById} branches={activeCompany.branches} search={search} jobStatus={queueJobStatus} priority={queuePriority} assignmentFilter={queueAssignment} sort={queueSort} returnTo={returnTo} onJobStatusChange={setQueueJobStatus} onPriorityChange={setQueuePriority} onAssignmentFilterChange={setQueueAssignment} onSortChange={setQueueSort} onSelect={selectAppointment} />
         ) : view === "day" && perspective === "schedule" ? (
           <DayCalendar
             items={visible}
@@ -513,7 +522,7 @@ export function SchedulingRoute({
           />
         ))}
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_24rem]">
-        {view !== "unassigned" && <UnscheduledQueue jobs={jobs.data?.items ?? []} appointments={visible} dispatchByAppointment={dispatchByAppointment} onSelect={selectAppointment} />}
+        {view !== "unassigned" && <NeedsSchedulingQueue jobs={jobs.data?.items ?? []} appointments={visible} dispatchByAppointment={dispatchByAppointment} jobsById={jobsById} branches={activeCompany.branches} search={search} jobStatus={queueJobStatus} priority={queuePriority} assignmentFilter={queueAssignment} sort={queueSort} returnTo={returnTo} onJobStatusChange={setQueueJobStatus} onPriorityChange={setQueuePriority} onAssignmentFilterChange={setQueueAssignment} onSortChange={setQueueSort} onSelect={selectAppointment} />}
         {currentSelection ? (
           <AppointmentPanel
             key={`${currentSelection.id}:${currentSelection.arrival_window_start_at}:${currentSelection.arrival_window_end_at}:${currentSelection.expected_duration_minutes}`}
@@ -971,60 +980,6 @@ function WeekCalendar({
         );
       })}
     </section>
-  );
-}
-
-function UnscheduledQueue({ jobs, appointments, dispatchByAppointment, onSelect }: {
-  readonly jobs: readonly JobListItem[];
-  readonly appointments: readonly AppointmentDetail[];
-  readonly dispatchByAppointment: Map<string, DispatchBoardItem>;
-  readonly onSelect: (item: AppointmentDetail) => void;
-}) {
-  const rows = jobs.filter((job) => !job.earliest_appointment_start_at);
-  const unassignedAppointments = appointments.filter((appointment) => {
-    const assignment = dispatchByAppointment.get(appointment.id)?.assignment;
-    return appointment.status === "draft" || !appointment.arrival_window_start_at || !assignment || assignment.status === "released";
-  });
-  return (
-    <Card className="p-4">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-semibold">Needs scheduling</h2>
-          <p className="text-sm text-content-muted">
-            Authorized Jobs with no known Appointment time.
-          </p>
-        </div>
-        <Badge>{rows.length + unassignedAppointments.length}</Badge>
-      </div>
-      {unassignedAppointments.length > 0 && <div className="mt-3 space-y-2"><h3 className="text-sm font-semibold">Appointments needing assignment or time</h3>{unassignedAppointments.slice(0, 12).map((appointment) => <button type="button" className="w-full rounded-lg border border-stroke p-3 text-left hover:border-action-primary" onClick={() => onSelect(appointment)} key={appointment.id}><strong>{appointment.appointment_number}</strong><span className="block text-sm text-content-muted">{appointment.arrival_window_start_at ? time(appointment.arrival_window_start_at) : "Time not established"} · {appointment.status === "draft" ? "Needs scheduling" : "Unassigned"}</span></button>)}</div>}
-      <div className="mt-3 grid gap-2 sm:grid-cols-2">
-        {rows.slice(0, 12).map((job) => (
-          <Link
-            className="rounded-lg border border-stroke p-3 hover:border-action-primary"
-            to={jobDetailPath(job.id)}
-            key={job.id}
-          >
-            <strong>{job.job_number}</strong>
-            <span className="block truncate text-sm">
-              {job.customer_display_name}
-            </span>
-            <span className="block truncate text-xs text-content-muted">
-              {job.service_location_label} · {label(job.priority)}
-            </span>
-          </Link>
-        ))}
-        {!rows.length && !unassignedAppointments.length && (
-          <p className="text-sm text-content-muted">
-            No unscheduled Jobs in this scope.
-          </p>
-        )}
-      </div>
-      {rows.length > 12 && (
-        <p className="mt-3 text-xs text-content-muted">
-          Showing 12 of {rows.length}; refine Branch or open Jobs.
-        </p>
-      )}
-    </Card>
   );
 }
 

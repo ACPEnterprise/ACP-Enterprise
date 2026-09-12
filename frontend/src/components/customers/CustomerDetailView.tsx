@@ -250,7 +250,7 @@ export function CustomerDetailView({ customerId, onBack }: CustomerDetailViewPro
         {customer.properties.length === 0 && editingProperty === null && <p className="mt-5 rounded-xl border border-dashed border-stroke p-5 text-sm text-content-muted">No service properties have been added.</p>}
         <div className="mt-5 grid gap-3 md:grid-cols-2">
           {customer.properties.map((property) => (
-            <article key={property.id} className="min-w-0 rounded-xl border border-stroke bg-surface-subtle p-4">
+            <article id={`service-location-${property.id}`} key={property.id} className="min-w-0 scroll-mt-24 rounded-xl border border-stroke bg-surface-subtle p-4">
               <div className="flex min-w-0 flex-wrap justify-between gap-3"><div className="flex min-w-0 gap-3"><MapPin size={18} className="mt-0.5 shrink-0 text-action-primary" /><div className="min-w-0 break-words"><p className="font-medium">{property.address_line_1}</p>{property.address_line_2 && <p className="text-sm text-content-muted">{property.address_line_2}</p>}<p className="text-sm text-content-muted">{property.city}, {property.state} {property.postal_code}</p></div></div>{property.is_primary && <span className="h-fit rounded-full bg-status-information/15 px-2 py-1 text-xs text-status-information">Primary</span>}</div>
               <p className="mt-3 text-xs text-content-muted">{property.property_type.replaceAll("_", " ")} · {property.sewer_septic ?? "waste system unknown"}</p>
               {canManage && !archived && <button type="button" onClick={() => setEditingProperty(property)} className="mt-3 text-sm text-action-primary">Edit property</button>}

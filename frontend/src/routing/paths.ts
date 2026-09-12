@@ -1,6 +1,8 @@
 export const customersPath = () => "/customers";
 export const customerDetailPath = (customerId: string) =>
   `/customers/${customerId}`;
+export const customerLocationPath = (customerId: string, locationId: string) =>
+  `${customerDetailPath(customerId)}#service-location-${locationId}`;
 
 export const jobsPath = () => "/jobs";
 export const jobDetailPath = (jobId: string) => `/jobs/${jobId}`;
@@ -20,5 +22,8 @@ export function schedulingReturnPath(value: string | null): string {
   }
 }
 
-export const withSchedulingReturn = (path: string, returnTo: string) =>
-  `${path}?returnTo=${encodeURIComponent(returnTo)}`;
+export const withSchedulingReturn = (path: string, returnTo: string) => {
+  const url = new URL(path, "https://acp.invalid");
+  url.searchParams.set("returnTo", returnTo);
+  return `${url.pathname}${url.search}${url.hash}`;
+};
