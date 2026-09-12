@@ -2,6 +2,21 @@
 
 Generated 2026-09-12 from protected `customer-management-v1` at `d4eee6f6b0bc178d58654f26f3ef2b9429332ab3`. This packet is qualification evidence only: no protected merge, deployment, Payroll execution, or real punches.
 
+## Shadow qualification result
+
+`PAYROLL.INTEGRATION.WAVE.SHADOW.QUALIFICATION.A` independently composed #225, #226, #232, #234, #239, and #240 in order from the recorded protected authority. The uncorrected deterministic shadow merge SHA was `8c6834f138e5a4b3235b050d901de0479419934e`.
+
+Fresh isolated PostgreSQL qualification proved:
+
+- zero-to-head migration passed;
+- `current == heads == e5g7i9k1m3o5` and exactly one head;
+- `alembic check` reported no drift;
+- affected Timekeeping, Payroll, and Operational Measurement suites: **229 passed**;
+- MyPy passed for 58 affected source files;
+- Python compilation and credential scan passed.
+
+Full-scope Ruff identified six findings already present unchanged on protected authority and one new import-order finding introduced by the candidate composition. `git diff --check` also identified two candidate documentation EOF findings. The three candidate-owned hygiene defects are corrected, without behavior changes, by reconciliation PR #248 at `3767229`. Candidate-delta Ruff and diff checks then passed. Enterprise should apply #248 after #240. The six protected baseline Ruff findings are outside this wave and must not be attributed to these candidates.
+
 ## Candidate disposition
 
 | Item | Exact disposition | Evidence / action |
@@ -15,6 +30,7 @@ Generated 2026-09-12 from protected `customer-management-v1` at `d4eee6f6b0bc178
 | PR #234, period proration gate | **READY_TO_INTEGRATE** after #232 | Explicitly blocks a mid-period compensation change absent policy. |
 | PR #239, proration policy | **READY_TO_INTEGRATE** after #234 | Adds governed policy and migration `e5g7i9k1m3o5`. |
 | PR #240, proration acceptance | **READY_TO_INTEGRATE** after #239 | Acceptance-only successor. |
+| PR #248, shadow reconciliation | **READY_TO_INTEGRATE** after #240 | Candidate-owned import/EOF qualification hygiene only; no behavior change. |
 
 All six remaining candidate tips produce a clean `git merge-tree` result against the recorded protected SHA. Their GitHub stacked bases are clean/mergeable. Recheck immediately before each integration because protected is advancing.
 
@@ -30,7 +46,7 @@ protected #216/#229/#231
             -> #240 boundary/overlap/replay acceptance
 ```
 
-Enterprise integration order is **#225, #226, #232, #234, #239, #240**. Do not merge #221 or #222.
+Enterprise integration order is **#225, #226, #232, #234, #239, #240, #248**. Do not merge #221 or #222.
 
 Protected currently has one Alembic head, `d4f6h8j0l2n4`. PRs #225–#234 add no migration. PR #239 adds `e5g7i9k1m3o5` with `down_revision = d4f6h8j0l2n4`; #240 adds none. Expected composed head is exactly `e5g7i9k1m3o5`.
 
