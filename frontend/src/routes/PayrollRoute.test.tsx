@@ -162,7 +162,11 @@ describe("PayrollRoute authorization", () => {
         },
       ]) as never,
     );
-    render(<PayrollRoute />);
+    render(
+      <MemoryRouter>
+        <PayrollRoute />
+      </MemoryRouter>,
+    );
     expect(
       screen.getByText(/tax · federal withholding election · missing/),
     ).toBeVisible();
