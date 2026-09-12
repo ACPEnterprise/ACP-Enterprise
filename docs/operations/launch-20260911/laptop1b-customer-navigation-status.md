@@ -1,11 +1,12 @@
 # Laptop1-B Customer navigation status
 
 - Mission authority: `0c08f1e3634f38a7fb82970932dea5de7a4cf24f`
-- Product base: `42a4f68087d76247269bd4c8388f556dd62a8b5c`
-- Lane: `work/customer-office-navigation-acceptance-1`
-- Candidate: `40765d535ed41c0e2733c87d51ef7b5230b0becb`
-- State: `QUALIFIED_HANDOFF_PUSHED`
+- Protected authority: `b22297c65165280a761860198dc05441df4a4312`
+- Lane: `work/customer-office-operating-acceptance-2`
+- State: `PROTECTED_INTEGRATED_PREVIEW_ACCEPTANCE_PENDING`
 - Prior Customer roster integration: PR #197 / `42a4f68087d76247269bd4c8388f556dd62a8b5c`
+- Customer context/navigation integration: PR #205 / `e9377e72`
+- Preferred-contact roster integration: PR #214 / `b22297c6`
 - Independent acceptance coordination: OM2-C candidate `c2984e7` confirms the
   protected Customer/search routes enforce authentication, but classifies actual
   source-population and rendered operator acceptance as unverified until a current
@@ -18,10 +19,16 @@ pagination. Customer detail exposes Contacts, Service Locations, bounded history
 and permission-scoped related operational records. Native created/updated dates
 are labeled as native record dates rather than source acquisition dates.
 
-The follow-on navigation preserves selected Customer and Service Location when an
+Integrated navigation preserves selected Customer and Service Location when an
 authorized office user opens Job creation. Generic Job creation searches the
 complete admitted Customer population through the paginated search contract; it
 does not silently select from the first 100 records.
+
+The roster projects the authoritative preferred contact when present and supports
+server-side name, Customer number, contact, phone, email, and address/location
+search. Loading, empty, error, stale-page recovery, archived/restored state, and
+responsive detail behavior are covered by the current product and deterministic
+tests.
 
 Company administrators receive the existing Migration readiness projection for
 Customers, Contacts, and Locations, including source, admitted, held, exception,
@@ -40,13 +47,29 @@ records remain Migration evidence and are never selectable as native Customers.
 
 ## Remaining acceptance
 
-1. Enterprise protected-integrates the qualified candidate.
-2. Enterprise deploys a coherent Preview release newer than the currently observed
-   `00e0d5f0faad31f6ff0b85cdde903857a78b70fc`.
-3. After protected integration and Preview deployment, verify authenticated roster
+1. Enterprise deploys current protected authority. Preview health reported version
+   `b5dff4b0203fe9a725a0ff844279876f410cba12` on September 12, 2026, one protected
+   commit behind the preferred-contact integration.
+2. Provide the lane an accepted authenticated Preview session without exposing an
+   owner credential or weakening authentication.
+3. After current deployment and authenticated access, verify roster
    pagination/search, source accounting, detail, and Customer-to-Job context.
 4. Reconcile displayed source counts and as-of date against Migration's final
    current-source packet; a partial source population remains partial.
+
+The unauthenticated live checks are intentionally bounded: `/customers` renders
+the application shell, `/backend-health` reports healthy PostgreSQL and Redis, and
+the Customer API rejects the request with `401 Authentication required`. These
+checks do not substitute for authenticated operator acceptance.
+
+## September 12 qualification
+
+- Isolated PostgreSQL zero-to-head migration plus focused Customer, Job, and
+  Scheduling backend qualification: `122 passed`.
+- Focused Customer detail, roster, operations, and Job-context frontend
+  qualification: `36 passed` across four test files.
+- Frontend ESLint and TypeScript/Vite production build: passed.
+- `git diff --check`: passed.
 
 Deterministic qualification now explicitly traverses page 1 to page 2 for both the
 Customer roster and the Customer selector used during Job creation, asserting the
