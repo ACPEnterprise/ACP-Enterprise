@@ -25,6 +25,12 @@ Two remaining interoperability defects were repaired:
    and worked interval whose Appointment is absent. This matches the native Job-clock
    contract. Appointment-scoped evidence remains supported; paid time is still
    prohibited from carrying Job or Appointment identity.
+3. New Job-clock mutations now require a current Dispatch assignment for the
+   authenticated Employee as either primary technician or active crew. The assignment
+   must be `assigned`, `acknowledged`, or `reconciliation_required` and match Company,
+   Branch, Job, and the supplied Appointment when present. Released assignments fail
+   closed. Exact replay still recovers already-committed immutable evidence after an
+   assignment changes.
 
 No scheduled duration becomes worked duration. No Job interval becomes payable time.
 No Production, Payroll execution, Accounting posting, or real Employee punch occurred.
@@ -33,8 +39,8 @@ No Production, Payroll execution, Accounting posting, or real Employee punch occ
 
 - Fresh isolated PostgreSQL zero-to-head: passed; one head `d4f6h8j0l2n4`.
 - Alembic drift check: passed.
-- Affected Timekeeping, Payroll, operational measurement, Economics, and Job tests:
-  194 passed.
+- Affected Timekeeping, Payroll, Dispatch assignment, operational measurement,
+  Economics, and Job tests: 195 passed.
 - Focused operational labor/Economics compatibility: 17 passed.
 - ACP Employee: 15 suites / 131 tests passed.
 - Mobile ESLint and TypeScript: passed.
