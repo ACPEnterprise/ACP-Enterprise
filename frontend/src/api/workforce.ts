@@ -67,7 +67,11 @@ export interface EmployeeAdministrationSummary extends WorkforceEmployeeSummary 
   branch_ids: string[];
   role_codes: string[];
   onboarding_status: string | null;
+  invitation_status: string | null;
+  delivery_status: string | null;
+  login_email: string | null;
   masked_login: string | null;
+  access_status: "ACTIVE" | "DISABLED" | "INVITED" | "NOT_LINKED";
   mobile_readiness: "READY" | "BLOCKED" | "NOT_LINKED";
   mobile_readiness_blockers: string[];
 }
