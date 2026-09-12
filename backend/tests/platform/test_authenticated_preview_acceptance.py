@@ -29,6 +29,9 @@ from scripts.authenticated_preview_acceptance import (
 CONTRACT_PATH = Path(__file__).parents[2] / "operations/preview-acceptance-identities.v1.json"
 MATRIX_PATH = Path(__file__).parents[2] / "operations/preview-authenticated-acceptance-matrix.v1.json"
 REPORT_PATH = Path(__file__).parents[2] / "operations/preview-authenticated-acceptance-report.v1.json"
+MUTATION_REGISTRY_PATH = (
+    Path(__file__).parents[2] / "app/platform/idempotency/mutation-coverage.v1.json"
+)
 
 
 def _token(expires_at: datetime) -> str:
@@ -180,7 +183,10 @@ def test_execution_matrix_and_report_use_exact_result_vocabulary() -> None:
     report = json.loads(REPORT_PATH.read_text(encoding="utf-8"))
     assert set(matrix["result_classifications"]) == expected
     assert set(report["allowed_classifications"]) == expected
-    assert len(matrix["payroll_mutation_gates"]) == 4
+    assert len(matrix["mutation_governance_routes"]) == 5
+    assert {
+        route["protected_state"] for route in matrix["mutation_governance_routes"]
+    } == {"CLASSIFIED"}
     assert all(
         case["method"] == "GET" or case.get("gate")
         for case in matrix["cases"]
@@ -196,6 +202,15 @@ def test_execution_matrix_and_report_use_exact_result_vocabulary() -> None:
         "defect_owner",
         "cleanup_revocation_status",
     } <= set(report["results"][0])
+
+
+def test_five_tracked_mutations_are_classified_by_current_authority() -> None:
+    matrix = json.loads(MATRIX_PATH.read_text(encoding="utf-8"))
+    registry = json.loads(MUTATION_REGISTRY_PATH.read_text(encoding="utf-8"))
+    classified = {f'{entry["method"]} {entry["path"]}' for entry in registry["entries"]}
+    assert {
+        route["identity"] for route in matrix["mutation_governance_routes"]
+    } <= classified
 
 
 def test_enterprise_plan_is_non_mutating_and_rejects_real_login() -> None:

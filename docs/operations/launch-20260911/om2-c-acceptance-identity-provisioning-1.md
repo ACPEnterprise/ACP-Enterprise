@@ -115,10 +115,9 @@ shared or non-fixture domain records.
 is `backend/operations/preview-authenticated-acceptance-report.v1.json`.
 No sanctioned synthetic identity/token/attestation or accepted
 live fixture adapter is present, so no authenticated Preview request was made. Scheduling
-mutation coverage landed in protected PR #237. It remains unavailable to acceptance
-until that exact authority is coherently deployed and attested. The four Payroll setup
-POST classifications remain `BLOCKED_BY_MUTATION_GOVERNANCE` and were not duplicated
-in OM2-C.
+mutation coverage and all four Payroll setup classifications landed in protected PR
+#237. They remain unavailable to acceptance until that exact authority is coherently
+deployed and attested, and until Enterprise separately allowlists synthetic mutation.
 
 Newly integrated PR #216 was independently qualified: 19 backend Job-clock/labor tests
 passed on PostgreSQL 16; Mobile Job-clock/foundation passed 2 suites / 27 tests, plus
@@ -132,9 +131,8 @@ files / 10 tests; focused Ruff/MyPy, frontend ESLint, TypeScript and production 
 passed. This qualifies the integrated implementation, not its deployment or operator
 workflow.
 
-The authoritative mutation inventory still finds all four new Payroll setup POST routes
-unclassified. The exact identities were published to PR #235. These owner-lane
-governance defects do not authorize OM2-C repairs.
+The five previously missing identities are retained explicitly in the execution matrix.
+Current protected authority classifies all five; OM2-C made no owner-lane repair.
 
 No Preview or Production mutation, real communication, payable time, money movement,
 Accounting posting, Payroll execution, or QBO/HCP mutation occurred.

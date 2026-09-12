@@ -43,10 +43,11 @@
     {"id":"QBO_SOURCE_CASH","persona":"QBO_READ","method":"GET","route":"/api/v1/accounting/source-evidence/qbo?basis=cash","workflow":"Connection/authorization/source/as-of/completeness truth","data":"preserved_or_unavailable_evidence","mutation":false},
     {"id":"QBO_SOURCE_ACCRUAL","persona":"QBO_READ","method":"GET","route":"/api/v1/accounting/source-evidence/qbo?basis=accrual","workflow":"Source/as-of/completeness truth","data":"preserved_or_unavailable_evidence","mutation":false}
   ],
-  "payroll_mutation_gates": [
-    "POST /api/v1/payroll/setup/compensations/{authority_id}/approve",
-    "POST /api/v1/payroll/setup/employees/{employee_id}/compensations",
-    "POST /api/v1/payroll/setup/employees/{employee_id}/inputs",
-    "POST /api/v1/payroll/setup/inputs/{authority_id}/approve"
+  "mutation_governance_routes": [
+    {"identity":"POST /api/v1/operations/jobs/{job_id}/schedule","protected_state":"CLASSIFIED","acceptance_gate":"DEPLOYED_RELEASE_ATTESTED_AND_EXPLICITLY_ALLOWLISTED"},
+    {"identity":"POST /api/v1/payroll/setup/compensations/{authority_id}/approve","protected_state":"CLASSIFIED","acceptance_gate":"DEPLOYED_RELEASE_ATTESTED_AND_EXPLICITLY_ALLOWLISTED"},
+    {"identity":"POST /api/v1/payroll/setup/employees/{employee_id}/compensations","protected_state":"CLASSIFIED","acceptance_gate":"DEPLOYED_RELEASE_ATTESTED_AND_EXPLICITLY_ALLOWLISTED"},
+    {"identity":"POST /api/v1/payroll/setup/employees/{employee_id}/inputs","protected_state":"CLASSIFIED","acceptance_gate":"DEPLOYED_RELEASE_ATTESTED_AND_EXPLICITLY_ALLOWLISTED"},
+    {"identity":"POST /api/v1/payroll/setup/inputs/{authority_id}/approve","protected_state":"CLASSIFIED","acceptance_gate":"DEPLOYED_RELEASE_ATTESTED_AND_EXPLICITLY_ALLOWLISTED"}
   ]
 }
