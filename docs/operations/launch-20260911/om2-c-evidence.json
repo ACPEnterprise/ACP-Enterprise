@@ -5,7 +5,7 @@
     "file_sha256": "03b74b5f065694b487268bdee531d8d50620f2816f30c91d8b665f9d5b3e9dfc"
   },
   "starting_protected_authority": "42a4f68087d76247269bd4c8388f556dd62a8b5c",
-  "protected_authority": "27b89ecf1d702acbe75d0e1f95cf83c5f6bba5c9",
+  "protected_authority": "f688923a35618670b5751c12ca8bb21548cde93c",
   "schema_head": "f6h8j0l2n4p6",
   "fixture_qualification": {
     "classification": "QUALIFIED_SYNTHETIC_ONLY",
@@ -169,7 +169,7 @@
     "rendered_authenticated_ui": "NOT_EXECUTED_NO_SANCTIONED_SESSION_OR_BROWSER_HARNESS"
   },
   "authenticated_preview_acceptance": {
-    "authority": "52dc336766a67fc0c4698244b9894bab0fe65913",
+    "authority": "f688923a35618670b5751c12ca8bb21548cde93c",
     "mechanism": "BOUNDED_SHORT_LIVED_TOKEN_FILE_RUNNER",
     "fixture_key": "acp-employee-beta-v1",
     "runner_tests_passed": 11,

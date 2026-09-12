@@ -247,11 +247,13 @@ source presence, component tests and simulator results cannot replace these chec
 
 ## Next action
 
-Protected authority and Preview backend now both report
-`52dc336766a67fc0c4698244b9894bab0fe65913`; the observed frontend index SHA-256 is
+Protected authority is `f688923a35618670b5751c12ca8bb21548cde93c`; Preview remains
+on the preceding coherent release `52dc336766a67fc0c4698244b9894bab0fe65913`. Its observed
+frontend index SHA-256 is
 `79fd5977dc19542464358e77a9eeffe9b4d0a73fbbc333f1f78131ccd9d0a2bb`, exactly
-matching the qualified local production artifact.
-Health and release correspondence pass. Schema-head correspondence and authenticated
+matching the qualified production artifact for that deployed release. Health passes;
+the newer Customer/source-evidence delta is integrated and qualified but not yet
+deployed. Schema-head correspondence and authenticated
 persona execution remain fail-closed until Enterprise supplies the sealed attestation
 and short-lived sessions. When Enterprise issues them, run the deterministic matrix
 immediately. Meanwhile, reconcile any
