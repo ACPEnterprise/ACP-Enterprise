@@ -12,6 +12,12 @@ Snapshot: 2026-09-12 17:15 America/New_York
 - GitHub CI evidence: no check runs or commit statuses are reported for the
   protected SHA. Local qualification does not substitute for the tests below.
 
+Independent qualification of that exact protected-but-undeployed tranche on
+2026-09-12 passed PostgreSQL zero-to-head, 20 affected backend tests, nine
+affected frontend suites and 43 tests, full ESLint, and the production
+TypeScript/Vite build. Four SQLAlchemy transaction-deassociation warnings were
+emitted by Invoice tests and remain part of the evidence.
+
 ## Protected integration policy
 
 GitHub ruleset `21781922` is active for exactly
