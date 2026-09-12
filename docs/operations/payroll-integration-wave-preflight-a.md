@@ -4,6 +4,8 @@
 
 Protected advanced to `36fe3eeaa85905ef282b07ea8b7cc5482c335794` through integration PR #251. That protected change composes and supersedes #225, #226, #232, #234, #239, and #240. Do **not** merge those six historical PRs individually now.
 
+Independent qualification of the actual protected #251 tree (not the shadow) passed fresh PostgreSQL zero-to-head, one head/current=head at `e5g7i9k1m3o5`, zero drift, **247** affected Timekeeping/Payroll/Operational Measurement tests, wave-scoped Ruff, MyPy across 60 source files, Python compilation, diff checks after #252, and the credential scan.
+
 PR #248 is also obsolete as an integration vehicle because its stacked base predates #251. Its only still-required changes were two documentation EOF fixes. Those are rebased directly on current protected authority as PR #252 (`fd60431`).
 
 The remaining mechanical merge plan is therefore:
