@@ -278,3 +278,70 @@ async def test_salary_and_unselected_policy_fail_closed(
                 time=snapshot.approved_entries,
                 compensation=(salary,),
             )
+
+
+@pytest.mark.asyncio
+async def test_acceptance_boundaries_overlap_and_scope_fail_closed(
+    payroll_database: tuple[async_sessionmaker[AsyncSession], dict[str, UUID]],
+) -> None:
+    factory, ids = payroll_database
+    manager, approver = contexts(ids)
+    snapshot = approved_time_snapshot(
+        company_id=ids["company_a"], employee_id=ids["employee_a"], minutes=60
+    )
+    policy = ApprovedProrationPolicy(
+        policy_id=uuid4(),
+        company_id=ids["company_a"],
+        policy_version=1,
+        effective_start=date(2026, 8, 1),
+        effective_end=None,
+        method=CompensationProrationMethod.BY_WORK_DATE,
+        rationale="Synthetic acceptance matrix",
+        provenance="synthetic.fixture",
+        approved_by_user_id=approver.user.id,
+        approved_at=snapshot.approved_entries[0].approved_at,
+        supersedes_policy_id=None,
+        policy_digest="a" * 64,
+    )
+    async with factory() as session:
+        first, second = await compensation_pair(session, ids, manager, approver)
+        before = replace(snapshot.approved_entries[0], work_date=date(2026, 8, 31))
+        before = replace(
+            before, evidence_digest=canonical_digest(before.canonical_content())
+        )
+        on_boundary = replace(
+            before, entry_id=uuid4(), revision_id=uuid4(), work_date=date(2026, 9, 1)
+        )
+        on_boundary = replace(
+            on_boundary,
+            evidence_digest=canonical_digest(on_boundary.canonical_content()),
+        )
+        result = allocate_hourly_time(
+            company_id=ids["company_a"],
+            employee_id=ids["employee_a"],
+            policy=policy,
+            time=(before, on_boundary),
+            compensation=(first, second),
+        )
+        assert tuple(item.compensation_authority_id for item in result.allocations) == (
+            first.authority_id,
+            second.authority_id,
+        )
+
+        unrelated_overlap = replace(second, supersedes_authority_id=None)
+        with pytest.raises(PayrollConflictError, match="exactly one"):
+            allocate_hourly_time(
+                company_id=ids["company_a"],
+                employee_id=ids["employee_a"],
+                policy=policy,
+                time=(on_boundary,),
+                compensation=(first, unrelated_overlap),
+            )
+        with pytest.raises(PayrollConflictError, match="scope or type"):
+            allocate_hourly_time(
+                company_id=ids["company_a"],
+                employee_id=uuid4(),
+                policy=policy,
+                time=(before,),
+                compensation=(first,),
+            )
