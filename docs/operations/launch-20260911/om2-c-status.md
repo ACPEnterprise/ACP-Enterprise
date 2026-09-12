@@ -8,7 +8,7 @@ Updated: 2026-09-12 America/New_York
 - Mission commit: `0c08f1e3634f38a7fb82970932dea5de7a4cf24f`
 - Mission file SHA-256: `03b74b5f065694b487268bdee531d8d50620f2816f30c91d8b665f9d5b3e9dfc`
 - Starting protected base: `42a4f68087d76247269bd4c8388f556dd62a8b5c`
-- Current protected base: `b2cf7b60f1c927b4ba24fc6a49513b7d19c26a94`
+- Current protected base: `4514b5df6be66e50ee172085c622ae613e172086`
 - Isolated branch: `work/om2c-launch-20260911-e2e-acceptance-1`
 - Mission activation evidence: mission commit at 2026-09-10 21:36:32 -0400.
 - Mission authorization expiry: 2026-09-13 21:36:32 -0400, unless earlier
@@ -28,6 +28,13 @@ deployed, nor operator accepted.
 Protected PR #219 is also integrated at `b2cf7b6`; its Economics/labor evidence delta
 passed 17 focused tests, Ruff and MyPy. Its backend deployment remains unproven because
 Preview health still reports `b5dff4b`.
+
+Authenticated Preview acceptance preparation is documented in
+`om2-c-authenticated-preview-acceptance-1.md`. The least-privilege token-file runner is
+qualified, but no live acceptance was executed because no dedicated synthetic token,
+expiring fixture attestation, or accepted live fixture adapter is available. Protected
+authority also includes Payroll readiness #220 and Scheduling serialization #224;
+their affected suite passed 36 tests on fresh PostgreSQL 16.
 
 Compact morning decision packet:
 `docs/operations/launch-20260911/om2-c-morning-launch-decision-20260912.md`.

@@ -5,7 +5,7 @@
     "file_sha256": "03b74b5f065694b487268bdee531d8d50620f2816f30c91d8b665f9d5b3e9dfc"
   },
   "starting_protected_authority": "42a4f68087d76247269bd4c8388f556dd62a8b5c",
-  "protected_authority": "b2cf7b60f1c927b4ba24fc6a49513b7d19c26a94",
+  "protected_authority": "4514b5df6be66e50ee172085c622ae613e172086",
   "schema_head": "d4f6h8j0l2n4",
   "fixture_qualification": {
     "classification": "QUALIFIED_SYNTHETIC_ONLY",
@@ -167,6 +167,20 @@
     "pr_216": "OPEN_UNINTEGRATED_UNDEPLOYED",
     "pr_215": "OPEN_UNINTEGRATED_UNDEPLOYED",
     "rendered_authenticated_ui": "NOT_EXECUTED_NO_SANCTIONED_SESSION_OR_BROWSER_HARNESS"
+  },
+  "authenticated_preview_acceptance": {
+    "authority": "4514b5df6be66e50ee172085c622ae613e172086",
+    "mechanism": "BOUNDED_SHORT_LIVED_TOKEN_FILE_RUNNER",
+    "fixture_key": "acp-employee-beta-v1",
+    "runner_tests_passed": 10,
+    "protected_delta_tests_passed": 36,
+    "ruff": "PASS",
+    "mypy": "PASS",
+    "live_execution": "BLOCKED_NO_SANCTIONED_TOKEN_ATTESTATION_OR_LIVE_FIXTURE_ADAPTER",
+    "credential_material_emitted": false,
+    "preview_mutation": false,
+    "production_access": false,
+    "scheduling_mutation": "BLOCKED_MISSING_AUTHORITATIVE_MUTATION_CLASSIFICATION"
   },
   "continuation_20260912": {
     "factory": {
