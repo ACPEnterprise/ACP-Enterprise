@@ -16,6 +16,10 @@ Month context or active filters. The day-number control remains the explicit
 Month-to-Day drill-down. The control exposes expanded state to assistive
 technology and can collapse the day again.
 
+On phone widths, previous / Today / next remain a compact first row and the
+date selector receives its own full-width row instead of forcing horizontal
+overflow. Desktop retains the efficient single-row controls.
+
 Selected appointment detail now reconciles after the authoritative appointment
 query refreshes. Reschedule success can no longer leave the former time and
 duration in the open detail form. Mutation remains human-confirmed and uses the

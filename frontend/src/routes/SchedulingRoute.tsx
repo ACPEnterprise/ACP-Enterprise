@@ -291,7 +291,7 @@ export function SchedulingRoute({
       {booking && <BookCustomerWorkPanel onClose={() => setBooking(false)} />}
       <Card className="space-y-4 p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
+          <div className="grid w-full grid-cols-[auto_1fr_auto] items-center gap-2 sm:flex sm:w-auto">
             <Button
               variant="outline"
               aria-label={`Previous ${view}`}
@@ -313,7 +313,7 @@ export function SchedulingRoute({
               <ChevronRight size={18} />
             </Button>
             <Input
-              className="w-auto"
+              className="col-span-3 w-full sm:col-auto sm:w-auto"
               aria-label="Service date"
               type="date"
               value={date}
