@@ -48,7 +48,7 @@ describe("authoritative punch contract", () => {
   });
   it("uses the authoritative self Job-clock contract without Employee identity or device time", async () => {
     const request = jest.fn()
-      .mockResolvedValueOnce({ active: false, event_id: null, employee_id: "synthetic", job_id: null, appointment_id: null, started_at: null, server_observed_at: "2026-09-11T01:00:00Z", elapsed_seconds: null })
+      .mockResolvedValueOnce({ active: false, event_id: null, employee_id: "synthetic", job_id: null, appointment_id: null, started_at: null, server_observed_at: "2026-09-11T01:00:00Z", elapsed_seconds: null, latest_action: null, latest_event_id: null, latest_occurred_at: null, latest_completed_interval_id: null })
       .mockResolvedValueOnce({ event_id: "event", action: "start", occurred_at: "2026-09-11T01:00:00Z", state: { active: true, event_id: "event", employee_id: "synthetic", job_id: "job", appointment_id: "appointment", started_at: "2026-09-11T01:00:00Z", server_observed_at: "2026-09-11T01:00:01Z", elapsed_seconds: 1 }, completed_interval: null });
     const service = createTimekeepingService({ request } as never);
     await service.jobClockState(); await service.jobClock("start", "job", "appointment", "opaque-job-key");

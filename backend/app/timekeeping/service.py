@@ -111,6 +111,7 @@ class WorkdayTimeService:
             session,
             company_id=context.company.id,
             branch_id=command.branch_id,
+            employee_id=command.employee_id,
             job_id=command.job_id,
             appointment_id=command.appointment_id,
         ):
