@@ -1,6 +1,6 @@
 # OM1 Enterprise integration queue
 
-Snapshot: 2026-09-12 17:36 America/New_York
+Snapshot: 2026-09-12 17:39 America/New_York
 
 ## Authority and deployed state
 
@@ -132,6 +132,18 @@ with exactly 503 records. The hold packet binds the documented delta digest and
 contains 10 duplicate-risk plus 3 insufficient-evidence Appointment holds, 22
 Location-unresolved Job holds, and zero true global blockers.
 
+Reproduce the read-only artifact checks on the host that owns the recovered
+files. Do not run the recovery packet's staging/install or executor commands.
+
+```bash
+SOURCE_ROOT=/Users/michaelbfouse/.acp-enterprise/migration/housecall-pro/hcp-current-admission-packet-20260912T170000Z
+test "$(stat -f '%Lp' "$SOURCE_ROOT/current-overlay-merge-packet.json")" = 600
+test "$(stat -f '%Lp' "$SOURCE_ROOT/current-operational-hold-dispositions.json")" = 600
+test "$(shasum -a 256 "$SOURCE_ROOT/current-overlay-merge-packet.json" | awk '{print $1}')" = ce9d4ea1e048a70b7a8a5b85fab33fd1a0568eb5cb1356229187144ab8bc7558
+test "$(shasum -a 256 "$SOURCE_ROOT/current-operational-hold-dispositions.json" | awk '{print $1}')" = c13cb0b565d2b86d34365f12d565f37f0e7ba6ec6bfa0d65de7f4a81ee088324
+ENVIRONMENT=test PYTHONPATH=backend python -c 'from pathlib import Path; from app.operational_migration.hcp_current_overlay import CurrentOverlayManifest; p=Path("/Users/michaelbfouse/.acp-enterprise/migration/housecall-pro/hcp-current-admission-packet-20260912T170000Z/current-overlay-merge-packet.json"); m=CurrentOverlayManifest.load(p); assert m.digest == "e23b7bcf5ac34ea650184afacc711af0c7028e83a6b1f7405e2ae17e13441eb2"'
+```
+
 ### HCP historical safe-tranche builder
 
 Update the packet authority from `9096a777...` to `91dae4a5...` and state that
@@ -170,6 +182,24 @@ The repository does not configure a Ruff, mypy, Flake8, or backend
 `pyproject.toml` gate; clean compilation must not be represented as coverage by
 those tools.
 
+Reproduce the database evidence against an empty disposable PostgreSQL
+database. Never point this sequence at Preview or Production.
+
+```bash
+test -n "$QUALIFICATION_DATABASE_URL"
+cd backend
+ENVIRONMENT=test DATABASE_URL="$QUALIFICATION_DATABASE_URL" alembic upgrade head
+ENVIRONMENT=test DATABASE_URL="$QUALIFICATION_DATABASE_URL" alembic current
+ENVIRONMENT=test DATABASE_URL="$QUALIFICATION_DATABASE_URL" alembic heads
+ENVIRONMENT=test DATABASE_URL="$QUALIFICATION_DATABASE_URL" alembic check
+ENVIRONMENT=test DATABASE_URL="$QUALIFICATION_DATABASE_URL" pytest -q tests/business_economics
+python -m compileall -q app/business_economics \
+  alembic/versions/g7i9k1m3o5q7_create_break_even_policy_events.py
+```
+
+Require exactly one head/current revision, `g7i9k1m3o5q7`, and no new upgrade
+operations from `alembic check`.
+
 ### PR #215
 
 Run the three affected Vitest suites plus frontend lint, typecheck/build. Confirm
@@ -183,6 +213,16 @@ authority at tree `c964c398836e12ec16d398fbc81c246b66fec189`: three suites and
 nine tests passed, followed by clean full ESLint and production TypeScript/Vite
 builds. This evidence does not replace Enterprise's final rerun after branch
 reconciliation.
+
+```bash
+cd frontend
+npm run test:run -- \
+  src/api/qboAccountingEvidence.test.ts \
+  src/components/accounting/QboSourceEvidence.test.tsx \
+  src/routes/PayrollRoute.test.tsx
+npm run lint
+npm run build
+```
 
 ### Mobile
 
@@ -201,6 +241,18 @@ and 138 tests passed, followed by clean typecheck, lint, configuration
 validation, and the non-mutating Apple distribution preflight. Jest emitted
 React `VirtualizedList` updates-not-wrapped-in-`act(...)` warnings; these did not
 fail the run but should remain visible in final qualification evidence.
+
+```bash
+cd mobile
+npm test
+npm run typecheck
+npm run lint
+npm run config:validate
+npm run apple:preflight
+```
+
+Do not run `beta:aasa:verify`, `apple:release:qualify`, account-authenticated EAS
+commands, signing, or upload during pre-integration qualification.
 
 ## Held candidate
 
@@ -239,8 +291,17 @@ is not a general UI qualification failure.
 
 ## Post-deployment acceptance
 
-1. Require `/backend-health` to report the deployed protected SHA and connected
-   PostgreSQL/Redis.
+1. Set `EXPECTED_PROTECTED_SHA` to the integrated protected tip and run the
+   command below. Do not begin lane acceptance until it passes.
+
+   ```bash
+   EXPECTED_PROTECTED_SHA=<FULL_INTEGRATED_PROTECTED_SHA>
+   curl --fail --silent --show-error \
+     https://preview.allcountyhomeservices.com/backend-health | \
+     jq -e --arg sha "$EXPECTED_PROTECTED_SHA" \
+       '.status == "healthy" and .environment == "preview" and .database == "connected" and .redis == "connected" and .version == $sha'
+   ```
+
 2. Scheduling: reproduce JOB-000306 and verify authoritative mutation recovery.
 3. Customer: exercise search, multiple Locations, Job/Appointment/Invoice return
    paths, open/history separation, source limitations, retry, and phone width.
