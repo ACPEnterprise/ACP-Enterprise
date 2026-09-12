@@ -22,10 +22,12 @@ Safe structured API failure codes remain operator-distinct: stale version, concu
 ## Idempotency and continuity
 
 - Exact retry preserves both request ID and mutation payload.
+- Optional technician assignment derives its idempotency identity from the scheduling request, so replay cannot create a second assignment decision merely because an earlier response was lost.
 - Editing an existing-Job scheduling intent produces a new request identity; it cannot contradict an earlier replay identity.
 - Reschedule confirmation closes on error and is not blindly replayed because rescheduling is protected by authoritative Appointment version rather than the service-request identity.
 - Successful booking links preserve the prior Scheduling URL, including view, date, Branch, technician, status, queue, search, and sort state.
 - Query refresh makes records leave Needs Scheduling only when current Job/Appointment authority says they no longer belong there.
+- Dispatch assignment, release, crew, exception, and reconciliation mutations refresh the authoritative board after failure as well as success; failed confirmations close instead of inviting a blind stale replay.
 
 ## Existing source boundary
 

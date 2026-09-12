@@ -31,6 +31,8 @@ export function useScheduleExistingJob(jobId: string) {
           result.appointment.id,
           employeeId,
           "Office assignment while scheduling Job",
+          undefined,
+          `schedule-assignment:${input.request_id}`,
         );
       }
       return result;

@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import * as operationsApi from "../api/operations";
+import { assignPrimary } from "../api/dispatch";
 import { jobKeys } from "./useJobs";
 import { useCreateServiceRequest, useScheduleExistingJob } from "./useOperations";
 import { appointmentKeys } from "./useScheduling";
@@ -60,5 +61,30 @@ describe("Operations recovery", () => {
     expect(invalidate).toHaveBeenCalledWith({ queryKey: jobKeys.detail("job-1") });
     expect(invalidate).toHaveBeenCalledWith({ queryKey: appointmentKeys.lists() });
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ["dispatch"] });
+  });
+
+  it("binds optional assignment replay to the scheduling request identity", async () => {
+    vi.mocked(operationsApi.scheduleExistingJob).mockResolvedValue({
+      request_id: request.request_id,
+      appointment: { id: "appointment-1", appointment_number: "APT-1" },
+      job: { id: "job-1", job_number: "JOB-1" },
+    });
+    vi.mocked(assignPrimary).mockResolvedValue({ id: "assignment-1" } as never);
+    const { wrapper } = setup();
+    const result = renderHook(() => useScheduleExistingJob("job-1"), { wrapper });
+    result.result.current.mutate({
+      ...request,
+      expected_job_version: 3,
+      reserve_capacity: true,
+      employee_id: "employee-1",
+    });
+    await waitFor(() => expect(result.result.current.isSuccess).toBe(true));
+    expect(assignPrimary).toHaveBeenCalledWith(
+      "appointment-1",
+      "employee-1",
+      "Office assignment while scheduling Job",
+      undefined,
+      `schedule-assignment:${request.request_id}`,
+    );
   });
 });
