@@ -8,7 +8,7 @@ Updated: 2026-09-12 America/New_York
 - Mission commit: `0c08f1e3634f38a7fb82970932dea5de7a4cf24f`
 - Mission file SHA-256: `03b74b5f065694b487268bdee531d8d50620f2816f30c91d8b665f9d5b3e9dfc`
 - Starting protected base: `42a4f68087d76247269bd4c8388f556dd62a8b5c`
-- Current protected base: `2d8709c895e60faf7cc0251d6c8ac82311013613`
+- Current protected base: `b2cf7b60f1c927b4ba24fc6a49513b7d19c26a94`
 - Isolated branch: `work/om2c-launch-20260911-e2e-acceptance-1`
 - Mission activation evidence: mission commit at 2026-09-10 21:36:32 -0400.
 - Mission authorization expiry: 2026-09-13 21:36:32 -0400, unless earlier
@@ -17,6 +17,17 @@ Updated: 2026-09-12 America/New_York
 ## Current checkpoint
 
 State: **CONDITIONALLY QUALIFIED — NOT OPERATOR ACCEPTED**.
+
+Latest loop checkpoint: protected PR #218 is integrated and its frontend artifact is
+deployed byte-for-byte. Focused scheduling/UI and Employee/time/payroll preparation
+passed, but the new `POST /api/v1/operations/jobs/{job_id}/schedule` operation is absent
+from the platform mutation-coverage registry. Exact ownership and reproduction are in
+the morning decision packet. PRs #216 and #215 remain open, so neither is integrated,
+deployed, nor operator accepted.
+
+Protected PR #219 is also integrated at `b2cf7b6`; its Economics/labor evidence delta
+passed 17 focused tests, Ruff and MyPy. Its backend deployment remains unproven because
+Preview health still reports `b5dff4b`.
 
 Compact morning decision packet:
 `docs/operations/launch-20260911/om2-c-morning-launch-decision-20260912.md`.

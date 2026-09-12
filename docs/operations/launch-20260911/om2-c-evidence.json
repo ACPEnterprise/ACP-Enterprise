@@ -5,7 +5,7 @@
     "file_sha256": "03b74b5f065694b487268bdee531d8d50620f2816f30c91d8b665f9d5b3e9dfc"
   },
   "starting_protected_authority": "42a4f68087d76247269bd4c8388f556dd62a8b5c",
-  "protected_authority": "2d8709c895e60faf7cc0251d6c8ac82311013613",
+  "protected_authority": "b2cf7b60f1c927b4ba24fc6a49513b7d19c26a94",
   "schema_head": "d4f6h8j0l2n4",
   "fixture_qualification": {
     "classification": "QUALIFIED_SYNTHETIC_ONLY",
@@ -72,8 +72,8 @@
     "database": "CONNECTED",
     "redis": "CONNECTED",
     "reported_backend_release": "b5dff4b0203fe9a725a0ff844279876f410cba12",
-    "frontend_index_sha256": "a7a3a9a038a71ea2ef00e00638b4b4b642f6988a5e47ce8387a8b1dc81a842d7",
-    "qualified_frontend_index_sha256": "a7a3a9a038a71ea2ef00e00638b4b4b642f6988a5e47ce8387a8b1dc81a842d7",
+    "frontend_index_sha256": "18d32734b4fe23a46cffebd30d4fcff2893475a0609db59ed38e1f992c835de6",
+    "qualified_frontend_index_sha256": "18d32734b4fe23a46cffebd30d4fcff2893475a0609db59ed38e1f992c835de6",
     "qualified_route_assets_match": {
       "customers": true,
       "scheduling_month_dispatch": true,
@@ -138,6 +138,35 @@
     "physical_mobile_acceptance": "NOT_EXECUTED_OWNED_BY_LAPTOP1_PHONE",
     "preview_mutated": false,
     "production_touched": false
+  },
+  "deployed_operating_acceptance_loop": {
+    "authority": "b2cf7b60f1c927b4ba24fc6a49513b7d19c26a94",
+    "integrated_change": "PR_218_UNASSIGNED_APPOINTMENTS_DO_NOT_RESERVE_CAPACITY",
+    "preview_frontend_matches_current_build": true,
+    "preview_backend_reported_release": "b5dff4b0203fe9a725a0ff844279876f410cba12",
+    "preview_existing_job_schedule_route_status_get_probe": 405,
+    "backend_focused_passed": 87,
+    "backend_focused_failed": 1,
+    "frontend_files_passed": 4,
+    "frontend_tests_passed": 31,
+    "frontend_eslint": "PASS",
+    "frontend_typescript_production_build": "PASS",
+    "employee_identity_time_payroll_passed": 59,
+    "pr_219_economics_labor_readiness": {
+      "tests_passed": 17,
+      "ruff": "PASS",
+      "mypy": "PASS",
+      "deployment": "UNPROVEN_BACKEND_HEALTH_REPORTS_OLDER_RELEASE"
+    },
+    "mutation_coverage_defect": {
+      "route": "POST /api/v1/operations/jobs/{job_id}/schedule",
+      "operation_id": "schedule_existing_job_api_v1_operations_jobs__job_id__schedule_post",
+      "actual": "MISSING_FROM_MUTATION_COVERAGE_REGISTRY",
+      "owner": "LAPTOP1_A_SCHEDULING_OPERATIONS"
+    },
+    "pr_216": "OPEN_UNINTEGRATED_UNDEPLOYED",
+    "pr_215": "OPEN_UNINTEGRATED_UNDEPLOYED",
+    "rendered_authenticated_ui": "NOT_EXECUTED_NO_SANCTIONED_SESSION_OR_BROWSER_HARNESS"
   },
   "continuation_20260912": {
     "factory": {
