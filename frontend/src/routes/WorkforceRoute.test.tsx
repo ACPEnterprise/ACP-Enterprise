@@ -28,7 +28,15 @@ vi.mock("../hooks/useWorkdayTime", () => ({
 vi.mock("../features/administration/hooks", () => ({
   useRoles: () => ({ data: [], isLoading: false, isError: false }),
 }));
-vi.mock("../auth", () => ({ useAuth: () => ({ permissionCodes: [] }) }));
+vi.mock("../auth", () => ({
+  useAuth: () => ({
+    permissionCodes: [],
+    activeCompany: {
+      default_branch_id: "branch-1",
+      branches: [{ id: "branch-1", name: "MAIN", code: "MAIN" }],
+    },
+  }),
+}));
 
 const summary = {
   employee_id: "employee-1",
@@ -148,12 +156,89 @@ describe("WorkforceRoute", () => {
       ),
     ).toBeInTheDocument();
     expect(screen.getByText(/Trade credential/)).toBeInTheDocument();
-    expect(screen.getAllByText(/Authorized Branch/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/MAIN/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Active/).length).toBeGreaterThan(0);
     expect(screen.getByRole("navigation", { name: "Employee detail" })).toBeVisible();
     expect(
       screen.queryByText(/compensation|net pay|tax election/i),
     ).not.toBeInTheDocument();
+  });
+
+  it("shows ordinary office identity, delivery, and access status", async () => {
+    mockEligibility();
+    vi.mocked(workforceHooks.useWorkforceDirectory).mockReturnValue({
+      isLoading: false,
+      isError: false,
+      isSuccess: true,
+      data: [summary],
+    } as never);
+    vi.mocked(workforceHooks.useWorkforceEmployee).mockImplementation(
+      (id) => ({
+        isLoading: false,
+        isError: false,
+        data: id
+          ? {
+              ...summary,
+              capabilities: [],
+              certifications: [],
+              languages: [],
+              branches: [],
+              work_restrictions: [],
+              equipment_capabilities: [],
+              availability: [],
+            }
+          : undefined,
+      }) as never,
+    );
+    vi.mocked(workforceHooks.useEmployeeAdministration).mockImplementation(
+      (id) => ({
+        isLoading: false,
+        isError: false,
+        data: id
+          ? {
+              ...summary,
+              membership_id: "membership-1",
+              membership_status: "active",
+              user_status: "active",
+              authorization_version: 4,
+              branch_ids: ["branch-1"],
+              role_codes: ["ACP_EMPLOYEE_MOBILE", "OFFICE_MANAGER"],
+              onboarding_status: "activated",
+              invitation_status: "consumed",
+              delivery_status: "accepted",
+              login_email: "employee@example.test",
+              masked_login: "e***@example.test",
+              access_status: "ACTIVE",
+              mobile_readiness: "READY",
+              mobile_readiness_blockers: [],
+              permissions: [],
+              workforce: {
+                ...summary,
+                capabilities: [],
+                certifications: [],
+                languages: [],
+                branches: [],
+                work_restrictions: [],
+                equipment_capabilities: [],
+                availability: [],
+              },
+            }
+          : undefined,
+      }) as never,
+    );
+    render(
+      <MemoryRouter>
+        <WorkforceRoute />
+      </MemoryRouter>,
+    );
+    await userEvent.click(screen.getByRole("button", { name: /Marisol Rivera/ }));
+    expect(screen.getByText("employee@example.test")).toBeVisible();
+    expect(screen.getByText("ACP EMPLOYEE MOBILE, OFFICE MANAGER")).toBeVisible();
+    expect(screen.getAllByText("MAIN").length).toBeGreaterThan(0);
+    expect(screen.getByText("consumed")).toBeVisible();
+    expect(screen.getByText("Provider accepted")).toBeVisible();
+    expect(screen.getByText("activated")).toBeVisible();
+    expect(screen.getAllByText("READY")).not.toHaveLength(0);
   });
 
   it("filters by explicit capability evidence", async () => {

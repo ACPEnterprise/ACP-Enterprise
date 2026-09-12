@@ -7,7 +7,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.platform.company.membership_models import Membership, MembershipBranchAccess
 from app.platform.employees.models import Employee
-from app.platform.onboarding.models import IdentityOnboardingRequest
+from app.platform.notifications.models import NotificationOutbox
+from app.platform.onboarding.models import (
+    IdentityOnboardingInvitation,
+    IdentityOnboardingRequest,
+)
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.catalog import permission_catalog
 from app.platform.permissions.models import (
@@ -24,6 +28,16 @@ from app.workforce.schemas import (
     WorkforceEmployeeDetail,
 )
 from app.workforce.service import workforce_operations_service
+
+MOBILE_REQUIRED_PERMISSION_CODES = frozenset(
+    {
+        "COMPANY_TIMEKEEPING_OWN_READ",
+        "COMPANY_TIMEKEEPING_OWN_PUNCH",
+        "COMPANY_EMPLOYEE_OPERATIONS_OWN_DAY_READ",
+        "COMPANY_JOB_READ",
+        "COMPANY_JOB_EXECUTE",
+    }
+)
 
 
 def _business_area(code: str) -> str:
@@ -52,6 +66,57 @@ def _business_area(code: str) -> str:
 
 
 class EmployeeAdministrationService:
+    @staticmethod
+    def _access_and_mobile_readiness(
+        *,
+        employee_status: str,
+        membership_status: str | None,
+        user_status: str | None,
+        has_branch_access: bool,
+        effective_permission_codes: frozenset[str],
+    ) -> tuple[
+        Literal["ACTIVE", "DISABLED", "INVITED", "NOT_LINKED"],
+        Literal["READY", "BLOCKED", "NOT_LINKED"],
+        tuple[str, ...],
+    ]:
+        blockers: list[str] = []
+        if membership_status is None or user_status is None:
+            access_status: Literal[
+                "ACTIVE", "DISABLED", "INVITED", "NOT_LINKED"
+            ] = "NOT_LINKED"
+        elif membership_status == "invited" or user_status == "invited":
+            access_status = "INVITED"
+        elif (
+            employee_status == "active"
+            and membership_status == "active"
+            and user_status == "active"
+        ):
+            access_status = "ACTIVE"
+        else:
+            access_status = "DISABLED"
+        if membership_status is None:
+            blockers.append("membership_missing")
+        elif membership_status != "active":
+            blockers.append("membership_inactive")
+        if user_status is None:
+            blockers.append("user_missing")
+        elif user_status != "active":
+            blockers.append("user_inactive")
+        if employee_status != "active":
+            blockers.append("employee_inactive")
+        if not has_branch_access:
+            blockers.append("branch_grant_missing")
+        if not MOBILE_REQUIRED_PERMISSION_CODES.issubset(
+            effective_permission_codes
+        ):
+            blockers.append("mobile_permissions_missing")
+        mobile_state: Literal["READY", "BLOCKED", "NOT_LINKED"] = (
+            "NOT_LINKED"
+            if membership_status is None or user_status is None
+            else "READY" if not blockers else "BLOCKED"
+        )
+        return access_status, mobile_state, tuple(blockers)
+
     async def detail(
         self,
         session: AsyncSession,
@@ -150,6 +215,7 @@ class EmployeeAdministrationService:
         _employee, membership, user = row
         branch_ids: tuple[UUID, ...] = ()
         role_codes: tuple[str, ...] = ()
+        effective_permission_codes: frozenset[str] = frozenset()
         if membership is not None:
             branch_ids = tuple(
                 await session.scalars(
@@ -171,6 +237,23 @@ class EmployeeAdministrationService:
                     .order_by(Role.code)
                 )
             )
+            effective_permission_codes = frozenset(
+                await session.scalars(
+                    select(Permission.code)
+                    .select_from(MembershipRole)
+                    .join(Role, Role.id == MembershipRole.role_id)
+                    .join(RolePermission, RolePermission.role_id == Role.id)
+                    .join(Permission, Permission.id == RolePermission.permission_id)
+                    .where(
+                        MembershipRole.company_id == context.company.id,
+                        MembershipRole.membership_id == membership.id,
+                        MembershipRole.revoked_at.is_(None),
+                        Role.company_id == context.company.id,
+                        Role.status == "active",
+                        Permission.status == "active",
+                    )
+                )
+            )
         onboarding = await session.scalar(
             select(IdentityOnboardingRequest)
             .where(
@@ -178,24 +261,65 @@ class EmployeeAdministrationService:
                 IdentityOnboardingRequest.employee_id == employee_id,
             )
             .order_by(IdentityOnboardingRequest.created_at.desc())
+            .limit(1)
         )
-        mobile_blockers: list[str] = []
-        if membership is None:
-            mobile_blockers.append("membership_missing")
-        elif membership.status != "active":
-            mobile_blockers.append("membership_inactive")
-        if user is None:
-            mobile_blockers.append("user_missing")
-        elif user.status != "active" or user.archived_at is not None:
-            mobile_blockers.append("user_inactive")
-        if not branch_ids and not (membership and membership.has_all_branch_access):
-            mobile_blockers.append("branch_grant_missing")
-        if not any(code in {"TECHNICIAN", "OWN_DATA_ROLE", "COMPANY_USER"} for code in role_codes):
-            mobile_blockers.append("mobile_role_missing")
-        mobile_state: Literal["READY", "BLOCKED", "NOT_LINKED"] = (
-            "NOT_LINKED"
-            if membership is None or user is None
-            else "READY" if not mobile_blockers else "BLOCKED"
+        invitation = (
+            await session.scalar(
+                select(IdentityOnboardingInvitation)
+                .where(
+                    IdentityOnboardingInvitation.onboarding_request_id
+                    == onboarding.id
+                )
+                .order_by(IdentityOnboardingInvitation.created_at.desc())
+                .limit(1)
+            )
+            if onboarding is not None
+            else None
+        )
+        delivery = (
+            await session.scalar(
+                select(NotificationOutbox)
+                .where(
+                    NotificationOutbox.company_id == context.company.id,
+                    NotificationOutbox.branch_id == onboarding.branch_id,
+                    NotificationOutbox.recipient_reference
+                    == f"invitation:{invitation.id}",
+                    NotificationOutbox.notification_type
+                    == "identity.onboarding_invitation",
+                    NotificationOutbox.channel == "email",
+                    NotificationOutbox.recipient == user.normalized_email,
+                )
+                .order_by(NotificationOutbox.created_at.desc())
+                .limit(1)
+            )
+            if onboarding is not None and invitation is not None and user is not None
+            else None
+        )
+        delivery_status = (
+            "delivered"
+            if delivery is not None and delivery.status == "sent"
+            else "uncertain"
+            if delivery is not None and delivery.status == "ambiguous"
+            else delivery.status
+            if delivery is not None
+            else None
+        )
+        access_status, mobile_state, mobile_blockers = (
+            self._access_and_mobile_readiness(
+                employee_status=workforce.employee_status,
+                membership_status=membership.status if membership else None,
+                user_status=(
+                    user.status
+                    if user is not None and user.archived_at is None
+                    else "archived"
+                    if user is not None
+                    else None
+                ),
+                has_branch_access=bool(
+                    branch_ids or (membership and membership.has_all_branch_access)
+                ),
+                effective_permission_codes=effective_permission_codes,
+            )
         )
         return EmployeeAdministrationSummary(
             **workforce.model_dump(
@@ -216,9 +340,13 @@ class EmployeeAdministrationService:
             branch_ids=branch_ids,
             role_codes=role_codes,
             onboarding_status=onboarding.status if onboarding else None,
+            invitation_status=invitation.status if invitation else None,
+            delivery_status=delivery_status,
+            login_email=user.normalized_email if user else None,
             masked_login=onboarding.masked_login if onboarding else None,
+            access_status=access_status,
             mobile_readiness=mobile_state,
-            mobile_readiness_blockers=tuple(mobile_blockers),
+            mobile_readiness_blockers=mobile_blockers,
         )
 
 

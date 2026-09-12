@@ -117,7 +117,11 @@ class EmployeeAdministrationSummary(WorkforceEmployeeSummary):
     branch_ids: tuple[UUID, ...]
     role_codes: tuple[str, ...]
     onboarding_status: str | None
+    invitation_status: str | None
+    delivery_status: str | None
+    login_email: str | None
     masked_login: str | None
+    access_status: Literal["ACTIVE", "DISABLED", "INVITED", "NOT_LINKED"]
     mobile_readiness: Literal["READY", "BLOCKED", "NOT_LINKED"]
     mobile_readiness_blockers: tuple[str, ...]
 
