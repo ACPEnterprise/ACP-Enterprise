@@ -198,6 +198,21 @@ _RATIO_KINDS = {
 }
 
 
+def break_even_policy_decisions() -> dict[BreakEvenPolicyKind, dict[str, object]]:
+    """Expose supported choices without selecting or preferring one."""
+    return {
+        kind: (
+            {"value_type": "decimal_ratio", "supported_options": ()}
+            if kind in _RATIO_KINDS
+            else {
+                "value_type": "enum",
+                "supported_options": tuple(sorted(_ENUM_VALUES[kind])),
+            }
+        )
+        for kind in BreakEvenPolicyKind
+    }
+
+
 def seal_break_even_policy(**values: object) -> BreakEvenPolicySelection:
     item = BreakEvenPolicySelection(**values, policy_digest="")  # type: ignore[arg-type]
     sealed = replace(item, policy_digest=_digest(item.canonical_content()))
