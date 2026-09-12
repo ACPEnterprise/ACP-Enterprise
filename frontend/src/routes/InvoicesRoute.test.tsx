@@ -50,10 +50,10 @@ vi.mock("../api/invoices", () => ({
   voidInvoice: vi.fn(),
 }));
 
-function renderRoute() {
+function renderRoute(initialEntry = "/invoices") {
   return render(
     <QueryClientProvider client={new QueryClient()}>
-      <MemoryRouter>
+      <MemoryRouter initialEntries={[initialEntry]}>
         <InvoicesRoute />
       </MemoryRouter>
     </QueryClientProvider>,
@@ -93,5 +93,12 @@ describe("InvoicesRoute", () => {
     expect(await screen.findByText("INV-000001")).toBeVisible();
     await userEvent.type(screen.getByLabelText("Search invoices"), "missing");
     expect(await screen.findByText("No invoices match these filters.")).toBeVisible();
+  });
+  it("preserves Customer context from Customer detail", async () => {
+    permissions = new Set(["COMPANY_INVOICE_READ"]);
+    renderRoute("/invoices?customerId=customer-1");
+    expect(await screen.findByText("INV-000001")).toBeVisible();
+    expect(invoicesApi.getInvoiceWorkspace).toHaveBeenCalledWith(expect.objectContaining({ customerId: "customer-1" }));
+    expect(screen.getByRole("link", { name: "Return to Customer" })).toHaveAttribute("href", "/customers/customer-1");
   });
 });

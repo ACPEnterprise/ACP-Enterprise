@@ -46,10 +46,10 @@ export function useCustomerConsents(customerId: string | null) {
     enabled: Boolean(customerId),
   });
 }
-export function useCustomerTimeline(customerId: string | null) {
+export function useCustomerTimeline(customerId: string | null, page = 1, pageSize = 25) {
   return useQuery({
-    queryKey: ["customer-timeline", customerId],
-    queryFn: () => getCustomerTimeline(customerId as string),
+    queryKey: ["customer-timeline", customerId, page, pageSize],
+    queryFn: () => getCustomerTimeline(customerId as string, page, pageSize),
     enabled: Boolean(customerId),
   });
 }
@@ -59,7 +59,10 @@ export function useCustomerMutations(customerId?: string) {
   const refresh = async (id?: string) => {
     await queryClient.invalidateQueries({ queryKey: ["customers"] });
     if (id) {
-      await queryClient.invalidateQueries({ queryKey: ["customer", id] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["customer", id] }),
+        queryClient.invalidateQueries({ queryKey: ["customer-timeline", id] }),
+      ]);
     }
   };
 
@@ -120,9 +123,10 @@ export function useCustomerMutations(customerId?: string) {
       mutationFn: (input: Parameters<typeof recordCustomerConsent>[1]) =>
         recordCustomerConsent(customerId as string, input),
       onSuccess: async () => {
-        await queryClient.invalidateQueries({
-          queryKey: ["customer-consents", customerId],
-        });
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: ["customer-consents", customerId] }),
+          queryClient.invalidateQueries({ queryKey: ["customer-timeline", customerId] }),
+        ]);
       },
     }),
   };
