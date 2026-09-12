@@ -42,6 +42,14 @@ records remain Migration evidence and are never selectable as native Customers.
   authorized readiness projection.
 - Laptop1-A owns Scheduling/Dispatch UI. Laptop1-B links into the integrated Job
   workflow with Customer/Location context and does not rewrite Scheduling state.
+- Laptop1-A candidate `91e3cf4f3e473a58b90869cfbce68b61baac5f03`
+  (`work/job-existing-scheduling-ui-1`) supplies the remaining existing-Job
+  scheduling seam. The navigation contract is: Customer detail → Create Job with
+  the selected Customer and Location → `/jobs/{job_id}` → schedule using the Job's
+  authoritative `branch_id`, `customer.id`, `service_location.id`, and
+  `concurrency_version` → linked Appointment. The scheduling command requires
+  both Job-manage and Scheduling-manage authority and must reject stale or
+  mismatched context. Laptop1-B does not duplicate that implementation.
 - Enterprise owns protected integration, Preview deployment, and authorized live
   Preview data writes.
 
