@@ -248,8 +248,9 @@ source presence, component tests and simulator results cannot replace these chec
 ## Next action
 
 Protected authority and Preview backend now both report
-`9096a77705623409da1418022c7949cae08468ce`; the observed frontend index SHA-256 is
-`25148741ec1034d7ce4d3867ab258b2930c8a2893287f3006db43d4579c7c69b`.
+`d4eee6f6b0bc178d58654f26f3ef2b9429332ab3`; the observed frontend index SHA-256 is
+`7b1046e7c1bc4373803ccca0205b8413d5e7bb5d0697894556356c18761c7de1`, exactly
+matching the qualified local production artifact.
 Health and release correspondence pass. Schema-head correspondence and authenticated
 persona execution remain fail-closed until Enterprise supplies the sealed attestation
 and short-lived sessions. When Enterprise issues them, run the deterministic matrix

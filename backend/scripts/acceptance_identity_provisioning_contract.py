@@ -12,6 +12,12 @@ from uuid import UUID
 CONTRACT_PATH = (
     Path(__file__).parents[1] / "operations/preview-acceptance-identities.v1.json"
 )
+REQUIRED_FIXTURE_REFERENCES = {
+    "csr": frozenset({"customer_id", "job_id", "appointment_id"}),
+    "employee": frozenset({"job_id"}),
+    "office": frozenset({"employee_id"}),
+    "qbo": frozenset(),
+}
 
 
 class ProvisioningBlocked(RuntimeError):
@@ -41,6 +47,18 @@ def require_synthetic_login(value: str) -> str:
     if not login.endswith(".invalid") or "@allcounty" in login:
         raise ProvisioningBlocked("Login must be a non-routable synthetic .invalid identity.")
     return login
+
+
+def fixture_references(values: list[str], persona: str) -> dict[str, str]:
+    parsed: dict[str, str] = {}
+    for value in values:
+        key, separator, raw_id = value.partition("=")
+        if not separator or key in parsed:
+            raise ProvisioningBlocked("Fixture references must be unique key=UUID values.")
+        parsed[key] = require_uuid(raw_id, key)
+    if frozenset(parsed) != REQUIRED_FIXTURE_REFERENCES[persona]:
+        raise ProvisioningBlocked("Fixture references do not exactly match the persona contract.")
+    return parsed
 
 
 def persona_contract(contract: dict[str, object], persona: str) -> dict[str, object]:
@@ -98,6 +116,14 @@ def attest(args: argparse.Namespace) -> dict[str, object]:
     maximum = maximum_value
     if args.ttl_seconds < 1 or args.ttl_seconds > maximum:
         raise ProvisioningBlocked("Attestation lifetime exceeds the contract maximum.")
+    requested_mutations = tuple(sorted(set(args.allow_mutation)))
+    conditional = selected.get("conditional_mutation_endpoints", [])
+    if not isinstance(conditional, list) or any(
+        route not in conditional for route in requested_mutations
+    ):
+        raise ProvisioningBlocked(
+            "Mutation allowlist exceeds the selected persona contract."
+        )
     payload = {
         "fixture_key": contract["fixture_key"],
         "environment": "preview",
@@ -109,6 +135,8 @@ def attest(args: argparse.Namespace) -> dict[str, object]:
         "user_id": require_uuid(args.user_id, "user_id"),
         "session_id": require_uuid(args.session_id, "session_id"),
         "permission_codes": selected["permissions"],
+        "mutation_allowlist": requested_mutations,
+        "fixture_references": fixture_references(args.fixture_reference, args.persona),
         "release_sha": args.release_sha,
         "protected_authority_sha": args.protected_authority_sha,
         "frontend_sha256": args.frontend_sha256,
@@ -163,6 +191,8 @@ def parser() -> argparse.ArgumentParser:
     seal.add_argument("--protected-authority-sha", required=True)
     seal.add_argument("--frontend-sha256", required=True)
     seal.add_argument("--schema-head", required=True)
+    seal.add_argument("--allow-mutation", action="append", default=[])
+    seal.add_argument("--fixture-reference", action="append", default=[])
     seal.add_argument("--ttl-seconds", type=int, default=3600)
     seal.add_argument("--output", type=Path, required=True)
     seal.set_defaults(action=attest)

@@ -15,6 +15,8 @@
     "user_id",
     "session_id",
     "permission_codes",
+    "mutation_allowlist",
+    "fixture_references",
     "release_sha",
     "protected_authority_sha",
     "frontend_sha256",
@@ -38,6 +40,15 @@
       "type": "array",
       "uniqueItems": true,
       "items": { "type": "string", "pattern": "^COMPANY_[A-Z0-9_]+$" }
+    },
+    "mutation_allowlist": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^/api/v1/" }
+    },
+    "fixture_references": {
+      "type": "object",
+      "additionalProperties": { "type": "string", "format": "uuid" }
     },
     "release_sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
     "protected_authority_sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },

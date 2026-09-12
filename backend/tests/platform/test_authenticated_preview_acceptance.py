@@ -125,6 +125,12 @@ def test_attestation_binds_synthetic_preview_scope(tmp_path: Path) -> None:
                         "COMPANY_DISPATCH_READ",
                     }
                 ),
+                "mutation_allowlist": [],
+                "fixture_references": {
+                    "customer_id": "00000000-0000-0000-0000-000000000011",
+                    "job_id": "00000000-0000-0000-0000-000000000012",
+                    "appointment_id": "00000000-0000-0000-0000-000000000013",
+                },
                 "issued_at": now.isoformat(),
                 "expires_at": (now + timedelta(hours=2)).isoformat(),
                 "authorized_by": "enterprise-release",
@@ -247,6 +253,10 @@ def test_enterprise_attestation_is_restricted_and_contains_no_token(tmp_path: Pa
             "protected_authority_sha": "b" * 40,
             "frontend_sha256": "c" * 64,
             "schema_head": "d4f6h8j0l2n4",
+            "allow_mutation": [],
+            "fixture_reference": [
+                "job_id=00000000-0000-0000-0000-000000000006"
+            ],
             "ttl_seconds": 3600,
             "output": output,
         },
@@ -256,9 +266,41 @@ def test_enterprise_attestation_is_restricted_and_contains_no_token(tmp_path: Pa
     assert result["credential_material_emitted"] is False
     assert output.stat().st_mode & 0o077 == 0
     assert "token" not in payload
+    assert payload["mutation_allowlist"] == []
+    assert payload["fixture_references"] == {
+        "job_id": "00000000-0000-0000-0000-000000000006"
+    }
     assert payload["permission_codes"] == [
         "COMPANY_EMPLOYEE_OPERATIONS_OWN_DAY_READ",
         "COMPANY_JOB_READ",
         "COMPANY_TIMEKEEPING_OWN_READ",
         "COMPANY_PAYROLL_STATEMENT_OWN_READ",
     ]
+
+
+def test_attestation_rejects_mutation_outside_persona_contract(tmp_path: Path) -> None:
+    arguments = type(
+        "Arguments",
+        (),
+        {
+            "persona": "employee",
+            "company_id": "00000000-0000-0000-0000-000000000001",
+            "branch_id": "00000000-0000-0000-0000-000000000002",
+            "user_id": "00000000-0000-0000-0000-000000000003",
+            "session_id": "00000000-0000-0000-0000-000000000004",
+            "audit_event_id": "00000000-0000-0000-0000-000000000005",
+            "authorized_by": "enterprise-release",
+            "release_sha": "a" * 40,
+            "protected_authority_sha": "b" * 40,
+            "frontend_sha256": "c" * 64,
+            "schema_head": "d4f6h8j0l2n4",
+            "allow_mutation": ["/api/v1/timekeeping/me/job-clock/start"],
+            "fixture_reference": [
+                "job_id=00000000-0000-0000-0000-000000000006"
+            ],
+            "ttl_seconds": 3600,
+            "output": tmp_path / "attestation.json",
+        },
+    )()
+    with pytest.raises(ProvisioningBlocked):
+        attest(arguments)

@@ -13,6 +13,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
+from uuid import UUID
 
 import httpx
 
@@ -69,6 +70,12 @@ PROHIBITED_PERMISSIONS = frozenset(
         "COMPANY_TIMEKEEPING_OWN_PUNCH",
     }
 )
+REQUIRED_FIXTURE_REFERENCES = {
+    "csr": frozenset({"customer_id", "job_id", "appointment_id"}),
+    "employee": frozenset({"job_id"}),
+    "office": frozenset({"employee_id"}),
+    "qbo": frozenset(),
+}
 
 
 class AcceptanceBlocked(RuntimeError):
@@ -99,7 +106,7 @@ def read_token(path: Path) -> str:
     return token
 
 
-def read_attestation(path: Path, *, now: datetime | None = None) -> dict[str, str]:
+def read_attestation(path: Path, *, now: datetime | None = None) -> dict[str, Any]:
     mode = stat.S_IMODE(path.stat().st_mode)
     if mode & 0o077:
         raise AcceptanceBlocked("Fixture attestation must not be group/world accessible.")
@@ -127,6 +134,22 @@ def read_attestation(path: Path, *, now: datetime | None = None) -> dict[str, st
     ):
         if not payload.get(field):
             raise AcceptanceBlocked(f"Fixture attestation must bind {field}.")
+    mutation_allowlist = payload.get("mutation_allowlist")
+    if not isinstance(mutation_allowlist, list):
+        raise AcceptanceBlocked("Fixture attestation must bind a mutation allowlist.")
+    fixture_ids = payload.get("fixture_references")
+    if not isinstance(fixture_ids, dict):
+        raise AcceptanceBlocked("Fixture attestation must bind fixture references.")
+    persona = str(payload.get("persona", ""))
+    if persona not in REQUIRED_FIXTURE_REFERENCES or frozenset(fixture_ids) != (
+        REQUIRED_FIXTURE_REFERENCES[persona]
+    ):
+        raise AcceptanceBlocked("Fixture references do not match the persona contract.")
+    try:
+        for value in fixture_ids.values():
+            UUID(str(value))
+    except ValueError as error:
+        raise AcceptanceBlocked("Fixture references must be UUIDs.") from error
     try:
         expires_at = datetime.fromisoformat(str(payload["expires_at"]))
     except (KeyError, ValueError) as error:
@@ -218,6 +241,29 @@ def probes(persona: str, *, start_at: str, end_at: str) -> tuple[Probe, ...]:
     return common + selected[persona]
 
 
+def fixture_probes(persona: str, references: dict[str, str]) -> tuple[Probe, ...]:
+    selected = {
+        "csr": (
+            Probe("customer_detail", f'/api/v1/customers/{references["customer_id"]}'),
+            Probe("job_detail", f'/api/v1/jobs/{references["job_id"]}'),
+            Probe(
+                "appointment_detail",
+                f'/api/v1/scheduling/appointments/{references["appointment_id"]}',
+            ),
+        ),
+        "employee": (Probe("assigned_job", f'/api/v1/jobs/{references["job_id"]}'),),
+        "office": (
+            Probe("employee_detail", f'/api/v1/workforce/employees/{references["employee_id"]}'),
+            Probe(
+                "employee_payroll_setup",
+                f'/api/v1/payroll/setup/employees/{references["employee_id"]}',
+            ),
+        ),
+        "qbo": (),
+    }
+    return selected[persona]
+
+
 def mutation_registry_has_schedule_route(registry_path: Path) -> bool:
     registry = json.loads(registry_path.read_text(encoding="utf-8"))
     return any(
@@ -263,7 +309,9 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             expected_branch_id=branch_id,
             persona=args.persona,
         )
-        for probe in probes(args.persona, start_at=args.start_at, end_at=args.end_at):
+        selected_probes = probes(args.persona, start_at=args.start_at, end_at=args.end_at)
+        selected_probes += fixture_probes(args.persona, attestation["fixture_references"])
+        for probe in selected_probes:
             response = client.get(probe.path, params=probe.params)
             if response.status_code != 200:
                 raise AcceptanceBlocked(f"{probe.name} returned HTTP {response.status_code}.")
