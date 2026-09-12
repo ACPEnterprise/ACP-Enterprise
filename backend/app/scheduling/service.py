@@ -225,6 +225,11 @@ class SchedulingService:
                     ),
                 )
                 appointment.capacity_reservation = reservation
+            else:
+                # Mark the optional relationship as loaded. Response serialization
+                # must not trigger async lazy IO after an unassigned Appointment
+                # has already committed successfully.
+                appointment.capacity_reservation = None
             self._stage_event(
                 session,
                 context=context,
