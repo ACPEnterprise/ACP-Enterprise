@@ -1,0 +1,38 @@
+{
+  "contractVersion": "1",
+  "appName": "ACP Employee",
+  "bundleIdentifier": "com.acpenterprise.employee",
+  "primaryLanguage": "en-US",
+  "localCandidate": { "version": "0.2.0", "build": "2", "uploaded": false },
+  "subtitleDraft": "Your ACP workday",
+  "descriptionDraft": "ACP Employee gives authorized employees secure access to their assigned work, job details, timeclock, time history, and other own-data capabilities provided by ACP Enterprise. Available screens and actions are determined by current Company, Branch, Employee, and permission authority.",
+  "betaDescription": "Validate secure sign-in and session restoration, My Day, assigned Job details, authoritative Timeclock and My Time, offline/stale recovery, and logout against synthetic ACP Preview data.",
+  "reviewNotesDraft": "ACP Employee has no public account creation. ACP supplies a bounded synthetic Preview employee review account separately through App Review's protected credential fields. The app shows only work and own-data authorized by ACP Enterprise. Directions are an explicit handoff to Apple Maps; the app does not track location. No payment collection or arbitrary customer messaging is present.",
+  "primaryCategoryRecommendation": "Business",
+  "supportUrl": "OWNER_REQUIRED_LIVE_HTTPS_URL",
+  "privacyPolicyUrl": "OWNER_REQUIRED_LIVE_HTTPS_URL",
+  "marketingUrl": null,
+  "copyright": "OWNER_REQUIRED_LEGAL_ENTITY_AND_YEAR",
+  "sku": "OWNER_REQUIRED_IMMUTABLE_SKU",
+  "internalTesterInstructions": [
+    "Confirm the installed build reports PREVIEW in Account before signing in.",
+    "Use only the sanctioned synthetic Preview employee identity.",
+    "Validate sign-in, session restoration, My Day, assigned Job, Timeclock, My Time, recovery, and logout.",
+    "Stop immediately if any Production endpoint or real customer/employee data appears."
+  ],
+  "employeeBetaInstructions": [
+    "Install only the owner-approved TestFlight build.",
+    "Activate or sign in with your individually issued ACP credentials; never share a password.",
+    "Verify PREVIEW is shown during beta acceptance.",
+    "Report the app version/build and safe correlation reference with any issue; never send passwords or activation links."
+  ],
+  "ownerDecisionsRequired": [
+    "final marketing copy and category",
+    "live support URL",
+    "live privacy-policy URL and legal approval",
+    "copyright legal entity/year",
+    "immutable SKU",
+    "age rating, content rights, availability, and review contact",
+    "privacy questionnaire submission"
+  ]
+}

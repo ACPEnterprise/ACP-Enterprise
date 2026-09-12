@@ -51,6 +51,8 @@ The current app uses standard HTTPS and OS-protected credential storage; no cust
 
 Owner decisions are required for final marketing copy. Required facts/checklist:
 
+The machine-readable draft and owner gates are in `mobile/operations/app-store-connect-metadata.v1.json`. It intentionally leaves legal identity, immutable SKU, live URLs, review contact, age rating and final marketing approval unresolved instead of inventing them.
+
 - Name: `ACP Employee`; subtitle and keywords: owner marketing approval required.
 - Description: authenticated employee field operations, own Timekeeping, assigned Jobs, and own-data capabilities; do not promise gated photos/notifications/commercial tools.
 - Primary category: owner decision (likely Business, subject to store taxonomy review).
@@ -63,6 +65,14 @@ Owner decisions are required for final marketing copy. Required facts/checklist:
 ## Screenshot plan
 
 Capture clean synthetic Preview evidence on Apple-required current screenshot sizes. Minimum story: Sign In; My Day with synthetic assignment; Job Workspace with bounded Customer/Location; authoritative field readiness; My Time; Account/Preview identity. Include a small iPhone class and current large class for layout qualification; produce required App Store screenshot dimensions from an accepted simulator/device matrix. No credentials, invitation tokens, real Employee/Customer data, Payroll value, internal IDs, or system status-bar surprises.
+
+## Repository-owned distribution package
+
+- `mobile/operations/app-store-connect-metadata.v1.json` contains factual draft copy, beta/review instructions, and explicit owner-owned blanks.
+- `mobile/operations/app-store-privacy-evidence.v1.json` inventories behavior observed in source and native configuration. It is technical evidence, not submitted legal answers.
+- `mobile/operations/aasa-hosting.v1.json` fixes the extensionless HTTPS route, exact-byte, header, redirect, authentication, and cache contract without inventing the Team ID or changing DNS.
+- `APPLE_TEAM_ID=<authoritative-id> npm run beta:aasa` generates the final bytes. After approved hosting, `APPLE_TEAM_ID=<authoritative-id> npm run beta:aasa:verify` performs a redirect-disabled, exact-byte deployment check.
+- `npm run apple:release:qualify` performs a clean locked dependency install, CocoaPods deployment install, Mobile regression/static checks, and unsigned Preview archive qualification. It never signs or uploads.
 
 ## Review account and notes
 
