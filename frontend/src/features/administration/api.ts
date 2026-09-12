@@ -17,6 +17,9 @@ export interface CompanyMembership {
   status: string;
   default_branch_id: string | null;
   has_all_branch_access: boolean;
+  display_name: string | null;
+  email: string | null;
+  branch_name: string | null;
 }
 
 export interface RoleCreateInput {

@@ -3,6 +3,7 @@ from uuid import UUID
 
 from sqlalchemy import distinct, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.events.schemas import BusinessEventCreate
 from app.events.service import BusinessEventService
@@ -183,6 +184,10 @@ class CompanyAdministrationService:
             (
                 await session.scalars(
                     select(Membership)
+                    .options(
+                        selectinload(Membership.user),
+                        selectinload(Membership.default_branch),
+                    )
                     .where(Membership.company_id == context.company.id)
                     .order_by(Membership.created_at, Membership.id)
                     .offset(offset)

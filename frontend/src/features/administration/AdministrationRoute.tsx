@@ -608,7 +608,7 @@ export function AdministrationRoute() {
             <CardDescription>
               Assign {selectedRole.name} within the current Company. This action does
               not add or change Company or Branch access. Each option identifies the
-              Membership submitted for assignment and its associated User.
+              person receiving the role.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -627,7 +627,10 @@ export function AdministrationRoute() {
                     <option value="">Select active Membership</option>
                     {activeMemberships.map((membership) => (
                       <option key={membership.id} value={membership.id}>
-                        Membership {membership.id} · User {membership.user_id}
+                        {membership.display_name || membership.email || `Membership ${membership.id.slice(0, 8)}`}
+                        {membership.branch_name ? ` — ${membership.branch_name}` : ""}
+                        {` — ${membership.status.charAt(0).toUpperCase()}${membership.status.slice(1)}`}
+                        {membership.email && membership.email !== membership.display_name ? ` · ${membership.email}` : ""}
                       </option>
                     ))}
                   </select>

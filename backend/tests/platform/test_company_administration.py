@@ -1202,6 +1202,10 @@ async def test_authorized_router_enforces_context_and_rejects_unknown_fields(
 ) -> None:
     _, factory = admin_database
     fixture = await seed_admin_fixture(factory, "ADMINH")
+    async with factory() as session, session.begin():
+        target_membership = await session.get(Membership, fixture.target_membership_id)
+        assert target_membership is not None
+        target_membership.default_branch_id = fixture.company_branch_id
     app = FastAPI()
     app.include_router(admin_router)
 
@@ -1220,6 +1224,7 @@ async def test_authorized_router_enforces_context_and_rejects_unknown_fields(
             "/api/v1/company-admin/memberships",
             params={"limit": 1, "offset": 0},
         )
+        all_memberships = await client.get("/api/v1/company-admin/memberships")
         unbounded = await client.get(
             "/api/v1/company-admin/memberships", params={"limit": 201}
         )
@@ -1232,6 +1237,18 @@ async def test_authorized_router_enforces_context_and_rejects_unknown_fields(
     assert {record["company_id"] for record in response.json()} == {
         str(fixture.context.company.id)
     }
+    membership = response.json()[0]
+    assert membership["display_name"] == fixture.context.user.display_name
+    assert membership["email"] == fixture.context.user.normalized_email
+    assert membership["branch_name"] is None
+    target = next(
+        item
+        for item in all_memberships.json()
+        if item["id"] == str(fixture.target_membership_id)
+    )
+    assert target["display_name"] == "Target User"
+    assert target["email"].endswith("-target@example.com")
+    assert target["branch_name"] == "Main Branch"
     assert unbounded.status_code == 422
     assert invalid.status_code == 422
 
