@@ -114,6 +114,37 @@ def test_deterministic_employee_job_appointment_labor_relationship():
     assert packet.evidence_digest == replay.evidence_digest
 
 
+def test_authoritative_job_only_clock_interval_composes_without_appointment():
+    company, branch, employee, job = (uuid4() for _ in range(4))
+    link = EmployeeJobLink(
+        company,
+        branch,
+        employee,
+        job,
+        None,
+        provenance("jobs_field_service", "job-assignment"),
+    )
+    worked = interval(
+        company,
+        branch,
+        employee,
+        IntervalKind.WORKED,
+        START,
+        START + timedelta(minutes=91),
+        job=job,
+        appointment=None,
+    )
+
+    packet = compose_labor_evidence(
+        company_id=company, links=(link,), intervals=(worked,)
+    )
+
+    assert packet.jobs[0].appointment_id is None
+    assert packet.jobs[0].worked_minutes == 91
+    assert packet.jobs[0].scheduled_minutes is None
+    assert "paid_interval" in packet.jobs[0].missing_inputs
+
+
 def test_missing_actual_work_never_falls_back_to_schedule():
     company, branch, employee, job, appointment = (uuid4() for _ in range(5))
     link = EmployeeJobLink(

@@ -31,13 +31,15 @@ export const jobWorkedIntervalSchema = z.object({
   correction_state: z.enum(["original", "corrected", "superseded"]),
   supersedes_revision_id: z.string().nullable(), audit_lineage: z.array(z.string()), source_event_ids: z.array(z.string()),
   validity: z.enum(["valid", "correction_required"]), confidence: z.enum(["authoritative", "disputed"]),
-  evidence_digest: z.string(), correction_reason: z.string().nullable(),
+  evidence_digest: z.string(), correction_reason: z.string().nullable(), corrected_by_user_id: z.string().nullable(),
 });
 export type JobWorkedInterval = z.infer<typeof jobWorkedIntervalSchema>;
 export const activeJobClockSchema = z.object({
   active: z.boolean(), event_id: z.string().nullable(), employee_id: z.string(), job_id: z.string().nullable(),
   appointment_id: z.string().nullable(), started_at: z.string().nullable(), server_observed_at: z.string(),
   elapsed_seconds: z.number().int().nonnegative().nullable(),
+  latest_action: jobClockActionSchema.nullable(), latest_event_id: z.string().nullable(),
+  latest_occurred_at: z.string().nullable(), latest_completed_interval_id: z.string().nullable(),
 });
 export type ActiveJobClock = z.infer<typeof activeJobClockSchema>;
 export const jobClockResultSchema = z.object({

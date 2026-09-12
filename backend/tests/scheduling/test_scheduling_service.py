@@ -41,6 +41,7 @@ from app.scheduling.models import (
     BranchSchedulingWeeklyInterval,
 )
 from app.scheduling.repository import SchedulingRepository
+from app.scheduling.router import appointment_response
 from app.scheduling.service import (
     CancelAppointmentCommand,
     CreateAppointmentCommand,
@@ -388,6 +389,8 @@ async def test_unassigned_creation_skips_capacity_and_replays_without_duplicate(
 
     assert first.id == replay.id
     assert first.capacity_reservation is None
+    response = appointment_response(first)
+    assert response.capacity_units is None
     async with factory() as session:
         assert await SchedulingRepository.get_capacity_reservation(
             session,

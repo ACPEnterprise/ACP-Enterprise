@@ -6,14 +6,15 @@ import { ApiFailure } from "../src/api/types";
 jest.mock("expo-crypto", () => ({ randomUUID: jest.fn(() => "opaque-job-clock-key") }));
 const jobId = "40000000-0000-4000-8000-000000000001";
 const appointmentId = "30000000-0000-4000-8000-000000000001";
-const inactive: ActiveJobClock = { active: false, event_id: null, employee_id: "synthetic-employee", job_id: null, appointment_id: null, started_at: null, server_observed_at: "2026-09-11T01:00:00Z", elapsed_seconds: null };
-const active: ActiveJobClock = { active: true, event_id: "synthetic-event", employee_id: "synthetic-employee", job_id: jobId, appointment_id: appointmentId, started_at: "2026-09-11T01:00:00Z", server_observed_at: "2026-09-11T01:01:00Z", elapsed_seconds: 60 };
+const inactive: ActiveJobClock = { active: false, event_id: null, employee_id: "synthetic-employee", job_id: null, appointment_id: null, started_at: null, server_observed_at: "2026-09-11T01:00:00Z", elapsed_seconds: null, latest_action: null, latest_event_id: null, latest_occurred_at: null, latest_completed_interval_id: null };
+const active: ActiveJobClock = { active: true, event_id: "synthetic-event", employee_id: "synthetic-employee", job_id: jobId, appointment_id: appointmentId, started_at: "2026-09-11T01:00:00Z", server_observed_at: "2026-09-11T01:01:00Z", elapsed_seconds: 60, latest_action: "start", latest_event_id: "synthetic-event", latest_occurred_at: "2026-09-11T01:00:00Z", latest_completed_interval_id: null };
+const stopped: ActiveJobClock = { ...inactive, server_observed_at: "2026-09-11T01:05:01Z", latest_action: "stop", latest_event_id: "synthetic-stop", latest_occurred_at: "2026-09-11T01:05:00Z", latest_completed_interval_id: "synthetic-interval" };
 
 function harness(initial = inactive, connected = true) {
   let current = initial; let listener: ((value: boolean) => void) | undefined;
   const service: TimekeepingService = {
     state: jest.fn(), timecard: jest.fn(), punch: jest.fn(), jobClockState: jest.fn(async () => current),
-    jobClock: jest.fn(async (action: JobClockAction) => { current = action === "start" ? active : inactive; return { event_id: "result-event", action, occurred_at: "2026-09-11T01:00:00Z", state: current, completed_interval: null }; }),
+    jobClock: jest.fn(async (action: JobClockAction) => { current = action === "start" ? active : stopped; return { event_id: "result-event", action, occurred_at: "2026-09-11T01:00:00Z", state: current, completed_interval: null }; }),
   };
   const network = { isConnected: jest.fn(async () => connected), subscribe: jest.fn((next: (value: boolean) => void) => { listener = next; return () => undefined; }) };
   return { service, network, setCurrent(value: ActiveJobClock) { current = value; }, reconnect(value: boolean) { connected = value; listener?.(value); } };
@@ -49,6 +50,29 @@ describe("authoritative Employee Job clock", () => {
     fireEvent.press(await screen.findByText("Clock On To This Job"));
     expect(await screen.findByText("The latest Job clock confirms the action.")).toBeOnTheScreen();
     expect(screen.getByText("Clock Off This Job")).toBeEnabled();
+  });
+
+  it("recovers a committed clock-off only from completed stop evidence", async () => {
+    const h = harness(active);
+    (h.service.jobClock as jest.Mock).mockImplementationOnce(async () => {
+      h.setCurrent(stopped);
+      throw new ApiFailure("timeout", "lost response");
+    });
+    render(<JobClockPanel service={h.service} network={h.network} jobId={jobId} appointmentId={appointmentId} enabled />);
+    fireEvent.press(await screen.findByText("Clock Off This Job"));
+    expect(await screen.findByText("The latest Job clock confirms the action.")).toBeOnTheScreen();
+    expect(screen.getByText("Clock On To This Job")).toBeEnabled();
+  });
+
+  it("does not misclassify an uncorrelated inactive refresh as a committed stop", async () => {
+    const h = harness(active);
+    (h.service.jobClock as jest.Mock).mockImplementationOnce(async () => {
+      h.setCurrent(inactive);
+      throw new ApiFailure("timeout", "lost response");
+    });
+    render(<JobClockPanel service={h.service} network={h.network} jobId={jobId} appointmentId={appointmentId} enabled />);
+    fireEvent.press(await screen.findByText("Clock Off This Job"));
+    expect(await screen.findByText(/not confirmed/)).toBeOnTheScreen();
   });
 
   it("reuses one logical request identity when an uncertain action is retried", async () => {
