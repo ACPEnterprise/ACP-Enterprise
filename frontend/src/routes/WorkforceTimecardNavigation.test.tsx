@@ -29,6 +29,10 @@ vi.mock("../hooks/useWorkforce", () => ({
     isPending: false,
     isError: false,
   }),
+  useEmployeePasswordReset: () => ({
+    query: { data: undefined },
+    mutation: { mutate: vi.fn(), isPending: false, isError: false },
+  }),
   useWorkforceEligibility: () => ({
     mutate: vi.fn(),
     data: undefined,
