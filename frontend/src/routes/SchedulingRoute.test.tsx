@@ -220,11 +220,23 @@ describe("SchedulingRoute", () => {
     await userEvent.click(within(screen.getByRole("region", { name: "Month calendar" })).getByRole("button", { name: /APT-000001.*UNASSIGNED/i }));
     expect(screen.getByRole("link", { name: "Open Customer" })).toHaveAttribute("href", "/customers/customer-1");
     expect(screen.getAllByText("Customer context unavailable").at(-1)).toBeVisible();
+    await userEvent.clear(screen.getByLabelText("New start"));
+    await userEvent.type(screen.getByLabelText("New start"), "2026-08-14T09:00");
+    await userEvent.clear(screen.getByLabelText("New arrival-window end"));
+    await userEvent.type(screen.getByLabelText("New arrival-window end"), "2026-08-14T12:00");
+    await userEvent.clear(screen.getByLabelText("Duration in minutes"));
+    await userEvent.type(screen.getByLabelText("Duration in minutes"), "90");
     await userEvent.click(screen.getByRole("button", { name: "Review new time" }));
     expect(rescheduleMutate).not.toHaveBeenCalled();
     expect(screen.getByRole("dialog", { name: "Move this appointment?" })).toBeVisible();
     await userEvent.click(screen.getByRole("button", { name: "Confirm new time" }));
-    expect(rescheduleMutate).toHaveBeenCalledOnce();
+    expect(rescheduleMutate).toHaveBeenCalledWith(expect.objectContaining({
+      input: expect.objectContaining({
+        arrival_window_start_at: new Date("2026-08-14T09:00").toISOString(),
+        arrival_window_end_at: new Date("2026-08-14T12:00").toISOString(),
+        expected_duration_minutes: 90,
+      }),
+    }), expect.any(Object));
   });
 
   it("reconciles selected appointment detail after the authoritative calendar refreshes", async () => {

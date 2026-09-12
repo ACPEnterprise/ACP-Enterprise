@@ -480,7 +480,7 @@ export function SchedulingRoute({
         {view !== "unassigned" && <UnscheduledQueue jobs={jobs.data?.items ?? []} appointments={visible} dispatchByAppointment={dispatchByAppointment} onSelect={setSelected} />}
         {currentSelection ? (
           <AppointmentPanel
-            key={`${currentSelection.id}:${currentSelection.arrival_window_start_at}:${currentSelection.expected_duration_minutes}`}
+            key={`${currentSelection.id}:${currentSelection.arrival_window_start_at}:${currentSelection.arrival_window_end_at}:${currentSelection.expected_duration_minutes}`}
             appointment={currentSelection}
             dispatchItem={selectedDispatch}
             job={
@@ -1008,17 +1008,21 @@ function AppointmentPanel({
   const [start, setStart] = useState(() =>
     toLocalInput(appointment.arrival_window_start_at),
   );
+  const [end, setEnd] = useState(() =>
+    toLocalInput(appointment.arrival_window_end_at),
+  );
   const [duration, setDuration] = useState(
     appointment.expected_duration_minutes ?? 60,
   );
   const [confirmMove, setConfirmMove] = useState(false);
+  const validWindow = Boolean(start && end && new Date(end) > new Date(start));
   const requestMove = (event: FormEvent) => {
     event.preventDefault();
-    setConfirmMove(true);
+    if (validWindow) setConfirmMove(true);
   };
   const submit = () => {
     const startAt = new Date(start);
-    const endAt = new Date(startAt.getTime() + duration * 60000);
+    const endAt = new Date(end);
     mutation.mutate(
       {
         appointmentId: appointment.id,
@@ -1116,6 +1120,18 @@ function AppointmentPanel({
             />
           </label>
           <label className="block text-sm font-medium">
+            New arrival-window end
+            <Input
+              className="mt-1"
+              required
+              type="datetime-local"
+              min={start || undefined}
+              value={end}
+              onChange={(event) => setEnd(event.target.value)}
+            />
+          </label>
+          {!validWindow && <p className="text-sm text-status-danger">Arrival window must end after it starts.</p>}
+          <label className="block text-sm font-medium">
             Duration in minutes
             <Input
               className="mt-1"
@@ -1136,7 +1152,7 @@ function AppointmentPanel({
               Appointment moved. Calendar and Dispatch evidence are refreshing.
             </Alert>
           )}
-          <Button type="submit" loading={mutation.isPending}>
+          <Button type="submit" loading={mutation.isPending} disabled={!validWindow || duration < 1}>
             Review new time
           </Button>
         </form>
@@ -1151,7 +1167,7 @@ function AppointmentPanel({
           onConfirm={submit}
         >
           <p><strong>{appointment.appointment_number}</strong></p>
-          <p>{new Date(start).toLocaleString()} · {duration} minutes</p>
+          <p>{new Date(start).toLocaleString()}–{new Date(end).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} arrival window · {duration} minutes expected work</p>
           <p>No Dispatch Intelligence proposal is accepted automatically.</p>
         </ConfirmationDialog>
       )}

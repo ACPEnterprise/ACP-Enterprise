@@ -25,6 +25,13 @@ review and explains the correction; no request is sent. Successful persistence
 links to the authoritative Appointment and Job and then to human-confirmed
 Dispatch assignment.
 
+The same separation now applies when an existing Job is scheduled and when an
+Appointment is rescheduled from the calendar detail drawer. A move preserves an
+explicit customer arrival window and an independent expected work duration;
+neither workflow silently derives one from the other. Inverted windows fail
+before confirmation, and Scheduling still submits current entity versions for
+server-side Branch, capacity, and conflict revalidation.
+
 The stacked calendar acceptance proves the same appointment is usable through
 Month, Day, Week, Work Week, Unassigned, Schedule, and Dispatch; crowded Month
 days expand without losing filters, hidden appointments are selectable, and
@@ -47,7 +54,7 @@ and Dispatch, then assign/reassign through explicit Dispatch confirmation and
 verify the refreshed authoritative state. Real SOURCE.4 adds mapped, unmapped,
 canceled, partial-lineage, and legacy-status cases when Migration admits them.
 
-Qualification passed 115 frontend test files / 414 tests, including focused CSR
+Qualification passed 115 frontend test files / 415 tests, including focused CSR
 booking, existing-Job scheduling, Month/cross-view, Dispatch presentation, API,
 authorization, and stale/conflict coverage. ESLint, TypeScript/Vite production
 build, `git diff --check`, and credential/private-key scanning passed. No schema
