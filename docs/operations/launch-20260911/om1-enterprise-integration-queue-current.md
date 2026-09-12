@@ -77,6 +77,12 @@ python -m compileall -q \
 The builder is read-only with respect to application data, but writes the
 explicit `--output` artifact. It must not be treated as admission authority.
 
+Independent qualification on 2026-09-12 composed the exact head onto protected
+authority at tree `9371c6ab231ae05a1feb2f3f38f3a90d8880145d`: all three focused
+tests and Python compilation passed. The tests cover accepted-record selection,
+HOLD treatment for unbound updates, `execution_allowed = false`, acceptance-plan
+digest tampering, and conflicting cross-scope native bindings.
+
 ### ECO
 
 Update the current integration-watch authority from `52dc3367...` to
