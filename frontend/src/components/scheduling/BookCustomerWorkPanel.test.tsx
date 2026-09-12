@@ -8,6 +8,8 @@ import { useCreateServiceRequest } from "../../hooks/useOperations";
 import { BookCustomerWorkPanel } from "./BookCustomerWorkPanel";
 
 const mutate = vi.hoisted(() => vi.fn());
+const fieldInput = (label: string) =>
+  screen.getByText(label).parentElement?.querySelector("input") as HTMLInputElement;
 vi.mock("../../auth", () => ({
   useAuth: () => ({ activeCompany: { default_branch_id: "branch-1", branches: [{ id: "branch-1", name: "Main" }] } }),
 }));
@@ -37,6 +39,12 @@ describe("BookCustomerWorkPanel", () => {
     render(<MemoryRouter><BookCustomerWorkPanel onClose={vi.fn()} /></MemoryRouter>);
     await userEvent.selectOptions(screen.getByRole("combobox", { name: /Customer/ }), "customer-1");
     await userEvent.selectOptions(screen.getByRole("combobox", { name: /Service Location/ }), "location-1");
+    await userEvent.clear(fieldInput("Arrival window starts"));
+    await userEvent.type(fieldInput("Arrival window starts"), "2026-09-14T09:00");
+    await userEvent.clear(fieldInput("Arrival window ends"));
+    await userEvent.type(fieldInput("Arrival window ends"), "2026-09-14T12:00");
+    await userEvent.clear(screen.getByRole("spinbutton", { name: /Expected duration \(minutes\)/ }));
+    await userEvent.type(screen.getByRole("spinbutton", { name: /Expected duration \(minutes\)/ }), "90");
     await userEvent.type(screen.getByRole("textbox", { name: "Customer-reported problem" }), "No cooling");
     await userEvent.click(screen.getByRole("button", { name: "Review booking" }));
     expect(mutate).not.toHaveBeenCalled();
@@ -47,10 +55,26 @@ describe("BookCustomerWorkPanel", () => {
         branch_id: "branch-1",
         customer_id: "customer-1",
         service_location_id: "location-1",
+        arrival_window_start_at: new Date("2026-09-14T09:00").toISOString(),
+        arrival_window_end_at: new Date("2026-09-14T12:00").toISOString(),
+        expected_duration_minutes: 90,
         customer_reported_problem: "No cooling",
       }),
       expect.objectContaining({ onSuccess: expect.any(Function) }),
     );
+  });
+
+  it("fails closed when the customer arrival window ends before it starts", async () => {
+    render(<MemoryRouter><BookCustomerWorkPanel onClose={vi.fn()} /></MemoryRouter>);
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: /Customer/ }), "customer-1");
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: /Service Location/ }), "location-1");
+    await userEvent.clear(fieldInput("Arrival window starts"));
+    await userEvent.type(fieldInput("Arrival window starts"), "2026-09-14T12:00");
+    await userEvent.clear(fieldInput("Arrival window ends"));
+    await userEvent.type(fieldInput("Arrival window ends"), "2026-09-14T09:00");
+    expect(screen.getByText("Arrival window must end after it starts.")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Review booking" })).toBeDisabled();
+    expect(mutate).not.toHaveBeenCalled();
   });
 
   it("truthfully keeps technician assignment separate after persistence", () => {
