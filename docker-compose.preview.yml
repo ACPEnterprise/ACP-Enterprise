@@ -2,6 +2,7 @@ x-backend-environment: &backend-environment
   APP_NAME: ${APP_NAME:-ACP Enterprise}
   APP_VERSION: ${APP_VERSION:-0.1.0}
   ENVIRONMENT: preview
+  PREVIEW_ACCEPTANCE_FIXTURE_ENABLED: ${PREVIEW_ACCEPTANCE_FIXTURE_ENABLED:-false}
   BUSINESS_TIMEZONE: ${BUSINESS_TIMEZONE:-America/New_York}
   DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env.preview}
   REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
