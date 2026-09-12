@@ -7,6 +7,7 @@ npm run config:validate
 
 archive_path="$PWD/build/apple/ACPEmployee-preview-unsigned.xcarchive"
 build_log="$PWD/build/apple/archive-build.log"
+mkdir -p "$(dirname "$archive_path")"
 rm -rf "$archive_path"
 EXPO_PUBLIC_APP_ENV=preview EXPO_PUBLIC_API_BASE_URL=https://preview.allcountyhomeservices.com \
   xcodebuild archive -workspace ios/ACPEmployee.xcworkspace -scheme ACPEmployee -configuration Release \
