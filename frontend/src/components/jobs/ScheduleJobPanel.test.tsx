@@ -86,4 +86,34 @@ describe("ScheduleJobPanel", () => {
     expect(screen.getByRole("combobox", { name: "Technician" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Book Appointment" })).toBeEnabled();
   });
+
+  it("preserves the request identity for an exact retry after an uncertain outcome", async () => {
+    vi.mocked(useScheduleExistingJob).mockReturnValue({
+      mutate,
+      isPending: false,
+      isSuccess: false,
+      error: { isAxiosError: true },
+    } as never);
+    renderPanel();
+    await userEvent.click(screen.getByRole("button", { name: "Book Appointment" }));
+    await userEvent.click(screen.getByRole("button", { name: "Retry same request" }));
+    expect(screen.getByText(/UNKNOWN REQUIRES REFRESH/)).toBeVisible();
+    const first = mutate.mock.calls[0][0];
+    const replay = mutate.mock.calls[1][0];
+    expect(replay.request_id).toBe(first.request_id);
+    expect(replay).toEqual(first);
+  });
+
+  it("requires review rather than stale-version replay", () => {
+    vi.mocked(useScheduleExistingJob).mockReturnValue({
+      mutate,
+      isPending: false,
+      isSuccess: false,
+      error: { isAxiosError: true, response: { status: 409, data: { detail: { code: "stale_version", recovery: "RETRY_AFTER_REFRESH" } } } },
+    } as never);
+    renderPanel();
+    expect(screen.getByText(/FAILED REQUIRES REFRESH/)).toBeVisible();
+    expect(screen.getByText(/record changed after it was loaded/i)).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Retry same request" })).not.toBeInTheDocument();
+  });
 });

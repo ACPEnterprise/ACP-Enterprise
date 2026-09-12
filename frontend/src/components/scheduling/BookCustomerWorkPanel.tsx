@@ -1,11 +1,13 @@
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router";
 
-import { getOperatorApiError } from "../../api/errors";
 import { useAuth } from "../../auth";
 import { useCustomerDetail, useCustomerList } from "../../hooks/useCustomers";
 import { useCreateServiceRequest } from "../../hooks/useOperations";
+import { appointmentDetailPath, jobDetailPath, schedulingReturnPath, withSchedulingReturn } from "../../routing/paths";
 import type { JobPriority } from "../../types/jobs";
+import type { ServiceRequestCreateInput } from "../../types/operations";
+import { schedulingMutationRecovery } from "./schedulingRecovery";
 import {
   Alert,
   Button,
@@ -21,7 +23,7 @@ const localInput = (date: Date) => {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 };
 
-export function BookCustomerWorkPanel({ onClose }: { readonly onClose: () => void }) {
+export function BookCustomerWorkPanel({ onClose, returnTo }: { readonly onClose: () => void; readonly returnTo?: string }) {
   const { activeCompany } = useAuth();
   const create = useCreateServiceRequest();
   const [customerSearch, setCustomerSearch] = useState("");
@@ -38,6 +40,7 @@ export function BookCustomerWorkPanel({ onClose }: { readonly onClose: () => voi
   const [priority, setPriority] = useState<JobPriority>("normal");
   const [problem, setProblem] = useState("");
   const [confirmation, setConfirmation] = useState<string | null>(null);
+  const [pendingRequest, setPendingRequest] = useState<{ fingerprint: string; input: ServiceRequestCreateInput } | null>(null);
 
   const selectedCustomer = customers.data?.items.find((item) => item.id === customerId);
   const selectedLocation = customer.data?.properties.find((item) => item.id === locationId);
@@ -47,16 +50,12 @@ export function BookCustomerWorkPanel({ onClose }: { readonly onClose: () => voi
   const ready = Boolean(
     branchId && customerId && locationId && startAt && endAt && duration > 0 && validWindow,
   );
-  const error = create.error ? getOperatorApiError(create.error, "booking") : null;
+  const error = create.error ? schedulingMutationRecovery(create.error, "booking") : null;
 
   const review = (event: FormEvent) => {
     event.preventDefault();
-    if (ready) setConfirmation(crypto.randomUUID());
-  };
-  const confirm = () => {
-    if (!confirmation || !ready) return;
-    create.mutate({
-      request_id: confirmation,
+    if (!ready) return;
+    const intent = {
       branch_id: branchId,
       customer_id: customerId,
       service_location_id: locationId,
@@ -68,7 +67,20 @@ export function BookCustomerWorkPanel({ onClose }: { readonly onClose: () => voi
       priority,
       customer_reported_problem: problem.trim() || null,
       internal_description: null,
-    }, { onSuccess: () => setConfirmation(null) });
+    } satisfies Omit<ServiceRequestCreateInput, "request_id">;
+    const fingerprint = JSON.stringify(intent);
+    const input = pendingRequest?.fingerprint === fingerprint
+      ? pendingRequest.input
+      : { ...intent, request_id: crypto.randomUUID() };
+    setPendingRequest({ fingerprint, input });
+    setConfirmation(input.request_id);
+  };
+  const confirm = () => {
+    if (!confirmation || !pendingRequest) return;
+    create.mutate(pendingRequest.input, {
+      onSuccess: () => { setConfirmation(null); setPendingRequest(null); },
+      onError: () => setConfirmation(null),
+    });
   };
 
   return (
@@ -81,14 +93,15 @@ export function BookCustomerWorkPanel({ onClose }: { readonly onClose: () => voi
         </div>
         <Button variant="ghost" onClick={onClose}>Close</Button>
       </div>
-      {error && <Alert className="mt-4" variant="danger" title={error.title}>{error.message}</Alert>}
+      {error && <Alert className="mt-4" variant="danger" title={error.title} action={error.retryLabel && pendingRequest ? <Button variant="outline" onClick={() => setConfirmation(pendingRequest.input.request_id)} disabled={create.isPending}>{error.retryLabel}</Button> : undefined}><strong>{error.state.replaceAll("_", " ")}</strong> — {error.message}</Alert>}
       {create.data && (
         <Alert className="mt-4" variant="success" title="Work booked">
-          {create.data.appointment.appointment_number} and {create.data.job.job_number} were saved. Assignment remains a separate human-confirmed Dispatch action.
+          SUCCEEDED — {create.data.appointment.appointment_number} and {create.data.job.job_number} were saved and authoritative queue/calendar state was refreshed. Assignment remains a separate human-confirmed Dispatch action.
           <div className="mt-3 flex flex-wrap gap-3">
-            <Link className="font-semibold text-action-primary underline" to={`/appointments/${create.data.appointment.id}`}>Open Appointment</Link>
-            <Link className="font-semibold text-action-primary underline" to={`/jobs/${create.data.job.id}`}>Open Job</Link>
+            <Link className="font-semibold text-action-primary underline" to={returnTo ? withSchedulingReturn(appointmentDetailPath(create.data.appointment.id), returnTo) : appointmentDetailPath(create.data.appointment.id)}>Open Appointment</Link>
+            <Link className="font-semibold text-action-primary underline" to={returnTo ? withSchedulingReturn(jobDetailPath(create.data.job.id), returnTo) : jobDetailPath(create.data.job.id)}>Open Job</Link>
             <Link className="font-semibold text-action-primary underline" to="/dispatch">Assign in Dispatch</Link>
+            {returnTo ? <Link className="font-semibold text-action-primary underline" to={schedulingReturnPath(returnTo)}>Return to prior Schedule view</Link> : null}
           </div>
         </Alert>
       )}
