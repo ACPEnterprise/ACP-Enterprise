@@ -1,6 +1,6 @@
 # OM1 Enterprise integration queue
 
-Snapshot: 2026-09-12 17:33 America/New_York
+Snapshot: 2026-09-12 17:36 America/New_York
 
 ## Authority and deployed state
 
@@ -37,6 +37,29 @@ acceptance gates in this packet operationally; GitHub will not enforce them.
 | ECO reconciliation | `1c0e7b20db62b6a342548f2842ea1a3a45965386` | 4/13 | `657821646f4fcfc3eda071fa2b285b3903f5dbbd` | Merge-clean; qualified; authority metadata stale |
 | PR #215 Payroll/QBO read UI | `724398348b566f655d2bc7127c20beeb6be52d6c` | 23/1 | `c964c398836e12ec16d398fbc81c246b66fec189` | Open/CLEAN; reconcile and refresh packet |
 | Mobile Apple release packet | `0183eaec3e2825a79b683e9e684a761243c86ea7` | 9/15 | `fad3ab879576b7bfb392c8e30e68ed6df63e2425` | Merge-clean; refresh two manifests |
+
+## Named launch queue coverage
+
+| Lane originally requested | Current disposition |
+|---|---|
+| JOB-000306 owner-observed failure | Acceptance observation; reproduce only after the protected deployment gap is deployed. No independent candidate is present. |
+| Scheduling mutation registry | `e26c9bd5...` now conflicts in the registry and its test; protected #237 is authoritative. Do not integrate the stale branch. |
+| Laptop1-A CSR booking | `d172cd11...` conflicts with the evolved Scheduling UI; protected #241 and recovery #250 are authoritative. Do not integrate the stale branch. |
+| Laptop1-B Customer office UX | `8516b08b...` conflicts in one add/add reliability test, while current-authority reconciliation `174fcd4e...` composes to zero delta. Superseded by #242 and #257. |
+| Workforce / Payroll #216 | Merged as `d52d1178...`; already protected. |
+| Workforce / Payroll #221, stacked #222, and #223 | Closed; their current successors are protected through #229, #231, and #235 respectively. |
+| Payroll tax rule | Reconciled `9a44f714...` composes to zero delta; superseded by protected #236. |
+| Identity #227 and #230 | Still open but superseded by protected #256 and #258; close, do not integrate. |
+| Identity recovery successor | `4cf7bdf4...` composes to zero delta; protected #256 is authoritative. |
+| Laptop1 Phone distribution readiness | `bf28a61c...` is an ancestor of the active Mobile owner-release packet; integrate only the successor packet. |
+| ECO named commits and persistence | `d7ef88d1...` and `37b32949...` are superseded by patch-evolved equivalents; `fe7a9623...`, `f587c271...`, and persistence `863cab13...` feed the active ECO watch. |
+| QBO `5fe11183...` | Superseded by protected real-company evidence #243. Preserve the OAuth owner gate. |
+| Migration executor / acceptance | `5b8b02de...` and `83bbeef0...` are superseded by protected guarded execution and acceptance #253. Recovery and builder remain active preparation only. |
+| Price Book operator readiness | `c1c90a0a...` is superseded by the broader held review candidate `49e852aa...`; no candidate is admissible yet. |
+
+Zero-delta classifications above use a three-way composition with current
+protected authority, not a direct endpoint diff. Conflicting stale branches are
+not reconciliation inputs: use their named protected successors as authority.
 
 All five effective deltas have zero pairwise file overlap and produce identical
 trees in either integration order. The combined pre-metadata tree is
