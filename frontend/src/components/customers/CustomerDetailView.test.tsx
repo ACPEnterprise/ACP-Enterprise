@@ -83,6 +83,7 @@ describe("CustomerDetailView", () => {
   });
 
   it("offers permission-gated Job creation with Customer and Location context", () => {
+    permissions.add("COMPANY_JOB_READ");
     permissions.add("COMPANY_JOB_MANAGE");
     vi.mocked(customerHooks.useCustomerDetail).mockReturnValue({
       isLoading: false, isError: false,
@@ -92,6 +93,7 @@ describe("CustomerDetailView", () => {
     render(<MemoryRouter><CustomerDetailView customerId={customer.id} onBack={vi.fn()} /></MemoryRouter>);
 
     expect(screen.getByRole("link", { name: "Create Job for this Location" })).toHaveAttribute("href", "/jobs?create=1&customerId=customer-1&locationId=location-1");
+    expect(screen.getByRole("link", { name: "View Jobs for this Location" })).toHaveAttribute("href", "/jobs?customerId=customer-1&locationId=location-1");
   });
 
   it("uses the shared accessible confirmation before archiving", async () => {
