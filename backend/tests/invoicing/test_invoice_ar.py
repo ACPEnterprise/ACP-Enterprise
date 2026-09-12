@@ -6,7 +6,11 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
+from sqlalchemy import func, select, update
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
 from app.core.config import settings
+from app.customer_migration.models import CustomerMigrationRun, CustomerSourceIdentity
 from app.customers.models import Customer
 from app.estimates.service import EstimateService
 from app.events.models import BusinessEvent
@@ -29,10 +33,11 @@ from app.invoicing.models import (
 )
 from app.invoicing.service import InvoiceService
 from app.jobs.models import Job
+from app.operational_migration import (
+    models as operational_migration_models,  # noqa: F401
+)
 from app.platform.branch.models import Branch
 from app.platform.company.models import Company
-from sqlalchemy import func, select, update
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from tests.estimates.test_estimate_conversion import (
     approved_estimate,
     conversion_spec,
@@ -114,10 +119,35 @@ async def test_office_workspace_and_customer_balance_use_native_scoped_evidence(
     assert balance["native_invoice_count"] == 1
     assert balance["invoice_total"] == invoice.total_amount
     assert balance["open_balance"] == Decimal("0.00")
+    assert balance["evidence_classifications"][0]["classification"] == "CURRENT_AUTHORITATIVE"
+    assert balance["evidence_classifications"][0]["source_system"] == "acp_native"
+    assert balance["evidence_classifications"][1]["classification"] == "UNAVAILABLE"
 
     async with factory() as session:
         hidden = await service.workspace(session, company.id, frozenset({uuid4()}), as_of=as_of, state="all")
     assert hidden == ()
+
+
+@pytest.mark.asyncio
+async def test_customer_balance_composes_only_explicit_customer_source_identity(invoice_fixture):
+    factory, company, branch, actor, customer, _, spec = invoice_fixture
+    run = CustomerMigrationRun(company_id=company.id, branch_id=branch.id, initiated_by_user_id=actor.id, source_system="housecall_pro", source_sha256="a" * 64, mode="import", status="completed", source_count=1, accepted_count=1, rejected_count=0, duplicate_count=0, unresolved_count=0, completed_at=datetime.now(timezone.utc))
+    async with factory() as session:
+        session.add(run)
+        await session.flush()
+        session.add(CustomerSourceIdentity(company_id=company.id, branch_id=branch.id, customer_id=customer.id, source_system="housecall_pro", source_customer_id="hcp-customer-1", first_run_id=run.id))
+        await session.commit()
+    async with factory() as session:
+        balance = await InvoiceService().customer_balance(session, company.id, frozenset({branch.id}), customer.id, as_of=spec.due_date)
+        foreign = await InvoiceService().customer_balance(session, uuid4(), frozenset({branch.id}), customer.id, as_of=spec.due_date)
+    assert balance is not None
+    source = balance["evidence_classifications"][1]
+    assert source["company_id"] == str(company.id)
+    assert source["customer_id"] == str(customer.id)
+    assert source["classification"] == "HISTORICAL_SOURCE_EVIDENCE"
+    assert source["source_record_identity"] == "hcp-customer-1"
+    assert source["evidence_digest"] == "a" * 64
+    assert foreign is None
 
 
 @pytest.mark.asyncio

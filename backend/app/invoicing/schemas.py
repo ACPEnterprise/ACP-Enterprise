@@ -1,5 +1,6 @@
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -94,6 +95,20 @@ class InvoiceWorkspaceItem(InvoiceSchema):
     version: int
 
 
+class CustomerEvidenceClassificationItem(InvoiceSchema):
+    company_id: UUID
+    customer_id: UUID
+    source_system: str
+    source_record_identity: str | None
+    as_of: date | None
+    acquired_at: datetime | None
+    evidence_digest: str | None
+    completeness: str
+    conflict_state: str
+    classification: Literal["CURRENT_AUTHORITATIVE", "HISTORICAL_SOURCE_EVIDENCE", "STALE", "CONFLICTING", "PARTIAL", "UNAVAILABLE"]
+    authority: str
+
+
 class CustomerBalanceItem(InvoiceSchema):
     customer_id: UUID
     customer_number: str
@@ -109,3 +124,4 @@ class CustomerBalanceItem(InvoiceSchema):
     native_invoice_count: int
     legacy_evidence_incomplete: bool
     as_of: date
+    evidence_classifications: tuple[CustomerEvidenceClassificationItem, ...] = ()

@@ -33,7 +33,13 @@ describe("Customer operations reliability", () => {
       items: [], total_count: 0, page: 1, page_size: 50,
     }) as never);
     vi.mocked(estimateHooks.useEstimates).mockReturnValue(query({ items: [], total: 0 }) as never);
-    vi.mocked(invoiceHooks.useInvoices).mockReturnValue(query([]) as never);
+    vi.mocked(invoiceHooks.useInvoiceWorkspace).mockReturnValue(query([]) as never);
+    vi.mocked(invoiceHooks.useCustomerBalance).mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: false,
+      isSuccess: true,
+    } as never);
     vi.mocked(paymentHooks.usePayments).mockReturnValue(query([]) as never);
   });
 
@@ -44,7 +50,7 @@ describe("Customer operations reliability", () => {
       expect.objectContaining({ customerId: "customer-no-job" }),
       true,
     );
-    expect(screen.getByText("No Jobs are currently linked in native Job authority.")).toBeInTheDocument();
+    expect(screen.getByText("No current Jobs are linked in native Job authority.")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Operational workspace" })).toBeInTheDocument();
   });
 
@@ -58,7 +64,7 @@ describe("Customer operations reliability", () => {
 
     render(<MemoryRouter><CustomerOperationsPanel customerId="customer-partial" /></MemoryRouter>);
 
-    expect(screen.getByText(/Some related work is unavailable/)).toBeInTheDocument();
-    expect(screen.getByText(/Customer identity remains available/)).toBeInTheDocument();
+    expect(screen.getByText("Related work is partial")).toBeInTheDocument();
+    expect(screen.getByText(/Customer identity remains usable/)).toBeInTheDocument();
   });
 });
