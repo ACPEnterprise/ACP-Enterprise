@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { getOperatorApiError } from "../../api/errors";
+import { schedulingMutationRecovery } from "../scheduling/schedulingRecovery";
 import {
   useDispatchMutations,
   useEligibleTechnicians,
@@ -60,6 +60,7 @@ export function DispatchAssignmentPanel({
     mutations.crew.error ||
     mutations.reconcile.error ||
     mutations.exception.error;
+  const recovery = error ? schedulingMutationRecovery(error, "Dispatch assignment") : null;
   const complete = () => {
     setConfirm(null);
     onClose();
@@ -72,7 +73,7 @@ export function DispatchAssignmentPanel({
           version: assignment.version,
           reason,
         },
-        { onSuccess: complete },
+        { onSuccess: complete, onError: () => setConfirm(null) },
       );
     else if (confirm === "restore" && assignment)
       mutations.reconcile.mutate(
@@ -82,7 +83,7 @@ export function DispatchAssignmentPanel({
           reason,
           resolution: "restore_assigned",
         },
-        { onSuccess: complete },
+        { onSuccess: complete, onError: () => setConfirm(null) },
       );
     else if (confirm === "reconcile" && assignment)
       mutations.exception.mutate(
@@ -92,7 +93,7 @@ export function DispatchAssignmentPanel({
           reason,
           exceptionCode,
         },
-        { onSuccess: complete },
+        { onSuccess: complete, onError: () => setConfirm(null) },
       );
     else if (confirm === "crew-remove" && assignment && removeEmployeeId)
       mutations.crew.mutate(
@@ -103,7 +104,7 @@ export function DispatchAssignmentPanel({
           reason,
           remove: true,
         },
-        { onSuccess: complete },
+        { onSuccess: complete, onError: () => setConfirm(null) },
       );
     else if (confirm === "crew" && assignment && employeeId)
       mutations.crew.mutate(
@@ -113,7 +114,7 @@ export function DispatchAssignmentPanel({
           version: assignment.version,
           reason,
         },
-        { onSuccess: complete },
+        { onSuccess: complete, onError: () => setConfirm(null) },
       );
     else if (employeeId)
       mutations.assign.mutate(
@@ -123,7 +124,7 @@ export function DispatchAssignmentPanel({
           reason,
           version: assignment?.version,
         },
-        { onSuccess: complete },
+        { onSuccess: complete, onError: () => setConfirm(null) },
       );
   };
   return (
@@ -192,9 +193,9 @@ export function DispatchAssignmentPanel({
             </Button>
           </div>
         )}
-      {error && (
-        <Alert variant="danger" title="Assignment not saved">
-          {getOperatorApiError(error, "Dispatch").message}
+      {recovery && (
+        <Alert variant="danger" title={recovery.title}>
+          <strong>{recovery.state.replaceAll("_", " ")}</strong> — {recovery.message}
         </Alert>
       )}
       {technicians.isLoading ? (
