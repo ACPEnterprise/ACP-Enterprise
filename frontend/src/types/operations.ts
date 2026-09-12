@@ -31,6 +31,7 @@ export interface ExistingJobScheduleInput {
   arrival_window_end_at: string;
   expected_duration_minutes: number;
   capacity_units: string;
+  reserve_capacity: boolean;
   employee_id: string | null;
 }
 

@@ -112,6 +112,7 @@ async def schedule_existing_job(
                 arrival_window_end_at=data.arrival_window_end_at,
                 expected_duration_minutes=data.expected_duration_minutes,
                 capacity_units=data.capacity_units,
+                reserve_capacity=data.reserve_capacity,
             ),
         )
     except SchedulingError as error:
