@@ -1,6 +1,6 @@
 # OM1 Enterprise integration queue
 
-Snapshot: 2026-09-12 17:44 America/New_York
+Snapshot: 2026-09-12 17:46 America/New_York
 
 ## Authority and deployed state
 
@@ -325,6 +325,50 @@ npm run apple:preflight
 
 Do not run `beta:aasa:verify`, `apple:release:qualify`, account-authenticated EAS
 commands, signing, or upload during pre-integration qualification.
+
+## Enterprise PR handoff
+
+Run this only after a lane's reconciliation, metadata edits, tests, and
+`git diff --check` pass. It pushes the candidate lane, never the protected
+branch. `PR_TITLE` and `PR_BODY` must describe the effective delta, exact test
+results, warnings, owner gates, rollback, and acceptance steps.
+
+```bash
+set -euo pipefail
+test "$(git branch --show-current)" = "$lane"
+candidate_head=$(git rev-parse HEAD)
+test -n "$PR_TITLE"
+test -f "$PR_BODY"
+git push origin "HEAD:refs/heads/$lane"
+remote_head=$(git ls-remote --heads origin "refs/heads/$lane" | cut -f1)
+test "$remote_head" = "$candidate_head"
+
+pr_number=$(gh pr list --repo ACPEnterprise/ACP-Enterprise \
+  --state open --base customer-management-v1 --head "$lane" \
+  --json number --jq '.[0].number // empty')
+if test -z "$pr_number"; then
+  gh pr create --repo ACPEnterprise/ACP-Enterprise \
+    --base customer-management-v1 --head "$lane" \
+    --title "$PR_TITLE" --body-file "$PR_BODY"
+  pr_number=$(gh pr list --repo ACPEnterprise/ACP-Enterprise \
+    --state open --base customer-management-v1 --head "$lane" \
+    --json number --jq '.[0].number')
+else
+  gh pr edit "$pr_number" --repo ACPEnterprise/ACP-Enterprise \
+    --title "$PR_TITLE" --body-file "$PR_BODY"
+fi
+
+gh pr view "$pr_number" --repo ACPEnterprise/ACP-Enterprise \
+  --json baseRefName,headRefName,headRefOid,isDraft,mergeable,mergeStateStatus | \
+  jq -e --arg lane "$lane" --arg head "$candidate_head" \
+    '.baseRefName == "customer-management-v1" and .headRefName == $lane and .headRefOid == $head and .isDraft == false and .mergeable == "MERGEABLE" and .mergeStateStatus == "CLEAN"'
+```
+
+If GitHub initially reports `UNKNOWN`, wait for mergeability computation and
+rerun only the final `gh pr view` check. Empty GitHub checks are not a pass:
+attach the required local qualification log because ruleset `21781922` does not
+require status checks or approvals. Send the new PR number and candidate head
+back through this queue refresh before Enterprise integrates it.
 
 ## Held candidate
 
