@@ -15,21 +15,28 @@ requires the separate `COMPANY_PRICE_BOOK_ACTIVATE` command.
 
 ## Existing draft and reference content
 
-No repository-owned or sanctioned local HCP Price Book record set was found.
-Reference classification counts for this checkpoint are therefore:
+The reconciled candidate includes a deterministic, digest-bound reference packet
+derived from seven owner-controlled sources. Original files remain outside Git.
+No HCP Price Book dataset was found or used. Record-level reference dispositions
+are:
 
 | Classification | Count |
 | --- | ---: |
 | REFERENCE_ONLY | 0 |
-| DRAFT_CANDIDATE | 0 |
-| INCOMPLETE | 0 |
-| CONFLICTING | 0 |
+| DRAFT_CANDIDATE | 218 |
+| INCOMPLETE | 359 |
+| CONFLICTING | 2 |
 | UNSUITABLE | 0 |
 
-This is not a claim that HCP has no Price Book. It means no evidence packet is
-available in this lane, so no HCP content was inferred, copied, or promoted.
-Current native runtime counts require an authorized read of the deployed
-operator catalog after protected integration; this lane did not access Preview.
+The 218 service candidates retain workbook sheet/row identity and remain
+`NOT_ACTIVATED`; they are draft candidates, not current ACP truth. The 359
+material records are incomplete because vendor identity and effective source
+dates are absent. Two physical rows share source part number `828627` and are
+conflicting until the owner resolves the duplicate. None creates Inventory or a
+customer-facing service automatically. Recommendation and sales documents remain
+document-level reference evidence and are not counted as item records. Current
+native runtime counts require an authorized read of the deployed operator catalog
+after protected integration; this lane did not access Preview.
 
 ## Build workflow
 
