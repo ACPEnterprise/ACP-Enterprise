@@ -1,6 +1,6 @@
 # OM1 Enterprise integration queue
 
-Snapshot: 2026-09-12 17:43 America/New_York
+Snapshot: 2026-09-12 17:44 America/New_York
 
 ## Authority and deployed state
 
@@ -385,6 +385,30 @@ is not a general UI qualification failure.
 7. Mobile: run distribution readiness; do not sign or upload without owner action.
 8. Migration: validate recovered artifacts and builder output; do not execute
    guarded admission without separate authority.
+
+### Acceptance evidence and rejection rules
+
+Create one immutable acceptance record per deployed batch. Bind it to the
+candidate head, integrated PR, protected merge SHA, deployed SHA, environment,
+UTC start/end time, qualification-log location, sanitized correlation/audit
+identifiers, observer, and `ACCEPTED` or `REJECTED` decision. The integrated and
+deployed SHAs must be identical. Never record access tokens, passwords, recovery
+links, Payroll values, provider payloads, Apple credentials, or Customer PII.
+
+| Lane | Minimum acceptance evidence | Reject and stop on |
+|---|---|---|
+| Scheduling | JOB-000306 before/after state; authoritative mutation outcome; repeated-idempotency result; Appointment count | Failure/unknown outcome, duplicate Appointment, changed arrival window, or non-idempotent retry |
+| Customer | Search and selected Customer IDs; Location count; Job/Appointment/Invoice return paths; open/history state; phone-width capture | Missing/foreign data, wrong source limitation, stale retry failure, or unusable phone layout |
+| Employee / Identity | Tested role and Branch; Payroll Setup route result; direct authorization denial; conflict-without-mutation result; delivery/reset audit IDs | Privilege expansion, cross-Branch visibility, mutation on conflict, delivery ambiguity, or reusable/expired reset success |
+| ECO | Alembic current/head output; governed policy create/read/update correlation IDs; immutable event IDs and ordering | Wrong/multiple head, drift, mutable/missing audit event, cross-Company visibility, or unexplained calculation variance |
+| PR #215 / QBO | Payroll evidence projection and QBO source-evidence response; role-negative result; before/after provider connection state | OAuth prompt/change, provider write, fabricated readiness, unauthorized financial visibility, or `mutation_authority` other than `none` |
+| Mobile | App/config version; Preview API target; permission-derived navigation; Job Clock recovery; offline/stale behavior; unsigned preflight result | Production target, stale authority enabling mutation, cross-Branch cache visibility, duplicate clock mutation, or any signing/upload attempt |
+| Migration preparation | Both input SHA-256 values; manifest digest and record count; hold counts; builder output SHA-256 and `execution_allowed` value | Digest/count mismatch, weakened HOLD, global blocker, `execution_allowed = true`, or any admission/executor invocation |
+
+Any rejection freezes that lane, preserves logs and immutable audit evidence,
+and invokes the applicable rollback below. It does not authorize destructive
+cleanup. Continue preparing other independent lanes after refreshing protected
+authority and recomputing their compositions.
 
 ## Rollback
 
