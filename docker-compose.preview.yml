@@ -23,6 +23,8 @@ x-backend-environment: &backend-environment
   IDENTITY_EMAIL_POSTMARK_TOKEN_FILE: ${IDENTITY_EMAIL_POSTMARK_TOKEN_FILE:-/run/secrets/acp/postmark-server-token}
   IDENTITY_EMAIL_SENDER: ${IDENTITY_EMAIL_SENDER:-ACP Employee <no-reply@allcountyhomeservices.com>}
   IDENTITY_EMAIL_ACTIVATION_ORIGIN: https://preview.allcountyhomeservices.com
+  PAYROLL_INPUT_ENCRYPTION_KEY_FILE: /run/secrets/acp/payroll-input-encryption-keyring.json
+  PAYROLL_INPUT_ACTIVE_KID: ${PAYROLL_INPUT_ACTIVE_KID:?Set PAYROLL_INPUT_ACTIVE_KID in .env.preview}
   SECURITY_HEADERS_ENABLED: "true"
   HSTS_ENABLED: "true"
   TRUST_FORWARDED_HEADERS: "true"
