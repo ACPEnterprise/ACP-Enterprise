@@ -40,6 +40,7 @@ class BreakEvenPolicyKind(StrEnum):
 class PolicyApprovalState(StrEnum):
     UNSELECTED = "UNSELECTED"
     DRAFT = "DRAFT"
+    AWAITING_APPROVAL = "AWAITING_APPROVAL"
     APPROVED = "APPROVED"
     SUPERSEDED = "SUPERSEDED"
 
@@ -99,10 +100,9 @@ class BreakEvenPolicySelection:
                     "approved policy requires explicit selection and approver"
                 )
         elif (
-            self.approval_state is PolicyApprovalState.SUPERSEDED
-            and self.supersedes_policy_id is None
+            self.approval_state is PolicyApprovalState.SUPERSEDED and self.value is None
         ):
-            raise ValueError("superseded policy requires predecessor identity")
+            raise ValueError("superseded policy must preserve its historical value")
         _validate_value(self.kind, self.value)
         if _digest(self.canonical_content()) != self.policy_digest:
             raise ValueError("break-even policy digest mismatch")
@@ -121,8 +121,19 @@ class BreakEvenPolicySnapshot:
     def verify(self) -> None:
         for item in self.selections:
             item.verify()
+            if item.approval_state is not PolicyApprovalState.APPROVED:
+                raise ValueError(
+                    "authoritative policy snapshot contains unapproved policy"
+                )
             if item.company_id != self.company_id or item.branch_id != self.branch_id:
                 raise ValueError("foreign policy scope")
+        expected_missing = tuple(
+            kind
+            for kind in BreakEvenPolicyKind
+            if kind not in {item.kind for item in self.selections}
+        )
+        if self.missing_policy != expected_missing:
+            raise ValueError("policy snapshot missing-state mismatch")
         expected = _digest(
             {
                 "contract_version": self.contract_version,
