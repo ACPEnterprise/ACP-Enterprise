@@ -67,7 +67,7 @@ That OM2-C harness extension and its initial evidence packet are now protected a
 
 Current-authority qualification on fresh PostgreSQL databases:
 
-- Alembic: one head, `d4f6h8j0l2n4`, upgrade from zero passed.
+- Alembic: one head, `f6h8j0l2n4p6`, upgrade from zero passed.
 - Extended Employee → Job clock → Timecard → Payroll scenario: 21 passed.
 - Customer, Job, Scheduling, Dispatch, identity, employee access, Timekeeping,
   Payroll reporting, QBO projection/evidence and factory intersections: 441 passed.
@@ -248,8 +248,8 @@ source presence, component tests and simulator results cannot replace these chec
 ## Next action
 
 Protected authority and Preview backend now both report
-`d4eee6f6b0bc178d58654f26f3ef2b9429332ab3`; the observed frontend index SHA-256 is
-`7b1046e7c1bc4373803ccca0205b8413d5e7bb5d0697894556356c18761c7de1`, exactly
+`52dc336766a67fc0c4698244b9894bab0fe65913`; the observed frontend index SHA-256 is
+`79fd5977dc19542464358e77a9eeffe9b4d0a73fbbc333f1f78131ccd9d0a2bb`, exactly
 matching the qualified local production artifact.
 Health and release correspondence pass. Schema-head correspondence and authenticated
 persona execution remain fail-closed until Enterprise supplies the sealed attestation
