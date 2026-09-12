@@ -1,5 +1,7 @@
 # Price Book operator readiness 1
 
+Protected authority: `d4eee6f6b0bc178d58654f26f3ef2b9429332ab3`
+
 ## Foundation inventory
 
 | Capability | State | Evidence / remaining work |
@@ -78,3 +80,17 @@ MyPy, frontend unit tests, TypeScript, ESLint, and the production frontend build
 Because there is no schema change, Alembic zero-to-head qualification is not
 newly required by this candidate; normal protected integration still verifies
 one head/current=head/zero drift.
+
+Local supported-runtime results:
+
+- CPython 3.12: Ruff passed, MyPy passed, compilation passed.
+- Authorization/OpenAPI boundary: 3 passed.
+- Price Book operator UI: 7 passed.
+- TypeScript and focused ESLint passed.
+- Production Vite build passed.
+- Alembic reports one head: `d4f6h8j0l2n4`.
+- Full Price Book suite: 3 passed and 15 PostgreSQL cases could not initialize
+  because the local shell cannot resolve the configured `postgres` host. No
+  application assertion failed; the 15 database-backed cases, including the new
+  cost-security and optimistic-update regression, remain mandatory in protected
+  PostgreSQL CI.
