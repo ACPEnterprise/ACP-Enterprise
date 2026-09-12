@@ -50,4 +50,26 @@ describe("Scheduling hooks", () => {
     expect(invalidate).toHaveBeenCalledWith({ queryKey: appointmentKeys.detail("appointment-1") });
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ["dispatch"] });
   });
+  it("refreshes authoritative projections after a failed or uncertain reschedule", async () => {
+    vi.mocked(schedulingApi.rescheduleAppointment).mockRejectedValue(new Error("uncertain"));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const invalidate = vi.spyOn(client, "invalidateQueries");
+    const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+    const result = renderHook(() => useRescheduleAppointment(), { wrapper });
+    result.result.current.mutate({
+      appointmentId: "appointment-1",
+      input: {
+        expected_version: 2,
+        arrival_window_start_at: "2026-08-13T14:00:00Z",
+        arrival_window_end_at: "2026-08-13T16:00:00Z",
+        expected_duration_minutes: 120,
+        capacity_units: "1.000",
+        reason_code: "operational_adjustment",
+      },
+    });
+    await waitFor(() => expect(result.result.current.isError).toBe(true));
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: appointmentKeys.lists() });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: appointmentKeys.detail("appointment-1") });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["dispatch"] });
+  });
 });
