@@ -40,6 +40,7 @@ from .schemas import (
     SnapshotRequest,
     TaxClassificationCreate,
     TaxClassificationItem,
+    TaxClassificationUpdate,
 )
 from .service import price_book_service
 
@@ -163,6 +164,23 @@ async def create_tax(
         return TaxClassificationItem.model_validate(
             await price_book_service.create_tax(
                 session, context=context, payload=payload
+            )
+        )
+    except PriceBookError as error:
+        raise http_error(error) from error
+
+
+@router.put("/tax-classifications/{tax_id}", response_model=TaxClassificationItem)
+async def update_tax(
+    tax_id: UUID,
+    payload: TaxClassificationUpdate,
+    context: ManageContext,
+    session: DatabaseSession,
+) -> TaxClassificationItem:
+    try:
+        return TaxClassificationItem.model_validate(
+            await price_book_service.update_tax(
+                session, context=context, tax_id=tax_id, payload=payload
             )
         )
     except PriceBookError as error:

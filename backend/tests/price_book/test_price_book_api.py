@@ -13,6 +13,7 @@ def test_price_book_permissions_and_openapi_are_bounded() -> None:
     assert "/api/v1/price-book/operator" in paths
     assert "/api/v1/price-book/categories/{category_id}" in paths
     assert "/api/v1/price-book/service-items/{item_id}" in paths
+    assert "/api/v1/price-book/tax-classifications/{tax_id}" in paths
     assert "/api/v1/price-book/service-items/{item_id}/versions" in paths
     assert "/api/v1/price-book/versions/{version_id}/activate" in paths
     assert "/api/v1/price-book/service-items/{item_id}/snapshots" in paths
