@@ -112,6 +112,30 @@ export interface PayrollOperatingRegister {
   run_digest: string;
 }
 
+export interface PayrollEmployeeSetup {
+  employee_id: string;
+  employee_name: string;
+  employee_number: string;
+  readiness: "READY_FOR_PAYROLL" | "BLOCKED_FOR_PAYROLL";
+  blockers: string[];
+  protected_input_configuration_ready: boolean;
+  compensations: Array<Record<string, unknown> & { id: string; lifecycle: string; version: number }>;
+  inputs: Array<Record<string, unknown> & { id: string; lifecycle: string; key: string; domain: string; version: number }>;
+}
+
+export type CompensationDraft = {
+  effective_start: string; effective_end?: string | null; compensation_type: "hourly" | "salaried";
+  hourly_rate?: string | null; salary_amount?: string | null; salary_frequency?: string | null;
+  worker_class_reference?: string | null; supersedes_authority_id?: string | null; audit_reason: string;
+};
+
+export type PayrollInputDraft = {
+  domain: "tax" | "deduction" | "employer_contribution"; authority_key: string;
+  effective_start: string; effective_end?: string | null; jurisdiction_reference?: string | null;
+  calculation_basis?: string | null; priority?: number | null; public_parameters?: Record<string, unknown>;
+  protected_values?: Record<string, unknown> | null; supersedes_authority_id?: string | null; audit_reason: string;
+};
+
 export async function getPayrollOperationsSummary(): Promise<PayrollOperationsSummary> {
   return (await apiClient.get<PayrollOperationsSummary>("/api/v1/payroll/operations/summary")).data;
 }
@@ -134,4 +158,20 @@ export async function getPayrollPeriodOperations(payPeriodId: string): Promise<P
 
 export async function listPayrollOperatingRegisters(): Promise<PayrollOperatingRegister[]> {
   return (await apiClient.get<PayrollOperatingRegister[]>("/api/v1/payroll/operations/registers")).data;
+}
+
+export async function getPayrollEmployeeSetup(employeeId: string): Promise<PayrollEmployeeSetup> {
+  return (await apiClient.get<PayrollEmployeeSetup>(`/api/v1/payroll/setup/employees/${employeeId}`)).data;
+}
+export async function draftPayrollCompensation(employeeId: string, body: CompensationDraft) {
+  return (await apiClient.post(`/api/v1/payroll/setup/employees/${employeeId}/compensations`, body)).data;
+}
+export async function draftPayrollInput(employeeId: string, body: PayrollInputDraft) {
+  return (await apiClient.post(`/api/v1/payroll/setup/employees/${employeeId}/inputs`, body)).data;
+}
+export async function approvePayrollCompensation(id: string) {
+  return (await apiClient.post(`/api/v1/payroll/setup/compensations/${id}/approve`)).data;
+}
+export async function approvePayrollInput(id: string) {
+  return (await apiClient.post(`/api/v1/payroll/setup/inputs/${id}/approve`)).data;
 }
