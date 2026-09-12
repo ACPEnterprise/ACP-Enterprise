@@ -33,6 +33,9 @@ from .schemas import (
     CategoryItem,
     CategoryUpdate,
     ComponentItem,
+    EffectiveCatalog,
+    EffectiveOption,
+    EffectiveServiceItem,
     OperatorCatalogPage,
     OperatorComponentItem,
     OperatorServiceItem,
@@ -58,6 +61,160 @@ def utc_now() -> datetime:
 
 
 class PriceBookService:
+    async def effective_catalog(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        branch_id: UUID,
+        effective_at: datetime,
+        category_id: UUID | None = None,
+        search: str | None = None,
+    ) -> EffectiveCatalog:
+        """Resolve the customer-safe catalog at one authoritative point in time."""
+        if branch_id not in context.authorized_branch_ids:
+            raise PriceBookNotFound("Branch was not found.")
+        item_query = select(PriceBookServiceItem).where(
+            PriceBookServiceItem.company_id == context.company.id,
+            PriceBookServiceItem.status == "active",
+            or_(
+                PriceBookServiceItem.branch_id.is_(None),
+                PriceBookServiceItem.branch_id == branch_id,
+            ),
+        )
+        if category_id is not None:
+            item_query = item_query.where(
+                PriceBookServiceItem.category_id == category_id
+            )
+        if search and search.strip():
+            term = f"%{search.strip()}%"
+            item_query = item_query.where(
+                or_(
+                    PriceBookServiceItem.name.ilike(term),
+                    PriceBookServiceItem.code.ilike(term),
+                    PriceBookServiceItem.customer_description.ilike(term),
+                )
+            )
+        items = tuple(
+            (
+                await session.scalars(item_query.order_by(PriceBookServiceItem.name))
+            ).all()
+        )
+        if not items:
+            return EffectiveCatalog(effective_at=effective_at, items=())
+
+        item_ids = tuple(item.id for item in items)
+        versions = tuple(
+            (
+                await session.scalars(
+                    select(PriceBookPriceVersion).where(
+                        PriceBookPriceVersion.company_id == context.company.id,
+                        PriceBookPriceVersion.service_item_id.in_(item_ids),
+                        PriceBookPriceVersion.status == "active",
+                        PriceBookPriceVersion.effective_at <= effective_at,
+                        or_(
+                            PriceBookPriceVersion.expires_at.is_(None),
+                            PriceBookPriceVersion.expires_at > effective_at,
+                        ),
+                        or_(
+                            PriceBookPriceVersion.branch_id.is_(None),
+                            PriceBookPriceVersion.branch_id == branch_id,
+                        ),
+                    )
+                )
+            ).all()
+        )
+        versions_by_item: dict[UUID, list[PriceBookPriceVersion]] = {}
+        for version in versions:
+            versions_by_item.setdefault(version.service_item_id, []).append(version)
+
+        categories = {
+            row.id: row
+            for row in (
+                await session.scalars(
+                    select(PriceBookCategory).where(
+                        PriceBookCategory.company_id == context.company.id,
+                        PriceBookCategory.status == "active",
+                    )
+                )
+            ).all()
+        }
+        taxes = {
+            row.id: row
+            for row in (
+                await session.scalars(
+                    select(PriceBookTaxClassification).where(
+                        PriceBookTaxClassification.company_id == context.company.id,
+                        PriceBookTaxClassification.status == "active",
+                    )
+                )
+            ).all()
+        }
+        option_rows = tuple(
+            (
+                await session.execute(
+                    select(PriceBookOption, PriceBookOptionGroup)
+                    .join(
+                        PriceBookOptionGroup,
+                        PriceBookOptionGroup.id == PriceBookOption.option_group_id,
+                    )
+                    .where(
+                        PriceBookOption.company_id == context.company.id,
+                        PriceBookOption.service_item_id.in_(item_ids),
+                        PriceBookOptionGroup.company_id == context.company.id,
+                        PriceBookOptionGroup.status == "active",
+                    )
+                    .order_by(PriceBookOption.position)
+                )
+            ).all()
+        )
+        options_by_item: dict[UUID, list[EffectiveOption]] = {}
+        for option, group in option_rows:
+            options_by_item.setdefault(option.service_item_id, []).append(
+                EffectiveOption(
+                    group_id=group.id,
+                    group_name=group.name,
+                    minimum_selections=group.minimum_selections,
+                    maximum_selections=group.maximum_selections,
+                    option_id=option.id,
+                    option_label=option.label,
+                )
+            )
+
+        resolved: list[EffectiveServiceItem] = []
+        for item in items:
+            candidates = versions_by_item.get(item.id, [])
+            scoped = [row for row in candidates if row.branch_id == branch_id] or [
+                row for row in candidates if row.branch_id is None
+            ]
+            # Ambiguous authority is omitted and will still fail closed at snapshot time.
+            if len(scoped) != 1:
+                continue
+            version = scoped[0]
+            category = categories.get(item.category_id)
+            tax = taxes.get(version.tax_classification_id)
+            if category is None or tax is None:
+                continue
+            resolved.append(
+                EffectiveServiceItem(
+                    item_id=item.id,
+                    item_code=item.code,
+                    item_name=item.name,
+                    customer_description=item.customer_description,
+                    category_id=category.id,
+                    category_name=category.name,
+                    price_version_id=version.id,
+                    unit_price=version.unit_price,
+                    currency=version.currency,
+                    effective_at=version.effective_at,
+                    expires_at=version.expires_at,
+                    tax_classification_name=tax.name,
+                    taxable=tax.taxable,
+                    options=tuple(options_by_item.get(item.id, [])),
+                )
+            )
+        return EffectiveCatalog(effective_at=effective_at, items=tuple(resolved))
+
     @staticmethod
     def _audit(
         session: AsyncSession,
@@ -1309,7 +1466,11 @@ class PriceBookService:
                 "option_group_id": str(payload.option_group_id)
                 if payload.option_group_id
                 else None,
+                "option_group_name": selected_option_group.name
+                if selected_option_group
+                else None,
                 "option_id": str(selected_option.id) if selected_option else None,
+                "option_label": selected_option.label if selected_option else None,
                 "option_group_constraints": (
                     {
                         "minimum_selections": selected_option_group.minimum_selections,

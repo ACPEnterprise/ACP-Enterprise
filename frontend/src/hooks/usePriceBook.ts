@@ -1,8 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as api from "../api/priceBook";
 
-export const priceBookKeys = { all: ["price-book"] as const, catalog: (branch?: string) => ["price-book", "catalog", branch] as const };
+export const priceBookKeys = { all: ["price-book"] as const, catalog: (branch?: string) => ["price-book", "catalog", branch] as const, effective: (branch: string, effectiveAt: string, category?: string, search?: string) => ["price-book", "effective", branch, effectiveAt, category, search] as const };
 export function usePriceBook(branch?: string, enabled = true, operator = false) { return useQuery({ queryKey: [...priceBookKeys.catalog(branch), operator ? "operator" : "reader"], queryFn: () => operator ? api.getOperatorPriceBook(branch) : api.getPriceBook(branch), enabled }); }
+export function useEffectivePriceBook(branch: string, effectiveAt: string, category?: string, search?: string, enabled = true) { return useQuery({ queryKey: priceBookKeys.effective(branch, effectiveAt, category, search), queryFn: () => api.getEffectivePriceBook({ branchId: branch, effectiveAt, categoryId: category, search }), enabled: enabled && Boolean(branch) && Boolean(effectiveAt) }); }
 export function usePriceBookMutations() {
   const client = useQueryClient(); const refresh = () => client.invalidateQueries({ queryKey: priceBookKeys.all });
   return {

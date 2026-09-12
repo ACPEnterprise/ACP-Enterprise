@@ -1,9 +1,10 @@
 import { apiClient } from "./client";
-import type { PriceBookCatalog, PriceBookCategory, PriceBookOperatorCatalog, PriceBookOption, PriceBookOptionGroup, PriceBookServiceItem, PriceBookVersion, TaxClassification } from "../types/priceBook";
+import type { EffectivePriceBookCatalog, PriceBookCatalog, PriceBookCategory, PriceBookOperatorCatalog, PriceBookOption, PriceBookOptionGroup, PriceBookServiceItem, PriceBookVersion, TaxClassification } from "../types/priceBook";
 
 const path = "/api/v1/price-book";
 export async function getPriceBook(branchId?: string): Promise<PriceBookCatalog> { return (await apiClient.get<PriceBookCatalog>(path, { params: branchId ? { branch_id: branchId } : undefined })).data; }
 export async function getOperatorPriceBook(branchId?: string): Promise<PriceBookOperatorCatalog> { return (await apiClient.get<PriceBookOperatorCatalog>(`${path}/operator`, { params: branchId ? { branch_id: branchId } : undefined })).data; }
+export async function getEffectivePriceBook(input: { branchId: string; effectiveAt: string; categoryId?: string; search?: string }): Promise<EffectivePriceBookCatalog> { return (await apiClient.get<EffectivePriceBookCatalog>(`${path}/effective-items`, { params: { branch_id: input.branchId, effective_at: input.effectiveAt, category_id: input.categoryId || undefined, search: input.search || undefined } })).data; }
 export async function createCategory(data: { code: string; name: string }): Promise<PriceBookCategory> { return (await apiClient.post<PriceBookCategory>(`${path}/categories`, data)).data; }
 export async function updateCategory(id: string, data: { expected_version: number; name: string; description?: string; parent_id?: string; status: "active" | "archived" }): Promise<PriceBookCategory> { return (await apiClient.put<PriceBookCategory>(`${path}/categories/${id}`, data)).data; }
 export async function createTax(data: { code: string; name: string; taxable: boolean }): Promise<TaxClassification> { return (await apiClient.post<TaxClassification>(`${path}/tax-classifications`, data)).data; }

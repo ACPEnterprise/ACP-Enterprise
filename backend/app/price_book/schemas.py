@@ -279,3 +279,34 @@ class OperatorCatalogPage(PriceBookSchema):
     option_groups: tuple[OptionGroupItem, ...]
     options: tuple[OptionItem, ...]
     internal_components: tuple[OperatorComponentItem, ...]
+
+
+class EffectiveOption(PriceBookSchema):
+    group_id: UUID
+    group_name: str
+    minimum_selections: int
+    maximum_selections: int
+    option_id: UUID
+    option_label: str
+
+
+class EffectiveServiceItem(PriceBookSchema):
+    item_id: UUID
+    item_code: str
+    item_name: str
+    customer_description: str
+    category_id: UUID
+    category_name: str
+    price_version_id: UUID
+    unit_price: Decimal
+    currency: str
+    effective_at: datetime
+    expires_at: datetime | None
+    tax_classification_name: str
+    taxable: bool
+    options: tuple[EffectiveOption, ...] = ()
+
+
+class EffectiveCatalog(PriceBookSchema):
+    effective_at: datetime
+    items: tuple[EffectiveServiceItem, ...]

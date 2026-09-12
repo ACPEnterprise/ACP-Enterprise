@@ -15,6 +15,16 @@ class EstimateLineInput(EstimateSchema):
     description: str | None = Field(default=None, max_length=4000)
 
 
+class PriceBookSelectionInput(EstimateSchema):
+    branch_id: UUID
+    quantity: Decimal = Field(gt=0)
+    currency: str = Field(pattern=r"^[A-Z]{3}$")
+    effective_at: datetime
+    idempotency_key: str = Field(pattern=r"^[A-Za-z0-9._:-]{8,128}$")
+    option_group_id: UUID | None = None
+    option_id: UUID | None = None
+
+
 class ProposalInput(EstimateSchema):
     branch_id: UUID
     customer_id: UUID

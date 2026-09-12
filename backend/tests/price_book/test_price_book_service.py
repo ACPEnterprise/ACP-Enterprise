@@ -384,6 +384,58 @@ async def test_activation_snapshot_idempotency_and_immutable_history(
 
 
 @pytest.mark.asyncio
+async def test_effective_catalog_resolves_only_current_customer_safe_truth(
+    price_book_fixture,
+):
+    factory, context, branch = price_book_fixture
+    service, item, version, effective = await seed_draft(factory, context, branch)
+    async with factory() as session:
+        group = await service.create_option_group(
+            session,
+            context=context,
+            payload=OptionGroupCreate(
+                code="LEVEL", name="Service level", minimum_selections=1
+            ),
+        )
+    async with factory() as session:
+        option = await service.add_option(
+            session,
+            context=context,
+            group_id=group.id,
+            payload=OptionCreate(service_item_id=item.id, label="Standard", position=1),
+        )
+    async with factory() as session:
+        await service.activate(
+            session,
+            context=context,
+            version_id=version.id,
+            expected_version=1,
+            reason="Available to Estimate operators",
+        )
+    async with factory() as session:
+        before = await service.effective_catalog(
+            session,
+            context=context,
+            branch_id=branch.id,
+            effective_at=effective - timedelta(seconds=1),
+        )
+        current = await service.effective_catalog(
+            session,
+            context=context,
+            branch_id=branch.id,
+            effective_at=effective + timedelta(minutes=1),
+            search="drain",
+        )
+    assert before.items == ()
+    assert len(current.items) == 1
+    assert current.items[0].price_version_id == version.id
+    assert current.items[0].options[0].option_id == option.id
+    serialized = current.model_dump(mode="json")
+    assert "unit_cost" not in str(serialized)
+    assert "internal_description" not in str(serialized)
+
+
+@pytest.mark.asyncio
 async def test_activation_supersedes_transactionally_and_rejects_stale_version(
     price_book_fixture,
 ):
@@ -710,6 +762,8 @@ async def test_historical_superseded_resolution_and_option_snapshot_evidence(
         )
     assert historical.price_version_id == first.id
     assert historical.snapshot_data["option_group_id"] == str(group.id)
+    assert historical.snapshot_data["option_group_name"] == group.name
+    assert historical.snapshot_data["option_label"] == option.label
     assert historical.snapshot_data["option_id"] == str(option.id)
     async with factory() as session:
         current = await service.snapshot(
