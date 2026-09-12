@@ -198,3 +198,49 @@ current backup plus verified-restore receipt. The 13 legacy current-open Appoint
 holds remain bounded and must be represented as held legacy truth, not matched.
 `FULL_HISTORICAL_FINANCIAL_ADMISSION_ALLOWED = FALSE`: in addition, 511 explicit
 financial projections and the financial side of the 170 drift pairs remain held.
+
+## September 12 operational admission finalization
+
+The concrete SQLAlchemy overlay repository now binds `hcp-current-overlay/v1` to a
+completed SOURCE.4 master run and an existing domain-service composition. It owns the
+database transaction, locks the master row, delegates native create/update work to
+the authoritative services, rejects native-identity replacement, and persists source
+state, fingerprints, non-mutating assertions, journals, and receipts under the
+master-run replay authority. Re-execution retrieves and verifies the same receipt.
+It cannot run outside its transaction or against an incomplete SOURCE.4 master run.
+
+The private record-level merge packet has manifest digest
+`e23b7bcf5ac34ea650184afacc711af0c7028e83a6b1f7405e2ae17e13441eb2`
+and file SHA-256
+`ce9d4ea1e048a70b7a8a5b85fab33fd1a0568eb5cb1356229187144ab8bc7558`.
+It contains 503 current operational assertions: 55 Customer creates, 20 Customer
+updates, one non-destructive Customer removal assertion, 63 Location creates, 49 Job
+creates, 254 Job updates, eight Job holds, 47 Appointment creates, and six Appointment
+updates. The other 14 Location-less Jobs are unchanged sealed records and remain
+bounded by the separate hold packet rather than being incorrectly represented as
+delta mutations.
+
+The private record-level hold packet has SHA-256
+`c13cb0b565d2b86d34365f12d565f37f0e7ba6ec6bfa0d65de7f4a81ee088324`.
+For the 13 legacy Appointment holds, every native record is an undated, unassigned
+draft. Ten bridged provider Jobs expose a specific historical provider Appointment;
+because the draft has no time/window identity, neither exact reuse nor safe unrelated
+creation is provable, so those ten are `HOLD_DUPLICATE_RISK`. Three provider Job
+relations expose no Appointment and remain `HOLD_INSUFFICIENT_EVIDENCE`. None is
+current or future September 12 calendar work. Counts are therefore: exact reuse zero,
+safe create zero, safe update zero, duplicate-risk hold ten, and insufficient-evidence
+hold three.
+
+All 22 Location-less open Jobs are `SAFE_OPERATIONAL_HOLD`: the Job identity,
+Customer identity, status, and source evidence remain in the hold packet while the
+other operational records proceed. The existing Job and Appointment models require a
+real `service_location_id`, so `SAFE_ADMIT_WITH_LOCATION_UNRESOLVED` is zero; inventing
+one is prohibited. `TRUE_GLOBAL_BLOCKER` is zero because the held Jobs have no parent
+role for unrelated source records and the overlay parent guard excludes them and their
+children from mutation.
+
+`CURRENT_OPERATIONAL_ADMISSION_ALLOWED = TRUE`, conditional only on Enterprise
+supplying and binding the fresh Preview backup digest, isolated verified-restore
+receipt, and current deployed/protected execution authority. Historical and financial
+admission remains false. No Preview, HCP, QBO, or Production mutation occurred during
+packet construction.

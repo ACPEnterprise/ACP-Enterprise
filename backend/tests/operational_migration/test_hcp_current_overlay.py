@@ -193,6 +193,20 @@ async def test_requires_parent_closure_and_matching_authority() -> None:
             rollback_backup_digest=BACKUP,
         )
 
+    held_parent = record("parent", OverlayAssertion.HOLD)
+    child = record(
+        "child",
+        OverlayAssertion.CREATE,
+        parents=(held_parent.key,),
+    )
+    with pytest.raises(ValueError, match="parent is non-operational"):
+        await CurrentOverlayExecutor().execute(
+            repository,
+            manifest=manifest(held_parent, child),
+            expected_base_source4_digest=DIGEST,
+            rollback_backup_digest=BACKUP,
+        )
+
 
 def test_manifest_is_immutable_and_rejects_invalid_assertions() -> None:
     value = manifest(record("new", OverlayAssertion.CREATE))

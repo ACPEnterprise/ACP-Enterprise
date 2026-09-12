@@ -125,6 +125,18 @@ class CurrentOverlayManifest:
         ):
             raise ValueError("current overlay digest mismatch")
 
+    def private_payload(self) -> dict[str, object]:
+        """Return the complete executable packet; callers must protect source data."""
+        self.verify()
+        return _manifest_payload(
+            self.base_source4_digest,
+            self.delta_digest,
+            self.company_id,
+            self.branch_id,
+            self.acquired_at,
+            self.records,
+        ) | {"digest": self.digest}
+
 
 @dataclass(frozen=True)
 class OverlaySourceState:
@@ -213,9 +225,19 @@ class CurrentOverlayExecutor:
         rollback_backup_digest: str,
     ) -> OverlayExecutionReceipt:
         keys = {item.key for item in manifest.records}
+        blocked_keys = {
+            item.key
+            for item in manifest.records
+            if item.assertion in {OverlayAssertion.HOLD, OverlayAssertion.REMOVE}
+        }
         journal: list[OverlayJournalEntry] = []
         for record in manifest.records:
             for parent in record.parent_keys:
+                if record.assertion in {
+                    OverlayAssertion.CREATE,
+                    OverlayAssertion.UPDATE,
+                } and parent in blocked_keys:
+                    raise ValueError("overlay parent is non-operational")
                 if parent not in keys and not await repository.source_exists(parent):
                     raise ValueError("overlay parent source identity missing")
             state = await repository.source_state(record.key)
