@@ -29,6 +29,13 @@ Job detail now offers permission-gated Customer navigation and preserves the
 Scheduling return path when opening its Customer or linked Appointment. This
 is navigation composition only and does not modify Customer implementation.
 
+Customer detail now offers separate, permission-gated actions to view existing
+Jobs or create a new Job for an authorized Service Location. The existing Jobs
+API already owned Customer and Service Location filtering; the frontend now
+passes both authoritative identifiers and clearly labels the bounded result
+scope. The CSR can return to the full Jobs roster without encountering or
+copying internal identifiers.
+
 ## Partial and failure states
 
 An Appointment/Dispatch projection failure offers an explicit bounded retry.
