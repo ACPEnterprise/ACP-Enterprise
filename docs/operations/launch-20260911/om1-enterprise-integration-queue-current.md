@@ -142,6 +142,15 @@ Price Book `49e852aa8c931c8042de0634b68d993b0e02452e` supersedes the smaller
 2. fail-closed `effective_catalog` multiple-match handling;
 3. review-route authorization matrix coverage.
 
+Independent PostgreSQL qualification on 2026-09-12 composed the exact candidate
+onto protected authority at tree `34ef9d4e85b7e2f3937abe386a03c55078504b34`:
+26 tests passed and one failed. In
+`test_operator_catalog_and_optimistic_metadata_management`, the expected stale
+tax conflict deassociated the enclosing fixture transaction and removed the
+seeded category; the following category update raised `PriceBookNotFound`.
+The run also emitted ten SQLAlchemy transaction-deassociation warnings. This is
+the deterministic isolation blocker and is not an intermittent failure.
+
 ## Secrets and owner gates
 
 - Preserve the QBO OAuth owner gate; no active candidate requires new OAuth.
