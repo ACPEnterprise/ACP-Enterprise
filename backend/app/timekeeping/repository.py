@@ -28,9 +28,11 @@ class TimekeepingRepository:
         *,
         company_id: UUID,
         branch_id: UUID,
+        employee_id: UUID,
         job_id: UUID,
         appointment_id: UUID | None,
     ) -> bool:
+        from app.dispatch.models import DispatchAssignment, DispatchCrewMember
         from app.jobs.models import Job, JobAppointmentLink
 
         if not await session.scalar(
@@ -43,18 +45,42 @@ class TimekeepingRepository:
             )
         ):
             return False
-        if appointment_id is None:
-            return True
+        if appointment_id is not None and not await session.scalar(
+            select(
+                exists().where(
+                    JobAppointmentLink.company_id == company_id,
+                    JobAppointmentLink.branch_id == branch_id,
+                    JobAppointmentLink.job_id == job_id,
+                    JobAppointmentLink.appointment_id == appointment_id,
+                )
+            )
+        ):
+            return False
+        crew_assignment_ids = select(DispatchCrewMember.assignment_id).where(
+            DispatchCrewMember.company_id == company_id,
+            DispatchCrewMember.employee_id == employee_id,
+            DispatchCrewMember.status == "active",
+        )
+        assignment_scope = (
+            DispatchAssignment.company_id == company_id,
+            DispatchAssignment.branch_id == branch_id,
+            DispatchAssignment.job_id == job_id,
+            DispatchAssignment.status.in_(
+                ("assigned", "acknowledged", "reconciliation_required")
+            ),
+            (
+                (DispatchAssignment.primary_employee_id == employee_id)
+                | (DispatchAssignment.id.in_(crew_assignment_ids))
+            ),
+        )
+        appointment_scope = (
+            (DispatchAssignment.appointment_id == appointment_id,)
+            if appointment_id is not None
+            else ()
+        )
         return bool(
             await session.scalar(
-                select(
-                    exists().where(
-                        JobAppointmentLink.company_id == company_id,
-                        JobAppointmentLink.branch_id == branch_id,
-                        JobAppointmentLink.job_id == job_id,
-                        JobAppointmentLink.appointment_id == appointment_id,
-                    )
-                )
+                select(exists().where(*assignment_scope, *appointment_scope))
             )
         )
 
