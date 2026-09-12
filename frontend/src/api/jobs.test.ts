@@ -10,8 +10,8 @@ describe("Jobs API", () => {
   beforeEach(() => vi.clearAllMocks());
   it("maps list filters and detail to the canonical endpoint", async () => {
     get.mockResolvedValueOnce({ data: { items: [], page: 2, page_size: 20, total_count: 0, total_pages: 0 } });
-    await listJobs({ searchText: " boiler ", status: ["ready"], priority: ["urgent"], jobType: ["repair"], branchId: "branch-1", page: 2, pageSize: 20, sortField: "priority", sortDirection: "asc" });
-    expect(get).toHaveBeenCalledWith("/api/v1/jobs", { params: expect.objectContaining({ search_text: " boiler ", status: ["ready"], priority: ["urgent"], branch_id: "branch-1", page: 2 }) });
+    await listJobs({ searchText: " boiler ", status: ["ready"], priority: ["urgent"], jobType: ["repair"], branchId: "branch-1", customerId: "customer-1", serviceLocationId: "location-1", page: 2, pageSize: 20, sortField: "priority", sortDirection: "asc" });
+    expect(get).toHaveBeenCalledWith("/api/v1/jobs", { params: expect.objectContaining({ search_text: " boiler ", status: ["ready"], priority: ["urgent"], branch_id: "branch-1", customer_id: "customer-1", service_location_id: "location-1", page: 2 }) });
     get.mockResolvedValueOnce({ data: { id: "job-1" } }); await getJob("job-1");
     expect(get).toHaveBeenLastCalledWith("/api/v1/jobs/job-1");
   });

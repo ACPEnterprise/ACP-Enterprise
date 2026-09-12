@@ -39,6 +39,7 @@ function displayName(customer: {
 
 export function CustomerDetailView({ customerId, onBack }: CustomerDetailViewProps) {
   const canManage = useHasPermission("COMPANY_CUSTOMER_MANAGE");
+  const canReadJobs = useHasPermission("COMPANY_JOB_READ");
   const canManageJobs = useHasPermission("COMPANY_JOB_MANAGE");
   const detail = useCustomerDetail(customerId);
   const mutations = useCustomerMutations(customerId);
@@ -253,6 +254,7 @@ export function CustomerDetailView({ customerId, onBack }: CustomerDetailViewPro
               <div className="flex min-w-0 flex-wrap justify-between gap-3"><div className="flex min-w-0 gap-3"><MapPin size={18} className="mt-0.5 shrink-0 text-action-primary" /><div className="min-w-0 break-words"><p className="font-medium">{property.address_line_1}</p>{property.address_line_2 && <p className="text-sm text-content-muted">{property.address_line_2}</p>}<p className="text-sm text-content-muted">{property.city}, {property.state} {property.postal_code}</p></div></div>{property.is_primary && <span className="h-fit rounded-full bg-status-information/15 px-2 py-1 text-xs text-status-information">Primary</span>}</div>
               <p className="mt-3 text-xs text-content-muted">{property.property_type.replaceAll("_", " ")} · {property.sewer_septic ?? "waste system unknown"}</p>
               {canManage && !archived && <button type="button" onClick={() => setEditingProperty(property)} className="mt-3 text-sm text-action-primary">Edit property</button>}
+              {canReadJobs && <Link className="mt-3 ml-4 inline-block text-sm font-semibold text-action-primary" to={`/jobs?customerId=${encodeURIComponent(customer.id)}&locationId=${encodeURIComponent(property.id)}`}>View Jobs for this Location</Link>}
               {canManageJobs && !archived && <Link className="mt-3 ml-4 inline-block text-sm text-action-primary" to={`/jobs?create=1&customerId=${encodeURIComponent(customer.id)}&locationId=${encodeURIComponent(property.id)}`}>Create Job for this Location</Link>}
             </article>
           ))}

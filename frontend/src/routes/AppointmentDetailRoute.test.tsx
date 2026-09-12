@@ -17,8 +17,8 @@ vi.mock("../hooks/useScheduling");
 
 const appointment = { id: "appointment-1", appointment_number: "APT-000001", branch_id: "branch-1", customer_id: "customer-1", service_location_id: "location-1", status: "scheduled", arrival_window_start_at: "2026-07-24T13:00:00Z", arrival_window_end_at: "2026-07-24T15:00:00Z", expected_duration_minutes: 90 } as AppointmentDetail;
 
-function renderRoute() {
-  return render(<MemoryRouter initialEntries={["/appointments/appointment-1"]}><Routes><Route path="/appointments/:appointmentId" element={<AppointmentDetailRoute />} /></Routes></MemoryRouter>);
+function renderRoute(entry = "/appointments/appointment-1") {
+  return render(<MemoryRouter initialEntries={[entry]}><Routes><Route path="/appointments/:appointmentId" element={<AppointmentDetailRoute />} /></Routes></MemoryRouter>);
 }
 
 describe("AppointmentDetailRoute", () => {
@@ -35,6 +35,17 @@ describe("AppointmentDetailRoute", () => {
     expect(screen.getByRole("heading", { name: "APT-000001" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "JOB-000001" })).toHaveAttribute("href", "/jobs/job-1");
     expect(screen.queryByRole("button", { name: "Create Job" })).not.toBeInTheDocument();
+  });
+  it("preserves a validated Scheduling return path through Appointment and Job detail", () => {
+    vi.mocked(useJobForAppointment).mockReturnValue({ isLoading: false, isError: false, data: { items: [{ id: "job-1", job_number: "JOB-000001", status: "ready" }] } } as never);
+    renderRoute("/appointments/appointment-1?returnTo=%2Fscheduling%3Fdate%3D2026-08-13%26view%3Dmonth");
+    expect(screen.getByRole("link", { name: "Back to Scheduling" })).toHaveAttribute("href", "/scheduling?date=2026-08-13&view=month");
+    expect(screen.getByRole("link", { name: "Open Job" })).toHaveAttribute("href", "/jobs/job-1?returnTo=%2Fscheduling%3Fdate%3D2026-08-13%26view%3Dmonth");
+  });
+  it("rejects a foreign return URL", () => {
+    vi.mocked(useJobForAppointment).mockReturnValue({ isLoading: false, isError: false, data: { items: [] } } as never);
+    renderRoute("/appointments/appointment-1?returnTo=https%3A%2F%2Fevil.example%2Fsteal");
+    expect(screen.getByRole("link", { name: "Back to Scheduling" })).toHaveAttribute("href", "/scheduling");
   });
   it("offers creation for an eligible unlinked Appointment", async () => {
     vi.mocked(useJobForAppointment).mockReturnValue({ isLoading: false, isError: false, data: { items: [] } } as never);
