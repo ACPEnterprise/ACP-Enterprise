@@ -640,7 +640,7 @@ export function WorkforceRoute() {
               <a className="text-action-primary underline" href="#employee-personal">Personal</a>
               <a className="text-action-primary underline" href="#employee-access-heading">Role / Permissions</a>
               {canReviewTime && <a className="text-action-primary underline" href={`#timecard-${detail.data.employee_id}`}>Time / Attendance</a>}
-              {permissionCodes.includes("COMPANY_PAYROLL_REPORTING_READ") && <Link className="text-action-primary underline" to={`/payroll?employee=${detail.data.employee_id}`}>Pay</Link>}
+              {permissionCodes.includes("COMPANY_PAYROLL_REPORTING_READ") && <Link className="text-action-primary underline" to={`/payroll?employee=${detail.data.employee_id}#payroll-employee-${detail.data.employee_id}`}>Payroll setup</Link>}
             </nav>
             <section id="employee-personal" className="mt-4 scroll-mt-4" aria-label="Employee personal and work identity">
               <dl className="grid gap-3 text-sm sm:grid-cols-3">

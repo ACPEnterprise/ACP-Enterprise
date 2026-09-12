@@ -25,6 +25,7 @@ describe("IdentityOnboardingRoute", () => {
     await user.click(screen.getByRole("button", { name: "Send Invite" }));
     expect(api.planEmployeeOnboarding).toHaveBeenCalledWith(expect.objectContaining({ role_ids: ["technician"], additional_permission_ids: [], branch_id: "main" }));
     expect(api.initiateEmployeeBetaOnboarding).toHaveBeenCalledTimes(1); expect(await screen.findByText("Employee invited. Delivery status is shown below.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "View Team" })).toHaveAttribute("href", "/employees");
   });
   it("shows only the five standard owner-facing role choices", async () => {
     renderPage(); const select = (await screen.findAllByRole("combobox"))[0];
