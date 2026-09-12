@@ -2,6 +2,10 @@ from datetime import date, datetime, timezone
 from types import SimpleNamespace
 from uuid import uuid4
 
+from app.workforce.employee_administration import (
+    MOBILE_REQUIRED_PERMISSION_CODES,
+    EmployeeAdministrationService,
+)
 from app.workforce.records import (
     WorkforceBranchEligibilityRecord,
     WorkforceCapabilityProfileRecord,
@@ -90,3 +94,46 @@ def test_public_workforce_contract_cannot_expose_payroll_material() -> None:
     forbidden = {"compensation", "tax", "deduction", "bank", "net_pay", "pay_rate"}
     assert not forbidden.intersection(WorkforceEmployeeDetail.model_fields)
     assert "availability" in WorkforceEmployeeDetail.model_fields
+
+
+def test_mobile_readiness_uses_effective_permissions_not_role_names() -> None:
+    access, mobile, blockers = EmployeeAdministrationService._access_and_mobile_readiness(
+        employee_status="active",
+        membership_status="active",
+        user_status="active",
+        has_branch_access=True,
+        effective_permission_codes=MOBILE_REQUIRED_PERMISSION_CODES,
+    )
+    assert (access, mobile, blockers) == ("ACTIVE", "READY", ())
+
+    missing = MOBILE_REQUIRED_PERMISSION_CODES - {"COMPANY_JOB_EXECUTE"}
+    access, mobile, blockers = EmployeeAdministrationService._access_and_mobile_readiness(
+        employee_status="active",
+        membership_status="active",
+        user_status="active",
+        has_branch_access=True,
+        effective_permission_codes=missing,
+    )
+    assert access == "ACTIVE"
+    assert mobile == "BLOCKED"
+    assert blockers == ("mobile_permissions_missing",)
+
+
+def test_employee_access_status_distinguishes_invited_and_disabled() -> None:
+    invited = EmployeeAdministrationService._access_and_mobile_readiness(
+        employee_status="active",
+        membership_status="invited",
+        user_status="invited",
+        has_branch_access=True,
+        effective_permission_codes=frozenset(),
+    )
+    assert invited[0] == "INVITED"
+    disabled = EmployeeAdministrationService._access_and_mobile_readiness(
+        employee_status="inactive",
+        membership_status="active",
+        user_status="active",
+        has_branch_access=True,
+        effective_permission_codes=MOBILE_REQUIRED_PERMISSION_CODES,
+    )
+    assert disabled[0] == "DISABLED"
+    assert "employee_inactive" in disabled[2]
