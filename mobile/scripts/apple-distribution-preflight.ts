@@ -9,6 +9,7 @@ const info = readFileSync("ios/ACPEmployee/Info.plist", "utf8");
 const privacy = readFileSync("ios/ACPEmployee/PrivacyInfo.xcprivacy", "utf8");
 const entitlements = readFileSync("ios/ACPEmployee/ACPEmployee.entitlements", "utf8");
 const project = readFileSync("ios/ACPEmployee.xcodeproj/project.pbxproj", "utf8");
+const previewConfig = JSON.parse(execFileSync("npx", ["expo", "config", "--json"], { encoding: "utf8", env: { ...process.env, EXPO_PUBLIC_APP_ENV: "preview", EXPO_PUBLIC_API_BASE_URL: contract.previewDistribution.apiBaseUrl, EXPO_PUBLIC_PRODUCTION_ACTIVATED: "false" } }));
 
 function assert(value: unknown, message: string): asserts value { if (!value) throw new Error(message); }
 assert(contract.appleMutationAuthorized === false && contract.uploadAuthorized === false, "Apple mutation/upload must remain disabled");
@@ -16,6 +17,7 @@ assert(app.ios.bundleIdentifier === contract.bundleIdentifier && project.include
 assert(app.version === contract.currentLocalCandidate.version && app.ios.buildNumber === contract.currentLocalCandidate.build, "Version candidate mismatch");
 assert(contract.currentLocalCandidate.uploaded === false && contract.versionPolicy.reuseUploadedBuild === false, "Build reuse must fail closed");
 assert(eas.build.beta.channel === "preview" && eas.build.beta.env.EXPO_PUBLIC_API_BASE_URL === contract.previewDistribution.apiBaseUrl, "Beta is not Preview-pinned");
+assert(previewConfig.extra.environment === "preview" && previewConfig.extra.apiBaseUrl === contract.previewDistribution.apiBaseUrl && previewConfig.extra.productionActivated === false, "Resolved native Preview configuration mismatch");
 assert(eas.build.production.env.EXPO_PUBLIC_PRODUCTION_ACTIVATED === "false" && eas.build.production.env.EXPO_PUBLIC_API_BASE_URL.includes("example.invalid"), "Production must remain unusable");
 assert(project.includes("IPHONEOS_DEPLOYMENT_TARGET = 16.4") && (project.match(/TARGETED_DEVICE_FAMILY = 1;/g) ?? []).length === 2 && app.ios.supportsTablet === false && app.orientation === "portrait", "Device/deployment contract mismatch");
 assert(entitlements.includes(contract.universalLinks.associatedDomain), "Associated Domain missing");
