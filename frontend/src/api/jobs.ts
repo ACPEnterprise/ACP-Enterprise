@@ -10,6 +10,7 @@ export async function listJobs(query: JobListParams): Promise<PaginatedJobs> {
     sort_field: query.sortField, sort_direction: query.sortDirection,
     appointment_id: query.appointmentId,
     customer_id: query.customerId,
+    service_location_id: query.serviceLocationId,
   } });
   return response.data;
 }

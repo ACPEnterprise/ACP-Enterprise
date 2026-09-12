@@ -18,7 +18,7 @@ vi.mock("../components/jobs/CreateJobPanel", () => ({
   CreateJobPanel: () => <div>Create Job panel</div>,
 }));
 
-const renderRoute = () => render(<MemoryRouter><JobsRoute /></MemoryRouter>);
+const renderRoute = (entry = "/jobs") => render(<MemoryRouter initialEntries={[entry]}><JobsRoute /></MemoryRouter>);
 
 describe("JobsRoute authorization", () => {
   beforeEach(() => {
@@ -44,5 +44,13 @@ describe("JobsRoute authorization", () => {
     permissions = new Set(["COMPANY_JOB_READ", "COMPANY_JOB_MANAGE"]);
     renderRoute();
     expect(screen.getByRole("button", { name: "Create Job" })).toBeVisible();
+  });
+
+  it("filters existing Jobs by Customer and Service Location context", () => {
+    permissions = new Set(["COMPANY_JOB_READ"]);
+    renderRoute("/jobs?customerId=customer-1&locationId=location-1");
+    expect(screen.getByText(/Showing only Jobs for the Customer and Service Location/)).toBeVisible();
+    expect(screen.getByRole("link", { name: "Show all Jobs" })).toHaveAttribute("href", "/jobs");
+    expect(useJobs).toHaveBeenCalledWith(expect.objectContaining({ customerId: "customer-1", serviceLocationId: "location-1" }), true);
   });
 });
