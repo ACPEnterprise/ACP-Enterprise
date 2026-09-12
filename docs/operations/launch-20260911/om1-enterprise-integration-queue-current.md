@@ -112,6 +112,13 @@ Retain the 138-test qualification count. Run Mobile tests, typecheck, lint,
 configuration validation, and Apple preflight. Signing/upload remains an owner
 operation.
 
+Independent qualification on 2026-09-12 composed the exact head onto protected
+authority at tree `fad3ab879576b7bfb392c8e30e68ed6df63e2425`: all 18 suites
+and 138 tests passed, followed by clean typecheck, lint, configuration
+validation, and the non-mutating Apple distribution preflight. Jest emitted
+React `VirtualizedList` updates-not-wrapped-in-`act(...)` warnings; these did not
+fail the run but should remain visible in final qualification evidence.
+
 ## Held candidate
 
 Price Book `49e852aa8c931c8042de0634b68d993b0e02452e` supersedes the smaller
