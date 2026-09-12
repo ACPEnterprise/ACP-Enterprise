@@ -23,7 +23,9 @@ from .schemas import (
     CatalogPage,
     CategoryCreate,
     CategoryItem,
+    CategoryUpdate,
     LifecycleRequest,
+    OperatorCatalogPage,
     OptionCreate,
     OptionGroupCreate,
     OptionGroupItem,
@@ -33,6 +35,7 @@ from .schemas import (
     PriceVersionUpdate,
     ServiceItem,
     ServiceItemCreate,
+    ServiceItemUpdate,
     SnapshotItem,
     SnapshotRequest,
     TaxClassificationCreate,
@@ -101,6 +104,20 @@ async def catalog(
         raise http_error(error) from error
 
 
+@router.get("/operator", response_model=OperatorCatalogPage)
+async def operator_catalog(
+    context: ManageContext,
+    session: DatabaseSession,
+    branch_id: Annotated[UUID | None, Query()] = None,
+) -> OperatorCatalogPage:
+    try:
+        return await price_book_service.operator_catalog(
+            session, context=context, branch_id=branch_id
+        )
+    except PriceBookError as error:
+        raise http_error(error) from error
+
+
 @router.post(
     "/categories", response_model=CategoryItem, status_code=status.HTTP_201_CREATED
 )
@@ -111,6 +128,23 @@ async def create_category(
         return CategoryItem.model_validate(
             await price_book_service.create_category(
                 session, context=context, payload=payload
+            )
+        )
+    except PriceBookError as error:
+        raise http_error(error) from error
+
+
+@router.put("/categories/{category_id}", response_model=CategoryItem)
+async def update_category(
+    category_id: UUID,
+    payload: CategoryUpdate,
+    context: ManageContext,
+    session: DatabaseSession,
+) -> CategoryItem:
+    try:
+        return CategoryItem.model_validate(
+            await price_book_service.update_category(
+                session, context=context, category_id=category_id, payload=payload
             )
         )
     except PriceBookError as error:
@@ -184,6 +218,23 @@ async def create_item(
         return ServiceItem.model_validate(
             await price_book_service.create_item(
                 session, context=context, payload=payload
+            )
+        )
+    except PriceBookError as error:
+        raise http_error(error) from error
+
+
+@router.put("/service-items/{item_id}", response_model=ServiceItem)
+async def update_item(
+    item_id: UUID,
+    payload: ServiceItemUpdate,
+    context: ManageContext,
+    session: DatabaseSession,
+) -> ServiceItem:
+    try:
+        return ServiceItem.model_validate(
+            await price_book_service.update_item(
+                session, context=context, item_id=item_id, payload=payload
             )
         )
     except PriceBookError as error:
