@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Annotated
 from uuid import UUID
 
@@ -20,10 +21,16 @@ from .errors import (
 from .schemas import (
     ActivationRequest,
     AuditItem,
+    BulkDraftRequest,
+    BulkDraftResult,
+    BulkDraftValidation,
     CatalogPage,
     CategoryCreate,
     CategoryItem,
+    CategoryUpdate,
+    EffectiveCatalog,
     LifecycleRequest,
+    OperatorCatalogPage,
     OptionCreate,
     OptionGroupCreate,
     OptionGroupItem,
@@ -33,10 +40,12 @@ from .schemas import (
     PriceVersionUpdate,
     ServiceItem,
     ServiceItemCreate,
+    ServiceItemUpdate,
     SnapshotItem,
     SnapshotRequest,
     TaxClassificationCreate,
     TaxClassificationItem,
+    TaxClassificationUpdate,
 )
 from .service import price_book_service
 
@@ -101,6 +110,72 @@ async def catalog(
         raise http_error(error) from error
 
 
+@router.get("/operator", response_model=OperatorCatalogPage)
+async def operator_catalog(
+    context: ManageContext,
+    session: DatabaseSession,
+    branch_id: Annotated[UUID | None, Query()] = None,
+) -> OperatorCatalogPage:
+    try:
+        return await price_book_service.operator_catalog(
+            session, context=context, branch_id=branch_id
+        )
+    except PriceBookError as error:
+        raise http_error(error) from error
+
+
+@router.get("/effective-items", response_model=EffectiveCatalog)
+async def effective_items(
+    context: ReadContext,
+    session: DatabaseSession,
+    branch_id: Annotated[UUID, Query()],
+    effective_at: Annotated[datetime, Query()],
+    category_id: Annotated[UUID | None, Query()] = None,
+    search: Annotated[str | None, Query(max_length=200)] = None,
+) -> EffectiveCatalog:
+    try:
+        return await price_book_service.effective_catalog(
+            session,
+            context=context,
+            branch_id=branch_id,
+            effective_at=effective_at,
+            category_id=category_id,
+            search=search,
+        )
+    except PriceBookError as error:
+        raise http_error(error) from error
+
+
+@router.post("/bulk-drafts/validate", response_model=BulkDraftValidation)
+async def validate_bulk_drafts(
+    payload: BulkDraftRequest,
+    context: ManageContext,
+    session: DatabaseSession,
+) -> BulkDraftValidation:
+    try:
+        return await price_book_service.validate_bulk_drafts(
+            session, context=context, payload=payload
+        )
+    except PriceBookError as error:
+        raise http_error(error) from error
+
+
+@router.post(
+    "/bulk-drafts", response_model=BulkDraftResult, status_code=status.HTTP_201_CREATED
+)
+async def create_bulk_drafts(
+    payload: BulkDraftRequest,
+    context: ManageContext,
+    session: DatabaseSession,
+) -> BulkDraftResult:
+    try:
+        return await price_book_service.create_bulk_drafts(
+            session, context=context, payload=payload
+        )
+    except PriceBookError as error:
+        raise http_error(error) from error
+
+
 @router.post(
     "/categories", response_model=CategoryItem, status_code=status.HTTP_201_CREATED
 )
@@ -111,6 +186,23 @@ async def create_category(
         return CategoryItem.model_validate(
             await price_book_service.create_category(
                 session, context=context, payload=payload
+            )
+        )
+    except PriceBookError as error:
+        raise http_error(error) from error
+
+
+@router.put("/categories/{category_id}", response_model=CategoryItem)
+async def update_category(
+    category_id: UUID,
+    payload: CategoryUpdate,
+    context: ManageContext,
+    session: DatabaseSession,
+) -> CategoryItem:
+    try:
+        return CategoryItem.model_validate(
+            await price_book_service.update_category(
+                session, context=context, category_id=category_id, payload=payload
             )
         )
     except PriceBookError as error:
@@ -129,6 +221,23 @@ async def create_tax(
         return TaxClassificationItem.model_validate(
             await price_book_service.create_tax(
                 session, context=context, payload=payload
+            )
+        )
+    except PriceBookError as error:
+        raise http_error(error) from error
+
+
+@router.put("/tax-classifications/{tax_id}", response_model=TaxClassificationItem)
+async def update_tax(
+    tax_id: UUID,
+    payload: TaxClassificationUpdate,
+    context: ManageContext,
+    session: DatabaseSession,
+) -> TaxClassificationItem:
+    try:
+        return TaxClassificationItem.model_validate(
+            await price_book_service.update_tax(
+                session, context=context, tax_id=tax_id, payload=payload
             )
         )
     except PriceBookError as error:
@@ -184,6 +293,23 @@ async def create_item(
         return ServiceItem.model_validate(
             await price_book_service.create_item(
                 session, context=context, payload=payload
+            )
+        )
+    except PriceBookError as error:
+        raise http_error(error) from error
+
+
+@router.put("/service-items/{item_id}", response_model=ServiceItem)
+async def update_item(
+    item_id: UUID,
+    payload: ServiceItemUpdate,
+    context: ManageContext,
+    session: DatabaseSession,
+) -> ServiceItem:
+    try:
+        return ServiceItem.model_validate(
+            await price_book_service.update_item(
+                session, context=context, item_id=item_id, payload=payload
             )
         )
     except PriceBookError as error:

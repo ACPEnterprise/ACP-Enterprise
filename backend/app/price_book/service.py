@@ -28,10 +28,23 @@ from .models import (
 )
 from .schemas import (
     AuditItem,
+    BulkDraftCreated,
+    BulkDraftIssue,
+    BulkDraftRequest,
+    BulkDraftResult,
+    BulkDraftRowValidation,
+    BulkDraftValidation,
     CatalogPage,
     CategoryCreate,
     CategoryItem,
+    CategoryUpdate,
     ComponentItem,
+    EffectiveCatalog,
+    EffectiveOption,
+    EffectiveServiceItem,
+    OperatorCatalogPage,
+    OperatorComponentItem,
+    OperatorServiceItem,
     OptionCreate,
     OptionGroupCreate,
     OptionGroupItem,
@@ -41,9 +54,11 @@ from .schemas import (
     PriceVersionUpdate,
     ServiceItem,
     ServiceItemCreate,
+    ServiceItemUpdate,
     SnapshotRequest,
     TaxClassificationCreate,
     TaxClassificationItem,
+    TaxClassificationUpdate,
 )
 
 
@@ -52,6 +67,450 @@ def utc_now() -> datetime:
 
 
 class PriceBookService:
+    async def _bulk_draft_validation(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        payload: BulkDraftRequest,
+    ) -> BulkDraftValidation:
+        categories = set(
+            (
+                await session.scalars(
+                    select(PriceBookCategory.id).where(
+                        PriceBookCategory.company_id == context.company.id,
+                        PriceBookCategory.status == "active",
+                    )
+                )
+            ).all()
+        )
+        taxes = set(
+            (
+                await session.scalars(
+                    select(PriceBookTaxClassification.id).where(
+                        PriceBookTaxClassification.company_id == context.company.id,
+                        PriceBookTaxClassification.status == "active",
+                    )
+                )
+            ).all()
+        )
+        existing = tuple(
+            (
+                await session.execute(
+                    select(PriceBookServiceItem.code, PriceBookServiceItem.name).where(
+                        PriceBookServiceItem.company_id == context.company.id
+                    )
+                )
+            ).all()
+        )
+        existing_codes = {code.casefold() for code, _ in existing}
+        existing_names = {name.strip().casefold() for _, name in existing}
+        request_codes: dict[str, int] = {}
+        request_names: dict[str, int] = {}
+        request_refs: dict[str, int] = {}
+        for row in payload.rows:
+            request_codes[row.code.casefold()] = (
+                request_codes.get(row.code.casefold(), 0) + 1
+            )
+            normalized_name = row.name.strip().casefold()
+            request_names[normalized_name] = request_names.get(normalized_name, 0) + 1
+            request_refs[row.client_ref] = request_refs.get(row.client_ref, 0) + 1
+
+        results: list[BulkDraftRowValidation] = []
+        for row in payload.rows:
+            issues: list[BulkDraftIssue] = []
+
+            def issue(
+                code: str,
+                field: str,
+                message: str,
+                target: list[BulkDraftIssue] = issues,
+            ) -> None:
+                target.append(BulkDraftIssue(code=code, field=field, message=message))
+
+            if request_refs[row.client_ref] > 1:
+                issue(
+                    "DUPLICATE_CLIENT_REFERENCE",
+                    "client_ref",
+                    "Row reference is duplicated in this batch.",
+                )
+            if not row.code:
+                issue("REQUIRED", "code", "Service code is required.")
+            elif (
+                row.code.casefold() in existing_codes
+                or request_codes[row.code.casefold()] > 1
+            ):
+                issue(
+                    "DUPLICATE_CODE",
+                    "code",
+                    "Service code already exists or is repeated in this batch.",
+                )
+            normalized_name = row.name.strip().casefold()
+            if not normalized_name:
+                issue("REQUIRED", "name", "Service name is required.")
+            elif (
+                normalized_name in existing_names or request_names[normalized_name] > 1
+            ):
+                issue(
+                    "DUPLICATE_NAME",
+                    "name",
+                    "Service name already exists or is repeated in this batch.",
+                )
+            if row.category_id not in categories:
+                issue(
+                    "CATEGORY_UNAVAILABLE",
+                    "category_id",
+                    "Choose an active Price Book category.",
+                )
+            if (
+                row.branch_id is not None
+                and row.branch_id not in context.authorized_branch_ids
+            ):
+                issue("BRANCH_UNAVAILABLE", "branch_id", "Choose an authorized Branch.")
+            if not row.customer_description.strip():
+                issue(
+                    "REQUIRED",
+                    "customer_description",
+                    "Customer description is required.",
+                )
+            if row.tax_classification_id not in taxes:
+                issue(
+                    "TAX_UNAVAILABLE",
+                    "tax_classification_id",
+                    "Choose an active tax classification.",
+                )
+            if row.unit_price is None:
+                issue("REQUIRED", "unit_price", "Proposed sell price is required.")
+            if row.effective_at is None:
+                issue(
+                    "REQUIRED", "effective_at", "Proposed effective date is required."
+                )
+            component_types = {component.component_type for component in row.components}
+            if "labor" not in component_types:
+                issue(
+                    "MISSING_LABOR_INPUT",
+                    "components",
+                    "Labor quantity is not supplied.",
+                )
+            if "material" not in component_types:
+                issue(
+                    "MISSING_MATERIAL_INPUT",
+                    "components",
+                    "Material quantity is not supplied.",
+                )
+            if any(component.unit_cost is None for component in row.components):
+                issue(
+                    "MISSING_COST_AUTHORITY",
+                    "components",
+                    "One or more internal costs remain unavailable.",
+                )
+            fatal = {
+                "DUPLICATE_CLIENT_REFERENCE",
+                "DUPLICATE_CODE",
+                "DUPLICATE_NAME",
+                "REQUIRED",
+                "CATEGORY_UNAVAILABLE",
+                "BRANCH_UNAVAILABLE",
+                "TAX_UNAVAILABLE",
+            }
+            can_save = not any(value.code in fatal for value in issues)
+            results.append(
+                BulkDraftRowValidation(
+                    client_ref=row.client_ref,
+                    can_save=can_save,
+                    readiness="READY_FOR_REVIEW" if not issues else "INCOMPLETE",
+                    issues=tuple(issues),
+                )
+            )
+        return BulkDraftValidation(
+            can_save=all(result.can_save for result in results), rows=tuple(results)
+        )
+
+    async def validate_bulk_drafts(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        payload: BulkDraftRequest,
+    ) -> BulkDraftValidation:
+        return await self._bulk_draft_validation(
+            session, context=context, payload=payload
+        )
+
+    async def create_bulk_drafts(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        payload: BulkDraftRequest,
+    ) -> BulkDraftResult:
+        created: list[BulkDraftCreated] = []
+        try:
+            async with session.begin():
+                validation = await self._bulk_draft_validation(
+                    session, context=context, payload=payload
+                )
+                if not validation.can_save:
+                    raise PriceBookValidation("Bulk draft rows require correction.")
+                validations = {row.client_ref: row for row in validation.rows}
+                now = utc_now()
+                for row in payload.rows:
+                    assert row.category_id is not None
+                    assert row.tax_classification_id is not None
+                    assert row.unit_price is not None
+                    assert row.effective_at is not None
+                    item = PriceBookServiceItem(
+                        company_id=context.company.id,
+                        branch_id=row.branch_id,
+                        category_id=row.category_id,
+                        code=row.code,
+                        name=row.name.strip(),
+                        customer_description=row.customer_description.strip(),
+                        internal_description=row.internal_description,
+                        created_by_user_id=context.user.id,
+                        created_at=now,
+                        updated_at=now,
+                    )
+                    session.add(item)
+                    await session.flush()
+                    version = PriceBookPriceVersion(
+                        company_id=context.company.id,
+                        service_item_id=item.id,
+                        branch_id=row.branch_id,
+                        tax_classification_id=row.tax_classification_id,
+                        revision=1,
+                        currency=row.currency,
+                        unit_price=row.unit_price,
+                        effective_at=row.effective_at,
+                        created_by_user_id=context.user.id,
+                        created_at=now,
+                        updated_at=now,
+                    )
+                    session.add(version)
+                    await session.flush()
+                    components: list[PriceBookComponent] = []
+                    for position, component in enumerate(row.components, 1):
+                        record = PriceBookComponent(
+                            company_id=context.company.id,
+                            price_version_id=version.id,
+                            component_type=component.component_type,
+                            code=component.code,
+                            label=component.label.strip(),
+                            quantity=component.quantity,
+                            unit_cost=component.unit_cost,
+                            position=position,
+                        )
+                        session.add(record)
+                        components.append(record)
+                    await session.flush()
+                    self._audit(
+                        session,
+                        context=context,
+                        entity_type="price_book_service_item",
+                        entity_id=item.id,
+                        action="bulk_draft_created",
+                        state={
+                            "code": item.code,
+                            "status": "draft",
+                            "client_ref": row.client_ref,
+                        },
+                        reason="Operator bulk Price Book draft build.",
+                        version=1,
+                    )
+                    self._audit(
+                        session,
+                        context=context,
+                        entity_type="price_book_price_version",
+                        entity_id=version.id,
+                        action="draft_created",
+                        state={
+                            "revision": 1,
+                            "status": "draft",
+                            "unit_price": str(version.unit_price),
+                            "currency": version.currency,
+                        },
+                        reason="Operator bulk Price Book draft build.",
+                        version=1,
+                    )
+                    result = validations[row.client_ref]
+                    created.append(
+                        BulkDraftCreated(
+                            client_ref=row.client_ref,
+                            service_item=ServiceItem.model_validate(item),
+                            draft_version=PriceVersionItem.model_validate(
+                                version
+                            ).model_copy(
+                                update={
+                                    "components": tuple(
+                                        ComponentItem.model_validate(value)
+                                        for value in components
+                                    )
+                                }
+                            ),
+                            readiness=result.readiness,
+                            issues=result.issues,
+                        )
+                    )
+        except IntegrityError as error:
+            raise PriceBookConflict(
+                "Bulk draft identity conflicts with current authority."
+            ) from error
+        return BulkDraftResult(created=tuple(created))
+
+    async def effective_catalog(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        branch_id: UUID,
+        effective_at: datetime,
+        category_id: UUID | None = None,
+        search: str | None = None,
+    ) -> EffectiveCatalog:
+        """Resolve the customer-safe catalog at one authoritative point in time."""
+        if branch_id not in context.authorized_branch_ids:
+            raise PriceBookNotFound("Branch was not found.")
+        item_query = select(PriceBookServiceItem).where(
+            PriceBookServiceItem.company_id == context.company.id,
+            PriceBookServiceItem.status == "active",
+            or_(
+                PriceBookServiceItem.branch_id.is_(None),
+                PriceBookServiceItem.branch_id == branch_id,
+            ),
+        )
+        if category_id is not None:
+            item_query = item_query.where(
+                PriceBookServiceItem.category_id == category_id
+            )
+        if search and search.strip():
+            term = f"%{search.strip()}%"
+            item_query = item_query.where(
+                or_(
+                    PriceBookServiceItem.name.ilike(term),
+                    PriceBookServiceItem.code.ilike(term),
+                    PriceBookServiceItem.customer_description.ilike(term),
+                )
+            )
+        items = tuple(
+            (
+                await session.scalars(item_query.order_by(PriceBookServiceItem.name))
+            ).all()
+        )
+        if not items:
+            return EffectiveCatalog(effective_at=effective_at, items=())
+
+        item_ids = tuple(item.id for item in items)
+        versions = tuple(
+            (
+                await session.scalars(
+                    select(PriceBookPriceVersion).where(
+                        PriceBookPriceVersion.company_id == context.company.id,
+                        PriceBookPriceVersion.service_item_id.in_(item_ids),
+                        PriceBookPriceVersion.status == "active",
+                        PriceBookPriceVersion.effective_at <= effective_at,
+                        or_(
+                            PriceBookPriceVersion.expires_at.is_(None),
+                            PriceBookPriceVersion.expires_at > effective_at,
+                        ),
+                        or_(
+                            PriceBookPriceVersion.branch_id.is_(None),
+                            PriceBookPriceVersion.branch_id == branch_id,
+                        ),
+                    )
+                )
+            ).all()
+        )
+        versions_by_item: dict[UUID, list[PriceBookPriceVersion]] = {}
+        for version in versions:
+            versions_by_item.setdefault(version.service_item_id, []).append(version)
+
+        categories = {
+            row.id: row
+            for row in (
+                await session.scalars(
+                    select(PriceBookCategory).where(
+                        PriceBookCategory.company_id == context.company.id,
+                        PriceBookCategory.status == "active",
+                    )
+                )
+            ).all()
+        }
+        taxes = {
+            row.id: row
+            for row in (
+                await session.scalars(
+                    select(PriceBookTaxClassification).where(
+                        PriceBookTaxClassification.company_id == context.company.id,
+                        PriceBookTaxClassification.status == "active",
+                    )
+                )
+            ).all()
+        }
+        option_rows = tuple(
+            (
+                await session.execute(
+                    select(PriceBookOption, PriceBookOptionGroup)
+                    .join(
+                        PriceBookOptionGroup,
+                        PriceBookOptionGroup.id == PriceBookOption.option_group_id,
+                    )
+                    .where(
+                        PriceBookOption.company_id == context.company.id,
+                        PriceBookOption.service_item_id.in_(item_ids),
+                        PriceBookOptionGroup.company_id == context.company.id,
+                        PriceBookOptionGroup.status == "active",
+                    )
+                    .order_by(PriceBookOption.position)
+                )
+            ).all()
+        )
+        options_by_item: dict[UUID, list[EffectiveOption]] = {}
+        for option, group in option_rows:
+            options_by_item.setdefault(option.service_item_id, []).append(
+                EffectiveOption(
+                    group_id=group.id,
+                    group_name=group.name,
+                    minimum_selections=group.minimum_selections,
+                    maximum_selections=group.maximum_selections,
+                    option_id=option.id,
+                    option_label=option.label,
+                )
+            )
+
+        resolved: list[EffectiveServiceItem] = []
+        for item in items:
+            candidates = versions_by_item.get(item.id, [])
+            scoped = [row for row in candidates if row.branch_id == branch_id] or [
+                row for row in candidates if row.branch_id is None
+            ]
+            # Ambiguous authority is omitted and will still fail closed at snapshot time.
+            if len(scoped) != 1:
+                continue
+            version = scoped[0]
+            category = categories.get(item.category_id)
+            tax = taxes.get(version.tax_classification_id)
+            if category is None or tax is None:
+                continue
+            resolved.append(
+                EffectiveServiceItem(
+                    item_id=item.id,
+                    item_code=item.code,
+                    item_name=item.name,
+                    customer_description=item.customer_description,
+                    category_id=category.id,
+                    category_name=category.name,
+                    price_version_id=version.id,
+                    unit_price=version.unit_price,
+                    currency=version.currency,
+                    effective_at=version.effective_at,
+                    expires_at=version.expires_at,
+                    tax_classification_name=tax.name,
+                    taxable=tax.taxable,
+                    options=tuple(options_by_item.get(item.id, [])),
+                )
+            )
+        return EffectiveCatalog(effective_at=effective_at, items=tuple(resolved))
+
     @staticmethod
     def _audit(
         session: AsyncSession,
@@ -213,6 +672,283 @@ class PriceBookService:
             ),
             options=tuple(OptionItem.model_validate(value) for value in options),
         )
+
+    async def operator_catalog(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        branch_id: UUID | None = None,
+    ) -> OperatorCatalogPage:
+        public = await self.catalog(session, context=context, branch_id=branch_id)
+        categories = tuple(
+            (
+                await session.scalars(
+                    select(PriceBookCategory)
+                    .where(PriceBookCategory.company_id == context.company.id)
+                    .order_by(PriceBookCategory.name)
+                )
+            ).all()
+        )
+        taxes = tuple(
+            (
+                await session.scalars(
+                    select(PriceBookTaxClassification)
+                    .where(PriceBookTaxClassification.company_id == context.company.id)
+                    .order_by(PriceBookTaxClassification.name)
+                )
+            ).all()
+        )
+        version_ids = [version.id for version in public.versions]
+        components = (
+            tuple(
+                (
+                    await session.scalars(
+                        select(PriceBookComponent)
+                        .where(
+                            PriceBookComponent.company_id == context.company.id,
+                            PriceBookComponent.price_version_id.in_(version_ids),
+                        )
+                        .order_by(
+                            PriceBookComponent.price_version_id,
+                            PriceBookComponent.position,
+                        )
+                    )
+                ).all()
+            )
+            if version_ids
+            else ()
+        )
+        return OperatorCatalogPage(
+            categories=tuple(
+                CategoryItem.model_validate(value) for value in categories
+            ),
+            tax_classifications=tuple(
+                TaxClassificationItem.model_validate(value) for value in taxes
+            ),
+            service_items=tuple(
+                OperatorServiceItem.model_validate(item)
+                for item in (
+                    (
+                        await session.scalars(
+                            select(PriceBookServiceItem)
+                            .where(
+                                PriceBookServiceItem.company_id == context.company.id,
+                                PriceBookServiceItem.id.in_(
+                                    [value.id for value in public.service_items]
+                                ),
+                            )
+                            .order_by(PriceBookServiceItem.name)
+                        )
+                    ).all()
+                    if public.service_items
+                    else ()
+                )
+            ),
+            versions=public.versions,
+            option_groups=public.option_groups,
+            options=public.options,
+            internal_components=tuple(
+                OperatorComponentItem.model_validate(component)
+                for component in components
+            ),
+        )
+
+    async def update_category(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        category_id: UUID,
+        payload: CategoryUpdate,
+    ) -> PriceBookCategory:
+        now = utc_now()
+        async with session.begin():
+            category = await session.scalar(
+                select(PriceBookCategory)
+                .where(
+                    PriceBookCategory.id == category_id,
+                    PriceBookCategory.company_id == context.company.id,
+                )
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
+            if category is None:
+                raise PriceBookNotFound("Category was not found.")
+            if category.version != payload.expected_version:
+                raise PriceBookConflict("Category changed before this update.")
+            if payload.parent_id == category.id:
+                raise PriceBookValidation("A category cannot be its own parent.")
+            if payload.parent_id and not await session.scalar(
+                select(PriceBookCategory.id).where(
+                    PriceBookCategory.id == payload.parent_id,
+                    PriceBookCategory.company_id == context.company.id,
+                    PriceBookCategory.status == "active",
+                )
+            ):
+                raise PriceBookNotFound("Parent category was not found.")
+            if payload.status == "archived" and await session.scalar(
+                select(PriceBookServiceItem.id).where(
+                    PriceBookServiceItem.company_id == context.company.id,
+                    PriceBookServiceItem.category_id == category.id,
+                    PriceBookServiceItem.status.in_(("draft", "active")),
+                )
+            ):
+                raise PriceBookConflict(
+                    "Active or draft items still use this category."
+                )
+            if payload.status == "archived" and await session.scalar(
+                select(PriceBookCategory.id).where(
+                    PriceBookCategory.company_id == context.company.id,
+                    PriceBookCategory.parent_id == category.id,
+                    PriceBookCategory.status == "active",
+                )
+            ):
+                raise PriceBookConflict(
+                    "Active child categories still use this category."
+                )
+            prior: dict[str, object] = {
+                "name": category.name,
+                "description": category.description,
+                "parent_id": str(category.parent_id) if category.parent_id else None,
+                "status": category.status,
+            }
+            category.name = payload.name.strip()
+            category.description = payload.description
+            category.parent_id = payload.parent_id
+            category.status = payload.status
+            category.version += 1
+            category.updated_at = now
+            self._audit(
+                session,
+                context=context,
+                entity_type="price_book_category",
+                entity_id=category.id,
+                action="updated" if payload.status == "active" else "archived",
+                prior_state=prior,
+                state={
+                    "name": category.name,
+                    "parent_id": str(category.parent_id)
+                    if category.parent_id
+                    else None,
+                    "status": category.status,
+                },
+                reason="Operator updated Price Book category.",
+                version=category.version,
+            )
+        return category
+
+    async def update_item(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        item_id: UUID,
+        payload: ServiceItemUpdate,
+    ) -> PriceBookServiceItem:
+        now = utc_now()
+        async with session.begin():
+            item = await session.scalar(
+                select(PriceBookServiceItem)
+                .where(
+                    PriceBookServiceItem.id == item_id,
+                    PriceBookServiceItem.company_id == context.company.id,
+                )
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
+            if item is None:
+                raise PriceBookNotFound("Service item was not found.")
+            if item.version != payload.expected_version:
+                raise PriceBookConflict("Service item changed before this update.")
+            if not await session.scalar(
+                select(PriceBookCategory.id).where(
+                    PriceBookCategory.id == payload.category_id,
+                    PriceBookCategory.company_id == context.company.id,
+                    PriceBookCategory.status == "active",
+                )
+            ):
+                raise PriceBookNotFound("Category was not found.")
+            prior: dict[str, object] = {
+                "category_id": str(item.category_id),
+                "name": item.name,
+                "customer_description": item.customer_description,
+                "internal_description": item.internal_description,
+            }
+            item.category_id = payload.category_id
+            item.name = payload.name.strip()
+            item.customer_description = payload.customer_description.strip()
+            item.internal_description = payload.internal_description
+            item.version += 1
+            item.updated_at = now
+            self._audit(
+                session,
+                context=context,
+                entity_type="price_book_service_item",
+                entity_id=item.id,
+                action="updated",
+                prior_state=prior,
+                state={
+                    "category_id": str(item.category_id),
+                    "name": item.name,
+                    "customer_description": item.customer_description,
+                },
+                reason="Operator updated Price Book service item.",
+                version=item.version,
+            )
+        return item
+
+    async def update_tax(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        tax_id: UUID,
+        payload: TaxClassificationUpdate,
+    ) -> PriceBookTaxClassification:
+        now = utc_now()
+        async with session.begin():
+            record = await session.scalar(
+                select(PriceBookTaxClassification)
+                .where(
+                    PriceBookTaxClassification.id == tax_id,
+                    PriceBookTaxClassification.company_id == context.company.id,
+                )
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
+            if record is None:
+                raise PriceBookNotFound("Tax classification was not found.")
+            if record.version != payload.expected_version:
+                raise PriceBookConflict(
+                    "Tax classification changed before this update."
+                )
+            prior: dict[str, object] = {
+                "name": record.name,
+                "taxable": record.taxable,
+                "status": record.status,
+            }
+            record.name = payload.name.strip()
+            record.taxable = payload.taxable
+            record.status = payload.status
+            record.version += 1
+            record.updated_at = now
+            self._audit(
+                session,
+                context=context,
+                entity_type="price_book_tax_classification",
+                entity_id=record.id,
+                action="updated",
+                prior_state=prior,
+                state={
+                    "name": record.name,
+                    "taxable": record.taxable,
+                    "status": record.status,
+                },
+                reason="Operator updated Price Book tax classification.",
+                version=record.version,
+            )
+        return record
 
     async def create_option_group(
         self,
@@ -1026,7 +1762,11 @@ class PriceBookService:
                 "option_group_id": str(payload.option_group_id)
                 if payload.option_group_id
                 else None,
+                "option_group_name": selected_option_group.name
+                if selected_option_group
+                else None,
                 "option_id": str(selected_option.id) if selected_option else None,
+                "option_label": selected_option.label if selected_option else None,
                 "option_group_constraints": (
                     {
                         "minimum_selections": selected_option_group.minimum_selections,

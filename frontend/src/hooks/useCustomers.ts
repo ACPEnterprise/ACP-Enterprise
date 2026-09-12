@@ -20,10 +20,11 @@ import {
 } from "../api/customers";
 import type { CustomerSearchCriteria } from "../types/customers";
 
-export function useCustomerList(search: string, limit: number, offset: number) {
+export function useCustomerList(search: string, limit: number, offset: number, enabled = true) {
   return useQuery({
     queryKey: ["customers", search, limit, offset],
     queryFn: () => listCustomers(search, limit, offset),
+    enabled,
   });
 }
 export function useCustomerSearch(criteria: CustomerSearchCriteria) {

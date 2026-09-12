@@ -10,6 +10,13 @@ def test_price_book_permissions_and_openapi_are_bounded() -> None:
     assert PriceBookPermission.ALL <= codes
     paths = app.openapi()["paths"]
     assert "/api/v1/price-book" in paths
+    assert "/api/v1/price-book/operator" in paths
+    assert "/api/v1/price-book/bulk-drafts/validate" in paths
+    assert "/api/v1/price-book/bulk-drafts" in paths
+    assert "/api/v1/price-book/effective-items" in paths
+    assert "/api/v1/price-book/categories/{category_id}" in paths
+    assert "/api/v1/price-book/service-items/{item_id}" in paths
+    assert "/api/v1/price-book/tax-classifications/{tax_id}" in paths
     assert "/api/v1/price-book/service-items/{item_id}/versions" in paths
     assert "/api/v1/price-book/versions/{version_id}/activate" in paths
     assert "/api/v1/price-book/service-items/{item_id}/snapshots" in paths
@@ -31,10 +38,14 @@ async def test_price_book_api_fails_closed_without_authentication() -> None:
         manage = await client.post(
             "/api/v1/price-book/categories", json={"code": "DRAIN", "name": "Drain"}
         )
+        bulk = await client.post(
+            "/api/v1/price-book/bulk-drafts/validate", json={"rows": []}
+        )
         activate = await client.post(
             "/api/v1/price-book/versions/00000000-0000-0000-0000-000000000001/activate",
             json={"expected_version": 1, "reason": "test"},
         )
     assert read.status_code == 401
     assert manage.status_code == 401
+    assert bulk.status_code == 401
     assert activate.status_code == 401

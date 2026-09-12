@@ -21,6 +21,14 @@ class CategoryCreate(PriceBookSchema):
         return value.strip().upper()
 
 
+class CategoryUpdate(PriceBookSchema):
+    expected_version: int = Field(ge=1)
+    name: str = Field(min_length=1, max_length=200)
+    description: str | None = Field(default=None, max_length=2000)
+    parent_id: UUID | None = None
+    status: str = Field(pattern=r"^(active|archived)$")
+
+
 class TaxClassificationCreate(PriceBookSchema):
     code: str = Field(min_length=1, max_length=80)
     name: str = Field(min_length=1, max_length=200)
@@ -30,6 +38,13 @@ class TaxClassificationCreate(PriceBookSchema):
     @classmethod
     def normalize_code(cls, value: str) -> str:
         return value.strip().upper()
+
+
+class TaxClassificationUpdate(PriceBookSchema):
+    expected_version: int = Field(ge=1)
+    name: str = Field(min_length=1, max_length=200)
+    taxable: bool
+    status: str = Field(pattern=r"^(active|inactive|archived)$")
 
 
 class ServiceItemCreate(PriceBookSchema):
@@ -44,6 +59,14 @@ class ServiceItemCreate(PriceBookSchema):
     @classmethod
     def normalize_code(cls, value: str) -> str:
         return value.strip().upper()
+
+
+class ServiceItemUpdate(PriceBookSchema):
+    expected_version: int = Field(ge=1)
+    category_id: UUID
+    name: str = Field(min_length=1, max_length=240)
+    customer_description: str = Field(min_length=1, max_length=4000)
+    internal_description: str | None = Field(default=None, max_length=4000)
 
 
 class ComponentCreate(PriceBookSchema):
@@ -164,6 +187,14 @@ class ComponentItem(PriceBookSchema):
     position: int
 
 
+class OperatorComponentItem(ComponentItem):
+    unit_cost: Decimal | None
+
+
+class OperatorServiceItem(ServiceItem):
+    internal_description: str | None
+
+
 class PriceVersionItem(PriceBookSchema):
     id: UUID
     company_id: UUID
@@ -238,3 +269,98 @@ class CatalogPage(PriceBookSchema):
     versions: tuple[PriceVersionItem, ...]
     option_groups: tuple[OptionGroupItem, ...]
     options: tuple[OptionItem, ...]
+
+
+class OperatorCatalogPage(PriceBookSchema):
+    categories: tuple[CategoryItem, ...]
+    tax_classifications: tuple[TaxClassificationItem, ...]
+    service_items: tuple[OperatorServiceItem, ...]
+    versions: tuple[PriceVersionItem, ...]
+    option_groups: tuple[OptionGroupItem, ...]
+    options: tuple[OptionItem, ...]
+    internal_components: tuple[OperatorComponentItem, ...]
+
+
+class EffectiveOption(PriceBookSchema):
+    group_id: UUID
+    group_name: str
+    minimum_selections: int
+    maximum_selections: int
+    option_id: UUID
+    option_label: str
+
+
+class EffectiveServiceItem(PriceBookSchema):
+    item_id: UUID
+    item_code: str
+    item_name: str
+    customer_description: str
+    category_id: UUID
+    category_name: str
+    price_version_id: UUID
+    unit_price: Decimal
+    currency: str
+    effective_at: datetime
+    expires_at: datetime | None
+    tax_classification_name: str
+    taxable: bool
+    options: tuple[EffectiveOption, ...] = ()
+
+
+class EffectiveCatalog(PriceBookSchema):
+    effective_at: datetime
+    items: tuple[EffectiveServiceItem, ...]
+
+
+class BulkDraftCandidate(PriceBookSchema):
+    client_ref: str = Field(min_length=1, max_length=80)
+    branch_id: UUID | None = None
+    category_id: UUID | None = None
+    code: str = Field(default="", max_length=80)
+    name: str = Field(default="", max_length=240)
+    customer_description: str = Field(default="", max_length=4000)
+    internal_description: str | None = Field(default=None, max_length=4000)
+    tax_classification_id: UUID | None = None
+    currency: str = Field(default="USD", pattern=r"^[A-Z]{3}$")
+    unit_price: Decimal | None = Field(default=None, ge=0)
+    effective_at: datetime | None = None
+    components: tuple[ComponentCreate, ...] = ()
+
+    @field_validator("code")
+    @classmethod
+    def normalize_bulk_code(cls, value: str) -> str:
+        return value.strip().upper()
+
+
+class BulkDraftRequest(PriceBookSchema):
+    rows: tuple[BulkDraftCandidate, ...] = Field(min_length=1, max_length=100)
+
+
+class BulkDraftIssue(PriceBookSchema):
+    code: str
+    field: str
+    message: str
+
+
+class BulkDraftRowValidation(PriceBookSchema):
+    client_ref: str
+    can_save: bool
+    readiness: str = Field(pattern=r"^(INCOMPLETE|READY_FOR_REVIEW)$")
+    issues: tuple[BulkDraftIssue, ...]
+
+
+class BulkDraftValidation(PriceBookSchema):
+    can_save: bool
+    rows: tuple[BulkDraftRowValidation, ...]
+
+
+class BulkDraftCreated(PriceBookSchema):
+    client_ref: str
+    service_item: ServiceItem
+    draft_version: PriceVersionItem
+    readiness: str
+    issues: tuple[BulkDraftIssue, ...]
+
+
+class BulkDraftResult(PriceBookSchema):
+    created: tuple[BulkDraftCreated, ...]

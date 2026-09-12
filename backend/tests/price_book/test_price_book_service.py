@@ -23,15 +23,20 @@ from app.price_book.errors import PriceBookConflict, PriceBookNotFound
 from app.price_book.models import PriceBookAuditEntry, PriceBookCommercialSnapshot
 from app.price_book.router import router as price_book_router
 from app.price_book.schemas import (
+    BulkDraftCandidate,
+    BulkDraftRequest,
     CategoryCreate,
+    CategoryUpdate,
     ComponentCreate,
     OptionCreate,
     OptionGroupCreate,
     PriceVersionCreate,
     PriceVersionUpdate,
     ServiceItemCreate,
+    ServiceItemUpdate,
     SnapshotRequest,
     TaxClassificationCreate,
+    TaxClassificationUpdate,
 )
 from app.price_book.service import PriceBookService
 from fastapi import FastAPI
@@ -217,6 +222,106 @@ async def seed_draft(factory, context, branch):
 
 
 @pytest.mark.asyncio
+async def test_operator_catalog_and_optimistic_metadata_management(
+    price_book_fixture,
+):
+    factory, context, branch = price_book_fixture
+    service, item, version, _ = await seed_draft(factory, context, branch)
+    async with factory() as session:
+        operator_catalog = await service.operator_catalog(session, context=context)
+    assert operator_catalog.service_items[0].internal_description is None
+    assert {
+        component.unit_cost for component in operator_catalog.internal_components
+    } == {
+        Decimal(45),
+        Decimal("8.25"),
+    }
+    tax = operator_catalog.tax_classifications[0]
+    async with factory() as session:
+        updated_tax = await service.update_tax(
+            session,
+            context=context,
+            tax_id=tax.id,
+            payload=TaxClassificationUpdate(
+                expected_version=tax.version,
+                name="Standard taxable",
+                taxable=True,
+                status="active",
+            ),
+        )
+    assert updated_tax.version == tax.version + 1
+    async with factory() as session:
+        with pytest.raises(PriceBookConflict):
+            await service.update_tax(
+                session,
+                context=context,
+                tax_id=tax.id,
+                payload=TaxClassificationUpdate(
+                    expected_version=tax.version,
+                    name="Stale tax change",
+                    taxable=False,
+                    status="inactive",
+                ),
+            )
+
+    category = operator_catalog.categories[0]
+    async with factory() as session:
+        updated_category = await service.update_category(
+            session,
+            context=context,
+            category_id=category.id,
+            payload=CategoryUpdate(
+                expected_version=category.version,
+                name="Drain and sewer",
+                description="Operator-managed category.",
+                status="active",
+            ),
+        )
+    assert updated_category.name == "Drain and sewer"
+    async with factory() as session:
+        with pytest.raises(PriceBookConflict):
+            await service.update_category(
+                session,
+                context=context,
+                category_id=category.id,
+                payload=CategoryUpdate(
+                    expected_version=updated_category.version,
+                    name=updated_category.name,
+                    status="archived",
+                ),
+            )
+
+    async with factory() as session:
+        updated_item = await service.update_item(
+            session,
+            context=context,
+            item_id=item.id,
+            payload=ServiceItemUpdate(
+                expected_version=item.version,
+                category_id=category.id,
+                name="Standard drain clearing",
+                customer_description="Clear one accessible standard drain.",
+                internal_description="Office scope note.",
+            ),
+        )
+    assert updated_item.internal_description == "Office scope note."
+    async with factory() as session:
+        with pytest.raises(PriceBookConflict):
+            await service.update_item(
+                session,
+                context=context,
+                item_id=item.id,
+                payload=ServiceItemUpdate(
+                    expected_version=item.version,
+                    category_id=category.id,
+                    name="Stale edit",
+                    customer_description="Must not persist.",
+                ),
+            )
+    assert version.status == "draft"
+
+
+@pytest.mark.asyncio
 async def test_activation_snapshot_idempotency_and_immutable_history(
     price_book_fixture,
 ):
@@ -277,6 +382,134 @@ async def test_activation_snapshot_idempotency_and_immutable_history(
                 )
             )
             == 1
+        )
+
+
+@pytest.mark.asyncio
+async def test_effective_catalog_resolves_only_current_customer_safe_truth(
+    price_book_fixture,
+):
+    factory, context, branch = price_book_fixture
+    service, item, version, effective = await seed_draft(factory, context, branch)
+    async with factory() as session:
+        group = await service.create_option_group(
+            session,
+            context=context,
+            payload=OptionGroupCreate(
+                code="LEVEL", name="Service level", minimum_selections=1
+            ),
+        )
+    async with factory() as session:
+        option = await service.add_option(
+            session,
+            context=context,
+            group_id=group.id,
+            payload=OptionCreate(service_item_id=item.id, label="Standard", position=1),
+        )
+    async with factory() as session:
+        await service.activate(
+            session,
+            context=context,
+            version_id=version.id,
+            expected_version=1,
+            reason="Available to Estimate operators",
+        )
+    async with factory() as session:
+        before = await service.effective_catalog(
+            session,
+            context=context,
+            branch_id=branch.id,
+            effective_at=effective - timedelta(seconds=1),
+        )
+        current = await service.effective_catalog(
+            session,
+            context=context,
+            branch_id=branch.id,
+            effective_at=effective + timedelta(minutes=1),
+            search="drain",
+        )
+    assert before.items == ()
+    assert len(current.items) == 1
+    assert current.items[0].price_version_id == version.id
+    assert current.items[0].options[0].option_id == option.id
+    serialized = current.model_dump(mode="json")
+    assert "unit_cost" not in str(serialized)
+    assert "internal_description" not in str(serialized)
+
+
+@pytest.mark.asyncio
+async def test_bulk_draft_validation_and_atomic_creation(price_book_fixture):
+    factory, context, branch = price_book_fixture
+    service = PriceBookService()
+    async with factory() as session:
+        category = await service.create_category(
+            session,
+            context=context,
+            payload=CategoryCreate(code="BUILD", name="Build workspace"),
+        )
+    async with factory() as session:
+        tax = await service.create_tax(
+            session,
+            context=context,
+            payload=TaxClassificationCreate(
+                code="BUILD-TAX", name="Build tax", taxable=True
+            ),
+        )
+    effective = datetime.now(timezone.utc) + timedelta(days=1)
+    valid = BulkDraftCandidate(
+        client_ref="row-1",
+        branch_id=branch.id,
+        category_id=category.id,
+        code="BUILD-001",
+        name="Draft service one",
+        customer_description="Customer-safe service description.",
+        internal_description="Owner review required.",
+        tax_classification_id=tax.id,
+        unit_price=Decimal("125.00"),
+        effective_at=effective,
+        components=(
+            ComponentCreate(
+                component_type="labor",
+                label="Labor",
+                quantity=Decimal("1.5"),
+                unit_cost=Decimal(40),
+            ),
+            ComponentCreate(
+                component_type="material",
+                label="Materials",
+                quantity=Decimal(1),
+                unit_cost=Decimal(12),
+            ),
+        ),
+    )
+    duplicate = valid.model_copy(update={"client_ref": "row-2"})
+    async with factory() as session:
+        rejected = await service.validate_bulk_drafts(
+            session,
+            context=context,
+            payload=BulkDraftRequest(rows=(valid, duplicate)),
+        )
+    assert rejected.can_save is False
+    assert {issue.code for row in rejected.rows for issue in row.issues} >= {
+        "DUPLICATE_CODE",
+        "DUPLICATE_NAME",
+    }
+    async with factory() as session:
+        created = await service.create_bulk_drafts(
+            session,
+            context=context,
+            payload=BulkDraftRequest(rows=(valid,)),
+        )
+    assert len(created.created) == 1
+    assert created.created[0].service_item.status == "draft"
+    assert created.created[0].draft_version.status == "draft"
+    assert created.created[0].readiness == "READY_FOR_REVIEW"
+    async with factory() as session:
+        assert (
+            await session.scalar(
+                select(func.count()).select_from(PriceBookCommercialSnapshot)
+            )
+            == 0
         )
 
 
@@ -607,6 +840,8 @@ async def test_historical_superseded_resolution_and_option_snapshot_evidence(
         )
     assert historical.price_version_id == first.id
     assert historical.snapshot_data["option_group_id"] == str(group.id)
+    assert historical.snapshot_data["option_group_name"] == group.name
+    assert historical.snapshot_data["option_label"] == option.label
     assert historical.snapshot_data["option_id"] == str(option.id)
     async with factory() as session:
         current = await service.snapshot(
@@ -702,6 +937,7 @@ async def test_complete_authorization_matrix(
         transport=httpx.ASGITransport(app=application), base_url="http://test"
     ) as client:
         read = await client.get("/api/v1/price-book")
+        operator = await client.get("/api/v1/price-book/operator")
         manage = await client.post(
             "/api/v1/price-book/categories",
             json={"code": f"AUTH-{uuid4().hex[:8]}", "name": "Authorized"},
@@ -721,6 +957,7 @@ async def test_complete_authorization_matrix(
             },
         )
     assert (read.status_code == 200) is read_allowed
+    assert (operator.status_code == 200) is manage_allowed
     assert (manage.status_code == 201) is manage_allowed
     assert (activate.status_code != 403) is activate_allowed
     assert (snapshot.status_code != 403) is manage_allowed

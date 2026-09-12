@@ -23,6 +23,7 @@ from app.estimates.schemas import (
     DecisionInput,
     EstimateItem,
     EstimateList,
+    PriceBookSelectionInput,
     ProposalInput,
     RevisionInput,
     TaxPolicyInput,
@@ -31,10 +32,14 @@ from app.estimates.schemas import (
 )
 from app.estimates.service import estimate_service
 from app.platform.permissions.authorization import AuthorizationContext
-from app.platform.permissions.codes import EstimatePermission
+from app.platform.permissions.codes import EstimatePermission, PriceBookPermission
 from app.platform.permissions.dependencies import require_permission
 from app.platform.reliability.correlation import current_correlation_id
 from app.platform.reliability.failures import ClientRecovery, FailureCode, SafeFailure
+from app.price_book.errors import PriceBookError
+from app.price_book.router import http_error as price_book_http_error
+from app.price_book.schemas import SnapshotItem, SnapshotRequest
+from app.price_book.service import price_book_service
 from app.tax_policy.models import OperationalTaxPolicy
 
 router = APIRouter(prefix="/api/v1/estimates", tags=["Estimates"])
@@ -44,6 +49,9 @@ ReadContext = Annotated[
 ]
 ManageContext = Annotated[
     AuthorizationContext, Depends(require_permission(EstimatePermission.MANAGE))
+]
+PriceBookReadContext = Annotated[
+    AuthorizationContext, Depends(require_permission(PriceBookPermission.READ))
 ]
 
 
@@ -120,6 +128,33 @@ async def list_estimates(
         limit=limit,
     )
     return EstimateList(items=items, total=len(items))
+
+
+@router.post(
+    "/price-book-items/{item_id}/snapshot",
+    response_model=SnapshotItem,
+    status_code=status.HTTP_201_CREATED,
+)
+async def select_price_book_item(
+    item_id: UUID,
+    payload: PriceBookSelectionInput,
+    context: ManageContext,
+    _price_book_context: PriceBookReadContext,
+    session: DatabaseSession,
+) -> SnapshotItem:
+    """Freeze an eligible Price Book selection for an Estimate operator."""
+    _branch(context, payload.branch_id)
+    try:
+        return SnapshotItem.model_validate(
+            await price_book_service.snapshot(
+                session,
+                context=context,
+                item_id=item_id,
+                payload=SnapshotRequest(**payload.model_dump(), historical=False),
+            )
+        )
+    except PriceBookError as error:
+        raise price_book_http_error(error) from error
 
 
 @router.get("/{estimate_id}", response_model=EstimateItem)
