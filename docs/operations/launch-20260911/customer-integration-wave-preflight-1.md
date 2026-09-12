@@ -94,3 +94,13 @@ Then perform the authenticated UI matrix. Record evidence, but do not call a scr
 ## Schema and gates
 
 The workflow and AR commits are frontend-only. Source classification extends an existing response and adds no migration. Fresh zero-to-head PostgreSQL migration succeeded on the candidate lineage. Real-data acceptance remains gated by accepted SOURCE.4 admission and authenticated Preview deployment. QBO live-source availability is not inferred and is not required for fixture-backed integration qualification.
+
+## Protected integration watch
+
+At `2026-09-12T19:17:02Z`, protected authority advanced from `d4eee6f6` to `ccf1228aafd9b6291f946b07756f8e031b1db94d` through Scheduling recovery PR #250. The four Customer-wave commits remain pending.
+
+This advancement creates one real integration conflict in `frontend/src/routes/JobsRoute.tsx`. Reconciliation must preserve protected authority's `hasCustomerContext`, Customer and Service Location filtering, “Customer work context” notice, and “Show all Jobs” recovery. It must also preserve the Customer candidate's explicit return link to `/customers/{customerId}`. Do not choose the older candidate query because it omits protected `serviceLocationId` filtering.
+
+The earlier reliability-test reconciliation remains required. No backend/schema conflict was introduced by this protected advancement.
+
+At `2026-09-12T19:19:35Z`, protected authority advanced again to `36fe3eeaa85905ef282b07ea8b7cc5482c335794` through Payroll operating-wave PR #251. This is semantically unrelated: all four Customer commits remain pending and the single `JobsRoute.tsx` reconciliation above is unchanged.
