@@ -314,6 +314,7 @@ class EffectiveCatalog(PriceBookSchema):
 
 class BulkDraftCandidate(PriceBookSchema):
     client_ref: str = Field(min_length=1, max_length=80)
+    source_identity: str | None = Field(default=None, min_length=1, max_length=240)
     branch_id: UUID | None = None
     category_id: UUID | None = None
     code: str = Field(default="", max_length=80)
@@ -364,3 +365,60 @@ class BulkDraftCreated(PriceBookSchema):
 
 class BulkDraftResult(PriceBookSchema):
     created: tuple[BulkDraftCreated, ...]
+
+
+class ReviewQueueRow(PriceBookSchema):
+    service_item_id: UUID
+    price_version_id: UUID
+    item_version: int
+    price_version: int
+    code: str
+    name: str
+    customer_description: str
+    category_name: str | None
+    branch_name: str
+    proposed_price: Decimal
+    currency: str
+    effective_at: datetime
+    tax_classification_name: str | None
+    labor_quantity: Decimal | None
+    material_quantity: Decimal | None
+    labor_cost: Decimal | None = None
+    material_cost: Decimal | None = None
+    source_identity: str | None
+    candidate_state: str = Field(
+        pattern=r"^(DRAFT_CANDIDATE|INCOMPLETE|CONFLICTING|READY_FOR_REVIEW)$"
+    )
+    activation_readiness: str = Field(
+        pattern=r"^(NOT_READY|READY_FOR_REVIEW|READY_FOR_ACTIVATION)$"
+    )
+    missing_evidence_reasons: tuple[str, ...] = ()
+    conflict_reasons: tuple[str, ...] = ()
+    management_review_complete: bool
+
+
+class ReviewQueue(PriceBookSchema):
+    rows: tuple[ReviewQueueRow, ...]
+
+
+class BulkReviewTarget(PriceBookSchema):
+    service_item_id: UUID
+    price_version_id: UUID
+    expected_item_version: int = Field(ge=1)
+    expected_price_version: int = Field(ge=1)
+
+
+class BulkReviewUpdate(PriceBookSchema):
+    targets: tuple[BulkReviewTarget, ...] = Field(min_length=1, max_length=100)
+    category_id: UUID | None = None
+    branch_id: UUID | None = None
+    tax_classification_id: UUID | None = None
+    effective_at: datetime | None = None
+    mark_for_individual_review: bool = False
+    reason: str = Field(min_length=1, max_length=500)
+
+
+class ReviewDecision(PriceBookSchema):
+    expected_price_version: int = Field(ge=1)
+    decision: str = Field(pattern=r"^(REVIEW_COMPLETE|RETURN_FOR_CORRECTION)$")
+    reason: str = Field(min_length=1, max_length=500)

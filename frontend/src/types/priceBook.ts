@@ -12,8 +12,12 @@ export interface EffectivePriceBookItem { item_id: string; item_code: string; it
 export interface EffectivePriceBookCatalog { effective_at: string; items: EffectivePriceBookItem[] }
 export interface PriceBookSnapshot { id: string; service_item_id: string; price_version_id: string; quantity: string; unit_price: string; extended_amount: string; currency: string; digest: string; snapshot_data: Record<string, unknown> }
 export interface BulkDraftComponent { component_type: "labor" | "material"; label: string; quantity: string; unit_cost?: string }
-export interface BulkDraftCandidate { client_ref: string; branch_id?: string; category_id?: string; code: string; name: string; customer_description: string; internal_description?: string; tax_classification_id?: string; currency: string; unit_price?: string; effective_at?: string; components: BulkDraftComponent[] }
+export interface BulkDraftCandidate { client_ref: string; source_identity?: string; branch_id?: string; category_id?: string; code: string; name: string; customer_description: string; internal_description?: string; tax_classification_id?: string; currency: string; unit_price?: string; effective_at?: string; components: BulkDraftComponent[] }
 export interface BulkDraftIssue { code: string; field: string; message: string }
 export interface BulkDraftRowValidation { client_ref: string; can_save: boolean; readiness: "INCOMPLETE" | "READY_FOR_REVIEW"; issues: BulkDraftIssue[] }
 export interface BulkDraftValidation { can_save: boolean; rows: BulkDraftRowValidation[] }
 export interface BulkDraftResult { created: Array<{ client_ref: string; service_item: PriceBookServiceItem; draft_version: PriceBookVersion; readiness: string; issues: BulkDraftIssue[] }> }
+export type ReviewCandidateState = "DRAFT_CANDIDATE" | "INCOMPLETE" | "CONFLICTING" | "READY_FOR_REVIEW";
+export type ActivationReadiness = "NOT_READY" | "READY_FOR_REVIEW" | "READY_FOR_ACTIVATION";
+export interface PriceBookReviewRow { service_item_id: string; price_version_id: string; item_version: number; price_version: number; code: string; name: string; customer_description: string; category_name: string | null; branch_name: string; proposed_price: string; currency: string; effective_at: string; tax_classification_name: string | null; labor_quantity: string | null; material_quantity: string | null; labor_cost: string | null; material_cost: string | null; source_identity: string | null; candidate_state: ReviewCandidateState; activation_readiness: ActivationReadiness; missing_evidence_reasons: string[]; conflict_reasons: string[]; management_review_complete: boolean }
+export interface PriceBookReviewQueue { rows: PriceBookReviewRow[] }

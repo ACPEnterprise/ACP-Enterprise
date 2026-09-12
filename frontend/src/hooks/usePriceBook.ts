@@ -1,9 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as api from "../api/priceBook";
 
-export const priceBookKeys = { all: ["price-book"] as const, catalog: (branch?: string) => ["price-book", "catalog", branch] as const, effective: (branch: string, effectiveAt: string, category?: string, search?: string) => ["price-book", "effective", branch, effectiveAt, category, search] as const };
+export const priceBookKeys = { all: ["price-book"] as const, catalog: (branch?: string) => ["price-book", "catalog", branch] as const, effective: (branch: string, effectiveAt: string, category?: string, search?: string) => ["price-book", "effective", branch, effectiveAt, category, search] as const, review: (branch?: string, category?: string, classification?: string, search?: string) => ["price-book", "review", branch, category, classification, search] as const };
 export function usePriceBook(branch?: string, enabled = true, operator = false) { return useQuery({ queryKey: [...priceBookKeys.catalog(branch), operator ? "operator" : "reader"], queryFn: () => operator ? api.getOperatorPriceBook(branch) : api.getPriceBook(branch), enabled }); }
 export function useEffectivePriceBook(branch: string, effectiveAt: string, category?: string, search?: string, enabled = true) { return useQuery({ queryKey: priceBookKeys.effective(branch, effectiveAt, category, search), queryFn: () => api.getEffectivePriceBook({ branchId: branch, effectiveAt, categoryId: category, search }), enabled: enabled && Boolean(branch) && Boolean(effectiveAt) }); }
+export function usePriceBookReview(branch?: string, category?: string, classification?: string, search?: string, enabled = true) { return useQuery({ queryKey: priceBookKeys.review(branch, category, classification, search), queryFn: () => api.getReviewQueue({ branchId: branch, categoryId: category, classification, search }), enabled }); }
 export function usePriceBookMutations() {
   const client = useQueryClient(); const refresh = () => client.invalidateQueries({ queryKey: priceBookKeys.all });
   return {
@@ -21,5 +22,7 @@ export function usePriceBookMutations() {
     option: useMutation({ mutationFn: ({ groupId, data }: { groupId: string; data: Parameters<typeof api.addOption>[1] }) => api.addOption(groupId, data), onSuccess: refresh }),
     validateBulk: useMutation({ mutationFn: api.validateBulkDrafts }),
     createBulk: useMutation({ mutationFn: api.createBulkDrafts, onSuccess: refresh }),
+    bulkReview: useMutation({ mutationFn: api.bulkUpdateReview, onSuccess: refresh }),
+    reviewDecision: useMutation({ mutationFn: ({ id, data }: { id: string; data: Parameters<typeof api.recordReviewDecision>[1] }) => api.recordReviewDecision(id, data), onSuccess: refresh }),
   };
 }

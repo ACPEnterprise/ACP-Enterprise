@@ -34,6 +34,7 @@ from .schemas import (
     BulkDraftResult,
     BulkDraftRowValidation,
     BulkDraftValidation,
+    BulkReviewUpdate,
     CatalogPage,
     CategoryCreate,
     CategoryItem,
@@ -52,6 +53,9 @@ from .schemas import (
     PriceVersionCreate,
     PriceVersionItem,
     PriceVersionUpdate,
+    ReviewDecision,
+    ReviewQueue,
+    ReviewQueueRow,
     ServiceItem,
     ServiceItemCreate,
     ServiceItemUpdate,
@@ -105,9 +109,24 @@ class PriceBookService:
         )
         existing_codes = {code.casefold() for code, _ in existing}
         existing_names = {name.strip().casefold() for _, name in existing}
+        existing_source_identities = {
+            source.strip().casefold()
+            for state in (
+                await session.scalars(
+                    select(PriceBookAuditEntry.new_state).where(
+                        PriceBookAuditEntry.company_id == context.company.id,
+                        PriceBookAuditEntry.entity_type == "price_book_service_item",
+                        PriceBookAuditEntry.action == "bulk_draft_created",
+                    )
+                )
+            ).all()
+            if isinstance((source := state.get("source_identity")), str)
+            and source.strip()
+        }
         request_codes: dict[str, int] = {}
         request_names: dict[str, int] = {}
         request_refs: dict[str, int] = {}
+        request_sources: dict[str, int] = {}
         for row in payload.rows:
             request_codes[row.code.casefold()] = (
                 request_codes.get(row.code.casefold(), 0) + 1
@@ -115,6 +134,9 @@ class PriceBookService:
             normalized_name = row.name.strip().casefold()
             request_names[normalized_name] = request_names.get(normalized_name, 0) + 1
             request_refs[row.client_ref] = request_refs.get(row.client_ref, 0) + 1
+            if row.source_identity:
+                source_key = row.source_identity.strip().casefold()
+                request_sources[source_key] = request_sources.get(source_key, 0) + 1
 
         results: list[BulkDraftRowValidation] = []
         for row in payload.rows:
@@ -134,6 +156,23 @@ class PriceBookService:
                     "client_ref",
                     "Row reference is duplicated in this batch.",
                 )
+            if row.source_identity is None or not row.source_identity.strip():
+                issue(
+                    "MISSING_SOURCE_IDENTITY",
+                    "source_identity",
+                    "Authoritative source identity evidence is required for readiness.",
+                )
+            else:
+                source_key = row.source_identity.strip().casefold()
+                if (
+                    source_key in existing_source_identities
+                    or request_sources[source_key] > 1
+                ):
+                    issue(
+                        "DUPLICATE_SOURCE_IDENTITY",
+                        "source_identity",
+                        "Source identity already exists or is repeated in this batch.",
+                    )
             if not row.code:
                 issue("REQUIRED", "code", "Service code is required.")
             elif (
@@ -208,6 +247,7 @@ class PriceBookService:
                 "DUPLICATE_CLIENT_REFERENCE",
                 "DUPLICATE_CODE",
                 "DUPLICATE_NAME",
+                "DUPLICATE_SOURCE_IDENTITY",
                 "REQUIRED",
                 "CATEGORY_UNAVAILABLE",
                 "BRANCH_UNAVAILABLE",
@@ -313,6 +353,7 @@ class PriceBookService:
                             "code": item.code,
                             "status": "draft",
                             "client_ref": row.client_ref,
+                            "source_identity": row.source_identity,
                         },
                         reason="Operator bulk Price Book draft build.",
                         version=1,
@@ -356,6 +397,512 @@ class PriceBookService:
                 "Bulk draft identity conflicts with current authority."
             ) from error
         return BulkDraftResult(created=tuple(created))
+
+    async def review_queue(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        branch_id: UUID | None = None,
+        category_id: UUID | None = None,
+        classification: str | None = None,
+        search: str | None = None,
+    ) -> ReviewQueue:
+        """Return management-only, derived readiness for native draft versions."""
+        if branch_id is not None and branch_id not in context.authorized_branch_ids:
+            raise PriceBookNotFound("Branch was not found.")
+        query = (
+            select(PriceBookPriceVersion, PriceBookServiceItem)
+            .join(
+                PriceBookServiceItem,
+                and_(
+                    PriceBookServiceItem.company_id == PriceBookPriceVersion.company_id,
+                    PriceBookServiceItem.id == PriceBookPriceVersion.service_item_id,
+                ),
+            )
+            .where(
+                PriceBookPriceVersion.company_id == context.company.id,
+                PriceBookPriceVersion.status == "draft",
+                PriceBookServiceItem.status == "draft",
+            )
+        )
+        if branch_id is not None:
+            query = query.where(
+                or_(
+                    PriceBookPriceVersion.branch_id.is_(None),
+                    PriceBookPriceVersion.branch_id == branch_id,
+                )
+            )
+        if category_id is not None:
+            query = query.where(PriceBookServiceItem.category_id == category_id)
+        if search and search.strip():
+            term = f"%{search.strip()}%"
+            query = query.where(
+                or_(
+                    PriceBookServiceItem.code.ilike(term),
+                    PriceBookServiceItem.name.ilike(term),
+                    PriceBookServiceItem.customer_description.ilike(term),
+                )
+            )
+        pairs = tuple((await session.execute(query)).all())
+        if not pairs:
+            return ReviewQueue(rows=())
+
+        items = {item.id: item for _, item in pairs}
+        versions = {version.id: version for version, _ in pairs}
+        all_identities = tuple(
+            (
+                await session.execute(
+                    select(PriceBookServiceItem.code, PriceBookServiceItem.name).where(
+                        PriceBookServiceItem.company_id == context.company.id
+                    )
+                )
+            ).all()
+        )
+        code_counts: dict[str, int] = {}
+        name_counts: dict[str, int] = {}
+        for code, name in all_identities:
+            code_key = code.strip().casefold()
+            name_key = name.strip().casefold()
+            code_counts[code_key] = code_counts.get(code_key, 0) + 1
+            name_counts[name_key] = name_counts.get(name_key, 0) + 1
+        categories = {
+            row.id: row
+            for row in (
+                await session.scalars(
+                    select(PriceBookCategory).where(
+                        PriceBookCategory.company_id == context.company.id,
+                        PriceBookCategory.id.in_(
+                            {item.category_id for item in items.values()}
+                        ),
+                    )
+                )
+            ).all()
+        }
+        taxes = {
+            row.id: row
+            for row in (
+                await session.scalars(
+                    select(PriceBookTaxClassification).where(
+                        PriceBookTaxClassification.company_id == context.company.id,
+                        PriceBookTaxClassification.id.in_(
+                            {
+                                version.tax_classification_id
+                                for version in versions.values()
+                            }
+                        ),
+                    )
+                )
+            ).all()
+        }
+        branch_ids = {
+            value
+            for version in versions.values()
+            if (value := version.branch_id) is not None
+        }
+        branches = (
+            {
+                row.id: row
+                for row in (
+                    await session.scalars(
+                        select(Branch).where(
+                            Branch.company_id == context.company.id,
+                            Branch.id.in_(branch_ids),
+                        )
+                    )
+                ).all()
+            }
+            if branch_ids
+            else {}
+        )
+        components = tuple(
+            (
+                await session.scalars(
+                    select(PriceBookComponent).where(
+                        PriceBookComponent.company_id == context.company.id,
+                        PriceBookComponent.price_version_id.in_(versions),
+                    )
+                )
+            ).all()
+        )
+        by_version: dict[UUID, list[PriceBookComponent]] = {}
+        for component in components:
+            by_version.setdefault(component.price_version_id, []).append(component)
+
+        audits = tuple(
+            (
+                await session.scalars(
+                    select(PriceBookAuditEntry)
+                    .where(
+                        PriceBookAuditEntry.company_id == context.company.id,
+                        or_(
+                            and_(
+                                PriceBookAuditEntry.entity_type
+                                == "price_book_service_item",
+                                PriceBookAuditEntry.entity_id.in_(items),
+                                PriceBookAuditEntry.action == "bulk_draft_created",
+                            ),
+                            and_(
+                                PriceBookAuditEntry.entity_type
+                                == "price_book_price_version",
+                                PriceBookAuditEntry.entity_id.in_(versions),
+                                PriceBookAuditEntry.action.in_(
+                                    (
+                                        "review_completed",
+                                        "review_returned",
+                                        "review_metadata_updated",
+                                        "individual_review_requested",
+                                    )
+                                ),
+                            ),
+                        ),
+                    )
+                    .order_by(PriceBookAuditEntry.occurred_at, PriceBookAuditEntry.id)
+                )
+            ).all()
+        )
+        source_by_item: dict[UUID, str] = {}
+        review_by_version: dict[UUID, str] = {}
+        for audit in audits:
+            if audit.entity_type == "price_book_service_item":
+                source = audit.new_state.get("source_identity")
+                if isinstance(source, str) and source.strip():
+                    source_by_item[audit.entity_id] = source.strip()
+            else:
+                review_by_version[audit.entity_id] = audit.action
+        source_counts: dict[str, int] = {}
+        for source in source_by_item.values():
+            source_counts[source] = source_counts.get(source, 0) + 1
+
+        rows: list[ReviewQueueRow] = []
+        for version, item in pairs:
+            missing: list[str] = []
+            conflicts: list[str] = []
+            category = categories.get(item.category_id)
+            tax = taxes.get(version.tax_classification_id)
+            branch = branches.get(version.branch_id) if version.branch_id else None
+            source = source_by_item.get(item.id)
+            record_components = by_version.get(version.id, [])
+            typed = {
+                kind: [
+                    value for value in record_components if value.component_type == kind
+                ]
+                for kind in ("labor", "material")
+            }
+            if source is None:
+                missing.append("Missing source identity evidence.")
+            elif source_counts[source] > 1:
+                conflicts.append("Source identity is bound to more than one draft.")
+            if code_counts[item.code.strip().casefold()] > 1:
+                conflicts.append("Service code duplicates another native item.")
+            if name_counts[item.name.strip().casefold()] > 1:
+                conflicts.append("Service name duplicates another native item.")
+            if category is None or category.status != "active":
+                missing.append("Choose an active category.")
+            if version.branch_id is not None and (
+                branch is None
+                or branch.status != "active"
+                or branch.id not in context.authorized_branch_ids
+            ):
+                missing.append("Choose an authorized active Branch.")
+            if tax is None or tax.status != "active":
+                missing.append("Choose an active tax classification.")
+            if not typed["labor"]:
+                missing.append(
+                    "Labor quantity is required; it was not assumed to be zero."
+                )
+            if not typed["material"]:
+                missing.append(
+                    "Material quantity is required; it was not assumed to be zero."
+                )
+            if any(value.unit_cost is None for value in record_components):
+                missing.append(
+                    "Internal cost evidence is incomplete; it was not assumed to be zero."
+                )
+            review_complete = review_by_version.get(version.id) == "review_completed"
+            if conflicts:
+                candidate_state = "CONFLICTING"
+            elif missing:
+                candidate_state = "INCOMPLETE"
+            elif review_complete:
+                candidate_state = "READY_FOR_REVIEW"
+            else:
+                candidate_state = "DRAFT_CANDIDATE"
+            if missing or conflicts:
+                activation_readiness = "NOT_READY"
+            elif review_complete:
+                activation_readiness = "READY_FOR_ACTIVATION"
+            else:
+                activation_readiness = "READY_FOR_REVIEW"
+
+            def quantity(
+                kind: str,
+                component_types: dict[str, list[PriceBookComponent]] = typed,
+            ) -> Decimal | None:
+                values = component_types[kind]
+                return (
+                    sum((value.quantity for value in values), Decimal(0))
+                    if values
+                    else None
+                )
+
+            def cost(
+                kind: str,
+                component_types: dict[str, list[PriceBookComponent]] = typed,
+            ) -> Decimal | None:
+                values = component_types[kind]
+                if not values or any(value.unit_cost is None for value in values):
+                    return None
+                return sum(
+                    (
+                        value.quantity * value.unit_cost
+                        for value in values
+                        if value.unit_cost is not None
+                    ),
+                    Decimal(0),
+                )
+
+            row = ReviewQueueRow(
+                service_item_id=item.id,
+                price_version_id=version.id,
+                item_version=item.version,
+                price_version=version.version,
+                code=item.code,
+                name=item.name,
+                customer_description=item.customer_description,
+                category_name=category.name if category else None,
+                branch_name=branch.name if branch else "Company-wide",
+                proposed_price=version.unit_price,
+                currency=version.currency,
+                effective_at=version.effective_at,
+                tax_classification_name=tax.name if tax else None,
+                labor_quantity=quantity("labor"),
+                material_quantity=quantity("material"),
+                labor_cost=cost("labor"),
+                material_cost=cost("material"),
+                source_identity=source,
+                candidate_state=candidate_state,
+                activation_readiness=activation_readiness,
+                missing_evidence_reasons=tuple(missing),
+                conflict_reasons=tuple(conflicts),
+                management_review_complete=review_complete,
+            )
+            if classification is None or classification in (
+                row.candidate_state,
+                row.activation_readiness,
+            ):
+                rows.append(row)
+        rows.sort(
+            key=lambda value: (value.category_name or "", value.branch_name, value.code)
+        )
+        return ReviewQueue(rows=tuple(rows))
+
+    async def bulk_review_update(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        payload: BulkReviewUpdate,
+    ) -> ReviewQueue:
+        if not any(
+            (
+                payload.category_id,
+                payload.branch_id,
+                payload.tax_classification_id,
+                payload.effective_at,
+                payload.mark_for_individual_review,
+            )
+        ):
+            raise PriceBookValidation("Choose at least one review metadata change.")
+        target_item_ids = {target.service_item_id for target in payload.targets}
+        target_version_ids = {target.price_version_id for target in payload.targets}
+        if len(target_item_ids) != len(payload.targets) or len(
+            target_version_ids
+        ) != len(payload.targets):
+            raise PriceBookValidation("Each review target must be unique.")
+        async with session.begin():
+            items = {
+                item.id: item
+                for item in (
+                    await session.scalars(
+                        select(PriceBookServiceItem)
+                        .where(
+                            PriceBookServiceItem.company_id == context.company.id,
+                            PriceBookServiceItem.id.in_(target_item_ids),
+                        )
+                        .with_for_update()
+                    )
+                ).all()
+            }
+            versions = {
+                version.id: version
+                for version in (
+                    await session.scalars(
+                        select(PriceBookPriceVersion)
+                        .where(
+                            PriceBookPriceVersion.company_id == context.company.id,
+                            PriceBookPriceVersion.id.in_(target_version_ids),
+                        )
+                        .with_for_update()
+                    )
+                ).all()
+            }
+            if len(items) != len(payload.targets) or len(versions) != len(
+                payload.targets
+            ):
+                raise PriceBookNotFound("One or more review rows were not found.")
+            if payload.category_id is not None and not await session.scalar(
+                select(PriceBookCategory.id).where(
+                    PriceBookCategory.id == payload.category_id,
+                    PriceBookCategory.company_id == context.company.id,
+                    PriceBookCategory.status == "active",
+                )
+            ):
+                raise PriceBookNotFound("Category was not found.")
+            if payload.tax_classification_id is not None and not await session.scalar(
+                select(PriceBookTaxClassification.id).where(
+                    PriceBookTaxClassification.id == payload.tax_classification_id,
+                    PriceBookTaxClassification.company_id == context.company.id,
+                    PriceBookTaxClassification.status == "active",
+                )
+            ):
+                raise PriceBookNotFound("Tax classification was not found.")
+            if payload.branch_id is not None and (
+                payload.branch_id not in context.authorized_branch_ids
+                or not await session.scalar(
+                    select(Branch.id).where(
+                        Branch.id == payload.branch_id,
+                        Branch.company_id == context.company.id,
+                        Branch.status == "active",
+                    )
+                )
+            ):
+                raise PriceBookNotFound("Branch was not found.")
+            now = utc_now()
+            for target in payload.targets:
+                item = items[target.service_item_id]
+                version = versions[target.price_version_id]
+                if (
+                    version.service_item_id != item.id
+                    or item.status != "draft"
+                    or version.status != "draft"
+                ):
+                    raise PriceBookConflict(
+                        "Only matching draft rows may be bulk reviewed."
+                    )
+                if (
+                    item.version != target.expected_item_version
+                    or version.version != target.expected_price_version
+                ):
+                    raise PriceBookConflict("A review row changed before this update.")
+                prior: dict[str, object] = {
+                    "category_id": str(item.category_id),
+                    "branch_id": str(version.branch_id) if version.branch_id else None,
+                    "tax_classification_id": str(version.tax_classification_id),
+                    "effective_at": version.effective_at.isoformat(),
+                }
+                if payload.category_id is not None:
+                    item.category_id = payload.category_id
+                if payload.branch_id is not None:
+                    item.branch_id = payload.branch_id
+                    version.branch_id = payload.branch_id
+                if payload.tax_classification_id is not None:
+                    version.tax_classification_id = payload.tax_classification_id
+                if payload.effective_at is not None:
+                    version.effective_at = payload.effective_at
+                item.version += 1
+                version.version += 1
+                item.updated_at = now
+                version.updated_at = now
+                self._audit(
+                    session,
+                    context=context,
+                    entity_type="price_book_price_version",
+                    entity_id=version.id,
+                    action="individual_review_requested"
+                    if payload.mark_for_individual_review
+                    else "review_metadata_updated",
+                    prior_state=prior,
+                    state={
+                        "category_id": str(item.category_id),
+                        "branch_id": str(version.branch_id)
+                        if version.branch_id
+                        else None,
+                        "tax_classification_id": str(version.tax_classification_id),
+                        "effective_at": version.effective_at.isoformat(),
+                        "activation_status": "NOT_ACTIVATED",
+                    },
+                    reason=payload.reason,
+                    version=version.version,
+                )
+        return await self.review_queue(session, context=context)
+
+    async def record_review_decision(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        version_id: UUID,
+        payload: ReviewDecision,
+    ) -> ReviewQueueRow:
+        async with session.begin():
+            before = await self.review_queue(session, context=context)
+            before_row = next(
+                (
+                    value
+                    for value in before.rows
+                    if value.price_version_id == version_id
+                ),
+                None,
+            )
+            if before_row is None:
+                raise PriceBookNotFound("Draft version was not found.")
+            if (
+                payload.decision == "REVIEW_COMPLETE"
+                and before_row.activation_readiness != "READY_FOR_REVIEW"
+            ):
+                raise PriceBookValidation(
+                    "Mandatory evidence is incomplete; review cannot make this draft activation-ready."
+                )
+            version = await session.scalar(
+                select(PriceBookPriceVersion)
+                .where(
+                    PriceBookPriceVersion.id == version_id,
+                    PriceBookPriceVersion.company_id == context.company.id,
+                )
+                .with_for_update()
+            )
+            if version is None:
+                raise PriceBookNotFound("Draft version was not found.")
+            if version.status != "draft":
+                raise PriceBookConflict("Only a draft can receive a review decision.")
+            if version.version != payload.expected_price_version:
+                raise PriceBookConflict("Draft changed before this review decision.")
+            version.version += 1
+            version.updated_at = utc_now()
+            self._audit(
+                session,
+                context=context,
+                entity_type="price_book_price_version",
+                entity_id=version.id,
+                action="review_completed"
+                if payload.decision == "REVIEW_COMPLETE"
+                else "review_returned",
+                state={
+                    "decision": payload.decision,
+                    "activation_status": "NOT_ACTIVATED",
+                },
+                reason=payload.reason,
+                version=version.version,
+            )
+        queue = await self.review_queue(session, context=context)
+        row = next(
+            (value for value in queue.rows if value.price_version_id == version_id),
+            None,
+        )
+        if row is None:
+            raise PriceBookNotFound("Reviewed draft was not found.")
+        return row
 
     async def effective_catalog(
         self,

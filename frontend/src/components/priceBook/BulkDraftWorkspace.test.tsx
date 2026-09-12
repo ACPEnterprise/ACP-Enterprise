@@ -17,7 +17,7 @@ describe("BulkDraftWorkspace", () => {
   it("imports rows, reports incompleteness, and never offers activation", async () => {
     state.validate.mockImplementation(async (rows: Array<{ client_ref: string }>) => ({ can_save: true, rows: [{ client_ref: rows[0].client_ref, can_save: true, readiness: "INCOMPLETE", issues: [{ code: "MISSING_COST_AUTHORITY", field: "components", message: "Internal cost remains unavailable." }] }] }));
     render(<BulkDraftWorkspace branchId="branch-1" categories={[{ id: "category-1", company_id: "company-1", parent_id: null, code: "DRAIN", name: "Drain", description: null, status: "active", version: 1 }]} taxes={[{ id: "tax-1", company_id: "company-1", code: "TAX", name: "Taxable", taxable: true, status: "active", version: 1 }]} />);
-    fireEvent.change(screen.getByLabelText("Paste draft services"), { target: { value: "DRAIN-1\tDrain clearing\tClear one drain\t125\t1.5\t1" } });
+    fireEvent.change(screen.getByLabelText("Paste draft services"), { target: { value: "flat-rate:DRAIN-1\tDRAIN-1\tDrain clearing\tClear one drain\t125\t1.5\t1" } });
     fireEvent.click(screen.getByRole("button", { name: "Load pasted rows" }));
     fireEvent.change(screen.getByLabelText("Service category 1"), { target: { value: "category-1" } });
     fireEvent.change(screen.getByLabelText("Tax classification 1"), { target: { value: "tax-1" } });

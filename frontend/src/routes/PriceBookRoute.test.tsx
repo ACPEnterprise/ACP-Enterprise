@@ -23,6 +23,7 @@ vi.mock("../auth", () => ({
   useHasPermission: (code: string) => authState.permissionCodes.includes(code),
 }));
 vi.mock("../hooks/usePriceBook", () => ({
+  usePriceBookReview: () => ({ data: { rows: [] }, isLoading: false, isError: false }),
   usePriceBook: () => ({
     isPending: false,
     isError: false,
@@ -36,7 +37,7 @@ vi.mock("../hooks/usePriceBook", () => ({
     },
   }),
   usePriceBookMutations: () => ({
-    category: { isPending: false, isError: Boolean(mutationState.categoryError), error: mutationState.categoryError, mutateAsync: mutationState.categoryMutate }, updateCategory: { isPending: false, isError: false, error: null, mutateAsync: vi.fn() }, tax: { isPending: false, isError: false, error: null, mutateAsync: vi.fn() }, updateTax: { isPending: false, isError: false, error: null, mutateAsync: vi.fn() }, item: { isPending: false, isError: false, error: null, mutateAsync: vi.fn() }, updateItem: { isPending: false, isError: false, error: null, mutateAsync: vi.fn() }, version: { isPending: false, isError: false, error: null, mutateAsync: vi.fn() }, updateVersion: { isPending: false, isError: false, error: null, mutateAsync: vi.fn() }, activate: { isError: false, error: null, mutateAsync: vi.fn() }, transition: { isError: false, error: null, mutateAsync: vi.fn() }, optionGroup: { isPending: false, isError: false, error: null, mutateAsync: vi.fn() }, option: { isPending: false, isError: false, error: null, mutateAsync: vi.fn() }, validateBulk: { isPending: false, isError: false, error: null, mutateAsync: vi.fn() }, createBulk: { isPending: false, isError: false, error: null, mutateAsync: vi.fn() },
+    category: { isPending: false, isError: Boolean(mutationState.categoryError), error: mutationState.categoryError, mutateAsync: mutationState.categoryMutate }, updateCategory: { isPending: false, isError: false, error: null, mutateAsync: vi.fn() }, tax: { isPending: false, isError: false, error: null, mutateAsync: vi.fn() }, updateTax: { isPending: false, isError: false, error: null, mutateAsync: vi.fn() }, item: { isPending: false, isError: false, error: null, mutateAsync: vi.fn() }, updateItem: { isPending: false, isError: false, error: null, mutateAsync: vi.fn() }, version: { isPending: false, isError: false, error: null, mutateAsync: vi.fn() }, updateVersion: { isPending: false, isError: false, error: null, mutateAsync: vi.fn() }, activate: { isError: false, error: null, mutateAsync: vi.fn() }, transition: { isError: false, error: null, mutateAsync: vi.fn() }, optionGroup: { isPending: false, isError: false, error: null, mutateAsync: vi.fn() }, option: { isPending: false, isError: false, error: null, mutateAsync: vi.fn() }, validateBulk: { isPending: false, isError: false, error: null, mutateAsync: vi.fn() }, createBulk: { isPending: false, isError: false, error: null, mutateAsync: vi.fn() }, bulkReview: { isPending: false, isError: false, error: null, mutateAsync: vi.fn() }, reviewDecision: { isPending: false, isError: false, error: null, mutateAsync: vi.fn() },
   }),
 }));
 

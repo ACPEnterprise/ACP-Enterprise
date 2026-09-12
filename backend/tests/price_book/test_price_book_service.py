@@ -8,6 +8,10 @@ from uuid import uuid4
 import httpx
 import pytest
 import pytest_asyncio
+from fastapi import FastAPI
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
 from app.core.config import settings
 from app.database.session import get_database_session
 from app.events.models import BusinessEvent
@@ -25,6 +29,8 @@ from app.price_book.router import router as price_book_router
 from app.price_book.schemas import (
     BulkDraftCandidate,
     BulkDraftRequest,
+    BulkReviewTarget,
+    BulkReviewUpdate,
     CategoryCreate,
     CategoryUpdate,
     ComponentCreate,
@@ -32,6 +38,7 @@ from app.price_book.schemas import (
     OptionGroupCreate,
     PriceVersionCreate,
     PriceVersionUpdate,
+    ReviewDecision,
     ServiceItemCreate,
     ServiceItemUpdate,
     SnapshotRequest,
@@ -39,9 +46,6 @@ from app.price_book.schemas import (
     TaxClassificationUpdate,
 )
 from app.price_book.service import PriceBookService
-from fastapi import FastAPI
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 
 @pytest_asyncio.fixture
@@ -322,6 +326,116 @@ async def test_operator_catalog_and_optimistic_metadata_management(
 
 
 @pytest.mark.asyncio
+async def test_review_queue_bulk_metadata_and_review_decision_are_non_activating(
+    price_book_fixture,
+):
+    factory, context, branch = price_book_fixture
+    service = PriceBookService()
+    async with factory() as session:
+        category = await service.create_category(
+            session,
+            context=context,
+            payload=CategoryCreate(code="SERVICE", name="Service Calls"),
+        )
+    async with factory() as session:
+        second_category = await service.create_category(
+            session,
+            context=context,
+            payload=CategoryCreate(code="DRAIN", name="Drain"),
+        )
+    async with factory() as session:
+        tax = await service.create_tax(
+            session,
+            context=context,
+            payload=TaxClassificationCreate(
+                code="TAXABLE", name="Taxable", taxable=True
+            ),
+        )
+    effective = datetime.now(timezone.utc) + timedelta(days=1)
+    async with factory() as session:
+        result = await service.create_bulk_drafts(
+            session,
+            context=context,
+            payload=BulkDraftRequest(
+                rows=(
+                    BulkDraftCandidate(
+                        client_ref="flat-rate:SVC-001",
+                        source_identity="flat-rate:SVC-001",
+                        branch_id=branch.id,
+                        category_id=category.id,
+                        code="SVC-001",
+                        name="Diagnostic visit",
+                        customer_description="Standard diagnostic visit.",
+                        tax_classification_id=tax.id,
+                        currency="USD",
+                        unit_price=Decimal("129.00"),
+                        effective_at=effective,
+                        components=(
+                            ComponentCreate(
+                                component_type="labor",
+                                label="Labor",
+                                quantity=Decimal(1),
+                                unit_cost=Decimal(45),
+                            ),
+                            ComponentCreate(
+                                component_type="material",
+                                label="Materials",
+                                quantity=Decimal(1),
+                                unit_cost=Decimal(10),
+                            ),
+                        ),
+                    ),
+                )
+            ),
+        )
+    created = result.created[0]
+    async with factory() as session:
+        queue = await service.review_queue(session, context=context)
+    row = queue.rows[0]
+    assert row.source_identity == "flat-rate:SVC-001"
+    assert row.activation_readiness == "READY_FOR_REVIEW"
+    assert row.labor_cost == Decimal(45)
+
+    async with factory() as session:
+        updated = await service.bulk_review_update(
+            session,
+            context=context,
+            payload=BulkReviewUpdate(
+                targets=(
+                    BulkReviewTarget(
+                        service_item_id=created.service_item.id,
+                        price_version_id=created.draft_version.id,
+                        expected_item_version=created.service_item.version,
+                        expected_price_version=created.draft_version.version,
+                    ),
+                ),
+                category_id=second_category.id,
+                mark_for_individual_review=True,
+                reason="Owner grouped reviewed service metadata.",
+            ),
+        )
+    updated_row = updated.rows[0]
+    assert updated_row.category_name == "Drain"
+    assert updated_row.activation_readiness == "READY_FOR_REVIEW"
+
+    async with factory() as session:
+        completed = await service.record_review_decision(
+            session,
+            context=context,
+            version_id=updated_row.price_version_id,
+            payload=ReviewDecision(
+                expected_price_version=updated_row.price_version,
+                decision="REVIEW_COMPLETE",
+                reason="Owner completed evidence review.",
+            ),
+        )
+    assert completed.activation_readiness == "READY_FOR_ACTIVATION"
+    async with factory() as session:
+        catalog = await service.catalog(session, context=context)
+    assert catalog.versions[0].status == "draft"
+
+
+@pytest.mark.asyncio
 async def test_activation_snapshot_idempotency_and_immutable_history(
     price_book_fixture,
 ):
@@ -458,6 +572,7 @@ async def test_bulk_draft_validation_and_atomic_creation(price_book_fixture):
     effective = datetime.now(timezone.utc) + timedelta(days=1)
     valid = BulkDraftCandidate(
         client_ref="row-1",
+        source_identity="flat-rate:BUILD-001",
         branch_id=branch.id,
         category_id=category.id,
         code="BUILD-001",

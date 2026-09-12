@@ -3,6 +3,7 @@ import { useMemo, useState, type FormEvent } from "react";
 
 import { useAuth, useHasPermission } from "../auth";
 import { BulkDraftWorkspace } from "../components/priceBook/BulkDraftWorkspace";
+import { PriceBookReviewQueue } from "../components/priceBook/PriceBookReviewQueue";
 import { usePriceBook, usePriceBookMutations } from "../hooks/usePriceBook";
 import type { PriceBookOperatorCatalog, PriceBookServiceItem, PriceBookVersion } from "../types/priceBook";
 import {
@@ -215,6 +216,7 @@ export function PriceBookRoute() {
       </div>
 
       {canManage && <BulkDraftWorkspace branchId={branch} categories={data?.categories ?? []} taxes={data?.tax_classifications ?? []} />}
+      {canManage && <PriceBookReviewQueue categories={data?.categories ?? []} taxes={data?.tax_classifications ?? []} branches={activeCompany?.branches ?? []} />}
 
       {canManage && <Card><CardHeader><CardTitle>Draft review queue</CardTitle><CardDescription>Readiness is derived from draft evidence and does not replace lifecycle status.</CardDescription></CardHeader><CardContent><div className="space-y-2">{draftReview.map(({ version, item, gaps }) => <div key={version.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-stroke p-3"><div><strong>{item?.name ?? "Draft service"}</strong><p className="text-xs text-content-muted">{item?.code} · proposed {version.currency} {version.unit_price} · effective {new Date(version.effective_at).toLocaleDateString()}</p>{gaps.length > 0 && <p className="mt-1 text-xs text-status-warning">Missing: {gaps.join(", ")}</p>}</div><Badge variant={gaps.length ? "warning" : "success"}>{gaps.length ? "INCOMPLETE" : "READY_FOR_REVIEW"}</Badge></div>)}{draftReview.length === 0 && <p className="text-sm text-content-muted">No draft versions are awaiting review.</p>}</div></CardContent></Card>}
 

@@ -24,6 +24,7 @@ from .schemas import (
     BulkDraftRequest,
     BulkDraftResult,
     BulkDraftValidation,
+    BulkReviewUpdate,
     CatalogPage,
     CategoryCreate,
     CategoryItem,
@@ -38,6 +39,9 @@ from .schemas import (
     PriceVersionCreate,
     PriceVersionItem,
     PriceVersionUpdate,
+    ReviewDecision,
+    ReviewQueue,
+    ReviewQueueRow,
     ServiceItem,
     ServiceItemCreate,
     ServiceItemUpdate,
@@ -171,6 +175,57 @@ async def create_bulk_drafts(
     try:
         return await price_book_service.create_bulk_drafts(
             session, context=context, payload=payload
+        )
+    except PriceBookError as error:
+        raise http_error(error) from error
+
+
+@router.get("/review-queue", response_model=ReviewQueue)
+async def review_queue(
+    context: ManageContext,
+    session: DatabaseSession,
+    branch_id: Annotated[UUID | None, Query()] = None,
+    category_id: Annotated[UUID | None, Query()] = None,
+    classification: Annotated[str | None, Query(max_length=40)] = None,
+    search: Annotated[str | None, Query(max_length=200)] = None,
+) -> ReviewQueue:
+    try:
+        return await price_book_service.review_queue(
+            session,
+            context=context,
+            branch_id=branch_id,
+            category_id=category_id,
+            classification=classification,
+            search=search,
+        )
+    except PriceBookError as error:
+        raise http_error(error) from error
+
+
+@router.post("/review-queue/bulk", response_model=ReviewQueue)
+async def bulk_review_update(
+    payload: BulkReviewUpdate,
+    context: ManageContext,
+    session: DatabaseSession,
+) -> ReviewQueue:
+    try:
+        return await price_book_service.bulk_review_update(
+            session, context=context, payload=payload
+        )
+    except PriceBookError as error:
+        raise http_error(error) from error
+
+
+@router.post("/review-queue/{version_id}/decision", response_model=ReviewQueueRow)
+async def record_review_decision(
+    version_id: UUID,
+    payload: ReviewDecision,
+    context: ManageContext,
+    session: DatabaseSession,
+) -> ReviewQueueRow:
+    try:
+        return await price_book_service.record_review_decision(
+            session, context=context, version_id=version_id, payload=payload
         )
     except PriceBookError as error:
         raise http_error(error) from error
