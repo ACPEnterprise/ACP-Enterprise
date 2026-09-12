@@ -5,8 +5,11 @@ from datetime import date, datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
 import pytest
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.payroll.contracts import PayrollConflictError
+from app.payroll.finalization import PayrollGrossResultService
 from app.timekeeping.commands import (
     CorrectTimeEntry,
     CreatePayPeriod,
@@ -29,6 +32,7 @@ from app.timekeeping.job_participation import (
     derive_job_worked_intervals,
     reconcile_job_participation,
 )
+from app.timekeeping.models import PayrollTimeInputRecord
 from app.timekeeping.permissions import TimekeepingPermission
 from app.timekeeping.service import WorkdayTimeService
 from tests.timekeeping.test_workday_authority import (
@@ -391,3 +395,98 @@ def test_open_job_clock_does_not_create_completed_or_payable_evidence() -> None:
     )
     with pytest.raises(JobParticipationError, match="remain active"):
         derive_job_worked_intervals((start,))
+
+
+@pytest.mark.asyncio
+async def test_correction_invalidates_old_payroll_source_and_admits_successor(
+    timekeeping_database: tuple[async_sessionmaker[AsyncSession], SeededTimekeeping],
+) -> None:
+    factory, seed = timekeeping_database
+    time_service = WorkdayTimeService()
+    payroll_service = PayrollGrossResultService()
+    context = manager(seed)
+    async with factory() as session:
+        approved = await accepted_revision(
+            time_service,
+            session,
+            seed,
+            work_date=date(2026, 8, 29),
+            start_at=NOW,
+            end_at=NOW + timedelta(hours=2),
+        )
+        pay_period = await period(time_service, session, seed)
+        first = await time_service.seal_payroll_input(
+            session,
+            context=context,  # type: ignore[arg-type]
+            employee_id=seed.employee_id,
+            pay_period=pay_period,
+        )
+        first_record = await session.scalar(
+            select(PayrollTimeInputRecord).where(
+                PayrollTimeInputRecord.snapshot_digest == first.snapshot_digest
+            )
+        )
+        assert first_record is not None
+        await payroll_service._require_current_time_snapshot(
+            session,
+            company_id=seed.company_id,
+            employee_id=seed.employee_id,
+            period_start=pay_period.period_start,
+            period_end=pay_period.period_end,
+            snapshot=first_record,
+        )
+
+        corrected = await time_service.correct(
+            session,
+            context=context,  # type: ignore[arg-type]
+            command=CorrectTimeEntry(
+                revision_id=approved.id,
+                start_at=NOW,
+                end_at=NOW + timedelta(hours=3),
+                approved_duration_minutes=None,
+                reason="Synthetic downstream staleness acceptance",
+                correction_kind=TimeCorrectionKind.INCORRECT_STOP,
+                idempotency_key="downstream-staleness-correction",
+            ),
+        )
+        with pytest.raises(PayrollConflictError, match="time evidence is stale"):
+            await payroll_service._require_current_time_snapshot(
+                session,
+                company_id=seed.company_id,
+                employee_id=seed.employee_id,
+                period_start=pay_period.period_start,
+                period_end=pay_period.period_end,
+                snapshot=first_record,
+            )
+
+        submitted = await time_service.submit(
+            session,
+            context=context,  # type: ignore[arg-type]
+            revision_id=corrected.id,
+        )
+        await time_service.approve(
+            session,
+            context=context,  # type: ignore[arg-type]
+            revision_id=submitted.id,
+        )
+        successor = await time_service.seal_payroll_input(
+            session,
+            context=context,  # type: ignore[arg-type]
+            employee_id=seed.employee_id,
+            pay_period=pay_period,
+        )
+        successor_record = await session.scalar(
+            select(PayrollTimeInputRecord).where(
+                PayrollTimeInputRecord.snapshot_digest == successor.snapshot_digest
+            )
+        )
+        assert successor_record is not None
+        assert successor.snapshot_digest != first.snapshot_digest
+        await payroll_service._require_current_time_snapshot(
+            session,
+            company_id=seed.company_id,
+            employee_id=seed.employee_id,
+            period_start=pay_period.period_start,
+            period_end=pay_period.period_end,
+            snapshot=successor_record,
+        )
