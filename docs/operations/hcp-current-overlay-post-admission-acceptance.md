@@ -210,3 +210,18 @@ run returns the prior receipt on replay. The advisory run lock must reject a
 concurrent executor. Restore is an Enterprise-controlled contingency and must
 correspond exactly to the backup digest in the authority and execution receipt;
 the acceptance lane never performs a destructive restore.
+
+## Qualification
+
+The readiness lane was qualified with repository-supported CPython 3.12.13.
+Focused acceptance and operational-measurement tests pass (`67 passed`), and
+Ruff, MyPy, compilation, diff validation, and the real sealed-artifact rebuild
+pass. The rebuilt plan reproduces digest
+`64af7e1130e984679cb955043a6449ff4c13c92a82785c64af0db3551dee23ce`.
+
+The broader operational-migration suite reports `255 passed, 11 failed`; all 11
+fail before test setup because this shell has neither Docker nor a resolvable
+PostgreSQL host named `postgres`. This is an environment limitation, not an
+application assertion failure. Protected integration must run the full affected
+suite and fresh zero-to-head/current=head/zero-drift checks in the sanctioned
+PostgreSQL-backed CI runtime before Preview execution.
