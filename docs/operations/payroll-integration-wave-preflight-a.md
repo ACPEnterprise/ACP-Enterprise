@@ -1,5 +1,35 @@
 # PAYROLL.INTEGRATION.WAVE.PREFLIGHT.A
 
+## Enterprise merge assist — current executable state
+
+Protected advanced to `36fe3eeaa85905ef282b07ea8b7cc5482c335794` through integration PR #251. That protected change composes and supersedes #225, #226, #232, #234, #239, and #240. Do **not** merge those six historical PRs individually now.
+
+PR #248 is also obsolete as an integration vehicle because its stacked base predates #251. Its only still-required changes were two documentation EOF fixes. Those are rebased directly on current protected authority as PR #252 (`fd60431`).
+
+The remaining mechanical merge plan is therefore:
+
+```text
+protected 36fe3ee -> merge PR #252 -> qualify -> optional Preview promotion by Enterprise
+```
+
+No intermediate deployment is required. PR #252 changes no executable code or schema. Rollback points are protected `36fe3ee` before #252 and the resulting protected merge SHA after #252. Reverting #252 only restores two blank EOF lines; do not roll back #251 merely to undo packet whitespace.
+
+After #252, Enterprise should run:
+
+```bash
+git diff --check <pre-252-protected>..HEAD
+cd backend
+PYTHONPATH=<isolated-deps>:. python -m alembic heads
+ENVIRONMENT=test DATABASE_URL=<fresh-isolated-postgresql-url> PYTHONPATH=<isolated-deps>:. python -m alembic upgrade head
+ENVIRONMENT=test DATABASE_URL=<fresh-isolated-postgresql-url> PYTHONPATH=<isolated-deps>:. python -m alembic current
+ENVIRONMENT=test DATABASE_URL=<fresh-isolated-postgresql-url> PYTHONPATH=<isolated-deps>:. python -m alembic check
+ENVIRONMENT=test DATABASE_URL=<fresh-isolated-postgresql-url> PYTHONPATH=<isolated-deps>:. python -m pytest tests/timekeeping tests/payroll tests/operational_measurement -q
+PYTHONPATH=<isolated-deps>:. python -m mypy app/timekeeping app/payroll app/operational_measurement
+python -m compileall -q app/timekeeping app/payroll app/operational_measurement tests/timekeeping tests/payroll tests/operational_measurement
+```
+
+Expected head remains exactly `e5g7i9k1m3o5`. Minimum later deployed acceptance is the focused set `test_payroll_time_source_acceptance.py`, `test_period_input_assembly_acceptance.py`, and `test_compensation_proration_policy.py`; it proves accepted-current-only time, predecessor exclusion, shared evidence identity, effective compensation, explicit proration, no scheduled-time substitution, and unsupported salary fail-closed behavior without executing Payroll.
+
 Generated 2026-09-12 from protected `customer-management-v1` at `d4eee6f6b0bc178d58654f26f3ef2b9429332ab3`. This packet is qualification evidence only: no protected merge, deployment, Payroll execution, or real punches.
 
 ## Shadow qualification result
