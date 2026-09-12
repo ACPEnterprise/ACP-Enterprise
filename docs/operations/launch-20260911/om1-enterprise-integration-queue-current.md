@@ -12,6 +12,16 @@ Snapshot: 2026-09-12 17:15 America/New_York
 - GitHub CI evidence: no check runs or commit statuses are reported for the
   protected SHA. Local qualification does not substitute for the tests below.
 
+## Protected integration policy
+
+GitHub ruleset `21781922` is active for exactly
+`refs/heads/customer-management-v1`. It blocks branch deletion and
+non-fast-forward updates and requires changes to enter through a pull request.
+It allows merge, squash, or rebase integration. It has no bypass actors, but it
+requires zero approving reviews, no code-owner review, no last-push approval,
+and no status checks. Enterprise must therefore enforce the qualification and
+acceptance gates in this packet operationally; GitHub will not enforce them.
+
 ## Active candidates
 
 | Candidate | Head | Behind/ahead | Effective tree | State |
