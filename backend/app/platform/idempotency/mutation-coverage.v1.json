@@ -60,6 +60,46 @@
     {
       "classification": "NATURALLY_IDEMPOTENT",
       "domain": "payroll",
+      "mechanism": "Company/Employee authority sequence plus canonical evidence digest",
+      "method": "POST",
+      "operation_id": "draft_compensation_api_v1_payroll_setup_employees__employee_id__compensations_post",
+      "path": "/api/v1/payroll/setup/employees/{employee_id}/compensations",
+      "reason": "Identical draft replay converges on the current immutable authority version while contradictory evidence conflicts.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "payroll",
+      "mechanism": "Company/Employee/domain/key authority sequence plus canonical evidence digest",
+      "method": "POST",
+      "operation_id": "draft_input_api_v1_payroll_setup_employees__employee_id__inputs_post",
+      "path": "/api/v1/payroll/setup/employees/{employee_id}/inputs",
+      "reason": "Identical draft replay converges on the current immutable authority version while contradictory evidence conflicts.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "payroll",
+      "mechanism": "immutable compensation authority identity plus convergent approved state",
+      "method": "POST",
+      "operation_id": "approve_compensation_api_v1_payroll_setup_compensations__authority_id__approve_post",
+      "path": "/api/v1/payroll/setup/compensations/{authority_id}/approve",
+      "reason": "Approval replay returns the same immutable authority or fails closed when the target cannot be approved.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "payroll",
+      "mechanism": "immutable Payroll input authority identity plus convergent approved state",
+      "method": "POST",
+      "operation_id": "approve_input_api_v1_payroll_setup_inputs__authority_id__approve_post",
+      "path": "/api/v1/payroll/setup/inputs/{authority_id}/approve",
+      "reason": "Approval replay returns the same immutable authority or fails closed when the target cannot be approved.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "payroll",
       "mechanism": "row lock plus convergent approved target state",
       "method": "POST",
       "operation_id": "approve_compliance_schema_api_v1_payroll_compliance_schemas__schema_id__approve_post",
@@ -1802,6 +1842,16 @@
     },
     {
       "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "operations",
+      "mechanism": "shared request identity across replay-safe Appointment creation and optimistic Job linking",
+      "method": "POST",
+      "operation_id": "schedule_existing_job_api_v1_operations_jobs__job_id__schedule_post",
+      "path": "/api/v1/operations/jobs/{job_id}/schedule",
+      "reason": "The accepted request identity recovers the same Appointment while stale or contradictory Job linkage fails closed.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED",
       "domain": "payments",
       "mechanism": "domain durable command/receipt identity and request digest",
       "method": "POST",
@@ -2829,6 +2879,6 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "2d6af8a04830852d7102587c7d40406fe88e0d8ef7c1a653c5effc9490309e53",
+  "fingerprint": "4c46abc67bf2fcc4c2db165f9c661efea478100afe374d0c1cff4ce29603654e",
   "schema_version": "1"
 }
