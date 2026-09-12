@@ -684,25 +684,41 @@ export function WorkforceRoute() {
                 </div>
                 <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
                   <div>
-                    <dt className="text-content-muted">User</dt>
-                    <dd className="font-medium">{administration.data.user_status ?? "Not linked"}</dd>
+                    <dt className="text-content-muted">Email</dt>
+                    <dd className="break-all font-medium">{administration.data.login_email ?? administration.data.masked_login ?? "Unavailable"}</dd>
                   </div>
                   <div>
-                    <dt className="text-content-muted">Membership</dt>
-                    <dd className="font-medium">{administration.data.membership_status ?? "Not linked"}</dd>
+                    <dt className="text-content-muted">Role</dt>
+                    <dd className="font-medium">{administration.data.role_codes.length ? administration.data.role_codes.map((code) => code.replaceAll("_", " ")).join(", ") : "Not assigned"}</dd>
                   </div>
                   <div>
-                    <dt className="text-content-muted">Invitation</dt>
-                    <dd className="font-medium">{administration.data.onboarding_status ?? "Not prepared"}</dd>
+                    <dt className="text-content-muted">Branch</dt>
+                    <dd className="font-medium">{branchName(administration.data.home_branch_id)}</dd>
                   </div>
                   <div>
-                    <dt className="text-content-muted">Login</dt>
-                    <dd className="font-medium">{administration.data.masked_login ?? "Unavailable"}</dd>
+                    <dt className="text-content-muted">Employee access</dt>
+                    <dd className="font-medium">{administration.data.access_status.replaceAll("_", " ")}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-content-muted">Invite status</dt>
+                    <dd className="font-medium">{administration.data.invitation_status?.replaceAll("_", " ") ?? "Not prepared"}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-content-muted">Email delivery</dt>
+                    <dd className="font-medium">{administration.data.delivery_status === "accepted" ? "Provider accepted" : administration.data.delivery_status?.replaceAll("_", " ") ?? "Not prepared"}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-content-muted">Account</dt>
+                    <dd className="font-medium">{administration.data.onboarding_status?.replaceAll("_", " ") ?? administration.data.user_status ?? "Not linked"}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-content-muted">Employment</dt>
+                    <dd className="font-medium">{administration.data.employee_status === "active" ? "Active" : "Disabled"}</dd>
                   </div>
                 </dl>
                 <div className="mt-4 grid gap-4 lg:grid-cols-2">
                   <div>
-                    <h5 className="text-sm font-semibold">Roles</h5>
+                    <h5 className="text-sm font-semibold">Role bundles</h5>
                     <div className="mt-2 flex flex-wrap gap-2">
                       {administration.data.role_codes.map((code) => (
                         <Badge key={code} variant="neutral">
@@ -713,8 +729,8 @@ export function WorkforceRoute() {
                     </div>
                   </div>
                   <div>
-                    <h5 className="text-sm font-semibold">Branch grants</h5>
-                    <p className="mt-2 break-words text-sm text-content-muted">{administration.data.branch_ids.length ? administration.data.branch_ids.join(", ") : "No explicit Branch grant."}</p>
+                    <h5 className="text-sm font-semibold">Branch access</h5>
+                    <p className="mt-2 break-words text-sm text-content-muted">{administration.data.branch_ids.length ? administration.data.branch_ids.map(branchName).join(", ") : "No explicit Branch access."}</p>
                   </div>
                 </div>
                 {administration.data.membership_id && (canManageMembership || canManageBranches || canManageRoles) && (
