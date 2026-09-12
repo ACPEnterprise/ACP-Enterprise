@@ -490,7 +490,11 @@ class PayrollTaxDeductionCalculationEngine:
                     requires_protected_input=tax_instruction.requires_protected_input,
                 )
             )
-            if output.amount < 0 or output.taxable_basis != gross_amount:
+            if (
+                output.amount < 0
+                or output.taxable_basis < 0
+                or output.taxable_basis > gross_amount
+            ):
                 raise TaxDeductionCalculationError("tax provider output is invalid")
             components.append(
                 TaxDeductionComponent(
@@ -502,8 +506,12 @@ class PayrollTaxDeductionCalculationEngine:
                     provider_id=provider.provider_id,
                     provider_version=output.provider_version,
                     jurisdiction_reference=tax_instruction.jurisdiction_reference,
-                    calculation_basis="approved_gross_pay",
-                    basis_amount=gross_amount,
+                    calculation_basis=(
+                        "approved_gross_pay"
+                        if output.taxable_basis == gross_amount
+                        else "provider_adjusted_taxable_wages"
+                    ),
+                    basis_amount=output.taxable_basis,
                     amount=output.amount,
                     currency=currency,
                     priority=0,
