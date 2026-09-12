@@ -1,5 +1,5 @@
 import { ArrowLeft } from "lucide-react";
-import { Link, useNavigate, useParams } from "react-router";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 
 import {
   AppointmentSummaryTable,
@@ -14,11 +14,15 @@ import { JobCompletionStatus } from "../components/jobs/JobCompletionStatus";
 import { ScheduleJobPanel } from "../components/jobs/ScheduleJobPanel";
 import { useHasPermission } from "../auth";
 import { useJob } from "../hooks/useJobs";
+import { schedulingReturnPath } from "../routing/paths";
 import { Alert, Button } from "../ui";
 
 export function JobDetailRoute() {
   const { jobId } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const returnTo = schedulingReturnPath(searchParams.get("returnTo"));
+  const hasSchedulingReturn = searchParams.has("returnTo") && returnTo !== "/scheduling";
   const canRead = useHasPermission("COMPANY_JOB_READ");
   const canReadCustomer = useHasPermission("COMPANY_CUSTOMER_READ");
   const canExecute = useHasPermission("COMPANY_JOB_EXECUTE");
@@ -45,9 +49,9 @@ export function JobDetailRoute() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Link
           className="inline-flex min-h-11 items-center gap-2 text-sm text-action-primary"
-          to="/jobs"
+          to={hasSchedulingReturn ? returnTo : "/jobs"}
         >
-          <ArrowLeft size={16} /> Back to Jobs
+          <ArrowLeft size={16} /> {hasSchedulingReturn ? "Back to Schedule" : "Back to Jobs"}
         </Link>
         {canReadCustomer && jobId ? (
           <Button
@@ -78,7 +82,7 @@ export function JobDetailRoute() {
         {canExecute && <LifecycleActionButtons job={job} />}
       </header>
       <div className="grid min-w-0 gap-4 lg:grid-cols-2">
-        <CustomerSummaryCard job={job} />
+        <CustomerSummaryCard job={job} canOpenCustomer={canReadCustomer} returnTo={hasSchedulingReturn ? returnTo : undefined} />
         <ServiceLocationCard job={job} />
       </div>
       <JobOperationalDetails job={job} />
