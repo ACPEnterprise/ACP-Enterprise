@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { useHasPermission } from "../auth";
-import { Link } from "react-router";
+import { Link, useSearchParams } from "react-router";
 
 import { useComplianceSchemas, usePayrollOperatingRegisters, usePayrollOperationsSummary, usePayrollPeriodOperations, usePayrollReports } from "../hooks/usePayroll";
 import { useCurrentPayPeriod, usePayPeriods } from "../hooks/useWorkdayTime";
 import { Alert, Card, CardContent, CardDescription, CardHeader, CardTitle, Spinner } from "../ui";
+import { PayrollEmployeeSetup } from "../components/payroll/PayrollEmployeeSetup";
 
 const label = (value: string) => value.replaceAll("_", " ").replaceAll(":", " · ");
 
@@ -24,6 +25,8 @@ function StateList({ values, empty }: { values: Record<string, number>; empty: s
 }
 
 export function PayrollRoute() {
+  const [searchParams] = useSearchParams();
+  const setupEmployeeId = searchParams.get("employee");
   const canReadReporting = useHasPermission("COMPANY_PAYROLL_REPORTING_READ");
   const canRead = canReadReporting;
   const operations = usePayrollOperationsSummary(canRead);
@@ -53,6 +56,7 @@ export function PayrollRoute() {
         <h1 className="mt-1 text-2xl font-bold sm:text-3xl">Payroll Administration</h1>
         <p className="mt-2 text-content-muted">Readiness, reconciliation, reporting, payment, remittance, statements, and correction evidence. Provider execution and filing remain disabled.</p>
       </header>
+      {setupEmployeeId && <PayrollEmployeeSetup employeeId={setupEmployeeId} />}
       <Alert variant={value.blocker_count ? "warning" : "information"} title={value.blocker_count ? "Payroll attention required" : "Payroll evidence reconciled"}>
         {value.blocker_count ? `${value.blocker_count} Employee disposition blocker(s) remain explicit.` : "No unexplained Employee blocker is present in the admitted run population."} History: {value.history_ready ? "complete authority available" : "incomplete—YTD remains unavailable"}.
       </Alert>
