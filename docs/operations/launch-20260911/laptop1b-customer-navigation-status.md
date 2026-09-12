@@ -39,6 +39,9 @@ contract and is labeled as incomplete rather than silently presented as full his
 Customer detail also links to a paginated Jobs roster with the Customer identity
 preserved as a server-side filter, so operators can traverse beyond the detail
 panel's first related-work page without manually searching again.
+Customer-scoped Appointments and Invoices are now independently paged within the
+detail workspace using their authoritative total and server-side offset/page
+contracts; neither silently stops at its first bounded page.
 The authoritative Customer timeline is also fully traversable through its existing
 server-side paging contract, including bounded previous/next controls and a safe
 return to page one when concurrent history changes invalidate the selected page.
@@ -107,7 +110,8 @@ checks do not substitute for authenticated operator acceptance.
   authority.
 - Focused Customer detail, roster, operations, and Job-context frontend
   qualification, including related-work population truth and existing-Job
-  scheduling plus Customer-history traversal: `48 passed` across eight test files.
+  scheduling plus Customer-history/Appointment/Invoice traversal: `49 passed`
+  across eight test files.
 - Frontend ESLint and TypeScript/Vite production build: passed.
 - `git diff --check`: passed.
 

@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -46,7 +47,7 @@ describe("CustomerOperationsPanel", () => {
     render(<MemoryRouter><CustomerOperationsPanel customerId="customer-1" /></MemoryRouter>);
 
     expect(invoiceHooks.useInvoiceWorkspace).toHaveBeenCalledWith(
-      expect.objectContaining({ customerId: "customer-1", limit: 100, offset: 0 }),
+      expect.objectContaining({ customerId: "customer-1", limit: 25, offset: 0 }),
       true,
     );
     expect(invoiceHooks.useCustomerBalance).toHaveBeenCalledWith(
@@ -56,8 +57,8 @@ describe("CustomerOperationsPanel", () => {
     );
     expect(screen.getByText("Showing 0 of 7 related Jobs.")).toBeInTheDocument();
     expect(screen.getByText("Showing 0 of 4 related Estimates.")).toBeInTheDocument();
-    expect(screen.getByText("Showing 0 of 3 Appointments in the operating window.")).toBeInTheDocument();
-    expect(screen.getByText("Showing 0 of 6 related Invoices.")).toBeInTheDocument();
+    expect(screen.getByText("Showing 0 of 3 Appointments in the operating window · page 1 of 1.")).toBeInTheDocument();
+    expect(screen.getByText("Showing 0 of 6 related Invoices · page 1 of 1.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open all related Jobs" })).toHaveAttribute(
       "href",
       "/jobs?customerId=customer-1",
@@ -69,5 +70,27 @@ describe("CustomerOperationsPanel", () => {
 
     expect(screen.getByText(/does not claim complete Payment history/i)).toBeInTheDocument();
     expect(screen.getByText("No matching Payment receipts are present in the bounded result.")).toBeInTheDocument();
+  });
+
+  it("traverses Customer-scoped Appointment and Invoice populations", async () => {
+    vi.mocked(schedulingHooks.useAppointments).mockReturnValue(query({
+      items: [], total_count: 51, page: 1, page_size: 50,
+    }) as never);
+    vi.mocked(invoiceHooks.useCustomerBalance).mockReturnValue(query({
+      native_invoice_count: 26,
+    }) as never);
+
+    render(<MemoryRouter><CustomerOperationsPanel customerId="customer-1" /></MemoryRouter>);
+    await userEvent.click(screen.getByRole("button", { name: "Next Appointments" }));
+    await userEvent.click(screen.getByRole("button", { name: "Next Invoices" }));
+
+    expect(schedulingHooks.useAppointments).toHaveBeenLastCalledWith(
+      expect.objectContaining({ customerId: "customer-1", page: 2, pageSize: 50 }),
+      true,
+    );
+    expect(invoiceHooks.useInvoiceWorkspace).toHaveBeenLastCalledWith(
+      expect.objectContaining({ customerId: "customer-1", limit: 25, offset: 25 }),
+      true,
+    );
   });
 });
