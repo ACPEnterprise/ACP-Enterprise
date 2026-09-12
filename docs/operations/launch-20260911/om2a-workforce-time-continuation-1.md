@@ -5,6 +5,7 @@
 - Mission commit: `0c08f1e3634f38a7fb82970932dea5de7a4cf24f`.
 - Mission file SHA-256: `03b74b5f065694b487268bdee531d8d50620f2816f30c91d8b665f9d5b3e9dfc`.
 - Protected starting authority: `b22297c65165280a761860198dc05441df4a4312`.
+- Reconciled protected authority: `2d8709c895e60faf7cc0251d6c8ac82311013613`.
 - PR #195 Job clock and PR #200 Job labor actuals are confirmed protected ancestors.
 - Successor branch: `work/job-labor-actuals-continuation-1`.
 
