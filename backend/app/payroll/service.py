@@ -462,6 +462,7 @@ class PayrollAuthorityService:
             approved_at=value.approved_at,
             decision_evidence_digest=value.decision_evidence_digest,
             authority_digest=value.authority_digest,
+            supersedes_authority_id=value.supersedes_authority_id,
         )
         result.verify()
         return result
