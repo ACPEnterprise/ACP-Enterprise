@@ -1,5 +1,6 @@
 import { apiClient } from "./client";
 import type { Estimate, EstimateDecisionInput, EstimateList, EstimateProposalInput, EstimateTransitionInput } from "../types/estimates";
+import type { PriceBookSnapshot } from "../types/priceBook";
 
 const root = "/api/v1/estimates";
 
@@ -13,6 +14,10 @@ export async function listEstimates(status?: string, customerId?: string): Promi
 
 export async function createEstimate(input: EstimateProposalInput): Promise<Estimate> {
   return (await apiClient.post<Estimate>(root, input)).data;
+}
+
+export async function snapshotEstimatePriceBookItem(itemId: string, input: { branch_id: string; quantity: string; currency: string; effective_at: string; idempotency_key: string; option_group_id?: string; option_id?: string }): Promise<PriceBookSnapshot> {
+  return (await apiClient.post<PriceBookSnapshot>(`${root}/price-book-items/${itemId}/snapshot`, input)).data;
 }
 
 export async function reviseEstimate(

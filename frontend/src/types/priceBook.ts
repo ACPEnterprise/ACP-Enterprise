@@ -6,3 +6,7 @@ export interface PriceBookVersion { id: string; company_id: string; service_item
 export interface PriceBookOptionGroup { id: string; company_id: string; code: string; name: string; minimum_selections: number; maximum_selections: number; status: string }
 export interface PriceBookOption { id: string; company_id: string; option_group_id: string; service_item_id: string; label: string; position: number }
 export interface PriceBookCatalog { categories: PriceBookCategory[]; tax_classifications: TaxClassification[]; service_items: PriceBookServiceItem[]; versions: PriceBookVersion[]; option_groups: PriceBookOptionGroup[]; options: PriceBookOption[] }
+export interface EffectivePriceBookOption { group_id: string; group_name: string; minimum_selections: number; maximum_selections: number; option_id: string; option_label: string }
+export interface EffectivePriceBookItem { item_id: string; item_code: string; item_name: string; customer_description: string; category_id: string; category_name: string; price_version_id: string; unit_price: string; currency: string; effective_at: string; expires_at: string | null; tax_classification_name: string; taxable: boolean; options: EffectivePriceBookOption[] }
+export interface EffectivePriceBookCatalog { effective_at: string; items: EffectivePriceBookItem[] }
+export interface PriceBookSnapshot { id: string; service_item_id: string; price_version_id: string; quantity: string; unit_price: string; extended_amount: string; currency: string; digest: string; snapshot_data: Record<string, unknown> }

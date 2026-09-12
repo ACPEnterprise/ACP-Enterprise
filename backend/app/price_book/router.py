@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Annotated
 from uuid import UUID
 
@@ -23,6 +24,7 @@ from .schemas import (
     CatalogPage,
     CategoryCreate,
     CategoryItem,
+    EffectiveCatalog,
     LifecycleRequest,
     OptionCreate,
     OptionGroupCreate,
@@ -96,6 +98,28 @@ async def catalog(
     try:
         return await price_book_service.catalog(
             session, context=context, branch_id=branch_id
+        )
+    except PriceBookError as error:
+        raise http_error(error) from error
+
+
+@router.get("/effective-items", response_model=EffectiveCatalog)
+async def effective_items(
+    context: ReadContext,
+    session: DatabaseSession,
+    branch_id: Annotated[UUID, Query()],
+    effective_at: Annotated[datetime, Query()],
+    category_id: Annotated[UUID | None, Query()] = None,
+    search: Annotated[str | None, Query(max_length=200)] = None,
+) -> EffectiveCatalog:
+    try:
+        return await price_book_service.effective_catalog(
+            session,
+            context=context,
+            branch_id=branch_id,
+            effective_at=effective_at,
+            category_id=category_id,
+            search=search,
         )
     except PriceBookError as error:
         raise http_error(error) from error

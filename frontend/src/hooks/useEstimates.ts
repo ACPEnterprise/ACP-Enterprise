@@ -23,6 +23,7 @@ export function useEstimateMutations() {
   };
   return {
     create: useMutation({ mutationFn: api.createEstimate, onSuccess: update }),
+    snapshotPriceBookItem: useMutation({ mutationFn: ({ itemId, input }: { itemId: string; input: Parameters<typeof api.snapshotEstimatePriceBookItem>[1] }) => api.snapshotEstimatePriceBookItem(itemId, input) }),
     revise: useMutation({
       mutationFn: ({ id, input }: { id: string; input: Parameters<typeof api.reviseEstimate>[1] }) => api.reviseEstimate(id, input),
       onSuccess: update,

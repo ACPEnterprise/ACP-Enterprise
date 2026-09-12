@@ -1,8 +1,9 @@
 import { apiClient } from "./client";
-import type { PriceBookCatalog, PriceBookCategory, PriceBookOption, PriceBookOptionGroup, PriceBookServiceItem, PriceBookVersion, TaxClassification } from "../types/priceBook";
+import type { EffectivePriceBookCatalog, PriceBookCatalog, PriceBookCategory, PriceBookOption, PriceBookOptionGroup, PriceBookServiceItem, PriceBookVersion, TaxClassification } from "../types/priceBook";
 
 const path = "/api/v1/price-book";
 export async function getPriceBook(branchId?: string): Promise<PriceBookCatalog> { return (await apiClient.get<PriceBookCatalog>(path, { params: branchId ? { branch_id: branchId } : undefined })).data; }
+export async function getEffectivePriceBook(input: { branchId: string; effectiveAt: string; categoryId?: string; search?: string }): Promise<EffectivePriceBookCatalog> { return (await apiClient.get<EffectivePriceBookCatalog>(`${path}/effective-items`, { params: { branch_id: input.branchId, effective_at: input.effectiveAt, category_id: input.categoryId || undefined, search: input.search || undefined } })).data; }
 export async function createCategory(data: { code: string; name: string }): Promise<PriceBookCategory> { return (await apiClient.post<PriceBookCategory>(`${path}/categories`, data)).data; }
 export async function createTax(data: { code: string; name: string; taxable: boolean }): Promise<TaxClassification> { return (await apiClient.post<TaxClassification>(`${path}/tax-classifications`, data)).data; }
 export async function createServiceItem(data: { branch_id?: string; category_id: string; code: string; name: string; customer_description: string }): Promise<PriceBookServiceItem> { return (await apiClient.post<PriceBookServiceItem>(`${path}/service-items`, data)).data; }
