@@ -14,7 +14,7 @@ from dataclasses import asdict
 from typing import Any, Protocol, cast
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.operational_migration.hcp_current_overlay import (
@@ -69,10 +69,14 @@ class SqlAlchemyCurrentOverlayRepository(CurrentOverlayRepository):
         *,
         master_run_id: UUID,
         services: CurrentOverlayDomainServices,
+        advisory_lock_identity: str | None = None,
+        execution_context: dict[str, object] | None = None,
     ) -> None:
         self._session = session
         self._master_run_id = master_run_id
         self._services = services
+        self._advisory_lock_identity = advisory_lock_identity
+        self._execution_context = dict(execution_context or {})
         self._master: HcpMigrationMasterRun | None = None
 
     @asynccontextmanager
@@ -80,6 +84,13 @@ class SqlAlchemyCurrentOverlayRepository(CurrentOverlayRepository):
         if self._session.in_transaction():
             raise ValueError("overlay adapter requires ownership of its transaction")
         async with self._session.begin():
+            if self._advisory_lock_identity is not None:
+                locked = await self._session.scalar(
+                    text("SELECT pg_try_advisory_xact_lock(hashtext(:identity))"),
+                    {"identity": self._advisory_lock_identity},
+                )
+                if locked is not True:
+                    raise ValueError("concurrent HCP overlay admission is active")
             self._master = await self._session.scalar(
                 select(HcpMigrationMasterRun)
                 .where(HcpMigrationMasterRun.id == self._master_run_id)
@@ -150,6 +161,7 @@ class SqlAlchemyCurrentOverlayRepository(CurrentOverlayRepository):
             raise ValueError("overlay receipt contract mismatch")
         receipts = self._state()["receipts"]
         value = asdict(receipt)
+        value["execution_context"] = self._execution_context
         existing = receipts.get(receipt.manifest_digest)
         if existing is not None and existing != value:
             raise ValueError("overlay receipt replay conflict")

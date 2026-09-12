@@ -465,61 +465,67 @@ class JobService:
         context: AuthorizationContext,
         command: UpdateJob,
     ) -> Job:
-        occurred_at, correlation_id = self._operation_identity()
         async with session.begin():
-            job = await self._locked_job(
-                session, context=context, job_id=command.job_id
+            return await self.stage_update_job(
+                session, context=context, command=command
             )
-            self._check_version(job, command.expected_version)
-            changes = self._metadata_changes(command)
-            reference_change = (
-                "customer_id" in changes or "service_location_id" in changes
-            )
-            if reference_change:
-                if (
-                    job.status != JobStatus.DRAFT.value
-                    or await self._repository.has_appointment_links(
-                        session, company_id=context.company.id, job_id=job.id
-                    )
-                ):
-                    raise JobInvalidTransitionError(
-                        "Customer and Service Location cannot be changed in this state."
-                    )
-                customer_id = changes.get("customer_id", job.customer_id)
-                location_id = changes.get(
-                    "service_location_id", job.service_location_id
+
+    async def stage_update_job(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        command: UpdateJob,
+    ) -> Job:
+        """Apply normal Job update invariants in the caller's transaction."""
+        occurred_at, correlation_id = self._operation_identity()
+        job = await self._locked_job(session, context=context, job_id=command.job_id)
+        self._check_version(job, command.expected_version)
+        changes = self._metadata_changes(command)
+        reference_change = "customer_id" in changes or "service_location_id" in changes
+        if reference_change:
+            if (
+                job.status != JobStatus.DRAFT.value
+                or await self._repository.has_appointment_links(
+                    session, company_id=context.company.id, job_id=job.id
                 )
-                assert isinstance(customer_id, UUID)
-                assert isinstance(location_id, UUID)
-                await self._require_customer_reference(
-                    session,
-                    context=context,
-                    customer_id=customer_id,
-                    service_location_id=location_id,
-                )
-            if job.status not in {JobStatus.DRAFT.value, JobStatus.READY.value}:
+            ):
                 raise JobInvalidTransitionError(
-                    "Job metadata cannot be changed in this state."
+                    "Customer and Service Location cannot be changed in this state."
                 )
-            changed = self._repository.update_job_metadata(
-                job,
-                changes=changes,
-                actor_user_id=context.user.id,
-                updated_at=occurred_at,
+            customer_id = changes.get("customer_id", job.customer_id)
+            location_id = changes.get("service_location_id", job.service_location_id)
+            assert isinstance(customer_id, UUID)
+            assert isinstance(location_id, UUID)
+            await self._require_customer_reference(
+                session,
+                context=context,
+                customer_id=customer_id,
+                service_location_id=location_id,
             )
-            if changed:
-                self._stage_event(
-                    session,
-                    context=context,
-                    job=job,
-                    event_type=EventType.JOB_UPDATED,
-                    occurred_at=occurred_at,
-                    correlation_id=correlation_id,
-                    payload={
-                        "changed_fields": list(changed),
-                        "version": job.concurrency_version,
-                    },
-                )
+        if job.status not in {JobStatus.DRAFT.value, JobStatus.READY.value}:
+            raise JobInvalidTransitionError(
+                "Job metadata cannot be changed in this state."
+            )
+        changed = self._repository.update_job_metadata(
+            job,
+            changes=changes,
+            actor_user_id=context.user.id,
+            updated_at=occurred_at,
+        )
+        if changed:
+            self._stage_event(
+                session,
+                context=context,
+                job=job,
+                event_type=EventType.JOB_UPDATED,
+                occurred_at=occurred_at,
+                correlation_id=correlation_id,
+                payload={
+                    "changed_fields": list(changed),
+                    "version": job.concurrency_version,
+                },
+            )
         return job
 
     async def activate_job(
