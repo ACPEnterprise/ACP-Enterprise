@@ -402,6 +402,9 @@ class ApprovedCompensationAuthority:
     approved_at: datetime
     decision_evidence_digest: str
     authority_digest: str
+    # Lineage metadata is retained outside the signed historical authority payload.
+    # It permits deterministic successor selection without changing existing digests.
+    supersedes_authority_id: UUID | None = None
 
     def canonical_content(self) -> dict[str, object]:
         return {
