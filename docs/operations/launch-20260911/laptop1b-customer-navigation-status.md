@@ -30,6 +30,13 @@ search. Loading, empty, error, stale-page recovery, archived/restored state, and
 responsive detail behavior are covered by the current product and deterministic
 tests.
 
+Customer detail related-work composition now reports authoritative totals for
+Jobs, Estimates, Appointments, and Invoices instead of implying that a bounded
+first page is complete. Invoice rows come from the existing server-side
+Customer-filtered workspace and reconcile their displayed count to Customer Balance
+authority. Payment receipt matching remains bounded by the current Payments list
+contract and is labeled as incomplete rather than silently presented as full history.
+
 Company administrators receive the existing Migration readiness projection for
 Customers, Contacts, and Locations, including source, admitted, held, exception,
 unresolved, delta, stale state, and source-window end date. Held or source-only
@@ -93,8 +100,8 @@ checks do not substitute for authenticated operator acceptance.
   Operations, and Scheduling backend qualification: `127 passed` against PR #217
   authority.
 - Focused Customer detail, roster, operations, and Job-context frontend
-  qualification, including existing-Job scheduling: `44 passed` across six test
-  files.
+  qualification, including related-work population truth and existing-Job
+  scheduling: `46 passed` across seven test files.
 - Frontend ESLint and TypeScript/Vite production build: passed.
 - `git diff --check`: passed.
 
