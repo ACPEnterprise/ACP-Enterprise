@@ -3,7 +3,6 @@ from decimal import Decimal
 from uuid import UUID, uuid4
 
 import pytest
-
 from app.business_economics.break_even_readiness import (
     BREAK_EVEN_READINESS_VERSION,
     BreakEvenInputKind,
@@ -114,6 +113,8 @@ def test_packet_preserves_facts_and_never_selects_break_even_policy() -> None:
     assert facts[BreakEvenInputKind.PRODUCTIVE_JOB_MINUTES].value == 240
     assert facts[BreakEvenInputKind.ACTUAL_LABOR_COST].value == Decimal("1200.00")
     assert "actual_direct_material_cost" in packet.missing_inputs
+    assert "labor_burden_prerequisites" in packet.missing_inputs
+    assert packet.branch_id is None
     assert "break_even_method" in packet.policy_gates
     assert packet.model_output is None
     assert packet.recommendation is None
@@ -135,9 +136,45 @@ def test_qbo_source_reported_cost_is_not_promoted() -> None:
         for item in packet.facts
         if item.kind is BreakEvenInputKind.ACTUAL_LABOR_COST
     )
-    assert labor.state == "UNKNOWN"
+    assert labor.state == "PARTIAL"
     assert labor.value is None
-    assert "accepted_cost_evidence_required" in labor.limitations
+    assert (
+        "accepted_authoritative_evidence_required; missing is not zero"
+        in labor.limitations
+    )
+
+
+def test_source_metadata_and_exact_required_matrix_are_preserved() -> None:
+    productive, company = _productive_packet()
+    packet = build_break_even_input_readiness(
+        productive,
+        economic_evidence=(_cost(company),),
+        period_start=START.date(),
+        period_end=START.date(),
+    )
+    labor = next(
+        item
+        for item in packet.facts
+        if item.kind is BreakEvenInputKind.COMPENSATION_LABOR_COST_AUTHORITY
+    )
+    assert labor.source_authorities == ("accepted_payroll",)
+    assert labor.source_dates == (START.isoformat(),)
+    assert labor.confidence == "available"
+    assert packet.period_start == START.date()
+    assert packet.model_output is None
+
+
+def test_mixed_periods_and_duplicate_semantic_facts_fail_closed() -> None:
+    productive, company = _productive_packet()
+    first = _cost(company)
+    second = _cost(company)
+    object.__setattr__(second, "input_id", "labor:second")
+    object.__setattr__(second, "reconciliation_key", "company-period:2026-10")
+    with pytest.raises(ValueError, match="mixed reconciliation periods"):
+        build_break_even_input_readiness(productive, economic_evidence=(first, second))
+    object.__setattr__(second, "reconciliation_key", first.reconciliation_key)
+    with pytest.raises(ValueError, match="duplicate break-even economic fact"):
+        build_break_even_input_readiness(productive, economic_evidence=(first, second))
 
 
 def test_foreign_company_and_branch_aggregation_fail_closed() -> None:
