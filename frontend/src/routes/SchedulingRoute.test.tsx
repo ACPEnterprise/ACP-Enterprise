@@ -223,13 +223,17 @@ describe("SchedulingRoute", () => {
 
   it("restores a direct-linked operating scope instead of resetting the CSR workspace", () => {
     vi.mocked(useAppointments).mockReturnValue({ isLoading: false, isError: false, data: { items: [appointment], total_count: 1, page: 1, page_size: 100 } } as never);
-    render(<MemoryRouter initialEntries={["/scheduling?date=2026-08-13&view=month&perspective=schedule&branch=branch-1&status=scheduled&technician=__unassigned&search=Taylor"]}><SchedulingRoute /></MemoryRouter>);
+    render(<MemoryRouter initialEntries={["/scheduling?date=2026-08-13&view=month&perspective=schedule&branch=branch-1&status=scheduled&technician=__unassigned&search=Taylor&jobStatus=ready&priority=emergency&queue=scheduled_unassigned&order=priority"]}><SchedulingRoute /></MemoryRouter>);
     expect(screen.getByLabelText("Service date")).toHaveValue("2026-08-13");
     expect(screen.getByRole("region", { name: "Month calendar" })).toBeVisible();
     expect(screen.getByLabelText("Branch")).toHaveValue("branch-1");
     expect(screen.getByLabelText("Appointment status")).toHaveValue("scheduled");
     expect(screen.getByLabelText("Technician")).toHaveValue("__unassigned");
     expect(screen.getByLabelText("Search schedule")).toHaveValue("Taylor");
+    expect(screen.getByLabelText("Queue Job status")).toHaveValue("ready");
+    expect(screen.getByLabelText("Queue priority")).toHaveValue("emergency");
+    expect(screen.getByLabelText("Queue state")).toHaveValue("scheduled_unassigned");
+    expect(screen.getByLabelText("Queue order")).toHaveValue("priority");
   });
 
   it("uses Month as an operating calendar and requires confirmation before moving work", async () => {
