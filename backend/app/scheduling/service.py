@@ -50,6 +50,7 @@ class CreateAppointmentCommand:
     arrival_window_end_at: datetime
     expected_duration_minutes: int
     capacity_units: Decimal = Decimal("1.00")
+    reserve_capacity: bool = True
     idempotency_key: UUID | None = None
 
 
@@ -157,17 +158,19 @@ class SchedulingService:
                 raise SchedulingNotFoundError(
                     "Customer or Service Location", command.customer_id
                 )
-            decision = await self._reserve_capacity(
-                session,
-                company_id=context.company.id,
-                branch_id=branch.id,
-                branch_timezone=branch.timezone,
-                window_start_at=command.arrival_window_start_at,
-                window_end_at=command.arrival_window_end_at,
-                expected_duration_minutes=command.expected_duration_minutes,
-                capacity_units=command.capacity_units,
-                now=now,
-            )
+            decision = None
+            if command.reserve_capacity:
+                decision = await self._reserve_capacity(
+                    session,
+                    company_id=context.company.id,
+                    branch_id=branch.id,
+                    branch_timezone=branch.timezone,
+                    window_start_at=command.arrival_window_start_at,
+                    window_end_at=command.arrival_window_end_at,
+                    expected_duration_minutes=command.expected_duration_minutes,
+                    capacity_units=command.capacity_units,
+                    now=now,
+                )
             if command.idempotency_key is not None:
                 existing = await self._repository.get_appointment_for_update(
                     session,
@@ -206,21 +209,22 @@ class SchedulingService:
                 updated_at=now,
             )
             await self._repository.create_appointment(session, appointment=appointment)
-            reservation = await self._repository.create_capacity_reservation(
-                session,
-                capacity_context=decision.context,
-                reservation=AppointmentCapacityReservation(
-                    company_id=context.company.id,
-                    branch_id=branch.id,
-                    appointment_id=appointment.id,
-                    reserved_start_at=decision.reservation_start_at,
-                    reserved_end_at=decision.reservation_end_at,
-                    capacity_units=command.capacity_units,
-                    created_at=now,
-                    updated_at=now,
-                ),
-            )
-            appointment.capacity_reservation = reservation
+            if decision is not None:
+                reservation = await self._repository.create_capacity_reservation(
+                    session,
+                    capacity_context=decision.context,
+                    reservation=AppointmentCapacityReservation(
+                        company_id=context.company.id,
+                        branch_id=branch.id,
+                        appointment_id=appointment.id,
+                        reserved_start_at=decision.reservation_start_at,
+                        reserved_end_at=decision.reservation_end_at,
+                        capacity_units=command.capacity_units,
+                        created_at=now,
+                        updated_at=now,
+                    ),
+                )
+                appointment.capacity_reservation = reservation
             self._stage_event(
                 session,
                 context=context,
@@ -752,6 +756,7 @@ class SchedulingService:
             and appointment.arrival_window_end_at == command.arrival_window_end_at
             and appointment.expected_duration_minutes
             == command.expected_duration_minutes
+            and (reservation is not None) == command.reserve_capacity
             and (
                 reservation is None
                 or reservation.capacity_units == command.capacity_units

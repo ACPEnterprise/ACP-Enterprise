@@ -51,6 +51,10 @@ class ExistingJobScheduleCreate(OperationsApiSchema):
     capacity_units: Decimal = Field(
         default=Decimal("1.00"), gt=0, max_digits=10, decimal_places=2
     )
+    reserve_capacity: bool = Field(
+        default=True,
+        description="Reserve Branch capacity; false for Needs Scheduling appointments.",
+    )
 
 
 class ExistingJobScheduleResponse(OperationsApiSchema):
