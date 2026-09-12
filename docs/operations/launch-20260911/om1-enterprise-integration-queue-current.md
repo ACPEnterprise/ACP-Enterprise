@@ -1,6 +1,6 @@
 # OM1 Enterprise integration queue
 
-Snapshot: 2026-09-12 17:15 America/New_York
+Snapshot: 2026-09-12 17:33 America/New_York
 
 ## Authority and deployed state
 
@@ -57,6 +57,41 @@ Do not execute Migration admission, authorize QBO, execute Payroll, or sign or
 upload an Apple build as part of integration.
 
 ## Required reconciliation and qualification
+
+All candidate heads remain fetchable from `origin`; PR #215's branch head and
+`refs/pull/215/head` both resolve to `724398348b566f655d2bc7127c20beeb6be52d6c`.
+Use a clean worktree for one lane at a time. The following sequence is
+pre-integration only: it updates the candidate branch and never checks out,
+pushes, or merges the protected branch.
+
+```bash
+git fetch origin --prune
+test "$(git rev-parse origin/customer-management-v1)" = \
+  91dae4a52084daef42048e21b7754742e5e5eba9
+
+lane=work/REPLACE_WITH_LANE
+expected=REPLACE_WITH_FULL_HEAD
+test "$(git rev-parse "origin/$lane")" = "$expected"
+git switch --force-create "$lane" "origin/$lane"
+git merge --no-edit origin/customer-management-v1
+git diff --check origin/customer-management-v1...HEAD
+```
+
+Replace the two placeholders with exactly one row below. Stop and recompute the
+packet if either SHA guard fails or the merge conflicts.
+
+| Lane | Expected head |
+|---|---|
+| `work/migration-source4-accepted-artifact-recovery-1` | `a3cad3d389b9ed69300939d15c19e2d7b08da063` |
+| `work/hcp-historical-safe-tranche-1` | `b32f99ff80f447bf8140b73380d19191ccb8db59` |
+| `work/eco-migration-reconciliation-integration-watch-1` | `1c0e7b20db62b6a342548f2842ea1a3a45965386` |
+| `work/om2b-payroll-accounting-continuation-1` | `724398348b566f655d2bc7127c20beeb6be52d6c` |
+| `work/mobile-apple-owner-release-packet-1` | `0183eaec3e2825a79b683e9e684a761243c86ea7` |
+
+After the lane-specific edits and tests below, commit and push only that lane,
+then open or refresh its PR into `customer-management-v1`. Enterprise must
+review the resulting PR delta and integrate it through the ruleset-required PR
+flow; direct protected updates are not an execution option.
 
 ### SOURCE.4 artifact recovery
 
