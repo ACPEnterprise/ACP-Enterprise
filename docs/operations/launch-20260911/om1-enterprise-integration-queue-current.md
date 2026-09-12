@@ -9,6 +9,8 @@ Snapshot: 2026-09-12 17:15 America/New_York
 - Deployed Preview: `52dc336766a67fc0c4698244b9894bab0fe65913`
 - Preview health: application healthy; PostgreSQL and Redis connected
 - Deployment gap: protected PRs #257, #258, #259, and #260
+- GitHub CI evidence: no check runs or commit statuses are reported for the
+  protected SHA. Local qualification does not substitute for the tests below.
 
 ## Active candidates
 
@@ -79,7 +81,9 @@ Update the current integration-watch authority from `52dc3367...` to
 
 Run the three affected Vitest suites plus frontend lint, typecheck/build. Confirm
 the eight-file effective delta contains no OAuth connect/disconnect mutation and
-continues to report `mutation_authority: none`.
+continues to report `mutation_authority: none`. GitHub reports no checks on the
+candidate branch, so Enterprise must require and record these results before
+integration.
 
 ### Mobile
 
