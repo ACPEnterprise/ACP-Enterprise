@@ -1,4 +1,5 @@
 from typing import Annotated
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -7,7 +8,12 @@ from app.database.session import get_database_session
 from app.jobs.errors import JobError
 from app.jobs.router import translate_job_error
 from app.jobs.schemas import JobMutationResponse
-from app.operations.schemas import ServiceRequestCreate, ServiceRequestResponse
+from app.operations.schemas import (
+    ExistingJobScheduleCreate,
+    ExistingJobScheduleResponse,
+    ServiceRequestCreate,
+    ServiceRequestResponse,
+)
 from app.operations.service import operations_service
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import JobPermission, SchedulingPermission
@@ -69,6 +75,50 @@ async def accept_service_request(
     except JobError as error:
         raise translate_job_error(error) from error
     return ServiceRequestResponse(
+        request_id=result.request_id,
+        appointment=appointment_response(result.appointment),
+        job=JobMutationResponse.model_validate(result.job),
+    )
+
+
+@router.post(
+    "/jobs/{job_id}/schedule",
+    response_model=ExistingJobScheduleResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Schedule an existing Job",
+)
+async def schedule_existing_job(
+    job_id: UUID,
+    data: ExistingJobScheduleCreate,
+    scheduling_context: SchedulingManageContext,
+    jobs_context: JobsManageContext,
+    session: DatabaseSession,
+) -> ExistingJobScheduleResponse:
+    context = scheduling_context
+    assert context.company.id == jobs_context.company.id
+    try:
+        result = await operations_service.schedule_existing_job(
+            session,
+            context=context,
+            request_id=data.request_id,
+            job_id=job_id,
+            expected_job_version=data.expected_job_version,
+            appointment=CreateAppointmentCommand(
+                idempotency_key=data.request_id,
+                branch_id=data.branch_id,
+                customer_id=data.customer_id,
+                service_location_id=data.service_location_id,
+                arrival_window_start_at=data.arrival_window_start_at,
+                arrival_window_end_at=data.arrival_window_end_at,
+                expected_duration_minutes=data.expected_duration_minutes,
+                capacity_units=data.capacity_units,
+            ),
+        )
+    except SchedulingError as error:
+        raise translate_scheduling_error(error) from error
+    except JobError as error:
+        raise translate_job_error(error) from error
+    return ExistingJobScheduleResponse(
         request_id=result.request_id,
         appointment=appointment_response(result.appointment),
         job=JobMutationResponse.model_validate(result.job),
