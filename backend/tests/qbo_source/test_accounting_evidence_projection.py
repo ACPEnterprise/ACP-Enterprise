@@ -189,6 +189,7 @@ def test_projection_matches_om2b_contract_without_promoting_accounting_truth(
     assert result["provider_environment"] == "production"
     assert len(result["company_identity_sha256"]) == 64
     assert result["company_info_verified_at"] == "2026-09-10T19:59:00+00:00"
+    assert result["realm_company_identity"] == result["company_identity_sha256"]
     assert result["source_manifest_sha256"] == result["snapshot_digest"]
     assert result["source_company_label"] == "All County Example"
     assert result["source_company_id_masked"] == "…3456"
@@ -209,6 +210,25 @@ def test_projection_matches_om2b_contract_without_promoting_accounting_truth(
     assert result["vendors"][0]["source_evidence_only"] is True
     assert result["bills"][0]["open_balance"]["amount"] == "5.00"
     assert result["reports"][0]["basis"] == "cash"
+    invoice_record = next(
+        item for item in result["records"] if item["record_type"] == "invoice"
+    )
+    assert invoice_record == {
+        "source": "QBO",
+        "realm_company_identity": result["company_identity_sha256"],
+        "record_type": "invoice",
+        "source_record_id": "i-1",
+        "provider_version": None,
+        "value": {"amount": "12.00", "currency": "USD", "state": "available"},
+        "accounting_basis": "cash",
+        "source_as_of": "2026-09-10",
+        "acquired_at": "2026-09-10T20:00:00+00:00",
+        "completeness": "complete",
+        "conflict_state": "none",
+        "refresh_state": "available",
+        "source_authority": "quickbooks_online_source_reported",
+        "accepted_as_acp_accounting": False,
+    }
     assert "qbo_source_reported_not_posted_acp_ledger" in result["limitations"]
 
 
@@ -234,6 +254,8 @@ def test_absent_evidence_is_unknown_not_zero_or_live(tmp_path: Path) -> None:
     assert result["ar"]["total_open"]["amount"] is None
     assert result["is_live"] is False
     assert result["mode"] == "blocked"
+    assert result["records"] == []
+    assert result["realm_company_identity"] is None
 
 
 def test_preserved_snapshot_is_stale_not_live_when_current_oauth_is_absent(

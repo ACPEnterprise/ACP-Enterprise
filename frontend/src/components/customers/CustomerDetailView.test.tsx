@@ -191,6 +191,67 @@ describe("CustomerDetailView", () => {
     expect(screen.getByText("unknown · unknown")).toBeInTheDocument();
   });
 
+  it("renders a full Customer with multiple Locations and missing optional Contact data", () => {
+    const location = {
+      id: "location-1",
+      customer_id: customer.id,
+      address_line_1: "10 Main Street",
+      address_line_2: null,
+      city: "Albany",
+      state: "NY",
+      postal_code: "12207",
+      property_type: "single_family" as const,
+      gate_access_instructions: null,
+      water_shutoff_location: null,
+      sewer_septic: "sewer" as const,
+      property_notes: null,
+      is_primary: true,
+      created_at: "2026-01-01T00:00:00Z",
+      updated_at: "2026-01-01T00:00:00Z",
+      archived_at: null,
+    };
+    vi.mocked(customerHooks.useCustomerDetail).mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: {
+        ...customer,
+        properties: [
+          location,
+          { ...location, id: "location-2", address_line_1: "20 Second Street", is_primary: false },
+        ],
+        contacts: [{
+          id: "contact-1",
+          customer_id: customer.id,
+          first_name: "Morgan",
+          last_name: null,
+          relationship_or_role: null,
+          phone: null,
+          email: null,
+          is_preferred: false,
+          can_approve_work: false,
+          created_at: "2026-01-01T00:00:00Z",
+          updated_at: "2026-01-01T00:00:00Z",
+          archived_at: null,
+        }],
+      },
+    } as never);
+
+    render(<MemoryRouter><CustomerDetailView customerId={customer.id} onBack={vi.fn()} /></MemoryRouter>);
+
+    expect(screen.getByText("10 Main Street")).toBeInTheDocument();
+    expect(screen.getByText("20 Second Street")).toBeInTheDocument();
+    expect(screen.getByText("Morgan")).toBeInTheDocument();
+    expect(screen.getByText("No phone or email")).toBeInTheDocument();
+  });
+
+  it("does not equate empty admitted Locations or Contacts with empty source", () => {
+    render(<MemoryRouter><CustomerDetailView customerId={customer.id} onBack={vi.fn()} /></MemoryRouter>);
+
+    expect(screen.getByText(/No Service Locations are currently admitted/)).toBeInTheDocument();
+    expect(screen.getByText(/does not infer a Location from held or incomplete source evidence/)).toBeInTheDocument();
+    expect(screen.getByText(/No additional Contacts are currently admitted/)).toBeInTheDocument();
+  });
+
   it("records explicit consent and renders consent-safe history", async () => {
     const recordConsent = vi.fn();
     vi.mocked(customerHooks.useCustomerConsents).mockReturnValue({

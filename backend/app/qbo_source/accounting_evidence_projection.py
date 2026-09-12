@@ -29,6 +29,7 @@ def unavailable_qbo_workspace(*, basis: Basis, limitation: str) -> dict[str, obj
         "mode": "blocked",
         "provider_environment": "production",
         "company_identity_sha256": None,
+        "realm_company_identity": None,
         "company_info_verified_at": None,
         "source_manifest_sha256": None,
         "source_company_label": "Real company not verified",
@@ -59,6 +60,7 @@ def unavailable_qbo_workspace(*, basis: Basis, limitation: str) -> dict[str, obj
         "vendors": [],
         "bills": [],
         "reports": [],
+        "records": [],
         "mutation_authority": "none",
     }
 
@@ -125,12 +127,23 @@ def project_latest_qbo_workspace(
     )
     if incompatible_report_date:
         limitations.add("incompatible_report_date_excluded")
+    company_identity = _company_identity_sha256(snapshot, company)
+    refresh_state = (
+        "available"
+        if state == "complete" and authorization_marker is not None
+        else "partial"
+        if state == "partial" and authorization_marker is not None
+        else "stale"
+    )
+    source_as_of = _text(snapshot.get("accounting_date_cutoff"))
+    acquired_at = _text(manifest.get("ended_at"))
     return {
         "contract_version": "qbo-accounting-evidence/v1",
         "source": "quickbooks_online",
         "mode": "live" if authorization_marker is not None else "historical",
         "provider_environment": "production",
-        "company_identity_sha256": _company_identity_sha256(snapshot, company),
+        "company_identity_sha256": company_identity,
+        "realm_company_identity": company_identity,
         "company_info_verified_at": (
             authorization_marker.get("company_info_verified_at")
             if authorization_marker is not None
@@ -145,13 +158,7 @@ def project_latest_qbo_workspace(
         "accounting_basis": basis,
         "as_of": snapshot.get("accounting_date_cutoff"),
         "acquired_at": manifest.get("ended_at"),
-        "refresh_state": (
-            "available"
-            if state == "complete" and authorization_marker is not None
-            else "partial"
-            if state == "partial" and authorization_marker is not None
-            else "stale"
-        ),
+        "refresh_state": refresh_state,
         "provider_authorization": (
             "verified_current" if authorization_marker is not None else "unverified"
         ),
@@ -180,8 +187,63 @@ def project_latest_qbo_workspace(
         "vendors": vendors,
         "bills": bills,
         "reports": reports,
+        "records": _record_evidence(
+            rows,
+            realm_company_identity=company_identity,
+            basis=basis,
+            source_as_of=source_as_of,
+            acquired_at=acquired_at,
+            completeness=state,
+            refresh_state=refresh_state,
+        ),
         "mutation_authority": "none",
     }
+
+
+def _record_evidence(
+    rows: Mapping[str, list[dict[str, object]]],
+    *,
+    realm_company_identity: str,
+    basis: Basis,
+    source_as_of: str | None,
+    acquired_at: str | None,
+    completeness: str,
+    refresh_state: str,
+) -> list[dict[str, object]]:
+    """Project a stable record index without promoting QBO into ACP truth."""
+    result: list[dict[str, object]] = []
+    for record_type, family in sorted(rows.items()):
+        for row in family:
+            amount = next(
+                (
+                    row[key]
+                    for key in ("TotalAmt", "CurrentBalance", "Balance", "Amount")
+                    if row.get(key) is not None
+                ),
+                None,
+            )
+            result.append(
+                {
+                    "source": "QBO",
+                    "realm_company_identity": realm_company_identity,
+                    "record_type": record_type,
+                    "source_record_id": _required_id(row),
+                    "provider_version": _text(row.get("SyncToken")),
+                    "value": _amount(amount, _currency(row)),
+                    "accounting_basis": basis,
+                    "source_as_of": source_as_of,
+                    "acquired_at": acquired_at,
+                    "completeness": completeness,
+                    "conflict_state": "none",
+                    "refresh_state": refresh_state,
+                    "source_authority": "quickbooks_online_source_reported",
+                    "accepted_as_acp_accounting": False,
+                }
+            )
+    return sorted(
+        result,
+        key=lambda item: (str(item["record_type"]), str(item["source_record_id"])),
+    )
 
 
 def _verify_current_authorization(
