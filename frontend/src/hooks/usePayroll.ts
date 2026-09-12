@@ -6,9 +6,9 @@ import {
   listPayrollOperatingRegisters,
   listPayrollReports,
   getPayrollPeriodOperations,
-  getPayrollEmployeeSetup, draftPayrollCompensation, draftPayrollInput,
+  getPayrollEmployeeSetup, draftPayrollCompensation,
   approvePayrollCompensation, approvePayrollInput,
-  type CompensationDraft, type PayrollInputDraft,
+  type CompensationDraft,
 } from "../api/payroll";
 
 export const usePayrollOperationsSummary = (enabled = true) =>
@@ -36,7 +36,6 @@ export function usePayrollEmployeeSetup(employeeId: string | null, enabled = tru
   return {
     query: useQuery({ queryKey: key, queryFn: () => getPayrollEmployeeSetup(employeeId!), enabled: enabled && Boolean(employeeId) }),
     draftCompensation: useMutation({ mutationFn: (body: CompensationDraft) => draftPayrollCompensation(employeeId!, body), onSuccess: refresh }),
-    draftInput: useMutation({ mutationFn: (body: PayrollInputDraft) => draftPayrollInput(employeeId!, body), onSuccess: refresh }),
     approveCompensation: useMutation({ mutationFn: approvePayrollCompensation, onSuccess: refresh }),
     approveInput: useMutation({ mutationFn: approvePayrollInput, onSuccess: refresh }),
   };

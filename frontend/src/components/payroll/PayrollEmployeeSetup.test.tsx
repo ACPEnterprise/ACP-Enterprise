@@ -5,6 +5,7 @@ import { PayrollEmployeeSetup } from "./PayrollEmployeeSetup";
 
 vi.mock("../../auth", () => ({ useHasPermission: () => true }));
 vi.mock("../../hooks/usePayroll", () => ({ usePayrollEmployeeSetup: vi.fn() }));
+vi.mock("../../api/payroll", () => ({ draftPayrollInput: vi.fn() }));
 
 describe("PayrollEmployeeSetup", () => {
   it("shows exact blockers and never substitutes zero", () => {
@@ -14,7 +15,7 @@ describe("PayrollEmployeeSetup", () => {
         readiness: "BLOCKED_FOR_PAYROLL", blockers: ["tax:federal_withholding_election:missing"],
         protected_input_configuration_ready: false, compensations: [], inputs: [],
       } },
-      draftCompensation: { mutateAsync: vi.fn() }, draftInput: { mutateAsync: vi.fn() },
+      draftCompensation: { mutateAsync: vi.fn() },
       approveCompensation: { mutate: vi.fn() }, approveInput: { mutate: vi.fn() },
     } as never);
     render(<PayrollEmployeeSetup employeeId="employee-1" />);

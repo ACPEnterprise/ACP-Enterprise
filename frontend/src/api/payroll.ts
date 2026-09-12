@@ -132,6 +132,7 @@ export type CompensationDraft = {
 export type PayrollInputDraft = {
   domain: "tax" | "deduction" | "employer_contribution"; authority_key: string;
   effective_start: string; effective_end?: string | null; jurisdiction_reference?: string | null;
+  applicability?: "required" | "not_applicable";
   calculation_basis?: string | null; priority?: number | null; public_parameters?: Record<string, unknown>;
   protected_values?: Record<string, unknown> | null; supersedes_authority_id?: string | null; audit_reason: string;
 };

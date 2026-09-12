@@ -2,6 +2,7 @@
 
 - Mission: `0c08f1e3634f38a7fb82970932dea5de7a4cf24f`
 - Starting authority: `2d8709c895e60faf7cc0251d6c8ac82311013613`
+- Reconciled authority: `150bcd2a4361313a2cac0337c0a1c85fbebac5c9`
 - Branch: `work/payroll-employee-setup-operations-1`
 - Worktree: `ACP-Enterprise-OM2B-payroll-setup`
 
@@ -14,7 +15,8 @@ exact safe blockers, and creates effective-dated drafts without Employee UUID
 entry. Separate authorized approval preserves the existing drafter/approver
 separation and supersession history.
 
-Supported setup evidence includes hourly/salary authority, effective date,
+Supported setup evidence uses the exact protected
+`payroll.real-input-readiness.v1` keys and includes hourly/salary authority, effective date,
 salary frequency, classification reference, federal W-4 filing status and Steps
 2/3/4, tax jurisdiction, state/local elections, pre/post-tax deductions, and YTD
 Social Security/Medicare wage evidence. Confidential values are encrypted by
@@ -49,3 +51,11 @@ tax/deduction calculation tests remain authoritative.
 No migration is required. No Payroll transmission, filing/payment, Accounting
 posting, money movement, QBO mutation, Preview deployment, or Production action
 is authorized from this lane.
+
+## Qualification
+
+- Full Payroll backend suite: 108 passed.
+- Complete frontend suite: 116 files / 413 tests passed.
+- Focused setup/readiness API: 8 passed; focused setup/Payroll UI: 6 passed.
+- Ruff, MyPy, ESLint, TypeScript, production build, Python compilation, and
+  `git diff --check`: passed.

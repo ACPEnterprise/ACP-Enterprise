@@ -110,24 +110,38 @@ class InputDraft(BaseModel):
 
 
 _SUPPORTED_INPUT_KEYS = {
-    "federal_withholding_election",
-    "tax_jurisdiction",
-    "state_withholding",
-    "local_withholding",
-    "ytd_social_security_wages",
-    "ytd_medicare_wages",
-    "pre_tax_deduction",
-    "post_tax_deduction",
+    "w4_filing_status",
+    "w4_step_2",
+    "w4_step_3",
+    "w4_step_4a",
+    "w4_step_4b",
+    "w4_step_4c",
+    "work_jurisdiction",
+    "residence_jurisdiction",
+    "state_local_withholding_configuration",
+    "unemployment_workforce_jurisdiction",
+    "deduction_configuration",
+    "deduction_tax_treatment",
+    "deduction_effective_date",
+    "deduction_limits",
+    "social_security_wages_ytd",
+    "social_security_tax_ytd",
+    "medicare_wages_ytd",
+    "medicare_tax_ytd",
+    "additional_medicare_prerequisites",
+    "federal_withholding_ytd",
+    "prior_payroll_coverage",
+    "federal_tax_table",
+    "state_local_tax_table",
+    "tax_table_source_version",
+    "tax_table_effective_date",
 }
-_SUPPORTED_PROTECTED_FIELDS = {
-    "filing_status",
-    "step_2",
-    "step_3_credits",
-    "step_4a_other_income",
-    "step_4b_deductions",
-    "step_4c_extra_withholding",
-    "ytd_amount",
-    "deduction_amount_or_rate",
+_SUPPORTED_PROTECTED_FIELDS = {"value"}
+_DEDUCTION_INPUT_KEYS = {
+    "deduction_configuration",
+    "deduction_tax_treatment",
+    "deduction_effective_date",
+    "deduction_limits",
 }
 
 
@@ -360,6 +374,13 @@ async def draft_input(
     if body.authority_key not in _SUPPORTED_INPUT_KEYS:
         raise HTTPException(
             422, "Payroll input key is not supported by this operating contract."
+        )
+    expected_domain = (
+        "deduction" if body.authority_key in _DEDUCTION_INPUT_KEYS else "tax"
+    )
+    if body.domain != expected_domain:
+        raise HTTPException(
+            422, "Payroll input key does not match its authoritative domain."
         )
     if body.protected_values and not set(body.protected_values).issubset(
         _SUPPORTED_PROTECTED_FIELDS

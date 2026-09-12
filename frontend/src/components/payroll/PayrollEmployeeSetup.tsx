@@ -1,9 +1,12 @@
 import { useState, type FormEvent } from "react";
 import { useHasPermission } from "../../auth";
 import { usePayrollEmployeeSetup } from "../../hooks/usePayroll";
+import { draftPayrollInput } from "../../api/payroll";
 import { Alert, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Spinner } from "../../ui";
 
 const label = (value: string) => value.replaceAll("_", " ").replaceAll(":", " · ");
+const taxKeys = ["w4_filing_status","w4_step_2","w4_step_3","w4_step_4a","w4_step_4b","w4_step_4c","work_jurisdiction","residence_jurisdiction","state_local_withholding_configuration","unemployment_workforce_jurisdiction","social_security_wages_ytd","social_security_tax_ytd","medicare_wages_ytd","medicare_tax_ytd","additional_medicare_prerequisites","federal_withholding_ytd","prior_payroll_coverage","federal_tax_table","state_local_tax_table","tax_table_source_version","tax_table_effective_date"];
+const deductionKeys = ["deduction_configuration","deduction_tax_treatment","deduction_effective_date","deduction_limits"];
 
 export function PayrollEmployeeSetup({ employeeId }: { employeeId: string }) {
   const canReadCompensation = useHasPermission("COMPANY_PAYROLL_COMPENSATION_READ");
@@ -33,14 +36,11 @@ export function PayrollEmployeeSetup({ employeeId }: { employeeId: string }) {
   };
   const submitInput = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault(); setMessage(""); const data = new FormData(event.currentTarget);
-    const key = String(data.get("authority_key")); const domain = String(data.get("domain")) as "tax" | "deduction";
-    const protectedValues = Object.fromEntries([
-      "filing_status", "step_2", "step_3_credits", "step_4a_other_income",
-      "step_4b_deductions", "step_4c_extra_withholding", "ytd_amount",
-      "deduction_amount_or_rate",
-    ].map((key) => [key, String(data.get(key) || "")]).filter(([, value]) => value));
+    const key = String(data.get("authority_key")); const domain = deductionKeys.includes(key) ? "deduction" : "tax";
+    const protectedValue = String(data.get("protected_value") || "");
     try {
-      await setup.draftInput.mutateAsync({ domain, authority_key: key, effective_start: String(data.get("effective_start")), jurisdiction_reference: String(data.get("jurisdiction_reference") || "") || null, calculation_basis: String(data.get("calculation_basis") || "") || null, priority: domain === "deduction" ? Number(data.get("priority") || 0) : null, public_parameters: {}, protected_values: Object.keys(protectedValues).length ? protectedValues : null, audit_reason: String(data.get("audit_reason")) });
+      await draftPayrollInput(employeeId, { domain, authority_key: key, applicability: String(data.get("applicability")) as "required" | "not_applicable", effective_start: String(data.get("effective_start")), jurisdiction_reference: String(data.get("jurisdiction_reference") || "") || null, calculation_basis: String(data.get("calculation_basis") || "") || null, priority: domain === "deduction" ? Number(data.get("priority") || 0) : null, public_parameters: {}, protected_values: protectedValue ? { value: protectedValue } : null, audit_reason: String(data.get("audit_reason")) });
+      await setup.query.refetch();
       setMessage("Payroll input draft saved. A different authorized approver must approve it."); event.currentTarget.reset();
     } catch { setMessage("Payroll input was not saved. Protected-input encryption, permissions, or effective-date authority may be unavailable."); }
   };
@@ -66,22 +66,13 @@ export function PayrollEmployeeSetup({ employeeId }: { employeeId: string }) {
       <section><h3 className="font-semibold">Tax and deduction authority history</h3>{value.inputs.length ? <ul className="space-y-1">{value.inputs.map((item) => <li key={item.id}>{label(item.domain)} · {label(item.key)} · version {item.version} · {label(item.lifecycle)}{item.lifecycle === "draft" && canApproveInput ? <Button className="ml-2" type="button" onClick={() => setup.approveInput.mutate(item.id)}>Approve</Button> : null}</li>)}</ul> : <p className="text-content-muted">No tax or deduction authority is configured. Missing inputs are not zero.</p>}</section>
       {(canTax || canDeduction) && <form className="grid gap-3 rounded-lg border border-stroke p-4 md:grid-cols-2" onSubmit={submitInput}>
         <h3 className="md:col-span-2 font-semibold">Add effective-dated Payroll input</h3>
-        <label>Input class<select name="domain" className="block w-full" required>{canTax && <option value="tax">Tax / W-4 / YTD</option>}{canDeduction && <option value="deduction">Deduction</option>}</select></label>
-        <label>Supported input<select name="authority_key" className="block w-full" required><option value="federal_withholding_election">Federal W-4 election</option><option value="tax_jurisdiction">Tax jurisdiction</option><option value="state_withholding">State withholding election</option><option value="local_withholding">Local withholding election</option><option value="ytd_social_security_wages">YTD Social Security wages</option><option value="ytd_medicare_wages">YTD Medicare wages</option><option value="pre_tax_deduction">Pre-tax deduction</option><option value="post_tax_deduction">Post-tax deduction</option></select></label>
+        <label>Exact missing input<select name="authority_key" className="block w-full" required>{[...(canTax ? taxKeys : []), ...(canDeduction ? deductionKeys : [])].map((key) => <option key={key} value={key}>{label(key)}</option>)}</select></label>
+        <label>Applicability<select name="applicability" className="block w-full"><option value="required">Required / supplied</option><option value="not_applicable">Approved not applicable</option></select></label>
         <label>Effective date<input name="effective_start" type="date" className="block w-full" required /></label>
         <label>Jurisdiction reference<input name="jurisdiction_reference" className="block w-full" /></label>
         <label>Calculation basis<input name="calculation_basis" className="block w-full" placeholder="Existing rule/provider reference" /></label>
         <label>Deduction priority<input name="priority" type="number" min="0" className="block w-full" /></label>
-        <fieldset className="grid gap-3 md:col-span-2 md:grid-cols-3"><legend className="font-semibold">Federal W-4 fields (when applicable)</legend>
-          <label>Filing status<select name="filing_status" className="block w-full"><option value="">Not supplied</option><option value="single">Single</option><option value="married_filing_jointly">Married filing jointly</option><option value="head_of_household">Head of household</option></select></label>
-          <label>Step 2 status<select name="step_2" className="block w-full"><option value="">Not supplied</option><option value="false">Not checked</option><option value="true">Checked</option></select></label>
-          <label>Step 3 credits<input name="step_3_credits" type="number" min="0" step="0.01" className="block w-full" /></label>
-          <label>Step 4(a) other income<input name="step_4a_other_income" type="number" min="0" step="0.01" className="block w-full" /></label>
-          <label>Step 4(b) deductions<input name="step_4b_deductions" type="number" min="0" step="0.01" className="block w-full" /></label>
-          <label>Step 4(c) extra withholding<input name="step_4c_extra_withholding" type="number" min="0" step="0.01" className="block w-full" /></label>
-        </fieldset>
-        <label>YTD wage amount<input name="ytd_amount" type="number" min="0" step="0.01" className="block w-full" /></label>
-        <label>Deduction amount or rate<input name="deduction_amount_or_rate" type="number" min="0" step="0.0001" className="block w-full" /></label>
+        <label className="md:col-span-2">Confidential value for this exact input<input name="protected_value" type="password" autoComplete="off" className="block w-full" /><span className="text-xs text-content-muted">Enter filing status, Step value, YTD amount, deduction configuration, or rule reference required by the selected blocker. The value is write-only.</span></label>
         <label>Reason<input name="audit_reason" className="block w-full" required /></label>
         <Button type="submit">Save Payroll input draft</Button>
       </form>}
