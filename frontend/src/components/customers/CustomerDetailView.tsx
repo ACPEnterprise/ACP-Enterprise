@@ -43,7 +43,8 @@ export function CustomerDetailView({ customerId, onBack }: CustomerDetailViewPro
   const detail = useCustomerDetail(customerId);
   const mutations = useCustomerMutations(customerId);
   const consents = useCustomerConsents(customerId);
-  const timeline = useCustomerTimeline(customerId);
+  const [timelinePage, setTimelinePage] = useState(1);
+  const timeline = useCustomerTimeline(customerId, timelinePage, 25);
   const canReadCommunications = useHasPermission("COMPANY_COMMUNICATIONS_READ");
   const [isEditingCustomer, setIsEditingCustomer] = useState(false);
   const [editingProperty, setEditingProperty] = useState<CustomerProperty | "new" | null>(null);
@@ -195,7 +196,7 @@ export function CustomerDetailView({ customerId, onBack }: CustomerDetailViewPro
         <p className="text-sm text-action-primary">Customer history</p>
         <h3 className="mt-1 text-xl font-semibold">Authoritative timeline</h3>
         {timeline.data && <p className="mt-2 text-xs text-content-muted">Showing {timeline.data.items.length} of {timeline.data.total_count} recorded events · page {timeline.data.page} of {timeline.data.total_pages || 1}</p>}
-        {timeline.isError && <Alert variant="danger" title="Timeline unavailable">{getApiErrorMessage(timeline.error)}</Alert>}
+        {timeline.isError && <Alert variant="danger" title="Timeline unavailable" action={<Button type="button" variant="outline" onClick={() => void timeline.refetch()}>Retry history</Button>}>{getApiErrorMessage(timeline.error)}</Alert>}
         {timeline.isLoading && <p className="mt-4 text-sm text-content-muted">Loading customer history…</p>}
         <ol className="mt-5 space-y-3" aria-label="Customer timeline">
           {(timeline.data?.items ?? []).map((entry) => (
@@ -211,6 +212,7 @@ export function CustomerDetailView({ customerId, onBack }: CustomerDetailViewPro
           ))}
         </ol>
         {timeline.isSuccess && timeline.data.items.length === 0 && <p className="mt-4 text-sm text-content-muted">No authoritative customer events are available.</p>}
+        {timeline.data && timeline.data.total_pages > 1 && <div className="mt-4 flex flex-col gap-3 border-t border-stroke pt-4 text-sm sm:flex-row sm:items-center sm:justify-between"><span className="text-content-muted">History page {timeline.data.page} of {timeline.data.total_pages}</span><div className="grid grid-cols-2 gap-2"><Button type="button" variant="outline" disabled={timelinePage <= 1 || timeline.isFetching} onClick={() => setTimelinePage((value) => Math.max(1, value - 1))}>Previous history</Button><Button type="button" variant="outline" disabled={timelinePage >= timeline.data.total_pages || timeline.isFetching} onClick={() => setTimelinePage((value) => value + 1)}>Next history</Button></div></div>}
       </Card>
 
       <Card className="p-ui-4 sm:p-ui-6">

@@ -46,10 +46,10 @@ export function useCustomerConsents(customerId: string | null) {
     enabled: Boolean(customerId),
   });
 }
-export function useCustomerTimeline(customerId: string | null) {
+export function useCustomerTimeline(customerId: string | null, page = 1, pageSize = 25) {
   return useQuery({
-    queryKey: ["customer-timeline", customerId],
-    queryFn: () => getCustomerTimeline(customerId as string),
+    queryKey: ["customer-timeline", customerId, page, pageSize],
+    queryFn: () => getCustomerTimeline(customerId as string, page, pageSize),
     enabled: Boolean(customerId),
   });
 }
