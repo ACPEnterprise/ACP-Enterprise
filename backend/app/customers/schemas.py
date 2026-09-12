@@ -455,8 +455,14 @@ class CustomerSearchQuery(StrictSchema):
         return self
 
 
+class CustomerSearchItem(CustomerResponse):
+    """Roster projection with authoritative effective-contact context."""
+
+    preferred_contact: ContactResponse | None
+
+
 class CustomerSearchResponse(StrictSchema):
-    items: list[CustomerResponse]
+    items: list[CustomerSearchItem]
     page: int
     page_size: int
     total_count: int
@@ -466,7 +472,7 @@ class CustomerSearchResponse(StrictSchema):
     def build(
         cls,
         *,
-        items: list[CustomerResponse],
+        items: list[CustomerSearchItem],
         page: int,
         page_size: int,
         total_count: int,
