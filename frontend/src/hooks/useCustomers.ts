@@ -59,7 +59,10 @@ export function useCustomerMutations(customerId?: string) {
   const refresh = async (id?: string) => {
     await queryClient.invalidateQueries({ queryKey: ["customers"] });
     if (id) {
-      await queryClient.invalidateQueries({ queryKey: ["customer", id] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["customer", id] }),
+        queryClient.invalidateQueries({ queryKey: ["customer-timeline", id] }),
+      ]);
     }
   };
 
