@@ -246,7 +246,7 @@ export function CustomerDetailView({ customerId, onBack }: CustomerDetailViewPro
 
       <Card className="p-ui-4 sm:p-ui-6">
         <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm text-action-primary">Service locations</p><h3 className="mt-1 text-xl font-semibold">Properties</h3></div>{canManage && !archived && <Button type="button" onClick={() => setEditingProperty("new")} leadingIcon={<Plus size={16} />}>Add property</Button>}</div>
-        {customer.properties.length === 0 && editingProperty === null && <p className="mt-5 rounded-xl border border-dashed border-stroke p-5 text-sm text-content-muted">No service properties have been added.</p>}
+        {customer.properties.length === 0 && editingProperty === null && <p className="mt-5 rounded-xl border border-dashed border-stroke p-5 text-sm text-content-muted">No Service Locations are currently admitted for this Customer. ACP does not infer a Location from held or incomplete source evidence.</p>}
         <div className="mt-5 grid gap-3 md:grid-cols-2">
           {customer.properties.map((property) => (
             <article key={property.id} className="min-w-0 rounded-xl border border-stroke bg-surface-subtle p-4">
@@ -262,11 +262,11 @@ export function CustomerDetailView({ customerId, onBack }: CustomerDetailViewPro
 
       <Card className="p-ui-4 sm:p-ui-6">
         <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm text-action-primary">Customer relationships</p><h3 className="mt-1 text-xl font-semibold">Contacts</h3></div>{canManage && !archived && <Button type="button" onClick={() => setEditingContact("new")} leadingIcon={<Plus size={16} />}>Add contact</Button>}</div>
-        {customer.contacts.length === 0 && editingContact === null && <p className="mt-5 rounded-xl border border-dashed border-stroke p-5 text-sm text-content-muted">No additional contacts have been added.</p>}
+        {customer.contacts.length === 0 && editingContact === null && <p className="mt-5 rounded-xl border border-dashed border-stroke p-5 text-sm text-content-muted">No additional Contacts are currently admitted for this Customer. The Customer's own optional contact fields remain separate.</p>}
         <div className="mt-5 grid gap-3 md:grid-cols-2">
           {customer.contacts.map((contact) => (
             <article key={contact.id} className="min-w-0 rounded-xl border border-stroke bg-surface-subtle p-4">
-              <div className="flex min-w-0 gap-3"><UserRound size={18} className="mt-0.5 shrink-0 text-action-primary" /><div className="min-w-0 break-words"><p className="font-medium">{contact.first_name} {contact.last_name ?? ""}</p><p className="text-sm text-content-muted">{contact.relationship_or_role ?? "Contact"}</p><p className="mt-2 break-all text-sm text-content-secondary">{contact.phone ?? contact.email}</p></div></div>
+              <div className="flex min-w-0 gap-3"><UserRound size={18} className="mt-0.5 shrink-0 text-action-primary" /><div className="min-w-0 break-words"><p className="font-medium">{contact.first_name} {contact.last_name ?? ""}</p><p className="text-sm text-content-muted">{contact.relationship_or_role ?? "Contact"}</p><p className="mt-2 break-all text-sm text-content-secondary">{contact.phone ?? contact.email ?? "No phone or email"}</p></div></div>
               <div className="mt-3 flex flex-wrap gap-2 text-xs">{contact.is_preferred && <span className="rounded-full bg-blue-950 px-2 py-1 text-blue-300">Preferred</span>}{contact.can_approve_work && <span className="rounded-full bg-emerald-950 px-2 py-1 text-emerald-300">May approve work</span>}</div>
               {canManage && !archived && <button type="button" onClick={() => setEditingContact(contact)} className="mt-3 text-sm text-action-primary">Edit contact</button>}
             </article>
