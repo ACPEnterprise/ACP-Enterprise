@@ -8,10 +8,12 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
 from enum import StrEnum
+from itertools import pairwise
 from uuid import UUID
 
 WORKDAY_TIME_DEFINITION_VERSION = "time.workday-authority.v1"
 PAYROLL_TIME_INPUT_VERSION = "payroll.time-input.v1"
+PAYROLL_INPUT_PROJECTION_VERSION = "payroll.time-input-projection.v1"
 
 
 class TimeEntryProvenance(StrEnum):
@@ -52,6 +54,14 @@ class WorkdayAuthorizationError(PermissionError):
 
 class WorkdayConflictError(WorkdayTimeError):
     pass
+
+
+class PayrollInputExclusionReason(StrEnum):
+    NOT_SUBMITTED = "not_submitted"
+    AWAITING_APPROVAL = "awaiting_approval"
+    CORRECTION_AWAITING_APPROVAL = "correction_awaiting_approval"
+    OVERLAPS_APPROVED_INTERVAL = "overlaps_approved_interval"
+    OPEN_JOB_CLOCK_NON_PAYABLE = "open_job_clock_non_payable"
 
 
 def canonical_digest(value: object) -> str:
@@ -115,6 +125,49 @@ class ApprovedWorkdayTimeFact:
             raise WorkdayTimeError("approved duration cannot be negative")
         if canonical_digest(self.canonical_content()) != self.evidence_digest:
             raise WorkdayTimeError("approved Workday Time digest mismatch")
+
+
+@dataclass(frozen=True)
+class PayrollInputEvidence:
+    entry_id: UUID | None
+    revision_id: UUID | None
+    state: str
+    eligible: bool
+    reason: PayrollInputExclusionReason | None
+    approved_minutes: int | None
+    evidence_digest: str | None
+
+    def canonical_content(self) -> dict[str, object]:
+        return {
+            "entry_id": str(self.entry_id) if self.entry_id else None,
+            "revision_id": str(self.revision_id) if self.revision_id else None,
+            "state": self.state,
+            "eligible": self.eligible,
+            "reason": self.reason.value if self.reason else None,
+            "approved_minutes": self.approved_minutes,
+            "evidence_digest": self.evidence_digest,
+        }
+
+
+@dataclass(frozen=True)
+class PayrollInputProjection:
+    version: str
+    employee_id: UUID
+    pay_period_id: UUID
+    included: tuple[PayrollInputEvidence, ...]
+    excluded: tuple[PayrollInputEvidence, ...]
+    total_eligible_minutes: int
+    projection_digest: str
+
+    def canonical_content(self) -> dict[str, object]:
+        return {
+            "version": self.version,
+            "employee_id": str(self.employee_id),
+            "pay_period_id": str(self.pay_period_id),
+            "included": tuple(item.canonical_content() for item in self.included),
+            "excluded": tuple(item.canonical_content() for item in self.excluded),
+            "total_eligible_minutes": self.total_eligible_minutes,
+        }
 
 
 @dataclass(frozen=True)
@@ -183,6 +236,27 @@ def seal_payroll_time_input(
         raise WorkdayTimeError(
             "Payroll Time Input requires approved evidence; missing is not zero"
         )
+    seen_entries: set[UUID] = set()
+    for entry in ordered:
+        if entry.entry_id in seen_entries:
+            raise WorkdayTimeError(
+                "Payroll Time Input contains duplicate entry evidence"
+            )
+        seen_entries.add(entry.entry_id)
+    timed = sorted(
+        (
+            entry
+            for entry in ordered
+            if entry.start_at is not None and entry.end_at is not None
+        ),
+        key=lambda value: (value.start_at, value.end_at, str(value.revision_id)),
+    )
+    for previous, current in pairwise(timed):
+        assert previous.end_at is not None and current.start_at is not None
+        if current.start_at < previous.end_at:
+            raise WorkdayTimeError(
+                "Payroll Time Input contains overlapping approved intervals"
+            )
     draft = PayrollTimeInputSnapshot(
         snapshot_id="",
         version=PAYROLL_TIME_INPUT_VERSION,
