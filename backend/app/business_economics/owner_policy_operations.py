@@ -74,6 +74,8 @@ class InMemoryPolicyOperationRepository:
         )
 
     def append(self, events: tuple[PolicyOperationEvent, ...]) -> None:
+        for event in events:
+            verify_policy_operation_event(event)
         known = {x.event_digest for x in self._events}
         if any(x.event_digest in known for x in events):
             raise ValueError("duplicate policy operation event")
@@ -362,6 +364,31 @@ def policy_operation_audit_entry(event: PolicyOperationEvent) -> AuditEntry:
             "event_digest": event.event_digest,
         },
     )
+
+
+def verify_policy_operation_event(event: PolicyOperationEvent) -> None:
+    event.policy.verify()
+    if (
+        event.company_id != event.policy.company_id
+        or event.branch_id != event.policy.branch_id
+        or event.policy_id != event.policy.policy_id
+        or event.policy_version != event.policy.version
+        or event.state is not event.policy.approval_state
+    ):
+        raise ValueError("policy operation event scope or identity mismatch")
+    body = {
+        "version": OPERATIONS_VERSION,
+        "company_id": event.company_id,
+        "branch_id": event.branch_id,
+        "policy_digest": event.policy.policy_digest,
+        "state": event.state,
+        "actor_id": event.actor_id,
+        "occurred_at": event.occurred_at,
+        "rationale": event.rationale,
+        "prior_event_digest": event.prior_event_digest,
+    }
+    if _digest(body) != event.event_digest:
+        raise ValueError("policy operation event digest mismatch")
 
 
 def _digest(value: object) -> str:
