@@ -58,6 +58,10 @@ describe("CustomerOperationsPanel", () => {
     expect(screen.getByText("Showing 0 of 4 related Estimates.")).toBeInTheDocument();
     expect(screen.getByText("Showing 0 of 3 Appointments in the operating window.")).toBeInTheDocument();
     expect(screen.getByText("Showing 0 of 6 related Invoices.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open all related Jobs" })).toHaveAttribute(
+      "href",
+      "/jobs?customerId=customer-1",
+    );
   });
 
   it("does not claim a bounded Payment receipt page is complete history", () => {

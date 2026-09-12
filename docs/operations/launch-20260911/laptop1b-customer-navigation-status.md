@@ -36,6 +36,9 @@ first page is complete. Invoice rows come from the existing server-side
 Customer-filtered workspace and reconcile their displayed count to Customer Balance
 authority. Payment receipt matching remains bounded by the current Payments list
 contract and is labeled as incomplete rather than silently presented as full history.
+Customer detail also links to a paginated Jobs roster with the Customer identity
+preserved as a server-side filter, so operators can traverse beyond the detail
+panel's first related-work page without manually searching again.
 
 Company administrators receive the existing Migration readiness projection for
 Customers, Contacts, and Locations, including source, admitted, held, exception,
@@ -101,7 +104,7 @@ checks do not substitute for authenticated operator acceptance.
   authority.
 - Focused Customer detail, roster, operations, and Job-context frontend
   qualification, including related-work population truth and existing-Job
-  scheduling: `46 passed` across seven test files.
+  scheduling: `47 passed` across eight test files.
 - Frontend ESLint and TypeScript/Vite production build: passed.
 - `git diff --check`: passed.
 
