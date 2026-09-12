@@ -150,3 +150,26 @@ def test_foreign_company_and_branch_aggregation_fail_closed() -> None:
     object.__setattr__(branch_cost, "branch_id", uuid4())
     with pytest.raises(ValueError, match="Branch evidence"):
         build_break_even_input_readiness(productive, economic_evidence=(branch_cost,))
+
+
+def test_company_period_scope_and_duplicate_values_fail_closed() -> None:
+    productive, company = _productive_packet()
+    wrong_subject = _cost(company)
+    object.__setattr__(wrong_subject, "subject_id", "another-company")
+    with pytest.raises(ValueError, match="outside Company scope"):
+        build_break_even_input_readiness(productive, economic_evidence=(wrong_subject,))
+
+    first = _cost(company)
+    second = _cost(company)
+    object.__setattr__(second, "input_id", "labor:duplicate-source")
+    with pytest.raises(ValueError, match="duplicate.*value evidence"):
+        build_break_even_input_readiness(productive, economic_evidence=(first, second))
+
+    other_period = _cost(company)
+    object.__setattr__(other_period, "input_id", "labor:other-period")
+    object.__setattr__(other_period, "value_digest", "d" * 64)
+    object.__setattr__(other_period, "reconciliation_key", "company-period:2026-10")
+    with pytest.raises(ValueError, match="periods cannot be silently combined"):
+        build_break_even_input_readiness(
+            productive, economic_evidence=(first, other_period)
+        )
