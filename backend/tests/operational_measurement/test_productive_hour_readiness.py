@@ -159,6 +159,17 @@ def test_missing_actual_time_is_absent_and_schedule_never_substitutes():
     )
     assert values[ProductiveHourMeasure.ACTUAL_WORKED_MINUTES].minutes is None
     assert values[ProductiveHourMeasure.TRAVEL_MINUTES].state is ReadinessState.ABSENT
+    employee_values = measures(packet.employees[0])
+    assert employee_values[ProductiveHourMeasure.SCHEDULED_MINUTES].minutes == 360
+    assert (
+        employee_values[ProductiveHourMeasure.ACTUAL_WORKED_MINUTES].state
+        is ReadinessState.ABSENT
+    )
+    assert employee_values[ProductiveHourMeasure.ACTUAL_WORKED_MINUTES].minutes is None
+    assert (
+        employee_values[ProductiveHourMeasure.UNCLASSIFIED_PAID_MINUTES].minutes
+        is None
+    )
 
 
 def test_partial_and_conflicting_operational_evidence_never_emit_partial_total():
