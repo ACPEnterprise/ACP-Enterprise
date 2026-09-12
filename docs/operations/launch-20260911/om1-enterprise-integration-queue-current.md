@@ -60,6 +60,14 @@ Merge current protected authority into
 lane branch, and open a documentation PR. The packet contains no protected SHA
 that needs editing.
 
+Independent host revalidation on 2026-09-12 confirmed both documented byte
+SHA-256 values, sizes, owner/group, and mode `0600`. The protected
+`CurrentOverlayManifest.load` accepted the `hcp-current-overlay/v1` artifact at
+canonical digest `e23b7bcf5ac34ea650184afacc711af0c7028e83a6b1f7405e2ae17e13441eb2`
+with exactly 503 records. The hold packet binds the documented delta digest and
+contains 10 duplicate-risk plus 3 insufficient-evidence Appointment holds, 22
+Location-unresolved Job holds, and zero true global blockers.
+
 ### HCP historical safe-tranche builder
 
 Update the packet authority from `9096a777...` to `91dae4a5...` and state that
