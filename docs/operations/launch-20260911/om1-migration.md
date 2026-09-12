@@ -267,3 +267,70 @@ update paths for each operational domain; parent hold propagation; duplicate sou
 native-fingerprint rejection; same-packet replay; stale prior-digest rejection;
 transaction rollback before receipt persistence; receipt recovery after commit; and a
 second execution proving zero additional native rows or events.
+
+## September 12 transaction-safe native overlay execution
+
+`HcpCurrentOverlayNativeServices` now provides the concrete production composition.
+Customer and Location creates use the existing migration-scoped Customer service;
+Job creates and Appointment creates/linking use the existing Job and Scheduling
+services. Customer, Job, and Appointment mutation services expose a caller-transaction
+method while their public methods retain transaction ownership. The overlay therefore
+uses the same validation, locking, optimistic version checks, Business Event staging,
+and parent-reference checks without nesting transactions or copying domain logic.
+
+SOURCE.4 identities are appended under `housecall_pro_source4`; legacy
+`housecall_pro` identities are not rewritten. Existing database uniqueness constraints
+reject one SOURCE.4 identity targeting multiple native rows or one native row receiving
+multiple SOURCE.4 identities. Exact replay resolves the persisted source state and
+durable receipt. Current overlay digest/acquisition metadata remains queryable on
+Location, Job, and Appointment lineage and in the master-run replay journal. Customer
+lineage remains bound through its authoritative source-identity table and the same
+durable overlay journal.
+
+Updates are compare-before-write. Customer and Job updates hold when the native
+`updated_at` is newer than source evidence. Job lifecycle must agree and only draft or
+ready metadata can update; completed/cancelled work is never reopened or overwritten.
+Appointment rescheduling is limited to scheduled/confirmed native work with an exact
+source window; unsupported lifecycle evidence is held. Cancelled creates, incomplete
+Locations, removal assertions, the 13 historical Appointment ambiguities, and the 22
+Location-unresolved Jobs remain non-mutating evidence. An expected domain hold is
+journaled and does not broaden into an unrelated operational failure; an unexpected
+validation/error rolls back the entire overlay transaction and receipt.
+
+The guarded command is:
+
+```text
+python -m app.operational_migration.hcp_current_overlay_command \
+  --authority-file /protected/path/hcp-current-overlay-authority.json \
+  --authorize-preview-execution
+```
+
+The 0600 authority file binds the deployed repository SHA, one expected schema head,
+exact Preview database, Company/Branch/actor and SOURCE.4 child-run identities,
+overlay file and manifest digests, hold packet, canonical classifier file and result,
+base SOURCE.4 digest, fresh backup file/digest, verified isolated-restore receipt,
+zero-drift/current-operational gate, and a deterministic idempotency identity. Runtime
+Preview/Production flags, migration permission, source-run scope, and a PostgreSQL
+transaction advisory lock are also fail-closed. The durable receipt context records
+authority/schema/backup/overlay/hold/classifier digests, scope, attempted identities,
+timestamp, idempotency identity, and success, while the receipt journal records every
+created/reused/updated/held outcome. Rollback is the single database transaction for
+the overlay plus Enterprise's digest-bound full-database backup restore.
+
+The current-calendar dry-run acceptance baseline remains exactly 11 Customers, 11
+Locations, 15 Jobs, and 18 Appointments. All 18 have provider Locations and mapped
+technician source assertions; expected current-calendar technician and Location holds
+are zero. The 461 historical Appointments, 13 legacy Appointment holds, and 22
+Location-unresolved Job holds remain separately reconciled and absent from active
+current-calendar truth. Enterprise post-admission verification must prove exact source
+identity continuity and local date/window/status equality through Customer -> Location
+-> Job -> Appointment, then exercise Schedule Month/Day/Week/Work Week and Dispatch
+read projections without creating dispatch assignments.
+
+Qualification used Python 3.12.13 and PostgreSQL 16.14 in an isolated local database.
+The database was created empty and upgraded zero-to-head; `alembic current` and
+`alembic heads` both reported the single head `d4f6h8j0l2n4`. Focused Customer/Job/
+Scheduling plus overlay tests passed 42/42, and the affected operational/customer
+migration suite passed 275/275. No Preview execution occurred. Enterprise must repeat
+the guarded PostgreSQL integration/replay tests after protected integration with its
+fresh backup and isolated restore receipt before live execution.

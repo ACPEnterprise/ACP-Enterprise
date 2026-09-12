@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+import json
 from contextlib import asynccontextmanager
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 from app.operational_migration.hcp_current_overlay import (
     CurrentOverlayExecutor,
     CurrentOverlayManifest,
     OverlayAssertion,
+    OverlayDomainHold,
     OverlayExecutionReceipt,
     OverlayKey,
     OverlayRecord,
@@ -224,3 +227,36 @@ def test_manifest_is_immutable_and_rejects_invalid_assertions() -> None:
                 {"unsafe": True},
             )
         )
+
+
+def test_private_manifest_round_trip_and_tamper_rejection(tmp_path: Path) -> None:
+    path = tmp_path / "overlay.json"
+    value = manifest(record("new", OverlayAssertion.CREATE))
+    path.write_text(json.dumps(value.private_payload()))
+    assert CurrentOverlayManifest.load(path) == value
+    path.write_text(json.dumps(value.private_payload() | {"digest": OTHER_DIGEST}))
+    with pytest.raises(ValueError, match="digest mismatch"):
+        CurrentOverlayManifest.load(path)
+
+
+@pytest.mark.asyncio
+async def test_expected_domain_conflict_is_held_without_hiding_other_work() -> None:
+    class HoldingRepository(MemoryRepository):
+        async def create(self, record: OverlayRecord) -> OverlaySourceState:
+            if record.source_id == "held-by-domain":
+                raise OverlayDomainHold("lifecycle conflict")
+            return await super().create(record)
+
+    repository = HoldingRepository()
+    receipt = await CurrentOverlayExecutor().execute(
+        repository,
+        manifest=manifest(
+            record("held-by-domain", OverlayAssertion.CREATE),
+            record("safe", OverlayAssertion.CREATE),
+        ),
+        expected_base_source4_digest=DIGEST,
+        rollback_backup_digest=BACKUP,
+    )
+
+    assert receipt.counts == {"held": 1, "created": 1}
+    assert [item.source_id for item in repository.assertions] == ["held-by-domain"]

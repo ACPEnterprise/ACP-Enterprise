@@ -13,9 +13,10 @@ import json
 from collections import Counter
 from collections.abc import Mapping
 from contextlib import AbstractAsyncContextManager
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime
 from enum import Enum
+from pathlib import Path
 from typing import Protocol
 
 CONTRACT = "hcp-current-overlay/v1"
@@ -31,6 +32,10 @@ class OverlayAssertion(str, Enum):
     UPDATE = "update"
     REMOVE = "remove"
     HOLD = "hold"
+
+
+class OverlayDomainHold(ValueError):
+    """A deterministic domain conflict that must be journaled without mutation."""
 
 
 @dataclass(frozen=True, order=True)
@@ -124,6 +129,39 @@ class CurrentOverlayManifest:
             or self.digest != expected.digest
         ):
             raise ValueError("current overlay digest mismatch")
+
+    @classmethod
+    def load(cls, path: Path) -> CurrentOverlayManifest:
+        """Load and cryptographically verify a private executable overlay packet."""
+        value = json.loads(path.read_bytes())
+        records = tuple(
+            OverlayRecord(
+                domain=item["domain"],
+                source_id=item["source_id"],
+                assertion=OverlayAssertion(item["assertion"]),
+                source_digest=item["source_digest"],
+                acquired_at=item["acquired_at"],
+                payload=item["payload"],
+                prior_source_digest=item.get("prior_source_digest"),
+                parent_keys=tuple(OverlayKey(**parent) for parent in item["parent_keys"]),
+                native_fingerprint=item.get("native_fingerprint"),
+                reason=item.get("reason", ""),
+            )
+            for item in value["records"]
+        )
+        manifest = cls(
+            contract=value["contract"],
+            source_system=value["source_system"],
+            base_source4_digest=value["base_source4_digest"],
+            delta_digest=value["delta_digest"],
+            company_id=value["company_id"],
+            branch_id=value["branch_id"],
+            acquired_at=value["acquired_at"],
+            records=records,
+            digest=value["digest"],
+        )
+        manifest.verify()
+        return manifest
 
     def private_payload(self) -> dict[str, object]:
         """Return the complete executable packet; callers must protect source data."""
@@ -242,6 +280,7 @@ class CurrentOverlayExecutor:
                     raise ValueError("overlay parent source identity missing")
             state = await repository.source_state(record.key)
             if record.assertion is OverlayAssertion.CREATE:
+                after: OverlaySourceState | None
                 if state is not None:
                     if state.source_digest != record.source_digest:
                         raise ValueError("overlay create conflicts with native truth")
@@ -254,16 +293,29 @@ class CurrentOverlayExecutor:
                         )
                         if owners:
                             raise ValueError("overlay duplicate native truth risk")
-                    after = await repository.create(record)
-                    outcome = "created"
+                    try:
+                        after = await repository.create(record)
+                        outcome = "created"
+                    except OverlayDomainHold as error:
+                        await repository.record_non_mutating_assertion(
+                            replace(
+                                record,
+                                assertion=OverlayAssertion.HOLD,
+                                payload={},
+                                reason=str(error),
+                            )
+                        )
+                        blocked_keys.add(record.key)
+                        after = state
+                        outcome = "held"
                 journal.append(
                     OverlayJournalEntry(
                         record.key,
                         record.assertion,
                         outcome,
                         state.source_digest if state else None,
-                        after.source_digest,
-                        after.native_id,
+                        after.source_digest if after else None,
+                        after.native_id if after else None,
                     )
                 )
             elif record.assertion is OverlayAssertion.UPDATE:
@@ -279,8 +331,21 @@ class CurrentOverlayExecutor:
                     after = state
                     outcome = "idempotent_replay"
                 else:
-                    after = await repository.update(state, record)
-                    outcome = "updated"
+                    try:
+                        after = await repository.update(state, record)
+                        outcome = "updated"
+                    except OverlayDomainHold as error:
+                        await repository.record_non_mutating_assertion(
+                            replace(
+                                record,
+                                assertion=OverlayAssertion.HOLD,
+                                payload={},
+                                reason=str(error),
+                            )
+                        )
+                        blocked_keys.add(record.key)
+                        after = state
+                        outcome = "held"
                 journal.append(
                     OverlayJournalEntry(
                         record.key,
