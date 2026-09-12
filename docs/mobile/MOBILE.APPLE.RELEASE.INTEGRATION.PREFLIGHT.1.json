@@ -1,0 +1,70 @@
+{
+  "program": "MOBILE.APPLE.RELEASE.INTEGRATION.PREFLIGHT.1",
+  "status": "READY_FOR_OWNER_TESTFLIGHT_AUTHORIZATION",
+  "branch": "work/mobile-apple-owner-release-packet-1",
+  "source_mobile_candidate": "bf28a61cfe7d36d0b050e0118b21b234c8a555e3",
+  "owner_packet_and_release_repair_commit": "a0417d96ee0bb53eb7cb4c463697dd6c19a0ae15",
+  "protected_authority": "d4eee6f6b0bc178d58654f26f3ef2b9429332ab3",
+  "reconciliation_commit": "abf4eafbbb2f311350299f18bdabed9078a13e05",
+  "authoritative_job_clock": {
+    "commit": "d52d117801d72d04e81afac157671c97a941efa0",
+    "distinct_stop_event_required": true,
+    "completed_interval_required": true,
+    "unrelated_inactive_refresh_is_not_success": true,
+    "current_assignment_revalidated": true
+  },
+  "release_defect_repaired": "Archived Expo constants previously identified development/localhost while Hermes used Preview. Dynamic native configuration and archive assertions now require the embedded manifest to identify Preview, the exact Preview API, and Production inactive.",
+  "qualification_commands": [
+    "cd mobile && npm run apple:release:qualify",
+    "cd mobile && npm run export",
+    "cd mobile && npx expo-doctor",
+    "cd mobile && APPLE_TEAM_ID=<OWNER_TEAM_ID> npm run beta:aasa -- build/apple/apple-app-site-association",
+    "cd mobile && APPLE_TEAM_ID=<OWNER_TEAM_ID> npm run beta:aasa:verify"
+  ],
+  "qualification": {
+    "jest_suites": 18,
+    "jest_tests": 138,
+    "typescript": "passed",
+    "eslint": "passed",
+    "expo_config": "passed",
+    "expo_doctor": "20_of_21_checked_in_native_project_warning_only",
+    "cocoapods_deployment_install": "passed_94_dependencies_93_pods",
+    "unsigned_generic_device_archive": "passed",
+    "standalone_release_simulator_build": "passed",
+    "standalone_launch_with_metro_stopped": "passed_safe_session_recovery_screen",
+    "ios_hermes_export": "passed",
+    "android_hermes_export": "passed",
+    "embedded_environment": "preview",
+    "embedded_api": "https://preview.allcountyhomeservices.com",
+    "production_activated": false,
+    "embedded_bundle": true,
+    "signed": false
+  },
+  "owner_gates": [
+    "Apple Developer Team ID",
+    "explicit App ID com.acpenterprise.employee",
+    "Associated Domains capability",
+    "employee.acpenterprise.com DNS/HTTPS",
+    "Team-ID-bound AASA publication and verification",
+    "live support URL",
+    "live privacy-policy URL",
+    "legal/privacy/metadata approval",
+    "App Store Connect record and immutable SKU",
+    "Apple Distribution certificate and provisioning profile",
+    "next unused build-number reservation",
+    "explicit signing authorization",
+    "explicit TestFlight upload authorization"
+  ],
+  "integration": {
+    "owner": "Enterprise / OM1 Enterprise Assist protected integration",
+    "direct_protected_push": false,
+    "backend_change": false,
+    "schema_change": false,
+    "preview_mutation": false,
+    "production_operation": false,
+    "apple_account_mutation": false,
+    "dns_mutation": false,
+    "signing": false,
+    "upload": false
+  }
+}
