@@ -5,6 +5,8 @@ from uuid import UUID, uuid4
 import httpx
 import pytest
 import pytest_asyncio
+from app.core.config import settings
+from app.events.models import BusinessEvent
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -12,8 +14,6 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-from app.core.config import settings
-from app.events.models import BusinessEvent
 from tests.customers.test_api import build_app, seed_customer_fixture
 
 
@@ -53,6 +53,17 @@ async def create_search_records(client: httpx.AsyncClient) -> tuple[dict, dict]:
         },
     )
     assert contact.status_code == 201, contact.text
+    secondary_contact = await client.post(
+        f"/api/v1/customers/{acme['id']}/contacts",
+        json={
+            "first_name": "Alternate",
+            "last_name": "Contact",
+            "email": "alternate@example.com",
+            "mobile_phone": "727-555-0111",
+            "is_preferred": False,
+        },
+    )
+    assert secondary_contact.status_code == 201, secondary_contact.text
     location = await client.post(
         f"/api/v1/customers/{acme['id']}/locations",
         json={
@@ -106,6 +117,24 @@ async def test_enterprise_customer_search_filter_sort_and_pagination(
             )
             assert response.status_code == 200, response.text
             assert expected_id in {item["id"] for item in response.json()["items"]}
+
+        roster = await client.get(
+            "/api/v1/customers/search", params={"query": "Acme Plumbing"}
+        )
+        assert roster.status_code == 200, roster.text
+        [roster_customer] = roster.json()["items"]
+        assert "primary_phone" not in roster_customer
+        assert "email" not in roster_customer
+        assert roster_customer["preferred_contact"] == {
+            **roster_customer["preferred_contact"],
+            "first_name": "Marisol",
+            "last_name": "Quintero",
+            "email": "dispatch.team@example.com",
+            "mobile_phone": "(727) 555-0198",
+            "office_phone": "727-555-0107",
+            "is_preferred": True,
+            "active": True,
+        }
 
         filtered = await client.get(
             "/api/v1/customers/search",

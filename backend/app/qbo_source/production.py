@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -35,6 +36,8 @@ from .runtime import (
 from .secrets import ProtectedProductionSecretProvider
 
 PRODUCTION_ACQUISITION_SCOPE = tuple(EntityKind)
+PRODUCTION_READ_PROBE_SCOPE = (EntityKind.COMPANY_INFO,)
+PRODUCTION_READ_PROBE_PREFIX = "company-info-probe-"
 
 
 @dataclass(frozen=True)
@@ -50,6 +53,38 @@ async def execute_production_acquisition(
     configuration: Settings = settings,
 ) -> AcquisitionResult:
     """Execute one sealed GET-only real-company snapshot after owner authorization."""
+    if command.run_id.startswith(PRODUCTION_READ_PROBE_PREFIX):
+        raise ValueError("full acquisition cannot reuse a read-probe identity")
+    return await _execute_production_acquisition(
+        command,
+        configuration,
+        entity_kinds=PRODUCTION_ACQUISITION_SCOPE,
+        bounded_snapshot=True,
+    )
+
+
+async def execute_production_read_probe(
+    command: ProductionAcquisitionCommand,
+    configuration: Settings = settings,
+) -> AcquisitionResult:
+    """Seal a CompanyInfo-only GET proving current real-provider readability."""
+    if not command.run_id.startswith(PRODUCTION_READ_PROBE_PREFIX):
+        raise ValueError("read-probe identity requires company-info-probe- prefix")
+    return await _execute_production_acquisition(
+        command,
+        configuration,
+        entity_kinds=PRODUCTION_READ_PROBE_SCOPE,
+        bounded_snapshot=False,
+    )
+
+
+async def _execute_production_acquisition(
+    command: ProductionAcquisitionCommand,
+    configuration: Settings,
+    *,
+    entity_kinds: tuple[EntityKind, ...],
+    bounded_snapshot: bool,
+) -> AcquisitionResult:
     if not configuration.qbo_production_enabled:
         raise SandboxRuntimeError("production_acquisition_disabled")
     root = _production_runtime_root(configuration)
@@ -59,6 +94,11 @@ async def execute_production_acquisition(
     )
     registry = SandboxConnectionRegistry(root / "connections", environment="production")
     marker = _read_verified_marker(registry)
+    if (
+        marker.get("api_minor_version")
+        != configuration.qbo_production_api_minor_version
+    ):
+        raise SandboxRuntimeError("production_api_version_not_verified")
     expected_name = ProtectedSandboxCompanyBinding(root / "configuration").read()
     if marker.get("company_name") != expected_name or not marker.get(
         "acquisition_eligible"
@@ -69,7 +109,9 @@ async def execute_production_acquisition(
         raise SandboxRuntimeError("production_realm_not_verified")
     evidence_root = Path(str(configuration.qbo_production_evidence_root)).resolve()
     store = ProtectedFilesystemEvidenceStore(
-        root=evidence_root, repository_root=repository, bounded_snapshot=True
+        root=evidence_root,
+        repository_root=repository,
+        bounded_snapshot=bounded_snapshot,
     )
     transport = IntuitHttpTransport()
     oauth = IntuitOAuthClient(
@@ -125,36 +167,46 @@ async def execute_production_acquisition(
         snapshot = requested_snapshot
     request = AcquisitionRequest(
         snapshot=snapshot,
-        entity_kinds=PRODUCTION_ACQUISITION_SCOPE,
+        entity_kinds=entity_kinds,
         page_size=command.page_size,
     )
-    return await AcquisitionRunner(provider=adapter, evidence_store=store).run(
-        run_id=command.run_id, request=request, company_name=expected_name
-    )
+    try:
+        return await AcquisitionRunner(provider=adapter, evidence_store=store).run(
+            run_id=command.run_id, request=request, company_name=expected_name
+        )
+    finally:
+        await transport.client.aclose()
 
 
 def _read_verified_marker(registry: SandboxConnectionRegistry) -> dict[str, object]:
     try:
-        value = json.loads(registry.verified_path.read_text(encoding="utf-8"))
-    except (FileNotFoundError, json.JSONDecodeError) as error:
+        return registry.verified_evidence()
+    except SandboxRuntimeError as error:
         raise SandboxRuntimeError("production_connection_not_verified") from error
-    if not isinstance(value, dict) or value.get("environment") != "production":
-        raise SandboxRuntimeError("production_connection_not_verified")
-    return value
 
 
 def run(command: ProductionAcquisitionCommand) -> AcquisitionResult:
     return asyncio.run(execute_production_acquisition(command))
 
 
-def main() -> None:
+def run_read_probe(command: ProductionAcquisitionCommand) -> AcquisitionResult:
+    return asyncio.run(execute_production_read_probe(command))
+
+
+def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Seal one authorized QBO read-only snapshot"
     )
     parser.add_argument("--run-id", required=True)
     parser.add_argument("--cutoff", required=True, type=date.fromisoformat)
-    arguments = parser.parse_args()
-    result = run(ProductionAcquisitionCommand(arguments.run_id, arguments.cutoff))
+    parser.add_argument(
+        "--company-info-only",
+        action="store_true",
+        help="Seal only the production CompanyInfo GET as a current-read probe.",
+    )
+    arguments = parser.parse_args(argv)
+    command = ProductionAcquisitionCommand(arguments.run_id, arguments.cutoff)
+    result = run_read_probe(command) if arguments.company_info_only else run(command)
     print(
         json.dumps(
             {
@@ -164,11 +216,17 @@ def main() -> None:
                 "manifest_sha256": result.manifest_sha256,
                 "failure_code": result.failure_code,
                 "bounded_snapshot": result.bounded_snapshot,
+                "acquisition_scope": (
+                    "company_info_read_probe"
+                    if arguments.company_info_only
+                    else "full_production_catalog"
+                ),
             },
             sort_keys=True,
         )
     )
+    return 0 if result.state.value == "complete" else 2
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

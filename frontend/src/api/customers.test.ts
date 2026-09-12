@@ -70,6 +70,32 @@ describe("customer response normalization", () => {
     expect(response.items[0]?.source).toBe("unknown");
   });
 
+  it("projects preferred Contact details into roster phone and email", async () => {
+    vi.spyOn(apiClient, "get").mockResolvedValue({
+      data: {
+        items: [{
+          ...customerResponse,
+          primary_phone: null,
+          email: null,
+          preferred_contact: {
+            mobile_phone: "727-555-0198",
+            email: "dispatch@example.com",
+            is_preferred: true,
+          },
+        }],
+        page: 1,
+        page_size: 20,
+        total_count: 1,
+        total_pages: 1,
+      },
+    } as never);
+
+    const response = await searchCustomers({ page: 1, page_size: 20 });
+
+    expect(response.items[0]?.primary_phone).toBe("727-555-0198");
+    expect(response.items[0]?.email).toBe("dispatch@example.com");
+  });
+
   it("normalizes missing sources in customer-detail responses", async () => {
     const detail: Record<string, unknown> = { ...customerResponse };
     delete detail.source;

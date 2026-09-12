@@ -3,18 +3,19 @@
 - Mission: `origin/work/launch-20260911-mission` at
   `0c08f1e3634f38a7fb82970932dea5de7a4cf24f`; file SHA-256
   `03b74b5f065694b487268bdee531d8d50620f2816f30c91d8b665f9d5b3e9dfc`.
-- Current protected base: `9b7dd10bb85d36d5ceaeb1064248d5c36ea26942`.
+- Current protected base: `132cded360525e10a5d9029b25fff2bd8a45b81b`.
 - Protected integration already present: OM1-ECO PR #201 as `d8999fc8` and
   OM2-B PR #206 as `9b7dd10b`.
 - Successor branch: `work/qbo-contract-successor-1`.
-- Successor implementation: `576e8b35`.
+- Contract reconciliation is protected as PR #209 at `3bcac1eb`.
+- Read-probe successor implementation: this branch's head commit.
 
 PR #201 merged before its final OM2-B response-shape reconciliation commit was
 published. The earlier authorization/completeness hardening was already content-
 equivalent in protected authority, so its cherry-pick was correctly empty. This
 successor contains only the missing consumer-contract convergence.
 
-The endpoint now returns OM2-B's required `mode`, provider environment, hashed
+The financial endpoint now returns OM2-B's required `mode`, provider environment, hashed
 company identity, CompanyInfo verification time, source-manifest digest,
 completeness, bills and conflicts, while retaining explicit provider authorization,
 historical/current evidence mode, entity/page counts and catalog dispositions.
@@ -24,13 +25,101 @@ is `blocked`. No QBO or Accounting mutation exists.
 
 Combined qualification on current protected composition:
 
-- QBO, source projection, Economics and operational measurement: 433 passed.
+- QBO, source projection, Economics and operational measurement: 450 passed.
 - OM2-B QBO API/component/route tests: 3 files, 5 tests passed.
 - Backend focused Ruff/MyPy/compilation and frontend TypeScript/ESLint passed.
 - No migration or schema change.
 
-State: IMPLEMENTED and QUALIFIED. It is not protected-integrated, Preview-deployed,
-or deployed-accepted. Enterprise must review/integrate this bounded successor, deploy
-the coherent OM1-ECO/OM2-B release, and perform authenticated Preview acceptance.
+State: the response contract is protected-integrated; the read probe is IMPLEMENTED
+and QUALIFIED but not protected-integrated, Preview-deployed, or deployed-accepted.
+Enterprise must review/integrate this scoped successor, deploy the coherent
+OM1-ECO/OM2-B release, and perform authenticated Preview acceptance.
 Real acquisition remains `LIVE_QBO_AUTHORIZATION_BLOCKED` until protected production
 credentials, exact Company binding and provider readability are actually available.
+
+## Production CompanyInfo read probe
+
+The successor also provides a sanctioned GET-only probe that can prove the current
+protected production realm is authorized and readable without starting a full
+financial acquisition:
+
+```shell
+python -m app.qbo_source.production \
+  --run-id company-info-probe-YYYYMMDD-unique \
+  --cutoff YYYY-MM-DD \
+  --company-info-only
+```
+
+The operator must run this only in the protected backend runtime after the exact
+production Company binding, verified production connection marker, and protected
+OAuth token are present. The probe uses the production Intuit API host and existing
+read-only adapter. It requests only `CompanyInfo`, seals its provider envelope and
+manifest, and closes the HTTP client. Probe run IDs occupy the dedicated
+`company-info-probe-` namespace and cannot be resumed as full acquisition IDs.
+
+The resulting manifest is deliberately non-bounded. A successful probe proves only
+that the configured production realm and exact Company were readable at that source
+timestamp; it does not establish financial-population completeness, report basis,
+or a live OM2-B projection. Unqueried entity families are not recorded as
+`EMPTY_CONFIRMED`. A full catalog acquisition remains required for live financial
+evidence. Any provider/OAuth failure remains explicit failed evidence and must not be
+relabeled live.
+
+The operator command returns process status `0` only for a sealed `complete` result.
+A provider, authorization, validation, or pagination failure still seals its partial
+evidence and prints the structured failure packet, but returns status `2` so release
+automation cannot mistake an incomplete refresh for success.
+
+The OM2-B financial projection admits only a complete full-catalog manifest with a
+matching, digest-verified `BOUNDED_COMPLETE` snapshot. It ignores non-bounded probe
+manifests when selecting the latest financial snapshot and loads only the bounded
+snapshot's included entities. Registered source reports are composed only when both
+their accounting basis and report end date match the requested bounded snapshot;
+date-incompatible controls are excluded with an explicit limitation. This prevents a
+newer readability probe, post-cutoff transaction, or older report from silently
+changing the source-to-projection result.
+
+The same bounded-evidence reader now supplies the Economics adapter. Economics no
+longer needs a caller to reconstruct a supposedly complete QBO envelope set: it can
+load the latest digest-bound financial packet and assess only its cutoff-included,
+content-addressed source envelopes. Missing bounded evidence returns no assessment;
+excluded purchases or other post-cutoff records cannot become contribution inputs.
+All resulting assertions remain source-reported, partial, unreconciled, and without
+policy or posting authority.
+
+## Production connection evidence contract
+
+An authenticated Company administrator can read:
+
+```text
+GET /api/v1/integrations/qbo/production/connection
+```
+
+The response distinguishes `connected`, `not_connected`, inconsistent, and
+`unavailable` local authority states. A connected response includes only a
+deterministic SHA-256 Company identity, the provider `CompanyInfo` verification
+timestamp, `verified_at_oauth_connection` readability, validated production-client
+presence, exact token-to-realm binding, refresh/access authority state, and derived
+acquisition eligibility. A missing/invalid client, token conflict, or expired refresh
+authority cannot silently remain acquisition-eligible.
+The verified marker's Intuit API minor version must also match current protected
+configuration. Version drift fails before evidence-root creation or any provider
+query, so it cannot produce a snapshot that the downstream projection must reject.
+It never exposes the realm, Company name, native CompanyInfo ID, OAuth credential, or
+token. Missing configuration returns explicit unavailable/unverified evidence instead
+of being called disconnected or live. The endpoint is cache-protected, has
+`mutation_authority=none`, and performs no QBO request or write.
+
+No QBO mutation, Accounting posting, ledger creation, money movement, Production
+deployment, repricing, or policy value is introduced by this probe.
+
+## Preview deployment evidence
+
+Read-only public-boundary verification on 2026-09-10 America/New_York found the
+Preview source-evidence route present and correctly authentication-protected
+(`401`, `Cache-Control: private, no-store`). The served frontend bundle
+`index-K-kwAz4Q.js` (SHA-256
+`869c07c8d8a022d619a854fb456d42412f8822e35655ed16951ad03eed7a86e5`) did not
+contain the OM2-B QBO route or screen markers. This proves neither an authenticated
+financial response nor deployed QBO UI acceptance. Current state remains
+`PROTECTED_CANDIDATE`, not `PREVIEW_DEPLOYED` or `DEPLOYED_ACCEPTANCE_PASSED`.
