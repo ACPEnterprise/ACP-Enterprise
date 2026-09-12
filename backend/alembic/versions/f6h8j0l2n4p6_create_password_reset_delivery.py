@@ -1,7 +1,7 @@
 """create protected password reset delivery
 
-Revision ID: e5g7i9k1m3o5
-Revises: d4f6h8j0l2n4
+Revision ID: f6h8j0l2n4p6
+Revises: e5g7i9k1m3o5
 """
 
 from collections.abc import Sequence
@@ -10,8 +10,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision: str = "e5g7i9k1m3o5"
-down_revision: str | Sequence[str] | None = "d4f6h8j0l2n4"
+revision: str = "f6h8j0l2n4p6"
+down_revision: str | Sequence[str] | None = "e5g7i9k1m3o5"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
