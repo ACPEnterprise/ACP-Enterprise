@@ -228,8 +228,11 @@ export function SchedulingRoute({
       technician,
     ],
   );
-  const selectedDispatch = selected
-    ? dispatchByAppointment.get(selected.id)
+  const currentSelection = selected
+    ? appointments.data?.items.find((item) => item.id === selected.id) ?? selected
+    : null;
+  const selectedDispatch = currentSelection
+    ? dispatchByAppointment.get(currentSelection.id)
     : undefined;
 
   if (!activeCompany)
@@ -288,7 +291,7 @@ export function SchedulingRoute({
       {booking && <BookCustomerWorkPanel onClose={() => setBooking(false)} />}
       <Card className="space-y-4 p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
+          <div className="grid w-full grid-cols-[auto_1fr_auto] items-center gap-2 sm:flex sm:w-auto">
             <Button
               variant="outline"
               aria-label={`Previous ${view}`}
@@ -310,7 +313,7 @@ export function SchedulingRoute({
               <ChevronRight size={18} />
             </Button>
             <Input
-              className="w-auto"
+              className="col-span-3 w-full sm:col-auto sm:w-auto"
               aria-label="Service date"
               type="date"
               value={date}
@@ -475,9 +478,10 @@ export function SchedulingRoute({
         ))}
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_24rem]">
         {view !== "unassigned" && <UnscheduledQueue jobs={jobs.data?.items ?? []} appointments={visible} dispatchByAppointment={dispatchByAppointment} onSelect={setSelected} />}
-        {selected ? (
+        {currentSelection ? (
           <AppointmentPanel
-            appointment={selected}
+            key={`${currentSelection.id}:${currentSelection.arrival_window_start_at}:${currentSelection.arrival_window_end_at}:${currentSelection.expected_duration_minutes}`}
+            appointment={currentSelection}
             dispatchItem={selectedDispatch}
             job={
               selectedDispatch?.job_id
@@ -802,6 +806,7 @@ function MonthCalendar({
   readonly onSelect: (item: AppointmentDetail) => void;
   readonly onOpenDay: (day: Date) => void;
 }) {
+  const [expandedDays, setExpandedDays] = useState<Set<string>>(() => new Set());
   const selected = new Date(`${date}T12:00:00`);
   const first = new Date(selected.getFullYear(), selected.getMonth(), 1);
   const gridStart = new Date(first);
@@ -814,12 +819,15 @@ function MonthCalendar({
   return (
     <section aria-label="Month calendar" className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-7">
       {days.map((day) => {
+        const dayKey = localDateValue(day);
         const rows = items.filter((item) => item.arrival_window_start_at && new Date(item.arrival_window_start_at).toDateString() === day.toDateString());
+        const expanded = expandedDays.has(dayKey);
+        const displayedRows = expanded ? rows : rows.slice(0, MONTH_VISIBLE_APPOINTMENTS);
         return (
-          <Card className={`min-h-36 p-2 ${day.getMonth() === selected.getMonth() ? "" : "opacity-50"}`} key={day.toISOString()}>
+          <Card className={`min-h-36 p-2 ${day.getMonth() === selected.getMonth() ? "" : "opacity-50"}`} key={dayKey}>
             <button type="button" className="w-full text-left text-sm font-semibold hover:text-action-primary" onClick={() => onOpenDay(day)} aria-label={`Open ${day.toLocaleDateString()} day schedule`}>{day.toLocaleDateString([], { weekday: "short", day: "numeric" })}</button>
             <div className="mt-2 space-y-1">
-              {rows.slice(0, MONTH_VISIBLE_APPOINTMENTS).map((item) => {
+              {displayedRows.map((item) => {
                 const dispatch = dispatchByAppointment.get(item.id);
                 const job = dispatch?.job_id ? jobsById.get(dispatch.job_id) : undefined;
                 return <button type="button" className="block w-full rounded border border-stroke p-1.5 text-left text-xs hover:border-action-primary" onClick={() => onSelect(item)} key={item.id} aria-label={`${item.appointment_number}, ${time(item.arrival_window_start_at)}, ${appointmentState(item, dispatch, job)}`}><strong className="block truncate">{time(item.arrival_window_start_at)} · {job?.job_number ?? item.appointment_number}</strong><span className="block truncate">{job?.customer_display_name ?? "Customer unavailable"}</span><span className="block truncate text-content-muted">{dispatch?.assignment?.primary_employee_name ?? "Unassigned"} · {appointmentState(item, dispatch, job)}</span></button>;
@@ -828,10 +836,18 @@ function MonthCalendar({
                 <button
                   type="button"
                   className="min-h-9 w-full rounded border border-dashed border-stroke px-2 text-left text-xs font-semibold text-action-primary hover:border-action-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus"
-                  onClick={() => onOpenDay(day)}
-                  aria-label={`Open all ${rows.length} appointments for ${day.toLocaleDateString()}`}
+                  onClick={() =>
+                    setExpandedDays((current) => {
+                      const next = new Set(current);
+                      if (next.has(dayKey)) next.delete(dayKey);
+                      else next.add(dayKey);
+                      return next;
+                    })
+                  }
+                  aria-expanded={expanded}
+                  aria-label={`${expanded ? "Collapse" : "Show"} all ${rows.length} appointments for ${day.toLocaleDateString()}`}
                 >
-                  +{rows.length - MONTH_VISIBLE_APPOINTMENTS} more
+                  {expanded ? "Show fewer" : `+${rows.length - MONTH_VISIBLE_APPOINTMENTS} more`}
                 </button>
               )}
               {!rows.length && <p className="text-xs text-content-muted">No appointments</p>}
@@ -992,17 +1008,21 @@ function AppointmentPanel({
   const [start, setStart] = useState(() =>
     toLocalInput(appointment.arrival_window_start_at),
   );
+  const [end, setEnd] = useState(() =>
+    toLocalInput(appointment.arrival_window_end_at),
+  );
   const [duration, setDuration] = useState(
     appointment.expected_duration_minutes ?? 60,
   );
   const [confirmMove, setConfirmMove] = useState(false);
+  const validWindow = Boolean(start && end && new Date(end) > new Date(start));
   const requestMove = (event: FormEvent) => {
     event.preventDefault();
-    setConfirmMove(true);
+    if (validWindow) setConfirmMove(true);
   };
   const submit = () => {
     const startAt = new Date(start);
-    const endAt = new Date(startAt.getTime() + duration * 60000);
+    const endAt = new Date(end);
     mutation.mutate(
       {
         appointmentId: appointment.id,
@@ -1100,6 +1120,18 @@ function AppointmentPanel({
             />
           </label>
           <label className="block text-sm font-medium">
+            New arrival-window end
+            <Input
+              className="mt-1"
+              required
+              type="datetime-local"
+              min={start || undefined}
+              value={end}
+              onChange={(event) => setEnd(event.target.value)}
+            />
+          </label>
+          {!validWindow && <p className="text-sm text-status-danger">Arrival window must end after it starts.</p>}
+          <label className="block text-sm font-medium">
             Duration in minutes
             <Input
               className="mt-1"
@@ -1120,7 +1152,7 @@ function AppointmentPanel({
               Appointment moved. Calendar and Dispatch evidence are refreshing.
             </Alert>
           )}
-          <Button type="submit" loading={mutation.isPending}>
+          <Button type="submit" loading={mutation.isPending} disabled={!validWindow || duration < 1}>
             Review new time
           </Button>
         </form>
@@ -1135,7 +1167,7 @@ function AppointmentPanel({
           onConfirm={submit}
         >
           <p><strong>{appointment.appointment_number}</strong></p>
-          <p>{new Date(start).toLocaleString()} · {duration} minutes</p>
+          <p>{new Date(start).toLocaleString()}–{new Date(end).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} arrival window · {duration} minutes expected work</p>
           <p>No Dispatch Intelligence proposal is accepted automatically.</p>
         </ConfirmationDialog>
       )}
