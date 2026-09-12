@@ -50,7 +50,13 @@ export function useJobClock(service: TimekeepingService, network: NetworkMonitor
       if (["conflict", "timeout", "unavailable", "malformed_response"].includes(kind)) {
         setStatus("recovering"); setMessage("Confirming the authoritative Job clock…");
         const recovered = await refresh();
-        const committed = action === "start" ? recovered?.active === true && recovered.job_id === jobId : recovered?.active === false && pending.priorEventId !== null;
+        const committed = action === "start"
+          ? recovered?.active === true && recovered.job_id === jobId && recovered.event_id !== pending.priorEventId
+          : recovered?.active === false
+            && recovered.latest_action === "stop"
+            && recovered.latest_event_id !== null
+            && recovered.latest_event_id !== pending.priorEventId
+            && recovered.latest_completed_interval_id !== null;
         if (committed) { retry.current = null; setStatus("ready"); setMessage("The latest Job clock confirms the action."); return true; }
         if (kind === "conflict") { retry.current = null; setStatus("ready"); setMessage("The Job clock changed. Review the latest state before acting."); }
         else { setStatus("ready"); setMessage("The Job clock action was not confirmed. Retry uses the same request identity."); }

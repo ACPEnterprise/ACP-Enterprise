@@ -1,5 +1,5 @@
 from collections.abc import AsyncIterator
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta, timezone
 from types import SimpleNamespace
 from uuid import UUID, uuid4
@@ -35,12 +35,14 @@ from app.timekeeping.commands import (
     RecordPunch,
 )
 from app.timekeeping.contracts import (
+    PayrollInputExclusionReason,
     PunchKind,
     TimeCorrectionKind,
     TimeEntryProvenance,
     WorkdayAuthorizationError,
     WorkdayConflictError,
     WorkdayTimeError,
+    canonical_digest,
     seal_payroll_time_input,
 )
 from app.timekeeping.economics_adapter import to_economics_workday_time
@@ -455,6 +457,23 @@ async def test_mixed_manual_and_punch_time_approval_correction_and_snapshot(
                 schedule_version=1,
             ),
         )
+        projection = await service.payroll_input_projection(
+            session,
+            context=manager_context,  # type: ignore[arg-type]
+            employee_id=seed.employee_id,
+            pay_period=period,
+        )
+        projection_replay = await service.payroll_input_projection(
+            session,
+            context=manager_context,  # type: ignore[arg-type]
+            employee_id=seed.employee_id,
+            pay_period=period,
+        )
+        assert projection.projection_digest == projection_replay.projection_digest
+        assert projection.total_eligible_minutes == 720
+        assert {item.reason for item in projection.excluded} == {
+            PayrollInputExclusionReason.NOT_SUBMITTED
+        }
         first = await service.seal_payroll_input(
             session,
             context=manager_context,  # type: ignore[arg-type]
@@ -474,6 +493,25 @@ async def test_mixed_manual_and_punch_time_approval_correction_and_snapshot(
             TimeEntryProvenance.EMPLOYEE_PUNCH,
             TimeEntryProvenance.AUTHORIZED_MANUAL_ENTRY,
         }
+        overlap_draft = replace(
+            first.approved_entries[0],
+            entry_id=uuid4(),
+            revision_id=uuid4(),
+            evidence_digest="",
+        )
+        overlap = replace(
+            overlap_draft,
+            evidence_digest=canonical_digest(overlap_draft.canonical_content()),
+        )
+        with pytest.raises(WorkdayTimeError, match="overlapping approved"):
+            seal_payroll_time_input(
+                company_id=seed.company_id,
+                employee_id=seed.employee_id,
+                pay_period_id=period.id,
+                period_start=period.period_start,
+                period_end=period.period_end,
+                approved_entries=(first.approved_entries[0], overlap),
+            )
         economics = to_economics_workday_time(first.approved_entries[0])
         assert economics.workday_time_id
 
@@ -507,6 +545,16 @@ async def test_mixed_manual_and_punch_time_approval_correction_and_snapshot(
             ),
         )
         assert correction_replay.id == corrected.id
+        pending_correction = await service.payroll_input_projection(
+            session,
+            context=manager_context,  # type: ignore[arg-type]
+            employee_id=seed.employee_id,
+            pay_period=period,
+        )
+        assert pending_correction.total_eligible_minutes == 480
+        assert PayrollInputExclusionReason.CORRECTION_AWAITING_APPROVAL in {
+            item.reason for item in pending_correction.excluded
+        }
         with pytest.raises(WorkdayConflictError, match="different correction"):
             await service.correct(
                 session,
@@ -747,6 +795,16 @@ async def test_phone_safe_api_manual_first_idempotency_and_payroll_snapshot(
                 )
                 assert approved.status_code == 200, approved.text
                 approved_revision_ids.append(approved.json()["revision_id"])
+            projection = await client.get(
+                f"/api/v1/timekeeping/pay-periods/{period.id}/employees/"
+                f"{seed.employee_id}/payroll-input-projection"
+            )
+            assert projection.status_code == 200, projection.text
+            assert {
+                item["revision_id"] for item in projection.json()["included"]
+            } == set(approved_revision_ids)
+            assert projection.json()["excluded"] == []
+            assert projection.json()["total_eligible_minutes"] > 0
             snapshot = await client.post(
                 f"/api/v1/timekeeping/pay-periods/{period.id}/employees/"
                 f"{seed.employee_id}/payroll-time-input"

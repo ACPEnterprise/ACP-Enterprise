@@ -6,7 +6,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from .contracts import PunchKind, TimeCorrectionKind
+from .contracts import PayrollInputExclusionReason, PunchKind, TimeCorrectionKind
 from .job_participation import (
     CorrectionState,
     IntervalConfidence,
@@ -193,6 +193,26 @@ class PayrollTimeInputView(BaseModel):
     approved_revision_ids: tuple[UUID, ...]
     total_approved_minutes: int
     snapshot_digest: str
+
+
+class PayrollInputEvidenceItem(BaseModel):
+    entry_id: UUID | None
+    revision_id: UUID | None
+    state: str
+    eligible: bool
+    reason: PayrollInputExclusionReason | None
+    approved_minutes: int | None
+    evidence_digest: str | None
+
+
+class PayrollInputProjectionView(BaseModel):
+    version: str
+    employee_id: UUID
+    pay_period_id: UUID
+    included: tuple[PayrollInputEvidenceItem, ...]
+    excluded: tuple[PayrollInputEvidenceItem, ...]
+    total_eligible_minutes: int
+    projection_digest: str
 
 
 class AdminTimecardReviewItem(BaseModel):
