@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { apiClient } from "./client";
-import { reportDispatchException } from "./dispatch";
+import { assignPrimary, reportDispatchException } from "./dispatch";
 
 vi.mock("./client", () => ({
-  apiClient: { post: vi.fn() },
+  apiClient: { post: vi.fn(), put: vi.fn() },
 }));
 
 describe("Dispatch API", () => {
@@ -33,6 +33,21 @@ describe("Dispatch API", () => {
         idempotency_key: "dispatch-idempotency-key",
         expected_version: 4,
       },
+    );
+  });
+
+  it("accepts a caller-owned idempotency identity for composite scheduling", async () => {
+    vi.mocked(apiClient.post).mockResolvedValue({ data: { id: "assignment-1" } });
+    await assignPrimary(
+      "appointment-1",
+      "employee-1",
+      "Office assignment",
+      undefined,
+      "schedule-assignment:request-1",
+    );
+    expect(apiClient.post).toHaveBeenCalledWith(
+      "/api/v1/dispatch/appointments/appointment-1/assignment",
+      expect.objectContaining({ idempotency_key: "schedule-assignment:request-1" }),
     );
   });
 });

@@ -24,7 +24,7 @@ const detailValue = (error: unknown, key: "code" | "recovery") => {
 
 export function schedulingMutationRecovery(
   error: unknown,
-  resource: "booking" | "Job scheduling" | "appointment move",
+  resource: "booking" | "Job scheduling" | "appointment move" | "Dispatch assignment",
 ): SchedulingRecovery {
   const safe = getOperatorApiError(error, resource);
   const code = detailValue(error, "code");
