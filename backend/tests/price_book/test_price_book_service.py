@@ -34,6 +34,7 @@ from app.price_book.schemas import (
     ServiceItemUpdate,
     SnapshotRequest,
     TaxClassificationCreate,
+    TaxClassificationUpdate,
 )
 from app.price_book.service import PriceBookService
 from fastapi import FastAPI
@@ -233,6 +234,33 @@ async def test_operator_catalog_and_optimistic_metadata_management(
         Decimal(45),
         Decimal("8.25"),
     }
+    tax = operator_catalog.tax_classifications[0]
+    async with factory() as session:
+        updated_tax = await service.update_tax(
+            session,
+            context=context,
+            tax_id=tax.id,
+            payload=TaxClassificationUpdate(
+                expected_version=tax.version,
+                name="Standard taxable",
+                taxable=True,
+                status="active",
+            ),
+        )
+    assert updated_tax.version == tax.version + 1
+    async with factory() as session:
+        with pytest.raises(PriceBookConflict):
+            await service.update_tax(
+                session,
+                context=context,
+                tax_id=tax.id,
+                payload=TaxClassificationUpdate(
+                    expected_version=tax.version,
+                    name="Stale tax change",
+                    taxable=False,
+                    status="inactive",
+                ),
+            )
 
     category = operator_catalog.categories[0]
     async with factory() as session:

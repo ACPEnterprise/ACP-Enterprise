@@ -40,6 +40,13 @@ class TaxClassificationCreate(PriceBookSchema):
         return value.strip().upper()
 
 
+class TaxClassificationUpdate(PriceBookSchema):
+    expected_version: int = Field(ge=1)
+    name: str = Field(min_length=1, max_length=200)
+    taxable: bool
+    status: str = Field(pattern=r"^(active|inactive|archived)$")
+
+
 class ServiceItemCreate(PriceBookSchema):
     branch_id: UUID | None = None
     category_id: UUID

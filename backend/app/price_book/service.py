@@ -49,6 +49,7 @@ from .schemas import (
     SnapshotRequest,
     TaxClassificationCreate,
     TaxClassificationItem,
+    TaxClassificationUpdate,
 )
 
 
@@ -236,6 +237,15 @@ class PriceBookService:
                 )
             ).all()
         )
+        taxes = tuple(
+            (
+                await session.scalars(
+                    select(PriceBookTaxClassification)
+                    .where(PriceBookTaxClassification.company_id == context.company.id)
+                    .order_by(PriceBookTaxClassification.name)
+                )
+            ).all()
+        )
         version_ids = [version.id for version in public.versions]
         components = (
             tuple(
@@ -260,7 +270,9 @@ class PriceBookService:
             categories=tuple(
                 CategoryItem.model_validate(value) for value in categories
             ),
-            tax_classifications=public.tax_classifications,
+            tax_classifications=tuple(
+                TaxClassificationItem.model_validate(value) for value in taxes
+            ),
             service_items=tuple(
                 OperatorServiceItem.model_validate(item)
                 for item in (
@@ -432,6 +444,58 @@ class PriceBookService:
                 version=item.version,
             )
         return item
+
+    async def update_tax(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        tax_id: UUID,
+        payload: TaxClassificationUpdate,
+    ) -> PriceBookTaxClassification:
+        now = utc_now()
+        async with session.begin():
+            record = await session.scalar(
+                select(PriceBookTaxClassification)
+                .where(
+                    PriceBookTaxClassification.id == tax_id,
+                    PriceBookTaxClassification.company_id == context.company.id,
+                )
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
+            if record is None:
+                raise PriceBookNotFound("Tax classification was not found.")
+            if record.version != payload.expected_version:
+                raise PriceBookConflict(
+                    "Tax classification changed before this update."
+                )
+            prior: dict[str, object] = {
+                "name": record.name,
+                "taxable": record.taxable,
+                "status": record.status,
+            }
+            record.name = payload.name.strip()
+            record.taxable = payload.taxable
+            record.status = payload.status
+            record.version += 1
+            record.updated_at = now
+            self._audit(
+                session,
+                context=context,
+                entity_type="price_book_tax_classification",
+                entity_id=record.id,
+                action="updated",
+                prior_state=prior,
+                state={
+                    "name": record.name,
+                    "taxable": record.taxable,
+                    "status": record.status,
+                },
+                reason="Operator updated Price Book tax classification.",
+                version=record.version,
+            )
+        return record
 
     async def create_option_group(
         self,

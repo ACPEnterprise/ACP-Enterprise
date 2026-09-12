@@ -9,6 +9,7 @@ export function usePriceBookMutations() {
     category: useMutation({ mutationFn: api.createCategory, onSuccess: refresh }),
     updateCategory: useMutation({ mutationFn: ({ id, data }: { id: string; data: Parameters<typeof api.updateCategory>[1] }) => api.updateCategory(id, data), onSuccess: refresh }),
     tax: useMutation({ mutationFn: api.createTax, onSuccess: refresh }),
+    updateTax: useMutation({ mutationFn: ({ id, data }: { id: string; data: Parameters<typeof api.updateTax>[1] }) => api.updateTax(id, data), onSuccess: refresh }),
     item: useMutation({ mutationFn: api.createServiceItem, onSuccess: refresh }),
     updateItem: useMutation({ mutationFn: ({ id, data }: { id: string; data: Parameters<typeof api.updateServiceItem>[1] }) => api.updateServiceItem(id, data), onSuccess: refresh }),
     version: useMutation({ mutationFn: ({ itemId, data }: { itemId: string; data: Parameters<typeof api.createPriceVersion>[1] }) => api.createPriceVersion(itemId, data), onSuccess: refresh }),

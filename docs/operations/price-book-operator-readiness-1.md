@@ -15,7 +15,7 @@ Protected authority: `d4eee6f6b0bc178d58654f26f3ef2b9429332ab3`
 | Labor/material inputs | BACKEND_READY | Typed quantity and optional unit cost; component ordering is immutable within each version |
 | Internal-cost security | BACKEND_READY | Ordinary read catalog omits costs/internal notes; separate MANAGE-authorized operator catalog exposes them |
 | Tax classifications | BACKEND_READY | Company-scoped taxable/non-taxable classifications and immutable snapshot evidence |
-| Tax operator workflow | FRONTEND_READY | Create and select tax treatment during draft review |
+| Tax operator workflow | FRONTEND_READY | Create, optimistic edit, activate/inactivate/archive and select during draft review |
 | Option groups/options | BACKEND_READY | Selection bounds, ordered options, Company scope and snapshot enforcement |
 | Option operator workflow | FRONTEND_READY | Create groups and attach customer-visible service options |
 | Currency and effective dates | BACKEND_READY | ISO currency constraint, effective/expiration validation and active-window exclusion |
@@ -25,7 +25,6 @@ Protected authority: `d4eee6f6b0bc178d58654f26f3ef2b9429332ab3`
 | Category custom drag ordering | MISSING | Domain has hierarchy and alphabetical order but no persisted display-order contract; no field was invented |
 | Service-item unit/quantity label semantics | MISSING | Quantity exists on components/snapshots, but no authoritative sell-unit field exists |
 | Other direct-cost component | MISSING | Domain supports labor/material only; no unsupported component type was introduced |
-| Tax lifecycle operator maintenance | PARTIAL | Tax creation/selection exists; inactivate/archive API is not defined |
 | Option edit/archive operator maintenance | PARTIAL | Creation and snapshot enforcement exist; update/archive API is not defined |
 | Real All County operating content | BLOCKED | Requires `PRICEBOOK.ALLCOUNTY.BUILD.1` and owner-approved content; no bulk content was created |
 
