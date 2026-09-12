@@ -104,3 +104,9 @@ This advancement creates one real integration conflict in `frontend/src/routes/J
 The earlier reliability-test reconciliation remains required. No backend/schema conflict was introduced by this protected advancement.
 
 At `2026-09-12T19:19:35Z`, protected authority advanced again to `36fe3eeaa85905ef282b07ea8b7cc5482c335794` through Payroll operating-wave PR #251. This is semantically unrelated: all four Customer commits remain pending and the single `JobsRoute.tsx` reconciliation above is unchanged.
+
+At `2026-09-12T19:35:00Z`, protected authority is `96d67cb73dbe4838e882e1551de5906eda598f4e` after guarded current HCP overlay PR #253. The Customer commits remain pending. `CUSTOMER.CURRENT.AUTHORITY.RECONCILIATION.1` is pushed as `work/customer-current-authority-reconciliation-1` at `d67125426ab4427c634c836500790407d3941f9c`.
+
+Enterprise should integrate that reconciliation branch as the replacement for individually applying the queued Customer chain. It contains the required precursor and all four Customer-wave semantics, preserves protected Customer and Service Location Job filtering, the protected Customer-context notice and **Show all Jobs** recovery, adds **Return to Customer**, and includes the bounded reliability-test reconciliation. Do not also integrate `customer-office-operating-acceptance-2`.
+
+Qualification on the reconciled current-authority branch: 123 frontend files / 466 tests passed; affected Customer/Invoice/AR set 8 files / 50 tests passed; PostgreSQL Invoice/AR/source classification 11 tests passed; fresh zero-to-head PostgreSQL upgrade reached the single head `e5g7i9k1m3o5`; ESLint, production TypeScript/Vite build, changed-boundary Ruff, MyPy (56 files), Python compilation, and diff check passed. A broader Ruff scan also reported one inherited import-order issue in untouched `tests/invoicing/test_financial_list_boundaries.py`; it is not introduced by this candidate.
