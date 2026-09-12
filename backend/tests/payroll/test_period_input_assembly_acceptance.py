@@ -264,3 +264,55 @@ async def test_missing_compensation_and_scope_block_without_mutating_time(
             await service.approve_compensation(
                 session, context=approver, authority_id=second.id
             )
+
+
+@pytest.mark.asyncio
+async def test_mid_period_compensation_change_requires_explicit_proration_policy(
+    payroll_database: tuple[async_sessionmaker[AsyncSession], dict[str, UUID]],
+) -> None:
+    factory, ids = payroll_database
+    authority = PayrollAuthorityService()
+    manager, approver = contexts(ids)
+    async with factory() as session:
+        policy = await approved_policy(authority, session, ids, manager, approver)
+        assert policy is not None
+        first_draft = await compensation_draft(
+            authority,
+            session,
+            ids,
+            manager,
+            version=1,
+            effective_start=date(2026, 8, 1),
+            rate="30.00",
+        )
+        await authority.approve_compensation(
+            session, context=approver, authority_id=first_draft.id
+        )
+        successor_draft = await compensation_draft(
+            authority,
+            session,
+            ids,
+            manager,
+            version=2,
+            effective_start=date(2026, 9, 1),
+            rate="32.00",
+            supersedes=first_draft.id,
+        )
+        await authority.approve_compensation(
+            session, context=approver, authority_id=successor_draft.id
+        )
+        period_start_compensation = await authority.resolve_compensation(
+            session,
+            company_id=ids["company_a"],
+            employee_id=ids["employee_a"],
+            as_of_date=date(2026, 8, 29),
+        )
+        assert period_start_compensation is not None
+        with pytest.raises(PayrollConflictError, match="proration policy"):
+            await authority.resolve_period_compensation(
+                session,
+                company_id=ids["company_a"],
+                employee_id=ids["employee_a"],
+                period_start=date(2026, 8, 29),
+                period_end=date(2026, 9, 4),
+            )
