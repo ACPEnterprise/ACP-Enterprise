@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://acp.example.invalid/contracts/preview-acceptance-attestation.v1.schema.json",
+  "title": "ACP Preview acceptance fixture attestation",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "fixture_key",
+    "environment",
+    "synthetic_marker",
+    "real_data_access",
+    "persona",
+    "company_id",
+    "branch_id",
+    "user_id",
+    "session_id",
+    "permission_codes",
+    "release_sha",
+    "issued_at",
+    "expires_at",
+    "authorized_by",
+    "audit_event_id"
+  ],
+  "properties": {
+    "fixture_key": { "const": "acp-employee-beta-v1" },
+    "environment": { "const": "preview" },
+    "synthetic_marker": { "const": "SYNTHETIC_BETA_ONLY" },
+    "real_data_access": { "const": false },
+    "persona": { "enum": ["csr", "employee", "office", "qbo"] },
+    "company_id": { "type": "string", "format": "uuid" },
+    "branch_id": { "type": "string", "format": "uuid" },
+    "user_id": { "type": "string", "format": "uuid" },
+    "session_id": { "type": "string", "format": "uuid" },
+    "permission_codes": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^COMPANY_[A-Z0-9_]+$" }
+    },
+    "release_sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "issued_at": { "type": "string", "format": "date-time" },
+    "expires_at": { "type": "string", "format": "date-time" },
+    "authorized_by": { "type": "string", "minLength": 1 },
+    "audit_event_id": { "type": "string", "format": "uuid" }
+  }
+}

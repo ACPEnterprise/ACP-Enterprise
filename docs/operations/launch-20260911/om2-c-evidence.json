@@ -5,7 +5,7 @@
     "file_sha256": "03b74b5f065694b487268bdee531d8d50620f2816f30c91d8b665f9d5b3e9dfc"
   },
   "starting_protected_authority": "42a4f68087d76247269bd4c8388f556dd62a8b5c",
-  "protected_authority": "4514b5df6be66e50ee172085c622ae613e172086",
+  "protected_authority": "27b89ecf1d702acbe75d0e1f95cf83c5f6bba5c9",
   "schema_head": "d4f6h8j0l2n4",
   "fixture_qualification": {
     "classification": "QUALIFIED_SYNTHETIC_ONLY",
@@ -181,6 +181,40 @@
     "preview_mutation": false,
     "production_access": false,
     "scheduling_mutation": "BLOCKED_MISSING_AUTHORITATIVE_MUTATION_CLASSIFICATION"
+  },
+  "acceptance_identity_provisioning": {
+    "authority": "27b89ecf1d702acbe75d0e1f95cf83c5f6bba5c9",
+    "state": "PREPARED_NOT_ISSUED",
+    "personas": ["CSR", "EMPLOYEE", "OFFICE", "QBO_READ"],
+    "one_identity_per_persona": true,
+    "token_maximum_seconds": 3600,
+    "attestation_maximum_seconds": 14400,
+    "contract_tests_passed": 13,
+    "ruff": "PASS",
+    "mypy": "PASS",
+    "credential_issuance": "ENTERPRISE_EXISTING_SECRET_BOUNDARY",
+    "preview_mutation": false,
+    "pr_216_qualification": {
+      "backend_passed": 19,
+      "mobile_suites_passed": 2,
+      "mobile_tests_passed": 27,
+      "mobile_typescript": "PASS",
+      "mobile_eslint": "PASS"
+    },
+    "pr_229_pr_231_time_payroll_qualification_passed": 20,
+    "pr_235_employee_payroll_setup": {
+      "backend_passed": 3,
+      "frontend_files_passed": 3,
+      "frontend_tests_passed": 10,
+      "ruff": "PASS",
+      "mypy": "PASS",
+      "eslint": "PASS",
+      "typescript_production_build": "PASS",
+      "deployment": "UNPROVEN",
+      "mutation_registry_missing_routes": 4,
+      "defect_owner": "OM2_B_PAYROLL"
+    },
+    "current_mutation_registry_missing_total": 5
   },
   "continuation_20260912": {
     "factory": {

@@ -24,7 +24,9 @@ REQUIRED_PERMISSIONS = {
         {
             "COMPANY_CUSTOMER_READ",
             "COMPANY_JOB_READ",
+            "COMPANY_JOB_MANAGE",
             "COMPANY_SCHEDULING_READ",
+            "COMPANY_SCHEDULING_MANAGE",
             "COMPANY_DISPATCH_READ",
         }
     ),
@@ -37,19 +39,22 @@ REQUIRED_PERMISSIONS = {
     "office": frozenset(
         {
             "COMPANY_TIMEKEEPING_ADMIN_READ",
-            "COMPANY_PAYROLL_CALCULATION_READ",
+            "COMPANY_PAYROLL_REPORTING_READ",
         }
     ),
-    "qbo": frozenset({"COMPANY_ACCOUNTING_READ"}),
+    "qbo": frozenset({"COMPANY_ACCOUNTING_REPORT_READ"}),
 }
 
 PROHIBITED_PERMISSIONS = frozenset(
     {
+        "COMPANY_ADMINISTER",
         "COMPANY_COMMUNICATIONS_MANAGE",
         "COMPANY_PAYMENT_COLLECT",
         "COMPANY_PAYMENT_APPLY",
         "COMPANY_PAYMENT_REFUND",
+        "COMPANY_ACCOUNTING_JOURNAL_PREPARE",
         "COMPANY_ACCOUNTING_JOURNAL_POST",
+        "COMPANY_ACCOUNTING_JOURNAL_REVERSE",
         "COMPANY_PAYROLL_CALCULATION_EXECUTE",
         "COMPANY_PAYROLL_PAYMENT_EXECUTION_AUTHORIZE",
         "COMPANY_PAYROLL_REMITTANCE_EXECUTE",
@@ -99,14 +104,28 @@ def read_attestation(path: Path, *, now: datetime | None = None) -> dict[str, st
     }
     if any(payload.get(key) != value for key, value in required.items()):
         raise AcceptanceBlocked("Fixture attestation does not match the Preview contract.")
-    if not payload.get("company_id") or not payload.get("branch_id"):
-        raise AcceptanceBlocked("Fixture attestation must bind exact Company and Branch IDs.")
+    for field in (
+        "company_id",
+        "branch_id",
+        "user_id",
+        "session_id",
+        "persona",
+        "release_sha",
+        "audit_event_id",
+        "authorized_by",
+    ):
+        if not payload.get(field):
+            raise AcceptanceBlocked(f"Fixture attestation must bind {field}.")
     try:
         expires_at = datetime.fromisoformat(str(payload["expires_at"]))
     except (KeyError, ValueError) as error:
         raise AcceptanceBlocked("Fixture attestation expiry is invalid.") from error
     current = now or datetime.now(timezone.utc)
-    if expires_at.tzinfo is None or expires_at <= current:
+    if (
+        expires_at.tzinfo is None
+        or expires_at <= current
+        or expires_at > current + timedelta(hours=4)
+    ):
         raise AcceptanceBlocked("Fixture attestation is expired or timezone-naive.")
     return payload
 
@@ -196,6 +215,10 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     token = read_token(args.token_file)
     expires_at = validate_short_lived_token(token)
     attestation = read_attestation(args.attestation_file)
+    if attestation["persona"] != args.persona:
+        raise AcceptanceBlocked("Fixture attestation persona does not match invocation.")
+    if frozenset(attestation.get("permission_codes", ())) != REQUIRED_PERMISSIONS[args.persona]:
+        raise AcceptanceBlocked("Fixture attestation permissions are not the exact persona minimum.")
     company_id = attestation["company_id"]
     branch_id = attestation["branch_id"]
     headers = {
@@ -205,6 +228,9 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     }
     results: list[dict[str, str | int]] = []
     with httpx.Client(base_url=origin, headers=headers, timeout=20, follow_redirects=False) as client:
+        health_response = client.get("/backend-health", headers={})
+        if health_response.status_code != 200 or health_response.json().get("version") != attestation["release_sha"]:
+            raise AcceptanceBlocked("Preview release does not match the fixture attestation.")
         session_response = client.get("/api/v1/auth/session")
         authorization_response = client.get("/api/v1/authorization/context")
         for response in (session_response, authorization_response):

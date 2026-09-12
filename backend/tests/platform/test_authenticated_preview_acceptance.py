@@ -7,7 +7,15 @@ from pathlib import Path
 
 import pytest
 
+from scripts.acceptance_identity_provisioning_contract import (
+    ProvisioningBlocked,
+    attest,
+    plan,
+)
 from scripts.authenticated_preview_acceptance import (
+    PREVIEW_ORIGIN,
+    PROHIBITED_PERMISSIONS,
+    REQUIRED_PERMISSIONS,
     SCHEDULE_ROUTE,
     AcceptanceBlocked,
     mutation_registry_has_schedule_route,
@@ -17,6 +25,8 @@ from scripts.authenticated_preview_acceptance import (
     validate_origin,
     validate_short_lived_token,
 )
+
+CONTRACT_PATH = Path(__file__).parents[2] / "operations/preview-acceptance-identities.v1.json"
 
 
 def _token(expires_at: datetime) -> str:
@@ -57,7 +67,9 @@ def test_identity_scope_and_permissions_fail_closed() -> None:
         "permission_codes": [
             "COMPANY_CUSTOMER_READ",
             "COMPANY_JOB_READ",
+            "COMPANY_JOB_MANAGE",
             "COMPANY_SCHEDULING_READ",
+            "COMPANY_SCHEDULING_MANAGE",
             "COMPANY_DISPATCH_READ",
         ],
     }
@@ -91,7 +103,24 @@ def test_attestation_binds_synthetic_preview_scope(tmp_path: Path) -> None:
                 "real_data_access": False,
                 "company_id": "company",
                 "branch_id": "branch",
+                "user_id": "user",
+                "session_id": "session",
+                "persona": "csr",
+                "release_sha": "a" * 40,
+                "permission_codes": sorted(
+                    {
+                        "COMPANY_CUSTOMER_READ",
+                        "COMPANY_JOB_READ",
+                        "COMPANY_JOB_MANAGE",
+                        "COMPANY_SCHEDULING_READ",
+                        "COMPANY_SCHEDULING_MANAGE",
+                        "COMPANY_DISPATCH_READ",
+                    }
+                ),
+                "issued_at": now.isoformat(),
                 "expires_at": (now + timedelta(hours=2)).isoformat(),
+                "authorized_by": "enterprise-release",
+                "audit_event_id": "audit",
             }
         ),
         encoding="utf-8",
@@ -114,3 +143,65 @@ def test_schedule_mutation_remains_blocked_until_registry_is_authoritative(tmp_p
         encoding="utf-8",
     )
     assert mutation_registry_has_schedule_route(registry)
+
+
+def test_provisioning_contract_matches_runner_personas() -> None:
+    contract = json.loads(CONTRACT_PATH.read_text(encoding="utf-8"))
+    assert contract["origin"] == PREVIEW_ORIGIN
+    assert contract["environment"] == "preview"
+    assert contract["real_data_access"] is False
+    assert contract["access_token_maximum_seconds"] == 3600
+    assert contract["one_identity_per_persona"] is True
+    assert set(contract["personas"]) == set(REQUIRED_PERMISSIONS)
+    assert frozenset(contract["prohibited_permissions"]) == PROHIBITED_PERMISSIONS
+    for name, persona in contract["personas"].items():
+        permissions = frozenset(persona["permissions"])
+        assert permissions == REQUIRED_PERMISSIONS[name]
+        assert not permissions & PROHIBITED_PERMISSIONS
+        assert all(path.startswith("/api/v1/") for path in persona["get_endpoints"])
+
+
+def test_enterprise_plan_is_non_mutating_and_rejects_real_login() -> None:
+    arguments = type(
+        "Arguments",
+        (),
+        {
+            "persona": "csr",
+            "synthetic_login": "csr@acceptance.invalid",
+            "company_id": "00000000-0000-0000-0000-000000000001",
+            "branch_id": "00000000-0000-0000-0000-000000000002",
+        },
+    )()
+    assert plan(arguments)["mutation_performed"] is False
+    arguments.synthetic_login = "person@example.com"
+    with pytest.raises(ProvisioningBlocked):
+        plan(arguments)
+
+
+def test_enterprise_attestation_is_restricted_and_contains_no_token(tmp_path: Path) -> None:
+    output = tmp_path / "attestation.json"
+    arguments = type(
+        "Arguments",
+        (),
+        {
+            "persona": "employee",
+            "company_id": "00000000-0000-0000-0000-000000000001",
+            "branch_id": "00000000-0000-0000-0000-000000000002",
+            "user_id": "00000000-0000-0000-0000-000000000003",
+            "session_id": "00000000-0000-0000-0000-000000000004",
+            "audit_event_id": "00000000-0000-0000-0000-000000000005",
+            "authorized_by": "enterprise-release",
+            "release_sha": "a" * 40,
+            "ttl_seconds": 3600,
+            "output": output,
+        },
+    )()
+    result = attest(arguments)
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    assert result["credential_material_emitted"] is False
+    assert output.stat().st_mode & 0o077 == 0
+    assert "token" not in payload
+    assert payload["permission_codes"] == [
+        "COMPANY_TIMEKEEPING_OWN_READ",
+        "COMPANY_PAYROLL_STATEMENT_OWN_READ",
+    ]

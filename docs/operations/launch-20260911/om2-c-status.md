@@ -8,7 +8,7 @@ Updated: 2026-09-12 America/New_York
 - Mission commit: `0c08f1e3634f38a7fb82970932dea5de7a4cf24f`
 - Mission file SHA-256: `03b74b5f065694b487268bdee531d8d50620f2816f30c91d8b665f9d5b3e9dfc`
 - Starting protected base: `42a4f68087d76247269bd4c8388f556dd62a8b5c`
-- Current protected base: `4514b5df6be66e50ee172085c622ae613e172086`
+- Current protected base: `27b89ecf1d702acbe75d0e1f95cf83c5f6bba5c9`
 - Isolated branch: `work/om2c-launch-20260911-e2e-acceptance-1`
 - Mission activation evidence: mission commit at 2026-09-10 21:36:32 -0400.
 - Mission authorization expiry: 2026-09-13 21:36:32 -0400, unless earlier
@@ -35,6 +35,23 @@ qualified, but no live acceptance was executed because no dedicated synthetic to
 expiring fixture attestation, or accepted live fixture adapter is available. Protected
 authority also includes Payroll readiness #220 and Scheduling serialization #224;
 their affected suite passed 36 tests on fresh PostgreSQL 16.
+
+The exact four-persona Enterprise provisioning contract is now prepared in
+`om2-c-acceptance-identity-provisioning-1.md`. It reuses existing onboarding,
+Company-administration, authentication, session-revocation and secret-delivery
+boundaries; it does not issue secrets. PR #216 is integrated and independently
+qualified with 19 backend tests and 2 Mobile suites / 27 tests plus Mobile static
+checks. Authenticated Preview execution remains gated on Enterprise provisioning and a
+coherent deployed release.
+
+Protected Timekeeping/Payroll-input PRs #229 and #231 were subsequently integrated;
+their affected intersection passed 20 tests on fresh PostgreSQL 16.
+
+Protected Employee Payroll setup PR #235 is integrated and passed 3 backend plus 3
+frontend files / 10 tests and focused backend/frontend static/build checks. Preview
+deployment and operator acceptance remain unproven. Its four POST routes are absent
+from the mutation registry and have been routed to OM2-B on PR #235; with the prior
+Scheduling route, current authority has five missing mutation classifications.
 
 Compact morning decision packet:
 `docs/operations/launch-20260911/om2-c-morning-launch-decision-20260912.md`.
