@@ -39,6 +39,12 @@ describe("ScheduleJobPanel", () => {
     expect(screen.getByRole("option", { name: "Unassigned / Needs Scheduling" })).toBeVisible();
     expect(screen.getByRole("option", { name: "Synthetic Beta Employee — SYN-BETA" })).toBeVisible();
     expect(screen.queryByRole("option", { name: /Other Branch/ })).not.toBeInTheDocument();
+    await userEvent.clear(screen.getByLabelText(/^Arrival window starts/));
+    await userEvent.type(screen.getByLabelText(/^Arrival window starts/), "2026-09-14T09:00");
+    await userEvent.clear(screen.getByLabelText(/^Arrival window ends/));
+    await userEvent.type(screen.getByLabelText(/^Arrival window ends/), "2026-09-14T12:00");
+    await userEvent.clear(screen.getByLabelText(/^Expected duration \(minutes\)/));
+    await userEvent.type(screen.getByLabelText(/^Expected duration \(minutes\)/), "90");
     await userEvent.selectOptions(screen.getByRole("combobox", { name: "Technician" }), "employee-beta");
     await userEvent.click(screen.getByRole("button", { name: "Book Appointment" }));
     expect(mutate).toHaveBeenCalledWith(expect.objectContaining({
@@ -46,9 +52,23 @@ describe("ScheduleJobPanel", () => {
       branch_id: "branch-main",
       customer_id: "customer-1",
       service_location_id: "location-1",
+      arrival_window_start_at: new Date("2026-09-14T09:00").toISOString(),
+      arrival_window_end_at: new Date("2026-09-14T12:00").toISOString(),
+      expected_duration_minutes: 90,
       employee_id: "employee-beta",
       reserve_capacity: true,
     }), expect.any(Object));
+  });
+
+  it("rejects an inverted arrival window without changing work duration semantics", async () => {
+    renderPanel();
+    await userEvent.clear(screen.getByLabelText(/^Arrival window starts/));
+    await userEvent.type(screen.getByLabelText(/^Arrival window starts/), "2026-09-14T12:00");
+    await userEvent.clear(screen.getByLabelText(/^Arrival window ends/));
+    await userEvent.type(screen.getByLabelText(/^Arrival window ends/), "2026-09-14T09:00");
+    expect(screen.getByText("Arrival window must end after it starts.")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Book Appointment" })).toBeDisabled();
+    expect(mutate).not.toHaveBeenCalled();
   });
 
   it("books Needs Scheduling without claiming technician capacity", async () => {

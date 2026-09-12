@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AccountsPayableRoute } from "./AccountsPayableRoute";
@@ -50,7 +51,7 @@ describe("owner reporting read routes", () => {
 
   it("renders Payroll Administration with reporting-read alone", () => {
     permissions.add("COMPANY_PAYROLL_REPORTING_READ");
-    render(<PayrollRoute />);
+    render(<MemoryRouter><PayrollRoute /></MemoryRouter>);
     expect(screen.getByRole("heading", { name: "Payroll Administration" })).toBeVisible();
   });
 
@@ -74,7 +75,7 @@ describe("owner reporting read routes", () => {
   });
 
   it("keeps both routes fail-closed without an accepted read permission", () => {
-    const payroll = render(<PayrollRoute />);
+    const payroll = render(<MemoryRouter><PayrollRoute /></MemoryRouter>);
     expect(screen.getByText(/not authorized to view Payroll/i)).toBeVisible();
     payroll.unmount();
     render(<AccountsPayableRoute />);

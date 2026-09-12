@@ -1,15 +1,25 @@
+# ruff: noqa: F401, F811 -- imported pytest fixture is consumed by name
+
 from contextlib import AbstractAsyncContextManager
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from uuid import UUID, uuid4
 
 import pytest
+from app.dispatch.models import DispatchAssignment, DispatchCrewMember
+from app.jobs.models import Job, JobAppointmentLink
 from app.timekeeping.commands import CorrectJobWorkedInterval, RecordJobClock
-from app.timekeeping.contracts import WorkdayAuthorizationError, WorkdayConflictError
+from app.timekeeping.contracts import (
+    WorkdayAuthorizationError,
+    WorkdayConflictError,
+    WorkdayTimeError,
+)
 from app.timekeeping.job_participation import JobClockKind
 from app.timekeeping.models import JobWorkedClockEvent, JobWorkedIntervalRevision
 from app.timekeeping.query_service import WorkdayTimeQueryService
+from app.timekeeping.repository import TimekeepingRepository
 from app.timekeeping.service import WorkdayTimeService
+from tests.dispatch.test_dispatch_service import dispatch_fixture
 
 NOW = datetime(2026, 9, 10, 12, 0, 1, 250000, tzinfo=timezone.utc)
 
@@ -267,6 +277,17 @@ async def test_independent_employee_identity_and_overlap_fail_closed() -> None:
             ),
         )
 
+    unassigned = FakeRepository(employee_id)
+    unassigned.scope_exists = False
+    with pytest.raises(WorkdayTimeError, match="scope is invalid"):
+        await HarnessService(unassigned).record_job_clock(
+            FakeSession(unassigned),
+            context=ctx,  # type: ignore[arg-type]
+            command=command(
+                ctx, employee_id, JobClockKind.START, "unassigned", NOW, job_id=job_id
+            ),
+        )
+
 
 @pytest.mark.asyncio
 async def test_correction_is_append_only_and_replay_safe() -> None:
@@ -358,3 +379,86 @@ async def test_active_clock_and_timecard_project_job_evidence_without_making_it_
     assert len(timecard.job_intervals) == 1
     assert timecard.job_intervals[0].job_id == job_id
     assert timecard.job_intervals[0].duration_seconds == 120
+
+
+@pytest.mark.asyncio
+async def test_job_clock_scope_requires_current_primary_or_crew_assignment(
+    dispatch_fixture: object,
+) -> None:
+    factory, context_value, appointment, primary, crew = dispatch_fixture  # type: ignore[misc]
+    now = datetime.now(timezone.utc)
+    async with factory() as session, session.begin():
+        job = Job(
+            company_id=context_value.company.id,
+            branch_id=context_value.active_branch.id,
+            job_number=f"JOB-{int(uuid4().hex[:8], 16):010d}",
+            customer_id=appointment.customer_id,
+            service_location_id=appointment.service_location_id,
+            status="in_progress",
+            concurrency_version=1,
+            activated_at=now,
+            started_at=now,
+            created_by_user_id=context_value.user.id,
+            updated_by_user_id=context_value.user.id,
+        )
+        session.add(job)
+        await session.flush()
+        session.add(
+            JobAppointmentLink(
+                company_id=context_value.company.id,
+                branch_id=context_value.active_branch.id,
+                job_id=job.id,
+                appointment_id=appointment.id,
+                visit_sequence=1,
+                linked_by_user_id=context_value.user.id,
+            )
+        )
+        assignment = DispatchAssignment(
+            company_id=context_value.company.id,
+            branch_id=context_value.active_branch.id,
+            appointment_id=appointment.id,
+            job_id=job.id,
+            primary_employee_id=primary.id,
+            status="acknowledged",
+            assignment_reason="Synthetic Job-clock scope qualification",
+            assigned_by_user_id=context_value.user.id,
+            window_start_at=appointment.arrival_window_start_at,
+            window_end_at=appointment.arrival_window_end_at,
+            effective_at=now,
+        )
+        session.add(assignment)
+        await session.flush()
+
+        repository = TimekeepingRepository()
+        scope = {
+            "company_id": context_value.company.id,
+            "branch_id": context_value.active_branch.id,
+            "job_id": job.id,
+            "appointment_id": appointment.id,
+        }
+        assert await repository.job_scope_exists(
+            session, employee_id=primary.id, **scope
+        )
+        assert not await repository.job_scope_exists(
+            session, employee_id=crew.id, **scope
+        )
+
+        session.add(
+            DispatchCrewMember(
+                company_id=context_value.company.id,
+                assignment_id=assignment.id,
+                employee_id=crew.id,
+                status="active",
+                added_by_user_id=context_value.user.id,
+            )
+        )
+        await session.flush()
+        assert await repository.job_scope_exists(
+            session, employee_id=crew.id, **scope
+        )
+
+        assignment.status = "released"
+        await session.flush()
+        assert not await repository.job_scope_exists(
+            session, employee_id=primary.id, **scope
+        )

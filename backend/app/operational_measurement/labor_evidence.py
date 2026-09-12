@@ -55,7 +55,7 @@ class EmployeeJobLink:
     branch_id: UUID
     employee_id: UUID
     job_id: UUID
-    appointment_id: UUID
+    appointment_id: UUID | None
     provenance: ProvenanceRef
 
 
@@ -80,10 +80,8 @@ class LaborInterval:
             self.job_id is not None or self.appointment_id is not None
         ):
             raise ValueError("paid time authority does not assign time to a Job")
-        if self.kind is not IntervalKind.PAID and (
-            self.job_id is None or self.appointment_id is None
-        ):
-            raise ValueError("Job interval requires Job and Appointment identity")
+        if self.kind is not IntervalKind.PAID and self.job_id is None:
+            raise ValueError("Job interval requires Job identity")
 
 
 @dataclass(frozen=True, slots=True)
@@ -92,7 +90,7 @@ class JobLaborEvidence:
     branch_id: UUID
     employee_id: UUID
     job_id: UUID
-    appointment_id: UUID
+    appointment_id: UUID | None
     scheduled_minutes: int | None
     worked_minutes: int | None
     jobsite_minutes: int | None
@@ -151,7 +149,9 @@ def compose_labor_evidence(
     link_keys = {(x.employee_id, x.job_id, x.appointment_id) for x in links}
 
     paid_by_employee: dict[UUID, list[LaborInterval]] = defaultdict(list)
-    job_intervals: dict[tuple[UUID, UUID, UUID], list[LaborInterval]] = defaultdict(
+    job_intervals: dict[
+        tuple[UUID, UUID, UUID | None], list[LaborInterval]
+    ] = defaultdict(
         list
     )
     for interval in intervals:
@@ -171,7 +171,11 @@ def compose_labor_evidence(
         )
         for link in sorted(
             links,
-            key=lambda x: (str(x.employee_id), str(x.job_id), str(x.appointment_id)),
+            key=lambda x: (
+                str(x.employee_id),
+                str(x.job_id),
+                str(x.appointment_id) if x.appointment_id is not None else "",
+            ),
         )
     )
     employees = tuple(
