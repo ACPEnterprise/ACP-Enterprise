@@ -41,6 +41,7 @@ export function ScheduleJobPanel({ job, canAssign }: {
       arrival_window_end_at: new Date(start.getTime() + duration * 60_000).toISOString(),
       expected_duration_minutes: duration,
       capacity_units: "1.00",
+      reserve_capacity: Boolean(employeeId),
       employee_id: employeeId || null,
     }, { onSuccess: () => setRequestId(crypto.randomUUID()) });
   };

@@ -9,13 +9,6 @@ from zoneinfo import ZoneInfo
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import delete, func, select
-from sqlalchemy.ext.asyncio import (
-    AsyncSession,
-    async_sessionmaker,
-    create_async_engine,
-)
-
 from app.analytics.service import AnalyticsService
 from app.core.config import settings
 from app.customers.models import Customer, ServiceLocation
@@ -57,6 +50,12 @@ from app.scheduling.service import (
 from app.scheduling.types import (
     AppointmentCancellationReason,
     AppointmentRescheduleReason,
+)
+from sqlalchemy import delete, func, select
+from sqlalchemy.ext.asyncio import (
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
 )
 
 BUSINESS_TIMEZONE = ZoneInfo("America/New_York")
@@ -362,6 +361,42 @@ async def test_creation_allocates_number_reserves_capacity_and_stages_event(
     assert all(event.branch_id == fixture.branch.id for event in events)
     assert events[0].occurred_at == events[1].occurred_at == FIXED_NOW
     assert analytics.appointments_booked.value == 1
+
+
+@pytest.mark.asyncio
+async def test_unassigned_creation_skips_capacity_and_replays_without_duplicate(
+    service_database: tuple[async_sessionmaker[AsyncSession], ServiceFixture],
+) -> None:
+    factory, fixture = service_database
+    request_id = uuid4()
+    command = CreateAppointmentCommand(
+        **{
+            **create_command(fixture).__dict__,
+            "idempotency_key": request_id,
+            "reserve_capacity": False,
+        }
+    )
+    service = SchedulingService(clock=lambda: FIXED_NOW)
+
+    async with factory() as session:
+        first = await service.create_appointment(
+            session, context=fixture.context, command=command
+        )
+        replay = await service.create_appointment(
+            session, context=fixture.context, command=command
+        )
+
+    assert first.id == replay.id
+    assert first.capacity_reservation is None
+    async with factory() as session:
+        assert await SchedulingRepository.get_capacity_reservation(
+            session,
+            company_id=fixture.company.id,
+            appointment_id=first.id,
+        ) is None
+        assert await session.scalar(
+            select(func.count(Appointment.id)).where(Appointment.id == first.id)
+        ) == 1
 
 
 @pytest.mark.asyncio
