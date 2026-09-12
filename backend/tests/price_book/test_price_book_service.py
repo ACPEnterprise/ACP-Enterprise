@@ -24,12 +24,14 @@ from app.price_book.models import PriceBookAuditEntry, PriceBookCommercialSnapsh
 from app.price_book.router import router as price_book_router
 from app.price_book.schemas import (
     CategoryCreate,
+    CategoryUpdate,
     ComponentCreate,
     OptionCreate,
     OptionGroupCreate,
     PriceVersionCreate,
     PriceVersionUpdate,
     ServiceItemCreate,
+    ServiceItemUpdate,
     SnapshotRequest,
     TaxClassificationCreate,
 )
@@ -214,6 +216,79 @@ async def seed_draft(factory, context, branch):
             ),
         )
     return service, item, version, effective
+
+
+@pytest.mark.asyncio
+async def test_operator_catalog_and_optimistic_metadata_management(
+    price_book_fixture,
+):
+    factory, context, branch = price_book_fixture
+    service, item, version, _ = await seed_draft(factory, context, branch)
+    async with factory() as session:
+        operator_catalog = await service.operator_catalog(session, context=context)
+    assert operator_catalog.service_items[0].internal_description is None
+    assert {
+        component.unit_cost for component in operator_catalog.internal_components
+    } == {
+        Decimal(45),
+        Decimal("8.25"),
+    }
+
+    category = operator_catalog.categories[0]
+    async with factory() as session:
+        updated_category = await service.update_category(
+            session,
+            context=context,
+            category_id=category.id,
+            payload=CategoryUpdate(
+                expected_version=category.version,
+                name="Drain and sewer",
+                description="Operator-managed category.",
+                status="active",
+            ),
+        )
+    assert updated_category.name == "Drain and sewer"
+    async with factory() as session:
+        with pytest.raises(PriceBookConflict):
+            await service.update_category(
+                session,
+                context=context,
+                category_id=category.id,
+                payload=CategoryUpdate(
+                    expected_version=updated_category.version,
+                    name=updated_category.name,
+                    status="archived",
+                ),
+            )
+
+    async with factory() as session:
+        updated_item = await service.update_item(
+            session,
+            context=context,
+            item_id=item.id,
+            payload=ServiceItemUpdate(
+                expected_version=item.version,
+                category_id=category.id,
+                name="Standard drain clearing",
+                customer_description="Clear one accessible standard drain.",
+                internal_description="Office scope note.",
+            ),
+        )
+    assert updated_item.internal_description == "Office scope note."
+    async with factory() as session:
+        with pytest.raises(PriceBookConflict):
+            await service.update_item(
+                session,
+                context=context,
+                item_id=item.id,
+                payload=ServiceItemUpdate(
+                    expected_version=item.version,
+                    category_id=category.id,
+                    name="Stale edit",
+                    customer_description="Must not persist.",
+                ),
+            )
+    assert version.status == "draft"
 
 
 @pytest.mark.asyncio
@@ -702,6 +777,7 @@ async def test_complete_authorization_matrix(
         transport=httpx.ASGITransport(app=application), base_url="http://test"
     ) as client:
         read = await client.get("/api/v1/price-book")
+        operator = await client.get("/api/v1/price-book/operator")
         manage = await client.post(
             "/api/v1/price-book/categories",
             json={"code": f"AUTH-{uuid4().hex[:8]}", "name": "Authorized"},
@@ -721,6 +797,7 @@ async def test_complete_authorization_matrix(
             },
         )
     assert (read.status_code == 200) is read_allowed
+    assert (operator.status_code == 200) is manage_allowed
     assert (manage.status_code == 201) is manage_allowed
     assert (activate.status_code != 403) is activate_allowed
     assert (snapshot.status_code != 403) is manage_allowed

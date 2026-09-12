@@ -21,6 +21,14 @@ class CategoryCreate(PriceBookSchema):
         return value.strip().upper()
 
 
+class CategoryUpdate(PriceBookSchema):
+    expected_version: int = Field(ge=1)
+    name: str = Field(min_length=1, max_length=200)
+    description: str | None = Field(default=None, max_length=2000)
+    parent_id: UUID | None = None
+    status: str = Field(pattern=r"^(active|archived)$")
+
+
 class TaxClassificationCreate(PriceBookSchema):
     code: str = Field(min_length=1, max_length=80)
     name: str = Field(min_length=1, max_length=200)
@@ -44,6 +52,14 @@ class ServiceItemCreate(PriceBookSchema):
     @classmethod
     def normalize_code(cls, value: str) -> str:
         return value.strip().upper()
+
+
+class ServiceItemUpdate(PriceBookSchema):
+    expected_version: int = Field(ge=1)
+    category_id: UUID
+    name: str = Field(min_length=1, max_length=240)
+    customer_description: str = Field(min_length=1, max_length=4000)
+    internal_description: str | None = Field(default=None, max_length=4000)
 
 
 class ComponentCreate(PriceBookSchema):
@@ -164,6 +180,14 @@ class ComponentItem(PriceBookSchema):
     position: int
 
 
+class OperatorComponentItem(ComponentItem):
+    unit_cost: Decimal | None
+
+
+class OperatorServiceItem(ServiceItem):
+    internal_description: str | None
+
+
 class PriceVersionItem(PriceBookSchema):
     id: UUID
     company_id: UUID
@@ -238,3 +262,13 @@ class CatalogPage(PriceBookSchema):
     versions: tuple[PriceVersionItem, ...]
     option_groups: tuple[OptionGroupItem, ...]
     options: tuple[OptionItem, ...]
+
+
+class OperatorCatalogPage(PriceBookSchema):
+    categories: tuple[CategoryItem, ...]
+    tax_classifications: tuple[TaxClassificationItem, ...]
+    service_items: tuple[OperatorServiceItem, ...]
+    versions: tuple[PriceVersionItem, ...]
+    option_groups: tuple[OptionGroupItem, ...]
+    options: tuple[OptionItem, ...]
+    internal_components: tuple[OperatorComponentItem, ...]

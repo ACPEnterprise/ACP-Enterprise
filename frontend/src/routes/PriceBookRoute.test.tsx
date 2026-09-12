@@ -29,14 +29,14 @@ vi.mock("../hooks/usePriceBook", () => ({
     data: {
       categories: [{ id: "category-1", name: "Drain", code: "DRAIN" }],
       tax_classifications: [{ id: "tax-1", name: "Taxable", code: "TAXABLE" }],
-      service_items: [{ id: "item-1", name: "Drain clearing", code: "DRAIN-CLEAR", status: "draft", customer_description: "Clear a drain." }],
-      versions: [{ id: "version-1", service_item_id: "item-1", revision: 1, currency: "USD", unit_price: "149.95", status: "draft", version: 1 }],
+      service_items: [{ id: "item-1", category_id: "category-1", name: "Drain clearing", code: "DRAIN-CLEAR", status: "draft", customer_description: "Clear a drain.", current_version_id: null }],
+      versions: [{ id: "version-1", service_item_id: "item-1", tax_classification_id: "tax-1", revision: 1, currency: "USD", unit_price: "149.95", effective_at: "2026-09-15T12:00:00Z", expires_at: null, status: "draft", version: 1, components: [] }],
       option_groups: [{ id: "group-1", name: "Service level", code: "SERVICE-LEVEL" }],
       options: [],
     },
   }),
   usePriceBookMutations: () => ({
-    category: { isPending: false, isError: Boolean(mutationState.categoryError), error: mutationState.categoryError, mutateAsync: mutationState.categoryMutate }, tax: { isPending: false, isError: false, error: null, mutateAsync: vi.fn() }, item: { isPending: false, isError: false, error: null, mutateAsync: vi.fn() }, version: { isPending: false, isError: false, error: null, mutateAsync: vi.fn() }, activate: { isError: false, error: null, mutateAsync: vi.fn() }, optionGroup: { isPending: false, isError: false, error: null, mutateAsync: vi.fn() }, option: { isPending: false, isError: false, error: null, mutateAsync: vi.fn() },
+    category: { isPending: false, isError: Boolean(mutationState.categoryError), error: mutationState.categoryError, mutateAsync: mutationState.categoryMutate }, updateCategory: { isPending: false, isError: false, error: null, mutateAsync: vi.fn() }, tax: { isPending: false, isError: false, error: null, mutateAsync: vi.fn() }, item: { isPending: false, isError: false, error: null, mutateAsync: vi.fn() }, updateItem: { isPending: false, isError: false, error: null, mutateAsync: vi.fn() }, version: { isPending: false, isError: false, error: null, mutateAsync: vi.fn() }, updateVersion: { isPending: false, isError: false, error: null, mutateAsync: vi.fn() }, activate: { isError: false, error: null, mutateAsync: vi.fn() }, transition: { isError: false, error: null, mutateAsync: vi.fn() }, optionGroup: { isPending: false, isError: false, error: null, mutateAsync: vi.fn() }, option: { isPending: false, isError: false, error: null, mutateAsync: vi.fn() },
   }),
 }));
 
@@ -55,21 +55,22 @@ describe("PriceBookRoute", () => {
   it("lets read-only users browse without mutation controls", () => {
     authState.permissionCodes = ["COMPANY_PRICE_BOOK_READ"];
     render(<MemoryRouter><PriceBookRoute /></MemoryRouter>);
-    expect(screen.getByText("Drain clearing")).toBeVisible();
+    expect(screen.getAllByText("Drain clearing")[0]).toBeVisible();
     expect(screen.queryByRole("button", { name: "Create category" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Activate version" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Review and activate" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Internal unit cost")).not.toBeInTheDocument();
   });
 
   it("gates manage and activate controls independently", () => {
     authState.permissionCodes = ["COMPANY_PRICE_BOOK_READ", "COMPANY_PRICE_BOOK_MANAGE"];
     const { unmount } = render(<MemoryRouter><PriceBookRoute /></MemoryRouter>);
     expect(screen.getByRole("button", { name: "Create category" })).toBeVisible();
-    expect(screen.queryByRole("button", { name: "Activate version" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Review and activate" })).not.toBeInTheDocument();
     unmount();
     authState.permissionCodes = ["COMPANY_PRICE_BOOK_READ", "COMPANY_PRICE_BOOK_ACTIVATE"];
     render(<MemoryRouter><PriceBookRoute /></MemoryRouter>);
     expect(screen.queryByRole("button", { name: "Create category" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Activate version" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Review and activate" })).toBeVisible();
   });
 
   it("renders complete management workflows on a narrow viewport", () => {
@@ -78,12 +79,20 @@ describe("PriceBookRoute", () => {
     render(<MemoryRouter><PriceBookRoute /></MemoryRouter>);
     expect(screen.getByRole("heading", { name: "Price Book" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Create service item" })).toBeVisible();
-    expect(screen.getByRole("button", { name: "Create tax classification" })).toBeVisible();
-    expect(screen.getByRole("button", { name: "Create option group" })).toBeVisible();
-    expect(screen.getByRole("button", { name: "Activate version" })).toBeVisible();
+    expect(screen.getByLabelText("Internal unit cost")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Review and activate" })).toBeVisible();
+  });
+
+  it("filters the operator catalog without exposing internal identifiers", () => {
+    authState.permissionCodes = ["COMPANY_PRICE_BOOK_READ"];
+    render(<MemoryRouter><PriceBookRoute /></MemoryRouter>);
+    fireEvent.change(screen.getByLabelText("Search Price Book"), { target: { value: "missing" } });
+    expect(screen.getByText("No services match these filters.")).toBeVisible();
+    expect(screen.queryByText("item-1")).not.toBeInTheDocument();
   });
 
   it("renders structured recovery without reflecting backend details", () => {
+    authState.permissionCodes = ["COMPANY_PRICE_BOOK_READ", "COMPANY_PRICE_BOOK_MANAGE"];
     mutationState.categoryError = {
       isAxiosError: true,
       response: { data: { detail: { recovery: "OWNER_ADMIN_ACTION_REQUIRED", message: "sql-provider-secret-canary" } } },
@@ -94,6 +103,7 @@ describe("PriceBookRoute", () => {
   });
 
   it("retains commercial evidence when a command rejects", async () => {
+    authState.permissionCodes = ["COMPANY_PRICE_BOOK_READ", "COMPANY_PRICE_BOOK_MANAGE"];
     mutationState.categoryMutate.mockRejectedValueOnce(new Error("unavailable"));
     render(<MemoryRouter><PriceBookRoute /></MemoryRouter>);
     fireEvent.change(screen.getByLabelText("Category code"), {

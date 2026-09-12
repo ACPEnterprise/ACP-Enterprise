@@ -31,7 +31,11 @@ from .schemas import (
     CatalogPage,
     CategoryCreate,
     CategoryItem,
+    CategoryUpdate,
     ComponentItem,
+    OperatorCatalogPage,
+    OperatorComponentItem,
+    OperatorServiceItem,
     OptionCreate,
     OptionGroupCreate,
     OptionGroupItem,
@@ -41,6 +45,7 @@ from .schemas import (
     PriceVersionUpdate,
     ServiceItem,
     ServiceItemCreate,
+    ServiceItemUpdate,
     SnapshotRequest,
     TaxClassificationCreate,
     TaxClassificationItem,
@@ -213,6 +218,220 @@ class PriceBookService:
             ),
             options=tuple(OptionItem.model_validate(value) for value in options),
         )
+
+    async def operator_catalog(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        branch_id: UUID | None = None,
+    ) -> OperatorCatalogPage:
+        public = await self.catalog(session, context=context, branch_id=branch_id)
+        categories = tuple(
+            (
+                await session.scalars(
+                    select(PriceBookCategory)
+                    .where(PriceBookCategory.company_id == context.company.id)
+                    .order_by(PriceBookCategory.name)
+                )
+            ).all()
+        )
+        version_ids = [version.id for version in public.versions]
+        components = (
+            tuple(
+                (
+                    await session.scalars(
+                        select(PriceBookComponent)
+                        .where(
+                            PriceBookComponent.company_id == context.company.id,
+                            PriceBookComponent.price_version_id.in_(version_ids),
+                        )
+                        .order_by(
+                            PriceBookComponent.price_version_id,
+                            PriceBookComponent.position,
+                        )
+                    )
+                ).all()
+            )
+            if version_ids
+            else ()
+        )
+        return OperatorCatalogPage(
+            categories=tuple(
+                CategoryItem.model_validate(value) for value in categories
+            ),
+            tax_classifications=public.tax_classifications,
+            service_items=tuple(
+                OperatorServiceItem.model_validate(item)
+                for item in (
+                    (
+                        await session.scalars(
+                            select(PriceBookServiceItem)
+                            .where(
+                                PriceBookServiceItem.company_id == context.company.id,
+                                PriceBookServiceItem.id.in_(
+                                    [value.id for value in public.service_items]
+                                ),
+                            )
+                            .order_by(PriceBookServiceItem.name)
+                        )
+                    ).all()
+                    if public.service_items
+                    else ()
+                )
+            ),
+            versions=public.versions,
+            option_groups=public.option_groups,
+            options=public.options,
+            internal_components=tuple(
+                OperatorComponentItem.model_validate(component)
+                for component in components
+            ),
+        )
+
+    async def update_category(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        category_id: UUID,
+        payload: CategoryUpdate,
+    ) -> PriceBookCategory:
+        now = utc_now()
+        async with session.begin():
+            category = await session.scalar(
+                select(PriceBookCategory)
+                .where(
+                    PriceBookCategory.id == category_id,
+                    PriceBookCategory.company_id == context.company.id,
+                )
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
+            if category is None:
+                raise PriceBookNotFound("Category was not found.")
+            if category.version != payload.expected_version:
+                raise PriceBookConflict("Category changed before this update.")
+            if payload.parent_id == category.id:
+                raise PriceBookValidation("A category cannot be its own parent.")
+            if payload.parent_id and not await session.scalar(
+                select(PriceBookCategory.id).where(
+                    PriceBookCategory.id == payload.parent_id,
+                    PriceBookCategory.company_id == context.company.id,
+                    PriceBookCategory.status == "active",
+                )
+            ):
+                raise PriceBookNotFound("Parent category was not found.")
+            if payload.status == "archived" and await session.scalar(
+                select(PriceBookServiceItem.id).where(
+                    PriceBookServiceItem.company_id == context.company.id,
+                    PriceBookServiceItem.category_id == category.id,
+                    PriceBookServiceItem.status.in_(("draft", "active")),
+                )
+            ):
+                raise PriceBookConflict(
+                    "Active or draft items still use this category."
+                )
+            if payload.status == "archived" and await session.scalar(
+                select(PriceBookCategory.id).where(
+                    PriceBookCategory.company_id == context.company.id,
+                    PriceBookCategory.parent_id == category.id,
+                    PriceBookCategory.status == "active",
+                )
+            ):
+                raise PriceBookConflict(
+                    "Active child categories still use this category."
+                )
+            prior: dict[str, object] = {
+                "name": category.name,
+                "description": category.description,
+                "parent_id": str(category.parent_id) if category.parent_id else None,
+                "status": category.status,
+            }
+            category.name = payload.name.strip()
+            category.description = payload.description
+            category.parent_id = payload.parent_id
+            category.status = payload.status
+            category.version += 1
+            category.updated_at = now
+            self._audit(
+                session,
+                context=context,
+                entity_type="price_book_category",
+                entity_id=category.id,
+                action="updated" if payload.status == "active" else "archived",
+                prior_state=prior,
+                state={
+                    "name": category.name,
+                    "parent_id": str(category.parent_id)
+                    if category.parent_id
+                    else None,
+                    "status": category.status,
+                },
+                reason="Operator updated Price Book category.",
+                version=category.version,
+            )
+        return category
+
+    async def update_item(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        item_id: UUID,
+        payload: ServiceItemUpdate,
+    ) -> PriceBookServiceItem:
+        now = utc_now()
+        async with session.begin():
+            item = await session.scalar(
+                select(PriceBookServiceItem)
+                .where(
+                    PriceBookServiceItem.id == item_id,
+                    PriceBookServiceItem.company_id == context.company.id,
+                )
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
+            if item is None:
+                raise PriceBookNotFound("Service item was not found.")
+            if item.version != payload.expected_version:
+                raise PriceBookConflict("Service item changed before this update.")
+            if not await session.scalar(
+                select(PriceBookCategory.id).where(
+                    PriceBookCategory.id == payload.category_id,
+                    PriceBookCategory.company_id == context.company.id,
+                    PriceBookCategory.status == "active",
+                )
+            ):
+                raise PriceBookNotFound("Category was not found.")
+            prior: dict[str, object] = {
+                "category_id": str(item.category_id),
+                "name": item.name,
+                "customer_description": item.customer_description,
+                "internal_description": item.internal_description,
+            }
+            item.category_id = payload.category_id
+            item.name = payload.name.strip()
+            item.customer_description = payload.customer_description.strip()
+            item.internal_description = payload.internal_description
+            item.version += 1
+            item.updated_at = now
+            self._audit(
+                session,
+                context=context,
+                entity_type="price_book_service_item",
+                entity_id=item.id,
+                action="updated",
+                prior_state=prior,
+                state={
+                    "category_id": str(item.category_id),
+                    "name": item.name,
+                    "customer_description": item.customer_description,
+                },
+                reason="Operator updated Price Book service item.",
+                version=item.version,
+            )
+        return item
 
     async def create_option_group(
         self,
