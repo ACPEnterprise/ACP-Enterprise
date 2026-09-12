@@ -239,8 +239,12 @@ one is prohibited. `TRUE_GLOBAL_BLOCKER` is zero because the held Jobs have no p
 role for unrelated source records and the overlay parent guard excludes them and their
 children from mutation.
 
-`CURRENT_OPERATIONAL_ADMISSION_ALLOWED = TRUE`, conditional only on Enterprise
-supplying and binding the fresh Preview backup digest, isolated verified-restore
-receipt, and current deployed/protected execution authority. Historical and financial
-admission remains false. No Preview, HCP, QBO, or Production mutation occurred during
-packet construction.
+`CURRENT_OPERATIONAL_ADMISSION_ALLOWED = FALSE`. The SQLAlchemy control/provenance
+adapter and complete private source packet exist, but the production implementation of
+its `CurrentOverlayDomainServices` port and the guarded execution command are not yet
+bound. Claiming the packet executable before that native transformation/service layer
+exists would bypass the required persistence boundary. After that bounded integration,
+the only external execution gate is Enterprise supplying and binding the fresh Preview
+backup digest, isolated verified-restore receipt, and current deployed/protected
+authority. Historical and financial admission remains false. No Preview, HCP, QBO, or
+Production mutation occurred during packet construction.
