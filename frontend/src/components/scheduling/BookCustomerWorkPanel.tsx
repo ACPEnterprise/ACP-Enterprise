@@ -86,6 +86,7 @@ export function BookCustomerWorkPanel({ onClose }: { readonly onClose: () => voi
           <div className="mt-3 flex flex-wrap gap-3">
             <Link className="font-semibold text-action-primary underline" to={`/appointments/${create.data.appointment.id}`}>Open Appointment</Link>
             <Link className="font-semibold text-action-primary underline" to={`/jobs/${create.data.job.id}`}>Open Job</Link>
+            <Link className="font-semibold text-action-primary underline" to="/dispatch">Assign in Dispatch</Link>
           </div>
         </Alert>
       )}

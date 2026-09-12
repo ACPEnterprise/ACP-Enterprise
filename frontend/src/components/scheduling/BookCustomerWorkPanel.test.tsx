@@ -67,5 +67,6 @@ describe("BookCustomerWorkPanel", () => {
     expect(screen.getByText(/Assignment remains a separate human-confirmed Dispatch action/)).toBeVisible();
     expect(screen.getByRole("link", { name: "Open Appointment" })).toHaveAttribute("href", "/appointments/appointment-1");
     expect(screen.getByRole("link", { name: "Open Job" })).toHaveAttribute("href", "/jobs/job-1");
+    expect(screen.getByRole("link", { name: "Assign in Dispatch" })).toHaveAttribute("href", "/dispatch");
   });
 });
