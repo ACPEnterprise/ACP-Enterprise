@@ -18,6 +18,7 @@ export function ScheduleJobPanel({ job, canAssign }: {
   const schedule = useScheduleExistingJob(job.id);
   const workforce = useWorkforceDirectory();
   const [startAt, setStartAt] = useState(() => localInput(new Date(Date.now() + 60 * 60 * 1000)));
+  const [endAt, setEndAt] = useState(() => localInput(new Date(Date.now() + 3 * 60 * 60 * 1000)));
   const [duration, setDuration] = useState(120);
   const [employeeId, setEmployeeId] = useState("");
   const [requestId, setRequestId] = useState(() => crypto.randomUUID());
@@ -30,7 +31,8 @@ export function ScheduleJobPanel({ job, canAssign }: {
   const submit = (event: FormEvent) => {
     event.preventDefault();
     const start = new Date(startAt);
-    if (Number.isNaN(start.getTime()) || duration < 15) return;
+    const end = new Date(endAt);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start || duration < 15) return;
     schedule.mutate({
       request_id: requestId,
       expected_job_version: job.concurrency_version,
@@ -38,7 +40,7 @@ export function ScheduleJobPanel({ job, canAssign }: {
       customer_id: job.customer.id,
       service_location_id: job.service_location.id,
       arrival_window_start_at: start.toISOString(),
-      arrival_window_end_at: new Date(start.getTime() + duration * 60_000).toISOString(),
+      arrival_window_end_at: end.toISOString(),
       expected_duration_minutes: duration,
       capacity_units: "1.00",
       reserve_capacity: Boolean(employeeId),
@@ -54,6 +56,7 @@ export function ScheduleJobPanel({ job, canAssign }: {
     {schedule.isSuccess ? <Alert className="mt-4" variant="success" title="Job scheduled">The Appointment was linked to this Job and operating views are refreshing.</Alert> : null}
     <form className="mt-5 grid gap-4 sm:grid-cols-2" onSubmit={submit}>
       <Field label="Arrival window starts" required><Input type="datetime-local" value={startAt} onChange={(event) => setStartAt(event.target.value)} required /></Field>
+      <Field label="Arrival window ends" required helperText={startAt && endAt && new Date(endAt) <= new Date(startAt) ? "Arrival window must end after it starts." : "Customer-facing arrival window; separate from expected work duration."}><Input type="datetime-local" value={endAt} onChange={(event) => setEndAt(event.target.value)} min={startAt || undefined} required /></Field>
       <Field label="Expected duration (minutes)" required><Input type="number" min={15} max={1440} value={duration} onChange={(event) => setDuration(Number(event.target.value))} required /></Field>
       <Field label="Technician" helperText={canAssign ? "Leave Unassigned when Dispatch should decide later." : "Dispatch assignment requires additional authority."} className="sm:col-span-2">
         <Select value={employeeId} onChange={(event) => setEmployeeId(event.target.value)} disabled={!canAssign || workforce.isLoading}>
@@ -61,7 +64,7 @@ export function ScheduleJobPanel({ job, canAssign }: {
           {technicians.map((employee) => <option key={employee.employee_id} value={employee.employee_id}>{employee.display_name} — {employee.employee_number}</option>)}
         </Select>
       </Field>
-      <div className="sm:col-span-2 sm:flex sm:justify-end"><Button type="submit" loading={schedule.isPending} disabled={schedule.isPending || !startAt || duration < 15}>Book Appointment</Button></div>
+      <div className="sm:col-span-2 sm:flex sm:justify-end"><Button type="submit" loading={schedule.isPending} disabled={schedule.isPending || !startAt || !endAt || new Date(endAt) <= new Date(startAt) || duration < 15}>Book Appointment</Button></div>
     </form>
   </section>;
 }

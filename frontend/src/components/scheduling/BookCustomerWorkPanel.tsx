@@ -33,6 +33,7 @@ export function BookCustomerWorkPanel({ onClose }: { readonly onClose: () => voi
   );
   const [locationId, setLocationId] = useState("");
   const [startAt, setStartAt] = useState(() => localInput(new Date(Date.now() + 60 * 60 * 1000)));
+  const [endAt, setEndAt] = useState(() => localInput(new Date(Date.now() + 3 * 60 * 60 * 1000)));
   const [duration, setDuration] = useState(120);
   const [priority, setPriority] = useState<JobPriority>("normal");
   const [problem, setProblem] = useState("");
@@ -41,9 +42,10 @@ export function BookCustomerWorkPanel({ onClose }: { readonly onClose: () => voi
   const selectedCustomer = customers.data?.items.find((item) => item.id === customerId);
   const selectedLocation = customer.data?.properties.find((item) => item.id === locationId);
   const start = new Date(startAt);
-  const end = new Date(start.getTime() + duration * 60_000);
+  const end = new Date(endAt);
+  const validWindow = !Number.isNaN(start.getTime()) && !Number.isNaN(end.getTime()) && end > start;
   const ready = Boolean(
-    branchId && customerId && locationId && startAt && duration > 0 && !Number.isNaN(start.getTime()),
+    branchId && customerId && locationId && startAt && endAt && duration > 0 && validWindow,
   );
   const error = create.error ? getOperatorApiError(create.error, "booking") : null;
 
@@ -86,6 +88,7 @@ export function BookCustomerWorkPanel({ onClose }: { readonly onClose: () => voi
           <div className="mt-3 flex flex-wrap gap-3">
             <Link className="font-semibold text-action-primary underline" to={`/appointments/${create.data.appointment.id}`}>Open Appointment</Link>
             <Link className="font-semibold text-action-primary underline" to={`/jobs/${create.data.job.id}`}>Open Job</Link>
+            <Link className="font-semibold text-action-primary underline" to="/dispatch">Assign in Dispatch</Link>
           </div>
         </Alert>
       )}
@@ -112,6 +115,7 @@ export function BookCustomerWorkPanel({ onClose }: { readonly onClose: () => voi
           </Select>
         </Field>
         <Field label="Arrival window starts" required><Input type="datetime-local" value={startAt} onChange={(event) => setStartAt(event.target.value)} required /></Field>
+        <Field label="Arrival window ends" required helperText={startAt && endAt && !validWindow ? "Arrival window must end after it starts." : "Customer-facing arrival window; this is separate from expected work duration."}><Input type="datetime-local" value={endAt} onChange={(event) => setEndAt(event.target.value)} min={startAt || undefined} required /></Field>
         <Field label="Expected duration (minutes)" required><Input type="number" min={15} max={1440} value={duration} onChange={(event) => setDuration(Number(event.target.value))} required /></Field>
         <Field label="Priority"><Select value={priority} onChange={(event) => setPriority(event.target.value as JobPriority)}>{["low", "normal", "high", "urgent", "emergency"].map((value) => <option value={value} key={value}>{value}</option>)}</Select></Field>
         <Field label="Customer-reported problem" className="md:col-span-2"><Textarea value={problem} onChange={(event) => setProblem(event.target.value)} /></Field>
