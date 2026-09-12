@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { Link } from "react-router";
+import { Link, useSearchParams } from "react-router";
 import { useHasPermission } from "../auth";
 import { useInvoiceMutations, useInvoiceWorkspace } from "../hooks/useInvoices";
 import type { InvoiceWorkspaceState } from "../types/invoices";
@@ -16,6 +16,8 @@ import {
 } from "../ui";
 
 export function InvoicesRoute() {
+  const [searchParams] = useSearchParams();
+  const customerId = searchParams.get("customerId") ?? undefined;
   const canRead = useHasPermission("COMPANY_INVOICE_READ");
   const canManage = useHasPermission("COMPANY_INVOICE_MANAGE");
   const today = new Date().toISOString().slice(0, 10);
@@ -29,7 +31,7 @@ export function InvoicesRoute() {
   });
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<InvoiceWorkspaceState>("open");
-  const invoices = useInvoiceWorkspace({ asOf: today, state: statusFilter, query: query.trim() || undefined }, canRead);
+  const invoices = useInvoiceWorkspace({ asOf: today, state: statusFilter, query: query.trim() || undefined, customerId }, canRead);
   if (!canRead)
     return (
       <Alert variant="danger">You are not authorized to view Invoices.</Alert>
@@ -59,6 +61,7 @@ export function InvoicesRoute() {
         <p className="mt-2 text-content-muted">
           Authoritative customer obligations from completed accepted work.
         </p>
+        {customerId && <p className="mt-2 text-sm text-status-information">Filtered to the Customer selected from Customer detail. <Link className="font-semibold underline" to={`/customers/${encodeURIComponent(customerId)}`}>Return to Customer</Link></p>}
       </header>
       {invoices.isPending ? (
         <Spinner label="Loading Invoices" />

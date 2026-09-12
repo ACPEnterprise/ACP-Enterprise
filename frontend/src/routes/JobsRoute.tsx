@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { ChevronLeft, ChevronRight, Plus, Search } from "lucide-react";
-import { useSearchParams } from "react-router";
+import { Link, useSearchParams } from "react-router";
 
 import { JobsEmptyState, JobsErrorState, JobsLoadingState } from "../components/jobs/JobStates";
 import { JobsTable } from "../components/jobs/JobsTable";
@@ -22,10 +22,10 @@ export function JobsRoute() {
   const [status, setStatus] = useState<JobStatus | "">(""); const [priority, setPriority] = useState<JobPriority | "">("");
   const [jobType, setJobType] = useState(""); const [branchId, setBranchId] = useState("");
   const [sortField, setSortField] = useState<JobSortField>("updated_at"); const [sortDirection, setSortDirection] = useState<SortDirection>("desc"); const [page, setPage] = useState(1);
-  const query = useJobs({ searchText, status: status ? [status] : undefined, priority: priority ? [priority] : undefined, jobType: jobType ? [jobType] : undefined, branchId: branchId || undefined, page, pageSize: 20, sortField, sortDirection }, canRead);
+  const query = useJobs({ searchText, status: status ? [status] : undefined, priority: priority ? [priority] : undefined, jobType: jobType ? [jobType] : undefined, branchId: branchId || undefined, customerId: initialCustomerId || undefined, page, pageSize: 20, sortField, sortDirection }, canRead);
   const submit = (event: FormEvent) => { event.preventDefault(); setPage(1); setSearchText(input.trim()); };
   if (!canRead) return <Alert variant="danger">You are not authorized to view Jobs.</Alert>;
-  return <div className="space-y-6"><header className="flex flex-col items-stretch gap-4 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-sm font-medium text-action-primary">Operations</p><h2 className="mt-1 text-2xl font-bold sm:text-3xl">Jobs</h2><p className="mt-2 text-content-muted">Manage work from creation through completion.</p></div>{canManage && <Button leadingIcon={<Plus size={18} />} onClick={() => setCreating(true)}>Create Job</Button>}</header>
+  return <div className="space-y-6"><header className="flex flex-col items-stretch gap-4 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-sm font-medium text-action-primary">Operations</p><h2 className="mt-1 text-2xl font-bold sm:text-3xl">Jobs</h2><p className="mt-2 text-content-muted">Manage work from creation through completion.</p>{initialCustomerId && <p className="mt-2 text-sm text-status-information">Filtered to the Customer selected from Customer detail. <Link className="font-semibold underline" to={`/customers/${encodeURIComponent(initialCustomerId)}`}>Return to Customer</Link></p>}</div>{canManage && <Button leadingIcon={<Plus size={18} />} onClick={() => setCreating(true)}>Create Job</Button>}</header>
     {creating && <CreateJobPanel onCancel={() => setCreating(false)} initialCustomerId={initialCustomerId} initialLocationId={initialLocationId} />}
     <form onSubmit={submit} className="grid gap-3 rounded-xl border border-stroke bg-surface p-ui-4 md:grid-cols-4">
       <label className="relative md:col-span-2"><span className="sr-only">Search Jobs</span><Search className="absolute left-3 top-3 text-slate-500" size={18} /><Input className="pl-10" value={input} onChange={(event) => setInput(event.target.value)} placeholder="Job number, customer, location, or problem" /></label>
