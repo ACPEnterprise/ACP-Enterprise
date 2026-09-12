@@ -56,6 +56,7 @@ from app.operational_migration.product_router import router as migration_product
 from app.operations.router import router as operations_router
 from app.payments.router import router as payments_router
 from app.payroll.router import router as payroll_router
+from app.payroll.setup_router import router as payroll_setup_router
 from app.platform.audit.router import router as platform_audit_router
 from app.platform.auth.router import router as auth_router
 from app.platform.company.admin_router import router as company_admin_router
@@ -201,6 +202,7 @@ app.include_router(estimates_router)
 app.include_router(invoicing_router)
 app.include_router(payments_router)
 app.include_router(payroll_router)
+app.include_router(payroll_setup_router)
 app.include_router(accounts_payable_router)
 app.include_router(communications_router)
 app.include_router(engineering_commands_router)
