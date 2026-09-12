@@ -110,6 +110,7 @@ class WorkforceEligibilityResponse(WorkforceSchema):
 
 
 class EmployeeAdministrationSummary(WorkforceEmployeeSummary):
+    user_id: UUID | None
     membership_id: UUID | None
     membership_status: str | None
     user_status: str | None
@@ -162,7 +163,9 @@ class CertificationEvidenceRequest(WorkforceSchema):
 
 class LanguageEvidenceRequest(WorkforceSchema):
     language_id: UUID
-    spoken_proficiency: str = Field(pattern="^(basic|conversational|professional|fluent|native)$")
+    spoken_proficiency: str = Field(
+        pattern="^(basic|conversational|professional|fluent|native)$"
+    )
     customer_facing_eligible: bool = False
 
 

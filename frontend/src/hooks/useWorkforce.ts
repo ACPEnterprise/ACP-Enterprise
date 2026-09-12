@@ -3,15 +3,33 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   evaluateWorkforceEligibility,
   getEmployeeAdministration,
+  getEmployeePasswordReset,
   getWorkforceEmployee,
   listWorkforceEmployees,
   setEmployeeBranchGrant,
   setEmployeeMembershipStatus,
   setEmployeeRole,
+  sendEmployeePasswordReset,
 } from "../api/workforce";
 
 export function useWorkforceDirectory() {
   return useQuery({ queryKey: ["workforce-directory"], queryFn: listWorkforceEmployees });
+}
+
+export function useEmployeePasswordReset(userId: string | null, enabled: boolean) {
+  const client = useQueryClient();
+  const query = useQuery({
+    queryKey: ["employee-password-reset", userId],
+    queryFn: () => getEmployeePasswordReset(userId as string),
+    enabled: enabled && Boolean(userId),
+  });
+  const mutation = useMutation({
+    mutationFn: () => sendEmployeePasswordReset(userId as string),
+    onSuccess: async () => {
+      await client.invalidateQueries({ queryKey: ["employee-password-reset", userId] });
+    },
+  });
+  return { query, mutation };
 }
 
 export function useWorkforceEligibility() {

@@ -1,6 +1,6 @@
 import { Eye, EyeOff, ShieldCheck } from "lucide-react";
 import { useState, type FormEvent } from "react";
-import { Navigate, useLocation, useNavigate } from "react-router";
+import { Link, Navigate, useLocation, useNavigate } from "react-router";
 
 import { useAuth } from "../auth";
 import { brandConfig } from "../branding/brandConfig";
@@ -136,6 +136,9 @@ export function LoginRoute() {
                   <Button type="submit" fullWidth loading={submitting} loadingLabel="Signing in">
                     Sign in
                   </Button>
+                  <Link className="text-center text-body-s text-action-primary hover:underline" to="/reset-password">
+                    Forgot your password?
+                  </Link>
                 </Stack>
               </form>
             </CardContent>
