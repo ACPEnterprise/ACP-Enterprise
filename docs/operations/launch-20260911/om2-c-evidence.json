@@ -71,9 +71,9 @@
     "health": "HEALTHY",
     "database": "CONNECTED",
     "redis": "CONNECTED",
-    "reported_backend_release": "b5dff4b0203fe9a725a0ff844279876f410cba12",
-    "frontend_index_sha256": "18d32734b4fe23a46cffebd30d4fcff2893475a0609db59ed38e1f992c835de6",
-    "qualified_frontend_index_sha256": "18d32734b4fe23a46cffebd30d4fcff2893475a0609db59ed38e1f992c835de6",
+    "reported_backend_release": "9096a77705623409da1418022c7949cae08468ce",
+    "frontend_index_sha256": "25148741ec1034d7ce4d3867ab258b2930c8a2893287f3006db43d4579c7c69b",
+    "qualified_frontend_index_sha256": "25148741ec1034d7ce4d3867ab258b2930c8a2893287f3006db43d4579c7c69b",
     "qualified_route_assets_match": {
       "customers": true,
       "scheduling_month_dispatch": true,
@@ -169,18 +169,21 @@
     "rendered_authenticated_ui": "NOT_EXECUTED_NO_SANCTIONED_SESSION_OR_BROWSER_HARNESS"
   },
   "authenticated_preview_acceptance": {
-    "authority": "4514b5df6be66e50ee172085c622ae613e172086",
+    "authority": "9096a77705623409da1418022c7949cae08468ce",
     "mechanism": "BOUNDED_SHORT_LIVED_TOKEN_FILE_RUNNER",
     "fixture_key": "acp-employee-beta-v1",
     "runner_tests_passed": 10,
-    "protected_delta_tests_passed": 36,
+    "protected_delta_tests_passed": 19,
     "ruff": "PASS",
     "mypy": "PASS",
     "live_execution": "BLOCKED_NO_SANCTIONED_TOKEN_ATTESTATION_OR_LIVE_FIXTURE_ADAPTER",
     "credential_material_emitted": false,
     "preview_mutation": false,
     "production_access": false,
-    "scheduling_mutation": "BLOCKED_MISSING_AUTHORITATIVE_MUTATION_CLASSIFICATION"
+    "scheduling_mutation": "CLASSIFIED_PROTECTED_AND_DEPLOYED_EXPLICIT_ALLOWLIST_PENDING",
+    "payroll_setup_mutations": "FOUR_CLASSIFIED_PROTECTED_AND_DEPLOYED_EXPLICIT_ALLOWLIST_PENDING",
+    "schema_correspondence": "BLOCKED_AUTH_ATTESTATION_NOT_ISSUED",
+    "execution_matrix": "PREPARED"
   },
   "acceptance_identity_provisioning": {
     "authority": "27b89ecf1d702acbe75d0e1f95cf83c5f6bba5c9",

@@ -247,8 +247,13 @@ source presence, component tests and simulator results cannot replace these chec
 
 ## Next action
 
-Monitor protected authority and Preview release identity. When Enterprise deploys the
-coherent checkpoint, rerun the deployed matrix immediately. Meanwhile, reconcile any
+Protected authority and Preview backend now both report
+`9096a77705623409da1418022c7949cae08468ce`; the observed frontend index SHA-256 is
+`25148741ec1034d7ce4d3867ab258b2930c8a2893287f3006db43d4579c7c69b`.
+Health and release correspondence pass. Schema-head correspondence and authenticated
+persona execution remain fail-closed until Enterprise supplies the sealed attestation
+and short-lived sessions. When Enterprise issues them, run the deterministic matrix
+immediately. Meanwhile, reconcile any
 new QBO, Customer population, identity-delivery or Payroll evidence packets without
 duplicating their owners' implementations.
 
@@ -259,8 +264,9 @@ reconciled as far as read-only evidence permits. Completion is externally gated 
    MyPy defect before any SOURCE.4 admission claim.
 2. **OM1 Enterprise/OM1 Phone** executing the governed identity retry and separately
    proving provider acceptance, human receipt, activation and login.
-3. **Enterprise** supplying sanctioned authenticated CSR and Employee sessions and a
-   non-payable test protocol; **Laptop1 Phone** owns physical-device acceptance.
+3. **Enterprise** supplying the four sanctioned persona sessions and sealed fixture/
+   schema attestation plus any non-payable mutation allowlist; **Laptop1 Phone** owns
+   physical-device acceptance.
 4. **OM1 ECO** supplying verified live QBO authorization/company evidence, or retaining
    the truthful external block.
 5. Local Docker/PostgreSQL availability for OM2-C's independent rerun of the latest
