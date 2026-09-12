@@ -62,7 +62,7 @@ export function useDispatchMutations() {
         reason: string;
         version?: number;
       }) => assignPrimary(x.appointmentId, x.employeeId, x.reason, x.version),
-      onSuccess: refresh,
+      onSettled: refresh,
     }),
     release: useMutation({
       mutationFn: (x: {
@@ -70,7 +70,7 @@ export function useDispatchMutations() {
         version: number;
         reason: string;
       }) => releasePrimary(x.appointmentId, x.version, x.reason),
-      onSuccess: refresh,
+      onSettled: refresh,
     }),
     crew: useMutation({
       mutationFn: (x: {
@@ -87,7 +87,7 @@ export function useDispatchMutations() {
           x.reason,
           x.remove,
         ),
-      onSuccess: refresh,
+      onSettled: refresh,
     }),
     reconcile: useMutation({
       mutationFn: (x: {
@@ -104,7 +104,7 @@ export function useDispatchMutations() {
               x.resolution,
             )
           : markReconciliation(x.appointmentId, x.version, x.reason),
-      onSuccess: refresh,
+      onSettled: refresh,
     }),
     exception: useMutation({
       mutationFn: (x: {
@@ -119,7 +119,7 @@ export function useDispatchMutations() {
           x.reason,
           x.exceptionCode,
         ),
-      onSuccess: refresh,
+      onSettled: refresh,
     }),
   };
 }

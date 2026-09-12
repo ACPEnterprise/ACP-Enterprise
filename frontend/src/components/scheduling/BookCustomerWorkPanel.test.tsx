@@ -87,10 +87,31 @@ describe("BookCustomerWorkPanel", () => {
         job: { id: "job-1", job_number: "JOB-1" },
       },
     } as never);
-    render(<MemoryRouter><BookCustomerWorkPanel onClose={vi.fn()} /></MemoryRouter>);
+    render(<MemoryRouter><BookCustomerWorkPanel onClose={vi.fn()} returnTo="/scheduling?view=unassigned&queue=needs_attention&order=oldest&search=County" /></MemoryRouter>);
     expect(screen.getByText(/Assignment remains a separate human-confirmed Dispatch action/)).toBeVisible();
-    expect(screen.getByRole("link", { name: "Open Appointment" })).toHaveAttribute("href", "/appointments/appointment-1");
-    expect(screen.getByRole("link", { name: "Open Job" })).toHaveAttribute("href", "/jobs/job-1");
+    expect(screen.getByRole("link", { name: "Open Appointment" })).toHaveAttribute("href", expect.stringMatching(/^\/appointments\/appointment-1\?returnTo=/));
+    expect(screen.getByRole("link", { name: "Open Job" })).toHaveAttribute("href", expect.stringMatching(/^\/jobs\/job-1\?returnTo=/));
     expect(screen.getByRole("link", { name: "Assign in Dispatch" })).toHaveAttribute("href", "/dispatch");
+    expect(screen.getByRole("link", { name: "Return to prior Schedule view" })).toHaveAttribute("href", "/scheduling?view=unassigned&queue=needs_attention&order=oldest&search=County");
+  });
+
+  it("replays the exact request identity after an uncertain booking outcome", async () => {
+    mutate.mockImplementation((_input, callbacks) => callbacks.onError());
+    vi.mocked(useCreateServiceRequest).mockReturnValue({
+      mutate,
+      isPending: false,
+      error: { isAxiosError: true },
+      data: null,
+    } as never);
+    render(<MemoryRouter><BookCustomerWorkPanel onClose={vi.fn()} /></MemoryRouter>);
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: /Customer/ }), "customer-1");
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: /Service Location/ }), "location-1");
+    await userEvent.click(screen.getByRole("button", { name: "Review booking" }));
+    await userEvent.click(screen.getByRole("button", { name: "Confirm booking" }));
+    await userEvent.click(screen.getByRole("button", { name: "Retry same request" }));
+    await userEvent.click(screen.getByRole("button", { name: "Confirm booking" }));
+    expect(screen.getByText(/UNKNOWN REQUIRES REFRESH/)).toBeVisible();
+    expect(mutate.mock.calls[1][0]).toEqual(mutate.mock.calls[0][0]);
+    expect(mutate.mock.calls[1][0].request_id).toBe(mutate.mock.calls[0][0].request_id);
   });
 });
