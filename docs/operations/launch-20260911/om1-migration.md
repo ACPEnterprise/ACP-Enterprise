@@ -248,3 +248,22 @@ the only external execution gate is Enterprise supplying and binding the fresh P
 backup digest, isolated verified-restore receipt, and current deployed/protected
 authority. Historical and financial admission remains false. No Preview, HCP, QBO, or
 Production mutation occurred during packet construction.
+
+### Current-calendar acceptance projection
+
+The September 12 relationship artifacts contain 18 current-or-future Appointments
+across 15 Jobs, 11 Customers, and 11 provider-identified Locations. All 18 Jobs are
+scheduled, all 18 Appointment technician assertions use one of the eight identities
+in the current provider roster, and none intersects the 22 Location-less Job holds.
+Five Job/Appointment pairs are unchanged from sealed SOURCE.4; ten Jobs and their
+Appointments are new; and three existing Jobs have changed while their Appointments
+are new. The remaining 461 bounded-scope Appointments are historical. This establishes
+the post-admission acceptance baseline without treating historical holds as current
+calendar blockers.
+
+Protected integration must exercise the domain-service composition with PostgreSQL,
+including: zero-to-head and current=head schema checks; create and compare-before-write
+update paths for each operational domain; parent hold propagation; duplicate source and
+native-fingerprint rejection; same-packet replay; stale prior-digest rejection;
+transaction rollback before receipt persistence; receipt recovery after commit; and a
+second execution proving zero additional native rows or events.
