@@ -5,7 +5,7 @@ import { draftPayrollInput } from "../../api/payroll";
 import { Alert, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Spinner } from "../../ui";
 
 const label = (value: string) => value.replaceAll("_", " ").replaceAll(":", " · ");
-const taxKeys = ["w4_filing_status","w4_step_2","w4_step_3","w4_step_4a","w4_step_4b","w4_step_4c","work_jurisdiction","residence_jurisdiction","state_local_withholding_configuration","unemployment_workforce_jurisdiction","social_security_wages_ytd","social_security_tax_ytd","medicare_wages_ytd","medicare_tax_ytd","additional_medicare_prerequisites","federal_withholding_ytd","prior_payroll_coverage","federal_tax_table","state_local_tax_table","tax_table_source_version","tax_table_effective_date"];
+const taxKeys = ["w4_filing_status","w4_step_2","w4_step_3","w4_step_4a","w4_step_4b","w4_step_4c","work_jurisdiction","residence_jurisdiction","state_local_withholding_configuration","unemployment_workforce_jurisdiction","social_security_applicability","social_security_wages_ytd","social_security_tax_ytd","medicare_applicability","medicare_wages_ytd","medicare_tax_ytd","additional_medicare_prerequisites","federal_withholding_ytd","prior_payroll_coverage","federal_tax_table","state_local_tax_table","tax_table_source_version","tax_table_effective_date"];
 const deductionKeys = ["deduction_configuration","deduction_tax_treatment","deduction_effective_date","deduction_limits"];
 
 export function PayrollEmployeeSetup({ employeeId }: { employeeId: string }) {
