@@ -19,7 +19,11 @@ from app.platform.notifications.providers import (
 
 POSTMARK_API_ORIGIN = "https://api.postmarkapp.com"
 IDENTITY_NOTIFICATION_TYPES = frozenset(
-    {"identity.onboarding_invitation", "identity.email_change_verification"}
+    {
+        "identity.onboarding_invitation",
+        "identity.email_change_verification",
+        "identity.password_reset",
+    }
 )
 
 

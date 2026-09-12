@@ -462,9 +462,46 @@ class PayrollAuthorityService:
             approved_at=value.approved_at,
             decision_evidence_digest=value.decision_evidence_digest,
             authority_digest=value.authority_digest,
+            supersedes_authority_id=value.supersedes_authority_id,
         )
         result.verify()
         return result
+
+    async def resolve_period_compensation(
+        self,
+        session: AsyncSession,
+        *,
+        company_id: UUID,
+        employee_id: UUID,
+        period_start: date,
+        period_end: date,
+    ) -> ApprovedCompensationAuthority | None:
+        """Resolve one authority for a whole period without implicit proration."""
+
+        if period_end < period_start:
+            raise PayrollConflictError("pay period date range is invalid")
+        at_start = await self.resolve_compensation(
+            session,
+            company_id=company_id,
+            employee_id=employee_id,
+            as_of_date=period_start,
+        )
+        at_end = await self.resolve_compensation(
+            session,
+            company_id=company_id,
+            employee_id=employee_id,
+            as_of_date=period_end,
+        )
+        if at_start is None or at_end is None:
+            return None
+        if (
+            at_start.authority_id != at_end.authority_id
+            or at_start.authority_digest != at_end.authority_digest
+        ):
+            raise PayrollConflictError(
+                "mid-period compensation change requires proration policy"
+            )
+        return at_start
 
     async def retire_compensation(
         self,

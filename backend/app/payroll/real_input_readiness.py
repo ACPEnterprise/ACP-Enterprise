@@ -155,6 +155,8 @@ _GROUPS: Final = {
         "deduction_limits",
     ),
     CalculationReadiness.YTD_NOT_READY: (
+        "social_security_applicability",
+        "medicare_applicability",
         "social_security_wages_ytd",
         "social_security_tax_ytd",
         "medicare_wages_ytd",

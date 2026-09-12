@@ -50,7 +50,7 @@ export function useRescheduleAppointment() {
       appointmentId: string;
       input: AppointmentRescheduleInput;
     }) => rescheduleAppointment(appointmentId, input),
-    onSuccess: async (_, variables) => {
+    onSettled: async (_, __, variables) => {
       await Promise.all([
         client.invalidateQueries({ queryKey: appointmentKeys.lists() }),
         client.invalidateQueries({

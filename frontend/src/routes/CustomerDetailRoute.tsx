@@ -1,12 +1,15 @@
-import { Navigate, useNavigate, useParams } from "react-router";
+import { Navigate, useNavigate, useParams, useSearchParams } from "react-router";
 
 import { CustomerDetailView } from "../components/customers/CustomerDetailView";
 import { useHasPermission } from "../auth";
 import { Alert, Button } from "../ui";
+import { schedulingReturnPath } from "../routing/paths";
 
 export function CustomerDetailRoute() {
   const { customerId } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const returnTo = schedulingReturnPath(searchParams.get("returnTo"));
   const canRead = useHasPermission("COMPANY_CUSTOMER_READ");
   const canReadRelated = [
     useHasPermission("COMPANY_JOB_READ"),
@@ -38,7 +41,7 @@ export function CustomerDetailRoute() {
       ) : null}
       <CustomerDetailView
         customerId={customerId}
-        onBack={() => navigate("/customers")}
+        onBack={() => navigate(searchParams.has("returnTo") ? returnTo : "/customers")}
       />
     </div>
   );

@@ -165,6 +165,33 @@ class ProtectedPayrollInputCipher:
         )
         return self.active_key_id, nonce, ciphertext, digest
 
+    def decrypt(
+        self,
+        *,
+        company_id: UUID,
+        key_id: str,
+        nonce: bytes,
+        ciphertext: bytes,
+        expected_digest: str,
+    ) -> dict[str, object]:
+        """Unseal for server-owned calculation assembly; never for API projection."""
+        key = self._keys.get(key_id)
+        if key is None:
+            raise PayrollAuthorityError("protected Payroll input key is unavailable")
+        try:
+            plaintext = AESGCM(key).decrypt(nonce, ciphertext, str(company_id).encode())
+            payload = json.loads(plaintext)
+        except Exception as error:
+            raise PayrollConflictError(
+                "protected Payroll input could not be authenticated"
+            ) from error
+        if (
+            not isinstance(payload, dict)
+            or canonical_digest(payload) != expected_digest
+        ):
+            raise PayrollConflictError("protected Payroll input digest mismatch")
+        return payload
+
 
 class PayrollInputAuthorityService:
     def __init__(
@@ -292,7 +319,9 @@ class PayrollInputAuthorityService:
             public_parameters=dict(command.public_parameters),
             evidence_digest=command.evidence_digest,
             authority_digest=canonical_digest(content),
-            protected_envelope_id=(protected_envelope.id if protected_envelope else None),
+            protected_envelope_id=(
+                protected_envelope.id if protected_envelope else None
+            ),
             supersedes_authority_id=command.supersedes_authority_id,
             drafted_by_user_id=context.user.id,
             approved_by_user_id=None,
@@ -347,9 +376,13 @@ class PayrollInputAuthorityService:
         if value.lifecycle != AuthorityLifecycle.DRAFT.value:
             raise PayrollConflictError("only draft input authority may be approved")
         if value.drafted_by_user_id == context.user.id:
-            raise PayrollAuthorizationError("input authority drafter cannot self-approve")
+            raise PayrollAuthorizationError(
+                "input authority drafter cannot self-approve"
+            )
         overlaps = await self._overlaps(session, value)
-        allowed = {value.supersedes_authority_id} if value.supersedes_authority_id else set()
+        allowed = (
+            {value.supersedes_authority_id} if value.supersedes_authority_id else set()
+        )
         if any(item.id not in allowed for item in overlaps):
             raise PayrollConflictError("approved input authority intervals overlap")
         now = datetime.now(timezone.utc)
@@ -536,7 +569,8 @@ class PayrollInputAuthorityService:
         approved = tuple(
             item
             for item in applicable
-            if item.lifecycle in {
+            if item.lifecycle
+            in {
                 AuthorityLifecycle.APPROVED.value,
                 AuthorityLifecycle.SUPERSEDED.value,
             }
@@ -549,7 +583,11 @@ class PayrollInputAuthorityService:
         active = tuple(item for item in approved if item.id not in superseded_ids)
         if len(active) > 1:
             return AuthorityResolution(
-                requirement, TaxDeductionAdmissionState.CONFLICTING, None, None, None,
+                requirement,
+                TaxDeductionAdmissionState.CONFLICTING,
+                None,
+                None,
+                None,
                 ("multiple approved authorities overlap",),
             )
         if len(active) == 1:
@@ -561,9 +599,7 @@ class PayrollInputAuthorityService:
                 or value.approved_at is None
                 or value.authority_digest
                 != canonical_digest(
-                    self._record_content(
-                        value, protected_digest=protected_digest
-                    )
+                    self._record_content(value, protected_digest=protected_digest)
                 )
             ):
                 return AuthorityResolution(
@@ -589,16 +625,28 @@ class PayrollInputAuthorityService:
             )
         if applicable:
             return AuthorityResolution(
-                requirement, TaxDeductionAdmissionState.UNAPPROVED, None, None, None,
+                requirement,
+                TaxDeductionAdmissionState.UNAPPROVED,
+                None,
+                None,
+                None,
                 ("only draft or retired authority is applicable",),
             )
         if values:
             return AuthorityResolution(
-                requirement, TaxDeductionAdmissionState.EXPIRED, None, None, None,
+                requirement,
+                TaxDeductionAdmissionState.EXPIRED,
+                None,
+                None,
+                None,
                 ("no authority applies at the effective date",),
             )
         return AuthorityResolution(
-            requirement, TaxDeductionAdmissionState.MISSING, None, None, None,
+            requirement,
+            TaxDeductionAdmissionState.MISSING,
+            None,
+            None,
+            None,
             ("required authority is absent",),
         )
 
@@ -656,7 +704,10 @@ class PayrollInputAuthorityService:
             or not command.audit_reason.strip()
         ):
             raise PayrollAuthorityError("input authority identity is incomplete")
-        if command.effective_end is not None and command.effective_end <= command.effective_start:
+        if (
+            command.effective_end is not None
+            and command.effective_end <= command.effective_start
+        ):
             raise PayrollAuthorityError("input authority interval is invalid")
         forbidden = {
             "ssn",
@@ -670,7 +721,9 @@ class PayrollInputAuthorityService:
             "exemption_election",
         }
         if forbidden.intersection(key.lower() for key in command.public_parameters):
-            raise PayrollAuthorityError("protected input cannot enter public parameters")
+            raise PayrollAuthorityError(
+                "protected input cannot enter public parameters"
+            )
 
     @staticmethod
     def _content(
@@ -690,15 +743,21 @@ class PayrollInputAuthorityService:
             "authority_version": command.authority_version,
             "applicability": command.applicability.value,
             "effective_start": command.effective_start.isoformat(),
-            "effective_end": command.effective_end.isoformat() if command.effective_end else None,
+            "effective_end": command.effective_end.isoformat()
+            if command.effective_end
+            else None,
             "jurisdiction_reference": command.jurisdiction_reference,
             "calculation_basis": command.calculation_basis,
             "priority": command.priority,
             "public_parameters": command.public_parameters,
             "evidence_digest": command.evidence_digest,
             "protected_input_digest": protected_digest,
-            "supersedes_authority_id": str(command.supersedes_authority_id) if command.supersedes_authority_id else None,
-            "approved_by_user_id": str(approved_by_user_id) if approved_by_user_id else None,
+            "supersedes_authority_id": str(command.supersedes_authority_id)
+            if command.supersedes_authority_id
+            else None,
+            "approved_by_user_id": str(approved_by_user_id)
+            if approved_by_user_id
+            else None,
             "approved_at": approved_at.isoformat() if approved_at else None,
         }
 

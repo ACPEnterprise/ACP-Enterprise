@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.customers.detail import CustomerDetailService, customer_detail_service
 from app.customers.errors import CustomerNotFoundError, CustomerStatusTransitionError
+from app.customers.models import Customer
 from app.customers.normalization import (
     normalize_email,
     normalize_phone,
@@ -42,79 +43,93 @@ class CustomerUpdateService:
         customer_id: UUID,
         data: CustomerUpdateRequest,
     ) -> CustomerDetailResponse:
-        requested = {
-            key: value.value if hasattr(value, "value") else value
-            for key, value in data.model_dump(exclude_unset=True).items()
-        }
         async with session.begin():
-            customer = await CustomerRepository.get(
-                session,
-                company_id=context.company.id,
-                customer_id=customer_id,
-                for_update=True,
+            await self.stage_update(
+                session, context=context, customer_id=customer_id, data=data
             )
-            if customer is None:
-                raise CustomerNotFoundError(customer_id)
-
-            previous_status = customer.status
-            requested_status = requested.get("status")
-            if isinstance(requested_status, str):
-                self._validate_status_transition(previous_status, requested_status)
-
-            if "display_name" in requested:
-                requested["normalized_name"] = normalize_search_text(
-                    str(requested["display_name"])
-                )
-            if "primary_phone" in requested:
-                requested["normalized_primary_phone"] = (
-                    normalize_phone(str(requested["primary_phone"]))
-                    if requested["primary_phone"]
-                    else None
-                )
-            if "secondary_phone" in requested:
-                requested["normalized_secondary_phone"] = (
-                    normalize_phone(str(requested["secondary_phone"]))
-                    if requested["secondary_phone"]
-                    else None
-                )
-            if "email" in requested:
-                requested["normalized_email"] = (
-                    normalize_email(str(requested["email"]))
-                    if requested["email"]
-                    else None
-                )
-            changed_fields = CustomerRepository.apply_updates(customer, requested)
-            business_fields = sorted(
-                field
-                for field in changed_fields
-                if field not in {"normalized_name", "updated_at"}
-            )
-            if business_fields:
-                CustomerRepository.apply_updates(
-                    customer, {"updated_at": datetime.now(timezone.utc)}
-                )
-                self._stage_event(
-                    session,
-                    context=context,
-                    event_type=EventType.CUSTOMER_UPDATED,
-                    customer_id=customer.id,
-                    payload={"changed_fields": business_fields},
-                )
-                if "status" in business_fields:
-                    self._stage_event(
-                        session,
-                        context=context,
-                        event_type=EventType.CUSTOMER_STATUS_CHANGED,
-                        customer_id=customer.id,
-                        payload={
-                            "previous_status": previous_status,
-                            "status": customer.status,
-                        },
-                    )
 
         return await self._detail_service.get_detail(
             session, context=context, customer_id=customer_id
         )
+
+    async def stage_update(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        customer_id: UUID,
+        data: CustomerUpdateRequest,
+    ) -> Customer:
+        """Apply the normal update invariants in the caller's active transaction."""
+        requested = {
+            key: value.value if hasattr(value, "value") else value
+            for key, value in data.model_dump(exclude_unset=True).items()
+        }
+        customer = await CustomerRepository.get(
+            session,
+            company_id=context.company.id,
+            customer_id=customer_id,
+            for_update=True,
+        )
+        if customer is None:
+            raise CustomerNotFoundError(customer_id)
+
+        previous_status = customer.status
+        requested_status = requested.get("status")
+        if isinstance(requested_status, str):
+            self._validate_status_transition(previous_status, requested_status)
+
+        if "display_name" in requested:
+            requested["normalized_name"] = normalize_search_text(
+                str(requested["display_name"])
+            )
+        if "primary_phone" in requested:
+            requested["normalized_primary_phone"] = (
+                normalize_phone(str(requested["primary_phone"]))
+                if requested["primary_phone"]
+                else None
+            )
+        if "secondary_phone" in requested:
+            requested["normalized_secondary_phone"] = (
+                normalize_phone(str(requested["secondary_phone"]))
+                if requested["secondary_phone"]
+                else None
+            )
+        if "email" in requested:
+            requested["normalized_email"] = (
+                normalize_email(str(requested["email"]))
+                if requested["email"]
+                else None
+            )
+        changed_fields = CustomerRepository.apply_updates(customer, requested)
+        business_fields = sorted(
+            field
+            for field in changed_fields
+            if field not in {"normalized_name", "updated_at"}
+        )
+        if business_fields:
+            CustomerRepository.apply_updates(
+                customer, {"updated_at": datetime.now(timezone.utc)}
+            )
+            self._stage_event(
+                session,
+                context=context,
+                event_type=EventType.CUSTOMER_UPDATED,
+                customer_id=customer.id,
+                payload={"changed_fields": business_fields},
+            )
+            if "status" in business_fields:
+                self._stage_event(
+                    session,
+                    context=context,
+                    event_type=EventType.CUSTOMER_STATUS_CHANGED,
+                    customer_id=customer.id,
+                    payload={
+                        "previous_status": previous_status,
+                        "status": customer.status,
+                    },
+                )
+        return customer
 
     @staticmethod
     def _validate_status_transition(current: str, requested: str) -> None:
