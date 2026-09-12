@@ -18,6 +18,16 @@ PR #254 remains open and clean. It proposes the read-only endpoint:
 
 Do not call or depend on that route until a protected successor containing #254 is deployed. Once deployed, acceptance must verify bounded unauthenticated `401`, foreign-Company `404`, missing cross-domain authority `403`, unavailable evidence `409`, missing key configuration `503`, metadata-only output, exact blocker keys, and absence of protected values/ciphertext/nonces/keys/calculated amounts. The endpoint supplements but does not replace the sanctioned synthetic time-to-Payroll chain or keyring round-trip proof.
 
+### Executor checkpoint: protected/deployed successor `52dc336`
+
+Protected and Preview advanced to `52dc336766a67fc0c4698244b9894bab0fe65913`, which contains #251 and integrated #254. Public health reported Preview, PostgreSQL connected, and Redis connected. The deployed readiness route returned the required bounded unauthenticated `401` without leaking metadata.
+
+Fresh-source qualification proved the legitimate migration lineage `e5g7i9k1m3o5 -> f6h8j0l2n4p6`, one head/current=head, and zero drift. The nine focused Job-clock, Workday, correction, Payroll-input, compensation, proration, encrypted-input, and readiness suites passed **43 tests**, including synthetic keyring load, encrypted round trip, rotation, wrong-Company AAD rejection, and tamper rejection.
+
+These results accept the protected source contracts but do not attest the deployed database revision or mounted Preview keyring. No authorized OM2-C synthetic acceptance identities were issued at this checkpoint, so deployed fixture execution remains pending.
+
+The sanctioned fixture grant must identify a non-payable Preview Company, Branch, two synthetic Employees (drafter and independent approver identities), synthetic Job and Appointment, isolated PayPeriod, permission grants, cleanup/retention owner, and explicit authorization for append-only synthetic clock/time/correction/compensation/proration evidence. It must prohibit Payroll run execution and collision with real Employee identities. Retain only IDs, states, reason codes, versions, and digests in acceptance evidence—never protected input values or key material.
+
 ## Host-level deployment evidence
 
 Enterprise should run these read-only checks on the Preview host and retain their output without printing secret contents:
