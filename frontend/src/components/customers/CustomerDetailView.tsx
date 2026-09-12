@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { ArrowLeft, Clock3, Edit3, MapPin, Plus, RotateCcw, Star, UserRound } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight, Clock3, Edit3, MapPin, Plus, RotateCcw, Star, UserRound } from "lucide-react";
 import { Link } from "react-router";
 
 import { getApiErrorMessage, getOperatorApiError } from "../../api/errors";
@@ -40,10 +40,12 @@ function displayName(customer: {
 export function CustomerDetailView({ customerId, onBack }: CustomerDetailViewProps) {
   const canManage = useHasPermission("COMPANY_CUSTOMER_MANAGE");
   const canManageJobs = useHasPermission("COMPANY_JOB_MANAGE");
+  const [timelineCursor, setTimelineCursor] = useState({ customerId, page: 1 });
+  const timelinePage = timelineCursor.customerId === customerId ? timelineCursor.page : 1;
   const detail = useCustomerDetail(customerId);
   const mutations = useCustomerMutations(customerId);
   const consents = useCustomerConsents(customerId);
-  const timeline = useCustomerTimeline(customerId);
+  const timeline = useCustomerTimeline(customerId, timelinePage, 50);
   const canReadCommunications = useHasPermission("COMPANY_COMMUNICATIONS_READ");
   const [isEditingCustomer, setIsEditingCustomer] = useState(false);
   const [editingProperty, setEditingProperty] = useState<CustomerProperty | "new" | null>(null);
@@ -211,6 +213,8 @@ export function CustomerDetailView({ customerId, onBack }: CustomerDetailViewPro
           ))}
         </ol>
         {timeline.isSuccess && timeline.data.items.length === 0 && <p className="mt-4 text-sm text-content-muted">No authoritative customer events are available.</p>}
+        {timeline.data && timeline.data.items.length === 0 && timeline.data.total_count > 0 && <Alert className="mt-4" variant="warning" title="This history page is no longer available"><Button type="button" variant="outline" onClick={() => setTimelineCursor({ customerId, page: 1 })}>Return to first history page</Button></Alert>}
+        {timeline.data && timeline.data.total_pages > 1 && <div className="mt-4 flex flex-col gap-3 border-t border-stroke pt-4 sm:flex-row sm:items-center sm:justify-between"><span className="text-sm text-content-muted">History page {timeline.data.page} of {timeline.data.total_pages}</span><div className="flex gap-2"><Button type="button" variant="outline" disabled={timelinePage === 1} onClick={() => setTimelineCursor({ customerId, page: Math.max(1, timelinePage - 1) })} leadingIcon={<ChevronLeft size={16} />}>Previous history</Button><Button type="button" variant="outline" disabled={timelinePage >= timeline.data.total_pages} onClick={() => setTimelineCursor({ customerId, page: timelinePage + 1 })} trailingIcon={<ChevronRight size={16} />}>Next history</Button></div></div>}
       </Card>
 
       <Card className="p-ui-4 sm:p-ui-6">

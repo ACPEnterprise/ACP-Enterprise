@@ -251,6 +251,30 @@ describe("CustomerDetailView", () => {
     expect(screen.queryByRole("button", { name: "Archive" })).not.toBeInTheDocument();
   });
 
+  it("traverses every authoritative Customer history page", async () => {
+    vi.mocked(customerHooks.useCustomerTimeline).mockReturnValue({
+      isLoading: false,
+      isError: false,
+      isSuccess: true,
+      data: {
+        items: [{
+          id: "event-1", timestamp: "2026-08-07T12:00:00Z",
+          event_type: "customer.created", actor: null,
+          entity: { type: "customer", id: customer.id },
+          summary: "Customer created", metadata: {}, branch_id: "branch-1",
+          company_id: "company-1", customer_id: customer.id,
+          correlation_id: "correlation-1",
+        }],
+        page: 1, page_size: 50, total_count: 51, total_pages: 2,
+      },
+    } as never);
+
+    render(<MemoryRouter><CustomerDetailView customerId={customer.id} onBack={vi.fn()} /></MemoryRouter>);
+    await userEvent.click(screen.getByRole("button", { name: "Next history" }));
+
+    expect(customerHooks.useCustomerTimeline).toHaveBeenLastCalledWith(customer.id, 2, 50);
+  });
+
   it("reviews duplicate evidence without offering an unsafe merge", async () => {
     const duplicateCheck = vi.fn((_input, options) => options.onSuccess([{
       ...customer, id: "candidate-2", reasons: ["matching_normalized_email"],
