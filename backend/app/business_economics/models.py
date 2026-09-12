@@ -107,6 +107,89 @@ class CompanyFinancePolicyVersion(Base):
     )
 
 
+class BreakEvenPolicyOperationRecord(Base):
+    """Append-only persistence for the governed break-even policy contract."""
+
+    __tablename__ = "economics_break_even_policy_events"
+    __table_args__ = (
+        CheckConstraint(
+            "state IN ('DRAFT','AWAITING_APPROVAL','APPROVED','SUPERSEDED')",
+            name="ck_eco_be_policy_event_state",
+        ),
+        CheckConstraint("policy_version >= 1", name="ck_eco_be_policy_version"),
+        CheckConstraint(
+            "effective_end IS NULL OR effective_end > effective_start",
+            name="ck_eco_be_policy_interval",
+        ),
+        CheckConstraint(
+            "scope_id = COALESCE(branch_id, company_id)",
+            name="ck_eco_be_policy_scope_identity",
+        ),
+        UniqueConstraint("event_digest", name="uq_eco_be_policy_event_digest"),
+        UniqueConstraint(
+            "company_id",
+            "scope_id",
+            "family_key",
+            "policy_version",
+            "state",
+            name="uq_eco_be_policy_version_state",
+        ),
+        Index(
+            "ix_eco_be_policy_resolution",
+            "company_id",
+            "scope_id",
+            "family_key",
+            "state",
+            "effective_start",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "branch_id"],
+            ["branches.company_id", "branches.id"],
+            name="fk_eco_be_policy_branch_company",
+            ondelete="RESTRICT",
+        ),
+    )
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True)
+    company_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    branch_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    scope_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    policy_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    family_key: Mapped[str] = mapped_column(String(100), nullable=False)
+    policy_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    state: Mapped[str] = mapped_column(String(30), nullable=False)
+    value_payload: Mapped[object] = mapped_column(JSONB, nullable=False)
+    effective_start: Mapped[date] = mapped_column(Date, nullable=False)
+    effective_end: Mapped[date | None] = mapped_column(Date)
+    actor_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    approved_by_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT")
+    )
+    approver_role: Mapped[str | None] = mapped_column(String(30))
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    rationale: Mapped[str] = mapped_column(Text, nullable=False)
+    provenance: Mapped[str] = mapped_column(Text, nullable=False)
+    provenance_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    policy_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    supersedes_policy_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    prior_event_digest: Mapped[str | None] = mapped_column(String(64))
+    event_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    contract_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
 class FinancePolicySnapshotRecord(Base):
     __tablename__ = "economics_policy_snapshots"
     __table_args__ = (
