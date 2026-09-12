@@ -10,8 +10,8 @@ contents, and schema operations. Protected authority owns the Payroll revision.
 This reconciliation preserves it unchanged and assigns the ECO migration the
 unique successor revision `f6h8j0l2n4p6`.
 
-The successor follows the single protected head `e5g7i9k1m3o5` at authority
-`36fe3eeaa85905ef282b07ea8b7cc5482c335794`. Operational measurement revision
+The successor follows the single protected head `e5g7i9k1m3o5` at final
+authority `96d67cb73dbe4838e882e1551de5906eda598f4e`. Operational measurement revision
 `a1c3e5g7i9k1` is already an ancestor of that Payroll head through the accepted
 Workforce/Time/Payroll chain.
 
@@ -36,6 +36,17 @@ integration; it does not provide a third migration definition.
 4. Deploy only through Enterprise's normal protected process after qualification.
 
 Expected final Alembic head: `f6h8j0l2n4p6`.
+
+## Qualification
+
+- Fresh PostgreSQL zero-to-head: passed.
+- Alembic heads/current: one head, `f6h8j0l2n4p6`.
+- Autogenerate drift: none.
+- Required schema: Economics policy table and immutability trigger present;
+  Payroll proration policy table present.
+- Business Economics + Operational Measurement + Payroll: 462 passed.
+- Changed-file Ruff, Business Economics MyPy, Python compilation, diff and
+  protected-data checks: passed.
 
 ## Boundaries
 
