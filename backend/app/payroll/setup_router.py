@@ -1,8 +1,10 @@
 """Operator-facing Payroll setup over existing effective-dated authorities."""
 
 import base64
+import json
 from datetime import date
 from decimal import Decimal
+from pathlib import Path
 from typing import Annotated, Literal
 from uuid import UUID
 
@@ -149,9 +151,15 @@ def _input_service() -> PayrollInputAuthorityService:
     if not settings.payroll_input_active_kid:
         return PayrollInputAuthorityService()
     try:
+        configured_keys = settings.payroll_input_encryption_keys
+        if settings.payroll_input_encryption_key_file:
+            key_file = Path(settings.payroll_input_encryption_key_file)
+            configured_keys = json.loads(key_file.read_text(encoding="utf-8"))
+            if not isinstance(configured_keys, dict):
+                raise ValueError("Payroll input keyring must be a JSON object.")
         keys = {
             key: base64.urlsafe_b64decode(value)
-            for key, value in settings.payroll_input_encryption_keys.items()
+            for key, value in configured_keys.items()
         }
         return PayrollInputAuthorityService(
             cipher=ProtectedPayrollInputCipher(
@@ -292,7 +300,11 @@ async def employee_setup(
         "compensations": [_comp(value) for value in compensations],
         "inputs": [_input(value) for value in inputs],
         "protected_input_configuration_ready": bool(
-            settings.payroll_input_active_kid and settings.payroll_input_encryption_keys
+            settings.payroll_input_active_kid
+            and (
+                settings.payroll_input_encryption_keys
+                or settings.payroll_input_encryption_key_file
+            )
         ),
     }
 

@@ -97,6 +97,7 @@ class Settings(BaseSettings):
     communications_webhook_enabled: bool = False
     payroll_paystatement_artifact_root: str | None = None
     payroll_input_encryption_keys: dict[str, str] = Field(default_factory=dict)
+    payroll_input_encryption_key_file: str | None = None
     payroll_input_active_kid: str | None = None
     credential_lockout_threshold: int = 5
     credential_lockout_duration_seconds: int = 900
