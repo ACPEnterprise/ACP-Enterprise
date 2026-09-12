@@ -44,6 +44,8 @@ from .schemas import (
     JobWorkedIntervalView,
     ManualTimeInput,
     PayPeriodView,
+    PayrollInputEvidenceItem,
+    PayrollInputProjectionView,
     PayrollTimeInputView,
     PunchInput,
     PunchResult,
@@ -247,6 +249,42 @@ async def correct_job_worked_interval(
             ),
         )
         return workday_time_queries.job_interval_view(result)
+    except (WorkdayTimeError, WorkdayAuthorizationError) as error:
+        raise _error(error) from error
+
+
+@router.get(
+    "/pay-periods/{pay_period_id}/employees/{employee_id}/payroll-input-projection",
+    response_model=PayrollInputProjectionView,
+)
+async def payroll_input_projection(
+    pay_period_id: UUID,
+    employee_id: UUID,
+    context: Approve,
+    session: Session,
+) -> PayrollInputProjectionView:
+    period = await timekeeping_repository.pay_period_by_id(
+        session, company_id=context.company.id, pay_period_id=pay_period_id
+    )
+    if period is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Pay period not found.")
+    try:
+        value = await workday_time_service.payroll_input_projection(
+            session, context=context, employee_id=employee_id, pay_period=period
+        )
+        return PayrollInputProjectionView(
+            version=value.version,
+            employee_id=value.employee_id,
+            pay_period_id=value.pay_period_id,
+            included=tuple(
+                PayrollInputEvidenceItem(**item.__dict__) for item in value.included
+            ),
+            excluded=tuple(
+                PayrollInputEvidenceItem(**item.__dict__) for item in value.excluded
+            ),
+            total_eligible_minutes=value.total_eligible_minutes,
+            projection_digest=value.projection_digest,
+        )
     except (WorkdayTimeError, WorkdayAuthorizationError) as error:
         raise _error(error) from error
 
