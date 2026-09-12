@@ -97,9 +97,9 @@ class PayrollOperationsService:
         context: AuthorizationContext,
         pay_period_id: UUID,
     ) -> PayrollPeriodOperations:
-        if not context.has_permission(PayrollPermission.REPORTING_READ) or not context.has_permission(
-            TimekeepingPermission.ADMIN_READ
-        ):
+        if not context.has_permission(
+            PayrollPermission.REPORTING_READ
+        ) or not context.has_permission(TimekeepingPermission.ADMIN_READ):
             raise PayrollAuthorizationError(
                 "Payroll period operations require Payroll and Timekeeping read authority"
             )
@@ -141,11 +141,15 @@ class PayrollOperationsService:
             select(EmployeeCompensationAuthorityVersion).where(
                 EmployeeCompensationAuthorityVersion.company_id == company_id,
                 EmployeeCompensationAuthorityVersion.employee_id.in_(employee_ids),
-                EmployeeCompensationAuthorityVersion.lifecycle.in_(("approved", "superseded")),
-                EmployeeCompensationAuthorityVersion.effective_start <= period.period_start,
+                EmployeeCompensationAuthorityVersion.lifecycle.in_(
+                    ("approved", "superseded")
+                ),
+                EmployeeCompensationAuthorityVersion.effective_start
+                <= period.period_start,
                 or_(
                     EmployeeCompensationAuthorityVersion.effective_end.is_(None),
-                    EmployeeCompensationAuthorityVersion.effective_end > period.period_end,
+                    EmployeeCompensationAuthorityVersion.effective_end
+                    > period.period_end,
                 ),
             ),
         )
@@ -175,7 +179,9 @@ class PayrollOperationsService:
             .where(
                 PayrollRunRecord.company_id == company_id,
                 PayrollRunRecord.pay_period_id == pay_period_id,
-                PayrollRunRecord.lifecycle.in_(("assembled", "under_review", "reviewed", "approved")),
+                PayrollRunRecord.lifecycle.in_(
+                    ("assembled", "under_review", "reviewed", "approved")
+                ),
             )
             .order_by(PayrollRunRecord.created_at.desc())
         )
@@ -197,13 +203,17 @@ class PayrollOperationsService:
             (
                 await session.scalars(
                     select(CompanyPayrollPolicyVersion).where(
-                    CompanyPayrollPolicyVersion.company_id == company_id,
-                    CompanyPayrollPolicyVersion.lifecycle.in_(("approved", "superseded")),
-                    CompanyPayrollPolicyVersion.effective_start <= period.period_start,
-                    or_(
-                        CompanyPayrollPolicyVersion.effective_end.is_(None),
-                        CompanyPayrollPolicyVersion.effective_end > period.period_end,
-                    ),
+                        CompanyPayrollPolicyVersion.company_id == company_id,
+                        CompanyPayrollPolicyVersion.lifecycle.in_(
+                            ("approved", "superseded")
+                        ),
+                        CompanyPayrollPolicyVersion.effective_start
+                        <= period.period_start,
+                        or_(
+                            CompanyPayrollPolicyVersion.effective_end.is_(None),
+                            CompanyPayrollPolicyVersion.effective_end
+                            > period.period_end,
+                        ),
                     )
                 )
             ).all()
@@ -226,12 +236,16 @@ class PayrollOperationsService:
                 if item.branch_id in branch_ids
                 or (context.active_branch is None and item.branch_id is None)
             )
-            accepted = tuple(
-                item for item in current if item.state == "approved" or item.approved_at is not None
-            )
+            accepted = self._accepted_time_revisions(current)
             accepted_minutes = sum(self._revision_minutes(item) for item in accepted)
             comp_count = len(compensations.get(employee.id, ()))
-            comp_state = "READY" if comp_count == 1 else "CONFLICTING" if comp_count else "MISSING_CONFIGURATION"
+            comp_state = (
+                "READY"
+                if comp_count == 1
+                else "CONFLICTING"
+                if comp_count
+                else "MISSING_CONFIGURATION"
+            )
             gross_value = gross.get(employee.id)
             tax_value = tax.get(employee.id)
             snapshot = time_snapshots.get(employee.id)
@@ -350,6 +364,19 @@ class PayrollOperationsService:
         for value in values:
             result.setdefault(value.employee_id, value)
         return result
+
+    @staticmethod
+    def _accepted_time_revisions(
+        revisions: tuple[WorkdayTimeEntryRevision, ...],
+    ) -> tuple[WorkdayTimeEntryRevision, ...]:
+        """Only the authoritative current approved state is payable evidence.
+
+        An approval timestamp on a corrected successor is lineage, not permission
+        to reuse superseded paid time.
+        """
+
+        return tuple(item for item in revisions if item.state == "approved")
+
     async def registers(
         self, session: AsyncSession, *, context: AuthorizationContext
     ) -> tuple[dict[str, object], ...]:
@@ -399,8 +426,10 @@ class PayrollOperationsService:
                 gross = (
                     await session.scalar(
                         select(PayrollGrossCalculationResultRecord).where(
-                            PayrollGrossCalculationResultRecord.company_id == context.company.id,
-                            PayrollGrossCalculationResultRecord.id == member.gross_result_id,
+                            PayrollGrossCalculationResultRecord.company_id
+                            == context.company.id,
+                            PayrollGrossCalculationResultRecord.id
+                            == member.gross_result_id,
                         )
                     )
                     if member.gross_result_id
@@ -409,7 +438,8 @@ class PayrollOperationsService:
                 tax = (
                     await session.scalar(
                         select(PayrollTaxDeductionResultRecord).where(
-                            PayrollTaxDeductionResultRecord.company_id == context.company.id,
+                            PayrollTaxDeductionResultRecord.company_id
+                            == context.company.id,
                             PayrollTaxDeductionResultRecord.id == member.tax_result_id,
                         )
                     )
@@ -422,7 +452,8 @@ class PayrollOperationsService:
                             PayrollTimeInputRecord.company_id == context.company.id,
                             PayrollTimeInputRecord.employee_id == member.employee_id,
                             PayrollTimeInputRecord.pay_period_id == run.pay_period_id,
-                            PayrollTimeInputRecord.snapshot_identity == gross.time_snapshot_id,
+                            PayrollTimeInputRecord.snapshot_identity
+                            == gross.time_snapshot_id,
                         )
                     )
                     if gross and gross.time_snapshot_id
@@ -442,26 +473,48 @@ class PayrollOperationsService:
                 rows.append(
                     {
                         "employee_id": str(member.employee_id),
-                        "employee_number": employee.employee_number if employee else "unavailable",
-                        "employee_name": employee.display_name if employee else "Employee unavailable",
-                        "status": "BLOCKED_FOR_PAYROLL" if member.disposition == "blocked" else member.disposition.upper(),
+                        "employee_number": employee.employee_number
+                        if employee
+                        else "unavailable",
+                        "employee_name": employee.display_name
+                        if employee
+                        else "Employee unavailable",
+                        "status": "BLOCKED_FOR_PAYROLL"
+                        if member.disposition == "blocked"
+                        else member.disposition.upper(),
                         "blockers": member.blocker_codes,
-                        "accepted_minutes": time.total_approved_minutes if time else None,
+                        "accepted_minutes": time.total_approved_minutes
+                        if time
+                        else None,
                         "regular_minutes": regular_minutes if gross else None,
                         "overtime_minutes": overtime_minutes if gross else None,
-                        "compensation_authority_id": str(gross.compensation_authority_id) if gross else None,
-                        "compensation_authority_digest": gross.compensation_digest if gross else None,
+                        "compensation_authority_id": str(
+                            gross.compensation_authority_id
+                        )
+                        if gross
+                        else None,
+                        "compensation_authority_digest": gross.compensation_digest
+                        if gross
+                        else None,
                         "earnings": earning,
-                        "withholdings_deductions_liabilities": tax.components if tax else [],
+                        "withholdings_deductions_liabilities": tax.components
+                        if tax
+                        else [],
                         "gross": str(tax.gross_pay) if tax else None,
                         "employee_taxes": str(tax.employee_tax_total) if tax else None,
-                        "deductions": str(tax.employee_deduction_total) if tax else None,
+                        "deductions": str(tax.employee_deduction_total)
+                        if tax
+                        else None,
                         "net_pay": str(tax.net_pay_candidate) if tax else None,
-                        "employer_liabilities": str(tax.employer_contribution_total) if tax else None,
+                        "employer_liabilities": str(tax.employer_contribution_total)
+                        if tax
+                        else None,
                         "tax_rule_version": tax.calculation_version if tax else None,
                         "money_version": tax.money_version if tax else None,
                         "calculation_digest": tax.calculation_digest if tax else None,
-                        "job_labor_allocation": "UNAVAILABLE_NO_AUTHORITATIVE_JOB_ALLOCATION" if gross else None,
+                        "job_labor_allocation": "UNAVAILABLE_NO_AUTHORITATIVE_JOB_ALLOCATION"
+                        if gross
+                        else None,
                     }
                 )
             result.append(
@@ -478,7 +531,9 @@ class PayrollOperationsService:
                     "liability_totals": {
                         "employee_taxes": str(run.aggregate_employee_taxes),
                         "employee_deductions": str(run.aggregate_employee_deductions),
-                        "employer_liabilities": str(run.aggregate_employer_contributions),
+                        "employer_liabilities": str(
+                            run.aggregate_employer_contributions
+                        ),
                         "net_pay": str(run.aggregate_net_pay),
                     },
                     "manual_tax_filing_payment_required": True,
@@ -664,7 +719,9 @@ class PayrollOperationsService:
         return {key: tuple(value) for key, value in grouped.items()}
 
     @staticmethod
-    async def _latest_by_employee(session, model, company_id, pay_period_id, lifecycles):
+    async def _latest_by_employee(
+        session, model, company_id, pay_period_id, lifecycles
+    ):
         values = (
             await session.scalars(
                 select(model)
