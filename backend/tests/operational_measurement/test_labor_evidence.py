@@ -2,6 +2,7 @@ from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
+
 from app.operational_measurement.labor_evidence import (
     Confidence,
     EmployeeJobLink,
@@ -141,6 +142,13 @@ def test_missing_actual_work_never_falls_back_to_schedule():
     assert evidence.paid_overlap_minutes is None
     assert evidence.confidence is Confidence.PARTIAL
     assert "worked_interval" in evidence.missing_inputs
+    employee = compose_labor_evidence(
+        company_id=company, links=(link,), intervals=(scheduled,)
+    ).employees[0]
+    assert employee.job_worked_minutes is None
+    assert employee.jobsite_minutes is None
+    assert employee.productive_minutes is None
+    assert employee.unclassified_paid_minutes is None
 
 
 def test_multi_technician_job_preserves_separate_employee_evidence():

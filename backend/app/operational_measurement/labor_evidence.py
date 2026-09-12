@@ -111,9 +111,9 @@ class EmployeeLaborEvidence:
     company_id: UUID
     employee_id: UUID
     paid_minutes: int | None
-    job_worked_minutes: int
-    jobsite_minutes: int
-    productive_minutes: int
+    job_worked_minutes: int | None
+    jobsite_minutes: int | None
+    productive_minutes: int | None
     unclassified_paid_minutes: int | None
     confidence: Confidence
     job_evidence_digests: tuple[str, ...]
@@ -351,19 +351,33 @@ def _employee_evidence(
 ) -> EmployeeLaborEvidence:
     conflicts = ["overlapping_paid_intervals"] if _has_overlap(paid) else []
     paid_minutes = _minutes(paid)
-    worked = sum(x.worked_minutes or 0 for x in jobs)
-    jobsite = sum(x.jobsite_minutes or 0 for x in jobs)
-    productive = sum(x.productive_minutes or 0 for x in jobs)
-    attributed_overlap = sum(x.paid_overlap_minutes or 0 for x in jobs)
-    if paid_minutes is not None and attributed_overlap > paid_minutes:
+    worked = _complete_job_sum(jobs, "worked_minutes")
+    jobsite = _complete_job_sum(jobs, "jobsite_minutes")
+    productive = _complete_job_sum(jobs, "productive_minutes")
+    attributed_overlap = _complete_job_sum(jobs, "paid_overlap_minutes")
+    if (
+        paid_minutes is not None
+        and attributed_overlap is not None
+        and attributed_overlap > paid_minutes
+    ):
         conflicts.append("job_paid_overlap_exceeds_paid_time")
     unclassified = (
         paid_minutes - attributed_overlap
-        if paid_minutes is not None and not conflicts
+        if paid_minutes is not None
+        and attributed_overlap is not None
+        and not conflicts
         else None
     )
     missing = tuple(
-        name for name, value in (("paid_interval", paid_minutes),) if value is None
+        name
+        for name, value in (
+            ("paid_interval", paid_minutes),
+            ("complete_job_worked_intervals", worked),
+            ("complete_jobsite_intervals", jobsite),
+            ("complete_productive_intervals", productive),
+            ("complete_paid_job_overlap", attributed_overlap),
+        )
+        if value is None
     )
     confidence = (
         Confidence.CONFLICTING
@@ -423,6 +437,16 @@ def _minutes(intervals: list[LaborInterval]) -> int | None:
         if intervals
         else None
     )
+
+
+def _complete_job_sum(
+    jobs: tuple[JobLaborEvidence, ...], attribute: str
+) -> int | None:
+    """Return a total only when every attributed Job supplies the measurement."""
+    if not jobs:
+        return None
+    values = tuple(getattr(item, attribute) for item in jobs)
+    return sum(values) if all(value is not None for value in values) else None
 
 
 def _overlap_minutes(
