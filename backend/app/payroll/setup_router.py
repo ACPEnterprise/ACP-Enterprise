@@ -19,16 +19,25 @@ from app.payroll.commands import DraftCompensationAuthority
 from app.payroll.contracts import (
     CompensationType,
     PayrollAuthorityError,
+    PayrollAuthorizationError,
     PayrollConflictError,
     canonical_digest,
 )
 from app.payroll.models import (
     EmployeeCompensationAuthorityVersion,
     PayrollInputAuthorityVersion,
+    PayrollProtectedInputEnvelope,
     PayrollRunMemberRecord,
     PayrollRunRecord,
 )
+from app.payroll.operations import PayrollOperationsService
 from app.payroll.permissions import PayrollPermission
+from app.payroll.real_employee_readiness_wiring import (
+    REFERENCE_VERSION,
+    AssemblyEvidence,
+    SetupValue,
+    assemble_real_employee_readiness,
+)
 from app.payroll.service import payroll_authority_service
 from app.payroll.tax_authority import (
     AuthorityApplicability,
@@ -43,6 +52,7 @@ from app.platform.permissions.dependencies import (
     require_any_permission,
     require_permission,
 )
+from app.timekeeping.models import PayPeriod, PayrollTimeInputRecord
 
 router = APIRouter(prefix="/api/v1/payroll/setup", tags=["Payroll Setup"])
 Session = Annotated[AsyncSession, Depends(get_database_session)]
@@ -111,6 +121,19 @@ class InputDraft(BaseModel):
     audit_reason: str = Field(min_length=3, max_length=500)
 
 
+class EmployeeReadinessProjection(BaseModel):
+    contract_version: str
+    readiness_contract_version: str
+    employee_id: UUID
+    pay_period_id: UUID
+    status: str
+    calculation_readiness: list[str]
+    exact_blockers: list[str]
+    provider_version: str | None
+    reconciliation_version: str | None
+    evidence_digest: str
+
+
 _SUPPORTED_INPUT_KEYS = {
     "w4_filing_status",
     "w4_step_2",
@@ -149,9 +172,9 @@ _DEDUCTION_INPUT_KEYS = {
 }
 
 
-def _input_service() -> PayrollInputAuthorityService:
+def _input_cipher() -> ProtectedPayrollInputCipher | None:
     if not settings.payroll_input_active_kid:
-        return PayrollInputAuthorityService()
+        return None
     try:
         configured_keys = settings.payroll_input_encryption_keys
         if settings.payroll_input_encryption_key_file:
@@ -163,15 +186,17 @@ def _input_service() -> PayrollInputAuthorityService:
             key: base64.urlsafe_b64decode(value)
             for key, value in configured_keys.items()
         }
-        return PayrollInputAuthorityService(
-            cipher=ProtectedPayrollInputCipher(
-                active_key_id=settings.payroll_input_active_kid, keys=keys
-            )
+        return ProtectedPayrollInputCipher(
+            active_key_id=settings.payroll_input_active_kid, keys=keys
         )
     except Exception as error:
         raise HTTPException(
             503, "Protected Payroll input configuration is unavailable."
         ) from error
+
+
+def _input_service() -> PayrollInputAuthorityService:
+    return PayrollInputAuthorityService(cipher=_input_cipher())
 
 
 def _comp(value: EmployeeCompensationAuthorityVersion) -> dict[str, object]:
@@ -309,6 +334,232 @@ async def employee_setup(
             )
         ),
     }
+
+
+@router.get(
+    "/employees/{employee_id}/readiness",
+    response_model=EmployeeReadinessProjection,
+)
+async def employee_readiness(
+    employee_id: UUID,
+    pay_period_id: UUID,
+    context: SetupRead,
+    session: Session,
+) -> EmployeeReadinessProjection:
+    """Project exact readiness blockers without returning protected input values."""
+    employee = await session.scalar(
+        select(Employee).where(
+            Employee.company_id == context.company.id, Employee.id == employee_id
+        )
+    )
+    period = await session.scalar(
+        select(PayPeriod).where(
+            PayPeriod.company_id == context.company.id, PayPeriod.id == pay_period_id
+        )
+    )
+    if employee is None or period is None:
+        raise HTTPException(404, "Employee Payroll readiness was not found.")
+    try:
+        operating = await PayrollOperationsService().period(
+            session, context=context, pay_period_id=pay_period_id
+        )
+    except PayrollAuthorizationError as error:
+        raise HTTPException(403, "Payroll readiness authority is required.") from error
+    operating_employee = next(
+        (value for value in operating.employees if value.employee_id == employee_id), None
+    )
+    compensation_rows = tuple(
+        (
+            await session.scalars(
+                select(EmployeeCompensationAuthorityVersion).where(
+                    EmployeeCompensationAuthorityVersion.company_id
+                    == context.company.id,
+                    EmployeeCompensationAuthorityVersion.employee_id == employee_id,
+                    EmployeeCompensationAuthorityVersion.lifecycle.in_(
+                        ("approved", "superseded")
+                    ),
+                    EmployeeCompensationAuthorityVersion.effective_start
+                    <= period.period_end,
+                    (
+                        EmployeeCompensationAuthorityVersion.effective_end.is_(None)
+                        | (
+                            EmployeeCompensationAuthorityVersion.effective_end
+                            >= period.period_start
+                        )
+                    ),
+                )
+            )
+        ).all()
+    )
+    superseded_compensation_ids = {
+        value.supersedes_authority_id
+        for value in compensation_rows
+        if value.supersedes_authority_id is not None
+    }
+    compensations = tuple(
+        value
+        for value in compensation_rows
+        if value.id not in superseded_compensation_ids
+        and value.lifecycle == "approved"
+    )
+    compensation = compensations[0] if len(compensations) == 1 else None
+    try:
+        setup_values = await _readiness_setup_values(
+            session,
+            company_id=context.company.id,
+            employee_id=employee_id,
+            period_start=period.period_start,
+            period_end=period.period_end,
+        )
+    except (PayrollAuthorityError, PayrollConflictError) as error:
+        raise HTTPException(409, "Payroll readiness evidence is unavailable.") from error
+    time_snapshot = await session.scalar(
+        select(PayrollTimeInputRecord)
+        .where(
+            PayrollTimeInputRecord.company_id == context.company.id,
+            PayrollTimeInputRecord.employee_id == employee_id,
+            PayrollTimeInputRecord.pay_period_id == pay_period_id,
+        )
+        .order_by(PayrollTimeInputRecord.created_at.desc())
+    )
+    time_ready = bool(
+        operating_employee is not None
+        and operating_employee.time_snapshot_state == "CURRENT"
+        and time_snapshot is not None
+    )
+    try:
+        assembly = assemble_real_employee_readiness(
+            AssemblyEvidence(
+                context.company.id,
+                employee.home_branch_id,
+                employee.id,
+                employee.status == "active",
+                period.period_start,
+                period.period_end,
+                compensation.salary_frequency if compensation is not None else None,
+                compensation.compensation_type if compensation is not None else None,
+                compensation.id if compensation is not None else None,
+                compensation.effective_start if compensation is not None else None,
+                compensation.effective_end if compensation is not None else None,
+                employee.id if time_ready else None,
+                time_snapshot.snapshot_digest if time_ready and time_snapshot else None,
+                setup_values,
+                REFERENCE_VERSION,
+            )
+        )
+    except (PayrollAuthorityError, PayrollConflictError, ValueError) as error:
+        raise HTTPException(409, "Payroll readiness evidence is unavailable.") from error
+    readiness = assembly.readiness.employees[0]
+    return EmployeeReadinessProjection(
+        contract_version="payroll.real-employee-readiness-runtime.v1",
+        readiness_contract_version=assembly.readiness.contract_version,
+        employee_id=employee.id,
+        pay_period_id=period.id,
+        status=(
+            "READY_FOR_PAYROLL"
+            if readiness.status.value == "PAYROLL_READY"
+            else readiness.status.value
+        ),
+        calculation_readiness=[value.value for value in readiness.calculation_readiness],
+        exact_blockers=list(readiness.exact_blockers),
+        provider_version=assembly.provider_version,
+        reconciliation_version=REFERENCE_VERSION,
+        evidence_digest=assembly.assembly_digest,
+    )
+
+
+async def _readiness_setup_values(
+    session: AsyncSession,
+    *,
+    company_id: UUID,
+    employee_id: UUID,
+    period_start: date,
+    period_end: date,
+) -> tuple[SetupValue, ...]:
+    rows = tuple(
+        (
+            await session.scalars(
+                select(PayrollInputAuthorityVersion).where(
+                    PayrollInputAuthorityVersion.company_id == company_id,
+                    PayrollInputAuthorityVersion.employee_id == employee_id,
+                    PayrollInputAuthorityVersion.lifecycle.in_(
+                        ("approved", "superseded")
+                    ),
+                    PayrollInputAuthorityVersion.effective_start <= period_end,
+                    (
+                        PayrollInputAuthorityVersion.effective_end.is_(None)
+                        | (PayrollInputAuthorityVersion.effective_end >= period_start)
+                    ),
+                )
+            )
+        ).all()
+    )
+    superseded_ids = {
+        value.supersedes_authority_id
+        for value in rows
+        if value.supersedes_authority_id is not None
+    }
+    active = tuple(value for value in rows if value.id not in superseded_ids)
+    envelope_ids = tuple(
+        value.protected_envelope_id
+        for value in active
+        if value.protected_envelope_id is not None
+    )
+    envelopes = {
+        value.id: value
+        for value in (
+            (
+                await session.scalars(
+                    select(PayrollProtectedInputEnvelope).where(
+                        PayrollProtectedInputEnvelope.company_id == company_id,
+                        PayrollProtectedInputEnvelope.id.in_(envelope_ids),
+                    )
+                )
+            ).all()
+            if envelope_ids
+            else ()
+        )
+    }
+    cipher = _input_cipher() if envelope_ids else None
+    if envelope_ids and cipher is None:
+        raise HTTPException(503, "Protected Payroll input configuration is unavailable.")
+    result: list[SetupValue] = []
+    for value in active:
+        envelope = (
+            envelopes.get(value.protected_envelope_id)
+            if value.protected_envelope_id is not None
+            else None
+        )
+        if envelope is not None and cipher is not None:
+            payload = cipher.decrypt(
+                company_id=company_id,
+                key_id=envelope.key_id,
+                nonce=envelope.nonce,
+                ciphertext=envelope.ciphertext,
+                expected_digest=envelope.content_digest,
+            )
+            resolved = payload.get("value")
+        elif value.applicability == "not_applicable":
+            resolved = "not_applicable"
+        else:
+            continue
+        result.append(
+            SetupValue(
+                value.authority_key,
+                employee_id,
+                period_end.year,
+                value.effective_start,
+                value.effective_end,
+                value.id,
+                value.authority_version,
+                value.authority_digest,
+                envelope.content_digest
+                if envelope is not None
+                else value.evidence_digest,
+                resolved,
+            )
+        )
+    return tuple(result)
 
 
 @router.post("/employees/{employee_id}/compensations", status_code=201)
