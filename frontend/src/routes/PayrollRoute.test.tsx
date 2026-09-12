@@ -162,7 +162,11 @@ describe("PayrollRoute authorization", () => {
         },
       ]) as never,
     );
-    render(<PayrollRoute />);
+    render(
+      <MemoryRouter>
+        <PayrollRoute />
+      </MemoryRouter>,
+    );
     expect(
       screen.getByText(/tax · federal withholding election · missing/),
     ).toBeVisible();
@@ -259,7 +263,7 @@ describe("PayrollRoute authorization", () => {
       }) as never,
     );
     render(
-      <MemoryRouter>
+      <MemoryRouter initialEntries={["/payroll?employee=employee-1#payroll-employee-employee-1"]}>
         <PayrollRoute />
       </MemoryRouter>,
     );
@@ -270,7 +274,14 @@ describe("PayrollRoute authorization", () => {
     ).toBeGreaterThan(0);
     expect(screen.getByRole("link", { name: "View timecard" })).toHaveAttribute(
       "href",
-      "/workforce?employee=employee-1#timecard-employee-1",
+      "/employees?employee=employee-1#timecard-employee-1",
+    );
+    expect(screen.getByText("Marisol Rivera").closest("tr")).toHaveAttribute(
+      "id",
+      "payroll-employee-employee-1",
+    );
+    expect(screen.getByText("Marisol Rivera").closest("tr")).toHaveClass(
+      "bg-action-primary/5",
     );
   });
 });
