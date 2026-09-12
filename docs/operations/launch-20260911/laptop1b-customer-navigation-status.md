@@ -1,7 +1,7 @@
 # Laptop1-B Customer navigation status
 
 - Mission authority: `0c08f1e3634f38a7fb82970932dea5de7a4cf24f`
-- Protected authority: `b22297c65165280a761860198dc05441df4a4312`
+- Protected authority: `2d8709c895e60faf7cc0251d6c8ac82311013613`
 - Lane: `work/customer-office-operating-acceptance-2`
 - State: `PROTECTED_INTEGRATED_PREVIEW_ACCEPTANCE_PENDING`
 - Prior Customer roster integration: PR #197 / `42a4f68087d76247269bd4c8388f556dd62a8b5c`
@@ -42,9 +42,9 @@ records remain Migration evidence and are never selectable as native Customers.
   authorized readiness projection.
 - Laptop1-A owns Scheduling/Dispatch UI. Laptop1-B links into the integrated Job
   workflow with Customer/Location context and does not rewrite Scheduling state.
-- Laptop1-A candidate `91e3cf4f3e473a58b90869cfbce68b61baac5f03`
-  (`work/job-existing-scheduling-ui-1`) supplies the remaining existing-Job
-  scheduling seam. The navigation contract is: Customer detail → Create Job with
+- Laptop1-A's existing-Job scheduling seam is authoritative through PR #217 /
+  `2d8709c895e60faf7cc0251d6c8ac82311013613`. The navigation contract is:
+  Customer detail → Create Job with
   the selected Customer and Location → `/jobs/{job_id}` → schedule using the Job's
   authoritative `branch_id`, `customer.id`, `service_location.id`, and
   `concurrency_version` → linked Appointment. The scheduling command requires
@@ -58,10 +58,13 @@ current source gate: acquisition completed at `2026-09-12T16:49:00Z`, packet dig
 `a2c427ccc8f99f33a2340fa84118f987d75f1997afc8f0c7cf7fc27123e87748`, and
 decision digest `5070aa62a8a86bfbd1249588e86f1f08d29ae433803ba05fdf8ee04b234e9025`.
 Relative to sealed SOURCE.4 it reports 55 added Customers and 63 added Locations.
-Canonical admission remains false: the current overlay is not accepted by the
-deployed executor, 1,389 legacy projections remain held for duplicate-native-truth
-risk, 22 open Location parents are unresolved, and other cross-domain admission
-guards remain open. The Customer UI must therefore continue to describe the native
+Canonical admission remains false. Migration candidate `88b005cb` partitions the
+1,389 legacy projections without changing their dispositions and qualifies the
+provider-neutral current-overlay contract, but its concrete Preview adapter and
+record packet are not deployed or invoked. The current-operation subset still has
+22 open Jobs without provider Location identity and 13 held legacy current-open
+Appointment projections; other cross-domain admission guards remain open. The
+Customer UI must therefore continue to describe the native
 population as admitted but partial and show the source readiness/as-of evidence; it
 must not add source-only records to the selectable roster.
 
@@ -86,10 +89,12 @@ checks do not substitute for authenticated operator acceptance.
 
 ## September 12 qualification
 
-- Isolated PostgreSQL zero-to-head migration plus focused Customer, Job, and
-  Scheduling backend qualification: `122 passed`.
+- Isolated PostgreSQL zero-to-head migration plus focused Customer, Job,
+  Operations, and Scheduling backend qualification: `127 passed` against PR #217
+  authority.
 - Focused Customer detail, roster, operations, and Job-context frontend
-  qualification: `36 passed` across four test files.
+  qualification, including existing-Job scheduling: `44 passed` across six test
+  files.
 - Frontend ESLint and TypeScript/Vite production build: passed.
 - `git diff --check`: passed.
 
