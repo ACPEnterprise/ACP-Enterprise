@@ -1,6 +1,6 @@
 # OM2-C acceptance identity provisioning contract
 
-Protected authority: `27b89ecf1d702acbe75d0e1f95cf83c5f6bba5c9`
+Protected authority at readiness preparation: `9096a77705623409da1418022c7949cae08468ce`
 
 This contract prepares Enterprise to provision four dedicated, non-Production
 acceptance identities. It does not provision them, issue a password, mint a token, or
@@ -33,8 +33,8 @@ communication, move money, post Accounting, execute Payroll, or create payable t
 | Persona | Exact permissions | Purpose |
 | --- | --- | --- |
 | CSR | `COMPANY_CUSTOMER_READ`, `COMPANY_JOB_READ`, `COMPANY_JOB_MANAGE`, `COMPANY_SCHEDULING_READ`, `COMPANY_SCHEDULING_MANAGE`, `COMPANY_DISPATCH_READ` | Customer/search/detail, Job lookup, calendar/Dispatch, and eventual synthetic Job scheduling |
-| EMPLOYEE | `COMPANY_TIMEKEEPING_OWN_READ`, `COMPANY_PAYROLL_STATEMENT_OWN_READ` | Own time state, Job-clock state, Timecard and own Payroll evidence, read-only |
-| OFFICE | `COMPANY_TIMEKEEPING_ADMIN_READ`, `COMPANY_PAYROLL_REPORTING_READ` | Office Timecard review and Payroll summary/register evidence, read-only |
+| EMPLOYEE | `COMPANY_EMPLOYEE_OPERATIONS_OWN_DAY_READ`, `COMPANY_JOB_READ`, `COMPANY_TIMEKEEPING_OWN_READ`, `COMPANY_PAYROLL_STATEMENT_OWN_READ` | My Day, assigned Job, own time state, Job-clock state, Timecard and own Payroll evidence, read-only |
+| OFFICE | `COMPANY_WORKFORCE_READ`, `COMPANY_MEMBERSHIP_READ`, `COMPANY_PAYROLL_COMPENSATION_READ`, `COMPANY_PAYROLL_TAX_AUTHORITY_READ`, `COMPANY_PAYROLL_DEDUCTION_AUTHORITY_READ`, `COMPANY_TIMEKEEPING_ADMIN_READ`, `COMPANY_PAYROLL_REPORTING_READ` | Employee/account state, Payroll setup, office Timecard review and Payroll summary/register evidence, read-only |
 | QBO_READ | `COMPANY_ACCOUNTING_REPORT_READ` | Preserved QBO unavailable or admitted source-evidence projections, GET-only |
 
 The versioned JSON contract lists every allowed GET endpoint. CSR's existing-Job
@@ -79,6 +79,9 @@ attestation all exist.
      --audit-event-id <audit-event-uuid> \
      --authorized-by <enterprise-actor-reference> \
      --release-sha <deployed-full-sha> \
+     --protected-authority-sha <fetched-protected-full-sha> \
+     --frontend-sha256 <deployed-index-sha256> \
+     --schema-head <deployed-alembic-head> \
      --ttl-seconds 3600 \
      --output <restricted-attestation-path>
    ```
@@ -107,9 +110,15 @@ shared or non-fixture domain records.
 
 ## Current execution state
 
-`PREPARED_NOT_ISSUED`. No sanctioned synthetic identity/token/attestation or accepted
+`EXECUTION_READY_BLOCKED_AUTH`. The deterministic matrix is
+`backend/operations/preview-authenticated-acceptance-matrix.v1.json`; the result record
+is `backend/operations/preview-authenticated-acceptance-report.v1.json`.
+No sanctioned synthetic identity/token/attestation or accepted
 live fixture adapter is present, so no authenticated Preview request was made. Scheduling
-mutation coverage remains unresolved and was not duplicated in OM2-C.
+mutation coverage landed in protected PR #237. It remains unavailable to acceptance
+until that exact authority is coherently deployed and attested. The four Payroll setup
+POST classifications remain `BLOCKED_BY_MUTATION_GOVERNANCE` and were not duplicated
+in OM2-C.
 
 Newly integrated PR #216 was independently qualified: 19 backend Job-clock/labor tests
 passed on PostgreSQL 16; Mobile Job-clock/foundation passed 2 suites / 27 tests, plus
@@ -123,10 +132,9 @@ files / 10 tests; focused Ruff/MyPy, frontend ESLint, TypeScript and production 
 passed. This qualifies the integrated implementation, not its deployment or operator
 workflow.
 
-The authoritative mutation inventory also finds all four new Payroll setup POST routes
-unclassified. The exact identities were published to PR #235. Together with the
-existing Job-scheduling POST, current authority has five missing mutation
-classifications. These owner-lane governance defects do not authorize OM2-C repairs.
+The authoritative mutation inventory still finds all four new Payroll setup POST routes
+unclassified. The exact identities were published to PR #235. These owner-lane
+governance defects do not authorize OM2-C repairs.
 
 No Preview or Production mutation, real communication, payable time, money movement,
 Accounting posting, Payroll execution, or QBO/HCP mutation occurred.

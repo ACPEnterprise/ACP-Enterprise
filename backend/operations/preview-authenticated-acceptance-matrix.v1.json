@@ -1,0 +1,52 @@
+{
+  "contract_version": "operator.authenticated.preview.acceptance.execution.v1",
+  "environment": "preview",
+  "result_classifications": [
+    "PASS",
+    "FAIL_PRODUCT_DEFECT",
+    "BLOCKED_AUTH",
+    "BLOCKED_MUTATION_GOVERNANCE",
+    "BLOCKED_SOURCE_DATA",
+    "BLOCKED_DEPENDENCY",
+    "NOT_APPLICABLE"
+  ],
+  "preflight": [
+    "preview_health_healthy",
+    "backend_sha_matches_attestation",
+    "frontend_sha256_matches_attestation",
+    "schema_head_matches_attestation",
+    "protected_authority_matches_attestation",
+    "attestation_unexpired",
+    "token_unexpired_and_not_revoked",
+    "company_and_branch_scope_match"
+  ],
+  "cases": [
+    {"id":"CSR_CUSTOMER_SEARCH","persona":"CSR","method":"GET","route":"/api/v1/customers/search","workflow":"Customer search","data":"synthetic_customer","mutation":false},
+    {"id":"CSR_CUSTOMER_DETAIL","persona":"CSR","method":"GET","route":"/api/v1/customers/{customer_id}","workflow":"Customer and Location navigation","data":"synthetic_customer","mutation":false},
+    {"id":"CSR_JOB_DETAIL","persona":"CSR","method":"GET","route":"/api/v1/jobs/{job_id}","workflow":"Job detail and source/stale/held truth","data":"synthetic_job","mutation":false},
+    {"id":"CSR_MONTH_CALENDAR","persona":"CSR","method":"GET","route":"/api/v1/scheduling/appointments","workflow":"Month calendar and Needs Scheduling state","data":"synthetic_schedule_window","mutation":false},
+    {"id":"CSR_APPOINTMENT_DETAIL","persona":"CSR","method":"GET","route":"/api/v1/scheduling/appointments/{appointment_id}","workflow":"Appointment detail","data":"synthetic_appointment","mutation":false},
+    {"id":"CSR_DISPATCH","persona":"CSR","method":"GET","route":"/api/v1/dispatch/board","workflow":"Dispatch read","data":"synthetic_schedule_window","mutation":false},
+    {"id":"CSR_SCHEDULE_MUTATION","persona":"CSR","method":"POST","route":"/api/v1/operations/jobs/{job_id}/schedule","workflow":"Replay-governed scheduling","data":"synthetic_job","mutation":true,"gate":"registry_present_and_deployed_release_attested"},
+    {"id":"EMPLOYEE_SESSION","persona":"EMPLOYEE","method":"GET","route":"/api/v1/auth/session","workflow":"Authenticated Mobile/session state","data":"synthetic_employee","mutation":false},
+    {"id":"EMPLOYEE_MY_DAY","persona":"EMPLOYEE","method":"GET","route":"/api/v1/employee-operations/me/day","workflow":"My Day and assigned Job visibility","data":"synthetic_employee","mutation":false},
+    {"id":"EMPLOYEE_ASSIGNED_JOB","persona":"EMPLOYEE","method":"GET","route":"/api/v1/jobs/{job_id}","workflow":"Assigned Job detail","data":"synthetic_assigned_job","mutation":false},
+    {"id":"EMPLOYEE_TIME_READ","persona":"EMPLOYEE","method":"GET","route":"/api/v1/timekeeping/me/timecard","workflow":"Own timekeeping read","data":"synthetic_non_payable_time","mutation":false},
+    {"id":"EMPLOYEE_TIME_MUTATION","persona":"EMPLOYEE","method":"POST","route":"not_allowlisted","workflow":"Non-payable time mutation","data":"synthetic_non_payable_time","mutation":true,"gate":"explicit_enterprise_allowlist_required"},
+    {"id":"OFFICE_TEAM","persona":"OFFICE","method":"GET","route":"/api/v1/workforce/employees","workflow":"Team and Employees","data":"synthetic_employee","mutation":false},
+    {"id":"OFFICE_EMPLOYEE_DETAIL","persona":"OFFICE","method":"GET","route":"/api/v1/workforce/employees/{employee_id}","workflow":"Employee detail and activation state","data":"synthetic_employee","mutation":false},
+    {"id":"OFFICE_MEMBERSHIP","persona":"OFFICE","method":"GET","route":"/api/v1/company-admin/memberships","workflow":"Invitation/account state projection","data":"synthetic_employee","mutation":false},
+    {"id":"OFFICE_PAYROLL_SETUP","persona":"OFFICE","method":"GET","route":"/api/v1/payroll/setup/employees/{employee_id}","workflow":"Payroll setup navigation","data":"synthetic_employee","mutation":false},
+    {"id":"OFFICE_TIMECARD","persona":"OFFICE","method":"GET","route":"/api/v1/timekeeping/admin/timecard-review","workflow":"Timecard navigation","data":"synthetic_non_payable_time","mutation":false},
+    {"id":"OFFICE_PAYROLL_STATE","persona":"OFFICE","method":"GET","route":"/api/v1/payroll/operations/summary","workflow":"BLOCKED_FOR_PAYROLL / READY_FOR_PAYROLL truth","data":"synthetic_payroll_period","mutation":false},
+    {"id":"OFFICE_PAYROLL_REGISTER","persona":"OFFICE","method":"GET","route":"/api/v1/payroll/operations/registers","workflow":"Payroll register evidence without execution","data":"synthetic_payroll_period","mutation":false},
+    {"id":"QBO_SOURCE_CASH","persona":"QBO_READ","method":"GET","route":"/api/v1/accounting/source-evidence/qbo?basis=cash","workflow":"Connection/authorization/source/as-of/completeness truth","data":"preserved_or_unavailable_evidence","mutation":false},
+    {"id":"QBO_SOURCE_ACCRUAL","persona":"QBO_READ","method":"GET","route":"/api/v1/accounting/source-evidence/qbo?basis=accrual","workflow":"Source/as-of/completeness truth","data":"preserved_or_unavailable_evidence","mutation":false}
+  ],
+  "payroll_mutation_gates": [
+    "POST /api/v1/payroll/setup/compensations/{authority_id}/approve",
+    "POST /api/v1/payroll/setup/employees/{employee_id}/compensations",
+    "POST /api/v1/payroll/setup/employees/{employee_id}/inputs",
+    "POST /api/v1/payroll/setup/inputs/{authority_id}/approve"
+  ]
+}

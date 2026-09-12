@@ -1,0 +1,7 @@
+{
+  "report_version": "operator.authenticated.preview.acceptance.report.v1",
+  "release_authority": {"protected_sha":null,"backend_sha":null,"frontend_sha256":null,"schema_head":null,"health":null},
+  "run": {"started_at":null,"attestation_expires_at":null,"token_expires_at":null,"revocation_checked_at":null},
+  "results": [{"persona":null,"route_workflow":null,"test_data_identity":null,"expected_result":null,"observed_result":null,"classification":"BLOCKED_AUTH","evidence_reference":null,"defect_owner":null,"cleanup_revocation_status":"NOT_ISSUED"}],
+  "allowed_classifications": ["PASS","FAIL_PRODUCT_DEFECT","BLOCKED_AUTH","BLOCKED_MUTATION_GOVERNANCE","BLOCKED_SOURCE_DATA","BLOCKED_DEPENDENCY","NOT_APPLICABLE"]
+}

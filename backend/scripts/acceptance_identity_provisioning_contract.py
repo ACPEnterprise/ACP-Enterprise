@@ -110,13 +110,26 @@ def attest(args: argparse.Namespace) -> dict[str, object]:
         "session_id": require_uuid(args.session_id, "session_id"),
         "permission_codes": selected["permissions"],
         "release_sha": args.release_sha,
+        "protected_authority_sha": args.protected_authority_sha,
+        "frontend_sha256": args.frontend_sha256,
+        "schema_head": args.schema_head,
         "issued_at": now.isoformat(),
         "expires_at": expires_at.isoformat(),
         "authorized_by": args.authorized_by,
         "audit_event_id": require_uuid(args.audit_event_id, "audit_event_id"),
     }
-    if len(args.release_sha) != 40 or any(c not in "0123456789abcdef" for c in args.release_sha):
-        raise ProvisioningBlocked("release_sha must be a lowercase full Git SHA.")
+    for field, value in (
+        ("release_sha", args.release_sha),
+        ("protected_authority_sha", args.protected_authority_sha),
+    ):
+        if len(value) != 40 or any(c not in "0123456789abcdef" for c in value):
+            raise ProvisioningBlocked(f"{field} must be a lowercase full Git SHA.")
+    if len(args.frontend_sha256) != 64 or any(
+        c not in "0123456789abcdef" for c in args.frontend_sha256
+    ):
+        raise ProvisioningBlocked("frontend_sha256 must be a lowercase SHA-256 digest.")
+    if not args.schema_head:
+        raise ProvisioningBlocked("schema_head is required.")
     output.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     output.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     output.chmod(0o600)
@@ -147,6 +160,9 @@ def parser() -> argparse.ArgumentParser:
     seal.add_argument("--audit-event-id", required=True)
     seal.add_argument("--authorized-by", required=True)
     seal.add_argument("--release-sha", required=True)
+    seal.add_argument("--protected-authority-sha", required=True)
+    seal.add_argument("--frontend-sha256", required=True)
+    seal.add_argument("--schema-head", required=True)
     seal.add_argument("--ttl-seconds", type=int, default=3600)
     seal.add_argument("--output", type=Path, required=True)
     seal.set_defaults(action=attest)

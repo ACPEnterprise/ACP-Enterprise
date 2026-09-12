@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import hashlib
 import json
 import os
 import stat
@@ -32,12 +33,19 @@ REQUIRED_PERMISSIONS = {
     ),
     "employee": frozenset(
         {
+            "COMPANY_EMPLOYEE_OPERATIONS_OWN_DAY_READ",
+            "COMPANY_JOB_READ",
             "COMPANY_TIMEKEEPING_OWN_READ",
             "COMPANY_PAYROLL_STATEMENT_OWN_READ",
         }
     ),
     "office": frozenset(
         {
+            "COMPANY_WORKFORCE_READ",
+            "COMPANY_MEMBERSHIP_READ",
+            "COMPANY_PAYROLL_COMPENSATION_READ",
+            "COMPANY_PAYROLL_TAX_AUTHORITY_READ",
+            "COMPANY_PAYROLL_DEDUCTION_AUTHORITY_READ",
             "COMPANY_TIMEKEEPING_ADMIN_READ",
             "COMPANY_PAYROLL_REPORTING_READ",
         }
@@ -111,6 +119,9 @@ def read_attestation(path: Path, *, now: datetime | None = None) -> dict[str, st
         "session_id",
         "persona",
         "release_sha",
+        "protected_authority_sha",
+        "frontend_sha256",
+        "schema_head",
         "audit_event_id",
         "authorized_by",
     ):
@@ -185,11 +196,16 @@ def probes(persona: str, *, start_at: str, end_at: str) -> tuple[Probe, ...]:
             Probe("dispatch", "/api/v1/dispatch/board", {"start_at": start_at, "end_at": end_at}),
         ),
         "employee": (
+            Probe("my_day", "/api/v1/employee-operations/me/day"),
+            Probe("own_time_state", "/api/v1/timekeeping/me/state"),
+            Probe("own_job_clock", "/api/v1/timekeeping/me/job-clock"),
             Probe("own_timecard", "/api/v1/timekeeping/me/timecard"),
             Probe("own_payroll_status", "/api/v1/payroll/me/payroll-status"),
             Probe("own_pay_statements", "/api/v1/payroll/me/pay-statements"),
         ),
         "office": (
+            Probe("employee_directory", "/api/v1/workforce/employees"),
+            Probe("membership_accounts", "/api/v1/company-admin/memberships"),
             Probe("timecard_review", "/api/v1/timekeeping/admin/timecard-review"),
             Probe("payroll_summary", "/api/v1/payroll/operations/summary"),
             Probe("payroll_registers", "/api/v1/payroll/operations/registers"),
@@ -231,6 +247,10 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         health_response = client.get("/backend-health", headers={})
         if health_response.status_code != 200 or health_response.json().get("version") != attestation["release_sha"]:
             raise AcceptanceBlocked("Preview release does not match the fixture attestation.")
+        frontend_response = client.get("/", headers={})
+        frontend_digest = hashlib.sha256(frontend_response.content).hexdigest()
+        if frontend_response.status_code != 200 or frontend_digest != attestation["frontend_sha256"]:
+            raise AcceptanceBlocked("Preview frontend does not match the fixture attestation.")
         session_response = client.get("/api/v1/auth/session")
         authorization_response = client.get("/api/v1/authorization/context")
         for response in (session_response, authorization_response):

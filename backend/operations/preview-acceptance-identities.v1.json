@@ -41,6 +41,8 @@
       "persona_code": "EMPLOYEE",
       "login_suffix": ".invalid",
       "permissions": [
+        "COMPANY_EMPLOYEE_OPERATIONS_OWN_DAY_READ",
+        "COMPANY_JOB_READ",
         "COMPANY_TIMEKEEPING_OWN_READ",
         "COMPANY_PAYROLL_STATEMENT_OWN_READ"
       ],
@@ -48,6 +50,8 @@
         "/api/v1/auth/session",
         "/api/v1/authorization/context",
         "/api/v1/identity/me",
+        "/api/v1/employee-operations/me/day",
+        "/api/v1/jobs/{job_id}",
         "/api/v1/timekeeping/me/state",
         "/api/v1/timekeeping/me/job-clock",
         "/api/v1/timekeeping/me/timecard",
@@ -60,6 +64,11 @@
       "persona_code": "OFFICE",
       "login_suffix": ".invalid",
       "permissions": [
+        "COMPANY_WORKFORCE_READ",
+        "COMPANY_MEMBERSHIP_READ",
+        "COMPANY_PAYROLL_COMPENSATION_READ",
+        "COMPANY_PAYROLL_TAX_AUTHORITY_READ",
+        "COMPANY_PAYROLL_DEDUCTION_AUTHORITY_READ",
         "COMPANY_TIMEKEEPING_ADMIN_READ",
         "COMPANY_PAYROLL_REPORTING_READ"
       ],
@@ -67,6 +76,10 @@
         "/api/v1/auth/session",
         "/api/v1/authorization/context",
         "/api/v1/identity/me",
+        "/api/v1/workforce/employees",
+        "/api/v1/workforce/employees/{employee_id}",
+        "/api/v1/company-admin/memberships",
+        "/api/v1/payroll/setup/employees/{employee_id}",
         "/api/v1/timekeeping/admin/timecard-review",
         "/api/v1/payroll/operations/summary",
         "/api/v1/payroll/operations/registers"
