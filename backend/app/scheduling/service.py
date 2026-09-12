@@ -1,4 +1,5 @@
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
@@ -39,6 +40,13 @@ from app.scheduling.types import (
 
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+@asynccontextmanager
+async def _caller_transaction(session: AsyncSession) -> AsyncIterator[None]:
+    if not session.in_transaction():
+        raise SchedulingValidationError("Caller-owned transaction is not active.")
+    yield
 
 
 @dataclass(frozen=True)
@@ -431,6 +439,7 @@ class SchedulingService:
         *,
         context: AuthorizationContext,
         command: RescheduleAppointmentCommand,
+        _caller_owns_transaction: bool = False,
     ) -> Appointment:
         reason_code = self._validate_reason(
             command.reason_code, AppointmentRescheduleReason
@@ -442,7 +451,12 @@ class SchedulingService:
             command.capacity_units,
         )
         now = self._clock()
-        async with session.begin():
+        transaction = (
+            _caller_transaction(session)
+            if _caller_owns_transaction
+            else session.begin()
+        )
+        async with transaction:
             current = await self._repository.get_appointment(
                 session,
                 company_id=context.company.id,
@@ -540,6 +554,21 @@ class SchedulingService:
                 },
             )
         return appointment
+
+    async def stage_reschedule_appointment(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        command: RescheduleAppointmentCommand,
+    ) -> Appointment:
+        """Reschedule through normal invariants in the caller's transaction."""
+        return await self.reschedule_appointment(
+            session,
+            context=context,
+            command=command,
+            _caller_owns_transaction=True,
+        )
 
     async def _reserve_capacity(
         self,
