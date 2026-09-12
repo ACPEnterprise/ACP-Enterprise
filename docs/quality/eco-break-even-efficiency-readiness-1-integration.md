@@ -1,7 +1,7 @@
 # ECO break-even input and operational diagnostics readiness
 
-Date: 2026-09-12  
-Protected starting authority: `origin/customer-management-v1` at `150bcd2a4361313a2cac0337c0a1c85fbebac5c9`  
+Date: 2026-09-12
+Protected starting authority: `origin/customer-management-v1` at `150bcd2a4361313a2cac0337c0a1c85fbebac5c9`
 Protected reconciled authority: `4514b5df6be66e50ee172085c622ae613e172086`
 Candidate branch: `work/eco-break-even-efficiency-readiness-1`
 

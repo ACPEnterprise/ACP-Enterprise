@@ -3,6 +3,7 @@
 Date: 2026-09-12
 
 - Protected starting authority: `d52d117801d72d04e81afac157671c97a941efa0`
+- Protected reconciled authority: `ee882429987feb73078fe229dbd57c60a366ce75`
 - Composed prerequisite candidate: `d7ef88d1f969902d5d217fa56cb0218000c56741`
 - Candidate branch: `work/eco-break-even-policy-scenario-1`
 
