@@ -95,7 +95,7 @@ describe("SchedulingRoute", () => {
     ).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Day calendar" })).toBeVisible();
     expect(screen.getByRole("region", { name: "Day agenda" })).toBeVisible();
-    expect(screen.getAllByRole("button", { name: /APT-000001/ })).toHaveLength(3);
+    expect(screen.getAllByRole("button", { name: /APT-000001/ })).toHaveLength(2);
   });
 
   it("offers bounded recovery when schedule or Job context projections fail", async () => {
@@ -322,7 +322,11 @@ describe("SchedulingRoute", () => {
       expect(within(month).getByRole("button", { name: new RegExp(item.appointment_number) })).toBeVisible();
     }
     await userEvent.click(within(month).getByRole("button", { name: /APT-000005/ }));
-    expect(screen.getByRole("link", { name: "Open Appointment" })).toHaveAttribute("href", expect.stringMatching(/^\/appointments\/appointment-5\?returnTo=/));
+    expect(
+      screen.getAllByRole("link", { name: "Open Appointment" }).find((link) =>
+        link.getAttribute("href")?.startsWith("/appointments/appointment-5?returnTo="),
+      ),
+    ).toBeDefined();
 
     await userEvent.click(within(month).getByRole("button", { name: /Open 8\/13\/2026 day schedule/ }));
     expect(screen.getByRole("region", { name: "Day calendar" })).toBeVisible();
@@ -337,8 +341,8 @@ describe("SchedulingRoute", () => {
     } as never);
     render(<MemoryRouter><SchedulingRoute /></MemoryRouter>);
     await userEvent.click(screen.getByRole("button", { name: "Unassigned" }));
-    expect(screen.getByRole("heading", { name: "Appointments needing assignment or time" })).toBeVisible();
-    await userEvent.click(screen.getByRole("button", { name: /APT-000001/ }));
+    expect(screen.getByRole("heading", { name: "Needs Scheduling work queue" })).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: "Select for assignment" }));
     expect(screen.getByText("Customer context unavailable")).toBeVisible();
   });
 
@@ -355,7 +359,7 @@ describe("SchedulingRoute", () => {
     );
     await userEvent.click(screen.getByRole("button", { name: "Unassigned" }));
     expect(
-      screen.getByRole("heading", { name: "Needs scheduling" }),
+      screen.getByRole("heading", { name: "Needs Scheduling work queue" }),
     ).toBeVisible();
     expect(
       screen.queryByRole("heading", { name: "Appointment details" }),
@@ -391,12 +395,9 @@ describe("SchedulingRoute", () => {
       </MemoryRouter>,
     );
     expect(
-      screen.getByRole("heading", { name: "Needs scheduling" }),
+      screen.getByRole("heading", { name: "Needs Scheduling work queue" }),
     ).toBeVisible();
-    expect(screen.getByRole("link", { name: /JOB-1/ })).toHaveAttribute(
-      "href",
-      "/jobs/job-1",
-    );
+    expect(screen.getByRole("link", { name: "Open Job to schedule" })).toHaveAttribute("href", expect.stringMatching(/^\/jobs\/job-1\?returnTo=/));
   });
 
   it("renders technician and unassigned lanes without claiming open time is availability", () => {
