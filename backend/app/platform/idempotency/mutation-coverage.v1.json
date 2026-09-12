@@ -1491,6 +1491,16 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     },
     {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "identity_admin",
+      "mechanism": "one active password-reset token and Company-scoped outbox identity per eligible User",
+      "method": "POST",
+      "operation_id": "send_password_reset_delivery_api_v1_identity_admin_users__user_id__password_reset_delivery_post",
+      "path": "/api/v1/identity-admin/users/{user_id}/password-reset-delivery",
+      "reason": "Repeated requests reuse the active single-use token and durable outbox record; only terminal failure or expiry permits an audited reissue.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
       "classification": "IDEMPOTENCY_REQUIRED",
       "domain": "identity_onboarding",
       "mechanism": "domain durable command/receipt identity and request digest",
@@ -2879,6 +2889,6 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "4c46abc67bf2fcc4c2db165f9c661efea478100afe374d0c1cff4ce29603654e",
+  "fingerprint": "7f922200bb7de36a6be176203c0d53084cb959705e9ce523e673a0d81173f447",
   "schema_version": "1"
 }

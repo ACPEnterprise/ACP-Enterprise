@@ -1,10 +1,9 @@
-from datetime import datetime
 import re
+from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-
 
 PendingEmailChangeStatus = Literal[
     "pending", "confirmed", "revoked", "superseded", "expired"
@@ -107,6 +106,25 @@ class ForcedPasswordResetResponse(IdentityApiSchema):
     reason_code: str | None
     cleared_at: datetime | None
     credential_version: int = Field(ge=1)
+
+
+PasswordResetDeliveryState = Literal[
+    "RESET_NOT_REQUESTED",
+    "RESET_PENDING_DELIVERY",
+    "RESET_ACCEPTED_BY_PROVIDER",
+    "RESET_DELIVERED",
+    "RESET_FAILED",
+    "RESET_UNCERTAIN",
+    "RESET_EXPIRED",
+    "RESET_CONSUMED",
+]
+
+
+class PasswordResetDeliveryResponse(IdentityApiSchema):
+    state: PasswordResetDeliveryState
+    requested_at: datetime | None = None
+    expires_at: datetime | None = None
+    provider_reference_present: bool = False
 
 
 class IdentityStateResponse(IdentityApiSchema):

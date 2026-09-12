@@ -60,6 +60,7 @@ export interface EmployeePermissionExplanation {
 }
 
 export interface EmployeeAdministrationSummary extends WorkforceEmployeeSummary {
+  user_id: string | null;
   membership_id: string | null;
   membership_status: string | null;
   user_status: string | null;
@@ -74,6 +75,23 @@ export interface EmployeeAdministrationSummary extends WorkforceEmployeeSummary 
   access_status: "ACTIVE" | "DISABLED" | "INVITED" | "NOT_LINKED";
   mobile_readiness: "READY" | "BLOCKED" | "NOT_LINKED";
   mobile_readiness_blockers: string[];
+}
+
+export type PasswordResetDeliveryState =
+  | "RESET_NOT_REQUESTED"
+  | "RESET_PENDING_DELIVERY"
+  | "RESET_ACCEPTED_BY_PROVIDER"
+  | "RESET_DELIVERED"
+  | "RESET_FAILED"
+  | "RESET_UNCERTAIN"
+  | "RESET_EXPIRED"
+  | "RESET_CONSUMED";
+
+export interface PasswordResetDelivery {
+  state: PasswordResetDeliveryState;
+  requested_at: string | null;
+  expires_at: string | null;
+  provider_reference_present: boolean;
 }
 
 export interface EmployeeAdministrationDetail extends EmployeeAdministrationSummary {
@@ -133,4 +151,24 @@ export async function setEmployeeRole(
   const path = `/api/v1/company-admin/memberships/${membershipId}/roles/${roleId}`;
   if (enabled) await apiClient.put(path);
   else await apiClient.delete(path);
+}
+
+export async function getEmployeePasswordReset(
+  userId: string,
+): Promise<PasswordResetDelivery> {
+  return (
+    await apiClient.get<PasswordResetDelivery>(
+      `/api/v1/identity-admin/users/${userId}/password-reset-delivery`,
+    )
+  ).data;
+}
+
+export async function sendEmployeePasswordReset(
+  userId: string,
+): Promise<PasswordResetDelivery> {
+  return (
+    await apiClient.post<PasswordResetDelivery>(
+      `/api/v1/identity-admin/users/${userId}/password-reset-delivery`,
+    )
+  ).data;
 }

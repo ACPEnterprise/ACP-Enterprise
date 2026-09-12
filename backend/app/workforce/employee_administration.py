@@ -81,9 +81,9 @@ class EmployeeAdministrationService:
     ]:
         blockers: list[str] = []
         if membership_status is None or user_status is None:
-            access_status: Literal[
-                "ACTIVE", "DISABLED", "INVITED", "NOT_LINKED"
-            ] = "NOT_LINKED"
+            access_status: Literal["ACTIVE", "DISABLED", "INVITED", "NOT_LINKED"] = (
+                "NOT_LINKED"
+            )
         elif membership_status == "invited" or user_status == "invited":
             access_status = "INVITED"
         elif (
@@ -106,14 +106,14 @@ class EmployeeAdministrationService:
             blockers.append("employee_inactive")
         if not has_branch_access:
             blockers.append("branch_grant_missing")
-        if not MOBILE_REQUIRED_PERMISSION_CODES.issubset(
-            effective_permission_codes
-        ):
+        if not MOBILE_REQUIRED_PERMISSION_CODES.issubset(effective_permission_codes):
             blockers.append("mobile_permissions_missing")
         mobile_state: Literal["READY", "BLOCKED", "NOT_LINKED"] = (
             "NOT_LINKED"
             if membership_status is None or user_status is None
-            else "READY" if not blockers else "BLOCKED"
+            else "READY"
+            if not blockers
+            else "BLOCKED"
         )
         return access_status, mobile_state, tuple(blockers)
 
@@ -267,8 +267,7 @@ class EmployeeAdministrationService:
             await session.scalar(
                 select(IdentityOnboardingInvitation)
                 .where(
-                    IdentityOnboardingInvitation.onboarding_request_id
-                    == onboarding.id
+                    IdentityOnboardingInvitation.onboarding_request_id == onboarding.id
                 )
                 .order_by(IdentityOnboardingInvitation.created_at.desc())
                 .limit(1)
@@ -333,6 +332,7 @@ class EmployeeAdministrationService:
                     "availability",
                 }
             ),
+            user_id=user.id if user else None,
             membership_id=membership.id if membership else None,
             membership_status=membership.status if membership else None,
             user_status=user.status if user else None,

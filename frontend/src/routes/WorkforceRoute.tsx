@@ -7,9 +7,9 @@ import type { AdminEmployeeTimecard } from "../api/timekeeping";
 import type { EmployeePermissionExplanation } from "../api/workforce";
 import { useAuth } from "../auth";
 import { useRoles } from "../features/administration/hooks";
-import { useEmployeeAccessMutation, useEmployeeAdministration, useWorkforceDirectory, useWorkforceEligibility, useWorkforceEmployee } from "../hooks/useWorkforce";
+import { useEmployeeAccessMutation, useEmployeeAdministration, useEmployeePasswordReset, useWorkforceDirectory, useWorkforceEligibility, useWorkforceEmployee } from "../hooks/useWorkforce";
 import { useAdminTimecardOperations, useAdminTimecardReview, usePayPeriods, useTimeCorrection } from "../hooks/useWorkdayTime";
-import { Alert, Badge, Card, Input, Spinner } from "../ui";
+import { Alert, Badge, Button, Card, ConfirmationDialog, Input, Spinner } from "../ui";
 
 function Readiness({ state }: { state: "READY" | "BLOCKED" | "INSUFFICIENT_EVIDENCE" }) {
   return <Badge variant={state === "READY" ? "success" : state === "BLOCKED" ? "danger" : "neutral"}>{state.replaceAll("_", " ")}</Badge>;
@@ -42,6 +42,12 @@ export function WorkforceRoute() {
   const [readinessFilter, setReadinessFilter] = useState("");
   const detail = useWorkforceEmployee(selected);
   const administration = useEmployeeAdministration(selected, canAdministerEmployees);
+  const canAdministerIdentity = permissionCodes.includes("COMPANY_ADMINISTER");
+  const passwordReset = useEmployeePasswordReset(
+    administration.data?.user_id ?? null,
+    canAdministerIdentity && administration.data?.access_status === "ACTIVE",
+  );
+  const [confirmPasswordReset, setConfirmPasswordReset] = useState(false);
   const accessMutation = useEmployeeAccessMutation(selected);
   const canManageMembership = permissionCodes.includes("COMPANY_MEMBERSHIP_MANAGE");
   const canManageBranches = permissionCodes.includes("COMPANY_BRANCH_ACCESS_MANAGE");
@@ -716,6 +722,18 @@ export function WorkforceRoute() {
                     <dd className="font-medium">{administration.data.employee_status === "active" ? "Active" : "Disabled"}</dd>
                   </div>
                 </dl>
+                {canAdministerIdentity && administration.data.user_id && administration.data.access_status === "ACTIVE" && (
+                  <div className="mt-4 rounded-lg bg-surface-subtle p-3">
+                    <h5 className="text-sm font-semibold">Account Access</h5>
+                    <p className="mt-1 text-sm text-content-muted">
+                      Password reset: {passwordReset.query.data?.state.replaceAll("_", " ") ?? "Loading"}
+                    </p>
+                    <Button className="mt-3" variant="secondary" onClick={() => setConfirmPasswordReset(true)} disabled={passwordReset.mutation.isPending}>
+                      Send Password Reset
+                    </Button>
+                    {passwordReset.mutation.isError && <Alert className="mt-3" variant="danger">The reset was not queued. Refresh employee authority and try again.</Alert>}
+                  </div>
+                )}
                 <div className="mt-4 grid gap-4 lg:grid-cols-2">
                   <div>
                     <h5 className="text-sm font-semibold">Role bundles</h5>
@@ -944,8 +962,18 @@ export function WorkforceRoute() {
                 </div>
               </section>
             </div>
-          </Card>
+      </Card>
         )}
+      {confirmPasswordReset && administration.data?.user_id && (
+        <ConfirmationDialog
+          title="Send password reset?"
+          description={`ACP will send a single-use, expiring reset link to ${administration.data.login_email ?? "this employee's login email"}.`}
+          confirmLabel="Send Password Reset"
+          pending={passwordReset.mutation.isPending}
+          onCancel={() => setConfirmPasswordReset(false)}
+          onConfirm={() => passwordReset.mutation.mutate(undefined, { onSuccess: () => setConfirmPasswordReset(false) })}
+        />
+      )}
       </div>
     </div>
   );
