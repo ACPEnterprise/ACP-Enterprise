@@ -6,7 +6,7 @@ import {
   Search,
   UserRound,
 } from "lucide-react";
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router";
 
 import { getOperatorApiError } from "../api/errors";
@@ -30,6 +30,8 @@ import {
   appointmentDetailPath,
   customerDetailPath,
   jobDetailPath,
+  schedulingPath,
+  withSchedulingReturn,
 } from "../routing/paths";
 import type { DispatchBoardItem } from "../types/dispatch";
 import type { JobListItem } from "../types/jobs";
@@ -50,6 +52,7 @@ const statuses: readonly AppointmentStatus[] = [
 ];
 type Perspective = "schedule" | "dispatch";
 type View = "day" | "week" | "work_week" | "month" | "unassigned";
+const views: readonly View[] = ["day", "week", "work_week", "month", "unassigned"];
 
 const label = (value: string) => value.replaceAll("_", " ");
 const time = (value: string | null) =>
@@ -134,19 +137,19 @@ export function SchedulingRoute({
   const canReadJobs = useHasPermission("COMPANY_JOB_READ");
   const canManageJobs = useHasPermission("COMPANY_JOB_MANAGE");
   const canReadCustomers = useHasPermission("COMPANY_CUSTOMER_READ");
-  const [searchParams] = useSearchParams();
-  const [date, setDate] = useState(() => localDateValue(new Date()));
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [date, setDate] = useState(() => /^\d{4}-\d{2}-\d{2}$/.test(searchParams.get("date") ?? "") ? searchParams.get("date")! : localDateValue(new Date()));
   const [perspective, setPerspective] = useState<Perspective>(() =>
     searchParams.get("perspective") === "dispatch"
       ? "dispatch"
       : initialPerspective,
   );
-  const [view, setView] = useState<View>("day");
-  const [branchId, setBranchId] = useState("");
-  const [status, setStatus] = useState<AppointmentStatus | "">("");
-  const [technician, setTechnician] = useState("");
-  const [search, setSearch] = useState("");
-  const [selected, setSelected] = useState<AppointmentDetail | null>(null);
+  const [view, setView] = useState<View>(() => views.includes(searchParams.get("view") as View) ? searchParams.get("view") as View : "day");
+  const [branchId, setBranchId] = useState(() => searchParams.get("branch") ?? "");
+  const [status, setStatus] = useState<AppointmentStatus | "">(() => statuses.includes(searchParams.get("status") as AppointmentStatus) ? searchParams.get("status") as AppointmentStatus : "");
+  const [technician, setTechnician] = useState(() => searchParams.get("technician") ?? "");
+  const [search, setSearch] = useState(() => searchParams.get("search") ?? "");
+  const [selectedId, setSelectedId] = useState<string | null>(() => searchParams.get("appointment"));
   const [booking, setBooking] = useState(false);
   const displayTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const range = calendarRange(date, view);
@@ -228,12 +231,30 @@ export function SchedulingRoute({
       technician,
     ],
   );
-  const currentSelection = selected
-    ? appointments.data?.items.find((item) => item.id === selected.id) ?? selected
+  const currentSelection = selectedId
+    ? appointments.data?.items.find((item) => item.id === selectedId) ?? null
     : null;
   const selectedDispatch = currentSelection
     ? dispatchByAppointment.get(currentSelection.id)
     : undefined;
+  const routeState = useMemo(() => {
+    const params = new URLSearchParams({ date, view, perspective });
+    if (branchId) params.set("branch", branchId);
+    if (status) params.set("status", status);
+    if (technician) params.set("technician", technician);
+    if (search.trim()) params.set("search", search.trim());
+    if (selectedId) params.set("appointment", selectedId);
+    return params;
+  }, [branchId, date, perspective, search, selectedId, status, technician, view]);
+  const returnTo = `${schedulingPath()}?${routeState.toString()}`;
+
+  useEffect(() => {
+    if (searchParams.toString() !== routeState.toString()) {
+      setSearchParams(routeState, { replace: true });
+    }
+  }, [routeState, searchParams, setSearchParams]);
+
+  const selectAppointment = (appointment: AppointmentDetail) => setSelectedId(appointment.id);
 
   if (!activeCompany)
     return (
@@ -427,7 +448,11 @@ export function SchedulingRoute({
         </Card>
       )}
       {(appointments.isError || (canDispatch && dispatch.isError)) && (
-        <Alert variant="danger" title="Schedule unavailable">
+        <Alert
+          variant="danger"
+          title="Schedule unavailable"
+          action={<Button variant="outline" onClick={() => { void appointments.refetch(); if (canDispatch) void dispatch.refetch(); }}>Retry schedule</Button>}
+        >
           {
             getOperatorApiError(
               appointments.error ?? dispatch.error,
@@ -436,23 +461,34 @@ export function SchedulingRoute({
           }
         </Alert>
       )}
+      {canReadJobs && jobs.isError && (
+        <Alert
+          variant="warning"
+          title="Customer and Job context is temporarily unavailable"
+          action={<Button variant="outline" onClick={() => void jobs.refetch()}>Retry Job context</Button>}
+        >
+          Appointment times remain authoritative and usable. Customer, Location,
+          Job status, and related navigation may be incomplete until this
+          projection refreshes.
+        </Alert>
+      )}
       {!appointments.isLoading &&
         !appointments.isError &&
         (view === "unassigned" ? (
-          <UnscheduledQueue jobs={jobs.data?.items ?? []} appointments={visible} dispatchByAppointment={dispatchByAppointment} onSelect={setSelected} />
+          <UnscheduledQueue jobs={jobs.data?.items ?? []} appointments={visible} dispatchByAppointment={dispatchByAppointment} onSelect={selectAppointment} />
         ) : view === "day" && perspective === "schedule" ? (
           <DayCalendar
             items={visible}
             dispatchByAppointment={dispatchByAppointment}
             jobsById={jobsById}
-            onSelect={setSelected}
+            onSelect={selectAppointment}
           />
         ) : view === "day" ? (
           <DispatchTimeline
             items={visible}
             dispatchByAppointment={dispatchByAppointment}
             jobsById={jobsById}
-            onSelect={setSelected}
+            onSelect={selectAppointment}
           />
         ) : view === "month" ? (
           <MonthCalendar
@@ -460,7 +496,7 @@ export function SchedulingRoute({
             items={visible}
             dispatchByAppointment={dispatchByAppointment}
             jobsById={jobsById}
-            onSelect={setSelected}
+            onSelect={selectAppointment}
             onOpenDay={(day) => {
               setDate(localDateValue(day));
               setView("day");
@@ -473,11 +509,11 @@ export function SchedulingRoute({
             items={visible}
             dispatchByAppointment={dispatchByAppointment}
             jobsById={jobsById}
-            onSelect={setSelected}
+            onSelect={selectAppointment}
           />
         ))}
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_24rem]">
-        {view !== "unassigned" && <UnscheduledQueue jobs={jobs.data?.items ?? []} appointments={visible} dispatchByAppointment={dispatchByAppointment} onSelect={setSelected} />}
+        {view !== "unassigned" && <UnscheduledQueue jobs={jobs.data?.items ?? []} appointments={visible} dispatchByAppointment={dispatchByAppointment} onSelect={selectAppointment} />}
         {currentSelection ? (
           <AppointmentPanel
             key={`${currentSelection.id}:${currentSelection.arrival_window_start_at}:${currentSelection.arrival_window_end_at}:${currentSelection.expected_duration_minutes}`}
@@ -489,7 +525,8 @@ export function SchedulingRoute({
                 : undefined
             }
             canManage={canManage}
-            onClose={() => setSelected(null)}
+            returnTo={returnTo}
+            onClose={() => setSelectedId(null)}
           />
         ) : (
           <Card className="p-6">
@@ -505,7 +542,7 @@ export function SchedulingRoute({
       {selectedDispatch && canDispatchManage && (
         <DispatchAssignmentPanel
           item={selectedDispatch}
-          onClose={() => setSelected(null)}
+          onClose={() => setSelectedId(null)}
         />
       )}
       {selectedDispatch && canDispatch && (
@@ -996,12 +1033,14 @@ function AppointmentPanel({
   dispatchItem,
   job,
   canManage,
+  returnTo,
   onClose,
 }: {
   readonly appointment: AppointmentDetail;
   readonly dispatchItem?: DispatchBoardItem;
   readonly job?: JobListItem;
   readonly canManage: boolean;
+  readonly returnTo: string;
   readonly onClose: () => void;
 }) {
   const mutation = useRescheduleAppointment();
@@ -1080,21 +1119,21 @@ function AppointmentPanel({
       <div className="mt-4 flex flex-wrap gap-2">
         <Link
           className="inline-flex min-h-11 items-center rounded-lg border border-stroke px-3"
-          to={appointmentDetailPath(appointment.id)}
+          to={withSchedulingReturn(appointmentDetailPath(appointment.id), returnTo)}
         >
           Open Appointment
         </Link>
         {job && (
           <Link
             className="inline-flex min-h-11 items-center rounded-lg border border-stroke px-3"
-            to={jobDetailPath(job.id)}
+            to={withSchedulingReturn(jobDetailPath(job.id), returnTo)}
           >
             Open Job
           </Link>
         )}
         <Link
           className="inline-flex min-h-11 items-center rounded-lg border border-stroke px-3"
-          to={customerDetailPath(appointment.customer_id)}
+          to={withSchedulingReturn(customerDetailPath(appointment.customer_id), returnTo)}
         >
           Open Customer
         </Link>

@@ -15,7 +15,7 @@ vi.mock("../components/jobs/JobCompletionStatus", () => ({ JobCompletionStatus: 
 vi.mock("../components/jobs/ScheduleJobPanel", () => ({ ScheduleJobPanel: () => <div>Schedule Job panel</div> }));
 
 const job = { id: "job-1", job_number: "JOB-000001", branch_id: "branch-1", status: "ready", priority: "high", concurrency_version: 2, job_type_code: "repair", customer_reported_problem: "No heat", internal_description: "Inspect furnace", created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-02T00:00:00Z", activated_at: "2026-01-02T00:00:00Z", started_at: null, paused_at: null, pause_reason_code: null, completed_at: null, completed_by_user_id: null, cancelled_at: null, cancelled_by_user_id: null, cancellation_reason_code: null, customer: { id: "customer-1", customer_number: "CUS-1", display_name: "Taylor Home" }, service_location: { id: "location-1", nickname: "Home", address_line_1: "10 Main", address_line_2: null, city: "Albany", state: "NY", postal_code: "12207", country: "US" }, appointments: [] } as unknown as JobDetail;
-function renderRoute() { const client = new QueryClient(); return render(<MemoryRouter initialEntries={["/jobs/job-1"]}><QueryClientProvider client={client}><Routes><Route path="/jobs/:jobId" element={<JobDetailRoute />} /></Routes></QueryClientProvider></MemoryRouter>); }
+function renderRoute(entry = "/jobs/job-1") { const client = new QueryClient(); return render(<MemoryRouter initialEntries={[entry]}><QueryClientProvider client={client}><Routes><Route path="/jobs/:jobId" element={<JobDetailRoute />} /></Routes></QueryClientProvider></MemoryRouter>); }
 
 describe("JobDetailRoute", () => {
   beforeEach(() => {
@@ -57,5 +57,13 @@ describe("JobDetailRoute", () => {
     vi.mocked(useJob).mockReturnValue({ isLoading: false, isError: false, data: job } as never);
     renderRoute();
     expect(screen.getByText("Schedule Job panel")).toBeVisible();
+  });
+  it("returns a calendar-opened Job to its validated Scheduling scope", () => {
+    permissions.add("COMPANY_CUSTOMER_READ");
+    vi.mocked(useJob).mockReturnValue({ isLoading: false, isError: false, data: { ...job, appointments: [{ appointment_id: "appointment-1", appointment_number: "APT-000001", visit_sequence: 1, status: "scheduled", arrival_window_start_at: "2026-08-13T13:00:00Z" }] } } as never);
+    renderRoute("/jobs/job-1?returnTo=%2Fscheduling%3Fdate%3D2026-08-13%26view%3Dweek");
+    expect(screen.getByRole("link", { name: "Back to Schedule" })).toHaveAttribute("href", "/scheduling?date=2026-08-13&view=week");
+    expect(screen.getByRole("link", { name: "Open Customer" })).toHaveAttribute("href", "/customers/customer-1?returnTo=%2Fscheduling%3Fdate%3D2026-08-13%26view%3Dweek");
+    expect(screen.getByRole("link", { name: "APT-000001" })).toHaveAttribute("href", "/appointments/appointment-1?returnTo=%2Fscheduling%3Fdate%3D2026-08-13%26view%3Dweek");
   });
 });
