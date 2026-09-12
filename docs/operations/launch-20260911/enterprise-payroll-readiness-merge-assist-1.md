@@ -2,7 +2,9 @@
 
 ## Authority and integration state
 
-- Starting/current protected authority: `36fe3eeaa85905ef282b07ea8b7cc5482c335794`.
+- Starting protected authority: `36fe3eeaa85905ef282b07ea8b7cc5482c335794`.
+- Reconciled protected authority: `96d67cb73dbe4838e882e1551de5906eda598f4e`;
+  its Migration-only delta does not overlap the Payroll runtime reconciliation.
 - Integration wave #251 contains the #238 implementation, reconciliation, and tests.
   Because #251 is a composed/squashed integration, `82d7fc1` is not a Git ancestor;
   file and contract equivalence, not ancestry alone, proves integration.
