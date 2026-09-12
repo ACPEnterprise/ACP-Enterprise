@@ -1,0 +1,21 @@
+{
+  "contractVersion": "1",
+  "scope": "ACP Employee 0.2.0 local candidate build 2",
+  "tracking": false,
+  "thirdPartyAdvertising": false,
+  "thirdPartyAnalytics": false,
+  "evidence": [
+    { "category": "identity_account", "accessed": true, "sentToAcp": true, "localHandling": "Login identity is submitted to ACP authentication; session material is stored only in OS-protected SecureStore. Passwords are transient and not persisted.", "purpose": "authentication_and_account_management" },
+    { "category": "employee_company_branch", "accessed": true, "sentToAcp": true, "localHandling": "Current self identity, Company, Branch, and permissions are held in authenticated application state.", "purpose": "app_functionality" },
+    { "category": "customer_job", "accessed": true, "sentToAcp": true, "localHandling": "Only employee-authorized assignment projections, customer display name, bounded service address, and Job/Appointment evidence are rendered; no broad customer record is stored.", "purpose": "app_functionality" },
+    { "category": "timekeeping", "accessed": true, "sentToAcp": true, "localHandling": "Own Workday state and timecard evidence are fetched from ACP; punch intent is sent without a client-authoritative timestamp.", "purpose": "app_functionality" },
+    { "category": "financial_information", "accessed": true, "sentToAcp": true, "localHandling": "Permission-gated own pay-statement status/artifact may be fetched from ACP and displayed in an isolated, non-caching WebView. No payment instrument, bank, tax-entry, or payroll-administration data is collected by Mobile.", "purpose": "app_functionality" },
+    { "category": "diagnostics", "accessed": true, "sentToAcp": true, "localHandling": "API requests may carry safe request correlation and build/environment compatibility metadata. No third-party crash or analytics provider is integrated.", "purpose": "app_functionality_and_security" },
+    { "category": "precise_or_coarse_location", "accessed": false, "sentToAcp": false, "localHandling": "The app requests no device location. Directions pass an already-authorized service address to a user-initiated system Maps handoff.", "purpose": "not_collected" },
+    { "category": "contacts", "accessed": false, "sentToAcp": false, "localHandling": "No Contacts permission or API is used.", "purpose": "not_collected" },
+    { "category": "photos_camera_microphone", "accessed": false, "sentToAcp": false, "localHandling": "No camera, photo-library, or microphone permission/API is enabled in this candidate.", "purpose": "not_collected" },
+    { "category": "device_identifiers", "accessed": false, "sentToAcp": false, "localHandling": "No advertising identifier or app-level device identifier collection was identified.", "purpose": "not_collected" },
+    { "category": "usage_data", "accessed": false, "sentToAcp": false, "localHandling": "No usage analytics SDK or event stream is integrated.", "purpose": "not_collected" }
+  ],
+  "submissionGate": "Owner/legal must map this technical evidence to Apple's then-current definitions, third-party practices, retention, linkage, and final privacy-policy text before publishing answers."
+}

@@ -13,12 +13,14 @@
     "export": "expo export --platform ios --output-dir dist/ios && expo export --platform android --output-dir dist/android",
     "config:validate": "tsx scripts/validate-config.ts",
     "beta:aasa": "tsx scripts/beta-aasa.ts",
+    "beta:aasa:verify": "tsx scripts/verify-aasa-deployment.ts",
     "beta:fixture": "tsx scripts/beta-fixture.ts",
     "beta:manifest": "tsx scripts/beta-manifest.ts",
     "beta:preflight": "tsx scripts/beta-preflight.ts",
     "beta:qualify": "bash scripts/beta-release-qualify.sh",
     "apple:preflight": "tsx scripts/apple-distribution-preflight.ts",
-    "apple:archive:qualify": "bash scripts/apple-archive-qualify.sh"
+    "apple:archive:qualify": "bash scripts/apple-archive-qualify.sh",
+    "apple:release:qualify": "bash scripts/apple-clean-release-qualify.sh"
   },
   "dependencies": {
     "@react-native-community/netinfo": "12.0.1",
