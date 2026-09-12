@@ -143,7 +143,20 @@ async def list_memberships(
     records = await company_administration_service.list_memberships(
         session, context=context, limit=limit, offset=offset
     )
-    return [MembershipResponse.model_validate(record) for record in records]
+    return [
+        MembershipResponse.model_validate(record).model_copy(
+            update={
+                "display_name": record.user.display_name,
+                "email": record.user.normalized_email,
+                "branch_name": (
+                    record.default_branch.name
+                    if record.default_branch is not None
+                    else None
+                ),
+            }
+        )
+        for record in records
+    ]
 
 
 @router.post(

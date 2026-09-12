@@ -130,8 +130,9 @@ describe("AdministrationRoute", () => {
     context.permissionCodes = ["COMPANY_ADMINISTER", "COMPANY_ROLE_READ", "COMPANY_ROLE_MANAGE", "COMPANY_PERMISSION_MANAGE", "COMPANY_MEMBERSHIP_READ"];
     vi.mocked(api.listRoles).mockResolvedValue([role]);
     vi.mocked(api.listMemberships).mockResolvedValue([
-      { id: "membership-active", user_id: "owner", company_id: "company-1", status: "active", default_branch_id: "branch-1", has_all_branch_access: false },
-      { id: "membership-inactive", user_id: "former-user", company_id: "company-1", status: "suspended", default_branch_id: "branch-2", has_all_branch_access: true },
+      { id: "membership-active", user_id: "owner", company_id: "company-1", status: "active", default_branch_id: "branch-1", has_all_branch_access: false, display_name: "Lianne Hernandez", email: "lianne@example.com", branch_name: "Main Branch" },
+      { id: "membership-same-name", user_id: "other-user", company_id: "company-1", status: "active", default_branch_id: "branch-2", has_all_branch_access: false, display_name: "Lianne Hernandez", email: "other@example.com", branch_name: "North Branch" },
+      { id: "membership-inactive", user_id: "former-user", company_id: "company-1", status: "suspended", default_branch_id: "branch-2", has_all_branch_access: true, display_name: "Former User", email: "former@example.com", branch_name: "North Branch" },
     ]);
     vi.mocked(api.createRole).mockResolvedValue({
       id: "role-source4", company_id: "company-1", code: "SOURCE4_PREVIEW_ADMISSION", name: "SOURCE.4 Preview Admission", description: null, status: "active", is_system: false,
@@ -421,14 +422,19 @@ describe("AdministrationRoute", () => {
     const membership = await screen.findByRole("combobox", { name: "Active Membership" });
     expect(
       within(membership).getByRole("option", {
-        name: "Membership membership-active · User owner",
+        name: "Lianne Hernandez — Main Branch — Active · lianne@example.com",
       }),
     ).toHaveValue("membership-active");
     expect(
       within(membership).queryByRole("option", {
-        name: "Membership membership-inactive · User former-user",
+        name: /Former User/,
       }),
     ).not.toBeInTheDocument();
+    expect(
+      within(membership).getByRole("option", {
+        name: "Lianne Hernandez — North Branch — Active · other@example.com",
+      }),
+    ).toHaveValue("membership-same-name");
     await userEvent.selectOptions(membership, "membership-active");
     await userEvent.click(screen.getByRole("button", { name: "Assign selected role" }));
     expect(vi.mocked(api.assignMembershipRole).mock.calls[0]?.slice(0, 2)).toEqual([

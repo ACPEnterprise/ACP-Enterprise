@@ -46,6 +46,9 @@ class MembershipResponse(StrictAdminSchema):
     revoked_at: datetime | None
     created_at: datetime
     updated_at: datetime
+    display_name: str | None = None
+    email: str | None = None
+    branch_name: str | None = None
 
     model_config = ConfigDict(from_attributes=True, extra="forbid")
 
