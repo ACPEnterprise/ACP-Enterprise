@@ -1,6 +1,6 @@
 # OM1 Enterprise integration queue
 
-Snapshot: 2026-09-12 17:39 America/New_York
+Snapshot: 2026-09-12 17:42 America/New_York
 
 ## Authority and deployed state
 
@@ -78,6 +78,39 @@ operational order:
 
 Do not execute Migration admission, authorize QBO, execute Payroll, or sign or
 upload an Apple build as part of integration.
+
+## Dependency graph
+
+```mermaid
+flowchart LR
+    A[Protected 91dae4a5] -->|reconcile| R[SOURCE.4 recovery]
+    A -->|reconcile| B[Historical builder]
+    A -->|reconcile| E[ECO watch]
+    A -->|reconcile| P[PR 215]
+    A -->|reconcile| M[Mobile owner packet]
+    R -.->|operational evidence order| B
+    R --> I[Enterprise per-lane PR integration]
+    B --> I
+    E --> I
+    P --> I
+    M --> I
+    I --> D[Enterprise deployment]
+    D --> H[Exact deployed-SHA health gate]
+    H --> EA[ECO acceptance]
+    H --> QA[QBO read-only acceptance]
+    H --> MA[Mobile readiness acceptance]
+    H --> XA[Migration artifact acceptance]
+    XA -.->|separate owner authority| MG[Guarded Migration admission]
+    QA -.->|separate owner authority| QG[QBO OAuth]
+    MA -.->|separate owner authority| AG[Apple signing and upload]
+```
+
+Solid candidate-to-integration arrows do not require a combined batch; each lane
+may enter independently through its own PR. There are no hard Git dependency
+edges or effective file overlaps among the five candidates. The dotted
+SOURCE.4-to-builder edge is operational ordering only. Dotted owner-gate edges
+are explicitly outside this packet's authority. Price Book is omitted from the
+integration path because it remains held.
 
 ## Required reconciliation and qualification
 
