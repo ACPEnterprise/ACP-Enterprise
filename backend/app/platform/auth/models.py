@@ -7,8 +7,10 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
+    LargeBinary,
     String,
     Text,
     UniqueConstraint,
@@ -327,6 +329,54 @@ class PasswordResetToken(Base):
     request_user_agent: Mapped[str | None] = mapped_column(Text)
 
     user: Mapped["User"] = relationship(back_populates="password_reset_tokens")
+
+
+class ProtectedPasswordResetDeliveryEnvelope(Base):
+    """Encrypted reset material consumed only by the identity delivery worker."""
+
+    __tablename__ = "protected_password_reset_delivery_envelopes"
+    __table_args__ = (
+        UniqueConstraint(
+            "password_reset_token_id",
+            name="uq_password_reset_delivery_envelope_token",
+        ),
+        CheckConstraint(
+            "status IN ('pending','claimed','delivered','destroyed')",
+            name="ck_password_reset_delivery_envelope_status",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "branch_id"],
+            ["branches.company_id", "branches.id"],
+            name="fk_password_reset_delivery_envelope_company_branch",
+            ondelete="RESTRICT",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    password_reset_token_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("password_reset_tokens.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    branch_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        nullable=False,
+    )
+    key_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    nonce: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    ciphertext: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+    destroyed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class EmailVerificationToken(Base):

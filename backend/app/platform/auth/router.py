@@ -16,6 +16,7 @@ from app.platform.auth.errors import (
     RefreshTokenReuseError,
 )
 from app.platform.auth.rate_limit import AuthenticationRateLimiter
+from app.platform.auth.recovery_delivery import employee_recovery_delivery_service
 from app.platform.auth.schemas import (
     AuthenticationResponse,
     EmailVerificationConfirmRequest,
@@ -218,7 +219,7 @@ async def request_password_reset(
         limit=5,
         window_seconds=3600,
     )
-    delivery = await recovery_service.request_password_reset(
+    delivery = await employee_recovery_delivery_service.request_public(
         session,
         email=data.email,
         ip_address=ip_address,
@@ -226,11 +227,7 @@ async def request_password_reset(
     )
     return GenericResponse(
         message="If the account is eligible, recovery instructions will be sent.",
-        development_token=(
-            delivery.plaintext_token
-            if settings.environment in {"development", "test"}
-            else None
-        ),
+        development_token=(delivery.plaintext_token if delivery is not None else None),
     )
 
 

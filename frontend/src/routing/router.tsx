@@ -58,6 +58,13 @@ export const appRoutes: RouteObject[] = [
     },
   },
   {
+    path: "/reset-password",
+    lazy: async () => {
+      const module = await import("../routes/PasswordResetRoute");
+      return { Component: module.PasswordResetRoute };
+    },
+  },
+  {
     path: "/",
     Component: ProtectedRoute,
     children: [

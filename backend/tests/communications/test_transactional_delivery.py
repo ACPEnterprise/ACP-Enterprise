@@ -11,6 +11,7 @@ from app.communications.delivery import (
 from app.communications.templates import (
     TemplateSecurityError,
     render_employee_invitation,
+    render_password_reset,
     render_protected_document_notice,
 )
 from app.platform.notifications.providers import (
@@ -59,6 +60,26 @@ def test_invitation_template_rejects_header_and_link_attacks(
 ) -> None:
     with pytest.raises(TemplateSecurityError):
         invitation(**override)
+
+
+def test_password_reset_template_is_fixed_https_and_single_use() -> None:
+    rendered = render_password_reset(
+        recipient_display_name="Synthetic Employee",
+        company_display_name="ACP Test Company",
+        reset_url="https://preview.example.test/reset-password?token=canary",
+        expected_origin="https://preview.example.test",
+        expiration_copy="This password reset expires in one hour.",
+    )
+    assert rendered.template_version == "identity-password-reset-v1"
+    assert "can be used once" in rendered.plain_text
+    with pytest.raises(TemplateSecurityError):
+        render_password_reset(
+            recipient_display_name="Synthetic Employee",
+            company_display_name="ACP Test Company",
+            reset_url="https://production.example.test/reset-password?token=canary",
+            expected_origin="https://preview.example.test",
+            expiration_copy="Expires soon.",
+        )
 
 
 def test_document_notice_binds_exact_artifact_digest_without_path() -> None:
