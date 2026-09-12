@@ -35,3 +35,25 @@ class ServiceRequestResponse(OperationsApiSchema):
     request_id: UUID
     appointment: AppointmentResponse
     job: JobMutationResponse
+
+
+class ExistingJobScheduleCreate(OperationsApiSchema):
+    request_id: UUID = Field(
+        description="Caller-stable identity preventing duplicate Appointments."
+    )
+    expected_job_version: int = Field(ge=1)
+    branch_id: UUID
+    customer_id: UUID
+    service_location_id: UUID
+    arrival_window_start_at: AwareDatetime
+    arrival_window_end_at: AwareDatetime
+    expected_duration_minutes: int = Field(gt=0)
+    capacity_units: Decimal = Field(
+        default=Decimal("1.00"), gt=0, max_digits=10, decimal_places=2
+    )
+
+
+class ExistingJobScheduleResponse(OperationsApiSchema):
+    request_id: UUID
+    appointment: AppointmentResponse
+    job: JobMutationResponse
