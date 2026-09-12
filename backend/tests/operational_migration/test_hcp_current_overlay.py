@@ -6,6 +6,7 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
+
 from app.operational_migration.hcp_current_overlay import (
     CurrentOverlayExecutor,
     CurrentOverlayManifest,

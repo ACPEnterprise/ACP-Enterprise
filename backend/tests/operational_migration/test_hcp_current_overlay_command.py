@@ -7,6 +7,7 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
+
 from app.operational_migration.hcp_current_overlay import (
     CurrentOverlayManifest,
     OverlayAssertion,
