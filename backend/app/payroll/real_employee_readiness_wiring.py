@@ -366,7 +366,9 @@ def _preview(
 ) -> tuple[PreviewComponent, ...]:
     if evidence.pay_frequency is None:
         raise PayrollAuthorityError("calculation preview pay frequency is missing")
-    gross = Decimal(str(values.get("fixture_gross_wages", "1000")))
+    if "fixture_gross_wages" not in values:
+        raise PayrollAuthorityError("calculation preview fixture wages are missing")
+    gross = Decimal(str(values["fixture_gross_wages"]))
     context = FederalTaxContext(
         effective_on=evidence.period_end or date.min,
         pay_frequency=PayFrequency(evidence.pay_frequency),
