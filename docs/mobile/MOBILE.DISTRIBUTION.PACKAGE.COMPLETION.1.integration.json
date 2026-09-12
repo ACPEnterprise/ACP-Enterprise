@@ -1,0 +1,63 @@
+{
+  "program": "MOBILE.DISTRIBUTION.PACKAGE.COMPLETION.1",
+  "branch": "work/laptop1-phone-20260912",
+  "distribution_package_commit": "443afb4aa3844f90099ba80a9a06e33f99baf97b",
+  "last_reconciled_authority": "ee882429987feb73078fe229dbd57c60a366ce75",
+  "reconciliation_commit": "1552f9d687bbe0354fe0cde34a1219bbd0dd7431",
+  "bundle_identifier": "com.acpenterprise.employee",
+  "candidate": { "version": "0.2.0", "build": "2", "uploaded": false },
+  "environment": { "channel": "preview", "production_activated": false },
+  "scope": [
+    "repository-owned App Store Connect metadata draft and owner gates",
+    "behavior-derived App Store privacy evidence",
+    "AASA hosting contract, deterministic generation, and exact-byte deployment verification",
+    "clean locked dependency, CocoaPods, Mobile regression, and unsigned archive qualification",
+    "Apple distribution runbook and preflight"
+  ],
+  "authoritative_dependency": {
+    "protected_commit": "d52d117801d72d04e81afac157671c97a941efa0",
+    "behavior": "lost-response Clock Off requires an authoritative stop event and completed interval; Job clock scope requires current assignment",
+    "mobile_tests": "reconciled_and_passed"
+  },
+  "qualification": {
+    "jest_suites": 17,
+    "jest_tests": 136,
+    "typescript": "passed",
+    "eslint": "passed",
+    "expo_config": "passed_preview_production_inactive",
+    "expo_doctor": "20_of_21_non_cng_native_sync_warning_only",
+    "ios_hermes_export": "passed",
+    "android_hermes_export": "passed",
+    "cocoapods_deployment_install": "passed_94_dependencies_93_pods",
+    "unsigned_generic_device_archive": "passed",
+    "unsigned_release_simulator_build_and_standalone_launch": "passed",
+    "npm_runtime_audit": "0_high_0_critical_17_moderate_transitive",
+    "secret_private_key_scan": "passed"
+  },
+  "repository_mutations": {
+    "backend": false,
+    "schema": false,
+    "preview": false,
+    "production": false,
+    "apple_account": false,
+    "signing": false,
+    "upload": false,
+    "dns": false
+  },
+  "owner_gates": [
+    "active Apple Team and authoritative Team ID",
+    "explicit App ID and Associated Domains registration",
+    "employee.acpenterprise.com DNS/HTTPS plus exact AASA publication",
+    "live support and privacy-policy URLs plus owner/legal approval",
+    "App Store Connect record and immutable SKU",
+    "Apple Distribution certificate and provisioning profile",
+    "next unused build-number reservation",
+    "separate signed archive and TestFlight upload authorization"
+  ],
+  "integration": {
+    "owner": "Enterprise protected integration",
+    "direct_protected_branch_push": false,
+    "preview_deployment_required": false,
+    "rollback": "Revert repository-owned distribution packet commits; no schema or runtime rollback is required."
+  }
+}
