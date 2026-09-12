@@ -9,6 +9,7 @@ from sqlalchemy import String, and_, cast, func, or_, select, text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.customer_migration.models import CustomerMigrationRun, CustomerSourceIdentity
 from app.customers.models import Customer, ServiceLocation
 from app.estimates.models import (
     Estimate,
@@ -38,6 +39,11 @@ from app.invoicing.models import (
     InvoiceLine,
     InvoiceNumberSequence,
     PaymentReceiptEvidence,
+)
+from app.invoicing.source_classification import (
+    historical_source_evidence,
+    native_evidence,
+    unavailable_source_evidence,
 )
 from app.jobs.models import Job
 from app.payments.models import PaymentReceipt
@@ -693,16 +699,26 @@ class InvoiceService:
         if customer is None:
             return None
         invoices = tuple((await session.scalars(select(Invoice).where(Invoice.company_id == company_id, Invoice.customer_id == customer_id, Invoice.branch_id.in_(branches)))).all())
-        if not invoices:
-            return {"customer_id": customer.id, "customer_number": customer.customer_number, "customer_display_name": customer.display_name, "currency": "USD", "invoice_total": Decimal(0), "open_balance": Decimal(0), "credit_total": Decimal(0), "write_off_total": Decimal(0), "applied_payment_total": Decimal(0), "unapplied_receipt_total": Decimal(0), "disputed_receipt_total": Decimal(0), "native_invoice_count": 0, "legacy_evidence_incomplete": False, "as_of": as_of}
         currencies = {item.currency for item in invoices}
-        if len(currencies) != 1:
+        if len(currencies) > 1:
             raise InvoiceValidation("Customer balance requires a single currency scope.")
         invoice_ids = tuple(item.id for item in invoices)
-        ledger = (await session.execute(select(ARLedgerEntry.entry_type, func.coalesce(func.sum(ARLedgerEntry.amount), 0)).where(ARLedgerEntry.company_id == company_id, ARLedgerEntry.invoice_id.in_(invoice_ids)).group_by(ARLedgerEntry.entry_type))).all()
-        totals = {kind: Decimal(amount) for kind, amount in ledger}
+        totals: dict[str, Decimal] = {}
+        if invoice_ids:
+            ledger = (await session.execute(select(ARLedgerEntry.entry_type, func.coalesce(func.sum(ARLedgerEntry.amount), 0)).where(ARLedgerEntry.company_id == company_id, ARLedgerEntry.invoice_id.in_(invoice_ids)).group_by(ARLedgerEntry.entry_type))).all()
+            totals = {kind: Decimal(amount) for kind, amount in ledger}
         receipts = (await session.execute(select(func.coalesce(func.sum(PaymentReceipt.available_amount), 0), func.coalesce(func.sum(PaymentReceipt.disputed_amount), 0)).where(PaymentReceipt.company_id == company_id, PaymentReceipt.customer_id == customer_id, PaymentReceipt.branch_id.in_(branches)))).one()
-        return {"customer_id": customer.id, "customer_number": customer.customer_number, "customer_display_name": customer.display_name, "currency": next(iter(currencies)), "invoice_total": sum((item.total_amount for item in invoices), Decimal(0)), "open_balance": sum((item.open_amount for item in invoices), Decimal(0)), "credit_total": -totals.get("credit_memo", Decimal(0)), "write_off_total": -totals.get("write_off", Decimal(0)), "applied_payment_total": -totals.get("payment_application", Decimal(0)) + totals.get("application_reversal", Decimal(0)), "unapplied_receipt_total": Decimal(receipts[0]), "disputed_receipt_total": Decimal(receipts[1]), "native_invoice_count": len(invoices), "legacy_evidence_incomplete": any(item.legacy_evidence_missing for item in invoices), "as_of": as_of}
+        result: dict[str, object] = {"customer_id": customer.id, "customer_number": customer.customer_number, "customer_display_name": customer.display_name, "currency": next(iter(currencies), "USD"), "invoice_total": sum((item.total_amount for item in invoices), Decimal(0)), "open_balance": sum((item.open_amount for item in invoices), Decimal(0)), "credit_total": -totals.get("credit_memo", Decimal(0)), "write_off_total": -totals.get("write_off", Decimal(0)), "applied_payment_total": -totals.get("payment_application", Decimal(0)) + totals.get("application_reversal", Decimal(0)), "unapplied_receipt_total": Decimal(receipts[0]), "disputed_receipt_total": Decimal(receipts[1]), "native_invoice_count": len(invoices), "legacy_evidence_incomplete": any(item.legacy_evidence_missing for item in invoices), "as_of": as_of}
+        native_values = {key: result[key] for key in ("currency", "invoice_total", "open_balance", "applied_payment_total", "unapplied_receipt_total", "disputed_receipt_total", "native_invoice_count")}
+        has_native_financial_evidence = bool(invoices) or any(Decimal(value) != 0 for value in receipts)
+        classifications = [native_evidence(company_id=str(company_id), customer_id=str(customer.id), as_of=as_of, acquired_at=max((item.updated_at for item in invoices), default=customer.updated_at), values=native_values, partial=bool(result["legacy_evidence_incomplete"]), conflicting=any(item.accounting_status == "reconciliation_required" for item in invoices) or Decimal(receipts[1]) > 0) if has_native_financial_evidence else unavailable_source_evidence(company_id=str(company_id), customer_id=str(customer.id), source_system="acp_native")]
+        source_rows = (await session.execute(select(CustomerSourceIdentity, CustomerMigrationRun).join(CustomerMigrationRun, CustomerMigrationRun.id == CustomerSourceIdentity.first_run_id).where(CustomerSourceIdentity.company_id == company_id, CustomerSourceIdentity.customer_id == customer_id, CustomerSourceIdentity.branch_id.in_(branches), CustomerMigrationRun.company_id == company_id).order_by(CustomerSourceIdentity.source_system, CustomerSourceIdentity.created_at))).all()
+        if source_rows:
+            classifications.extend(historical_source_evidence(company_id=str(company_id), customer_id=str(customer.id), source_system=identity.source_system, source_record_identity=identity.source_customer_id, acquired_at=run.completed_at or run.started_at, evidence_digest=run.source_sha256, complete=run.status == "completed" and run.unresolved_count == 0) for identity, run in source_rows)
+        else:
+            classifications.append(unavailable_source_evidence(company_id=str(company_id), customer_id=str(customer.id)))
+        result["evidence_classifications"] = tuple(item.as_dict() for item in classifications)
+        return result
 
     async def _reduction(self, session, spec, kind, event):
         async with session.begin():

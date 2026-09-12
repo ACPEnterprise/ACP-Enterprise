@@ -96,6 +96,17 @@ describe("CustomerDetailView", () => {
     expect(screen.getByRole("link", { name: "View Jobs for this Location" })).toHaveAttribute("href", "/jobs?customerId=customer-1&locationId=location-1");
   });
 
+  it("pages authoritative history instead of silently stopping at the first page", async () => {
+    vi.mocked(customerHooks.useCustomerTimeline).mockReturnValue({
+      isLoading: false, isFetching: false, isError: false, isSuccess: true,
+      data: { items: [], page: 1, page_size: 25, total_count: 30, total_pages: 2 },
+    } as never);
+    render(<MemoryRouter><CustomerDetailView customerId={customer.id} onBack={vi.fn()} /></MemoryRouter>);
+    expect(customerHooks.useCustomerTimeline).toHaveBeenCalledWith(customer.id, 1, 25);
+    await userEvent.click(screen.getByRole("button", { name: "Next history" }));
+    expect(customerHooks.useCustomerTimeline).toHaveBeenLastCalledWith(customer.id, 2, 25);
+  });
+
   it("uses the shared accessible confirmation before archiving", async () => {
     const archive = vi.fn();
     vi.mocked(customerHooks.useCustomerMutations).mockReturnValue({
