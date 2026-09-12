@@ -1,11 +1,10 @@
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
-
 from app.jobs.types import JobPriority
 from app.main import app
 from app.operations.schemas import ServiceRequestCreate
@@ -100,6 +99,59 @@ async def test_service_request_rejects_mismatched_orchestration_identity() -> No
         )
 
 
+@pytest.mark.asyncio
+async def test_existing_job_schedule_reuses_scheduling_and_links_current_job() -> None:
+    data = service_request()
+    job_id = uuid4()
+    appointment = SimpleNamespace(id=uuid4())
+    job = SimpleNamespace(
+        id=job_id,
+        branch_id=data.branch_id,
+        customer_id=data.customer_id,
+        service_location_id=data.service_location_id,
+        concurrency_version=4,
+        status="in_progress",
+    )
+    scheduling = SimpleNamespace(create_appointment=AsyncMock(return_value=appointment))
+    jobs = SimpleNamespace(link_appointment=AsyncMock(return_value=job))
+    repository = SimpleNamespace(get_job=AsyncMock(return_value=job))
+    context = SimpleNamespace(
+        company=SimpleNamespace(id=uuid4()),
+        can_access_branch=lambda branch_id: branch_id == data.branch_id,
+    )
+    service = OperationsService(
+        scheduling=scheduling, jobs=jobs, job_repository=repository
+    )
+    command = CreateAppointmentCommand(
+        idempotency_key=data.request_id,
+        branch_id=data.branch_id,
+        customer_id=data.customer_id,
+        service_location_id=data.service_location_id,
+        arrival_window_start_at=data.arrival_window_start_at,
+        arrival_window_end_at=data.arrival_window_end_at,
+        expected_duration_minutes=data.expected_duration_minutes,
+    )
+
+    transaction = AsyncMock()
+    session = SimpleNamespace(begin=MagicMock(return_value=transaction))
+    result = await service.schedule_existing_job(
+        session,
+        context=context,
+        request_id=data.request_id,
+        job_id=job_id,
+        expected_job_version=4,
+        appointment=command,
+    )
+
+    assert result.appointment is appointment
+    assert result.job is job
+    link = jobs.link_appointment.await_args.kwargs["command"]
+    assert link.job_id == job_id
+    assert link.appointment_id == appointment.id
+    assert link.visit_sequence == 1
+    assert link.expected_version == 4
+
+
 def test_service_request_contract_rejects_unknown_fields() -> None:
     data = service_request()
     with pytest.raises(ValueError):
@@ -110,3 +162,5 @@ def test_service_request_route_is_registered_in_application_contract() -> None:
     operation = app.openapi()["paths"]["/api/v1/operations/service-requests"]["post"]
     assert operation["summary"] == "Accept a launch service request"
     assert operation["responses"]["201"]
+    schedule = app.openapi()["paths"]["/api/v1/operations/jobs/{job_id}/schedule"]["post"]
+    assert schedule["summary"] == "Schedule an existing Job"
