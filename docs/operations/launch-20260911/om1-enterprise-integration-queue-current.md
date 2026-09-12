@@ -1,6 +1,6 @@
 # OM1 Enterprise integration queue
 
-Snapshot: 2026-09-12 17:42 America/New_York
+Snapshot: 2026-09-12 17:43 America/New_York
 
 ## Authority and deployed state
 
@@ -111,6 +111,45 @@ edges or effective file overlaps among the five candidates. The dotted
 SOURCE.4-to-builder edge is operational ordering only. Dotted owner-gate edges
 are explicitly outside this packet's authority. Price Book is omitted from the
 integration path because it remains held.
+
+## Batch boundaries and refresh checkpoints
+
+All five lanes may be reconciled and qualified concurrently from the guarded
+authority above. Integration remains sequential because the first protected PR
+changes the authority for every remaining lane.
+
+| Checkpoint | Enterprise action | Required stop condition |
+|---|---|---|
+| Existing deployment gap | Deploy and accept protected #257-#260 before attributing runtime results to a later candidate | `/backend-health` does not report the exact deployed protected SHA or either dependency is disconnected |
+| Wave C preparation | Prepare SOURCE.4 recovery, then the historical builder | Artifact digest/loader check, builder tests, or authority metadata fails |
+| ECO checkpoint | Integrate and deploy ECO independently | More than one Alembic head, drift, migration failure, or governed-policy acceptance failure |
+| Wave B | Integrate PR #215 independently | QBO/Payroll projection tests fail or any provider mutation appears |
+| Wave D | Integrate Mobile independently | Test/static/preflight failure or either manifest is stale |
+
+After every protected integration, stop before integrating another candidate and
+run this read-only checkpoint in a clone containing the remaining remote branch:
+
+```bash
+set -euo pipefail
+git fetch origin --prune
+prior_authority="REPLACE_WITH_AUTHORITY_USED_FOR_LAST_QUALIFICATION"
+new_authority=$(git rev-parse origin/customer-management-v1)
+test "$new_authority" != "$prior_authority"
+lane=work/REMAINING_LANE
+expected_head="REPLACE_WITH_EXPECTED_REMOTE_HEAD"
+test "$(git rev-parse "origin/$lane")" = "$expected_head"
+composed_tree=$(git merge-tree --write-tree "$new_authority" "origin/$lane")
+git cat-file -e "$composed_tree^{tree}"
+git diff --check "$new_authority^{tree}" "$composed_tree"
+git diff --name-status "$new_authority^{tree}" "$composed_tree"
+```
+
+The command exits nonzero on a merge conflict. Recompute behind/ahead counts,
+effective trees, pairwise overlaps, metadata edits, and test scope before the
+next integration. If ECO is blocked, proceed with reconciliation and
+qualification of PR #215 or Mobile; neither depends on ECO. Owner-gated
+Migration admission, QBO OAuth, Payroll execution, and Apple distribution never
+block preparation of an independent lane.
 
 ## Required reconciliation and qualification
 
