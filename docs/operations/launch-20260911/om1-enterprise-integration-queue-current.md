@@ -1,6 +1,6 @@
 # OM1 Enterprise integration queue
 
-Snapshot: 2026-09-12 17:46 America/New_York
+Snapshot: 2026-09-12 17:48 America/New_York
 
 ## Authority and deployed state
 
@@ -411,7 +411,7 @@ is not a general UI qualification failure.
    command below. Do not begin lane acceptance until it passes.
 
    ```bash
-   EXPECTED_PROTECTED_SHA=<FULL_INTEGRATED_PROTECTED_SHA>
+   EXPECTED_PROTECTED_SHA="REPLACE_WITH_FULL_INTEGRATED_PROTECTED_SHA"
    curl --fail --silent --show-error \
      https://preview.allcountyhomeservices.com/backend-health | \
      jq -e --arg sha "$EXPECTED_PROTECTED_SHA" \
