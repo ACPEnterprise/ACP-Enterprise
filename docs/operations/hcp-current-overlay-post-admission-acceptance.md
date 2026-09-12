@@ -1,9 +1,13 @@
 # HCP current overlay: Enterprise execution and acceptance packet
 
-Date: 2026-09-12  
-Executor candidate: `5b8b02deb3f76172d8fe6666a11dda071cee0fbe`  
-Executor development authority: `d52d117801d72d04e81afac157671c97a941efa0`  
-Acceptance development authority: `8cf3bdbf0c814c4a45f2b189b061db556d1c704f`  
+Date: 2026-09-12
+
+Executor candidate: `5b8b02deb3f76172d8fe6666a11dda071cee0fbe`
+
+Executor development authority: `d52d117801d72d04e81afac157671c97a941efa0`
+
+Acceptance development authority: `8cf3bdbf0c814c4a45f2b189b061db556d1c704f`
+
 Schema head: `d4f6h8j0l2n4`
 
 The required execution authority is the exact deployed protected SHA produced by
