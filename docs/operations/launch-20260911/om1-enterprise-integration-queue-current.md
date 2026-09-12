@@ -1,6 +1,6 @@
 # OM1 Enterprise integration queue
 
-Snapshot: 2026-09-12 17:48 America/New_York
+Snapshot: 2026-09-12 17:50 America/New_York
 
 ## Authority and deployed state
 
@@ -30,13 +30,13 @@ acceptance gates in this packet operationally; GitHub will not enforce them.
 
 ## Active candidates
 
-| Candidate | Head | Behind/ahead | Effective tree | State |
-|---|---|---:|---|---|
-| SOURCE.4 artifact recovery | `a3cad3d389b9ed69300939d15c19e2d7b08da063` | 2/1 | `e4bcdfdc5898ec62f6166d164b43d9416054d2f5` | Merge-clean; documentation-only; PR required |
-| HCP historical safe-tranche builder | `b32f99ff80f447bf8140b73380d19191ccb8db59` | 12/1 | `9371c6ab231ae05a1feb2f3f38f3a90d8880145d` | Merge-clean; authority metadata stale |
-| ECO reconciliation | `1c0e7b20db62b6a342548f2842ea1a3a45965386` | 4/13 | `657821646f4fcfc3eda071fa2b285b3903f5dbbd` | Merge-clean; qualified; authority metadata stale |
-| PR #215 Payroll/QBO read UI | `724398348b566f655d2bc7127c20beeb6be52d6c` | 23/1 | `c964c398836e12ec16d398fbc81c246b66fec189` | Open/CLEAN; reconcile and refresh packet |
-| Mobile Apple release packet | `0183eaec3e2825a79b683e9e684a761243c86ea7` | 9/15 | `fad3ab879576b7bfb392c8e30e68ed6df63e2425` | Merge-clean; refresh two manifests |
+| Candidate | Exact branch | Head | PR | Behind/ahead | Effective tree | Classification |
+|---|---|---|---|---:|---|---|
+| SOURCE.4 artifact recovery | `work/migration-source4-accepted-artifact-recovery-1` | `a3cad3d389b9ed69300939d15c19e2d7b08da063` | None | 2/1 | `e4bcdfdc5898ec62f6166d164b43d9416054d2f5` | Stale but reconcilable; merge-clean; documentation-only |
+| HCP historical safe-tranche builder | `work/hcp-historical-safe-tranche-1` | `b32f99ff80f447bf8140b73380d19191ccb8db59` | None | 12/1 | `9371c6ab231ae05a1feb2f3f38f3a90d8880145d` | Stale but reconcilable; merge-clean; metadata edit required |
+| ECO reconciliation | `work/eco-migration-reconciliation-integration-watch-1` | `1c0e7b20db62b6a342548f2842ea1a3a45965386` | None | 4/13 | `657821646f4fcfc3eda071fa2b285b3903f5dbbd` | Stale but reconcilable; merge-clean; metadata edit required |
+| Payroll/QBO read UI | `work/om2b-payroll-accounting-continuation-1` | `724398348b566f655d2bc7127c20beeb6be52d6c` | #215 open/CLEAN | 23/1 | `c964c398836e12ec16d398fbc81c246b66fec189` | Stale but reconcilable; merge-clean; PR refresh required |
+| Mobile Apple release packet | `work/mobile-apple-owner-release-packet-1` | `0183eaec3e2825a79b683e9e684a761243c86ea7` | None | 9/15 | `fad3ab879576b7bfb392c8e30e68ed6df63e2425` | Stale but reconcilable; merge-clean; two manifest edits required |
 
 ## Named launch queue coverage
 
@@ -372,8 +372,12 @@ back through this queue refresh before Enterprise integrates it.
 
 ## Held candidate
 
-Price Book `49e852aa8c931c8042de0634b68d993b0e02452e` supersedes the smaller
-`c1c90a0a...` candidate but remains held for:
+Price Book branch `work/pricebook-allcounty-review-readiness-1` at
+`49e852aa8c931c8042de0634b68d993b0e02452e` is 4 behind / 13 ahead, has no PR,
+and composes merge-clean at tree
+`34ef9d4e85b7e2f3937abe386a03c55078504b34`. It is stale and Git-reconcilable,
+but not qualification-admissible. It supersedes the smaller `c1c90a0a...`
+candidate and remains held for:
 
 1. savepoint-based test isolation;
 2. fail-closed `effective_catalog` multiple-match handling;
