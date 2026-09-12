@@ -47,6 +47,16 @@ describe("ScheduleJobPanel", () => {
       customer_id: "customer-1",
       service_location_id: "location-1",
       employee_id: "employee-beta",
+      reserve_capacity: true,
+    }), expect.any(Object));
+  });
+
+  it("books Needs Scheduling without claiming technician capacity", async () => {
+    renderPanel();
+    await userEvent.click(screen.getByRole("button", { name: "Book Appointment" }));
+    expect(mutate).toHaveBeenCalledWith(expect.objectContaining({
+      employee_id: null,
+      reserve_capacity: false,
     }), expect.any(Object));
   });
 
