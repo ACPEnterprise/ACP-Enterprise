@@ -14,6 +14,8 @@ import { useAuth, useHasPermission } from "../auth";
 import { DispatchAssignmentPanel } from "../components/dispatch/DispatchAssignmentPanel";
 import { DispatchRecommendationPanel } from "../components/dispatch/DispatchRecommendationPanel";
 import { BookCustomerWorkPanel } from "../components/scheduling/BookCustomerWorkPanel";
+import { NeedsSchedulingQueue, type QueueAssignmentFilter, type QueueSort } from "../components/scheduling/NeedsSchedulingQueue";
+import { schedulingMutationRecovery } from "../components/scheduling/schedulingRecovery";
 import {
   dayRange,
   localDateValue,
@@ -288,7 +290,7 @@ export function SchedulingRoute({
           </Link>
         </div>
       </header>
-      {booking && <BookCustomerWorkPanel onClose={() => setBooking(false)} />}
+      {booking && <BookCustomerWorkPanel onClose={() => setBooking(false)} returnTo={returnTo} />}
       <Card className="space-y-4 p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="grid w-full grid-cols-[auto_1fr_auto] items-center gap-2 sm:flex sm:w-auto">
@@ -1005,6 +1007,9 @@ function AppointmentPanel({
   readonly onClose: () => void;
 }) {
   const mutation = useRescheduleAppointment();
+  const mutationError = mutation.error
+    ? schedulingMutationRecovery(mutation.error, "appointment move")
+    : null;
   const [start, setStart] = useState(() =>
     toLocalInput(appointment.arrival_window_start_at),
   );
@@ -1035,7 +1040,7 @@ function AppointmentPanel({
           reason_code: "operational_adjustment",
         },
       },
-      { onSuccess: () => setConfirmMove(false) },
+      { onSuccess: () => setConfirmMove(false), onError: () => setConfirmMove(false) },
     );
   };
   return (
@@ -1142,9 +1147,9 @@ function AppointmentPanel({
               onChange={(event) => setDuration(Number(event.target.value))}
             />
           </label>
-          {mutation.isError && (
-            <Alert variant="danger" title="Appointment not moved">
-              {getOperatorApiError(mutation.error, "Scheduling").message}
+          {mutationError && (
+            <Alert variant="danger" title={mutationError.title}>
+              <strong>{mutationError.state.replaceAll("_", " ")}</strong> — {mutationError.message}
             </Alert>
           )}
           {mutation.isSuccess && (

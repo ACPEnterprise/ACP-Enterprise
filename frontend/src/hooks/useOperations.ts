@@ -10,7 +10,7 @@ export function useCreateServiceRequest() {
   const client = useQueryClient();
   return useMutation({
     mutationFn: (input: ServiceRequestCreateInput) => createServiceRequest(input),
-    onSuccess: async () => {
+    onSettled: async () => {
       await Promise.all([
         client.invalidateQueries({ queryKey: appointmentKeys.lists() }),
         client.invalidateQueries({ queryKey: jobKeys.lists() }),
@@ -35,7 +35,7 @@ export function useScheduleExistingJob(jobId: string) {
       }
       return result;
     },
-    onSuccess: async () => {
+    onSettled: async () => {
       await Promise.all([
         client.invalidateQueries({ queryKey: appointmentKeys.lists() }),
         client.invalidateQueries({ queryKey: jobKeys.lists() }),

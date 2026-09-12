@@ -82,8 +82,8 @@ export function JobDetailRoute() {
         <ServiceLocationCard job={job} />
       </div>
       <JobOperationalDetails job={job} />
-      {canSchedule && job.appointments.length === 0 && !["completed", "cancelled"].includes(job.status) ? <ScheduleJobPanel job={job} canAssign={canAssign} /> : null}
-      <AppointmentSummaryTable job={job} />
+      {canSchedule && job.appointments.length === 0 && !["completed", "cancelled"].includes(job.status) ? <ScheduleJobPanel job={job} canAssign={canAssign} returnTo={hasSchedulingReturn ? returnTo : undefined} /> : null}
+      <AppointmentSummaryTable job={job} returnTo={hasSchedulingReturn ? returnTo : undefined} />
       <JobCompletionStatus jobId={job.id} />
     </div>
   );
