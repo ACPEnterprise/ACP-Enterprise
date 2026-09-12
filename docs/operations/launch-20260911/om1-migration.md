@@ -1,12 +1,11 @@
 # OM1 Migration checkpoint
 
-Updated: 2026-09-11 02:25 UTC
+Updated: 2026-09-12 17:00 UTC
 
 - Mission commit: `0c08f1e3634f38a7fb82970932dea5de7a4cf24f`
 - Mission file SHA-256: `03b74b5f065694b487268bdee531d8d50620f2816f30c91d8b665f9d5b3e9dfc`
-- Current protected authority: `132cded360525e10a5d9029b25fff2bd8a45b81b`
-- Deployed Preview classification authority:
-  `0b74c7654fde500529da824bdce604e01575cec1`
+- Current protected and deployed authority:
+  `b5dff4b0203fe9a725a0ff844279876f410cba12`
 - Native Location classifier integration: `681a7595` (PR #208)
 - Pull request: #198
 
@@ -92,3 +91,35 @@ candidate; and the 25 held Locations comprise seven with no positive candidate a
 18 with only non-unique candidates. Converting any of these holds to unrelated or
 exact would therefore require new authoritative evidence, not another deterministic
 pass over the current inputs.
+
+## September 12 current operational packet
+
+The GET-only refresh completed at `2026-09-12T16:49:00Z` with digest
+`a2c427ccc8f99f33a2340fa84118f987d75f1997afc8f0c7cf7fc27123e87748`.
+Since the September 10 refresh it found five new and three changed Customers; one new
+and 16 changed Jobs; one new and five changed Estimates; two new and two changed
+Invoices; and no Employee change. Relative to sealed SOURCE.4, the current evidence
+contains 55 added Customers, 63 added Locations, 49 added and 262 changed Jobs, and
+45 added and 25 changed Invoices. Estimate payload volatility remains explicit: 15
+are added and all 1,307 common records differ at the raw-payload level.
+
+The bounded open-work appointment refresh read all 377 currently open Jobs plus every
+Job changed since September 10: 383 of 383 provider relation requests succeeded and
+returned 479 Appointments. Compared with sealed SOURCE.4 within this scope, 47 IDs are
+new, six changed, and 426 are unchanged. The packet records 187 fully mapped and 292
+partially unmapped appointment technician dispositions. All 40 referenced Customers
+missing from the list endpoint resolved through sanctioned detail GETs. Twenty-two
+open Jobs still have no provider Location ID after a successful Job-detail lookup.
+
+The immutable current decision digest is
+`5070aa62a8a86bfbd1249588e86f1f08d29ae433803ba05fdf8ee04b234e9025`
+(file SHA-256
+`f4649503ef079703641bc7593a2afd33c2464ac4ff0dddc27aaa4183ff51a77d`).
+It is retained on the Preview host below
+`source4-classification/current-20260912`. Canonical admission remains false. The
+deployed executor accepts only the sealed historical package, no current overlay;
+1,389 legacy projections still create duplicate-native-truth risk; 170 unique
+invoice-number-linked Job/Invoice candidates have native field drift; a current
+backup and verified restore receipt are absent; the 22 open Location parents are
+unresolved; and 292 Appointments contain at least one unmapped technician. The
+admission executor was not invoked.
