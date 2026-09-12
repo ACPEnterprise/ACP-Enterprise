@@ -135,7 +135,9 @@ def build_productive_hour_readiness(
         ):
             raise ValueError("supplemental Job evidence lacks labor relationship")
 
-    by_job: dict[tuple[UUID, UUID, UUID, UUID], list[SupplementalTimeFact]] = (
+    by_job: dict[
+        tuple[UUID, UUID, UUID, UUID | None], list[SupplementalTimeFact]
+    ] = (
         defaultdict(list)
     )
     by_employee: dict[UUID, list[SupplementalTimeFact]] = defaultdict(list)
@@ -156,7 +158,12 @@ def build_productive_hour_readiness(
         for item in labor.jobs
     )
     employees = tuple(
-        _employee_scope(item, by_employee[item.employee_id]) for item in labor.employees
+        _employee_scope(
+            item,
+            by_employee[item.employee_id],
+            tuple(scope for scope in jobs if scope.employee_id == item.employee_id),
+        )
+        for item in labor.employees
     )
     branches = tuple(
         _aggregate_scope(
@@ -270,32 +277,16 @@ def _job_scope(
 
 
 def _employee_scope(
-    item: EmployeeLaborEvidence, supplemental: list[SupplementalTimeFact]
+    item: EmployeeLaborEvidence,
+    supplemental: list[SupplementalTimeFact],
+    jobs: tuple[ScopeReadiness, ...],
 ) -> ScopeReadiness:
     values = (
         _employee_measure(ProductiveHourMeasure.PAID_MINUTES, item.paid_minutes, item),
-        _absent(
-            ProductiveHourMeasure.SCHEDULED_MINUTES,
-            "Employee schedule aggregation requires authoritative Job schedule relationships.",
-        ),
-        _employee_measure(
-            ProductiveHourMeasure.ACTUAL_WORKED_MINUTES,
-            item.job_worked_minutes,
-            item,
-            empty_is_absent=not item.job_evidence_digests,
-        ),
-        _employee_measure(
-            ProductiveHourMeasure.JOBSITE_MINUTES,
-            item.jobsite_minutes,
-            item,
-            empty_is_absent=not item.job_evidence_digests,
-        ),
-        _employee_measure(
-            ProductiveHourMeasure.PRODUCTIVE_JOB_MINUTES,
-            item.productive_minutes,
-            item,
-            empty_is_absent=not item.job_evidence_digests,
-        ),
+        _aggregate_measure(ProductiveHourMeasure.SCHEDULED_MINUTES, jobs),
+        _aggregate_measure(ProductiveHourMeasure.ACTUAL_WORKED_MINUTES, jobs),
+        _aggregate_measure(ProductiveHourMeasure.JOBSITE_MINUTES, jobs),
+        _aggregate_measure(ProductiveHourMeasure.PRODUCTIVE_JOB_MINUTES, jobs),
         _supplemental_measure(ProductiveHourMeasure.TRAVEL_MINUTES, supplemental),
         _supplemental_measure(
             ProductiveHourMeasure.NONPRODUCTIVE_OPERATIONAL_MINUTES, supplemental

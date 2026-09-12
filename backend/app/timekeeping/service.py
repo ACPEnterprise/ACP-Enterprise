@@ -24,7 +24,11 @@ from .commands import (
     RecordPunch,
 )
 from .contracts import (
+    PAYROLL_INPUT_PROJECTION_VERSION,
     ApprovedWorkdayTimeFact,
+    PayrollInputEvidence,
+    PayrollInputExclusionReason,
+    PayrollInputProjection,
     PunchKind,
     TimeEntryProvenance,
     TimeEntryState,
@@ -111,6 +115,7 @@ class WorkdayTimeService:
             session,
             company_id=context.company.id,
             branch_id=command.branch_id,
+            employee_id=command.employee_id,
             job_id=command.job_id,
             appointment_id=command.appointment_id,
         ):
@@ -799,18 +804,19 @@ class WorkdayTimeService:
         self._require_permission(context, TimekeepingPermission.APPROVE)
         if pay_period.company_id != context.company.id:
             raise WorkdayAuthorizationError("pay period Company mismatch")
-        revisions = await self._repository.current_employee_revisions(
+        projection, facts = await self._payroll_input_projection(
             session,
-            company_id=context.company.id,
+            context=context,
             employee_id=employee_id,
-            start_date=pay_period.period_start,
-            end_date=pay_period.period_end,
+            pay_period=pay_period,
         )
-        facts = tuple(
-            self._approved_fact(value)
-            for value in revisions
-            if value.state == TimeEntryState.APPROVED.value
-        )
+        if any(
+            item.reason is PayrollInputExclusionReason.OVERLAPS_APPROVED_INTERVAL
+            for item in projection.excluded
+        ):
+            raise WorkdayConflictError(
+                "Payroll Time Input has overlapping accepted intervals"
+            )
         snapshot = seal_payroll_time_input(
             company_id=context.company.id,
             employee_id=employee_id,
@@ -843,6 +849,146 @@ class WorkdayTimeService:
             )
         await session.commit()
         return snapshot
+
+    async def payroll_input_projection(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        employee_id: UUID,
+        pay_period: PayPeriod,
+    ) -> PayrollInputProjection:
+        self._require_permission(context, TimekeepingPermission.APPROVE)
+        if pay_period.company_id != context.company.id:
+            raise WorkdayAuthorizationError("pay period Company mismatch")
+        projection, _ = await self._payroll_input_projection(
+            session,
+            context=context,
+            employee_id=employee_id,
+            pay_period=pay_period,
+        )
+        return projection
+
+    async def _payroll_input_projection(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        employee_id: UUID,
+        pay_period: PayPeriod,
+    ) -> tuple[PayrollInputProjection, tuple[ApprovedWorkdayTimeFact, ...]]:
+        revisions = await self._repository.current_employee_revisions(
+            session,
+            company_id=context.company.id,
+            employee_id=employee_id,
+            start_date=pay_period.period_start,
+            end_date=pay_period.period_end,
+        )
+        approved = [
+            (value, self._approved_fact(value))
+            for value in revisions
+            if value.state == TimeEntryState.APPROVED.value
+        ]
+        overlap_ids: set[UUID] = set()
+        timed = sorted(
+            (
+                pair
+                for pair in approved
+                if pair[1].start_at is not None and pair[1].end_at is not None
+            ),
+            key=lambda pair: (
+                pair[1].start_at,
+                pair[1].end_at,
+                str(pair[1].revision_id),
+            ),
+        )
+        for index, (_, current) in enumerate(timed):
+            assert current.start_at is not None
+            for _, previous in timed[:index]:
+                assert previous.end_at is not None
+                if current.start_at < previous.end_at:
+                    overlap_ids.update((current.revision_id, previous.revision_id))
+
+        included_facts = tuple(
+            fact for _, fact in approved if fact.revision_id not in overlap_ids
+        )
+        included = tuple(
+            PayrollInputEvidence(
+                entry_id=fact.entry_id,
+                revision_id=fact.revision_id,
+                state=TimeEntryState.APPROVED.value,
+                eligible=True,
+                reason=None,
+                approved_minutes=fact.approved_duration_minutes,
+                evidence_digest=fact.evidence_digest,
+            )
+            for fact in included_facts
+        )
+        excluded: list[PayrollInputEvidence] = []
+        for revision in revisions:
+            reason: PayrollInputExclusionReason | None = None
+            if revision.id in overlap_ids:
+                reason = PayrollInputExclusionReason.OVERLAPS_APPROVED_INTERVAL
+            elif revision.state == TimeEntryState.RECORDED.value:
+                reason = PayrollInputExclusionReason.NOT_SUBMITTED
+            elif revision.state == TimeEntryState.SUBMITTED.value:
+                reason = PayrollInputExclusionReason.AWAITING_APPROVAL
+            elif revision.state == TimeEntryState.CORRECTED.value:
+                reason = PayrollInputExclusionReason.CORRECTION_AWAITING_APPROVAL
+            if reason is not None:
+                excluded.append(
+                    PayrollInputEvidence(
+                        entry_id=revision.entry_id,
+                        revision_id=revision.id,
+                        state=revision.state,
+                        eligible=False,
+                        reason=reason,
+                        approved_minutes=None,
+                        evidence_digest=revision.evidence_digest,
+                    )
+                )
+        latest_job_clock = await self._repository.latest_job_clock_event(
+            session, company_id=context.company.id, employee_id=employee_id
+        )
+        if latest_job_clock is not None and latest_job_clock.kind == "start":
+            excluded.append(
+                PayrollInputEvidence(
+                    entry_id=None,
+                    revision_id=None,
+                    state="open_job_clock",
+                    eligible=False,
+                    reason=PayrollInputExclusionReason.OPEN_JOB_CLOCK_NON_PAYABLE,
+                    approved_minutes=None,
+                    evidence_digest=latest_job_clock.event_digest,
+                )
+            )
+        excluded_tuple = tuple(
+            sorted(
+                excluded,
+                key=lambda item: (
+                    item.reason.value if item.reason else "",
+                    str(item.revision_id or ""),
+                ),
+            )
+        )
+        draft = PayrollInputProjection(
+            version=PAYROLL_INPUT_PROJECTION_VERSION,
+            employee_id=employee_id,
+            pay_period_id=pay_period.id,
+            included=included,
+            excluded=excluded_tuple,
+            total_eligible_minutes=sum(
+                fact.approved_duration_minutes for fact in included_facts
+            ),
+            projection_digest="",
+        )
+        projection = PayrollInputProjection(
+            **{
+                **draft.__dict__,
+                "projection_digest": canonical_digest(draft.canonical_content()),
+            }
+        )
+        return projection, included_facts
 
     async def _new_time_revision(
         self,
