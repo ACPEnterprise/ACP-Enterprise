@@ -53,6 +53,18 @@ records remain Migration evidence and are never selectable as native Customers.
 - Enterprise owns protected integration, Preview deployment, and authorized live
   Preview data writes.
 
+Migration's September 12 GET-only operational packet is authoritative for the
+current source gate: acquisition completed at `2026-09-12T16:49:00Z`, packet digest
+`a2c427ccc8f99f33a2340fa84118f987d75f1997afc8f0c7cf7fc27123e87748`, and
+decision digest `5070aa62a8a86bfbd1249588e86f1f08d29ae433803ba05fdf8ee04b234e9025`.
+Relative to sealed SOURCE.4 it reports 55 added Customers and 63 added Locations.
+Canonical admission remains false: the current overlay is not accepted by the
+deployed executor, 1,389 legacy projections remain held for duplicate-native-truth
+risk, 22 open Location parents are unresolved, and other cross-domain admission
+guards remain open. The Customer UI must therefore continue to describe the native
+population as admitted but partial and show the source readiness/as-of evidence; it
+must not add source-only records to the selectable roster.
+
 ## Remaining acceptance
 
 1. Enterprise deploys current protected authority. Preview health reported version
@@ -62,8 +74,10 @@ records remain Migration evidence and are never selectable as native Customers.
    owner credential or weakening authentication.
 3. After current deployment and authenticated access, verify roster
    pagination/search, source accounting, detail, and Customer-to-Job context.
-4. Reconcile displayed source counts and as-of date against Migration's final
-   current-source packet; a partial source population remains partial.
+4. After Migration accepts a successor admission packet, rerun the roster's total
+   traversal and supported search matrix, then reconcile the displayed source
+   counts and as-of date against that exact accepted digest. A partial source
+   population remains partial.
 
 The unauthenticated live checks are intentionally bounded: `/customers` renders
 the application shell, `/backend-health` reports healthy PostgreSQL and Redis, and
