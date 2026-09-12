@@ -3,6 +3,7 @@ from decimal import Decimal
 from uuid import UUID, uuid4
 
 import pytest
+
 from app.business_economics.break_even_readiness import (
     BREAK_EVEN_READINESS_VERSION,
     BreakEvenInputKind,
