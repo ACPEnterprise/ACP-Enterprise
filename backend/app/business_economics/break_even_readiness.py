@@ -99,6 +99,15 @@ def build_break_even_input_readiness(
         raise ValueError("Company packet cannot silently aggregate Branch evidence")
     if len({item.input_id for item in economic_evidence}) != len(economic_evidence):
         raise ValueError("duplicate break-even evidence identity")
+    if any(item.subject_id != str(company_id) for item in economic_evidence):
+        raise ValueError("break-even evidence subject is outside Company scope")
+    if len({item.reconciliation_key for item in economic_evidence}) > 1:
+        raise ValueError("break-even evidence periods cannot be silently combined")
+    semantic_values = tuple(
+        (item.component, item.value_digest) for item in economic_evidence
+    )
+    if len(set(semantic_values)) != len(semantic_values):
+        raise ValueError("duplicate break-even economic value evidence")
 
     facts = [
         _time_fact(productive_hours, ProductiveHourMeasure.PAID_MINUTES),
