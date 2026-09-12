@@ -95,6 +95,12 @@ continues to report `mutation_authority: none`. GitHub reports no checks on the
 candidate branch, so Enterprise must require and record these results before
 integration.
 
+Independent qualification on 2026-09-12 composed the exact head onto protected
+authority at tree `c964c398836e12ec16d398fbc81c246b66fec189`: three suites and
+nine tests passed, followed by clean full ESLint and production TypeScript/Vite
+builds. This evidence does not replace Enterprise's final rerun after branch
+reconciliation.
+
 ### Mobile
 
 Refresh protected authority and reconciliation commit in:
