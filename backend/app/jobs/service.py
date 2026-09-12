@@ -572,7 +572,12 @@ class JobService:
                     "Appointment is already linked under the current Job policy."
                 )
             self._check_version(job, command.expected_version)
-            if job.status not in {JobStatus.DRAFT.value, JobStatus.READY.value}:
+            if job.status not in {
+                JobStatus.DRAFT.value,
+                JobStatus.READY.value,
+                JobStatus.IN_PROGRESS.value,
+                JobStatus.PAUSED.value,
+            }:
                 raise JobInvalidTransitionError(
                     "Appointment cannot be linked in this state."
                 )

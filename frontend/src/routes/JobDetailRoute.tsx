@@ -11,6 +11,7 @@ import { JobPriorityBadge, JobStatusBadge } from "../components/jobs/JobBadges";
 import { JobsErrorState, JobsLoadingState } from "../components/jobs/JobStates";
 import { LifecycleActionButtons } from "../components/jobs/LifecycleActionButtons";
 import { JobCompletionStatus } from "../components/jobs/JobCompletionStatus";
+import { ScheduleJobPanel } from "../components/jobs/ScheduleJobPanel";
 import { useHasPermission } from "../auth";
 import { useJob } from "../hooks/useJobs";
 import { Alert, Button } from "../ui";
@@ -21,6 +22,10 @@ export function JobDetailRoute() {
   const canRead = useHasPermission("COMPANY_JOB_READ");
   const canReadCustomer = useHasPermission("COMPANY_CUSTOMER_READ");
   const canExecute = useHasPermission("COMPANY_JOB_EXECUTE");
+  const canManageScheduling = useHasPermission("COMPANY_SCHEDULING_MANAGE");
+  const canManageJobs = useHasPermission("COMPANY_JOB_MANAGE");
+  const canSchedule = canManageScheduling && canManageJobs;
+  const canAssign = useHasPermission("COMPANY_DISPATCH_MANAGE");
   const query = useJob(jobId, canRead);
   if (!canRead) {
     return <Alert variant="danger">You are not authorized to view this Job.</Alert>;
@@ -77,6 +82,7 @@ export function JobDetailRoute() {
         <ServiceLocationCard job={job} />
       </div>
       <JobOperationalDetails job={job} />
+      {canSchedule && job.appointments.length === 0 && !["completed", "cancelled"].includes(job.status) ? <ScheduleJobPanel job={job} canAssign={canAssign} /> : null}
       <AppointmentSummaryTable job={job} />
       <JobCompletionStatus jobId={job.id} />
     </div>
