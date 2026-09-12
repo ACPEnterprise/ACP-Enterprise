@@ -294,6 +294,10 @@ class CustomerRepository:
             (
                 await session.scalars(
                     select(Customer)
+                    .options(
+                        joinedload(Customer.primary_contact),
+                        selectinload(Customer.contacts),
+                    )
                     .where(*filters)
                     .order_by(
                         direction(sort_columns[criteria.sort_by]),

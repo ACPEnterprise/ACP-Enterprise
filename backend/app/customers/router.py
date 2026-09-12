@@ -24,6 +24,7 @@ from app.customers.schemas import (
     CustomerNoteCreate,
     CustomerNoteResponse,
     CustomerResponse,
+    CustomerSearchItem,
     CustomerSearchQuery,
     CustomerSearchResponse,
     CustomerStatusUpdate,
@@ -177,8 +178,24 @@ async def search_customers(
     records, total = await customer_search_service.search(
         session, context=context, criteria=criteria
     )
+    items: list[CustomerSearchItem] = []
+    for record in records:
+        preferred_contact = customer_detail_service.preferred_contact(
+            record.primary_contact, record.contacts
+        )
+        customer = CustomerResponse.model_validate(record)
+        items.append(
+            CustomerSearchItem(
+                **customer.model_dump(),
+                preferred_contact=(
+                    ContactResponse.model_validate(preferred_contact)
+                    if preferred_contact is not None
+                    else None
+                ),
+            )
+        )
     return CustomerSearchResponse.build(
-        items=[CustomerResponse.model_validate(record) for record in records],
+        items=items,
         page=criteria.page,
         page_size=criteria.page_size,
         total_count=total,

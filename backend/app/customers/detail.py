@@ -44,7 +44,7 @@ class CustomerDetailService:
 
         contacts = sorted(customer.contacts, key=self._contact_sort_key)
         locations = sorted(customer.locations, key=self._location_sort_key)
-        preferred_contact = self._preferred_contact(customer.primary_contact, contacts)
+        preferred_contact = self.preferred_contact(customer.primary_contact, contacts)
         customer_response = CustomerResponse.model_validate(customer)
         location_responses = [
             ServiceLocationResponse.model_validate(location) for location in locations
@@ -94,7 +94,7 @@ class CustomerDetailService:
         )
 
     @staticmethod
-    def _preferred_contact(
+    def preferred_contact(
         primary_contact: CustomerContact | None,
         contacts: list[CustomerContact],
     ) -> CustomerContact | None:
