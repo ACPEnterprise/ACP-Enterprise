@@ -13,9 +13,14 @@ from app.communications.postmark import PostmarkIdentityProvider
 from app.communications.templates import (
     RenderedTransactionalMessage,
     render_employee_invitation,
+    render_password_reset,
 )
 from app.core.config import Settings, settings
 from app.database.session import AsyncSessionFactory
+from app.platform.auth.recovery_delivery import (
+    EmployeeRecoveryDeliveryService,
+    RecoveryDeliveryError,
+)
 from app.platform.company.models import Company
 from app.platform.notifications.models import NotificationOutbox
 from app.platform.notifications.repository import NotificationOutboxRepository
@@ -29,7 +34,9 @@ from app.platform.onboarding.service import (
 )
 from app.platform.users.models import User
 
-DELIVERABLE_IDENTITY_TYPES = frozenset({"identity.onboarding_invitation"})
+DELIVERABLE_IDENTITY_TYPES = frozenset(
+    {"identity.onboarding_invitation", "identity.password_reset"}
+)
 
 
 class IdentityInvitationResolver:
@@ -37,19 +44,44 @@ class IdentityInvitationResolver:
         self.configuration = configuration
 
     async def render(self, record: NotificationOutbox) -> RenderedTransactionalMessage:
+        if record.notification_type == "identity.password_reset":
+            token_id = UUID(str(record.payload.get("password_reset_token_id", "")))
+            async with AsyncSessionFactory() as session:
+                recovery = await EmployeeRecoveryDeliveryService(
+                    self.configuration
+                ).claim(session, token_id=token_id)
+            origin = self.configuration.identity_email_activation_origin.rstrip("/")
+            return render_password_reset(
+                recipient_display_name=recovery.display_name,
+                company_display_name=recovery.company_name,
+                reset_url=f"{origin}/reset-password?token={recovery.secret}",
+                expected_origin=origin,
+                expiration_copy=f"This password reset expires {recovery.expires_at.isoformat()}.",
+            )
         if record.notification_type != "identity.onboarding_invitation":
             raise ValueError("Identity template is not supported by this consumer.")
         invitation_id = UUID(str(record.payload.get("invitation_id", "")))
         async with AsyncSessionFactory() as session:
-            delivery = await IdentityOnboardingService(self.configuration).claim_protected_delivery(
-                session, invitation_id=invitation_id
-            )
+            delivery = await IdentityOnboardingService(
+                self.configuration
+            ).claim_protected_delivery(session, invitation_id=invitation_id)
         async with AsyncSessionFactory() as session:
             row = (
                 await session.execute(
-                    select(User.display_name, Company.name, IdentityOnboardingInvitation.expires_at)
-                    .join(IdentityOnboardingRequest, IdentityOnboardingRequest.user_id == User.id)
-                    .join(IdentityOnboardingInvitation, IdentityOnboardingInvitation.onboarding_request_id == IdentityOnboardingRequest.id)
+                    select(
+                        User.display_name,
+                        Company.name,
+                        IdentityOnboardingInvitation.expires_at,
+                    )
+                    .join(
+                        IdentityOnboardingRequest,
+                        IdentityOnboardingRequest.user_id == User.id,
+                    )
+                    .join(
+                        IdentityOnboardingInvitation,
+                        IdentityOnboardingInvitation.onboarding_request_id
+                        == IdentityOnboardingRequest.id,
+                    )
                     .join(Company, Company.id == IdentityOnboardingRequest.company_id)
                     .where(IdentityOnboardingInvitation.id == invitation_id)
                 )
@@ -109,9 +141,11 @@ class IdentityOutboxWorker:
                         resolver=self.resolver,
                         now=datetime.now(timezone.utc),
                     )
-                except (OnboardingConflictError, ValueError):
+                except (OnboardingConflictError, RecoveryDeliveryError, ValueError):
                     if record.claim_token is None:
-                        raise RuntimeError("Claimed identity notification lost its token.")
+                        raise RuntimeError(
+                            "Claimed identity notification lost its token."
+                        )
                     await NotificationOutboxRepository.mark_failed(
                         session,
                         notification_id=record.id,
@@ -122,11 +156,20 @@ class IdentityOutboxWorker:
                     )
                     continue
             if result.outcome in {"accepted", "delivered"}:
-                invitation_id = UUID(str(record.payload["invitation_id"]))
-                async with AsyncSessionFactory() as session:
-                    await IdentityOnboardingService(self.configuration).complete_protected_delivery(
-                        session, invitation_id=invitation_id
-                    )
+                if record.notification_type == "identity.password_reset":
+                    token_id = UUID(str(record.payload["password_reset_token_id"]))
+                    async with AsyncSessionFactory() as session:
+                        await EmployeeRecoveryDeliveryService(
+                            self.configuration
+                        ).complete(session, token_id=token_id)
+                else:
+                    invitation_id = UUID(str(record.payload["invitation_id"]))
+                    async with AsyncSessionFactory() as session:
+                        await IdentityOnboardingService(
+                            self.configuration
+                        ).complete_protected_delivery(
+                            session, invitation_id=invitation_id
+                        )
         return len(record_ids)
 
     async def run(self) -> None:
@@ -136,7 +179,9 @@ class IdentityOutboxWorker:
         while True:
             processed = await self.run_once()
             if processed == 0:
-                await asyncio.sleep(self.configuration.identity_outbox_worker_poll_seconds)
+                await asyncio.sleep(
+                    self.configuration.identity_outbox_worker_poll_seconds
+                )
 
 
 if __name__ == "__main__":

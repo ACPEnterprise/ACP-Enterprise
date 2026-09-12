@@ -6,6 +6,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.database.session import get_database_session
+from app.platform.auth.recovery_delivery import (
+    RecoveryDeliveryError,
+    RecoveryDeliveryStatus,
+    employee_recovery_delivery_service,
+)
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import AdministrationPermission
 from app.platform.permissions.dependencies import (
@@ -30,6 +35,8 @@ from app.platform.users.identity_schemas import (
     IdentityMutationResponse,
     IdentityStateResponse,
     IdentityUserResponse,
+    PasswordResetDeliveryResponse,
+    PasswordResetDeliveryState,
     PendingEmailChangeResponse,
     PendingEmailChangeStatus,
 )
@@ -56,6 +63,17 @@ AdministrationContext = Annotated[
     AuthorizationContext,
     Depends(require_permission(AdministrationPermission.COMPANY_ADMINISTER)),
 ]
+
+
+def password_reset_delivery_response(
+    delivery: RecoveryDeliveryStatus,
+) -> PasswordResetDeliveryResponse:
+    return PasswordResetDeliveryResponse(
+        state=cast(PasswordResetDeliveryState, delivery.state),
+        requested_at=delivery.requested_at,
+        expires_at=delivery.expires_at,
+        provider_reference_present=delivery.provider_reference_present,
+    )
 
 
 def translate_identity_error(error: IdentityAdministrationError) -> HTTPException:
@@ -280,6 +298,53 @@ async def require_forced_password_reset(
     except IdentityAdministrationError as error:
         raise translate_identity_error(error) from error
     return forced_reset_response(credential, changed=changed)
+
+
+@administration_router.get(
+    "/users/{user_id}/password-reset-delivery",
+    response_model=PasswordResetDeliveryResponse,
+    summary="Retrieve employee password-reset delivery state",
+)
+async def get_password_reset_delivery(
+    user_id: UUID,
+    context: AdministrationContext,
+    session: DatabaseSession,
+) -> PasswordResetDeliveryResponse:
+    try:
+        delivery = await employee_recovery_delivery_service.status_admin(
+            session, context=context, user_id=user_id
+        )
+    except RecoveryDeliveryError as error:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Employee account recovery is unavailable.",
+        ) from error
+    return password_reset_delivery_response(delivery)
+
+
+@administration_router.post(
+    "/users/{user_id}/password-reset-delivery",
+    response_model=PasswordResetDeliveryResponse,
+    summary="Send an audited employee password reset",
+)
+async def send_password_reset_delivery(
+    user_id: UUID,
+    context: AdministrationContext,
+    session: DatabaseSession,
+) -> PasswordResetDeliveryResponse:
+    try:
+        await employee_recovery_delivery_service.request_admin(
+            session, context=context, user_id=user_id
+        )
+        delivery = await employee_recovery_delivery_service.status_admin(
+            session, context=context, user_id=user_id
+        )
+    except RecoveryDeliveryError as error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Employee account recovery is unavailable.",
+        ) from error
+    return password_reset_delivery_response(delivery)
 
 
 @administration_router.post(

@@ -88,6 +88,44 @@ def render_employee_invitation(
     return RenderedTransactionalMessage(**facts, content_digest=_digest(facts))
 
 
+def render_password_reset(
+    *,
+    recipient_display_name: str,
+    company_display_name: str,
+    reset_url: str,
+    expected_origin: str,
+    expiration_copy: str,
+) -> RenderedTransactionalMessage:
+    """Render a fixed recovery message without persisting its single-use token."""
+    person = _safe_header(recipient_display_name) or "there"
+    company = _safe_header(company_display_name) or "your company"
+    action = _https_url(reset_url, expected_origin=expected_origin)
+    expiration = _safe_header(expiration_copy)
+    subject = _safe_header(f"Reset your ACP password for {company}")
+    plain = (
+        f"Hello {person},\n\nA password reset was requested for your ACP account "
+        f"with {company}. Reset your password: {action}\n\n{expiration}\n\n"
+        "This link can be used once. If you did not request this reset, contact "
+        "your company administrator."
+    )
+    markup = (
+        f"<p>Hello {html.escape(person)},</p>"
+        f"<p>A password reset was requested for your ACP account with "
+        f"{html.escape(company)}.</p>"
+        f'<p><a href="{html.escape(action, quote=True)}">Reset Password</a></p>'
+        f"<p>{html.escape(expiration)} This link can be used once.</p>"
+        "<p>If you did not request this reset, contact your company administrator.</p>"
+    )
+    facts = {
+        "template_identifier": "identity-password-reset",
+        "template_version": "identity-password-reset-v1",
+        "subject": subject,
+        "plain_text": plain,
+        "html": markup,
+    }
+    return RenderedTransactionalMessage(**facts, content_digest=_digest(facts))
+
+
 def render_protected_document_notice(
     *,
     template_identifier: str,
@@ -157,9 +195,7 @@ def render_operational_notice(
     sms = f"{company}: {label}."
     if action:
         plain += f" View details securely: {action}"
-        markup += (
-            f'<p><a href="{html.escape(action, quote=True)}">View details securely</a></p>'
-        )
+        markup += f'<p><a href="{html.escape(action, quote=True)}">View details securely</a></p>'
         sms += f" {action}"
     facts = {
         "template_identifier": message_type.value.replace("_", "-"),
