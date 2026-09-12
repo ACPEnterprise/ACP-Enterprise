@@ -99,7 +99,12 @@ Update the current integration-watch authority from `52dc3367...` to
 - PostgreSQL zero-to-head and current-head checks;
 - Alembic head `g7i9k1m3o5q7`, down revision `f6h8j0l2n4p6`;
 - no Alembic autogenerate drift;
-- 252 Business Economics tests.
+- 252 Business Economics tests;
+- clean Python compilation for the affected application, migration, and tests.
+
+The repository does not configure a Ruff, mypy, Flake8, or backend
+`pyproject.toml` gate; clean compilation must not be represented as coverage by
+those tools.
 
 ### PR #215
 
