@@ -110,4 +110,20 @@ export interface CustomerBalance {
   native_invoice_count: number;
   legacy_evidence_incomplete: boolean;
   as_of: string;
+  evidence_classifications: CustomerEvidenceClassification[];
+}
+
+export type CustomerEvidenceState = "CURRENT_AUTHORITATIVE" | "HISTORICAL_SOURCE_EVIDENCE" | "STALE" | "CONFLICTING" | "PARTIAL" | "UNAVAILABLE";
+export interface CustomerEvidenceClassification {
+  company_id: string;
+  customer_id: string;
+  source_system: string;
+  source_record_identity: string | null;
+  as_of: string | null;
+  acquired_at: string | null;
+  evidence_digest: string | null;
+  completeness: string;
+  conflict_state: string;
+  classification: CustomerEvidenceState;
+  authority: string;
 }

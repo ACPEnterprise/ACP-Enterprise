@@ -123,9 +123,10 @@ export function useCustomerMutations(customerId?: string) {
       mutationFn: (input: Parameters<typeof recordCustomerConsent>[1]) =>
         recordCustomerConsent(customerId as string, input),
       onSuccess: async () => {
-        await queryClient.invalidateQueries({
-          queryKey: ["customer-consents", customerId],
-        });
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: ["customer-consents", customerId] }),
+          queryClient.invalidateQueries({ queryKey: ["customer-timeline", customerId] }),
+        ]);
       },
     }),
   };
