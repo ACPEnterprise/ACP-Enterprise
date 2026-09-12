@@ -19,5 +19,7 @@ export function usePriceBookMutations() {
     transition: useMutation({ mutationFn: ({ id, version, action }: { id: string; version: number; action: "inactivate" | "archive" }) => api.transitionPriceVersion(id, version, action), onSuccess: refresh }),
     optionGroup: useMutation({ mutationFn: api.createOptionGroup, onSuccess: refresh }),
     option: useMutation({ mutationFn: ({ groupId, data }: { groupId: string; data: Parameters<typeof api.addOption>[1] }) => api.addOption(groupId, data), onSuccess: refresh }),
+    validateBulk: useMutation({ mutationFn: api.validateBulkDrafts }),
+    createBulk: useMutation({ mutationFn: api.createBulkDrafts, onSuccess: refresh }),
   };
 }

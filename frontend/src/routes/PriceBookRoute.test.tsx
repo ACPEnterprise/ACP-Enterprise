@@ -36,7 +36,7 @@ vi.mock("../hooks/usePriceBook", () => ({
     },
   }),
   usePriceBookMutations: () => ({
-    category: { isPending: false, isError: Boolean(mutationState.categoryError), error: mutationState.categoryError, mutateAsync: mutationState.categoryMutate }, updateCategory: { isPending: false, isError: false, error: null, mutateAsync: vi.fn() }, tax: { isPending: false, isError: false, error: null, mutateAsync: vi.fn() }, updateTax: { isPending: false, isError: false, error: null, mutateAsync: vi.fn() }, item: { isPending: false, isError: false, error: null, mutateAsync: vi.fn() }, updateItem: { isPending: false, isError: false, error: null, mutateAsync: vi.fn() }, version: { isPending: false, isError: false, error: null, mutateAsync: vi.fn() }, updateVersion: { isPending: false, isError: false, error: null, mutateAsync: vi.fn() }, activate: { isError: false, error: null, mutateAsync: vi.fn() }, transition: { isError: false, error: null, mutateAsync: vi.fn() }, optionGroup: { isPending: false, isError: false, error: null, mutateAsync: vi.fn() }, option: { isPending: false, isError: false, error: null, mutateAsync: vi.fn() },
+    category: { isPending: false, isError: Boolean(mutationState.categoryError), error: mutationState.categoryError, mutateAsync: mutationState.categoryMutate }, updateCategory: { isPending: false, isError: false, error: null, mutateAsync: vi.fn() }, tax: { isPending: false, isError: false, error: null, mutateAsync: vi.fn() }, updateTax: { isPending: false, isError: false, error: null, mutateAsync: vi.fn() }, item: { isPending: false, isError: false, error: null, mutateAsync: vi.fn() }, updateItem: { isPending: false, isError: false, error: null, mutateAsync: vi.fn() }, version: { isPending: false, isError: false, error: null, mutateAsync: vi.fn() }, updateVersion: { isPending: false, isError: false, error: null, mutateAsync: vi.fn() }, activate: { isError: false, error: null, mutateAsync: vi.fn() }, transition: { isError: false, error: null, mutateAsync: vi.fn() }, optionGroup: { isPending: false, isError: false, error: null, mutateAsync: vi.fn() }, option: { isPending: false, isError: false, error: null, mutateAsync: vi.fn() }, validateBulk: { isPending: false, isError: false, error: null, mutateAsync: vi.fn() }, createBulk: { isPending: false, isError: false, error: null, mutateAsync: vi.fn() },
   }),
 }));
 
@@ -80,6 +80,7 @@ describe("PriceBookRoute", () => {
     expect(screen.getByRole("heading", { name: "Price Book" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Create service item" })).toBeVisible();
     expect(screen.getByLabelText("Internal unit cost")).toBeVisible();
+    expect(screen.getByRole("heading", { name: "All County draft builder" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Review and activate" })).toBeVisible();
   });
 

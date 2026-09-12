@@ -2,6 +2,7 @@ import axios from "axios";
 import { useMemo, useState, type FormEvent } from "react";
 
 import { useAuth, useHasPermission } from "../auth";
+import { BulkDraftWorkspace } from "../components/priceBook/BulkDraftWorkspace";
 import { usePriceBook, usePriceBookMutations } from "../hooks/usePriceBook";
 import type { PriceBookOperatorCatalog, PriceBookServiceItem, PriceBookVersion } from "../types/priceBook";
 import {
@@ -80,6 +81,16 @@ export function PriceBookRoute() {
   const selectedItem = data?.service_items.find((value) => value.id === selectedItemId) ?? filteredItems[0];
   const selectedVersions = (data?.versions ?? []).filter((value) => value.service_item_id === selectedItem?.id);
   const currentVersion = selectedVersions.find((value) => value.id === selectedItem?.current_version_id);
+  const draftReview = useMemo(() => {
+    const internalComponents = data && "internal_components" in data ? (data as PriceBookOperatorCatalog).internal_components : [];
+    return (data?.versions ?? []).filter((version) => version.status === "draft").map((version) => {
+      const item = data?.service_items.find((value) => value.id === version.service_item_id);
+      const components = internalComponents.filter((component) => version.components.some((value) => value.id === component.id));
+      const types = new Set(components.map((component) => component.component_type));
+      const gaps = [...(!types.has("labor") ? ["labor quantity"] : []), ...(!types.has("material") ? ["material quantity"] : []), ...(components.some((component) => component.unit_cost == null) ? ["internal cost authority"] : [])];
+      return { version, item, gaps };
+    });
+  }, [data]);
   const failedMutation = Object.values(mutations).find((mutation) => mutation.isError);
 
   const perform = async (operation: () => Promise<unknown>, success?: () => void) => {
@@ -202,6 +213,10 @@ export function PriceBookRoute() {
         <Card><CardHeader><CardTitle>Services</CardTitle><CardDescription>{filteredItems.length} matching items</CardDescription></CardHeader><CardContent><ul className="space-y-2">{filteredItems.map((value) => <li key={value.id}><button type="button" className="w-full rounded-lg border border-stroke p-3 text-left hover:bg-surface-muted" onClick={() => setSelectedItemId(value.id)}><span className="flex items-center justify-between gap-2"><strong>{value.name}</strong><Badge variant={value.status === "active" ? "success" : "neutral"}>{value.status}</Badge></span><span className="mt-1 block text-sm text-content-muted">{value.code} · {data?.categories.find((entry) => entry.id === value.category_id)?.name ?? "Uncategorized"}</span></button></li>)}</ul></CardContent></Card>
         <ServiceDetail item={selectedItem} versions={selectedVersions} currentVersion={currentVersion} canManage={canManage} canActivate={canActivate} onEditItem={editItem} onEditDraft={editDraft} onActivate={(version) => void perform(() => mutations.activate.mutateAsync({ id: version.id, version: version.version }))} onTransition={(version, action) => void perform(() => mutations.transition.mutateAsync({ id: version.id, version: version.version, action }))} />
       </div>
+
+      {canManage && <BulkDraftWorkspace branchId={branch} categories={data?.categories ?? []} taxes={data?.tax_classifications ?? []} />}
+
+      {canManage && <Card><CardHeader><CardTitle>Draft review queue</CardTitle><CardDescription>Readiness is derived from draft evidence and does not replace lifecycle status.</CardDescription></CardHeader><CardContent><div className="space-y-2">{draftReview.map(({ version, item, gaps }) => <div key={version.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-stroke p-3"><div><strong>{item?.name ?? "Draft service"}</strong><p className="text-xs text-content-muted">{item?.code} · proposed {version.currency} {version.unit_price} · effective {new Date(version.effective_at).toLocaleDateString()}</p>{gaps.length > 0 && <p className="mt-1 text-xs text-status-warning">Missing: {gaps.join(", ")}</p>}</div><Badge variant={gaps.length ? "warning" : "success"}>{gaps.length ? "INCOMPLETE" : "READY_FOR_REVIEW"}</Badge></div>)}{draftReview.length === 0 && <p className="text-sm text-content-muted">No draft versions are awaiting review.</p>}</div></CardContent></Card>}
 
       {canManage && <section aria-label="Price Book maintenance" className="grid gap-4 lg:grid-cols-2">
         <Card><CardHeader><CardTitle>Maintain category</CardTitle><CardDescription>Renaming and grouping preserve every historical reference.</CardDescription></CardHeader><CardContent><form className="space-y-3" onSubmit={(event) => void submitCategoryEdit(event)}><Select aria-label="Category to maintain" value={categoryEdit.id} onChange={(event) => chooseCategory(event.target.value)} required><option value="">Choose category</option>{data?.categories.map((value) => <option key={value.id} value={value.id}>{value.name} · {value.status}</option>)}</Select><Input aria-label="Updated category name" value={categoryEdit.name} onChange={(event) => setCategoryEdit({ ...categoryEdit, name: event.target.value })} required /><Textarea aria-label="Category description" value={categoryEdit.description} onChange={(event) => setCategoryEdit({ ...categoryEdit, description: event.target.value })} /><Select aria-label="Parent category" value={categoryEdit.parent_id} onChange={(event) => setCategoryEdit({ ...categoryEdit, parent_id: event.target.value })}><option value="">Top-level category</option>{data?.categories.filter((value) => value.status === "active" && value.id !== categoryEdit.id).map((value) => <option key={value.id} value={value.id}>{value.name}</option>)}</Select><Select aria-label="Category state" value={categoryEdit.status} onChange={(event) => setCategoryEdit({ ...categoryEdit, status: event.target.value as "active" | "archived" })}><option value="active">Active</option><option value="archived">Archived</option></Select><Button fullWidth type="submit" disabled={!categoryEdit.id} loading={mutations.updateCategory.isPending}>Save category</Button></form></CardContent></Card>

@@ -28,6 +28,12 @@ from .models import (
 )
 from .schemas import (
     AuditItem,
+    BulkDraftCreated,
+    BulkDraftIssue,
+    BulkDraftRequest,
+    BulkDraftResult,
+    BulkDraftRowValidation,
+    BulkDraftValidation,
     CatalogPage,
     CategoryCreate,
     CategoryItem,
@@ -61,6 +67,296 @@ def utc_now() -> datetime:
 
 
 class PriceBookService:
+    async def _bulk_draft_validation(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        payload: BulkDraftRequest,
+    ) -> BulkDraftValidation:
+        categories = set(
+            (
+                await session.scalars(
+                    select(PriceBookCategory.id).where(
+                        PriceBookCategory.company_id == context.company.id,
+                        PriceBookCategory.status == "active",
+                    )
+                )
+            ).all()
+        )
+        taxes = set(
+            (
+                await session.scalars(
+                    select(PriceBookTaxClassification.id).where(
+                        PriceBookTaxClassification.company_id == context.company.id,
+                        PriceBookTaxClassification.status == "active",
+                    )
+                )
+            ).all()
+        )
+        existing = tuple(
+            (
+                await session.execute(
+                    select(PriceBookServiceItem.code, PriceBookServiceItem.name).where(
+                        PriceBookServiceItem.company_id == context.company.id
+                    )
+                )
+            ).all()
+        )
+        existing_codes = {code.casefold() for code, _ in existing}
+        existing_names = {name.strip().casefold() for _, name in existing}
+        request_codes: dict[str, int] = {}
+        request_names: dict[str, int] = {}
+        request_refs: dict[str, int] = {}
+        for row in payload.rows:
+            request_codes[row.code.casefold()] = (
+                request_codes.get(row.code.casefold(), 0) + 1
+            )
+            normalized_name = row.name.strip().casefold()
+            request_names[normalized_name] = request_names.get(normalized_name, 0) + 1
+            request_refs[row.client_ref] = request_refs.get(row.client_ref, 0) + 1
+
+        results: list[BulkDraftRowValidation] = []
+        for row in payload.rows:
+            issues: list[BulkDraftIssue] = []
+
+            def issue(
+                code: str,
+                field: str,
+                message: str,
+                target: list[BulkDraftIssue] = issues,
+            ) -> None:
+                target.append(BulkDraftIssue(code=code, field=field, message=message))
+
+            if request_refs[row.client_ref] > 1:
+                issue(
+                    "DUPLICATE_CLIENT_REFERENCE",
+                    "client_ref",
+                    "Row reference is duplicated in this batch.",
+                )
+            if not row.code:
+                issue("REQUIRED", "code", "Service code is required.")
+            elif (
+                row.code.casefold() in existing_codes
+                or request_codes[row.code.casefold()] > 1
+            ):
+                issue(
+                    "DUPLICATE_CODE",
+                    "code",
+                    "Service code already exists or is repeated in this batch.",
+                )
+            normalized_name = row.name.strip().casefold()
+            if not normalized_name:
+                issue("REQUIRED", "name", "Service name is required.")
+            elif (
+                normalized_name in existing_names or request_names[normalized_name] > 1
+            ):
+                issue(
+                    "DUPLICATE_NAME",
+                    "name",
+                    "Service name already exists or is repeated in this batch.",
+                )
+            if row.category_id not in categories:
+                issue(
+                    "CATEGORY_UNAVAILABLE",
+                    "category_id",
+                    "Choose an active Price Book category.",
+                )
+            if (
+                row.branch_id is not None
+                and row.branch_id not in context.authorized_branch_ids
+            ):
+                issue("BRANCH_UNAVAILABLE", "branch_id", "Choose an authorized Branch.")
+            if not row.customer_description.strip():
+                issue(
+                    "REQUIRED",
+                    "customer_description",
+                    "Customer description is required.",
+                )
+            if row.tax_classification_id not in taxes:
+                issue(
+                    "TAX_UNAVAILABLE",
+                    "tax_classification_id",
+                    "Choose an active tax classification.",
+                )
+            if row.unit_price is None:
+                issue("REQUIRED", "unit_price", "Proposed sell price is required.")
+            if row.effective_at is None:
+                issue(
+                    "REQUIRED", "effective_at", "Proposed effective date is required."
+                )
+            component_types = {component.component_type for component in row.components}
+            if "labor" not in component_types:
+                issue(
+                    "MISSING_LABOR_INPUT",
+                    "components",
+                    "Labor quantity is not supplied.",
+                )
+            if "material" not in component_types:
+                issue(
+                    "MISSING_MATERIAL_INPUT",
+                    "components",
+                    "Material quantity is not supplied.",
+                )
+            if any(component.unit_cost is None for component in row.components):
+                issue(
+                    "MISSING_COST_AUTHORITY",
+                    "components",
+                    "One or more internal costs remain unavailable.",
+                )
+            fatal = {
+                "DUPLICATE_CLIENT_REFERENCE",
+                "DUPLICATE_CODE",
+                "DUPLICATE_NAME",
+                "REQUIRED",
+                "CATEGORY_UNAVAILABLE",
+                "BRANCH_UNAVAILABLE",
+                "TAX_UNAVAILABLE",
+            }
+            can_save = not any(value.code in fatal for value in issues)
+            results.append(
+                BulkDraftRowValidation(
+                    client_ref=row.client_ref,
+                    can_save=can_save,
+                    readiness="READY_FOR_REVIEW" if not issues else "INCOMPLETE",
+                    issues=tuple(issues),
+                )
+            )
+        return BulkDraftValidation(
+            can_save=all(result.can_save for result in results), rows=tuple(results)
+        )
+
+    async def validate_bulk_drafts(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        payload: BulkDraftRequest,
+    ) -> BulkDraftValidation:
+        return await self._bulk_draft_validation(
+            session, context=context, payload=payload
+        )
+
+    async def create_bulk_drafts(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        payload: BulkDraftRequest,
+    ) -> BulkDraftResult:
+        created: list[BulkDraftCreated] = []
+        try:
+            async with session.begin():
+                validation = await self._bulk_draft_validation(
+                    session, context=context, payload=payload
+                )
+                if not validation.can_save:
+                    raise PriceBookValidation("Bulk draft rows require correction.")
+                validations = {row.client_ref: row for row in validation.rows}
+                now = utc_now()
+                for row in payload.rows:
+                    assert row.category_id is not None
+                    assert row.tax_classification_id is not None
+                    assert row.unit_price is not None
+                    assert row.effective_at is not None
+                    item = PriceBookServiceItem(
+                        company_id=context.company.id,
+                        branch_id=row.branch_id,
+                        category_id=row.category_id,
+                        code=row.code,
+                        name=row.name.strip(),
+                        customer_description=row.customer_description.strip(),
+                        internal_description=row.internal_description,
+                        created_by_user_id=context.user.id,
+                        created_at=now,
+                        updated_at=now,
+                    )
+                    session.add(item)
+                    await session.flush()
+                    version = PriceBookPriceVersion(
+                        company_id=context.company.id,
+                        service_item_id=item.id,
+                        branch_id=row.branch_id,
+                        tax_classification_id=row.tax_classification_id,
+                        revision=1,
+                        currency=row.currency,
+                        unit_price=row.unit_price,
+                        effective_at=row.effective_at,
+                        created_by_user_id=context.user.id,
+                        created_at=now,
+                        updated_at=now,
+                    )
+                    session.add(version)
+                    await session.flush()
+                    components: list[PriceBookComponent] = []
+                    for position, component in enumerate(row.components, 1):
+                        record = PriceBookComponent(
+                            company_id=context.company.id,
+                            price_version_id=version.id,
+                            component_type=component.component_type,
+                            code=component.code,
+                            label=component.label.strip(),
+                            quantity=component.quantity,
+                            unit_cost=component.unit_cost,
+                            position=position,
+                        )
+                        session.add(record)
+                        components.append(record)
+                    await session.flush()
+                    self._audit(
+                        session,
+                        context=context,
+                        entity_type="price_book_service_item",
+                        entity_id=item.id,
+                        action="bulk_draft_created",
+                        state={
+                            "code": item.code,
+                            "status": "draft",
+                            "client_ref": row.client_ref,
+                        },
+                        reason="Operator bulk Price Book draft build.",
+                        version=1,
+                    )
+                    self._audit(
+                        session,
+                        context=context,
+                        entity_type="price_book_price_version",
+                        entity_id=version.id,
+                        action="draft_created",
+                        state={
+                            "revision": 1,
+                            "status": "draft",
+                            "unit_price": str(version.unit_price),
+                            "currency": version.currency,
+                        },
+                        reason="Operator bulk Price Book draft build.",
+                        version=1,
+                    )
+                    result = validations[row.client_ref]
+                    created.append(
+                        BulkDraftCreated(
+                            client_ref=row.client_ref,
+                            service_item=ServiceItem.model_validate(item),
+                            draft_version=PriceVersionItem.model_validate(
+                                version
+                            ).model_copy(
+                                update={
+                                    "components": tuple(
+                                        ComponentItem.model_validate(value)
+                                        for value in components
+                                    )
+                                }
+                            ),
+                            readiness=result.readiness,
+                            issues=result.issues,
+                        )
+                    )
+        except IntegrityError as error:
+            raise PriceBookConflict(
+                "Bulk draft identity conflicts with current authority."
+            ) from error
+        return BulkDraftResult(created=tuple(created))
+
     async def effective_catalog(
         self,
         session: AsyncSession,

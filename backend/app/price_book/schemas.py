@@ -310,3 +310,57 @@ class EffectiveServiceItem(PriceBookSchema):
 class EffectiveCatalog(PriceBookSchema):
     effective_at: datetime
     items: tuple[EffectiveServiceItem, ...]
+
+
+class BulkDraftCandidate(PriceBookSchema):
+    client_ref: str = Field(min_length=1, max_length=80)
+    branch_id: UUID | None = None
+    category_id: UUID | None = None
+    code: str = Field(default="", max_length=80)
+    name: str = Field(default="", max_length=240)
+    customer_description: str = Field(default="", max_length=4000)
+    internal_description: str | None = Field(default=None, max_length=4000)
+    tax_classification_id: UUID | None = None
+    currency: str = Field(default="USD", pattern=r"^[A-Z]{3}$")
+    unit_price: Decimal | None = Field(default=None, ge=0)
+    effective_at: datetime | None = None
+    components: tuple[ComponentCreate, ...] = ()
+
+    @field_validator("code")
+    @classmethod
+    def normalize_bulk_code(cls, value: str) -> str:
+        return value.strip().upper()
+
+
+class BulkDraftRequest(PriceBookSchema):
+    rows: tuple[BulkDraftCandidate, ...] = Field(min_length=1, max_length=100)
+
+
+class BulkDraftIssue(PriceBookSchema):
+    code: str
+    field: str
+    message: str
+
+
+class BulkDraftRowValidation(PriceBookSchema):
+    client_ref: str
+    can_save: bool
+    readiness: str = Field(pattern=r"^(INCOMPLETE|READY_FOR_REVIEW)$")
+    issues: tuple[BulkDraftIssue, ...]
+
+
+class BulkDraftValidation(PriceBookSchema):
+    can_save: bool
+    rows: tuple[BulkDraftRowValidation, ...]
+
+
+class BulkDraftCreated(PriceBookSchema):
+    client_ref: str
+    service_item: ServiceItem
+    draft_version: PriceVersionItem
+    readiness: str
+    issues: tuple[BulkDraftIssue, ...]
+
+
+class BulkDraftResult(PriceBookSchema):
+    created: tuple[BulkDraftCreated, ...]

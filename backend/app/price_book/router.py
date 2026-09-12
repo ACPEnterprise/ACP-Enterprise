@@ -21,6 +21,9 @@ from .errors import (
 from .schemas import (
     ActivationRequest,
     AuditItem,
+    BulkDraftRequest,
+    BulkDraftResult,
+    BulkDraftValidation,
     CatalogPage,
     CategoryCreate,
     CategoryItem,
@@ -138,6 +141,36 @@ async def effective_items(
             effective_at=effective_at,
             category_id=category_id,
             search=search,
+        )
+    except PriceBookError as error:
+        raise http_error(error) from error
+
+
+@router.post("/bulk-drafts/validate", response_model=BulkDraftValidation)
+async def validate_bulk_drafts(
+    payload: BulkDraftRequest,
+    context: ManageContext,
+    session: DatabaseSession,
+) -> BulkDraftValidation:
+    try:
+        return await price_book_service.validate_bulk_drafts(
+            session, context=context, payload=payload
+        )
+    except PriceBookError as error:
+        raise http_error(error) from error
+
+
+@router.post(
+    "/bulk-drafts", response_model=BulkDraftResult, status_code=status.HTTP_201_CREATED
+)
+async def create_bulk_drafts(
+    payload: BulkDraftRequest,
+    context: ManageContext,
+    session: DatabaseSession,
+) -> BulkDraftResult:
+    try:
+        return await price_book_service.create_bulk_drafts(
+            session, context=context, payload=payload
         )
     except PriceBookError as error:
         raise http_error(error) from error

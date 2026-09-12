@@ -23,6 +23,8 @@ from app.price_book.errors import PriceBookConflict, PriceBookNotFound
 from app.price_book.models import PriceBookAuditEntry, PriceBookCommercialSnapshot
 from app.price_book.router import router as price_book_router
 from app.price_book.schemas import (
+    BulkDraftCandidate,
+    BulkDraftRequest,
     CategoryCreate,
     CategoryUpdate,
     ComponentCreate,
@@ -433,6 +435,82 @@ async def test_effective_catalog_resolves_only_current_customer_safe_truth(
     serialized = current.model_dump(mode="json")
     assert "unit_cost" not in str(serialized)
     assert "internal_description" not in str(serialized)
+
+
+@pytest.mark.asyncio
+async def test_bulk_draft_validation_and_atomic_creation(price_book_fixture):
+    factory, context, branch = price_book_fixture
+    service = PriceBookService()
+    async with factory() as session:
+        category = await service.create_category(
+            session,
+            context=context,
+            payload=CategoryCreate(code="BUILD", name="Build workspace"),
+        )
+    async with factory() as session:
+        tax = await service.create_tax(
+            session,
+            context=context,
+            payload=TaxClassificationCreate(
+                code="BUILD-TAX", name="Build tax", taxable=True
+            ),
+        )
+    effective = datetime.now(timezone.utc) + timedelta(days=1)
+    valid = BulkDraftCandidate(
+        client_ref="row-1",
+        branch_id=branch.id,
+        category_id=category.id,
+        code="BUILD-001",
+        name="Draft service one",
+        customer_description="Customer-safe service description.",
+        internal_description="Owner review required.",
+        tax_classification_id=tax.id,
+        unit_price=Decimal("125.00"),
+        effective_at=effective,
+        components=(
+            ComponentCreate(
+                component_type="labor",
+                label="Labor",
+                quantity=Decimal("1.5"),
+                unit_cost=Decimal(40),
+            ),
+            ComponentCreate(
+                component_type="material",
+                label="Materials",
+                quantity=Decimal(1),
+                unit_cost=Decimal(12),
+            ),
+        ),
+    )
+    duplicate = valid.model_copy(update={"client_ref": "row-2"})
+    async with factory() as session:
+        rejected = await service.validate_bulk_drafts(
+            session,
+            context=context,
+            payload=BulkDraftRequest(rows=(valid, duplicate)),
+        )
+    assert rejected.can_save is False
+    assert {issue.code for row in rejected.rows for issue in row.issues} >= {
+        "DUPLICATE_CODE",
+        "DUPLICATE_NAME",
+    }
+    async with factory() as session:
+        created = await service.create_bulk_drafts(
+            session,
+            context=context,
+            payload=BulkDraftRequest(rows=(valid,)),
+        )
+    assert len(created.created) == 1
+    assert created.created[0].service_item.status == "draft"
+    assert created.created[0].draft_version.status == "draft"
+    assert created.created[0].readiness == "READY_FOR_REVIEW"
+    async with factory() as session:
+        assert (
+            await session.scalar(
+                select(func.count()).select_from(PriceBookCommercialSnapshot)
+            )
+            == 0
+        )
 
 
 @pytest.mark.asyncio
