@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -13,7 +14,7 @@ vi.mock("../components/customers/CustomerManagement", () => ({
   CustomerManagement: () => <div>Protected customer list</div>,
 }));
 vi.mock("../components/customers/CustomerDetailView", () => ({
-  CustomerDetailView: () => <div>Protected customer detail</div>,
+  CustomerDetailView: ({ onBack }: { onBack: () => void }) => <div>Protected customer detail<button onClick={onBack}>Back from customer</button></div>,
 }));
 
 describe("Customer route authorization", () => {
@@ -50,5 +51,19 @@ describe("Customer route authorization", () => {
     expect(
       screen.getByRole("button", { name: "Ask LIA about this Customer" }),
     ).toBeVisible();
+  });
+
+  it("returns a calendar-opened Customer to the validated Scheduling scope", async () => {
+    permissions.add("COMPANY_CUSTOMER_READ");
+    render(
+      <MemoryRouter initialEntries={["/customers/customer-1?returnTo=%2Fscheduling%3Fdate%3D2026-08-13%26view%3Dmonth"]}>
+        <Routes>
+          <Route path="/customers/:customerId" element={<CustomerDetailRoute />} />
+          <Route path="/scheduling" element={<div>Restored schedule</div>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Back from customer" }));
+    expect(screen.getByText("Restored schedule")).toBeVisible();
   });
 });
