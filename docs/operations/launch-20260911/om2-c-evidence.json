@@ -5,7 +5,7 @@
     "file_sha256": "03b74b5f065694b487268bdee531d8d50620f2816f30c91d8b665f9d5b3e9dfc"
   },
   "starting_protected_authority": "42a4f68087d76247269bd4c8388f556dd62a8b5c",
-  "protected_authority": "132cded360525e10a5d9029b25fff2bd8a45b81b",
+  "protected_authority": "2d8709c895e60faf7cc0251d6c8ac82311013613",
   "schema_head": "d4f6h8j0l2n4",
   "fixture_qualification": {
     "classification": "QUALIFIED_SYNTHETIC_ONLY",
@@ -71,21 +71,23 @@
     "health": "HEALTHY",
     "database": "CONNECTED",
     "redis": "CONNECTED",
-    "reported_backend_release": "0b74c7654fde500529da824bdce604e01575cec1",
-    "frontend_index_sha256": "cdd6bed341a63b5f8ed853a71d73f0a1f219c44a8ca95aca2c17cf40c289dd85",
-    "qualified_frontend_index_sha256": "cdd6bed341a63b5f8ed853a71d73f0a1f219c44a8ca95aca2c17cf40c289dd85",
+    "reported_backend_release": "b5dff4b0203fe9a725a0ff844279876f410cba12",
+    "frontend_index_sha256": "a7a3a9a038a71ea2ef00e00638b4b4b642f6988a5e47ce8387a8b1dc81a842d7",
+    "qualified_frontend_index_sha256": "a7a3a9a038a71ea2ef00e00638b4b4b642f6988a5e47ce8387a8b1dc81a842d7",
     "qualified_route_assets_match": {
       "customers": true,
       "scheduling_month_dispatch": true,
       "workday": true,
       "payroll": true,
-      "classification": "CURRENT_0B74C76_INDEX_MATCH"
+      "classification": "CURRENT_FRONTEND_INDEX_MATCH_PREVIEW_B5DFF4B"
     },
     "job_clock_route_status": 401,
     "registered_timecard_payroll_route_status": 401,
     "non_authoritative_guessed_plural_routes_status": 404,
     "qbo_source_evidence_route_status": 401,
     "operations_post_route_read_only_get_status": 405,
+    "existing_job_schedule_route_read_only_get_status": 405,
+    "existing_job_schedule_route_allow": "POST",
     "deployment_recovery": {
       "transient_status": 502,
       "recovered_within_seconds": 45,
@@ -104,7 +106,7 @@
     "source4_ambiguous_holds": 1389,
     "source4_conflicts": 0,
     "source4_classification_digest": "ddf33badaa56e18948718946d52ca30203935c971396e34d86db9b49811f3be7",
-    "source4_currentness": "STALE_VERSUS_2026_09_11_GET_ONLY_REFRESH",
+    "source4_currentness": "STALE_VERSUS_2026_09_12_GET_ONLY_REFRESH",
     "qbo": "BLOCKED_EXTERNAL_LIVE_AUTHORIZATION",
     "employee_graph": "ACTUAL_PREVIEW_EVIDENCE_REPORTED_BY_OM1_PHONE",
     "employee_delivery": "DEFINITIVE_PROVIDER_REJECTION_NO_ACCEPTANCE_ONE_RETRY_ELIGIBLE",
@@ -130,11 +132,54 @@
     "accounting": false
   },
   "final_checkpoint": {
-    "classification": "DEPENDENCY_GATED_LOCALLY_EXHAUSTED",
+    "classification": "CONDITIONALLY_QUALIFIED_NOT_OPERATOR_ACCEPTED",
     "authenticated_operator_acceptance": "NOT_EXECUTED_NO_SANCTIONED_SESSION",
     "source_backed_crossdomain_acceptance": "NOT_EXECUTED_ADMISSION_PROHIBITED",
     "physical_mobile_acceptance": "NOT_EXECUTED_OWNED_BY_LAPTOP1_PHONE",
     "preview_mutated": false,
     "production_touched": false
+  },
+  "continuation_20260912": {
+    "factory": {
+      "authority": "b22297c65165280a761860198dc05441df4a4312",
+      "total_scenarios": 53,
+      "passed": 49,
+      "declared_gates": 4,
+      "failed": 0,
+      "duration_ms": 144589
+    },
+    "redis_required_qualification_passed": 21,
+    "post_source4_contract_passed": 21,
+    "qbo_backend_passed": 36,
+    "customer_company_backend_passed": 23,
+    "frontend_chain_tests": {
+      "customer_role": {"files": 5, "tests": 54},
+      "scheduling_dispatch": {"files": 5, "tests": 29},
+      "employee_payroll": {"files": 4, "tests": 14},
+      "revenue": {"files": 4, "tests": 20}
+    },
+    "actual_hcp_packet": {
+      "observed_at": "2026-09-12T16:49:00Z",
+      "decision_digest": "5070aa62a8a86bfbd1249588e86f1f08d29ae433803ba05fdf8ee04b234e9025",
+      "open_job_requests_succeeded": 383,
+      "open_job_requests_total": 383,
+      "appointments": 479,
+      "fully_mapped_appointments": 187,
+      "partially_unmapped_appointments": 292,
+      "open_jobs_missing_location_id": 22,
+      "classification": "OWNER_LANE_READ_ONLY_EVIDENCE_NOT_ADMITTED"
+    },
+    "migration_mypy_errors": 15,
+    "pending_om2b_candidate": "724398348b566f655d2bc7127c20beeb6be52d6c"
+    ,
+    "existing_job_schedule_qualification": {
+      "backend_passed": 5,
+      "frontend_files_passed": 3,
+      "frontend_tests_passed": 9,
+      "ruff": "PASS",
+      "mypy": "PASS",
+      "eslint": "PASS",
+      "typescript_production_build": "PASS"
+    }
   }
 }

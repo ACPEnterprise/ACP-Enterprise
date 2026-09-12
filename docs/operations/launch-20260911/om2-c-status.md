@@ -1,6 +1,6 @@
 # OM2-C launch acceptance status
 
-Updated: 2026-09-10 America/New_York
+Updated: 2026-09-12 America/New_York
 
 ## Authority and mission pin
 
@@ -8,7 +8,7 @@ Updated: 2026-09-10 America/New_York
 - Mission commit: `0c08f1e3634f38a7fb82970932dea5de7a4cf24f`
 - Mission file SHA-256: `03b74b5f065694b487268bdee531d8d50620f2816f30c91d8b665f9d5b3e9dfc`
 - Starting protected base: `42a4f68087d76247269bd4c8388f556dd62a8b5c`
-- Current protected base: `132cded360525e10a5d9029b25fff2bd8a45b81b`
+- Current protected base: `2d8709c895e60faf7cc0251d6c8ac82311013613`
 - Isolated branch: `work/om2c-launch-20260911-e2e-acceptance-1`
 - Mission activation evidence: mission commit at 2026-09-10 21:36:32 -0400.
 - Mission authorization expiry: 2026-09-13 21:36:32 -0400, unless earlier
@@ -16,7 +16,10 @@ Updated: 2026-09-10 America/New_York
 
 ## Current checkpoint
 
-State: **DEPENDENCY GATED — LOCALLY EXHAUSTED AT CURRENT CHECKPOINT**.
+State: **CONDITIONALLY QUALIFIED — NOT OPERATOR ACCEPTED**.
+
+Compact morning decision packet:
+`docs/operations/launch-20260911/om2-c-morning-launch-decision-20260912.md`.
 
 The protected authority now includes the Job-clock backend, operator Month/calendar
 workflow, Customer roster/navigation, CSR service-request booking, QBO source-evidence
