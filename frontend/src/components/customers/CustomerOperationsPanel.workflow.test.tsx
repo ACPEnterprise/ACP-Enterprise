@@ -26,8 +26,8 @@ describe("CustomerOperationsPanel office workflow", () => {
       : { items: [job("job-current", "ready")], total_count: 1 }) as never);
     vi.mocked(schedulingHooks.useAppointments).mockReturnValue(query({ items: [{ id: "appointment-1", appointment_number: "APT-1", arrival_window_start_at: "2026-09-12T14:00:00Z", status: "scheduled" }] }) as never);
     vi.mocked(estimateHooks.useEstimates).mockReturnValue(query({ items: [{ id: "estimate-1", estimate_number: "EST-1", proposal_title: "Repair", status: "approved" }] }) as never);
-    vi.mocked(invoiceHooks.useInvoiceWorkspace).mockReturnValue(query([{ id: "invoice-1", invoice_number: "INV-1", currency: "USD", open_amount: "75.00", status: "partially_paid" }]) as never);
-    vi.mocked(invoiceHooks.useCustomerBalance).mockReturnValue(query({ currency: "USD", open_balance: "75.00", native_invoice_count: 1, applied_payment_total: "25.00", unapplied_receipt_total: "0.00", legacy_evidence_incomplete: false }) as never);
+    vi.mocked(invoiceHooks.useInvoiceWorkspace).mockReturnValue(query([{ id: "invoice-1", invoice_number: "INV-1", currency: "USD", open_amount: "75.00", status: "partially_paid" }, { id: "invoice-paid", invoice_number: "INV-PAID", currency: "USD", open_amount: "0.00", status: "paid" }]) as never);
+    vi.mocked(invoiceHooks.useCustomerBalance).mockReturnValue(query({ currency: "USD", open_balance: "75.00", native_invoice_count: 2, applied_payment_total: "25.00", unapplied_receipt_total: "10.00", legacy_evidence_incomplete: false, as_of: "2026-09-12" }) as never);
   });
 
   it("separates current and historical work and preserves action context", () => {
@@ -38,8 +38,9 @@ describe("CustomerOperationsPanel office workflow", () => {
     expect(screen.getByRole("link", { name: "Open Job to schedule" })).toHaveAttribute("href", "/jobs/job-current");
     expect(screen.getByRole("link", { name: /APT-1/ })).toHaveAttribute("href", "/appointments/appointment-1");
     expect(screen.getByRole("link", { name: /INV-1/ })).toHaveAttribute("href", "/invoices/invoice-1");
+    expect(screen.getByRole("link", { name: /INV-PAID/ })).toHaveAttribute("href", "/invoices/invoice-paid");
     expect(screen.getByRole("link", { name: "Open Invoice / AR workspace" })).toHaveAttribute("href", "/invoices?customerId=customer-1");
-    expect(screen.getByText("USD 75.00")).toBeInTheDocument();
+    expect(screen.getAllByText("USD 75.00").length).toBeGreaterThan(0);
   });
 
   it("does not turn absent related evidence into fabricated relationships or zero", () => {
@@ -51,7 +52,7 @@ describe("CustomerOperationsPanel office workflow", () => {
     render(<MemoryRouter><CustomerOperationsPanel customerId="customer-1" /></MemoryRouter>);
     expect(screen.getByText("No current Jobs are linked in native Job authority.")).toBeInTheDocument();
     expect(screen.getByText("No historical Jobs are present in native Job authority.")).toBeInTheDocument();
-    expect(screen.getByText("Balance evidence is unavailable; no zero balance is inferred.")).toBeInTheDocument();
+    expect(screen.getByText(/UNAVAILABLE · Balance evidence is unavailable/)).toBeInTheDocument();
   });
 
   it("marks the workspace partial when an owning domain is unavailable", () => {
@@ -62,8 +63,22 @@ describe("CustomerOperationsPanel office workflow", () => {
   });
 
   it("warns when native AR does not represent complete historical evidence", () => {
-    vi.mocked(invoiceHooks.useCustomerBalance).mockReturnValue(query({ currency: "USD", open_balance: "75.00", native_invoice_count: 1, applied_payment_total: "25.00", unapplied_receipt_total: "0.00", legacy_evidence_incomplete: true }) as never);
+    vi.mocked(invoiceHooks.useCustomerBalance).mockReturnValue(query({ currency: "USD", open_balance: "75.00", native_invoice_count: 1, applied_payment_total: "25.00", unapplied_receipt_total: "0.00", legacy_evidence_incomplete: true, as_of: "2026-09-12" }) as never);
     render(<MemoryRouter><CustomerOperationsPanel customerId="customer-1" /></MemoryRouter>);
-    expect(screen.getByText(/Historical financial evidence is incomplete/)).toBeInTheDocument();
+    expect(screen.getByText("PARTIAL historical evidence")).toBeInTheDocument();
+    expect(screen.getByText("PARTIAL")).toBeInTheDocument();
+  });
+
+  it("does not confuse an unapplied receipt with an Invoice payment", () => {
+    render(<MemoryRouter><CustomerOperationsPanel customerId="customer-1" /></MemoryRouter>);
+    expect(screen.getByText("Unapplied receipts")).toBeInTheDocument();
+    expect(screen.getByText(/Unapplied receipts remain separate Customer credit evidence/)).toBeInTheDocument();
+  });
+
+  it("labels a failed Customer balance read unavailable without showing zero", () => {
+    vi.mocked(invoiceHooks.useCustomerBalance).mockReturnValue({ data: undefined, isLoading: false, isError: true, isSuccess: false } as never);
+    render(<MemoryRouter><CustomerOperationsPanel customerId="customer-1" /></MemoryRouter>);
+    expect(screen.getByText("UNAVAILABLE balance evidence")).toBeInTheDocument();
+    expect(screen.getByText(/No zero balance is inferred/)).toBeInTheDocument();
   });
 });
