@@ -151,6 +151,12 @@ seeded category; the following category update raised `PriceBookNotFound`.
 The run also emitted ten SQLAlchemy transaction-deassociation warnings. This is
 the deterministic isolation blocker and is not an intermittent failure.
 
+The frontend portion of that exact composition is independently green: all five
+focused suites and 14 tests passed, followed by clean full ESLint and production
+TypeScript/Vite builds. The hold is therefore specifically the backend isolation
+defect plus the unclosed ambiguity and authorization-coverage requirements; it
+is not a general UI qualification failure.
+
 ## Secrets and owner gates
 
 - Preserve the QBO OAuth owner gate; no active candidate requires new OAuth.
