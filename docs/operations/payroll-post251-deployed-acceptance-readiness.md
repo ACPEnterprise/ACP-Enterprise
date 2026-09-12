@@ -8,6 +8,16 @@ Prepared 2026-09-12 for protected Payroll authority `36fe3eeaa85905ef282b07ea8b7
 - `PAYROLL_TIME_CHAIN_DEPLOYED = YES`: `https://preview.allcountyhomeservices.com/backend-health` reported application version `36fe3eeaa85905ef282b07ea8b7cc5482c335794`, environment `preview`, database `connected`, and Redis `connected` on 2026-09-12.
 - `PAYROLL_TIME_CHAIN_ACCEPTED = NO`: public health does not prove the deployed schema revision or Payroll encryption-keyring usability, and no authorized synthetic Preview acceptance identity/fixture scope was available to execute the evidence chain.
 
+### Watch checkpoint: protected successor `96d67cb`
+
+Protected and Preview advanced to `96d67cb73dbe4838e882e1551de5906eda598f4e`, a Migration-only successor that contains #251. Preview briefly returned two 502 responses during the transition, then `/backend-health` recovered and reported the exact successor SHA, Preview environment, PostgreSQL connected, and Redis connected. This preserves `INTEGRATED = YES` and `DEPLOYED = YES`; it does not satisfy schema/keyring/fixture acceptance gates.
+
+PR #254 remains open and clean. It proposes the read-only endpoint:
+
+`GET /api/v1/payroll/setup/employees/{employee_id}/readiness?pay_period_id={id}`
+
+Do not call or depend on that route until a protected successor containing #254 is deployed. Once deployed, acceptance must verify bounded unauthenticated `401`, foreign-Company `404`, missing cross-domain authority `403`, unavailable evidence `409`, missing key configuration `503`, metadata-only output, exact blocker keys, and absence of protected values/ciphertext/nonces/keys/calculated amounts. The endpoint supplements but does not replace the sanctioned synthetic time-to-Payroll chain or keyring round-trip proof.
+
 ## Host-level deployment evidence
 
 Enterprise should run these read-only checks on the Preview host and retain their output without printing secret contents:
