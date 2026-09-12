@@ -8,6 +8,9 @@ import { Alert, Card, CardContent, CardDescription, CardHeader, CardTitle, Spinn
 
 const label = (value: string) => value.replaceAll("_", " ").replaceAll(":", " · ");
 
+const componentLabel = (value: { component_key: string; jurisdiction_reference: string | null }) =>
+  `${label(value.component_key)}${value.jurisdiction_reference ? ` · ${value.jurisdiction_reference}` : ""}`;
+
 function StateList({ values, empty }: { values: Record<string, number>; empty: string }) {
   const entries = Object.entries(values).sort(([left], [right]) => left.localeCompare(right));
   if (!entries.length) return <p className="text-sm text-content-muted">{empty}</p>;
@@ -281,6 +284,7 @@ export function PayrollRoute() {
                             <th>Deductions</th>
                             <th>Net</th>
                             <th>Employer liability</th>
+                            <th>Calculation detail</th>
                             <th>Status / exceptions</th>
                           </tr>
                         </thead>
@@ -299,6 +303,20 @@ export function PayrollRoute() {
                               <td>{member.deductions ?? "Unavailable"}</td>
                               <td>{member.net_pay ?? "Unavailable"}</td>
                               <td>{member.employer_liabilities ?? "Unavailable"}</td>
+                              <td className="min-w-64">
+                                {member.withholdings_deductions_liabilities.length ? (
+                                  <ul className="space-y-1">
+                                    {member.withholdings_deductions_liabilities.map((component) => (
+                                      <li key={`${component.kind}-${component.component_key}`}>
+                                        <span className="capitalize">{componentLabel(component)}</span>: {component.currency} {component.amount} ({label(component.responsibility)})
+                                      </li>
+                                    ))}
+                                  </ul>
+                                ) : "Unavailable"}
+                                <p className="mt-2 text-xs text-content-muted">Tax rule: {member.tax_rule_version ?? "Unavailable"}</p>
+                                <p className="text-xs text-content-muted">Compensation authority: {member.compensation_authority_id ? "Verified" : "Unavailable"}</p>
+                                <p className="text-xs text-content-muted">Job labor: {member.job_labor_allocation ? label(member.job_labor_allocation) : "Unavailable"}</p>
+                              </td>
                               <td>
                                 {label(member.status)}
                                 {member.blockers.length ? (
