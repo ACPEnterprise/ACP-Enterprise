@@ -186,8 +186,57 @@ describe("CustomerManagement", () => {
 
     expect(screen.getByText(/Source evidence through 2026-09-10/)).toBeInTheDocument();
     expect(screen.getByText("90 admitted / 100 source")).toBeInTheDocument();
-    expect(screen.getByText(/5 held · 3 exception · 1 unresolved · delta 0/)).toBeInTheDocument();
+    expect(screen.getByText(/5 held · 3 exception · 1 deferred · 1 unresolved · delta 0/)).toBeInTheDocument();
+    expect(screen.getByText("Source population is partial")).toBeInTheDocument();
     expect(screen.getByText(/never presented as native Customers/)).toBeInTheDocument();
+  });
+
+  it("makes stale source evidence explicit without disabling the native roster", () => {
+    permissions.add("COMPANY_ADMINISTER");
+    vi.mocked(administrationHooks.useMigrationReadiness).mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: {
+        overall_status: "PARTIAL",
+        stale: true,
+        historical_window: { ends_on: "2026-08-27" },
+        counts: [{ domain: "Customers", source: 100, migrated: 100, held: 0, exception: 0, non_applicable: 0, deferred: 0, unresolved: 0, delta: 0 }],
+      },
+    } as never);
+    vi.mocked(customerHooks.useCustomerSearch).mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: { items: [], total_count: 0, page: 1, page_size: 20, total_pages: 0 },
+    } as never);
+
+    render(<MemoryRouter><CustomerManagement /></MemoryRouter>);
+
+    expect(screen.getByText("Stale source projection")).toBeInTheDocument();
+    expect(screen.getByText("Source projection is stale")).toBeInTheDocument();
+    expect(screen.getByText(/do not treat this source population or as-of date as current/i)).toBeInTheDocument();
+    expect(screen.getByText("No Customer records are currently admitted.")).toBeInTheDocument();
+  });
+
+  it("offers a safe retry when source readiness is unavailable", async () => {
+    const refetch = vi.fn();
+    permissions.add("COMPANY_ADMINISTER");
+    vi.mocked(administrationHooks.useMigrationReadiness).mockReturnValue({
+      isLoading: false,
+      isError: true,
+      error: { isAxiosError: true, response: { status: 503 } },
+      refetch,
+    } as never);
+    vi.mocked(customerHooks.useCustomerSearch).mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: { items: [], total_count: 0, page: 1, page_size: 20, total_pages: 0 },
+    } as never);
+
+    render(<MemoryRouter><CustomerManagement /></MemoryRouter>);
+    await userEvent.click(screen.getByRole("button", { name: "Retry source accounting" }));
+
+    expect(refetch).toHaveBeenCalledOnce();
+    expect(screen.getByText(/population completeness and source freshness are unverified/i)).toBeInTheDocument();
   });
 
   it("requests every roster page instead of treating the first page as complete", async () => {
@@ -203,14 +252,16 @@ describe("CustomerManagement", () => {
     expect(customerHooks.useCustomerSearch).toHaveBeenLastCalledWith(expect.objectContaining({ page: 2, page_size: 20 }));
   });
 
-  it("sends supported search fields to authoritative server search", async () => {
+  it.each(["Alex Rivera", "727-555-0198", "880 Enterprise Boulevard"])(
+    "sends supported %s search to authoritative server search",
+    async (searchValue) => {
     vi.mocked(customerHooks.useCustomerSearch).mockReturnValue({ isLoading: false, isError: false, data: { items: [], total_count: 0, page: 1, page_size: 20, total_pages: 0 } } as never);
     render(<MemoryRouter><CustomerManagement /></MemoryRouter>);
 
-    await userEvent.type(screen.getByRole("textbox", { name: "Search customers" }), "10 Main");
+    await userEvent.type(screen.getByRole("textbox", { name: "Search customers" }), searchValue);
     await userEvent.selectOptions(screen.getByRole("combobox", { name: "Customer status" }), "active");
     await userEvent.click(screen.getByRole("button", { name: "Search" }));
 
-    expect(customerHooks.useCustomerSearch).toHaveBeenLastCalledWith(expect.objectContaining({ query: "10 Main", status: "active", page: 1 }));
+    expect(customerHooks.useCustomerSearch).toHaveBeenLastCalledWith(expect.objectContaining({ query: searchValue, status: "active", page: 1 }));
   });
 });
