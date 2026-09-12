@@ -44,7 +44,7 @@ export async function assignPrimary(
   employeeId: string,
   reason: string,
   expectedVersion?: number,
-  idempotencyKey = crypto.randomUUID(),
+  idempotencyKey: string = crypto.randomUUID(),
 ): Promise<DispatchAssignment> {
   const path = `${ROOT}/appointments/${appointmentId}/assignment${expectedVersion ? "/primary" : ""}`;
   const method = expectedVersion ? apiClient.put : apiClient.post;
