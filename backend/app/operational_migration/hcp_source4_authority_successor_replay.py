@@ -533,7 +533,8 @@ def _state_family_digest(state: dict[str, object], key: str) -> str:
 def _row_snapshot(value: Any) -> dict[str, object]:
     mapper = inspect(type(value))
     return {
-        column.key: _json_value(getattr(value, column.key)) for column in mapper.columns
+        attribute.key: _json_value(getattr(value, attribute.key))
+        for attribute in mapper.column_attrs
     }
 
 

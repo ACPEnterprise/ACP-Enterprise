@@ -8,6 +8,7 @@ from types import SimpleNamespace
 from uuid import UUID, uuid4
 
 import pytest
+from app.customers.models import Customer
 from app.operational_migration.hcp_current_overlay import OverlayJournalEntry
 from app.operational_migration.hcp_source4_authority_successor_replay import (
     CONTRACT,
@@ -15,6 +16,7 @@ from app.operational_migration.hcp_source4_authority_successor_replay import (
     VERIFIER_VERSION,
     ReplaySuccessorAuthority,
     ReplayVerificationError,
+    _row_snapshot,
     _verify_records,
     schema_semantic_digest,
 )
@@ -192,3 +194,15 @@ def test_schema_semantic_compatibility_digest_is_deterministic() -> None:
     assert schema_semantic_digest() == schema_semantic_digest()
     assert len(schema_semantic_digest()) == 64
     assert CONTRACT == "hcp-source4-authority-successor-replay/v1"
+
+
+def test_row_snapshot_uses_mapped_attribute_keys_for_renamed_columns() -> None:
+    customer = Customer()
+    for attribute in Customer.__mapper__.column_attrs:
+        setattr(customer, attribute.key, None)
+    customer.marketing_source = "source-value"
+
+    snapshot = _row_snapshot(customer)
+
+    assert snapshot["marketing_source"] == "source-value"
+    assert "source" not in snapshot
