@@ -85,6 +85,7 @@ class HcpCurrentOverlayNativeServices(CurrentOverlayDomainServices):
         jobs: JobService | None = None,
         scheduling: SchedulingService | None = None,
         repository: OperationalMigrationRepository | None = None,
+        qualified_targets: Mapping[OverlayKey, UUID] | None = None,
     ) -> None:
         if context.active_branch is None:
             raise ValueError("overlay requires active Branch scope")
@@ -102,6 +103,8 @@ class HcpCurrentOverlayNativeServices(CurrentOverlayDomainServices):
         self.repository = repository or OperationalMigrationRepository()
         self._binding_bootstrap: HcpSource4NativeBindingBootstrap | None = None
         self._update_records: dict[OverlayKey, OverlayRecord] = {}
+        self._records: dict[OverlayKey, OverlayRecord] = {}
+        self._qualified_targets = dict(qualified_targets or {})
 
     def bind_lineage(
         self, *, master_run_id: UUID, customer_run_id: UUID, operational_run_id: UUID
@@ -125,17 +128,25 @@ class HcpCurrentOverlayNativeServices(CurrentOverlayDomainServices):
     ) -> dict[str, dict[str, int]]:
         if self._binding_bootstrap is None:
             raise ValueError("overlay native lineage is not bound")
+        self._records = {record.key: record for record in records}
         self._update_records = {
             record.key: record
             for record in records
             if record.assertion.value == "update"
+            and record.key not in self._qualified_targets
         }
-        return await self._binding_bootstrap.inventory(session, records)
+        remaining = tuple(
+            record for record in records if record.key not in self._qualified_targets
+        )
+        return await self._binding_bootstrap.inventory(session, remaining)
 
     async def source_state(
         self, session: AsyncSession, key: OverlayKey
     ) -> OverlaySourceState | None:
         target = await self._target(session, key)
+        if target is None and key in self._qualified_targets:
+            await self._bind_qualified_target(session, key)
+            target = await self._target(session, key)
         update = self._update_records.get(key)
         if target is None and update is not None:
             if self._binding_bootstrap is None:
@@ -152,8 +163,80 @@ class HcpCurrentOverlayNativeServices(CurrentOverlayDomainServices):
             raise ValueError("bound source identity lacks base digest authority")
         return OverlaySourceState(digest, str(target[1].id), {})
 
+    async def _bind_qualified_target(
+        self, session: AsyncSession, key: OverlayKey
+    ) -> None:
+        native_id = self._qualified_targets[key]
+        if key.domain == "customer":
+            native: Any = await session.get(Customer, native_id)
+            if native is None or native.company_id != self.context.company.id:
+                raise ValueError("qualified v4 Customer target drifted")
+            session.add(
+                CustomerSourceIdentity(
+                    company_id=self.context.company.id,
+                    branch_id=self.branch.id,
+                    customer_id=native.id,
+                    source_system=SOURCE_SYSTEM,
+                    source_customer_id=key.source_id,
+                    first_run_id=self.customer_run_id,
+                )
+            )
+        elif key.domain == "service_location":
+            native = await session.get(ServiceLocation, native_id)
+            record = self._records.get(key)
+            if native is None or record is None:
+                raise ValueError("qualified v4 Location target drifted")
+            customer = await self._customer_identity(session, record.parent_keys)
+            if native.customer_id != customer.customer_id:
+                raise ValueError("qualified v4 Location parent drifted")
+            session.add(
+                ServiceLocationSourceIdentity(
+                    company_id=self.context.company.id,
+                    branch_id=self.branch.id,
+                    master_run_id=self.master_run_id,
+                    customer_source_identity_id=customer.id,
+                    service_location_id=native.id,
+                    customer_id=native.customer_id,
+                    source_system=SOURCE_SYSTEM,
+                    source_location_id=key.source_id,
+                    source_digest=self.base_source_digests[key],
+                    package_digest=self.package_digest,
+                    transformation_version=TRANSFORMATION_VERSION,
+                    transformation_digest=_digest({"qualified_reuse": str(native_id)}),
+                    source_context={"authority": "hcp-current-overlay-merge-packet/v4"},
+                    first_run_id=self.customer_run_id,
+                )
+            )
+        else:
+            raise ValueError("v4 qualified target domain is unsupported")
+        await session.flush()
+
     async def source_exists(self, session: AsyncSession, key: OverlayKey) -> bool:
         return await self._target(session, key) is not None
+
+    async def source_native_id(
+        self, session: AsyncSession, key: OverlayKey
+    ) -> UUID | None:
+        target = await self._target(session, key)
+        return target[1].id if target is not None else None
+
+    async def qualified_native(
+        self, session: AsyncSession, domain: str, native_id: UUID
+    ) -> Customer | ServiceLocation | Job | Appointment | None:
+        model = {
+            "customer": Customer,
+            "service_location": ServiceLocation,
+            "job": Job,
+            "appointment": Appointment,
+        }.get(domain)
+        if model is None:
+            return None
+        native: Any = await session.get(model, native_id)
+        if native is None or native.company_id != self.context.company.id:
+            return None
+        if hasattr(native, "branch_id") and native.branch_id != self.branch.id:
+            return None
+        return native
 
     async def fingerprint_owners(
         self, session: AsyncSession, domain: str, fingerprint: str
@@ -161,8 +244,7 @@ class HcpCurrentOverlayNativeServices(CurrentOverlayDomainServices):
         if domain == "service_location":
             values = await session.scalars(
                 select(ServiceLocationSourceIdentity.service_location_id).where(
-                    ServiceLocationSourceIdentity.company_id
-                    == self.context.company.id,
+                    ServiceLocationSourceIdentity.company_id == self.context.company.id,
                     ServiceLocationSourceIdentity.source_digest == fingerprint,
                 )
             )
@@ -264,7 +346,9 @@ class HcpCurrentOverlayNativeServices(CurrentOverlayDomainServices):
             )
         )
 
-    async def _create_customer(self, session: AsyncSession, record: OverlayRecord) -> Customer:
+    async def _create_customer(
+        self, session: AsyncSession, record: OverlayRecord
+    ) -> Customer:
         payload = record.payload
         first = _text(payload.get("first_name"))
         last = _text(payload.get("last_name"))
@@ -392,7 +476,9 @@ class HcpCurrentOverlayNativeServices(CurrentOverlayDomainServices):
         await session.flush()
         return job
 
-    async def _create_appointment(self, session: AsyncSession, record: OverlayRecord) -> Appointment:
+    async def _create_appointment(
+        self, session: AsyncSession, record: OverlayRecord
+    ) -> Appointment:
         job_identity, job = await self._appointment_parent(session, record.parent_keys)
         start = _datetime(record.payload.get("start_time"))
         end = _datetime(record.payload.get("end_time"))
@@ -424,8 +510,9 @@ class HcpCurrentOverlayNativeServices(CurrentOverlayDomainServices):
         )
         visit_sequence = 1 + int(
             await session.scalar(
-                select(func.coalesce(func.max(JobAppointmentLink.visit_sequence), 0))
-                .where(JobAppointmentLink.job_id == job.id)
+                select(
+                    func.coalesce(func.max(JobAppointmentLink.visit_sequence), 0)
+                ).where(JobAppointmentLink.job_id == job.id)
             )
             or 0
         )
@@ -465,9 +552,13 @@ class HcpCurrentOverlayNativeServices(CurrentOverlayDomainServices):
         await session.flush()
         return appointment
 
-    async def _update_customer(self, session: AsyncSession, state: OverlaySourceState, record: OverlayRecord):
+    async def _update_customer(
+        self, session: AsyncSession, state: OverlaySourceState, record: OverlayRecord
+    ):
         payload = record.payload
-        customer = await session.get(Customer, UUID(state.native_id), with_for_update=True)
+        customer = await session.get(
+            Customer, UUID(state.native_id), with_for_update=True
+        )
         if customer is None or customer.company_id != self.context.company.id:
             raise ValueError("overlay Customer target is missing or out of scope")
         source_updated_at = _datetime(payload.get("updated_at"))
@@ -496,7 +587,9 @@ class HcpCurrentOverlayNativeServices(CurrentOverlayDomainServices):
             ),
         )
 
-    async def _update_job(self, session: AsyncSession, state: OverlaySourceState, record: OverlayRecord):
+    async def _update_job(
+        self, session: AsyncSession, state: OverlaySourceState, record: OverlayRecord
+    ):
         job = await session.get(Job, UUID(state.native_id), with_for_update=True)
         if job is None or job.company_id != self.context.company.id:
             raise ValueError("overlay Job target is missing or out of scope")
@@ -521,8 +614,12 @@ class HcpCurrentOverlayNativeServices(CurrentOverlayDomainServices):
             ),
         )
 
-    async def _update_appointment(self, session: AsyncSession, state: OverlaySourceState, record: OverlayRecord):
-        appointment = await session.get(Appointment, UUID(state.native_id), with_for_update=True)
+    async def _update_appointment(
+        self, session: AsyncSession, state: OverlaySourceState, record: OverlayRecord
+    ):
+        appointment = await session.get(
+            Appointment, UUID(state.native_id), with_for_update=True
+        )
         if appointment is None or appointment.company_id != self.context.company.id:
             raise ValueError("overlay Appointment target is missing or out of scope")
         start = _datetime(record.payload.get("start_time"))
@@ -536,7 +633,10 @@ class HcpCurrentOverlayNativeServices(CurrentOverlayDomainServices):
             raise OverlayDomainHold(
                 "historical Appointment window is not rescheduled into native truth"
             )
-        if (appointment.arrival_window_start_at, appointment.arrival_window_end_at) == (start, end):
+        if (appointment.arrival_window_start_at, appointment.arrival_window_end_at) == (
+            start,
+            end,
+        ):
             return appointment
         return await self.scheduling.stage_reschedule_appointment(
             session,
@@ -552,7 +652,9 @@ class HcpCurrentOverlayNativeServices(CurrentOverlayDomainServices):
             ),
         )
 
-    async def _stamp_identity(self, session: AsyncSession, record: OverlayRecord) -> None:
+    async def _stamp_identity(
+        self, session: AsyncSession, record: OverlayRecord
+    ) -> None:
         target = await self._target(session, record.key)
         if target is None:
             raise ValueError("overlay source identity disappeared")
@@ -566,56 +668,116 @@ class HcpCurrentOverlayNativeServices(CurrentOverlayDomainServices):
         company_id = self.context.company.id
         if key.domain == "customer":
             customer_identity = await self.repository.get_customer_identity(
-                session, company_id=company_id, branch_id=self.branch.id,
-                source_system=SOURCE_SYSTEM, source_customer_id=key.source_id
+                session,
+                company_id=company_id,
+                branch_id=self.branch.id,
+                source_system=SOURCE_SYSTEM,
+                source_customer_id=key.source_id,
             )
             return (
-                customer_identity,
-                await session.get(Customer, customer_identity.customer_id),
-            ) if customer_identity else None
+                (
+                    customer_identity,
+                    await session.get(Customer, customer_identity.customer_id),
+                )
+                if customer_identity
+                else None
+            )
         if key.domain == "service_location":
-            location_identity = await session.scalar(select(ServiceLocationSourceIdentity).where(
-                ServiceLocationSourceIdentity.company_id == company_id,
-                ServiceLocationSourceIdentity.source_system == SOURCE_SYSTEM,
-                ServiceLocationSourceIdentity.source_location_id == key.source_id))
+            location_identity = await session.scalar(
+                select(ServiceLocationSourceIdentity).where(
+                    ServiceLocationSourceIdentity.company_id == company_id,
+                    ServiceLocationSourceIdentity.source_system == SOURCE_SYSTEM,
+                    ServiceLocationSourceIdentity.source_location_id == key.source_id,
+                )
+            )
             return (
-                location_identity,
-                await session.get(
-                    ServiceLocation, location_identity.service_location_id
-                ),
-            ) if location_identity else None
+                (
+                    location_identity,
+                    await session.get(
+                        ServiceLocation, location_identity.service_location_id
+                    ),
+                )
+                if location_identity
+                else None
+            )
         if key.domain == "job":
-            job_identity = await self.repository.get_job_identity(session, company_id=company_id, source_system=SOURCE_SYSTEM, source_job_id=key.source_id)
-            return (job_identity, await session.get(Job, job_identity.job_id)) if job_identity else None
+            job_identity = await self.repository.get_job_identity(
+                session,
+                company_id=company_id,
+                source_system=SOURCE_SYSTEM,
+                source_job_id=key.source_id,
+            )
+            return (
+                (job_identity, await session.get(Job, job_identity.job_id))
+                if job_identity
+                else None
+            )
         if key.domain == "appointment":
-            appointment_identity = await self.repository.get_appointment_identity(session, company_id=company_id, source_system=SOURCE_SYSTEM, source_appointment_id=key.source_id)
-            return (appointment_identity, await session.get(Appointment, appointment_identity.appointment_id)) if appointment_identity else None
+            appointment_identity = await self.repository.get_appointment_identity(
+                session,
+                company_id=company_id,
+                source_system=SOURCE_SYSTEM,
+                source_appointment_id=key.source_id,
+            )
+            return (
+                (
+                    appointment_identity,
+                    await session.get(Appointment, appointment_identity.appointment_id),
+                )
+                if appointment_identity
+                else None
+            )
         return None
 
-    async def _customer_identity(self, session: AsyncSession, parents: tuple[OverlayKey, ...]):
+    async def _customer_identity(
+        self, session: AsyncSession, parents: tuple[OverlayKey, ...]
+    ):
         key = next((item for item in parents if item.domain == "customer"), None)
         if key is None:
             raise ValueError("Location Customer parent is missing")
-        identity = await self.repository.get_customer_identity(session, company_id=self.context.company.id, branch_id=self.branch.id, source_system=SOURCE_SYSTEM, source_customer_id=key.source_id)
+        identity = await self.repository.get_customer_identity(
+            session,
+            company_id=self.context.company.id,
+            branch_id=self.branch.id,
+            source_system=SOURCE_SYSTEM,
+            source_customer_id=key.source_id,
+        )
         if identity is None:
             raise ValueError("Location Customer parent is unresolved")
         return identity
 
-    async def _job_parents(self, session: AsyncSession, parents: tuple[OverlayKey, ...]):
+    async def _job_parents(
+        self, session: AsyncSession, parents: tuple[OverlayKey, ...]
+    ):
         customer = await self._customer_identity(session, parents)
-        key = next((item for item in parents if item.domain == "service_location"), None)
+        key = next(
+            (item for item in parents if item.domain == "service_location"), None
+        )
         if key is None:
             raise ValueError("Job Location parent is missing")
-        location = await self.repository.get_location_identity(session, company_id=self.context.company.id, customer_source_identity_id=customer.id, source_system=SOURCE_SYSTEM, source_location_id=key.source_id)
+        location = await self.repository.get_location_identity(
+            session,
+            company_id=self.context.company.id,
+            customer_source_identity_id=customer.id,
+            source_system=SOURCE_SYSTEM,
+            source_location_id=key.source_id,
+        )
         if location is None:
             raise ValueError("Job Location parent is unresolved")
         return customer, location
 
-    async def _appointment_parent(self, session: AsyncSession, parents: tuple[OverlayKey, ...]):
+    async def _appointment_parent(
+        self, session: AsyncSession, parents: tuple[OverlayKey, ...]
+    ):
         key = next((item for item in parents if item.domain == "job"), None)
         if key is None:
             raise ValueError("Appointment Job parent is missing")
-        identity = await self.repository.get_job_identity(session, company_id=self.context.company.id, source_system=SOURCE_SYSTEM, source_job_id=key.source_id)
+        identity = await self.repository.get_job_identity(
+            session,
+            company_id=self.context.company.id,
+            source_system=SOURCE_SYSTEM,
+            source_job_id=key.source_id,
+        )
         job = (
             await session.get(Job, identity.job_id, with_for_update=True)
             if identity
@@ -645,11 +807,15 @@ def _job_status(payload: Mapping[str, object]) -> str:
 
 def _technicians(payload: Mapping[str, object]) -> list[str]:
     employees = payload.get("assigned_employees")
-    return [
-        str(item["id"])
-        for item in employees
-        if isinstance(item, Mapping) and item.get("id")
-    ] if isinstance(employees, list) else []
+    return (
+        [
+            str(item["id"])
+            for item in employees
+            if isinstance(item, Mapping) and item.get("id")
+        ]
+        if isinstance(employees, list)
+        else []
+    )
 
 
 def _mapping(value: object) -> Mapping[str, object]:
@@ -666,12 +832,28 @@ def _location(payload: Mapping[str, object]) -> ServiceLocationCreate:
     country = str(payload.get("country") or "US").upper()
     if country in {"USA", "UNITED STATES", "UNITED STATES OF AMERICA"}:
         country = "US"
-    return ServiceLocationCreate(nickname=_text(payload.get("type")), address=str(payload["street"]), address_line_2=_text(payload.get("street_line_2")), city=str(payload["city"]), state=str(payload["state"]), postal_code=str(payload["zip"]), country=country, is_primary=False, active=True)
+    return ServiceLocationCreate(
+        nickname=_text(payload.get("type")),
+        address=str(payload["street"]),
+        address_line_2=_text(payload.get("street_line_2")),
+        city=str(payload["city"]),
+        state=str(payload["state"]),
+        postal_code=str(payload["zip"]),
+        country=country,
+        is_primary=False,
+        active=True,
+    )
 
 
 def _metadata(record: OverlayRecord) -> dict[str, object]:
-    return {"current_overlay_source_digest": record.source_digest, "current_overlay_acquired_at": record.acquired_at, "current_overlay_contract": TRANSFORMATION_VERSION}
+    return {
+        "current_overlay_source_digest": record.source_digest,
+        "current_overlay_acquired_at": record.acquired_at,
+        "current_overlay_contract": TRANSFORMATION_VERSION,
+    }
 
 
 def _digest(value: object) -> str:
-    return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":"), default=str).encode()).hexdigest()
+    return hashlib.sha256(
+        json.dumps(value, sort_keys=True, separators=(",", ":"), default=str).encode()
+    ).hexdigest()
