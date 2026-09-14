@@ -5,11 +5,16 @@ import hashlib
 import json
 import os
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 from uuid import UUID, uuid4
 
 import pytest
 
 from app.operational_migration.hcp_current_overlay import OverlayKey
+from app.operational_migration.hcp_current_overlay_native import (
+    HcpCurrentOverlayNativeServices,
+)
 from app.operational_migration.hcp_current_overlay_v4 import (
     EXPECTED_COUNTS,
     V4ExecutableOverlay,
@@ -199,6 +204,24 @@ async def test_v4_preflight_aggregates_all_target_failures(tmp_path: Path) -> No
     report = json.loads(str(error.value))
     assert report["failure_count"] == 9
     assert len(report["failures"]) == 9
+
+
+@pytest.mark.asyncio
+async def test_qualified_location_uses_owning_customer_for_company_scope() -> None:
+    company_id = uuid4()
+    customer_id = uuid4()
+    location = SimpleNamespace(id=uuid4(), customer_id=customer_id)
+    customer = SimpleNamespace(id=customer_id, company_id=company_id)
+    session = SimpleNamespace(get=AsyncMock(side_effect=(location, customer)))
+    services = object.__new__(HcpCurrentOverlayNativeServices)
+    services.context = SimpleNamespace(company=SimpleNamespace(id=company_id))
+    services.branch = SimpleNamespace(id=uuid4())
+
+    result = await services.qualified_native(
+        session, "service_location", location.id
+    )
+
+    assert result is location
 
 
 def test_v3_execution_authority_does_not_accept_v2_contract(tmp_path: Path) -> None:

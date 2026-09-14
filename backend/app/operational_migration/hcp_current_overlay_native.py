@@ -232,7 +232,13 @@ class HcpCurrentOverlayNativeServices(CurrentOverlayDomainServices):
         if model is None:
             return None
         native: Any = await session.get(model, native_id)
-        if native is None or native.company_id != self.context.company.id:
+        if native is None:
+            return None
+        if domain == "service_location":
+            customer = await session.get(Customer, native.customer_id)
+            if customer is None or customer.company_id != self.context.company.id:
+                return None
+        elif native.company_id != self.context.company.id:
             return None
         if hasattr(native, "branch_id") and native.branch_id != self.branch.id:
             return None
