@@ -8,7 +8,7 @@ const label = (value: string) => value.replaceAll("_", " ").replaceAll(":", " ·
 const taxKeys = ["w4_filing_status","w4_step_2","w4_step_3","w4_step_4a","w4_step_4b","w4_step_4c","work_jurisdiction","residence_jurisdiction","state_local_withholding_configuration","unemployment_workforce_jurisdiction","social_security_applicability","social_security_wages_ytd","social_security_tax_ytd","medicare_applicability","medicare_wages_ytd","medicare_tax_ytd","additional_medicare_prerequisites","federal_withholding_ytd","prior_payroll_coverage","federal_tax_table","state_local_tax_table","tax_table_source_version","tax_table_effective_date"];
 const deductionKeys = ["deduction_configuration","deduction_tax_treatment","deduction_effective_date","deduction_limits"];
 
-export function PayrollEmployeeSetup({ employeeId }: { employeeId: string }) {
+export function PayrollEmployeeSetup({ employeeId, payPeriodId }: { employeeId: string; payPeriodId: string | null }) {
   const canReadCompensation = useHasPermission("COMPANY_PAYROLL_COMPENSATION_READ");
   const canReadTax = useHasPermission("COMPANY_PAYROLL_TAX_AUTHORITY_READ");
   const canReadDeduction = useHasPermission("COMPANY_PAYROLL_DEDUCTION_AUTHORITY_READ");
@@ -20,7 +20,7 @@ export function PayrollEmployeeSetup({ employeeId }: { employeeId: string }) {
   const canApproveTax = useHasPermission("COMPANY_PAYROLL_TAX_AUTHORITY_APPROVE");
   const canApproveDeduction = useHasPermission("COMPANY_PAYROLL_DEDUCTION_AUTHORITY_APPROVE");
   const canApproveInput = canApproveTax || canApproveDeduction;
-  const setup = usePayrollEmployeeSetup(employeeId, canRead);
+  const setup = usePayrollEmployeeSetup(employeeId, payPeriodId, canRead);
   const [message, setMessage] = useState("");
   if (!canRead) return <Alert variant="warning">Payroll setup requires compensation or tax/deduction read authority.</Alert>;
   if (setup.query.isPending) return <Spinner label="Loading Employee Payroll setup" />;
@@ -47,6 +47,12 @@ export function PayrollEmployeeSetup({ employeeId }: { employeeId: string }) {
   return <Card>
     <CardHeader><CardTitle>Employee Payroll setup · {value.employee_name}</CardTitle><CardDescription>{value.employee_number} · effective-dated, audit-preserving authority</CardDescription></CardHeader>
     <CardContent className="space-y-6">
+      {!payPeriodId && <Alert variant="warning">Select a pay period to evaluate authoritative Employee readiness.</Alert>}
+      {payPeriodId && setup.readiness.isPending && <Spinner label="Loading exact-period Payroll readiness" />}
+      {payPeriodId && setup.readiness.isError && <Alert variant="danger">Exact-period Payroll readiness is unavailable. No value was inferred or changed.</Alert>}
+      {setup.readiness.data && <Alert variant={setup.readiness.data.status === "READY_FOR_PAYROLL" ? "success" : "warning"} title={`${setup.readiness.data.status} · selected pay period`}>
+        {setup.readiness.data.exact_blockers.length ? <ul className="list-disc pl-5">{setup.readiness.data.exact_blockers.map((item) => <li key={item}>{label(item)}</li>)}</ul> : "Every authoritative prerequisite for this selected period is satisfied. No Payroll was executed."}
+      </Alert>}
       <Alert variant={value.readiness === "READY_FOR_PAYROLL" ? "success" : "warning"} title={value.readiness}>
         {value.blockers.length ? <ul className="list-disc pl-5">{value.blockers.map((item) => <li key={item}>{label(item)}</li>)}</ul> : "All currently admitted Payroll requirements are ready."}
       </Alert>
