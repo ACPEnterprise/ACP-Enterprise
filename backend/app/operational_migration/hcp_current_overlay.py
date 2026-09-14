@@ -21,9 +21,7 @@ from typing import Protocol
 
 CONTRACT = "hcp-current-overlay/v1"
 EXECUTOR_CONTRACT = "hcp-current-overlay-executor/v1"
-OPERATIONAL_DOMAINS = frozenset(
-    {"customer", "service_location", "job", "appointment"}
-)
+OPERATIONAL_DOMAINS = frozenset({"customer", "service_location", "job", "appointment"})
 SUPPORTED_DOMAINS = OPERATIONAL_DOMAINS | {"estimate", "invoice", "payment"}
 
 
@@ -143,7 +141,9 @@ class CurrentOverlayManifest:
                 acquired_at=item["acquired_at"],
                 payload=item["payload"],
                 prior_source_digest=item.get("prior_source_digest"),
-                parent_keys=tuple(OverlayKey(**parent) for parent in item["parent_keys"]),
+                parent_keys=tuple(
+                    OverlayKey(**parent) for parent in item["parent_keys"]
+                ),
                 native_fingerprint=item.get("native_fingerprint"),
                 reason=item.get("reason", ""),
             )
@@ -241,6 +241,7 @@ class CurrentOverlayExecutor:
         manifest: CurrentOverlayManifest,
         expected_base_source4_digest: str,
         rollback_backup_digest: str,
+        require_non_mutating_parents: bool = True,
     ) -> OverlayExecutionReceipt:
         manifest.verify()
         if manifest.base_source4_digest != expected_base_source4_digest:
@@ -252,7 +253,12 @@ class CurrentOverlayExecutor:
                 _verify_receipt(replay, manifest.digest, rollback_backup_digest)
                 return replay
 
-            receipt = await self._apply(repository, manifest, rollback_backup_digest)
+            receipt = await self._apply(
+                repository,
+                manifest,
+                rollback_backup_digest,
+                require_non_mutating_parents=require_non_mutating_parents,
+            )
             await repository.persist_receipt(receipt)
             return receipt
 
@@ -261,6 +267,8 @@ class CurrentOverlayExecutor:
         repository: CurrentOverlayRepository,
         manifest: CurrentOverlayManifest,
         rollback_backup_digest: str,
+        *,
+        require_non_mutating_parents: bool,
     ) -> OverlayExecutionReceipt:
         keys = {item.key for item in manifest.records}
         blocked_keys = {
@@ -281,12 +289,24 @@ class CurrentOverlayExecutor:
         )
         for record in ordered_records:
             for parent in record.parent_keys:
-                if record.assertion in {
-                    OverlayAssertion.CREATE,
-                    OverlayAssertion.UPDATE,
-                } and parent in blocked_keys:
+                if (
+                    record.assertion
+                    in {
+                        OverlayAssertion.CREATE,
+                        OverlayAssertion.UPDATE,
+                    }
+                    and parent in blocked_keys
+                ):
                     raise ValueError("overlay parent is non-operational")
-                if parent not in keys and not await repository.source_exists(parent):
+                if (
+                    parent not in keys
+                    and (
+                        require_non_mutating_parents
+                        or record.assertion
+                        not in {OverlayAssertion.HOLD, OverlayAssertion.REMOVE}
+                    )
+                    and not await repository.source_exists(parent)
+                ):
                     raise ValueError("overlay parent source identity missing")
             state = await repository.source_state(record.key)
             if record.assertion is OverlayAssertion.CREATE:
@@ -372,7 +392,9 @@ class CurrentOverlayExecutor:
                     OverlayJournalEntry(
                         record.key,
                         record.assertion,
-                        "held" if record.assertion is OverlayAssertion.HOLD else "removal_recorded",
+                        "held"
+                        if record.assertion is OverlayAssertion.HOLD
+                        else "removal_recorded",
                         state.source_digest if state else None,
                         state.source_digest if state else None,
                         state.native_id if state else None,
@@ -430,8 +452,13 @@ def _validate_manifest_values(
             raise ValueError("overlay record acquisition timestamp is invalid")
         if item.assertion is OverlayAssertion.UPDATE and not item.prior_source_digest:
             raise ValueError("overlay update requires prior source digest")
-        if item.assertion in {OverlayAssertion.REMOVE, OverlayAssertion.HOLD} and item.payload:
-            raise ValueError("non-mutating overlay assertions cannot carry write payload")
+        if (
+            item.assertion in {OverlayAssertion.REMOVE, OverlayAssertion.HOLD}
+            and item.payload
+        ):
+            raise ValueError(
+                "non-mutating overlay assertions cannot carry write payload"
+            )
 
 
 def _verify_receipt(
