@@ -67,6 +67,10 @@ class CurrentOverlayDomainServices(Protocol):
         self, *, master_run_id: UUID, customer_run_id: UUID, operational_run_id: UUID
     ) -> None: ...
 
+    async def prepare_update_bindings(
+        self, session: AsyncSession, records: tuple[OverlayRecord, ...]
+    ) -> dict[str, dict[str, int]]: ...
+
 
 class SqlAlchemyCurrentOverlayRepository(CurrentOverlayRepository):
     """Durable, lock-protected adapter bound to one admitted SOURCE.4 master run."""
@@ -80,6 +84,7 @@ class SqlAlchemyCurrentOverlayRepository(CurrentOverlayRepository):
         advisory_lock_identity: str | None = None,
         execution_context: dict[str, object] | None = None,
         lineage_bootstrap: CurrentOverlayLineageBootstrap | None = None,
+        overlay_records: tuple[OverlayRecord, ...] = (),
     ) -> None:
         self._session = session
         self._master_run_id = master_run_id
@@ -87,6 +92,7 @@ class SqlAlchemyCurrentOverlayRepository(CurrentOverlayRepository):
         self._advisory_lock_identity = advisory_lock_identity
         self._execution_context = dict(execution_context or {})
         self._lineage_bootstrap = lineage_bootstrap
+        self._overlay_records = overlay_records
         self._master: HcpMigrationMasterRun | None = None
 
     @asynccontextmanager
@@ -112,6 +118,10 @@ class SqlAlchemyCurrentOverlayRepository(CurrentOverlayRepository):
                     customer_run_id=self._lineage_bootstrap.customer_run.id,
                     operational_run_id=self._lineage_bootstrap.operational_run.id,
                 )
+                inventory = await self._services.prepare_update_bindings(
+                    self._session, self._overlay_records
+                )
+                self._execution_context["update_binding_inventory"] = inventory
             else:
                 self._master = await self._session.scalar(
                     select(HcpMigrationMasterRun)

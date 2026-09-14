@@ -239,6 +239,7 @@ async def execute_current_overlay(
             master_run_id=binding.master_run_id,
             services=services,
             lineage_bootstrap=bootstrap,
+            overlay_records=manifest.records,
             advisory_lock_identity=f"hcp-current-overlay:{authority.company_id}",
             execution_context={
                 "authority_sha": repository_sha,
