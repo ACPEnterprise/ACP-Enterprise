@@ -1,6 +1,6 @@
 # OM1 Enterprise integration queue
 
-Snapshot: 2026-09-14 16:02 America/New_York
+Snapshot: 2026-09-14 16:18 America/New_York
 
 ## Authority and deployed state
 
@@ -117,6 +117,7 @@ acceptance gates in this packet operationally; GitHub will not enforce them.
 | SOURCE.4 artifact recovery | `work/migration-source4-accepted-artifact-recovery-1` | `a3cad3d389b9ed69300939d15c19e2d7b08da063` | None | 11/1 | `6b49028ab04630d007af9bdd3150f9fcdf2ee5db` | Stale but reconcilable; merge-clean; documentation-only |
 | HCP historical safe-tranche builder | `work/hcp-historical-safe-tranche-1` | `b32f99ff80f447bf8140b73380d19191ccb8db59` | None | 21/1 | `10ae87b95c81a59c5eb5b8c16fc5e6170527732d` | Stale but reconcilable; merge-clean; metadata edit required |
 | SOURCE.4 UPDATE cohort authority | `work/hcp-update-cohort-authority-1` | `d53e5d36422218bd715f07d8099e09865167e0f1` | None | 5/1 | `0e18436bc563f57e79c76f8293146012c21f5205` | Stale but reconcilable; merge-clean, but blocked: unsafe overwrite/symlink handling, incomplete authority verification, and no command/generator integration tests |
+| SOURCE.4 authority-successor replay verifier | `work/hcp-source4-authority-successor-replay-1` | `dac091e39895434ae50d2abf54963c80a7bbcaa9` | None | 0/1 | `151c9be187a5de934c706a274f8d164c3baacff5` | Current and merge-clean, but blocked: assumes completed execution; unsafe artifact path/mode validation, nondeterministic database digests, overbroad event scope, unsealed authority, and no command/PostgreSQL tests |
 | ECO reconciliation | `work/eco-migration-reconciliation-integration-watch-1` | `1c0e7b20db62b6a342548f2842ea1a3a45965386` | None | 13/13 | `3ae2251f6469131fbd8b6a393e7ebc1af83a0280` | Blocked on schema reconciliation; duplicate protected revision ID; rebase and assign a new revision downstream of `h8j0l2n4p6r8` |
 | Payroll/QBO read UI | `work/om2b-payroll-accounting-continuation-1` | `724398348b566f655d2bc7127c20beeb6be52d6c` | #215 open/CLEAN | 32/1 | `17cc5f436c624f30507c0a65f98ed9ffceb4697b` | Stale but reconcilable; merge-clean; PR refresh required |
 | Mobile Apple release packet | `work/mobile-apple-owner-release-packet-1` | `0183eaec3e2825a79b683e9e684a761243c86ea7` | None | 18/15 | `f0e7a6c4c305fe6805a15cc354df0ca602d9606d` | Stale but reconcilable; merge-clean; two manifest edits required |
@@ -138,15 +139,15 @@ acceptance gates in this packet operationally; GitHub will not enforce them.
 | Laptop1 Phone distribution readiness | `bf28a61c...` is an ancestor of the active Mobile owner-release packet; integrate only the successor packet. |
 | ECO named commits and persistence | `d7ef88d1...` and `37b32949...` are superseded by patch-evolved equivalents; `fe7a9623...`, `f587c271...`, and persistence `863cab13...` feed the active ECO watch. |
 | QBO `5fe11183...` | Superseded by protected real-company evidence #243. Preserve the OAuth owner gate. |
-| Migration executor / acceptance | `5b8b02de...` and `83bbeef0...` are superseded by protected guarded execution and acceptance #253. Lineage, native binding, runtime inventory, v4 completeness, the v4 executor, Location lookup, and exact-replay repair are protected through #262-#270. Recovery, builder, cohort authority, runtime repair, v4 repair, and a complete executor repair remain preparation. Protected #270 is not qualified execution authority. Do not run its generators, executor command, or guarded admission. |
+| Migration executor / acceptance | `5b8b02de...` and `83bbeef0...` are superseded by protected guarded execution and acceptance #253. Lineage, native binding, runtime inventory, v4 completeness, the v4 executor, Location lookup, and exact-replay repair are protected through #262-#270. Recovery, builder, cohort authority, runtime repair, v4 repair, a complete executor repair, and replay-verifier successor `dac091e3...` remain preparation. The replay verifier assumes an execution already occurred and cannot authorize one. Protected #270 is not qualified execution authority. Do not run its generators, executor command, guarded admission, or replay verifier. |
 | Price Book operator readiness | `c1c90a0a...` is superseded by the broader held review candidate `49e852aa...`; no candidate is admissible yet. |
 
 Zero-delta classifications above use a three-way composition with current
 protected authority, not a direct endpoint diff. Conflicting stale branches are
 not reconciliation inputs: use their named protected successors as authority.
 
-The seven remaining effective deltas have zero pairwise file overlap. ECO and
-cohort authority are not admissible: ECO's
+The eight remaining effective deltas are merge-clean. ECO, cohort authority, and
+the authority-successor replay verifier are not admissible: ECO's
 differently named migration still declares protected revision `g7i9k1m3o5q7`
 from `f6h8j0l2n4p6`; cohort authority has unsafe file handling, incomplete verification,
 and missing command/generator coverage. Protected #266 retains v4's unbound
@@ -154,8 +155,8 @@ inputs, unsafe output, incomplete authority/verifier/tests, and contradictory
 readiness; those defects now require successors rather than candidate edits.
 Protected executor through #270 depends on those repairs and adds independent
 authority/file-verification and execution-test gaps; #269 fixes its Location
-lookup and #270 incompletely repairs exact replay. The five-candidate combined tree excluding both blocked
-active lanes is
+lookup and #270 incompletely repairs exact replay. The five-candidate combined
+tree excludes the two blocked Migration-preparation lanes and blocked ECO and is
 `c058a550c85c21ae975a10fe254ed3bacb31675e`; it changes 51 files and passes
 `git diff --check`. Recompute all trees after protected movement or packet edits.
 
@@ -178,10 +179,14 @@ operational order:
 5. Treat protected executor through #270 as operationally disabled. Preserve
    #269's Location-scope fix and correct #270's replay validation, then prepare a complete successor
    only after steps 3-4; do not create an execution authority.
-6. Reconcile ECO to a new revision downstream of protected `h8j0l2n4p6r8`, then
+6. Repair `dac091e3...` as read-only post-execution tooling: harden and seal its
+   authority/files, make every database digest deterministic and correctly
+   scoped, and add command plus real-PostgreSQL zero-write/replay coverage. It
+   remains unusable until a separately authorized execution exists.
+7. Reconcile ECO to a new revision downstream of protected `h8j0l2n4p6r8`, then
    integrate ECO as its own later database checkpoint.
-7. PR #215 in Wave B if QBO read-evidence acceptance is scheduled.
-8. Mobile in Wave D; authoritative Job Clock `d52d1178` is already protected.
+8. PR #215 in Wave B if QBO read-evidence acceptance is scheduled.
+9. Mobile in Wave D; authoritative Job Clock `d52d1178` is already protected.
 
 Do not execute Migration admission, authorize QBO, execute Payroll, or sign or
 upload an Apple build as part of integration.
@@ -197,6 +202,7 @@ flowchart LR
     K --> U[Runtime inventory repair and qualification]
     U --> X[V3 plus v4 complete-graph repair successor]
     X --> V[Complete v4 executor repair preserving PR 269 and correcting PR 270]
+    A --> Y[Repair read-only authority-successor verifier]
     A -->|reconcile| B[Historical builder]
     A -->|reconcile| E[ECO watch]
     A -->|reconcile| P[PR 215]
@@ -221,6 +227,7 @@ flowchart LR
     C --> PA[Sealed persona acceptance]
     H --> PA
     V --> XA
+    Y --> XA
     XA -.->|separate owner authority| MG[Guarded Migration admission]
     QA -.->|separate owner authority| QG[QBO OAuth]
     MA -.->|separate owner authority| AG[Apple signing and upload]
@@ -236,7 +243,7 @@ integration path because it remains held.
 
 ## Batch boundaries and refresh checkpoints
 
-All seven remaining active lanes may be inspected concurrently from the guarded
+All eight remaining active lanes may be inspected concurrently from the guarded
 authority above. Integration remains sequential because the first protected PR
 changes the authority for every remaining lane. ECO qualification cannot
 complete until its duplicate revision is replaced downstream of now-protected
@@ -246,7 +253,7 @@ complete until its duplicate revision is replaced downstream of now-protected
 |---|---|---|
 | Acceptance tooling | Reconcile `1fb0481a...` to `26469c29...`, update schema/release bindings, then open a fresh PR. Route the declared service-principal/activation/session/token-writer gaps to Enterprise/platform before persona issuance | Contract tests fail, protected SHA moves, platform primitive remains missing at execution time, persona permissions/digests differ, or secret material appears in arguments/evidence |
 | Current deployed acceptance | Preserve the exact-`26469c29...` healthy responses at 16:00-16:02 and all prior rollout evidence; attach or rerun missing #261-#270 qualification; keep the protected #265/#266 generators and executor through #270 disabled | Deployed SHA differs, focused test, zero-to-head migration, exactly-one-head/drift check fails, required evidence cannot be produced, defective tooling is exercised, or health/dependency state regresses |
-| Wave C preparation | Treat #264-#270 as integrated, but #265/#266 and the executor through #270 operationally rejected; repair cohort/runtime/v4/executor evidence in that order; prepare recovery and historical builder independently | Any unbound input, unsafe private-file path, missing or ambiguous execution authority, test/digest/count failure, current graph other than 11/11/15/18 with zero holds, exactly-one-head/drift/migration failure, or authority mismatch |
+| Wave C preparation | Treat #264-#270 as integrated, but #265/#266 and the executor through #270 operationally rejected; repair cohort/runtime/v4/executor evidence in that order; prepare recovery and historical builder independently; repair `dac091e3...` only as post-execution verification tooling | Any unbound input, unsafe private-file path, missing or ambiguous execution authority, nondeterministic or overbroad replay evidence, test/digest/count failure, current graph other than 11/11/15/18 with zero holds, exactly-one-head/drift/migration failure, or authority mismatch |
 | ECO checkpoint | Native binding is protected; assign ECO a unique revision with down-revision `h8j0l2n4p6r8`, requalify, then integrate/deploy independently | Duplicate/multiple Alembic head, drift, migration failure, or governed-policy acceptance failure |
 | Wave B | Integrate PR #215 independently | QBO/Payroll projection tests fail or any provider mutation appears |
 | Wave D | Integrate Mobile independently | Test/static/preflight failure or either manifest is stale |
@@ -306,6 +313,7 @@ packet if either SHA guard fails or the merge conflicts.
 | `work/migration-source4-accepted-artifact-recovery-1` | `a3cad3d389b9ed69300939d15c19e2d7b08da063` |
 | `work/hcp-historical-safe-tranche-1` | `b32f99ff80f447bf8140b73380d19191ccb8db59` |
 | `work/hcp-update-cohort-authority-1` | `d53e5d36422218bd715f07d8099e09865167e0f1` |
+| `work/hcp-source4-authority-successor-replay-1` | `dac091e39895434ae50d2abf54963c80a7bbcaa9` |
 | `work/eco-migration-reconciliation-integration-watch-1` | `1c0e7b20db62b6a342548f2842ea1a3a45965386` |
 | `work/om2b-payroll-accounting-continuation-1` | `724398348b566f655d2bc7127c20beeb6be52d6c` |
 | `work/mobile-apple-owner-release-packet-1` | `0183eaec3e2825a79b683e9e684a761243c86ea7` |
@@ -655,6 +663,35 @@ mismatched digests, CLI behavior, or PostgreSQL replay. A successor must cover
 CREATE and UPDATE exact replay, reject digest and ownership drift, and prove
 transactional replay through the command boundary. Do not run the command.
 
+### SOURCE.4 authority-successor replay verifier
+
+Branch `work/hcp-source4-authority-successor-replay-1` at
+`dac091e39895434ae50d2abf54963c80a7bbcaa9` is a direct child of protected
+authority, has no PR or schema change, and composes merge-clean at tree
+`151c9be187a5de934c706a274f8d164c3baacff5`. Its five-file delta adds 935 lines
+for a nominally read-only verifier of a previously committed 522-record
+execution. Python 3.12 compilation and `git diff --check` pass. Its four tests
+are synthetic; they do not exercise the command or PostgreSQL transaction.
+
+Do not run or integrate it as acceptance-ready. Its authority and input checks
+use `stat()`, `is_file()`, and ordinary reads that follow symlinks and accept any
+mode without group/world access instead of exact `0600`; its authority has no
+sealed self-digest. Child, hold, Business Event, and native-row queries have no
+deterministic ordering before hashing. Business Events are selected only by
+Company, Branch, and the master time window, so unrelated concurrent events can
+enter the claimed execution digest. The schema-semantic digest hashes hardcoded
+contract labels rather than inspected database semantics. The verifier also
+assumes the original guarded execution and receipt already exist; neither this
+candidate nor this packet authorizes that execution.
+
+A bounded successor must use non-following descriptor-based exact-mode file
+validation, seal the complete verifier authority, deterministically order and
+scope every database evidence family to the execution, inspect the schema
+semantics it claims to bind, and add command plus real-PostgreSQL tests proving
+zero writes, repeatability, every mismatch family, and rollback. It may run only
+after that repair is integrated/deployed and a separately authorized execution
+has actually produced the bound receipt.
+
 ### SOURCE.4 artifact recovery
 
 Merge current protected authority into
@@ -970,6 +1007,7 @@ links, Payroll values, provider payloads, Apple credentials, or Customer PII.
 | Migration runtime inventory | Candidate/merge/deployed SHAs; exact schema and input digests/modes; all 280 UPDATE rows exactly once by cohort/domain/disposition; current blocker count; output mode and `mutation_authority: none`; read-only transaction/rollback evidence | Unsafe output path/mode, incomplete/duplicate/unknown cohort, mislabeled disposition, schema/authority mismatch, database mutation, runtime hold authorization, or guarded executor invocation |
 | Migration Preview baseline/v3/v4 | Runtime/baseline/v3/v4 hashes and modes; v3 503 coverage and 146/5/352 dispositions; v4 503+19=522 coverage, 174/4/5/339 dispositions, 13 released holds, exact 11/11/15/18 zero-hold graph; explicit non-executable state; sanitized evidence only | Any unbound input, unsafe file handling, hardcoded or contradictory readiness, missing authority field, PII disclosure, count/digest/authority drift, unsupported executor semantics, or execution attempt |
 | Migration v4 executor | Repaired cohort/runtime/v4 authority chain; exact candidate/merge/deployed SHA; sealed execution-authority digest and scope; every input's byte and semantic verification; private-file/symlink evidence; PostgreSQL 522-record preflight, write, replay, and injected rollback evidence; verified backup/restore receipt | Any unrepaired predecessor, followed symlink, non-exact mode, unverified semantic input, incomplete execution grant, missing database/CLI/replay/rollback coverage, partial mutation, or execution without separate owner authority |
+| Migration authority-successor replay | Sealed read-only authority; original execution/receipt identity; exact successor/deployed SHA; deterministic execution-scoped child/hold/event/binding/native digests; exact 522 outcomes and zero mutations; repeated PostgreSQL command evidence | No separately authorized completed execution, followed symlink, non-exact mode, unsealed authority, unordered or overbroad evidence, schema mismatch, receipt/count drift, any write, or missing command/database coverage |
 | Migration preparation | Both input SHA-256 values; manifest digest and record count; hold counts; builder output SHA-256 and `execution_allowed` value | Digest/count mismatch, weakened HOLD, global blocker, `execution_allowed = true`, or any admission/executor invocation |
 
 Any rejection freezes that lane, preserves logs and immutable audit evidence,
