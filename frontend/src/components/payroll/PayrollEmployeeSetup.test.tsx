@@ -15,11 +15,24 @@ describe("PayrollEmployeeSetup", () => {
         readiness: "BLOCKED_FOR_PAYROLL", blockers: ["tax:federal_withholding_election:missing"],
         protected_input_configuration_ready: false, compensations: [], inputs: [],
       } },
+      readiness: { isPending: false, isError: false, data: {
+        contract_version: "payroll.real-employee-readiness-runtime.v1",
+        readiness_contract_version: "payroll.real-input-readiness.v1",
+        employee_id: "employee-1",
+        pay_period_id: "period-1",
+        status: "BLOCKED_FOR_PAYROLL",
+        calculation_readiness: ["WITHHOLDING_NOT_READY"],
+        exact_blockers: ["missing w4_filing_status"],
+        provider_version: "2026.v1",
+        reconciliation_version: "2026.v1",
+        evidence_digest: "safe-digest",
+      } },
       draftCompensation: { mutateAsync: vi.fn() },
       approveCompensation: { mutate: vi.fn() }, approveInput: { mutate: vi.fn() },
     } as never);
-    render(<PayrollEmployeeSetup employeeId="employee-1" />);
-    expect(screen.getByText("BLOCKED_FOR_PAYROLL")).toBeVisible();
+    render(<PayrollEmployeeSetup employeeId="employee-1" payPeriodId="period-1" />);
+    expect(screen.getByText(/BLOCKED_FOR_PAYROLL · selected pay period/)).toBeVisible();
+    expect(screen.getByText(/missing w4 filing status/i)).toBeVisible();
     expect(screen.getByText(/federal withholding election · missing/i)).toBeVisible();
     expect(screen.getAllByText(/not zero/i).length).toBeGreaterThan(0);
     expect(screen.queryByText("0.00")).not.toBeInTheDocument();

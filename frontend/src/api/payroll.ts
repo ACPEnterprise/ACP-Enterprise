@@ -123,6 +123,19 @@ export interface PayrollEmployeeSetup {
   inputs: Array<Record<string, unknown> & { id: string; lifecycle: string; key: string; domain: string; version: number }>;
 }
 
+export interface PayrollEmployeeReadiness {
+  contract_version: string;
+  readiness_contract_version: string;
+  employee_id: string;
+  pay_period_id: string;
+  status: "READY_FOR_PAYROLL" | "BLOCKED_FOR_PAYROLL";
+  calculation_readiness: string[];
+  exact_blockers: string[];
+  provider_version: string;
+  reconciliation_version: string;
+  evidence_digest: string;
+}
+
 export type CompensationDraft = {
   effective_start: string; effective_end?: string | null; compensation_type: "hourly" | "salaried";
   hourly_rate?: string | null; salary_amount?: string | null; salary_frequency?: string | null;
@@ -163,6 +176,14 @@ export async function listPayrollOperatingRegisters(): Promise<PayrollOperatingR
 
 export async function getPayrollEmployeeSetup(employeeId: string): Promise<PayrollEmployeeSetup> {
   return (await apiClient.get<PayrollEmployeeSetup>(`/api/v1/payroll/setup/employees/${employeeId}`)).data;
+}
+export async function getPayrollEmployeeReadiness(employeeId: string, payPeriodId: string): Promise<PayrollEmployeeReadiness> {
+  return (
+    await apiClient.get<PayrollEmployeeReadiness>(
+      `/api/v1/payroll/setup/employees/${employeeId}/readiness`,
+      { params: { pay_period_id: payPeriodId } },
+    )
+  ).data;
 }
 export async function draftPayrollCompensation(employeeId: string, body: CompensationDraft) {
   return (await apiClient.post(`/api/v1/payroll/setup/employees/${employeeId}/compensations`, body)).data;

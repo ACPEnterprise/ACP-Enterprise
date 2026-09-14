@@ -86,7 +86,7 @@ export function PayrollRoute() {
         <h1 className="mt-1 text-2xl font-bold sm:text-3xl">Payroll Administration</h1>
         <p className="mt-2 text-content-muted">Readiness, reconciliation, reporting, payment, remittance, statements, and correction evidence. Provider execution and filing remain disabled.</p>
       </header>
-      {setupEmployeeId && <PayrollEmployeeSetup employeeId={setupEmployeeId} />}
+      {setupEmployeeId && <PayrollEmployeeSetup employeeId={setupEmployeeId} payPeriodId={effectivePayPeriodId} />}
       <Alert variant={value.blocker_count ? "warning" : "information"} title={value.blocker_count ? "Payroll attention required" : "Payroll evidence reconciled"}>
         {value.blocker_count ? `${value.blocker_count} Employee disposition blocker(s) remain explicit.` : "No unexplained Employee blocker is present in the admitted run population."} History: {value.history_ready ? "complete authority available" : "incomplete—YTD remains unavailable"}.
       </Alert>
@@ -211,6 +211,9 @@ export function PayrollRoute() {
                           )}
                         </td>
                         <td>
+                          <Link className="mr-3 font-semibold text-action-primary underline" to={`/payroll?employee=${employee.employee_id}&period=${effectivePayPeriodId}#payroll-employee-${employee.employee_id}`}>
+                            Payroll setup
+                          </Link>
                           <Link className="font-semibold text-action-primary underline" to={`/employees?employee=${employee.employee_id}&period=${effectivePayPeriodId}#timecard-${employee.employee_id}`}>
                             View timecard
                           </Link>
