@@ -1,21 +1,21 @@
 # OM1 Enterprise integration queue
 
-Snapshot: 2026-09-14 16:49 America/New_York
+Snapshot: 2026-09-14 17:03 America/New_York
 
 ## Authority and deployed state
 
-- Protected authority: `cfebd1669c2d21402377391f3bfa2433f8d63da3`
-- Protected tip: PR #272, replay mapped-row serialization repair
+- Protected authority: `a390c9d8fcbb16244ca141a09fa0acf9a34ec4cc`
+- Protected tip: PR #273, Dispatch field-readiness workflow
 - Deployed Preview: `cfebd1669c2d21402377391f3bfa2433f8d63da3`
 - Preview health: application healthy; PostgreSQL and Redis connected
-- Deployment gap: none; deployed and protected SHAs match
+- Deployment gap: PR #273 is not deployed; Preview still reports `cfebd166...`
 - Acceptance state: pending. Preview initially remained at `b296cc6b...` after
   #265 merged, then by 2026-09-14 14:00 America/New_York returned HTTP 200 at
   exact SHA `b4bf00d3...` with healthy application and connected PostgreSQL and
   Redis. A separate HTTP 502 occurred at 14:16:45 with no authority/PR/head
   change; four consecutive checks from 14:17:23 through 14:17:34 recovered HTTP
   200 at the same exact SHA with both dependencies connected. Preserve both
-  transient incidents in acceptance evidence. Required #261-#272 evidence and
+  transient incidents in acceptance evidence. Required #261-#273 evidence and
   authenticated persona evidence have not all been supplied. Do not run #265's
   command or #266's generators until repair successors land. During #266 rollout,
   Preview returned HTTP 502 at 15:10, then reported exact `9e866898...` with a
@@ -33,6 +33,10 @@ Snapshot: 2026-09-14 16:49 America/New_York
   dependencies connected at 16:24.
   After #272 merged, Preview reported exact `cfebd166...` healthy with both
   dependencies connected at 16:27, 16:28, and 16:30.
+  After #273 merged, the 16:57 and 17:00 health attempts hit SSL connection
+  timeouts; the intervening 16:58 response remained healthy at old SHA
+  `cfebd166...`, as did 17:01; the 17:02 and 17:03 requests returned HTTP 502. Do not accept
+  or exercise field readiness before exact-SHA recovery.
 - GitHub CI evidence: no check runs or commit statuses are reported for the
   protected SHA. PR #264's body reports 698 migration/job/scheduling regressions,
   16 focused tests, PostgreSQL zero-to-head/current=head, and zero drift, but no
@@ -80,9 +84,14 @@ Snapshot: 2026-09-14 16:49 America/New_York
   It fixes mapped-column serialization and adds one unit regression, but does
   not clear #271's authority, filesystem, ordering, event-scope, or database
   command gaps. Keep the verifier disabled.
+- PR #273 merged at 16:55 as protected `a390c9d8...` from unchanged blocked head
+  `b510bb39...`. It has no checks, statuses, reviews, comments, or linked logs;
+  its body explicitly leaves PostgreSQL Dispatch suites pending. Protected
+  integration does not cure the unreachable UI action, partial-commit workflow,
+  or hidden mutation error. Keep field readiness operationally disabled.
 
 Independent qualification on 2026-09-12 covered the earlier #257-#260 tranche,
-not later #261-#272. That bounded run passed PostgreSQL zero-to-head, 20 affected
+not later #261-#273. That bounded run passed PostgreSQL zero-to-head, 20 affected
 backend tests, nine affected frontend suites and 43 tests, full ESLint, and the
 production TypeScript/Vite build. Four SQLAlchemy transaction-deassociation
 warnings were emitted by Invoice tests and remain part of that bounded evidence.
@@ -128,14 +137,13 @@ acceptance gates in this packet operationally; GitHub will not enforce them.
 
 | Candidate | Exact branch | Head | PR | Behind/ahead | Effective tree | Classification |
 |---|---|---|---|---:|---|---|
-| OM2-C persona contract and acceptance harness | `work/om2c-launch-20260911-e2e-acceptance-1` | `1fb0481a043caaca749ae5dd49dc6cdf6d994061` | None; prior #212 is merged | 8/46 | `e1dcdbb86515d3fd9de779769074f35cd9a3e4f3` | Stale but reconcilable; merge-clean; protected/schema bindings must advance; acceptance execution blocked on missing platform service principal |
-| SOURCE.4 artifact recovery | `work/migration-source4-accepted-artifact-recovery-1` | `a3cad3d389b9ed69300939d15c19e2d7b08da063` | None | 13/1 | `ebc47d5e32ff0b5da2565bcbc81c9204883ddba3` | Stale but reconcilable; merge-clean; documentation-only |
-| HCP historical safe-tranche builder | `work/hcp-historical-safe-tranche-1` | `b32f99ff80f447bf8140b73380d19191ccb8db59` | None | 23/1 | `c9a0de619ed3de5ee8fe3a64ccabcde7f3aafc85` | Stale but reconcilable; merge-clean; metadata edit required |
-| SOURCE.4 UPDATE cohort authority | `work/hcp-update-cohort-authority-1` | `d53e5d36422218bd715f07d8099e09865167e0f1` | None | 7/1 | `7cba40f1859c511dee99aa134114d57d666e054a` | Stale but reconcilable; merge-clean, but blocked: unsafe overwrite/symlink handling, incomplete authority verification, and no command/generator integration tests |
-| ECO reconciliation | `work/eco-migration-reconciliation-integration-watch-1` | `1c0e7b20db62b6a342548f2842ea1a3a45965386` | None | 15/13 | `9fa93c16dc20ad7624bde3a3da754f8b65362751` | Blocked on schema reconciliation; duplicate protected revision ID; rebase and assign a new revision downstream of `h8j0l2n4p6r8` |
-| Payroll/QBO read UI | `work/om2b-payroll-accounting-continuation-1` | `724398348b566f655d2bc7127c20beeb6be52d6c` | #215 open/CLEAN | 34/1 | `d94ff4c30c25ce2e2ec6b004852a353d2583d716` | Stale but reconcilable; merge-clean; PR refresh required |
-| Mobile Apple release packet | `work/mobile-apple-owner-release-packet-1` | `0183eaec3e2825a79b683e9e684a761243c86ea7` | None | 20/15 | `f940d0775b6e0fc52d29d16315c77d058d69a6fd` | Stale but reconcilable; merge-clean; two manifest edits required |
-| Phone Dispatch field readiness | `work/om1-phone-dispatch-assignability-1` | `b510bb3994e6a56661d8994b7ad900d4910ced87` | #273 open/MERGEABLE | 0/1 | `b5217206baab7770a7772559d61b28c4618dff3a` | Current and merge-clean, but blocked: ineligible option cannot be selected to invoke repair; three separately committed mutations permit partial readiness; mutation failures are not surfaced |
+| OM2-C persona contract and acceptance harness | `work/om2c-launch-20260911-e2e-acceptance-1` | `1fb0481a043caaca749ae5dd49dc6cdf6d994061` | None; prior #212 is merged | 9/46 | `842ce77e402c280a76d5ba260dc5cf436d7338d5` | Stale but reconcilable; merge-clean; protected/schema bindings must advance; acceptance execution blocked on missing platform service principal |
+| SOURCE.4 artifact recovery | `work/migration-source4-accepted-artifact-recovery-1` | `a3cad3d389b9ed69300939d15c19e2d7b08da063` | None | 14/1 | `309331d2b62d28f57f64013a1995d7ee46a41793` | Stale but reconcilable; merge-clean; documentation-only |
+| HCP historical safe-tranche builder | `work/hcp-historical-safe-tranche-1` | `b32f99ff80f447bf8140b73380d19191ccb8db59` | None | 24/1 | `b7a9b3eabbc9628471ad76465c3ae2d54e5ab252` | Stale but reconcilable; merge-clean; metadata edit required |
+| SOURCE.4 UPDATE cohort authority | `work/hcp-update-cohort-authority-1` | `d53e5d36422218bd715f07d8099e09865167e0f1` | None | 8/1 | `ef67d33dc9b51210c405ce319d3fc622267785e6` | Stale but reconcilable; merge-clean, but blocked: unsafe overwrite/symlink handling, incomplete authority verification, and no command/generator integration tests |
+| ECO reconciliation | `work/eco-migration-reconciliation-integration-watch-1` | `1c0e7b20db62b6a342548f2842ea1a3a45965386` | None | 16/13 | `8df90efe745d6725d06904a0ec24a350a7a3b619` | Blocked on schema reconciliation; duplicate protected revision ID; rebase and assign a new revision downstream of `h8j0l2n4p6r8` |
+| Payroll/QBO read UI | `work/om2b-payroll-accounting-continuation-1` | `724398348b566f655d2bc7127c20beeb6be52d6c` | #215 open/CLEAN | 35/1 | `579ba2e8d61dc25d1bbed2fac49d6b58aa752caf` | Stale but reconcilable; merge-clean; PR refresh required |
+| Mobile Apple release packet | `work/mobile-apple-owner-release-packet-1` | `0183eaec3e2825a79b683e9e684a761243c86ea7` | None | 21/15 | `5177ddc24a7fae3027ca540af310f2fd345c6321` | Stale but reconcilable; merge-clean; blocked on field-readiness repair successor and two manifest edits |
 
 ## Named launch queue coverage
 
@@ -147,11 +155,11 @@ acceptance gates in this packet operationally; GitHub will not enforce them.
 | Laptop1-B Customer office UX | `8516b08b...` conflicts in one add/add reliability test, while current-authority reconciliation `174fcd4e...` composes to zero delta. Superseded by #242 and #257. |
 | Workforce / Payroll #216 | Merged as `d52d1178...`; already protected. |
 | Workforce / Payroll #221, stacked #222, and #223 | Closed; their current successors are protected through #229, #231, and #235 respectively. |
-| Current OM2 successor | Persona-contract successor `1fb0481a...` is active but eight protected commits stale. Reconcile it to `cfebd166...`, update protected/schema bindings, and retain its fail-closed missing-service-principal state. Its former PR #212 does not cover the new head; open a fresh PR after reconciliation. |
+| Current OM2 successor | Persona-contract successor `1fb0481a...` is active but nine protected commits stale. Reconcile it to `a390c9d8...`, update protected/schema bindings, and retain its fail-closed missing-service-principal state. Its former PR #212 does not cover the new head; open a fresh PR after reconciliation. |
 | Payroll tax rule | Reconciled `9a44f714...` composes to zero delta; superseded by protected #236. |
 | Identity #227 and #230 | Still open but superseded by protected #256 and #258; close, do not integrate. |
 | Identity recovery successor | `4cf7bdf4...` composes to zero delta; protected #256 is authoritative. |
-| Laptop1 Phone distribution readiness | `bf28a61c...` is an ancestor of the active Mobile owner-release packet. New PR #273 attempts to close physical-device Dispatch assignability but requires a bounded repair before integration; reconcile Mobile manifests only after its authoritative successor. |
+| Laptop1 Phone distribution readiness | `bf28a61c...` is an ancestor of the active Mobile owner-release packet. PR #273 is now protected but its Dispatch assignability action remains operationally disabled; reconcile Mobile manifests only after a bounded repair successor. |
 | ECO named commits and persistence | `d7ef88d1...` and `37b32949...` are superseded by patch-evolved equivalents; `fe7a9623...`, `f587c271...`, and persistence `863cab13...` feed the active ECO watch. |
 | QBO `5fe11183...` | Superseded by protected real-company evidence #243. Preserve the OAuth owner gate. |
 | Migration executor / acceptance | `5b8b02de...` and `83bbeef0...` are superseded by protected guarded execution and acceptance #253. Lineage, native binding, runtime inventory, v4 completeness, the v4 executor, Location lookup, exact-replay repair, authority-successor verifier, and mapped-row repair are protected through #262-#272. Recovery, builder, cohort authority, runtime repair, v4 repair, a complete executor repair, and a verifier repair remain preparation. PR #271/#272 assume an execution already occurred and cannot authorize one. Protected executor and verifier are not qualified. Do not run their generators, executor command, guarded admission, or replay verifier. |
@@ -161,8 +169,8 @@ Zero-delta classifications above use a three-way composition with current
 protected authority, not a direct endpoint diff. Conflicting stale branches are
 not reconciliation inputs: use their named protected successors as authority.
 
-The eight remaining effective deltas are merge-clean. ECO, cohort authority,
-and PR #273 are not admissible: ECO's
+The seven remaining effective deltas are merge-clean. ECO and cohort authority
+are not admissible, and Mobile is blocked on a repair to protected #273: ECO's
 differently named migration still declares protected revision `g7i9k1m3o5q7`
 from `f6h8j0l2n4p6`; cohort authority has unsafe file handling, incomplete verification,
 and missing command/generator coverage. Protected #266 retains v4's unbound
@@ -172,10 +180,12 @@ Protected executor through #270 depends on those repairs and adds independent
 authority/file-verification and execution-test gaps; #269 fixes its Location
 lookup and #270 incompletely repairs exact replay. Protected #271 adds an
 independently defective post-execution verifier; #272 fixes only mapped-row
-serialization. The five-candidate combined
-tree excludes blocked cohort authority, ECO, and PR #273 and is
-`3b6c4a11976c25d48950f28a7a8e9b22aaf63233`; it changes 51 files and passes
-`git diff --check`. Recompute all trees after protected movement or packet edits.
+serialization. Protected #273 adds independently defective Dispatch readiness.
+The four currently independent candidates compose at tree
+`01f78473087b7082aa362bbd53a74b2d95bbf642`; they change 29 files and pass
+`git diff --check`. Including blocked Mobile remains mechanically clean at tree
+`e02f4ce649f8f58f7a35a9e66788794bc37bb8ec` across 51 files. Recompute all
+trees after protected movement or packet edits.
 
 ## Integration order and release waves
 
@@ -203,7 +213,7 @@ operational order:
 7. Reconcile ECO to a new revision downstream of protected `h8j0l2n4p6r8`, then
    integrate ECO as its own later database checkpoint.
 8. PR #215 in Wave B if QBO read-evidence acceptance is scheduled.
-9. Repair PR #273 so the intended ineligible Employee is selectable, the complete
+9. Repair protected #273 so the intended ineligible Employee is selectable, the complete
    profile/capability/availability operation is one atomic transaction, and its
    failure is visible; require real PostgreSQL API/idempotency/rollback coverage.
 10. Reconcile Mobile manifests after the PR #273 successor is protected, then
@@ -216,7 +226,7 @@ upload an Apple build as part of integration.
 
 ```mermaid
 flowchart LR
-    A[Protected cfebd166 through mapped-row repair] -->|reconcile| R[SOURCE.4 recovery]
+    A[Protected a390c9d8 through defective field readiness] -->|reconcile| R[SOURCE.4 recovery]
     A --> C[OM2-C persona contract]
     A --> L[Protected #262 through #266 qualification]
     A --> K[Cohort authority repair]
@@ -228,7 +238,7 @@ flowchart LR
     A -->|reconcile| E[ECO watch]
     A -->|reconcile| P[PR 215]
     A -->|reconcile| M[Mobile owner packet]
-    A --> F[PR 273 field-readiness repair]
+    A --> F[Protected PR 273 field-readiness repair]
     F --> M
     R -.->|operational evidence order| B
     R --> I[Enterprise per-lane PR integration]
@@ -266,7 +276,7 @@ integration path because it remains held.
 
 ## Batch boundaries and refresh checkpoints
 
-All eight remaining active lanes may be inspected concurrently from the guarded
+All seven remaining active lanes may be inspected concurrently from the guarded
 authority above. Integration remains sequential because the first protected PR
 changes the authority for every remaining lane. ECO qualification cannot
 complete until its duplicate revision is replaced downstream of now-protected
@@ -274,12 +284,12 @@ complete until its duplicate revision is replaced downstream of now-protected
 
 | Checkpoint | Enterprise action | Required stop condition |
 |---|---|---|
-| Acceptance tooling | Reconcile `1fb0481a...` to `cfebd166...`, update schema/release bindings, then open a fresh PR. Route the declared service-principal/activation/session/token-writer gaps to Enterprise/platform before persona issuance | Contract tests fail, protected SHA moves, platform primitive remains missing at execution time, persona permissions/digests differ, or secret material appears in arguments/evidence |
-| Current deployed acceptance | Preserve the exact-`cfebd166...` healthy responses at 16:27-16:30, the prior `2455cb3d...` response, and all earlier rollout evidence; attach or rerun missing #261-#272 qualification; keep the protected #265/#266 generators, executor through #270, and #271/#272 verifier disabled | Deployed SHA differs, focused test, zero-to-head migration, exactly-one-head/drift check fails, required evidence cannot be produced, defective tooling is exercised, or health/dependency state regresses |
+| Acceptance tooling | Reconcile `1fb0481a...` to `a390c9d8...`, update schema/release bindings, then open a fresh PR. Route the declared service-principal/activation/session/token-writer gaps to Enterprise/platform before persona issuance | Contract tests fail, protected SHA moves, platform primitive remains missing at execution time, persona permissions/digests differ, or secret material appears in arguments/evidence |
+| Current deployed acceptance | Wait for exact `a390c9d8...`; preserve both SSL timeouts, the 17:02-17:03 HTTP 502s, old-`cfebd166...` responses, and all earlier rollout evidence; attach or rerun missing #261-#273 qualification; keep the protected Migration commands/verifier and #273 field-readiness mutation disabled | Deployed SHA differs, focused test, zero-to-head migration, exactly-one-head/drift check fails, required evidence cannot be produced, defective tooling is exercised, or health/dependency state regresses |
 | Wave C preparation | Treat #264-#272 as integrated, but #265/#266, the executor through #270, and verifier through #272 operationally rejected; repair cohort/runtime/v4/executor evidence in that order; prepare recovery and historical builder independently; repair #271/#272 only as post-execution verification tooling | Any unbound input, unsafe private-file path, missing or ambiguous execution authority, nondeterministic or overbroad replay evidence, test/digest/count failure, current graph other than 11/11/15/18 with zero holds, exactly-one-head/drift/migration failure, or authority mismatch |
 | ECO checkpoint | Native binding is protected; assign ECO a unique revision with down-revision `h8j0l2n4p6r8`, requalify, then integrate/deploy independently | Duplicate/multiple Alembic head, drift, migration failure, or governed-policy acceptance failure |
 | Wave B | Integrate PR #215 independently | QBO/Payroll projection tests fail or any provider mutation appears |
-| Wave D | Repair and qualify PR #273, integrate its successor, then reconcile and integrate Mobile independently | Ineligible target cannot be selected, partial readiness persists on failure, mutation error is hidden, PostgreSQL/API/idempotency/rollback test fails, or either Mobile manifest is stale |
+| Wave D | Keep protected #273 disabled; repair and qualify a successor, then reconcile and integrate Mobile independently | Ineligible target cannot be selected, partial readiness persists on failure, mutation error is hidden, PostgreSQL/API/idempotency/rollback test fails, or either Mobile manifest is stale |
 
 After every protected integration, stop before integrating another candidate and
 run this read-only checkpoint in a clone containing the remaining remote branch:
@@ -317,7 +327,7 @@ pushes, or merges the protected branch.
 ```bash
 git fetch origin --prune
 test "$(git rev-parse origin/customer-management-v1)" = \
-  cfebd1669c2d21402377391f3bfa2433f8d63da3
+  a390c9d8fcbb16244ca141a09fa0acf9a34ec4cc
 
 lane=work/REPLACE_WITH_LANE
 expected=REPLACE_WITH_FULL_HEAD
@@ -339,7 +349,6 @@ packet if either SHA guard fails or the merge conflicts.
 | `work/eco-migration-reconciliation-integration-watch-1` | `1c0e7b20db62b6a342548f2842ea1a3a45965386` |
 | `work/om2b-payroll-accounting-continuation-1` | `724398348b566f655d2bc7127c20beeb6be52d6c` |
 | `work/mobile-apple-owner-release-packet-1` | `0183eaec3e2825a79b683e9e684a761243c86ea7` |
-| `work/om1-phone-dispatch-assignability-1` | `b510bb3994e6a56661d8994b7ad900d4910ced87` |
 
 After the lane-specific edits and tests below, commit and push only that lane,
 then open or refresh its PR into `customer-management-v1`. Enterprise must
@@ -348,7 +357,7 @@ flow; direct protected updates are not an execution option.
 
 ### OM2-C persona contract and acceptance harness
 
-The branch is eight commits behind protected authority and has no open PR. PR #212 is
+The branch is nine commits behind protected authority and has no open PR. PR #212 is
 historical and already merged; do not append this head to that closed identity.
 Open a fresh PR for the 15-file effective delta. It has no Alembic migration and
 zero file overlap with every other active or held lane.
@@ -369,7 +378,7 @@ python -m compileall -q \
 ```
 
 After merging protected authority, update the successor's protected binding to
-`cfebd166...` and its deployed binding only after Preview reports that exact SHA;
+`a390c9d8...` and its deployed binding only after Preview reports that exact SHA;
 retain schema binding `h8j0l2n4p6r8` and recompute any
 contract/report digests affected by those edits. Retain the qualified frontend
 digest unless the deployed frontend artifact proves it changed. Require those
@@ -490,9 +499,9 @@ current-calendar dependencies, before mutation. Do not invoke
 ### SOURCE.4 UPDATE cohort authority
 
 Branch `work/hcp-update-cohort-authority-1` is current at
-`d53e5d36422218bd715f07d8099e09865167e0f1`, has no PR, is 7 behind / 1 ahead,
+`d53e5d36422218bd715f07d8099e09865167e0f1`, has no PR, is 8 behind / 1 ahead,
 and composes merge-clean at tree
-`7cba40f1859c511dee99aa134114d57d666e054a`. It has no schema change and is the
+`ef67d33dc9b51210c405ce319d3fc622267785e6`. It has no schema change and is the
 intended sealed input authority for a post-#265 repair successor.
 
 The documented local artifact at
@@ -725,7 +734,7 @@ any other verifier blocker above. Preserve it in the complete verifier repair.
 
 Merge current protected authority into
 `work/migration-source4-accepted-artifact-recovery-1`, require tree
-`ebc47d5e32ff0b5da2565bcbc81c9204883ddba3`, run `git diff --check`, push the
+`309331d2b62d28f57f64013a1995d7ee46a41793`, run `git diff --check`, push the
 lane branch, and open a documentation PR. The packet contains no protected SHA
 that needs editing.
 
@@ -751,7 +760,7 @@ ENVIRONMENT=test PYTHONPATH=backend python -c 'from pathlib import Path; from ap
 
 ### HCP historical safe-tranche builder
 
-Update the packet authority from `9096a777...` to `cfebd166...` and state that
+Update the packet authority from `9096a777...` to `a390c9d8...` and state that
 the executor and post-admission acceptance are protected through PR #253 at
 `96d67cb73dbe4838e882e1551de5906eda598f4e`. Run:
 
@@ -767,7 +776,7 @@ The builder is read-only with respect to application data, but writes the
 explicit `--output` artifact. It must not be treated as admission authority.
 
 Composition was revalidated on 2026-09-14 at tree
-`c9a0de619ed3de5ee8fe3a64ccabcde7f3aafc85`; lane qualification on 2026-09-12
+`b7a9b3eabbc9628471ad76465c3ae2d54e5ab252`; lane qualification on 2026-09-12
 passed all three focused tests and Python compilation. The tests cover accepted-record selection,
 HOLD treatment for unbound updates, `execution_allowed = false`, acceptance-plan
 digest tampering, and conflicting cross-scope native bindings.
@@ -827,7 +836,7 @@ candidate branch, so Enterprise must require and record these results before
 integration.
 
 Composition was revalidated on 2026-09-14 at tree
-`d94ff4c30c25ce2e2ec6b004852a353d2583d716`; lane qualification on 2026-09-12
+`579ba2e8d61dc25d1bbed2fac49d6b58aa752caf`; lane qualification on 2026-09-12
 passed three suites and nine tests, followed by clean full ESLint and production
 TypeScript/Vite builds. This evidence does not replace Enterprise's final rerun
 after branch reconciliation.
@@ -844,17 +853,16 @@ npm run build
 
 ### Mobile
 
-PR #273 (`work/om1-phone-dispatch-assignability-1`) is a direct one-commit child
-of protected authority at `b510bb3994e6a56661d8994b7ad900d4910ced87`, is
-open/MERGEABLE with no checks or reviews, and composes cleanly at tree
-`b5217206baab7770a7772559d61b28c4618dff3a`. Its ten-file delta adds a
+PR #273 integrated `work/om1-phone-dispatch-assignability-1` head
+`b510bb3994e6a56661d8994b7ad900d4910ced87` as protected merge
+`a390c9d8fcbb16244ca141a09fa0acf9a34ec4cc`, with no checks or reviews. Its ten-file delta adds a
 profile-less Employee eligibility projection and a permission-gated field
 readiness mutation for the exact Appointment Branch/window. It has no schema or
 configuration change. The PR reports frontend 247 files/469 tests, backend 20
 tests, build/typecheck/lint/Ruff/MyPy/compile/diff/secret scans, while explicitly
 leaving PostgreSQL Dispatch suites pending; GitHub contains no check evidence.
 
-Do not integrate this head. The `<option>` remains disabled whenever the
+Do not exercise the protected field-readiness mutation. The `<option>` remains disabled whenever the
 technician is ineligible, so the operator cannot select the profile-less target
 that must become `selected` before the readiness button renders. The backend
 orchestrator calls three existing services that each commit independently;
@@ -881,7 +889,7 @@ configuration validation, and Apple preflight. Signing/upload remains an owner
 operation.
 
 Composition was revalidated on 2026-09-14 at tree
-`f940d0775b6e0fc52d29d16315c77d058d69a6fd`; lane qualification on 2026-09-12
+`5177ddc24a7fae3027ca540af310f2fd345c6321`; lane qualification on 2026-09-12
 passed all 18 suites and 138 tests, followed by clean typecheck, lint, configuration
 validation, and the non-mutating Apple distribution preflight. Jest emitted
 React `VirtualizedList` updates-not-wrapped-in-`act(...)` warnings; these did not
@@ -946,7 +954,7 @@ back through this queue refresh before Enterprise integrates it.
 ## Held candidate
 
 Price Book branch `work/pricebook-allcounty-review-readiness-1` at
-`49e852aa8c931c8042de0634b68d993b0e02452e` is 15 behind / 13 ahead, has no PR,
+`49e852aa8c931c8042de0634b68d993b0e02452e` is 16 behind / 13 ahead, has no PR,
 and composes merge-clean at tree
 `c4a5754193c3a819200ddbfb8621d7862698255f`. It is stale and Git-reconcilable,
 but not qualification-admissible. It supersedes the smaller `c1c90a0a...`
@@ -1073,7 +1081,7 @@ authority and recomputing their compositions.
 
 ## Rollback
 
-- #257-#272, PR #215, PR #273, and Mobile have no application-state rollback. Rebuild the previous
+- #257-#273, PR #215, and Mobile have no application-state rollback. Rebuild the previous
   approved application image and retain evidence.
 - Disable the Preview fixture flag rather than deleting its tenant or audit data.
 - ECO application rollback should retain its additive migration under the
