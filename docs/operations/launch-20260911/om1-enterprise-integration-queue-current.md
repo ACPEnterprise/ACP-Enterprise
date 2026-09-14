@@ -1,14 +1,17 @@
 # OM1 Enterprise integration queue
 
-Snapshot: 2026-09-14 12:55 America/New_York
+Snapshot: 2026-09-14 13:00 America/New_York
 
 ## Authority and deployed state
 
 - Protected authority: `efbe85fa1b5a5213e334d55532f48ffc48e0d016`
 - Protected tip: PR #262, bounded SOURCE.4 overlay lineage bootstrap
-- Deployed Preview: `52dc336766a67fc0c4698244b9894bab0fe65913`
+- Deployed Preview: `efbe85fa1b5a5213e334d55532f48ffc48e0d016`
 - Preview health: application healthy; PostgreSQL and Redis connected
-- Deployment gap: protected PRs #257 through #262
+- Deployment gap: none; deployed and protected SHAs match
+- Acceptance state: pending. Exact-SHA health passed at 2026-09-14 13:00
+  America/New_York, but required #261/#262 qualification and authenticated
+  persona evidence have not been supplied.
 - GitHub CI evidence: no check runs or commit statuses are reported for the
   protected SHA. Local qualification does not substitute for the tests below.
 
@@ -24,7 +27,8 @@ Composition and `git diff --check` were revalidated at the exact protected SHA
 on 2026-09-14. The focused test could not be rerun on this host: the installed
 pytest uses Python 3.9, which cannot import the repository's modern type syntax,
 while the available Python 3.12 environment has no pytest. Enterprise must run
-that test under the supported backend environment before deployment:
+that test under the supported backend environment before accepting this
+deployment or deploying another batch:
 
 ```bash
 ENVIRONMENT=test PYTHONPATH=backend python -m pytest -q \
@@ -33,7 +37,8 @@ ENVIRONMENT=test PYTHONPATH=backend python -m pytest -q \
 
 PR #262 integrated the lineage bootstrap without GitHub checks or statuses.
 Its focused PostgreSQL tests and zero-to-head migration qualification remain
-mandatory before deployment; exact commands appear in the lineage section.
+mandatory before accepting this deployment or deploying another batch; exact
+commands appear in the lineage section.
 
 ## Protected integration policy
 
@@ -154,8 +159,8 @@ complete until its duplicate Alembic revision is replaced downstream of #262.
 | Checkpoint | Enterprise action | Required stop condition |
 |---|---|---|
 | Acceptance tooling | Reconcile `2b749ff2...` to `efbe85fa...`, update its contract authority, open a fresh PR, integrate it, refetch, then deploy the resulting protected tip containing #257-#262 and this contract | Contract tests fail, protected SHA moves, persona permissions/digests differ, or secret material appears in arguments/evidence |
-| Existing deployment gap | Accept the exact newly deployed protected tip before attributing runtime results to a later candidate | `/backend-health` does not report the exact deployed protected SHA or either dependency is disconnected |
-| Wave C preparation | Qualify protected #262 before deployment; prepare SOURCE.4 recovery and retain the historical builder as preparation tooling | Artifact digest/loader check, lineage tests, exactly-one-head check, zero-to-head migration, builder tests, or authority metadata fails |
+| Current deployed acceptance | Preserve the healthy exact-SHA result for `efbe85fa...`; run the missing #261/#262 qualification; do not mark accepted until evidence is attached | Focused test, zero-to-head migration, exactly-one-head/drift check fails, or health/dependency state regresses |
+| Wave C preparation | Qualify protected #262 before acceptance; prepare SOURCE.4 recovery and retain the historical builder as preparation tooling | Artifact digest/loader check, lineage tests, exactly-one-head check, zero-to-head migration, builder tests, or authority metadata fails |
 | ECO checkpoint | Assign ECO a new unique revision ID with down-revision `g7i9k1m3o5q7`; requalify, then integrate/deploy independently | Duplicate/multiple Alembic head, drift, migration failure, or governed-policy acceptance failure |
 | Wave B | Integrate PR #215 independently | QBO/Payroll projection tests fail or any provider mutation appears |
 | Wave D | Integrate Mobile independently | Test/static/preflight failure or either manifest is stale |
