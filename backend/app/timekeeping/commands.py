@@ -52,6 +52,7 @@ class CreatePayPeriod:
     timezone: str
     schedule_definition_id: str
     schedule_version: int
+    idempotency_key: str | None = None
 
 
 @dataclass(frozen=True)

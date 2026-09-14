@@ -766,9 +766,17 @@ class WorkdayTimeService:
         command: CreatePayPeriod,
     ) -> PayPeriod:
         self._require_permission(context, TimekeepingPermission.APPROVE)
+        if command.idempotency_key is not None:
+            self._validate_idempotency_key(command.idempotency_key)
         if command.schedule_version < 1:
             raise WorkdayTimeError("pay-period schedule version must be positive")
         self._validate_timezone(command.timezone)
+        if command.period_end < command.period_start:
+            raise WorkdayTimeError("pay-period end must not precede start")
+        if command.processing_date < command.period_end:
+            raise WorkdayTimeError("pay-period processing date must not precede end")
+        if command.payday < command.processing_date:
+            raise WorkdayTimeError("payday must not precede processing date")
         overlap = await self._repository.overlapping_pay_period(
             session,
             company_id=context.company.id,
@@ -776,6 +784,16 @@ class WorkdayTimeService:
             period_end=command.period_end,
         )
         if overlap is not None:
+            if (
+                overlap.period_start == command.period_start
+                and overlap.period_end == command.period_end
+                and overlap.processing_date == command.processing_date
+                and overlap.payday == command.payday
+                and overlap.timezone == command.timezone
+                and overlap.schedule_definition_id == command.schedule_definition_id
+                and overlap.schedule_version == command.schedule_version
+            ):
+                return overlap
             raise WorkdayConflictError("pay periods may not overlap")
         period = PayPeriod(
             company_id=context.company.id,
@@ -788,10 +806,52 @@ class WorkdayTimeService:
             schedule_version=command.schedule_version,
             created_by_user_id=context.user.id,
         )
-        async with session.begin_nested():
-            session.add(period)
-        await session.commit()
-        return period
+        try:
+            async with session.begin_nested():
+                session.add(period)
+                await session.flush()
+                self._audit.stage(
+                    session,
+                    AuditEntry(
+                        action="timekeeping.pay_period_created",
+                        resource_type="pay_period",
+                        actor_user_id=context.user.id,
+                        company_id=context.company.id,
+                        resource_id=period.id,
+                        details={
+                            "period_start": command.period_start.isoformat(),
+                            "period_end": command.period_end.isoformat(),
+                            "processing_date": command.processing_date.isoformat(),
+                            "payday": command.payday.isoformat(),
+                            "timezone": command.timezone,
+                            "schedule_definition_id": command.schedule_definition_id,
+                            "schedule_version": command.schedule_version,
+                        },
+                    ),
+                )
+            await session.commit()
+            return period
+        except IntegrityError:
+            await session.rollback()
+            existing = await self._repository.overlapping_pay_period(
+                session,
+                company_id=context.company.id,
+                period_start=command.period_start,
+                period_end=command.period_end,
+            )
+            if existing is not None and (
+                existing.period_start == command.period_start
+                and existing.period_end == command.period_end
+                and existing.processing_date == command.processing_date
+                and existing.payday == command.payday
+                and existing.timezone == command.timezone
+                and existing.schedule_definition_id == command.schedule_definition_id
+                and existing.schedule_version == command.schedule_version
+            ):
+                return existing
+            raise WorkdayConflictError(
+                "concurrent pay-period creation could not be reconciled"
+            )
 
     async def seal_payroll_input(
         self,

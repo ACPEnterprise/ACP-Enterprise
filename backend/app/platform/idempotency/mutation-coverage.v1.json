@@ -2401,6 +2401,16 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     },
     {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "timekeeping",
+      "mechanism": "immutable Company/date-range uniqueness with exact-payload replay and contradictory-overlap rejection",
+      "method": "POST",
+      "operation_id": "create_pay_period_api_v1_timekeeping_admin_pay_periods_post",
+      "path": "/api/v1/timekeeping/admin/pay-periods",
+      "reason": "Exact office retry returns the existing immutable period; overlapping or materially different authority fails closed.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
       "classification": "EXPLICIT_EXEMPTION",
       "domain": "timekeeping",
       "mechanism": "legacy compatibility boundary; no shared durable receipt asserted",
@@ -2899,6 +2909,6 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "f5705879847f13d73f90e440bb8f8094438bf59398c245b4e2498bcdc10f5727",
+  "fingerprint": "2959a05f7167ee4305f371c5a90b7c76e1ecceeae388eb4d6ca67fe7c89a9da7",
   "schema_version": "1"
 }

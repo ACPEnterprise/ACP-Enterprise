@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import { useHasPermission } from "../auth";
 import { Link, useSearchParams } from "react-router";
 
 import { useComplianceSchemas, usePayrollOperatingRegisters, usePayrollOperationsSummary, usePayrollPeriodOperations, usePayrollReports } from "../hooks/usePayroll";
-import { useCurrentPayPeriod, usePayPeriods } from "../hooks/useWorkdayTime";
-import { Alert, Card, CardContent, CardDescription, CardHeader, CardTitle, Spinner } from "../ui";
+import { useCreatePayPeriod, useCurrentPayPeriod, usePayPeriods } from "../hooks/useWorkdayTime";
+import { Alert, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Spinner } from "../ui";
 import { PayrollEmployeeSetup } from "../components/payroll/PayrollEmployeeSetup";
 
 const label = (value: string) => value.replaceAll("_", " ").replaceAll(":", " · ");
@@ -33,6 +33,9 @@ export function PayrollRoute() {
   const reports = usePayrollReports(canRead);
   const schemas = useComplianceSchemas(canRead);
   const canReadTime = useHasPermission("COMPANY_TIMEKEEPING_ADMIN_READ");
+  const canManagePayPeriods = useHasPermission("COMPANY_TIMEKEEPING_APPROVE");
+  const createPeriod = useCreatePayPeriod();
+  const [periodMessage, setPeriodMessage] = useState("");
   const currentPeriod = useCurrentPayPeriod(canRead && canReadTime);
   const payPeriods = usePayPeriods(canRead && canReadTime);
   const [selectedPayPeriodId, setSelectedPayPeriodId] = useState("");
@@ -49,6 +52,25 @@ export function PayrollRoute() {
     );
   const value = operations.data;
   const approvedRunCount = value.run_counts.approved ?? 0;
+  const submitPayPeriod = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setPeriodMessage("");
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    try {
+      await createPeriod.mutateAsync({
+        pay_frequency: String(data.get("pay_frequency")) as "weekly" | "biweekly" | "semimonthly" | "monthly",
+        period_start: String(data.get("period_start")),
+        period_end: String(data.get("period_end")),
+        processing_date: String(data.get("processing_date")),
+        payday: String(data.get("payday")),
+      });
+      setPeriodMessage("Pay period created. Payroll and Timecard readiness have been refreshed.");
+      form.reset();
+    } catch {
+      setPeriodMessage("Pay period was not created. Review dates, overlap, authority, and current Company context.");
+    }
+  };
   return (
     <div className="mx-auto max-w-7xl space-y-6 pb-12">
       <header>
@@ -60,6 +82,36 @@ export function PayrollRoute() {
       <Alert variant={value.blocker_count ? "warning" : "information"} title={value.blocker_count ? "Payroll attention required" : "Payroll evidence reconciled"}>
         {value.blocker_count ? `${value.blocker_count} Employee disposition blocker(s) remain explicit.` : "No unexplained Employee blocker is present in the admitted run population."} History: {value.history_ready ? "complete authority available" : "incomplete—YTD remains unavailable"}.
       </Alert>
+      <Card>
+        <CardHeader>
+          <CardTitle>Pay Periods</CardTitle>
+          <CardDescription>Company-scoped, immutable Payroll calendar authority. Creating a period does not calculate or execute Payroll.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {(payPeriods.data ?? []).length > 0 ? (
+            <ul className="space-y-2 text-sm">
+              {(payPeriods.data ?? []).map((period) => (
+                <li className="rounded-lg border border-stroke p-3" key={period.id}>
+                  <strong>{period.period_start} – {period.period_end}</strong>
+                  <span className="block text-content-muted">Processing {period.processing_date} · Pay date {period.payday} · {label(period.schedule_definition_id)}</span>
+                </li>
+              ))}
+            </ul>
+          ) : <p className="text-sm text-content-muted">No pay periods configured for this Company.</p>}
+          {periodMessage && <Alert variant={periodMessage.startsWith("Pay period created") ? "success" : "danger"}>{periodMessage}</Alert>}
+          {canManagePayPeriods ? (
+            <form className="grid gap-3 rounded-lg border border-stroke p-4 md:grid-cols-2" onSubmit={submitPayPeriod}>
+              <h3 className="font-semibold md:col-span-2">Create Pay Period</h3>
+              <label>Pay frequency<select className="block w-full" name="pay_frequency" required><option value="weekly">Weekly</option><option value="biweekly">Biweekly</option><option value="semimonthly">Semimonthly</option><option value="monthly">Monthly</option></select></label>
+              <label>Period start<input className="block w-full" name="period_start" type="date" required /></label>
+              <label>Period end<input className="block w-full" name="period_end" type="date" required /></label>
+              <label>Processing date<input className="block w-full" name="processing_date" type="date" required /></label>
+              <label>Pay date<input className="block w-full" name="payday" type="date" required /></label>
+              <Button disabled={createPeriod.isPending} type="submit">{createPeriod.isPending ? "Creating…" : "Create Pay Period"}</Button>
+            </form>
+          ) : <Alert variant="information">Pay-period administration requires Timekeeping approval authority.</Alert>}
+        </CardContent>
+      </Card>
       <Card>
         <CardHeader>
           <CardTitle>Current pay-period review</CardTitle>

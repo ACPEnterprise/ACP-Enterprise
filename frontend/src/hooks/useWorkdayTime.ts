@@ -8,9 +8,11 @@ import {
   getAdminTimecardOperations,
   getCurrentPayPeriod,
   getPayPeriods,
+  createPayPeriod,
   recordOwnPunch,
   type PunchAction,
   type TimeCorrectionInput,
+  type PayPeriodCreateInput,
 } from "../api/timekeeping";
 
 export const workdayKeys = {
@@ -67,6 +69,20 @@ export function usePayPeriods(enabled = true) {
     queryFn: getPayPeriods,
     enabled,
     retry: false,
+  });
+}
+
+export function useCreatePayPeriod() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: PayPeriodCreateInput) => createPayPeriod(input),
+    onSuccess: async () => {
+      await Promise.all([
+        client.invalidateQueries({ queryKey: workdayKeys.currentPayPeriod() }),
+        client.invalidateQueries({ queryKey: workdayKeys.payPeriods() }),
+        client.invalidateQueries({ queryKey: ["payroll"] }),
+      ]);
+    },
   });
 }
 
