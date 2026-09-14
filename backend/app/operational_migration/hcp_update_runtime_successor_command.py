@@ -39,7 +39,7 @@ def _private_json(path: Path) -> dict[str, object]:
         raise ValueError(f"{path.name} permissions must be 0600")
     value = json.loads(path.read_bytes())
     if not isinstance(value, dict):
-        raise ValueError(f"{path.name} must contain an object")
+        raise TypeError(f"{path.name} must contain an object")
     return value
 
 
@@ -60,7 +60,7 @@ def _cohorts(path: Path) -> dict[tuple[str, str], str]:
 async def run(authority_path: Path, cohort_path: Path) -> dict[str, object]:
     authority = CurrentOverlayExecutionAuthority.load(authority_path)
     manifest: CurrentOverlayManifest = authority.verify_artifacts()
-    repository_sha = subprocess.run(
+    repository_sha = subprocess.run(  # noqa: ASYNC221
         ("git", "rev-parse", "HEAD"), check=True, capture_output=True, text=True
     ).stdout.strip()
     if repository_sha != authority.expected_repository_sha:
