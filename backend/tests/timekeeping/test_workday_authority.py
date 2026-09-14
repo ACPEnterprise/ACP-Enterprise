@@ -286,6 +286,9 @@ async def test_office_pay_period_api_is_authorized_audited_and_replay_safe(
         manager=True,
     )
     denied_context = FakeContext(seed, {TimekeepingPermission.ADMIN_READ})
+    pay_period_only_context = FakeContext(
+        seed, {TimekeepingPermission.PAY_PERIOD_MANAGE}
+    )
     selected_context: dict[str, FakeContext] = {"value": manager_context}
 
     async def session_override() -> AsyncIterator[AsyncSession]:
@@ -321,6 +324,13 @@ async def test_office_pay_period_api_is_authorized_audited_and_replay_safe(
             )
             assert replay.status_code == 201
             assert replay.json()["id"] == created.json()["id"]
+            selected_context["value"] = pay_period_only_context
+            period_index = await client.get("/api/v1/timekeeping/pay-periods")
+            assert period_index.status_code == 200
+            assert [value["id"] for value in period_index.json()] == [
+                created.json()["id"]
+            ]
+            selected_context["value"] = manager_context
             conflict = await client.post(
                 "/api/v1/timekeeping/admin/pay-periods",
                 headers={"Idempotency-Key": "overlapping-period"},

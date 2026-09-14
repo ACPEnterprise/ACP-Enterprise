@@ -36,8 +36,9 @@ export function PayrollRoute() {
   const canManagePayPeriods = useHasPermission("COMPANY_PAYROLL_POLICY_MANAGE");
   const createPeriod = useCreatePayPeriod();
   const [periodMessage, setPeriodMessage] = useState("");
-  const currentPeriod = useCurrentPayPeriod(canRead && canReadTime);
-  const payPeriods = usePayPeriods(canRead && canReadTime);
+  const canReadPayPeriods = canRead && (canReadTime || canManagePayPeriods);
+  const currentPeriod = useCurrentPayPeriod(canReadPayPeriods);
+  const payPeriods = usePayPeriods(canReadPayPeriods);
   const [selectedPayPeriodId, setSelectedPayPeriodId] = useState("");
   const effectivePayPeriodId = selectedPayPeriodId || currentPeriod.data?.id || payPeriods.data?.[0]?.id || null;
   const periodOperations = usePayrollPeriodOperations(effectivePayPeriodId, canRead && canReadTime);
@@ -109,7 +110,7 @@ export function PayrollRoute() {
               <label>Pay date<input className="block w-full" name="payday" type="date" required /></label>
               <Button disabled={createPeriod.isPending} type="submit">{createPeriod.isPending ? "Creating…" : "Create Pay Period"}</Button>
             </form>
-          ) : <Alert variant="information">Pay-period administration requires Timekeeping approval authority.</Alert>}
+          ) : <Alert variant="information">Pay-period administration requires Payroll policy management authority.</Alert>}
         </CardContent>
       </Card>
       <Card>
