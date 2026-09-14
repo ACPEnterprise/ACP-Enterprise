@@ -174,6 +174,11 @@ class _Services:
     def bind_lineage(self, **values: object) -> None:
         self.lineage = values
 
+    async def prepare_update_bindings(
+        self, session: AsyncSession, records: tuple[OverlayRecord, ...]
+    ) -> dict[str, dict[str, int]]:
+        return {}
+
     async def source_state(
         self, session: AsyncSession, key: OverlayKey
     ) -> OverlaySourceState | None:

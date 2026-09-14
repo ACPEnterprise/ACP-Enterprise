@@ -1021,6 +1021,60 @@ class AppointmentSourceIdentity(Base):
     )
 
 
+class HcpSource4NativeBindingEvidence(Base):
+    """Immutable proof that an exact legacy identity gained SOURCE.4 lineage."""
+
+    __tablename__ = "hcp_source4_native_binding_evidence"
+    __table_args__ = (
+        CheckConstraint(
+            "domain IN ('customer','service_location','job','appointment')",
+            name="ck_hcp_source4_binding_domain",
+        ),
+        ForeignKeyConstraint(
+            ["master_run_id", "company_id", "branch_id"],
+            [
+                "hcp_migration_master_runs.id",
+                "hcp_migration_master_runs.company_id",
+                "hcp_migration_master_runs.branch_id",
+            ],
+            name="fk_hcp_source4_binding_master_scope",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "company_id", "domain", "source4_source_id",
+            name="uq_hcp_source4_binding_source",
+        ),
+        UniqueConstraint(
+            "company_id", "domain", "native_id",
+            name="uq_hcp_source4_binding_target",
+        ),
+        UniqueConstraint("binding_digest", name="uq_hcp_source4_binding_digest"),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    branch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    master_run_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    domain: Mapped[str] = mapped_column(String(40), nullable=False)
+    source4_source_id: Mapped[str] = mapped_column(String(191), nullable=False)
+    native_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    legacy_source_identity_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), nullable=False
+    )
+    source4_source_identity_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), nullable=False
+    )
+    package_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    predecessor_source_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    binding_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    evidence: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
 class EstimateSourceIdentity(Base):
     __tablename__ = "operational_migration_estimate_source_identities"
     __table_args__ = (

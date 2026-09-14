@@ -42,6 +42,9 @@ from app.operational_migration.hcp_current_overlay_adapter import (
     CurrentOverlayDomainServices,
 )
 from app.operational_migration.hcp_source4_contracts import JOB_STATUS
+from app.operational_migration.hcp_source4_native_binding import (
+    HcpSource4NativeBindingBootstrap,
+)
 from app.operational_migration.models import (
     AppointmentSourceIdentity,
     HcpMigrationHold,
@@ -97,6 +100,8 @@ class HcpCurrentOverlayNativeServices(CurrentOverlayDomainServices):
         self.jobs = jobs or JobService()
         self.scheduling = scheduling or SchedulingService()
         self.repository = repository or OperationalMigrationRepository()
+        self._binding_bootstrap: HcpSource4NativeBindingBootstrap | None = None
+        self._update_records: dict[OverlayKey, OverlayRecord] = {}
 
     def bind_lineage(
         self, *, master_run_id: UUID, customer_run_id: UUID, operational_run_id: UUID
@@ -106,11 +111,37 @@ class HcpCurrentOverlayNativeServices(CurrentOverlayDomainServices):
             raise ValueError("overlay native master lineage conflict")
         self.customer_run_id = customer_run_id
         self.operational_run_id = operational_run_id
+        self._binding_bootstrap = HcpSource4NativeBindingBootstrap(
+            company_id=self.context.company.id,
+            branch_id=self.branch.id,
+            master_run_id=master_run_id,
+            customer_run_id=customer_run_id,
+            operational_run_id=operational_run_id,
+            package_digest=self.package_digest,
+        )
+
+    async def prepare_update_bindings(
+        self, session: AsyncSession, records: tuple[OverlayRecord, ...]
+    ) -> dict[str, dict[str, int]]:
+        if self._binding_bootstrap is None:
+            raise ValueError("overlay native lineage is not bound")
+        self._update_records = {
+            record.key: record
+            for record in records
+            if record.assertion.value == "update"
+        }
+        return await self._binding_bootstrap.inventory(session, records)
 
     async def source_state(
         self, session: AsyncSession, key: OverlayKey
     ) -> OverlaySourceState | None:
         target = await self._target(session, key)
+        update = self._update_records.get(key)
+        if target is None and update is not None:
+            if self._binding_bootstrap is None:
+                raise ValueError("overlay UPDATE binding bootstrap is unavailable")
+            await self._binding_bootstrap.bind_for_update(session, update)
+            target = await self._target(session, key)
         if target is None:
             return None
         digest = self.base_source_digests.get(key)
