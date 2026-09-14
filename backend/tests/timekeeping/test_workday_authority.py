@@ -1,3 +1,4 @@
+import asyncio
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta, timezone
@@ -362,6 +363,50 @@ async def test_office_pay_period_api_is_authorized_audited_and_replay_safe(
             assert audits[0].company_id == seed.company_id
     finally:
         app.dependency_overrides.clear()
+
+
+@pytest.mark.asyncio
+async def test_concurrent_office_pay_period_creation_converges(
+    timekeeping_database: tuple[async_sessionmaker[AsyncSession], SeededTimekeeping],
+) -> None:
+    factory, seed = timekeeping_database
+    context = FakeContext(
+        seed,
+        {TimekeepingPermission.APPROVE},
+        manager=True,
+    )
+    command = CreatePayPeriod(
+        period_start=date(2026, 10, 4),
+        period_end=date(2026, 10, 10),
+        processing_date=date(2026, 10, 12),
+        payday=date(2026, 10, 16),
+        timezone="America/New_York",
+        schedule_definition_id="office.weekly.v1",
+        schedule_version=1,
+        idempotency_key="concurrent-office-period",
+    )
+
+    async def create() -> PayPeriod:
+        async with factory() as session:
+            return await WorkdayTimeService().create_pay_period(
+                session,
+                context=context,  # type: ignore[arg-type]
+                command=command,
+            )
+
+    first, second = await asyncio.gather(create(), create())
+    assert first.id == second.id
+    async with factory() as session:
+        periods = (
+            await session.scalars(
+                select(PayPeriod).where(
+                    PayPeriod.company_id == seed.company_id,
+                    PayPeriod.period_start == command.period_start,
+                    PayPeriod.period_end == command.period_end,
+                )
+            )
+        ).all()
+        assert len(periods) == 1
 
 
 @pytest.mark.asyncio
