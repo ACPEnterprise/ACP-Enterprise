@@ -1,12 +1,12 @@
 # OM1 Enterprise integration queue
 
-Snapshot: 2026-09-14 15:37 America/New_York
+Snapshot: 2026-09-14 15:43 America/New_York
 
 ## Authority and deployed state
 
-- Protected authority: `9e86689838417fce719c22d85aa921525dfae105`
-- Protected tip: PR #266, SOURCE.4 complete-current-graph v4 tooling
-- Deployed Preview: `9e86689838417fce719c22d85aa921525dfae105`
+- Protected authority: `8b755ee6ce15abef7a4906d975d85acfdc6d7ac4`
+- Protected tip: PR #268, guarded SOURCE.4 v4 executor
+- Deployed Preview: `8b755ee6ce15abef7a4906d975d85acfdc6d7ac4`
 - Preview health: application healthy; PostgreSQL and Redis connected
 - Deployment gap: none; deployed and protected SHAs match
 - Acceptance state: pending. Preview initially remained at `b296cc6b...` after
@@ -15,12 +15,15 @@ Snapshot: 2026-09-14 15:37 America/New_York
   Redis. A separate HTTP 502 occurred at 14:16:45 with no authority/PR/head
   change; four consecutive checks from 14:17:23 through 14:17:34 recovered HTTP
   200 at the same exact SHA with both dependencies connected. Preserve both
-  transient incidents in acceptance evidence. Required #261-#266 evidence and
+  transient incidents in acceptance evidence. Required #261-#268 evidence and
   authenticated persona evidence have not all been supplied. Do not run #265's
   command or #266's generators until repair successors land. During #266 rollout,
   Preview returned HTTP 502 at 15:10, then reported exact `9e866898...` with a
   healthy application and connected PostgreSQL/Redis at 15:11 and 15:12. Preserve
   that transient and require consecutive exact-SHA responses in final acceptance.
+  After #268 merged, Preview remained healthy on `9e866898...` at 15:41, then
+  reported exact `8b755ee6...` healthy with both dependencies connected at 15:42
+  and 15:43. Deployment does not authorize the executor command.
 - GitHub CI evidence: no check runs or commit statuses are reported for the
   protected SHA. PR #264's body reports 698 migration/job/scheduling regressions,
   16 focused tests, PostgreSQL zero-to-head/current=head, and zero drift, but no
@@ -41,15 +44,15 @@ Snapshot: 2026-09-14 15:37 America/New_York
   execute the protected generators or treat their output as admission authority;
   require bounded repair successors.
 - PR #267 opened from executor head `8fc29014...` and was closed at 15:36 as
-  superseded by PR #268. Active #268 head `b6a78204...` adds exactly one blank
-  import separator to #267's product patch; it is 0 behind / 2 ahead and GitHub
-  reports CLEAN/MERGEABLE but no checks, statuses, reviews, comments, or linked
-  qualification evidence. Its body says the isolated PostgreSQL suite is “in
-  progress”; that is not evidence. Keep #268 blocked for the exact defects and
-  predecessor order below.
+  superseded by PR #268. PR #268 merged at 15:39 as protected `8b755ee6...` from
+  head `b6a78204...`, whose only additional change is one blank import separator.
+  It has no checks, statuses, reviews, comments, or linked qualification evidence;
+  its body says the isolated PostgreSQL suite is “in progress,” which is not
+  evidence. Keep the protected executor operationally disabled for the exact
+  defects and predecessor order below.
 
 Independent qualification on 2026-09-12 covered the earlier #257-#260 tranche,
-not later #261-#266. That bounded run passed PostgreSQL zero-to-head, 20 affected
+not later #261-#268. That bounded run passed PostgreSQL zero-to-head, 20 affected
 backend tests, nine affected frontend suites and 43 tests, full ESLint, and the
 production TypeScript/Vite build. Four SQLAlchemy transaction-deassociation
 warnings were emitted by Invoice tests and remain part of that bounded evidence.
@@ -95,14 +98,13 @@ acceptance gates in this packet operationally; GitHub will not enforce them.
 
 | Candidate | Exact branch | Head | PR | Behind/ahead | Effective tree | Classification |
 |---|---|---|---|---:|---|---|
-| OM2-C persona contract and acceptance harness | `work/om2c-launch-20260911-e2e-acceptance-1` | `1fb0481a043caaca749ae5dd49dc6cdf6d994061` | None; prior #212 is merged | 3/46 | `2d2d348ee5071ff5cdab2fe70867786ea1123b47` | Stale but reconcilable; merge-clean; protected/schema bindings must advance; acceptance execution blocked on missing platform service principal |
-| SOURCE.4 artifact recovery | `work/migration-source4-accepted-artifact-recovery-1` | `a3cad3d389b9ed69300939d15c19e2d7b08da063` | None | 8/1 | `2b9b698753c125c5eea75a5c00b742b973447f6c` | Stale but reconcilable; merge-clean; documentation-only |
-| HCP historical safe-tranche builder | `work/hcp-historical-safe-tranche-1` | `b32f99ff80f447bf8140b73380d19191ccb8db59` | None | 18/1 | `14b67823d64d04035a2c7a8df23dcf58eb2a9f17` | Stale but reconcilable; merge-clean; metadata edit required |
-| SOURCE.4 UPDATE cohort authority | `work/hcp-update-cohort-authority-1` | `d53e5d36422218bd715f07d8099e09865167e0f1` | None | 2/1 | `68ce10cf9b468928e36cf6c5af0b8358e6dc7c28` | Stale but reconcilable; merge-clean, but blocked: unsafe overwrite/symlink handling, incomplete authority verification, and no command/generator integration tests |
-| HCP v4 guarded executor | `work/hcp-current-overlay-v4-executor-1-reconciled` | `b6a782045db161d613e51e24d031f53854027bb9` | #268 open/CLEAN; #267 superseded/closed | 0/2 | `afed2972d6c62494dcd21280acdcf1e61772eab3` | Current and merge-clean; one formatting-only successor commit leaves it blocked on cohort/runtime/v4 repairs and independently unsafe: follows symlinks, accepts non-exact private modes, does not semantically verify predecessor authorities, and lacks command/database/replay/rollback tests; PostgreSQL work is unproven |
-| ECO reconciliation | `work/eco-migration-reconciliation-integration-watch-1` | `1c0e7b20db62b6a342548f2842ea1a3a45965386` | None | 10/13 | `b5aa9c7e03c69ce41fb2595302661a2003d513a8` | Blocked on schema reconciliation; duplicate protected revision ID; rebase and assign a new revision downstream of `h8j0l2n4p6r8` |
-| Payroll/QBO read UI | `work/om2b-payroll-accounting-continuation-1` | `724398348b566f655d2bc7127c20beeb6be52d6c` | #215 open/CLEAN | 29/1 | `7c1f948096ad55070e622f36fdd489d5939fd41b` | Stale but reconcilable; merge-clean; PR refresh required |
-| Mobile Apple release packet | `work/mobile-apple-owner-release-packet-1` | `0183eaec3e2825a79b683e9e684a761243c86ea7` | None | 15/15 | `6958706a3efd166e9bb671515295e4281ef99628` | Stale but reconcilable; merge-clean; two manifest edits required |
+| OM2-C persona contract and acceptance harness | `work/om2c-launch-20260911-e2e-acceptance-1` | `1fb0481a043caaca749ae5dd49dc6cdf6d994061` | None; prior #212 is merged | 4/46 | `164bacfd3792303ca37a8b6c4ea2832a97213c34` | Stale but reconcilable; merge-clean; protected/schema bindings must advance; acceptance execution blocked on missing platform service principal |
+| SOURCE.4 artifact recovery | `work/migration-source4-accepted-artifact-recovery-1` | `a3cad3d389b9ed69300939d15c19e2d7b08da063` | None | 9/1 | `737a9558f00662b752cad3788ff00eb6abb8b3ba` | Stale but reconcilable; merge-clean; documentation-only |
+| HCP historical safe-tranche builder | `work/hcp-historical-safe-tranche-1` | `b32f99ff80f447bf8140b73380d19191ccb8db59` | None | 19/1 | `0c774448d6c2b8a270051b80ecb8a24334284774` | Stale but reconcilable; merge-clean; metadata edit required |
+| SOURCE.4 UPDATE cohort authority | `work/hcp-update-cohort-authority-1` | `d53e5d36422218bd715f07d8099e09865167e0f1` | None | 3/1 | `d65ed02b978fb3cb33cf9715c588ed026bab8244` | Stale but reconcilable; merge-clean, but blocked: unsafe overwrite/symlink handling, incomplete authority verification, and no command/generator integration tests |
+| ECO reconciliation | `work/eco-migration-reconciliation-integration-watch-1` | `1c0e7b20db62b6a342548f2842ea1a3a45965386` | None | 11/13 | `1e134f413c64793c2335b1eba7ded35763566248` | Blocked on schema reconciliation; duplicate protected revision ID; rebase and assign a new revision downstream of `h8j0l2n4p6r8` |
+| Payroll/QBO read UI | `work/om2b-payroll-accounting-continuation-1` | `724398348b566f655d2bc7127c20beeb6be52d6c` | #215 open/CLEAN | 30/1 | `c708ec40704a464fba63563b33c7e9eac28a2abe` | Stale but reconcilable; merge-clean; PR refresh required |
+| Mobile Apple release packet | `work/mobile-apple-owner-release-packet-1` | `0183eaec3e2825a79b683e9e684a761243c86ea7` | None | 16/15 | `2ccf77a96e2356e5623c0f998960df8895f63197` | Stale but reconcilable; merge-clean; two manifest edits required |
 
 ## Named launch queue coverage
 
@@ -114,31 +116,31 @@ acceptance gates in this packet operationally; GitHub will not enforce them.
 | Laptop1-B Customer office UX | `8516b08b...` conflicts in one add/add reliability test, while current-authority reconciliation `174fcd4e...` composes to zero delta. Superseded by #242 and #257. |
 | Workforce / Payroll #216 | Merged as `d52d1178...`; already protected. |
 | Workforce / Payroll #221, stacked #222, and #223 | Closed; their current successors are protected through #229, #231, and #235 respectively. |
-| Current OM2 successor | Persona-contract successor `1fb0481a...` is active but three protected commits stale. Reconcile it to `9e866898...`, update protected/schema bindings, and retain its fail-closed missing-service-principal state. Its former PR #212 does not cover the new head; open a fresh PR after reconciliation. |
+| Current OM2 successor | Persona-contract successor `1fb0481a...` is active but four protected commits stale. Reconcile it to `8b755ee6...`, update protected/schema bindings, and retain its fail-closed missing-service-principal state. Its former PR #212 does not cover the new head; open a fresh PR after reconciliation. |
 | Payroll tax rule | Reconciled `9a44f714...` composes to zero delta; superseded by protected #236. |
 | Identity #227 and #230 | Still open but superseded by protected #256 and #258; close, do not integrate. |
 | Identity recovery successor | `4cf7bdf4...` composes to zero delta; protected #256 is authoritative. |
 | Laptop1 Phone distribution readiness | `bf28a61c...` is an ancestor of the active Mobile owner-release packet; integrate only the successor packet. |
 | ECO named commits and persistence | `d7ef88d1...` and `37b32949...` are superseded by patch-evolved equivalents; `fe7a9623...`, `f587c271...`, and persistence `863cab13...` feed the active ECO watch. |
 | QBO `5fe11183...` | Superseded by protected real-company evidence #243. Preserve the OAuth owner gate. |
-| Migration executor / acceptance | `5b8b02de...` and `83bbeef0...` are superseded by protected guarded execution and acceptance #253. Lineage, parent ordering, native binding, runtime inventory, and v4 completeness are protected through #262-#266. Recovery, builder, cohort authority, runtime repair, and v4 repair remain preparation. Executor successor `b6a78204...` / PR #268 is current but blocked and must be repaired after them. V4 adds 19 missing current members and releases 13 dependent holds, but is not execution authority. Do not run its generators, the new executor command, or guarded admission. |
+| Migration executor / acceptance | `5b8b02de...` and `83bbeef0...` are superseded by protected guarded execution and acceptance #253. Lineage, native binding, runtime inventory, v4 completeness, and the v4 executor are protected through #262-#268. Recovery, builder, cohort authority, runtime repair, v4 repair, and an executor repair successor remain preparation. V4 adds 19 missing current members and releases 13 dependent holds, but protected #268 is not qualified execution authority. Do not run its generators, executor command, or guarded admission. |
 | Price Book operator readiness | `c1c90a0a...` is superseded by the broader held review candidate `49e852aa...`; no candidate is admissible yet. |
 
 Zero-delta classifications above use a three-way composition with current
 protected authority, not a direct endpoint diff. Conflicting stale branches are
 not reconciliation inputs: use their named protected successors as authority.
 
-The eight remaining effective deltas have zero pairwise file overlap. ECO,
-cohort authority, and the v4 executor are not admissible: ECO's
+The seven remaining effective deltas have zero pairwise file overlap. ECO and
+cohort authority are not admissible: ECO's
 differently named migration still declares protected revision `g7i9k1m3o5q7`
 from `f6h8j0l2n4p6`; cohort authority has unsafe file handling, incomplete verification,
 and missing command/generator coverage. Protected #266 retains v4's unbound
 inputs, unsafe output, incomplete authority/verifier/tests, and contradictory
-readiness; those defects now require successors rather than candidate edits. The
-executor depends on those repairs and adds independent authority/file-verification
-and execution-test gaps. The five-candidate combined tree excluding all three
-blocked active lanes is
-`1bc6f351cf2b6a13bd630e812e42ac17c4a93ad5`; it changes 51 files and passes
+readiness; those defects now require successors rather than candidate edits.
+Protected executor #268 depends on those repairs and adds independent
+authority/file-verification and execution-test gaps. The five-candidate combined
+tree excluding both blocked active lanes is
+`6800dd41987df32bd9f8f2dc3e491bf6c0dad985`; it changes 51 files and passes
 `git diff --check`. Recompute all trees after protected movement or packet edits.
 
 ## Integration order and release waves
@@ -157,8 +159,8 @@ operational order:
    contract, and make non-executable authority explicit. Its protected arithmetic
    supplies 19 missing records and releases 13 dependent holds, yielding all 55
    current members without a current hold, but does not authorize execution.
-5. Repair and qualify executor head `b6a78204...` only after steps 3-4. Do not
-   integrate its present executable command or create an execution authority.
+5. Treat protected executor #268 as operationally disabled. Prepare a bounded
+   repair successor only after steps 3-4; do not create an execution authority.
 6. Reconcile ECO to a new revision downstream of protected `h8j0l2n4p6r8`, then
    integrate ECO as its own later database checkpoint.
 7. PR #215 in Wave B if QBO read-evidence acceptance is scheduled.
@@ -171,13 +173,13 @@ upload an Apple build as part of integration.
 
 ```mermaid
 flowchart LR
-    A[Protected 9e866898 through v4 completeness] -->|reconcile| R[SOURCE.4 recovery]
+    A[Protected 8b755ee6 through unqualified v4 executor] -->|reconcile| R[SOURCE.4 recovery]
     A --> C[OM2-C persona contract]
     A --> L[Protected #262 through #266 qualification]
     A --> K[Cohort authority repair]
     K --> U[Runtime inventory repair and qualification]
     U --> X[V3 plus v4 complete-graph repair successor]
-    X --> V[V4 executor repair of b6a78204]
+    X --> V[V4 executor repair successor]
     A -->|reconcile| B[Historical builder]
     A -->|reconcile| E[ECO watch]
     A -->|reconcile| P[PR 215]
@@ -217,7 +219,7 @@ integration path because it remains held.
 
 ## Batch boundaries and refresh checkpoints
 
-All eight remaining active lanes may be inspected concurrently from the guarded
+All seven remaining active lanes may be inspected concurrently from the guarded
 authority above. Integration remains sequential because the first protected PR
 changes the authority for every remaining lane. ECO qualification cannot
 complete until its duplicate revision is replaced downstream of now-protected
@@ -225,9 +227,9 @@ complete until its duplicate revision is replaced downstream of now-protected
 
 | Checkpoint | Enterprise action | Required stop condition |
 |---|---|---|
-| Acceptance tooling | Reconcile `1fb0481a...` to `9e866898...`, update schema/release bindings, then open a fresh PR. Route the declared service-principal/activation/session/token-writer gaps to Enterprise/platform before persona issuance | Contract tests fail, protected SHA moves, platform primitive remains missing at execution time, persona permissions/digests differ, or secret material appears in arguments/evidence |
-| Current deployed acceptance | Preserve the 15:10 rollout 502 and healthy exact-`9e866898...` recovery from 15:11 onward; attach or rerun missing #261-#266 qualification; keep #265 and #266 commands disabled | Deployed SHA differs, focused test, zero-to-head migration, exactly-one-head/drift check fails, required evidence cannot be produced, defective tooling is exercised, or health/dependency state regresses |
-| Wave C preparation | Treat #264-#266 as integrated, but #265/#266 operationally rejected; repair cohort/runtime/v4 evidence in that order, then qualify a separate compatible executor; prepare recovery and historical builder independently | Any unbound input, unsafe private-file path, missing non-executable authority, test/digest/count failure, current graph other than 11/11/15/18 with zero holds, exactly-one-head/drift/migration failure, or authority mismatch |
+| Acceptance tooling | Reconcile `1fb0481a...` to `8b755ee6...`, update schema/release bindings, then open a fresh PR. Route the declared service-principal/activation/session/token-writer gaps to Enterprise/platform before persona issuance | Contract tests fail, protected SHA moves, platform primitive remains missing at execution time, persona permissions/digests differ, or secret material appears in arguments/evidence |
+| Current deployed acceptance | Preserve the healthy exact-`8b755ee6...` responses from 15:42 onward and all prior rollout evidence; attach or rerun missing #261-#268 qualification; keep #265, #266, and #268 commands disabled | Deployed SHA differs, focused test, zero-to-head migration, exactly-one-head/drift check fails, required evidence cannot be produced, defective tooling is exercised, or health/dependency state regresses |
+| Wave C preparation | Treat #264-#268 as integrated, but #265/#266/#268 operationally rejected; repair cohort/runtime/v4/executor evidence in that order; prepare recovery and historical builder independently | Any unbound input, unsafe private-file path, missing or ambiguous execution authority, test/digest/count failure, current graph other than 11/11/15/18 with zero holds, exactly-one-head/drift/migration failure, or authority mismatch |
 | ECO checkpoint | Native binding is protected; assign ECO a unique revision with down-revision `h8j0l2n4p6r8`, requalify, then integrate/deploy independently | Duplicate/multiple Alembic head, drift, migration failure, or governed-policy acceptance failure |
 | Wave B | Integrate PR #215 independently | QBO/Payroll projection tests fail or any provider mutation appears |
 | Wave D | Integrate Mobile independently | Test/static/preflight failure or either manifest is stale |
@@ -268,7 +270,7 @@ pushes, or merges the protected branch.
 ```bash
 git fetch origin --prune
 test "$(git rev-parse origin/customer-management-v1)" = \
-  9e86689838417fce719c22d85aa921525dfae105
+  8b755ee6ce15abef7a4906d975d85acfdc6d7ac4
 
 lane=work/REPLACE_WITH_LANE
 expected=REPLACE_WITH_FULL_HEAD
@@ -287,7 +289,6 @@ packet if either SHA guard fails or the merge conflicts.
 | `work/migration-source4-accepted-artifact-recovery-1` | `a3cad3d389b9ed69300939d15c19e2d7b08da063` |
 | `work/hcp-historical-safe-tranche-1` | `b32f99ff80f447bf8140b73380d19191ccb8db59` |
 | `work/hcp-update-cohort-authority-1` | `d53e5d36422218bd715f07d8099e09865167e0f1` |
-| `work/hcp-current-overlay-v4-executor-1-reconciled` | `b6a782045db161d613e51e24d031f53854027bb9` |
 | `work/eco-migration-reconciliation-integration-watch-1` | `1c0e7b20db62b6a342548f2842ea1a3a45965386` |
 | `work/om2b-payroll-accounting-continuation-1` | `724398348b566f655d2bc7127c20beeb6be52d6c` |
 | `work/mobile-apple-owner-release-packet-1` | `0183eaec3e2825a79b683e9e684a761243c86ea7` |
@@ -320,7 +321,7 @@ python -m compileall -q \
 ```
 
 After merging protected authority, update the successor's protected binding to
-`9e866898...` and its deployed binding only after Preview reports that exact SHA;
+`8b755ee6...` and its deployed binding only after Preview reports that exact SHA;
 retain schema binding `h8j0l2n4p6r8` and recompute any
 contract/report digests affected by those edits. Retain the qualified frontend
 digest unless the deployed frontend artifact proves it changed. Require those
@@ -441,9 +442,9 @@ current-calendar dependencies, before mutation. Do not invoke
 ### SOURCE.4 UPDATE cohort authority
 
 Branch `work/hcp-update-cohort-authority-1` is current at
-`d53e5d36422218bd715f07d8099e09865167e0f1`, has no PR, is 2 behind / 1 ahead,
+`d53e5d36422218bd715f07d8099e09865167e0f1`, has no PR, is 3 behind / 1 ahead,
 and composes merge-clean at tree
-`68ce10cf9b468928e36cf6c5af0b8358e6dc7c28`. It has no schema change and is the
+`d65ed02b978fb3cb33cf9715c588ed026bab8244`. It has no schema change and is the
 intended sealed input authority for a post-#265 repair successor.
 
 The documented local artifact at
@@ -580,17 +581,16 @@ receipt, Company/Branch, complete artifact lineage, and idempotency identity.
 
 ### HCP v4 executor candidate
 
-Branch `work/hcp-current-overlay-v4-executor-1-reconciled` head
-`b6a782045db161d613e51e24d031f53854027bb9` is based exactly on protected
-`9e866898...`, is 0 behind / 2 ahead, and is PR #268 open/CLEAN with no GitHub
-checks/reviews/comments. It composes merge-clean at tree
-`afed2972d6c62494dcd21280acdcf1e61772eab3`, has no schema change, and adds an
+PR #268 integrated branch `work/hcp-current-overlay-v4-executor-1-reconciled`
+head `b6a782045db161d613e51e24d031f53854027bb9` as protected merge
+`8b755ee6ce15abef7a4906d975d85acfdc6d7ac4`. It has no GitHub checks, reviews,
+comments, or linked qualification evidence and no schema change. It adds an
 executable `--authorize-preview-execution` command and changes shared overlay
 and native services. The second commit adds only a blank import separator to the
 test file. `git diff --check` and Python 3.12 compilation pass; pytest is
 unavailable in the local Python 3.12 environment.
 
-Do not integrate this head and do not run its command. It is stacked on
+Do not run the protected command. It is stacked on
 unrepaired protected #265/#266 evidence and has independent blockers:
 
 1. authority and artifact inspection uses `stat()`, `is_file()`, and byte reads
@@ -620,7 +620,7 @@ prepare a separate exact-SHA owner authority. This packet does not authorize it.
 
 Merge current protected authority into
 `work/migration-source4-accepted-artifact-recovery-1`, require tree
-`2b9b698753c125c5eea75a5c00b742b973447f6c`, run `git diff --check`, push the
+`737a9558f00662b752cad3788ff00eb6abb8b3ba`, run `git diff --check`, push the
 lane branch, and open a documentation PR. The packet contains no protected SHA
 that needs editing.
 
@@ -646,7 +646,7 @@ ENVIRONMENT=test PYTHONPATH=backend python -c 'from pathlib import Path; from ap
 
 ### HCP historical safe-tranche builder
 
-Update the packet authority from `9096a777...` to `9e866898...` and state that
+Update the packet authority from `9096a777...` to `8b755ee6...` and state that
 the executor and post-admission acceptance are protected through PR #253 at
 `96d67cb73dbe4838e882e1551de5906eda598f4e`. Run:
 
@@ -662,7 +662,7 @@ The builder is read-only with respect to application data, but writes the
 explicit `--output` artifact. It must not be treated as admission authority.
 
 Composition was revalidated on 2026-09-14 at tree
-`14b67823d64d04035a2c7a8df23dcf58eb2a9f17`; lane qualification on 2026-09-12
+`0c774448d6c2b8a270051b80ecb8a24334284774`; lane qualification on 2026-09-12
 passed all three focused tests and Python compilation. The tests cover accepted-record selection,
 HOLD treatment for unbound updates, `execution_allowed = false`, acceptance-plan
 digest tampering, and conflicting cross-scope native bindings.
@@ -722,7 +722,7 @@ candidate branch, so Enterprise must require and record these results before
 integration.
 
 Composition was revalidated on 2026-09-14 at tree
-`7c1f948096ad55070e622f36fdd489d5939fd41b`; lane qualification on 2026-09-12
+`c708ec40704a464fba63563b33c7e9eac28a2abe`; lane qualification on 2026-09-12
 passed three suites and nine tests, followed by clean full ESLint and production
 TypeScript/Vite builds. This evidence does not replace Enterprise's final rerun
 after branch reconciliation.
@@ -749,7 +749,7 @@ configuration validation, and Apple preflight. Signing/upload remains an owner
 operation.
 
 Composition was revalidated on 2026-09-14 at tree
-`6958706a3efd166e9bb671515295e4281ef99628`; lane qualification on 2026-09-12
+`2ccf77a96e2356e5623c0f998960df8895f63197`; lane qualification on 2026-09-12
 passed all 18 suites and 138 tests, followed by clean typecheck, lint, configuration
 validation, and the non-mutating Apple distribution preflight. Jest emitted
 React `VirtualizedList` updates-not-wrapped-in-`act(...)` warnings; these did not
@@ -814,9 +814,9 @@ back through this queue refresh before Enterprise integrates it.
 ## Held candidate
 
 Price Book branch `work/pricebook-allcounty-review-readiness-1` at
-`49e852aa8c931c8042de0634b68d993b0e02452e` is 10 behind / 13 ahead, has no PR,
+`49e852aa8c931c8042de0634b68d993b0e02452e` is 11 behind / 13 ahead, has no PR,
 and composes merge-clean at tree
-`7f0e59989450d38c880b488a8ee583d4663448fd`. It is stale and Git-reconcilable,
+`c4a5754193c3a819200ddbfb8621d7862698255f`. It is stale and Git-reconcilable,
 but not qualification-admissible. It supersedes the smaller `c1c90a0a...`
 candidate and remains held for:
 
@@ -825,7 +825,7 @@ candidate and remains held for:
 3. review-route authorization matrix coverage.
 
 Composition was revalidated on 2026-09-14 at tree
-`7f0e59989450d38c880b488a8ee583d4663448fd`; PostgreSQL qualification on
+`c4a5754193c3a819200ddbfb8621d7862698255f`; PostgreSQL qualification on
 2026-09-12 produced 26 passing tests and one failure. In
 `test_operator_catalog_and_optimistic_metadata_management`, the expected stale
 tax conflict deassociated the enclosing fixture transaction and removed the
@@ -940,7 +940,7 @@ authority and recomputing their compositions.
 
 ## Rollback
 
-- #257-#266, PR #215, and Mobile have no application-state rollback. Rebuild the previous
+- #257-#268, PR #215, and Mobile have no application-state rollback. Rebuild the previous
   approved application image and retain evidence.
 - Disable the Preview fixture flag rather than deleting its tenant or audit data.
 - ECO application rollback should retain its additive migration under the
@@ -970,7 +970,7 @@ authority and recomputing their compositions.
 
 ## Superseded open PRs
 
-PR #267 is already closed and superseded by active #268; do not reopen it.
+PR #267 is already closed and superseded by protected #268; do not reopen it.
 
 Close, do not integrate: #255, #252, #249, #248, #247, #246, #245, #244,
 #240, #239, #238, #234, #233, #232, #230, #228, #227, #226, #225, #198,
