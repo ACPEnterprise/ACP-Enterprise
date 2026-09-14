@@ -30,7 +30,7 @@ function weeklyTimecardSummaries(employee: AdminEmployeeTimecard, periodStart: s
 }
 
 export function WorkforceRoute() {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const linkedEmployeeId = searchParams.get("employee");
   const { activeCompany, permissionCodes = [] } = useAuth();
   const canAdministerEmployees = permissionCodes.includes("COMPANY_WORKFORCE_MANAGE") && permissionCodes.includes("COMPANY_MEMBERSHIP_READ") && permissionCodes.includes("COMPANY_ROLE_READ");
@@ -66,12 +66,19 @@ export function WorkforceRoute() {
   const [correctionEnd, setCorrectionEnd] = useState("");
   const [correctionReason, setCorrectionReason] = useState("");
   const payPeriods = usePayPeriods(canReviewTime);
-  const [selectedPayPeriodId, setSelectedPayPeriodId] = useState("");
+  const [selectedPayPeriodId, setSelectedPayPeriodId] = useState(searchParams.get("period") ?? "");
   const effectivePayPeriodId = selectedPayPeriodId || timeReview.data?.pay_period?.id || payPeriods.data?.[0]?.id || null;
   const timecards = useAdminTimecardOperations(effectivePayPeriodId, canReviewTime);
   const [branchId, setBranchId] = useState("");
   const [windowStart, setWindowStart] = useState("");
   const [windowEnd, setWindowEnd] = useState("");
+  const selectPayPeriod = (payPeriodId: string) => {
+    setSelectedPayPeriodId(payPeriodId);
+    const next = new URLSearchParams(searchParams);
+    if (payPeriodId) next.set("period", payPeriodId);
+    else next.delete("period");
+    setSearchParams(next, { replace: true });
+  };
   const [capabilities, setCapabilities] = useState("");
   const [languages, setLanguages] = useState("");
   const administrationPermissions = administration.data?.permissions;
@@ -228,7 +235,7 @@ export function WorkforceRoute() {
               </Alert>
             </div>
           )}
-          {timeReview.data && !timeReview.data.pay_period && (
+          {timeReview.data && !timeReview.data.pay_period && !effectivePayPeriodId && (
             <div className="mt-4">
               <Alert variant="warning" title="Pay period required">
                 Configure an authorized pay period before preparing payroll time evidence.
@@ -366,7 +373,7 @@ export function WorkforceRoute() {
             <div className="flex flex-wrap items-center gap-2">
               <label className="text-sm font-medium">
                 Pay period
-                <select aria-label="Timecard pay period" className="ml-2 min-h-10 rounded-lg border border-stroke bg-surface px-2" value={effectivePayPeriodId ?? ""} onChange={(event) => setSelectedPayPeriodId(event.target.value)}>
+                <select aria-label="Timecard pay period" className="ml-2 min-h-10 rounded-lg border border-stroke bg-surface px-2" value={effectivePayPeriodId ?? ""} onChange={(event) => selectPayPeriod(event.target.value)}>
                 {(payPeriods.data ?? []).map((period) => (
                   <option key={period.id} value={period.id}>
                     {period.period_start} – {period.period_end}
@@ -374,7 +381,7 @@ export function WorkforceRoute() {
                 ))}
                 </select>
               </label>
-              {permissionCodes.includes("COMPANY_PAYROLL_REPORTING_READ") && <Link className="rounded-lg border border-stroke px-3 py-2 text-sm font-semibold" to="/payroll">Review Payroll period</Link>}
+              {permissionCodes.includes("COMPANY_PAYROLL_REPORTING_READ") && <Link className="rounded-lg border border-stroke px-3 py-2 text-sm font-semibold" to={`/payroll${effectivePayPeriodId ? `?period=${effectivePayPeriodId}` : ""}`}>Review Payroll period</Link>}
             </div>
           </div>
           {timeReview.isLoading && (
@@ -389,7 +396,7 @@ export function WorkforceRoute() {
               </Alert>
             </div>
           )}
-          {timeReview.data && !timeReview.data.pay_period && (
+          {timeReview.data && !timeReview.data.pay_period && !effectivePayPeriodId && (
             <div className="mt-4">
               <Alert variant="warning" title="Pay period required">
                 Configure an authorized pay period before preparing payroll time evidence.

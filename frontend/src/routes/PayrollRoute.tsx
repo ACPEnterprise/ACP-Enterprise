@@ -25,7 +25,7 @@ function StateList({ values, empty }: { values: Record<string, number>; empty: s
 }
 
 export function PayrollRoute() {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const setupEmployeeId = searchParams.get("employee");
   const canReadReporting = useHasPermission("COMPANY_PAYROLL_REPORTING_READ");
   const canRead = canReadReporting;
@@ -39,7 +39,7 @@ export function PayrollRoute() {
   const canReadPayPeriods = canRead && (canReadTime || canManagePayPeriods);
   const currentPeriod = useCurrentPayPeriod(canReadPayPeriods);
   const payPeriods = usePayPeriods(canReadPayPeriods);
-  const [selectedPayPeriodId, setSelectedPayPeriodId] = useState("");
+  const [selectedPayPeriodId, setSelectedPayPeriodId] = useState(searchParams.get("period") ?? "");
   const effectivePayPeriodId = selectedPayPeriodId || currentPeriod.data?.id || payPeriods.data?.[0]?.id || null;
   const periodOperations = usePayrollPeriodOperations(effectivePayPeriodId, canRead && canReadTime);
   const registers = usePayrollOperatingRegisters(canRead);
@@ -53,6 +53,13 @@ export function PayrollRoute() {
     );
   const value = operations.data;
   const approvedRunCount = value.run_counts.approved ?? 0;
+  const selectPayPeriod = (payPeriodId: string) => {
+    setSelectedPayPeriodId(payPeriodId);
+    const next = new URLSearchParams(searchParams);
+    if (payPeriodId) next.set("period", payPeriodId);
+    else next.delete("period");
+    setSearchParams(next, { replace: true });
+  };
   const submitPayPeriod = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setPeriodMessage("");
@@ -130,7 +137,7 @@ export function PayrollRoute() {
               No Payroll value was inferred or changed.
             </Alert>
           )}
-          {canReadTime && currentPeriod.data === null && (
+          {canReadTime && currentPeriod.data === null && !effectivePayPeriodId && (
             <Alert variant="warning" title="No current pay period">
               Configure authoritative pay-period dates before office review.
             </Alert>
@@ -146,7 +153,7 @@ export function PayrollRoute() {
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <label className="font-semibold">
                   Pay period
-                  <select aria-label="Payroll pay period" className="ml-2 min-h-10 rounded-lg border border-stroke bg-surface px-2 font-normal" value={effectivePayPeriodId ?? ""} onChange={(event) => setSelectedPayPeriodId(event.target.value)}>
+                  <select aria-label="Payroll pay period" className="ml-2 min-h-10 rounded-lg border border-stroke bg-surface px-2 font-normal" value={effectivePayPeriodId ?? ""} onChange={(event) => selectPayPeriod(event.target.value)}>
                     {(payPeriods.data ?? []).map((period) => (
                       <option key={period.id} value={period.id}>
                         {period.period_start} – {period.period_end}
@@ -204,7 +211,7 @@ export function PayrollRoute() {
                           )}
                         </td>
                         <td>
-                          <Link className="font-semibold text-action-primary underline" to={`/employees?employee=${employee.employee_id}#timecard-${employee.employee_id}`}>
+                          <Link className="font-semibold text-action-primary underline" to={`/employees?employee=${employee.employee_id}&period=${effectivePayPeriodId}#timecard-${employee.employee_id}`}>
                             View timecard
                           </Link>
                         </td>
