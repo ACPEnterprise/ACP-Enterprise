@@ -98,6 +98,15 @@ class HcpCurrentOverlayNativeServices(CurrentOverlayDomainServices):
         self.scheduling = scheduling or SchedulingService()
         self.repository = repository or OperationalMigrationRepository()
 
+    def bind_lineage(
+        self, *, master_run_id: UUID, customer_run_id: UUID, operational_run_id: UUID
+    ) -> None:
+        """Bind database-created children before any native mutation occurs."""
+        if master_run_id != self.master_run_id:
+            raise ValueError("overlay native master lineage conflict")
+        self.customer_run_id = customer_run_id
+        self.operational_run_id = operational_run_id
+
     async def source_state(
         self, session: AsyncSession, key: OverlayKey
     ) -> OverlaySourceState | None:

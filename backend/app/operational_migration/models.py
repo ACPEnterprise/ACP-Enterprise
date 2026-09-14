@@ -31,7 +31,8 @@ class HcpMigrationMasterRun(Base):
     __tablename__ = "hcp_migration_master_runs"
     __table_args__ = (
         CheckConstraint(
-            "status IN ('prepared','running','interrupted','completed','failed')",
+            "status IN ('prepared','running','interrupted','completed',"
+            "'completed_current_operational','failed')",
             name="ck_hcp_master_run_status",
         ),
         ForeignKeyConstraint(
@@ -94,7 +95,7 @@ class HcpMigrationMasterRun(Base):
     rollback_state: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
     input_digest: Mapped[str] = mapped_column(String(64), nullable=False)
     attestation_digest: Mapped[str] = mapped_column(String(64), nullable=False)
-    status: Mapped[str] = mapped_column(String(20), nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False)
     started_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
     )
