@@ -28,6 +28,18 @@ export async function getEligibleTechnicians(
     )
   ).data;
 }
+export async function prepareFieldReadiness(
+  employeeId: string,
+  branchId: string,
+  windowStartAt: string,
+  windowEndAt: string,
+): Promise<void> {
+  await apiClient.put(`/api/v1/workforce/administration/employees/${employeeId}/field-readiness`, {
+    branch_id: branchId,
+    window_start_at: windowStartAt,
+    window_end_at: windowEndAt,
+  });
+}
 export async function getDispatchRecommendation(
   jobId: string,
   windows: readonly { start_at: string; end_at: string }[],

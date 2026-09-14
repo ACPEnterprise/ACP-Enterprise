@@ -180,3 +180,15 @@ class AvailabilityEvidenceRequest(WorkforceSchema):
 class WorkforceEvidenceResponse(WorkforceSchema):
     id: UUID
     created: bool
+
+
+class FieldReadinessRequest(WorkforceSchema):
+    branch_id: UUID
+    window_start_at: datetime
+    window_end_at: datetime
+
+
+class FieldReadinessResponse(WorkforceSchema):
+    profile_id: UUID
+    capability_evidence_id: UUID
+    availability_evidence_id: UUID

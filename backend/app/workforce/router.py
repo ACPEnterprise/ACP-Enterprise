@@ -20,6 +20,8 @@ from app.workforce.schemas import (
     CapabilityEvidenceRequest,
     CertificationEvidenceRequest,
     EmployeeAdministrationDetail,
+    FieldReadinessRequest,
+    FieldReadinessResponse,
     LanguageEvidenceRequest,
     WorkforceDirectory,
     WorkforceEligibilityRequest,
@@ -226,6 +228,35 @@ async def record_availability(
     except WorkforceAdministrationConflict as error:
         raise _workforce_conflict(error) from error
     return WorkforceEvidenceResponse(id=evidence_id, created=created)
+
+
+@router.put(
+    "/administration/employees/{employee_id}/field-readiness",
+    response_model=FieldReadinessResponse,
+)
+async def prepare_field_readiness(
+    employee_id: UUID,
+    data: FieldReadinessRequest,
+    context: CapabilityManageContext,
+    session: Session,
+) -> FieldReadinessResponse:
+    if not context.has_permission(WorkforcePermission.AVAILABILITY_MANAGE):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Availability management authority is required.")
+    try:
+        profile_id, capability_id, availability_id = (
+            await workforce_administration_service.prepare_field_readiness(
+                session, context=context, employee_id=employee_id,
+                branch_id=data.branch_id, start_at=data.window_start_at,
+                end_at=data.window_end_at,
+            )
+        )
+    except WorkforceAdministrationConflict as error:
+        raise _workforce_conflict(error) from error
+    return FieldReadinessResponse(
+        profile_id=profile_id,
+        capability_evidence_id=capability_id,
+        availability_evidence_id=availability_id,
+    )
 
 
 @router.post("/eligibility", response_model=WorkforceEligibilityResponse)
