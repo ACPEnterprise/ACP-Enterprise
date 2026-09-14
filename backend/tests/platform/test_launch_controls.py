@@ -47,6 +47,7 @@ from app.platform.permissions.codes import (
     PaymentPermission,
     PurchasingPermission,
     SchedulingPermission,
+    WorkforcePermission,
 )
 from app.scheduling import models as scheduling_models  # noqa: F401
 from app.timekeeping.permissions import TimekeepingPermission
@@ -100,6 +101,8 @@ def test_launch_role_matrix_uses_only_canonical_least_privilege_permissions() ->
     administrator = roles[LaunchRoleCode.COMPANY_ADMINISTRATOR].permission_codes
     assert administrator == COMPANY_ADMINISTRATOR_OWNER_READ_PERMISSIONS
     assert PayrollPermission.REPORTING_READ in administrator
+    assert WorkforcePermission.CAPABILITY_MANAGE in administrator
+    assert WorkforcePermission.AVAILABILITY_MANAGE in administrator
     assert EconomicsPolicyPermission.MEASUREMENT_READ in administrator
     assert EconomicsPolicyPermission.MEASUREMENT_EXECUTE not in administrator
     assert PayrollPermission.REPORTING_MANAGE not in administrator

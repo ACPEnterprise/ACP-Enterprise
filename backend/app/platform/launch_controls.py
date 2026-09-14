@@ -23,6 +23,7 @@ from app.platform.permissions.codes import (
     PriceBookPermission,
     PurchasingPermission,
     SchedulingPermission,
+    WorkforcePermission,
 )
 from app.timekeeping.permissions import TimekeepingPermission
 
@@ -43,6 +44,8 @@ COMPANY_ADMINISTRATOR_OWNER_READ_PERMISSIONS = frozenset(
         SchedulingPermission.READ,
         JobPermission.READ,
         DispatchPermission.READ,
+        WorkforcePermission.CAPABILITY_MANAGE,
+        WorkforcePermission.AVAILABILITY_MANAGE,
         EconomicsPolicyPermission.MEASUREMENT_READ,
         InventoryPermission.READ,
         PurchasingPermission.READ,
