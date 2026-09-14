@@ -6,20 +6,11 @@ from uuid import UUID, uuid4
 
 import pytest
 import pytest_asyncio
-from httpx import ASGITransport, AsyncClient
-from sqlalchemy import delete, update
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import (
-    AsyncEngine,
-    AsyncSession,
-    async_sessionmaker,
-    create_async_engine,
-)
-
 from app.core.config import settings
 from app.customers.models import Customer, ServiceLocation  # noqa: F401
 from app.database.session import get_database_session
 from app.main import app
+from app.platform.audit.models import AuditRecord
 from app.platform.branch.models import Branch
 from app.platform.company.membership_models import Membership
 from app.platform.company.models import Company
@@ -53,7 +44,17 @@ from app.timekeeping.models import (
     WorkdayTimeEntryRevision,
 )
 from app.timekeeping.permissions import TimekeepingPermission
+from app.timekeeping.schemas import PayPeriodCreateInput
 from app.timekeeping.service import WorkdayTimeService
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy import delete, select, update
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 NOW = datetime(2026, 8, 29, 8, 0, tzinfo=timezone.utc)
 
@@ -244,6 +245,123 @@ async def timekeeping_database() -> AsyncIterator[
         yield factory, seed
     finally:
         await engine.dispose()
+
+
+def test_office_pay_period_input_enforces_frequency_and_chronology() -> None:
+    valid = PayPeriodCreateInput(
+        pay_frequency="weekly",
+        period_start=date(2026, 9, 13),
+        period_end=date(2026, 9, 19),
+        processing_date=date(2026, 9, 21),
+        payday=date(2026, 9, 25),
+    )
+    assert valid.pay_frequency == "weekly"
+    with pytest.raises(ValueError, match="7 calendar days"):
+        PayPeriodCreateInput(
+            pay_frequency="weekly",
+            period_start=date(2026, 9, 13),
+            period_end=date(2026, 9, 20),
+            processing_date=date(2026, 9, 21),
+            payday=date(2026, 9, 25),
+        )
+    with pytest.raises(ValueError, match="processing_date"):
+        PayPeriodCreateInput(
+            pay_frequency="weekly",
+            period_start=date(2026, 9, 13),
+            period_end=date(2026, 9, 19),
+            processing_date=date(2026, 9, 18),
+            payday=date(2026, 9, 25),
+        )
+
+
+@pytest.mark.asyncio
+async def test_office_pay_period_api_is_authorized_audited_and_replay_safe(
+    timekeeping_database: tuple[async_sessionmaker[AsyncSession], SeededTimekeeping],
+) -> None:
+    factory, seed = timekeeping_database
+    manager_context = FakeContext(
+        seed,
+        {TimekeepingPermission.APPROVE, TimekeepingPermission.ADMIN_READ},
+        manager=True,
+    )
+    denied_context = FakeContext(seed, {TimekeepingPermission.ADMIN_READ})
+    selected_context: dict[str, FakeContext] = {"value": manager_context}
+
+    async def session_override() -> AsyncIterator[AsyncSession]:
+        async with factory() as session:
+            yield session
+
+    async def context_override() -> FakeContext:
+        return selected_context["value"]
+
+    app.dependency_overrides[get_database_session] = session_override
+    app.dependency_overrides[get_authorization_context] = context_override
+    payload = {
+        "pay_frequency": "weekly",
+        "period_start": "2026-09-13",
+        "period_end": "2026-09-19",
+        "processing_date": "2026-09-21",
+        "payday": "2026-09-25",
+    }
+    try:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            created = await client.post(
+                "/api/v1/timekeeping/admin/pay-periods",
+                headers={"Idempotency-Key": "office-period-2026-09-13"},
+                json=payload,
+            )
+            assert created.status_code == 201, created.text
+            replay = await client.post(
+                "/api/v1/timekeeping/admin/pay-periods",
+                headers={"Idempotency-Key": "office-period-2026-09-13"},
+                json=payload,
+            )
+            assert replay.status_code == 201
+            assert replay.json()["id"] == created.json()["id"]
+            conflict = await client.post(
+                "/api/v1/timekeeping/admin/pay-periods",
+                headers={"Idempotency-Key": "overlapping-period"},
+                json={
+                    **payload,
+                    "period_start": "2026-09-14",
+                    "period_end": "2026-09-20",
+                },
+            )
+            assert conflict.status_code == 409
+            selected_context["value"] = denied_context
+            denied = await client.post(
+                "/api/v1/timekeeping/admin/pay-periods",
+                headers={"Idempotency-Key": "denied-period"},
+                json={
+                    **payload,
+                    "period_start": "2026-09-20",
+                    "period_end": "2026-09-26",
+                    "processing_date": "2026-09-28",
+                    "payday": "2026-09-30",
+                },
+            )
+            assert denied.status_code == 403
+        async with factory() as session:
+            periods = (
+                await session.scalars(
+                    select(PayPeriod).where(PayPeriod.company_id == seed.company_id)
+                )
+            ).all()
+            assert len(periods) == 1
+            audits = (
+                await session.scalars(
+                    select(AuditRecord).where(
+                        AuditRecord.action == "timekeeping.pay_period_created",
+                        AuditRecord.company_id == seed.company_id,
+                    )
+                )
+            ).all()
+            assert len(audits) == 1
+            assert audits[0].company_id == seed.company_id
+    finally:
+        app.dependency_overrides.clear()
 
 
 @pytest.mark.asyncio

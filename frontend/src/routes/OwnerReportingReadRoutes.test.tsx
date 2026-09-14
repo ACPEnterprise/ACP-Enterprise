@@ -35,6 +35,7 @@ vi.mock("../hooks/usePayroll", () => ({
   usePayrollPeriodOperations: () => ({ isLoading: false, isError: false, data: undefined }),
 }));
 vi.mock("../hooks/useWorkdayTime", () => ({
+  useCreatePayPeriod: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useCurrentPayPeriod: () => ({ isLoading: false, isError: false, data: undefined }),
   usePayPeriods: () => ({ isLoading: false, isError: false, data: [] }),
 }));

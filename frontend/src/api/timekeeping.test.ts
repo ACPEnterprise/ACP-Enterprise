@@ -1,9 +1,32 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { apiClient } from "./client";
-import { correctTimeEntry, getAdminTimecardReview, getOwnActiveJobClock, getOwnPunchState, getOwnTimecard, recordOwnJobClock, recordOwnPunch } from "./timekeeping";
+import { correctTimeEntry, createPayPeriod, getAdminTimecardReview, getOwnActiveJobClock, getOwnPunchState, getOwnTimecard, recordOwnJobClock, recordOwnPunch } from "./timekeeping";
 
 describe("Workday Time API client", () => {
+  it("creates a Company-scoped pay period without sending identifiers", async () => {
+    const adapter = vi.fn(async (config) => {
+      expect(config.url).toBe("/api/v1/timekeeping/admin/pay-periods");
+      expect(config.headers.get("Idempotency-Key")).toBeTruthy();
+      expect(JSON.parse(String(config.data))).toEqual({
+        pay_frequency: "weekly",
+        period_start: "2026-09-13",
+        period_end: "2026-09-19",
+        processing_date: "2026-09-21",
+        payday: "2026-09-25",
+      });
+      expect(String(config.data)).not.toMatch(/company_id|branch_id|user_id/);
+      return { data: { id: "period-1" }, status: 201, statusText: "Created", headers: {}, config };
+    });
+    const original = apiClient.defaults.adapter;
+    apiClient.defaults.adapter = adapter;
+    try {
+      await createPayPeriod({ pay_frequency: "weekly", period_start: "2026-09-13", period_end: "2026-09-19", processing_date: "2026-09-21", payday: "2026-09-25" });
+    } finally {
+      apiClient.defaults.adapter = original;
+    }
+  });
+
   it("uses self-scoped endpoints and sends only an action with a fresh idempotency key", async () => {
     const keys: string[] = [];
     const adapter = vi.fn(async (config) => {

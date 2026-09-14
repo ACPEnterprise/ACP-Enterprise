@@ -167,6 +167,42 @@ class PayPeriodView(BaseModel):
     schedule_version: int
 
 
+class PayPeriodCreateInput(BaseModel):
+    """Office-facing input for the existing immutable pay-period authority."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    pay_frequency: Literal["weekly", "biweekly", "semimonthly", "monthly"]
+    period_start: date
+    period_end: date
+    processing_date: date
+    payday: date
+
+    @model_validator(mode="after")
+    def valid_chronology(self) -> "PayPeriodCreateInput":
+        if self.period_end < self.period_start:
+            raise ValueError("period_end must not precede period_start")
+        if self.processing_date < self.period_end:
+            raise ValueError("processing_date must not precede period_end")
+        if self.payday < self.processing_date:
+            raise ValueError("payday must not precede processing_date")
+        days = (self.period_end - self.period_start).days + 1
+        expected_days = {"weekly": 7, "biweekly": 14}
+        if (
+            self.pay_frequency in expected_days
+            and days != expected_days[self.pay_frequency]
+        ):
+            raise ValueError(
+                f"{self.pay_frequency} pay periods must contain "
+                f"{expected_days[self.pay_frequency]} calendar days"
+            )
+        if self.pay_frequency == "semimonthly" and days not in {13, 14, 15, 16}:
+            raise ValueError("semimonthly pay periods must contain 13-16 calendar days")
+        if self.pay_frequency == "monthly" and days not in {28, 29, 30, 31}:
+            raise ValueError("monthly pay periods must contain 28-31 calendar days")
+        return self
+
+
 class TimecardView(BaseModel):
     employee_id: UUID
     punch_state: PunchState

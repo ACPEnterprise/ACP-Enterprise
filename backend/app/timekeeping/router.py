@@ -20,6 +20,7 @@ from app.platform.reliability.failures import ClientRecovery, FailureCode, SafeF
 from .commands import (
     CorrectJobWorkedInterval,
     CorrectTimeEntry,
+    CreatePayPeriod,
     RecordJobClock,
     RecordManualTime,
     RecordPunch,
@@ -43,6 +44,7 @@ from .schemas import (
     JobWorkedIntervalCorrectionInput,
     JobWorkedIntervalView,
     ManualTimeInput,
+    PayPeriodCreateInput,
     PayPeriodView,
     PayrollInputEvidenceItem,
     PayrollInputProjectionView,
@@ -404,6 +406,39 @@ async def pay_periods(
     return await workday_time_queries.admin_pay_periods(
         session, context=context, limit=limit
     )
+
+
+@router.post(
+    "/admin/pay-periods",
+    response_model=PayPeriodView,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_pay_period(
+    payload: PayPeriodCreateInput,
+    idempotency_key: IdempotencyKey,
+    context: Approve,
+    session: Session,
+) -> PayPeriodView:
+    """Create or recover one immutable Company-scoped office pay period."""
+    _, timezone_name = _branch_and_timezone(context)
+    try:
+        value = await workday_time_service.create_pay_period(
+            session,
+            context=context,
+            command=CreatePayPeriod(
+                period_start=payload.period_start,
+                period_end=payload.period_end,
+                processing_date=payload.processing_date,
+                payday=payload.payday,
+                timezone=timezone_name,
+                schedule_definition_id=f"office.{payload.pay_frequency}.v1",
+                schedule_version=1,
+                idempotency_key=idempotency_key,
+            ),
+        )
+        return workday_time_queries.pay_period_view(value)
+    except (WorkdayTimeError, WorkdayAuthorizationError) as error:
+        raise _error(error) from error
 
 
 @router.get("/admin/timecard-review", response_model=AdminTimecardReview)

@@ -24,6 +24,14 @@ export interface PayPeriod {
   schedule_version: number;
 }
 
+export interface PayPeriodCreateInput {
+  pay_frequency: "weekly" | "biweekly" | "semimonthly" | "monthly";
+  period_start: string;
+  period_end: string;
+  processing_date: string;
+  payday: string;
+}
+
 export interface TimeEntry {
   entry_id: string;
   revision_id: string;
@@ -273,6 +281,14 @@ export async function getCurrentPayPeriod(): Promise<PayPeriod | null> {
 
 export async function getPayPeriods(): Promise<PayPeriod[]> {
   return (await apiClient.get<PayPeriod[]>("/api/v1/timekeeping/pay-periods", { params: { limit: 26 } })).data;
+}
+
+export async function createPayPeriod(input: PayPeriodCreateInput): Promise<PayPeriod> {
+  return (await apiClient.post<PayPeriod>(
+    "/api/v1/timekeeping/admin/pay-periods",
+    input,
+    { headers: { "Idempotency-Key": crypto.randomUUID() } },
+  )).data;
 }
 
 export async function getAdminTimecardOperations(payPeriodId: string): Promise<AdminTimecardOperations> {

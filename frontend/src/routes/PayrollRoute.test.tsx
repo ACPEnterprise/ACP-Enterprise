@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -9,7 +9,7 @@ import {
   usePayrollOperatingRegisters,
   usePayrollReports,
 } from "../hooks/usePayroll";
-import { useCurrentPayPeriod, usePayPeriods } from "../hooks/useWorkdayTime";
+import { useCreatePayPeriod, useCurrentPayPeriod, usePayPeriods } from "../hooks/useWorkdayTime";
 import { PayrollRoute } from "./PayrollRoute";
 
 const permissionState = vi.hoisted(() => ({ values: new Set<string>() }));
@@ -25,6 +25,7 @@ vi.mock("../hooks/usePayroll", () => ({
   usePayrollPeriodOperations: vi.fn(),
 }));
 vi.mock("../hooks/useWorkdayTime", () => ({
+  useCreatePayPeriod: vi.fn(() => ({ mutateAsync: vi.fn(), isPending: false })),
   useCurrentPayPeriod: vi.fn(() => ({
     data: undefined,
     isLoading: false,
@@ -57,6 +58,7 @@ describe("PayrollRoute authorization", () => {
       query(undefined) as never,
     );
     vi.mocked(usePayPeriods).mockReturnValue(query([]) as never);
+    vi.mocked(useCreatePayPeriod).mockReturnValue({ mutateAsync: vi.fn(), isPending: false } as never);
   });
 
   it("disables every protected query without reporting read authority", () => {
@@ -107,6 +109,24 @@ describe("PayrollRoute authorization", () => {
     expect(usePayrollReports).toHaveBeenCalledWith(true);
     expect(useComplianceSchemas).toHaveBeenCalledWith(true);
     expect(usePayrollOperatingRegisters).toHaveBeenCalledWith(true);
+  });
+
+  it("lets an authorized office operator create a pay period without UUID input", async () => {
+    const mutateAsync = vi.fn().mockResolvedValue({ id: "period-1" });
+    permissionState.values = new Set([
+      "COMPANY_PAYROLL_REPORTING_READ",
+      "COMPANY_TIMEKEEPING_APPROVE",
+    ]);
+    vi.mocked(useCreatePayPeriod).mockReturnValue({ mutateAsync, isPending: false } as never);
+    vi.mocked(usePayrollOperationsSummary).mockReturnValue(query({ blocker_count: 0, history_ready: false, aggregate_approved_gross: "0.00", aggregate_approved_net: "0.00", reconciliation_state: "attention_required", provider_readiness: { filing: "not_configured", payment: "not_configured", remittance: "not_configured" }, run_counts: {}, member_dispositions: {}, payment_counts: {}, remittance_counts: {}, reporting_counts: {}, statement_counts: {}, adjustment_counts: {} }) as never);
+    render(<MemoryRouter><PayrollRoute /></MemoryRouter>);
+    fireEvent.change(screen.getByLabelText("Period start"), { target: { value: "2026-09-13" } });
+    fireEvent.change(screen.getByLabelText("Period end"), { target: { value: "2026-09-19" } });
+    fireEvent.change(screen.getByLabelText("Processing date"), { target: { value: "2026-09-21" } });
+    fireEvent.change(screen.getByLabelText("Pay date"), { target: { value: "2026-09-25" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create Pay Period" }));
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalledWith(expect.objectContaining({ pay_frequency: "weekly" })));
+    expect(screen.queryByLabelText(/company|uuid/i)).not.toBeInTheDocument();
   });
 
   it("shows exact blockers without implying filing or payment", () => {
