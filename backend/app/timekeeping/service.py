@@ -765,7 +765,11 @@ class WorkdayTimeService:
         context: AuthorizationContext,
         command: CreatePayPeriod,
     ) -> PayPeriod:
-        self._require_permission(context, TimekeepingPermission.APPROVE)
+        if not (
+            context.has_permission(TimekeepingPermission.PAY_PERIOD_MANAGE)
+            or context.has_permission(TimekeepingPermission.APPROVE)
+        ):
+            raise WorkdayAuthorizationError("pay-period management permission denied")
         if command.idempotency_key is not None:
             self._validate_idempotency_key(command.idempotency_key)
         if command.schedule_version < 1:

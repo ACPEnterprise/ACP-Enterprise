@@ -75,6 +75,10 @@ Correct = Annotated[
 Approve = Annotated[
     AuthorizationContext, Depends(require_permission(TimekeepingPermission.APPROVE))
 ]
+PayPeriodManage = Annotated[
+    AuthorizationContext,
+    Depends(require_permission(TimekeepingPermission.PAY_PERIOD_MANAGE)),
+]
 AdminRead = Annotated[
     AuthorizationContext, Depends(require_permission(TimekeepingPermission.ADMIN_READ))
 ]
@@ -262,7 +266,7 @@ async def correct_job_worked_interval(
 async def payroll_input_projection(
     pay_period_id: UUID,
     employee_id: UUID,
-    context: Approve,
+    context: PayPeriodManage,
     session: Session,
 ) -> PayrollInputProjectionView:
     period = await timekeeping_repository.pay_period_by_id(
@@ -416,7 +420,7 @@ async def pay_periods(
 async def create_pay_period(
     payload: PayPeriodCreateInput,
     idempotency_key: IdempotencyKey,
-    context: Approve,
+    context: PayPeriodManage,
     session: Session,
 ) -> PayPeriodView:
     """Create or recover one immutable Company-scoped office pay period."""

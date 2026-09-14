@@ -282,7 +282,7 @@ async def test_office_pay_period_api_is_authorized_audited_and_replay_safe(
     factory, seed = timekeeping_database
     manager_context = FakeContext(
         seed,
-        {TimekeepingPermission.APPROVE, TimekeepingPermission.ADMIN_READ},
+        {TimekeepingPermission.PAY_PERIOD_MANAGE, TimekeepingPermission.ADMIN_READ},
         manager=True,
     )
     denied_context = FakeContext(seed, {TimekeepingPermission.ADMIN_READ})
@@ -372,7 +372,7 @@ async def test_concurrent_office_pay_period_creation_converges(
     factory, seed = timekeeping_database
     context = FakeContext(
         seed,
-        {TimekeepingPermission.APPROVE},
+        {TimekeepingPermission.PAY_PERIOD_MANAGE},
         manager=True,
     )
     command = CreatePayPeriod(
