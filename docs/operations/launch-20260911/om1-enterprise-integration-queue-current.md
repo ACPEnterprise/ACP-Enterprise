@@ -1,6 +1,6 @@
 # OM1 Enterprise integration queue
 
-Snapshot: 2026-09-14 14:20 America/New_York
+Snapshot: 2026-09-14 14:28 America/New_York
 
 ## Authority and deployed state
 
@@ -81,7 +81,7 @@ acceptance gates in this packet operationally; GitHub will not enforce them.
 | SOURCE.4 artifact recovery | `work/migration-source4-accepted-artifact-recovery-1` | `a3cad3d389b9ed69300939d15c19e2d7b08da063` | None | 7/1 | `d59c684aa2ea28435acb6d8b57842ab3e051200a` | Stale but reconcilable; merge-clean; documentation-only |
 | HCP historical safe-tranche builder | `work/hcp-historical-safe-tranche-1` | `b32f99ff80f447bf8140b73380d19191ccb8db59` | None | 17/1 | `84b637e286d0c4b885fa2280ff22f594c60f505c` | Stale but reconcilable; merge-clean; metadata edit required |
 | SOURCE.4 UPDATE cohort authority | `work/hcp-update-cohort-authority-1` | `d53e5d36422218bd715f07d8099e09865167e0f1` | None | 1/1 | `7785a394a7bc6bf675d4c2c16e1fea462103b0c0` | Stale but reconcilable; merge-clean, but blocked: unsafe overwrite/symlink handling, incomplete authority verification, and no command/generator integration tests |
-| HCP Preview-baseline v3 reconciliation | `work/hcp-overlay-preview-baseline-reconciliation-1` | `0f7ffae28cee22180d42867bc523c5004ea69202` | None | 0/1 | `7688a964723f1f67569264fee55677934c8b5332` | Current and merge-clean, but blocked/non-executable: unbound decision inputs, unsafe output handling, incomplete verifier/tests, and 32 current-graph holds/unresolved members |
+| HCP complete-current-graph v4 stack | `work/hcp-current-graph-completeness-1` | `452d1bb326bd0abb4acec9a8525df5ff96ff359a` | None | 0/2 | `18175c5588c87504ad1ef3bbd0fd027a48f74a55` | Current, stacked on and supersedes v3, merge-clean, but non-executable: graph arithmetic closes 55/55 while authority fields, decision-input bindings, safe output, verifier, and tests remain incomplete |
 | ECO reconciliation | `work/eco-migration-reconciliation-integration-watch-1` | `1c0e7b20db62b6a342548f2842ea1a3a45965386` | None | 9/13 | `4e145611ff96af05c6eb5afb2f4e92294420a3c3` | Blocked on schema reconciliation; duplicate protected revision ID; rebase and assign a new revision downstream of `h8j0l2n4p6r8` |
 | Payroll/QBO read UI | `work/om2b-payroll-accounting-continuation-1` | `724398348b566f655d2bc7127c20beeb6be52d6c` | #215 open/CLEAN | 28/1 | `d05ec12ac416d237cc55beb549bdbd255f2524aa` | Stale but reconcilable; merge-clean; PR refresh required |
 | Mobile Apple release packet | `work/mobile-apple-owner-release-packet-1` | `0183eaec3e2825a79b683e9e684a761243c86ea7` | None | 14/15 | `4687f405c3fbf0ac52b892b099007ff91ceb000b` | Stale but reconcilable; merge-clean; two manifest edits required |
@@ -103,7 +103,7 @@ acceptance gates in this packet operationally; GitHub will not enforce them.
 | Laptop1 Phone distribution readiness | `bf28a61c...` is an ancestor of the active Mobile owner-release packet; integrate only the successor packet. |
 | ECO named commits and persistence | `d7ef88d1...` and `37b32949...` are superseded by patch-evolved equivalents; `fe7a9623...`, `f587c271...`, and persistence `863cab13...` feed the active ECO watch. |
 | QBO `5fe11183...` | Superseded by protected real-company evidence #243. Preserve the OAuth owner gate. |
-| Migration executor / acceptance | `5b8b02de...` and `83bbeef0...` are superseded by protected guarded execution and acceptance #253. Lineage, parent ordering, native binding, and runtime inventory are protected through #262-#265. Recovery, builder, cohort authority, and v3 baseline reconciliation remain active preparation. Runtime evidence shows all 280 UPDATE successors missing; v3 shows 19 current members absent from v2 and 32 current holds/unresolved. Do not run guarded admission. |
+| Migration executor / acceptance | `5b8b02de...` and `83bbeef0...` are superseded by protected guarded execution and acceptance #253. Lineage, parent ordering, native binding, and runtime inventory are protected through #262-#265. Recovery, builder, cohort authority, and stacked v4 completeness remain active preparation. V4 adds the 19 missing current members and releases 13 dependent holds, but is not execution authority. Do not run guarded admission. |
 | Price Book operator readiness | `c1c90a0a...` is superseded by the broader held review candidate `49e852aa...`; no candidate is admissible yet. |
 
 Zero-delta classifications above use a three-way composition with current
@@ -111,11 +111,11 @@ protected authority, not a direct endpoint diff. Conflicting stale branches are
 not reconciliation inputs: use their named protected successors as authority.
 
 The eight remaining effective deltas have zero pairwise file overlap. ECO,
-cohort authority, and v3 baseline reconciliation are not admissible: ECO's
+cohort authority, and v4 completeness are not admissible: ECO's
 differently named migration still declares protected revision `g7i9k1m3o5q7`
 from `f6h8j0l2n4p6`; cohort authority has unsafe file handling, incomplete verification,
-and missing command/generator coverage; v3 has unbound decision inputs, unsafe
-output handling, incomplete verification, and a non-admissible current graph.
+and missing command/generator coverage; v4 inherits v3's unbound inputs and adds
+unsafe output, incomplete authority/verifier/tests, and contradictory readiness.
 The five-candidate combined tree excluding all three blocked lanes is
 `0eea3951057478528b8744783a407a6868af24cc`; it changes 51 files and passes
 `git diff --check`. Recompute all trees after protected movement or packet edits.
@@ -132,10 +132,10 @@ operational order:
    qualification evidence. Treat #265 as deployed but rejected for operational
    use; repair and qualify cohort authority, then stack a read-only runtime
    inventory repair successor on its verifier before any guarded execution.
-4. Repair and qualify the non-executable v3 baseline reconciliation, then create
-   a separate sealed 19-record SOURCE.4 completion candidate and recompute the
-   32 current holds. Guarded execution remains blocked until all 55 current graph
-   members are present and none is held or unresolved.
+4. Reconcile the stacked v4 candidate after cohort/runtime repairs; bind every
+   input and make non-executable authority explicit. Its arithmetic supplies the
+   19 missing records and releases 13 dependent holds, yielding all 55 current
+   members without a current hold, but does not itself authorize execution.
 5. Reconcile ECO to a new revision downstream of protected `h8j0l2n4p6r8`, then
    integrate ECO as its own later database checkpoint.
 6. PR #215 in Wave B if QBO read-evidence acceptance is scheduled.
@@ -153,8 +153,7 @@ flowchart LR
     A --> L[Protected #262/#263/#264/#265 qualification]
     A --> K[Cohort authority repair]
     K --> U[Runtime inventory repair and qualification]
-    U --> V[Non-executable v3 baseline repair]
-    V --> X[Sealed 19-record completion candidate]
+    U --> X[Stacked v3 plus v4 complete-graph repair]
     A -->|reconcile| B[Historical builder]
     A -->|reconcile| E[ECO watch]
     A -->|reconcile| P[PR 215]
@@ -167,7 +166,6 @@ flowchart LR
     M --> I
     C --> I
     U --> I
-    V --> I
     X --> I
     I --> D[Enterprise deployment]
     L --> D
@@ -180,7 +178,7 @@ flowchart LR
     C --> PA[Sealed persona acceptance]
     H --> PA
     X --> XA
-    XA -.->|all 55 current members admissible plus separate owner authority| MG[Guarded Migration admission]
+    XA -.->|qualified v4 executor plus separate owner authority| MG[Guarded Migration admission]
     QA -.->|separate owner authority| QG[QBO OAuth]
     MA -.->|separate owner authority| AG[Apple signing and upload]
 ```
@@ -205,7 +203,7 @@ complete until its duplicate revision is replaced downstream of now-protected
 |---|---|---|
 | Acceptance tooling | Reconcile `1fb0481a...` to `b4bf00d3...`, update schema/release bindings, then open a fresh PR. Route the declared service-principal/activation/session/token-writer gaps to Enterprise/platform before persona issuance | Contract tests fail, protected SHA moves, platform primitive remains missing at execution time, persona permissions/digests differ, or secret material appears in arguments/evidence |
 | Current deployed acceptance | Preserve healthy exact-SHA evidence for `b4bf00d3...` and its initial deployment lag; attach or rerun missing #261-#265 qualification; keep #265's command disabled | Focused test, zero-to-head migration, exactly-one-head/drift check fails, #264 evidence cannot be produced, #265 defects are exercised, or health/dependency state regresses |
-| Wave C preparation | Treat #264/#265 as integrated and deployed, but #265 operationally rejected; repair cohort/runtime evidence and v3 generator/verifier; seal the missing 19-record SOURCE.4 intent separately and recompute the full 55-member current graph; prepare recovery and historical builder | Any unbound input, unsafe private-file path, test/digest/count failure, any current hold/unresolved member, graph count other than 11/11/15/18, exactly-one-head/drift/migration failure, or authority mismatch |
+| Wave C preparation | Treat #264/#265 as integrated and deployed, but #265 operationally rejected; repair cohort/runtime evidence, then reconcile and qualify the stacked v3/v4 candidate; prepare recovery and historical builder | Any unbound input, unsafe private-file path, missing non-executable authority, test/digest/count failure, current graph other than 11/11/15/18 with zero holds, exactly-one-head/drift/migration failure, or authority mismatch |
 | ECO checkpoint | Native binding is protected; assign ECO a unique revision with down-revision `h8j0l2n4p6r8`, requalify, then integrate/deploy independently | Duplicate/multiple Alembic head, drift, migration failure, or governed-policy acceptance failure |
 | Wave B | Integrate PR #215 independently | QBO/Payroll projection tests fail or any provider mutation appears |
 | Wave D | Integrate Mobile independently | Test/static/preflight failure or either manifest is stale |
@@ -265,7 +263,7 @@ packet if either SHA guard fails or the merge conflicts.
 | `work/migration-source4-accepted-artifact-recovery-1` | `a3cad3d389b9ed69300939d15c19e2d7b08da063` |
 | `work/hcp-historical-safe-tranche-1` | `b32f99ff80f447bf8140b73380d19191ccb8db59` |
 | `work/hcp-update-cohort-authority-1` | `d53e5d36422218bd715f07d8099e09865167e0f1` |
-| `work/hcp-overlay-preview-baseline-reconciliation-1` | `0f7ffae28cee22180d42867bc523c5004ea69202` |
+| `work/hcp-current-graph-completeness-1` | `452d1bb326bd0abb4acec9a8525df5ff96ff359a` |
 | `work/eco-migration-reconciliation-integration-watch-1` | `1c0e7b20db62b6a342548f2842ea1a3a45965386` |
 | `work/om2b-payroll-accounting-continuation-1` | `724398348b566f655d2bc7127c20beeb6be52d6c` |
 | `work/mobile-apple-owner-release-packet-1` | `0183eaec3e2825a79b683e9e684a761243c86ea7` |
@@ -489,14 +487,15 @@ separately authorized read-only Preview inventory using fresh mode-0600 authorit
 and cohort files. It may create the named private output file; it must not invoke
 the guarded write executor or mutate application data.
 
-### HCP Preview-baseline v3 reconciliation
+### HCP Preview-baseline v3 and complete-current-graph v4
 
-Branch `work/hcp-overlay-preview-baseline-reconciliation-1` is current at
-`0f7ffae28cee22180d42867bc523c5004ea69202`, has no PR, is 0 behind / 1 ahead,
+Branch `work/hcp-current-graph-completeness-1` is current at
+`452d1bb326bd0abb4acec9a8525df5ff96ff359a`, has no PR, is 0 behind / 2 ahead,
 and composes merge-clean at tree
-`7688a964723f1f67569264fee55677934c8b5332`. It has no schema change and produces
-a separate non-executable v3 packet; it does not replace or authorize the v2
-guarded executor.
+`18175c5588c87504ad1ef3bbd0fd027a48f74a55`. Its first commit is exact v3 head
+`0f7ffae2...`; therefore this stacked branch supersedes the standalone v3 lane.
+It has no schema change. Neither artifact replaces or authorizes the v2 guarded
+executor.
 
 Read-only local evidence inspection on 2026-09-14 confirmed mode `0600` and the
 documented SHA-256 for all three private outputs: runtime inventory
@@ -512,31 +511,46 @@ unresolved current members. Its `current_operational_graph_admittable` and
 `ready_for_guarded_execution` values are false. No raw Customer or Employee data
 belongs in the integration packet or acceptance record.
 
-Current-head `git diff --check` and Python 3.12 compilation of the generator,
-command, and test module pass. Full pytest was unavailable in the local Python
-3.12 environment; static success does not qualify the decision logic.
+The sealed v4 artifact was independently checked at mode `0600`, size 1,640,025
+bytes, file SHA-256
+`e886eaeddea4c3c9a7f00e1987beb813eebe872bb9c28953efe78ba3a2fc91ee`, and valid
+internal digest `d2bb1e759935c2601140213905b761738543e3bb30bf86542778fed6ca8f1af9`.
+It has 522 unique identities: the original 503 plus 19 completions. Aggregate
+dispositions are 174 CREATE_NEW, 4 REUSE_EXISTING, 5 UPDATE_EXISTING, and 339
+historical HOLD. The 19 additions comprise 15 creates and four reuses; 13
+dependent current holds are released. Its current graph is exactly Customer 11,
+Location 11, Job 15, Appointment 18, with zero current holds.
+
+Current stacked-head `git diff --check` and Python 3.12 compilation of both
+generators, commands, and test modules pass. Full pytest was unavailable in the
+local Python 3.12 environment; static success does not qualify the decision logic.
 
 Do not open a PR at current head. A bounded successor must:
 
 1. bind and verify byte hashes plus semantic contracts for every decision input,
-   especially the currently unhashed legacy classifier and successor manifest;
+   including the currently unhashed original overlay, current-delta manifest,
+   legacy classifier, successor manifest, refresh pages, and schedule pages;
 2. use exclusive regular-file mode-`0600` creation and reject existing targets,
    symlinks, non-private inputs, and partial output;
 3. add explicit top-level `mutation_authority: none` and
-   `execution_allowed: false`; replace `holds_authorized: true` with unambiguous
+   `execution_allowed: false` to both artifacts; v4 must not set
+   `ready_for_guarded_execution: true` before an executor and separate authority
+   support its semantics; replace `holds_authorized: true` and
+   `historical_holds_authorized: true` with unambiguous
    evidence-classification language that grants no write authority;
 4. derive rather than hardcode duplicate-safety, target-proof, immutable-input,
    graph-completeness, hold, and readiness statements, and make the verifier
    enforce every authority/schema/digest/count/Company/Branch/current-graph field;
 5. add build/command tests using representative Customer/Location/Job/Appointment
    dependency graphs, all input-tamper cases, parent-hold propagation, the exact
-   503 and 11/11/15/18 counts, deterministic bytes, and safe failure/output paths.
+   503/19/522 and 11/11/15/18 counts, 13 hold releases, deterministic bytes, and
+   safe failure/output paths.
 
-After that repair, create a separate mechanically derived and sealed SOURCE.4
-intent packet for the 19 current graph members missing from v2, bind it through a
-new versioned non-executable authority, and recompute all 32 current holds. Do not
-prepare guarded execution until all 55 current members have an admitted
-disposition and none is HOLD or unresolved. Any future execution authority must
+The v4 stack is the mechanically derived 19-record completion candidate, but it
+must be reconciled onto the repaired cohort/runtime evidence and requalified
+before integration. A separate executor successor must explicitly implement and
+test v4 CREATE_NEW/REUSE_EXISTING/UPDATE_EXISTING/HOLD semantics. Any future
+execution authority must
 also bind fresh protected/deployed SHA, schema, backup and verified restore
 receipt, Company/Branch, complete artifact lineage, and idempotency identity.
 
@@ -784,7 +798,7 @@ is not a general UI qualification failure.
 - Cohort generation reads accepted private Migration artifacts and writes a
   private authority file. It needs no Preview access or secrets; preserve its
   published file/internal digests and never treat it as execution authority.
-- Preview-baseline and v3 artifacts contain private operational evidence and
+- Preview-baseline, v3, and v4 artifacts contain private operational evidence and
   source payloads. Keep their directories `0700`, files `0600`, never attach raw
   contents to GitHub or acceptance records, and pass paths rather than bytes.
 - Fixture creation/reuse is audited. Do not invoke internal `record_reset`.
@@ -825,10 +839,11 @@ is not a general UI qualification failure.
 8. Mobile: run distribution readiness; do not sign or upload without owner action.
 9. Migration: validate recovered artifacts and builder output. If native binding
    is deployed, confirm exact head `h8j0l2n4p6r8`. Preserve the already-created
-   runtime/baseline/v3 evidence privately; do not rerun inventory until its repair
-   is deployed and separately authorized. Reject guarded admission while any of
-   the 55 current graph members is held/unresolved or missing; separate owner
-   authority alone cannot override that graph gate.
+   runtime/baseline/v3/v4 evidence privately; do not rerun inventory until its
+   repair is deployed and separately authorized. V4's 55-member/zero-current-hold
+   arithmetic is preparation evidence only. Reject guarded admission until v4,
+   its executor semantics, and every input binding are qualified; separate owner
+   authority alone cannot override those gates.
 
 ### Acceptance evidence and rejection rules
 
@@ -852,7 +867,7 @@ links, Payroll values, provider payloads, Apple credentials, or Customer PII.
 | Migration native binding | Head `h8j0l2n4p6r8`; 280-UPDATE database inventory and disposition counts; eight current-calendar dependencies; exact immutable binding/evidence IDs; replay and transaction rollback results | Missing/ambiguous/conflicting/cross-scope/graph-inconsistent binding, count mismatch, partial evidence/native mutation, wrong head, or guarded execution without separate owner authority |
 | Migration cohort authority | Candidate/merge SHA; all accepted input digests; generated file/internal digest; exact 280 unique UPDATE keys and 20/254/6 domain plus 8/37/235 cohort counts; regular mode-0600 file evidence | Input/digest/count drift, inferred native identity, mutation authority, unsafe overwrite/symlink, non-deterministic bytes, or incomplete contract verification |
 | Migration runtime inventory | Candidate/merge/deployed SHAs; exact schema and input digests/modes; all 280 UPDATE rows exactly once by cohort/domain/disposition; current blocker count; output mode and `mutation_authority: none`; read-only transaction/rollback evidence | Unsafe output path/mode, incomplete/duplicate/unknown cohort, mislabeled disposition, schema/authority mismatch, database mutation, runtime hold authorization, or guarded executor invocation |
-| Migration Preview baseline/v3 | Runtime/baseline/v3 hashes and modes; 503 assertion coverage; 146/5/352 aggregate dispositions; 19 missing-v2 and 32 current-held/unresolved counts; explicit non-executable state; sanitized evidence only | Unbound classifier/manifest, unsafe file handling, hardcoded proof claims, PII disclosure, count/digest/authority drift, any current hold/unresolved member, or any execution attempt |
+| Migration Preview baseline/v3/v4 | Runtime/baseline/v3/v4 hashes and modes; v3 503 coverage and 146/5/352 dispositions; v4 503+19=522 coverage, 174/4/5/339 dispositions, 13 released holds, exact 11/11/15/18 zero-hold graph; explicit non-executable state; sanitized evidence only | Any unbound input, unsafe file handling, hardcoded or contradictory readiness, missing authority field, PII disclosure, count/digest/authority drift, unsupported executor semantics, or execution attempt |
 | Migration preparation | Both input SHA-256 values; manifest digest and record count; hold counts; builder output SHA-256 and `execution_allowed` value | Digest/count mismatch, weakened HOLD, global blocker, `execution_allowed = true`, or any admission/executor invocation |
 
 Any rejection freezes that lane, preserves logs and immutable audit evidence,
@@ -881,9 +896,10 @@ authority and recomputing their compositions.
 - Runtime-inventory tooling has no application-state rollback. Disable/remove the
   command in the next image if rejected and retain its private inventory and
   qualification evidence; do not delete or reinterpret it as write authority.
-- V3 baseline reconciliation has no application-state rollback and is explicitly
-  non-executable. Retain its private artifacts and evidence, disable the generator
-  if rejected, and never promote the 352 HOLD classifications into write authority.
+- V3/v4 reconciliation has no application-state rollback and must remain
+  explicitly non-executable. Retain private artifacts and evidence, disable the
+  generators if rejected, and never promote either historical HOLDs or v4
+  readiness booleans into write authority.
 
 ## Superseded open PRs
 
