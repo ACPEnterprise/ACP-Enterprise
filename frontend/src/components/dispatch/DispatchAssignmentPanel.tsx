@@ -10,6 +10,7 @@ import type {
   TechnicianEligibility,
 } from "../../types/dispatch";
 import { useAuth } from "../../auth";
+import { canPrepareFieldReadiness } from "./fieldReadiness";
 import {
   Alert,
   Button,
@@ -217,7 +218,7 @@ export function DispatchAssignmentPanel({
                 <option
                   key={t.employee_id}
                   value={t.employee_id}
-                  disabled={!t.eligible}
+                  disabled={!t.eligible && !canPrepareFieldReadiness(t, permissionCodes)}
                 >
                   {t.display_name} —{" "}
                   {t.eligible ? "Eligible" : label(t.decision)}
@@ -226,7 +227,7 @@ export function DispatchAssignmentPanel({
             </Select>
           </label>
           {selected && <Eligibility item={selected} />}
-          {selected && !selected.eligible && permissionCodes.includes("COMPANY_WORKFORCE_CAPABILITY_MANAGE") && permissionCodes.includes("COMPANY_WORKFORCE_AVAILABILITY_MANAGE") && selected.reasons.every((reason) => ["missing_workforce_profile", "missing_required_capability", "availability_unknown"].includes(reason)) && (
+          {selected && canPrepareFieldReadiness(selected, permissionCodes) && (
             <Button
               variant="outline"
               disabled={pending}
