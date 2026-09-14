@@ -1,6 +1,6 @@
 # OM1 Enterprise integration queue
 
-Snapshot: 2026-09-14 14:01 America/New_York
+Snapshot: 2026-09-14 14:18 America/New_York
 
 ## Authority and deployed state
 
@@ -12,8 +12,12 @@ Snapshot: 2026-09-14 14:01 America/New_York
 - Acceptance state: pending. Preview initially remained at `b296cc6b...` after
   #265 merged, then by 2026-09-14 14:00 America/New_York returned HTTP 200 at
   exact SHA `b4bf00d3...` with healthy application and connected PostgreSQL and
-  Redis. Required #261-#265 evidence and authenticated persona evidence have not
-  all been supplied. Do not run #265's command until a repair successor lands.
+  Redis. A separate HTTP 502 occurred at 14:16:45 with no authority/PR/head
+  change; four consecutive checks from 14:17:23 through 14:17:34 recovered HTTP
+  200 at the same exact SHA with both dependencies connected. Preserve both
+  transient incidents in acceptance evidence. Required #261-#265 evidence and
+  authenticated persona evidence have not all been supplied. Do not run #265's
+  command until a repair successor lands.
 - GitHub CI evidence: no check runs or commit statuses are reported for the
   protected SHA. PR #264's body reports 698 migration/job/scheduling regressions,
   16 focused tests, PostgreSQL zero-to-head/current=head, and zero drift, but no
