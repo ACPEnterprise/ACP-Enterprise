@@ -115,7 +115,7 @@ describe("PayrollRoute authorization", () => {
     const mutateAsync = vi.fn().mockResolvedValue({ id: "period-1" });
     permissionState.values = new Set([
       "COMPANY_PAYROLL_REPORTING_READ",
-      "COMPANY_TIMEKEEPING_APPROVE",
+      "COMPANY_PAYROLL_POLICY_MANAGE",
     ]);
     vi.mocked(useCreatePayPeriod).mockReturnValue({ mutateAsync, isPending: false } as never);
     vi.mocked(usePayrollOperationsSummary).mockReturnValue(query({ blocker_count: 0, history_ready: false, aggregate_approved_gross: "0.00", aggregate_approved_net: "0.00", reconciliation_state: "attention_required", provider_readiness: { filing: "not_configured", payment: "not_configured", remittance: "not_configured" }, run_counts: {}, member_dispositions: {}, payment_counts: {}, remittance_counts: {}, reporting_counts: {}, statement_counts: {}, adjustment_counts: {} }) as never);

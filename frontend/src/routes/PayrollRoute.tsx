@@ -33,7 +33,7 @@ export function PayrollRoute() {
   const reports = usePayrollReports(canRead);
   const schemas = useComplianceSchemas(canRead);
   const canReadTime = useHasPermission("COMPANY_TIMEKEEPING_ADMIN_READ");
-  const canManagePayPeriods = useHasPermission("COMPANY_TIMEKEEPING_APPROVE");
+  const canManagePayPeriods = useHasPermission("COMPANY_PAYROLL_POLICY_MANAGE");
   const createPeriod = useCreatePayPeriod();
   const [periodMessage, setPeriodMessage] = useState("");
   const currentPeriod = useCurrentPayPeriod(canRead && canReadTime);
