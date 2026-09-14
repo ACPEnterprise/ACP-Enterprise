@@ -1,6 +1,6 @@
 # OM1 Enterprise integration queue
 
-Snapshot: 2026-09-14 14:28 America/New_York
+Snapshot: 2026-09-14 14:49 America/New_York
 
 ## Authority and deployed state
 
@@ -29,6 +29,13 @@ Snapshot: 2026-09-14 14:28 America/New_York
   tests. Exact-head inspection found unsafe private-output creation, an unverified
   cohort-authority boundary, and inverted rejection labels. Deployment does not
   cure those defects; keep the command operationally disabled pending repair.
+- PR #266 opened at 2026-09-14 14:48 America/New_York against the exact protected
+  SHA with unchanged head `452d1bb3...`. GitHub reports CLEAN/MERGEABLE, but the
+  PR has no checks, statuses, reviews, or comments. Its two commits are the exact
+  previously qualified v3-plus-v4 stack, so opening the PR does not clear the
+  unsafe output, unbound decision inputs, incomplete authority/verifier/tests,
+  contradictory readiness, or missing compatible-executor blockers. Do not
+  integrate or execute PR #266 in its current form.
 
 Independent qualification on 2026-09-12 covered the earlier #257-#260 tranche,
 not later #261-#265. That bounded run passed PostgreSQL zero-to-head, 20 affected
@@ -81,7 +88,7 @@ acceptance gates in this packet operationally; GitHub will not enforce them.
 | SOURCE.4 artifact recovery | `work/migration-source4-accepted-artifact-recovery-1` | `a3cad3d389b9ed69300939d15c19e2d7b08da063` | None | 7/1 | `d59c684aa2ea28435acb6d8b57842ab3e051200a` | Stale but reconcilable; merge-clean; documentation-only |
 | HCP historical safe-tranche builder | `work/hcp-historical-safe-tranche-1` | `b32f99ff80f447bf8140b73380d19191ccb8db59` | None | 17/1 | `84b637e286d0c4b885fa2280ff22f594c60f505c` | Stale but reconcilable; merge-clean; metadata edit required |
 | SOURCE.4 UPDATE cohort authority | `work/hcp-update-cohort-authority-1` | `d53e5d36422218bd715f07d8099e09865167e0f1` | None | 1/1 | `7785a394a7bc6bf675d4c2c16e1fea462103b0c0` | Stale but reconcilable; merge-clean, but blocked: unsafe overwrite/symlink handling, incomplete authority verification, and no command/generator integration tests |
-| HCP complete-current-graph v4 stack | `work/hcp-current-graph-completeness-1` | `452d1bb326bd0abb4acec9a8525df5ff96ff359a` | None | 0/2 | `18175c5588c87504ad1ef3bbd0fd027a48f74a55` | Current, stacked on and supersedes v3, merge-clean, but non-executable: graph arithmetic closes 55/55 while authority fields, decision-input bindings, safe output, verifier, and tests remain incomplete |
+| HCP complete-current-graph v4 stack | `work/hcp-current-graph-completeness-1` | `452d1bb326bd0abb4acec9a8525df5ff96ff359a` | #266 open/CLEAN | 0/2 | `18175c5588c87504ad1ef3bbd0fd027a48f74a55` | Current, stacked on and supersedes v3, merge-clean, but blocked and non-executable: graph arithmetic closes 55/55 while authority fields, decision-input bindings, safe output, verifier, tests, and compatible executor remain incomplete; no GitHub evidence |
 | ECO reconciliation | `work/eco-migration-reconciliation-integration-watch-1` | `1c0e7b20db62b6a342548f2842ea1a3a45965386` | None | 9/13 | `4e145611ff96af05c6eb5afb2f4e92294420a3c3` | Blocked on schema reconciliation; duplicate protected revision ID; rebase and assign a new revision downstream of `h8j0l2n4p6r8` |
 | Payroll/QBO read UI | `work/om2b-payroll-accounting-continuation-1` | `724398348b566f655d2bc7127c20beeb6be52d6c` | #215 open/CLEAN | 28/1 | `d05ec12ac416d237cc55beb549bdbd255f2524aa` | Stale but reconcilable; merge-clean; PR refresh required |
 | Mobile Apple release packet | `work/mobile-apple-owner-release-packet-1` | `0183eaec3e2825a79b683e9e684a761243c86ea7` | None | 14/15 | `4687f405c3fbf0ac52b892b099007ff91ceb000b` | Stale but reconcilable; merge-clean; two manifest edits required |
@@ -103,7 +110,7 @@ acceptance gates in this packet operationally; GitHub will not enforce them.
 | Laptop1 Phone distribution readiness | `bf28a61c...` is an ancestor of the active Mobile owner-release packet; integrate only the successor packet. |
 | ECO named commits and persistence | `d7ef88d1...` and `37b32949...` are superseded by patch-evolved equivalents; `fe7a9623...`, `f587c271...`, and persistence `863cab13...` feed the active ECO watch. |
 | QBO `5fe11183...` | Superseded by protected real-company evidence #243. Preserve the OAuth owner gate. |
-| Migration executor / acceptance | `5b8b02de...` and `83bbeef0...` are superseded by protected guarded execution and acceptance #253. Lineage, parent ordering, native binding, and runtime inventory are protected through #262-#265. Recovery, builder, cohort authority, and stacked v4 completeness remain active preparation. V4 adds the 19 missing current members and releases 13 dependent holds, but is not execution authority. Do not run guarded admission. |
+| Migration executor / acceptance | `5b8b02de...` and `83bbeef0...` are superseded by protected guarded execution and acceptance #253. Lineage, parent ordering, native binding, and runtime inventory are protected through #262-#265. Recovery, builder, cohort authority, and stacked v4 completeness PR #266 remain active preparation. V4 adds the 19 missing current members and releases 13 dependent holds, but is not execution authority. PR #266 is blocked despite CLEAN/MERGEABLE GitHub metadata. Do not integrate it or run guarded admission. |
 | Price Book operator readiness | `c1c90a0a...` is superseded by the broader held review candidate `49e852aa...`; no candidate is admissible yet. |
 
 Zero-delta classifications above use a three-way composition with current
