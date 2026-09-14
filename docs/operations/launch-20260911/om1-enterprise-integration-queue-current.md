@@ -1,6 +1,6 @@
 # OM1 Enterprise integration queue
 
-Snapshot: 2026-09-14 13:36 America/New_York
+Snapshot: 2026-09-14 13:44 America/New_York
 
 ## Authority and deployed state
 
@@ -21,11 +21,11 @@ Snapshot: 2026-09-14 13:36 America/New_York
   those claims in GitHub. Preserve the originating log before acceptance or
   guarded execution. Local qualification does not substitute for the gates below.
 
-Independent qualification of that exact protected-but-undeployed tranche on
-2026-09-12 passed PostgreSQL zero-to-head, 20 affected backend tests, nine
-affected frontend suites and 43 tests, full ESLint, and the production
-TypeScript/Vite build. Four SQLAlchemy transaction-deassociation warnings were
-emitted by Invoice tests and remain part of the evidence.
+Independent qualification on 2026-09-12 covered the earlier #257-#260 tranche,
+not later #261-#264. That bounded run passed PostgreSQL zero-to-head, 20 affected
+backend tests, nine affected frontend suites and 43 tests, full ESLint, and the
+production TypeScript/Vite build. Four SQLAlchemy transaction-deassociation
+warnings were emitted by Invoice tests and remain part of that bounded evidence.
 
 PR #261 added an explicit rollback between read-only authorization resolution
 and fixture mutation plus one focused regression test. It has no GitHub checks.
