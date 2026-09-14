@@ -8,6 +8,7 @@ from pathlib import Path
 from uuid import UUID, uuid4
 
 import pytest
+
 from app.operational_migration.hcp_current_overlay import OverlayKey
 from app.operational_migration.hcp_current_overlay_v4 import (
     EXPECTED_COUNTS,
