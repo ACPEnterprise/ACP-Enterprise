@@ -1,6 +1,6 @@
 # OM1 Enterprise integration queue
 
-Snapshot: 2026-09-14 12:14 America/New_York
+Snapshot: 2026-09-14 12:47 America/New_York
 
 ## Authority and deployed state
 
@@ -45,6 +45,7 @@ acceptance gates in this packet operationally; GitHub will not enforce them.
 
 | Candidate | Exact branch | Head | PR | Behind/ahead | Effective tree | Classification |
 |---|---|---|---|---:|---|---|
+| OM2-C persona contract and acceptance harness | `work/om2c-launch-20260911-e2e-acceptance-1` | `2b749ff29d2f1c15210ed0bc22ac739eb5a46913` | None; prior #212 is merged | 0/44 | `dc30dd0bbe40e0ac01af4554b4e35400ff4b8c62` | Current; merge-clean; fresh PR required; acceptance tooling |
 | SOURCE.4 artifact recovery | `work/migration-source4-accepted-artifact-recovery-1` | `a3cad3d389b9ed69300939d15c19e2d7b08da063` | None | 3/1 | `721bab093cc46dea87f6ed2cf3772aff56b8d134` | Stale but reconcilable; merge-clean; documentation-only |
 | HCP historical safe-tranche builder | `work/hcp-historical-safe-tranche-1` | `b32f99ff80f447bf8140b73380d19191ccb8db59` | None | 13/1 | `e0b9ff5f9ec9f9b01bd0c92f76ba56d73cf38775` | Stale but reconcilable; merge-clean; metadata edit required |
 | ECO reconciliation | `work/eco-migration-reconciliation-integration-watch-1` | `1c0e7b20db62b6a342548f2842ea1a3a45965386` | None | 5/13 | `478c9401215f9c83f8abcd1c5eae55d3e98e904f` | Stale but reconcilable; merge-clean; metadata edit required |
@@ -61,6 +62,7 @@ acceptance gates in this packet operationally; GitHub will not enforce them.
 | Laptop1-B Customer office UX | `8516b08b...` conflicts in one add/add reliability test, while current-authority reconciliation `174fcd4e...` composes to zero delta. Superseded by #242 and #257. |
 | Workforce / Payroll #216 | Merged as `d52d1178...`; already protected. |
 | Workforce / Payroll #221, stacked #222, and #223 | Closed; their current successors are protected through #229, #231, and #235 respectively. |
+| Current OM2 successor | Persona-contract and authenticated-acceptance successor `2b749ff2...` is current and active. Its former PR #212 is already merged and does not cover the new head; open a fresh PR. |
 | Payroll tax rule | Reconciled `9a44f714...` composes to zero delta; superseded by protected #236. |
 | Identity #227 and #230 | Still open but superseded by protected #256 and #258; close, do not integrate. |
 | Identity recovery successor | `4cf7bdf4...` composes to zero delta; protected #256 is authoritative. |
@@ -74,9 +76,9 @@ Zero-delta classifications above use a three-way composition with current
 protected authority, not a direct endpoint diff. Conflicting stale branches are
 not reconciliation inputs: use their named protected successors as authority.
 
-All five effective deltas have zero pairwise file overlap and produce identical
+All six effective deltas have zero pairwise file overlap and produce identical
 trees in either integration order. The combined pre-metadata tree is
-`34ab5a5511c00af1a5b08156b5a1df66831742d4`; it changes 59 files and passes
+`87a9cebb03e23c51ff0f57baf8a59b48bf07d8ea`; it changes 75 files and passes
 `git diff --check`. Recompute all trees after protected movement or packet edits.
 
 ## Integration order and release waves
@@ -84,10 +86,11 @@ trees in either integration order. The combined pre-metadata tree is
 There is no Git-level dependency between active candidates. Prefer this
 operational order:
 
-1. SOURCE.4 artifact recovery, then safe-tranche builder (Wave C tooling).
-2. ECO as its own database checkpoint.
-3. PR #215 in Wave B if QBO read-evidence acceptance is scheduled.
-4. Mobile in Wave D; authoritative Job Clock `d52d1178` is already protected.
+1. OM2-C persona contract and acceptance harness, before deployed acceptance.
+2. SOURCE.4 artifact recovery, then safe-tranche builder (Wave C tooling).
+3. ECO as its own database checkpoint.
+4. PR #215 in Wave B if QBO read-evidence acceptance is scheduled.
+5. Mobile in Wave D; authoritative Job Clock `d52d1178` is already protected.
 
 Do not execute Migration admission, authorize QBO, execute Payroll, or sign or
 upload an Apple build as part of integration.
@@ -97,6 +100,7 @@ upload an Apple build as part of integration.
 ```mermaid
 flowchart LR
     A[Protected e1015aad] -->|reconcile| R[SOURCE.4 recovery]
+    A --> C[OM2-C persona contract]
     A -->|reconcile| B[Historical builder]
     A -->|reconcile| E[ECO watch]
     A -->|reconcile| P[PR 215]
@@ -107,12 +111,15 @@ flowchart LR
     E --> I
     P --> I
     M --> I
+    C --> I
     I --> D[Enterprise deployment]
     D --> H[Exact deployed-SHA health gate]
     H --> EA[ECO acceptance]
     H --> QA[QBO read-only acceptance]
     H --> MA[Mobile readiness acceptance]
     H --> XA[Migration artifact acceptance]
+    C --> PA[Sealed persona acceptance]
+    H --> PA
     XA -.->|separate owner authority| MG[Guarded Migration admission]
     QA -.->|separate owner authority| QG[QBO OAuth]
     MA -.->|separate owner authority| AG[Apple signing and upload]
@@ -120,20 +127,21 @@ flowchart LR
 
 Solid candidate-to-integration arrows do not require a combined batch; each lane
 may enter independently through its own PR. There are no hard Git dependency
-edges or effective file overlaps among the five candidates. The dotted
+edges or effective file overlaps among the six candidates. The dotted
 SOURCE.4-to-builder edge is operational ordering only. Dotted owner-gate edges
 are explicitly outside this packet's authority. Price Book is omitted from the
 integration path because it remains held.
 
 ## Batch boundaries and refresh checkpoints
 
-All five lanes may be reconciled and qualified concurrently from the guarded
+All six lanes may be reconciled and qualified concurrently from the guarded
 authority above. Integration remains sequential because the first protected PR
 changes the authority for every remaining lane.
 
 | Checkpoint | Enterprise action | Required stop condition |
 |---|---|---|
-| Existing deployment gap | Deploy and accept protected #257-#261 before attributing runtime results to a later candidate | `/backend-health` does not report the exact deployed protected SHA or either dependency is disconnected |
+| Acceptance tooling | Open a fresh PR for `2b749ff2...`, integrate it, refetch authority, then deploy the resulting protected tip containing #257-#261 and this contract | Contract tests fail, protected SHA moves, persona permissions/digests differ, or secret material appears in arguments/evidence |
+| Existing deployment gap | Accept the exact newly deployed protected tip before attributing runtime results to a later candidate | `/backend-health` does not report the exact deployed protected SHA or either dependency is disconnected |
 | Wave C preparation | Prepare SOURCE.4 recovery, then the historical builder | Artifact digest/loader check, builder tests, or authority metadata fails |
 | ECO checkpoint | Integrate and deploy ECO independently | More than one Alembic head, drift, migration failure, or governed-policy acceptance failure |
 | Wave B | Integrate PR #215 independently | QBO/Payroll projection tests fail or any provider mutation appears |
@@ -190,6 +198,7 @@ packet if either SHA guard fails or the merge conflicts.
 
 | Lane | Expected head |
 |---|---|
+| `work/om2c-launch-20260911-e2e-acceptance-1` | `2b749ff29d2f1c15210ed0bc22ac739eb5a46913` |
 | `work/migration-source4-accepted-artifact-recovery-1` | `a3cad3d389b9ed69300939d15c19e2d7b08da063` |
 | `work/hcp-historical-safe-tranche-1` | `b32f99ff80f447bf8140b73380d19191ccb8db59` |
 | `work/eco-migration-reconciliation-integration-watch-1` | `1c0e7b20db62b6a342548f2842ea1a3a45965386` |
@@ -200,6 +209,36 @@ After the lane-specific edits and tests below, commit and push only that lane,
 then open or refresh its PR into `customer-management-v1`. Enterprise must
 review the resulting PR delta and integrate it through the ruleset-required PR
 flow; direct protected updates are not an execution option.
+
+### OM2-C persona contract and acceptance harness
+
+The branch is based on exact protected authority and has no open PR. PR #212 is
+historical and already merged; do not append this head to that closed identity.
+Open a fresh PR for the 16-file effective delta. It has no Alembic migration and
+zero file overlap with every other active or held lane.
+
+Static qualification on 2026-09-14 passed Python 3.12 compilation for both
+scripts and the 12-test module, JSON parsing for the contract/schema/example,
+all four canonical permission digests, empty default mutation lists, and the
+declared persona mutation ceilings. Full pytest was not runnable locally because
+the Python 3.12 environment lacks pytest; require it in the supported backend
+environment before integration:
+
+```bash
+ENVIRONMENT=test PYTHONPATH=backend python -m pytest -q \
+  backend/tests/platform/test_authenticated_preview_acceptance.py
+python -m compileall -q \
+  backend/scripts/acceptance_identity_provisioning_contract.py \
+  backend/scripts/authenticated_preview_acceptance.py
+```
+
+Require contract authority `e1015aad...`, exact synthetic Company/Branch IDs,
+exact permission digests, file references under
+`/run/secrets/acp-preview-acceptance/v1/{run_id}`, directory mode `0700`, file
+mode `0600`, and no credential content in contract, attestation, report, logs,
+or command arguments. EMPLOYEE, OFFICE, and QBO_READ must retain empty maximum
+mutation lists. CSR may name only the scheduling route and receives no mutation
+authority unless Enterprise seals that route into the run attestation.
 
 ### SOURCE.4 artifact recovery
 
@@ -418,6 +457,9 @@ is not a general UI qualification failure.
 - Preview fixture defaults disabled. Authorized use requires Preview environment,
   `PREVIEW_ACCEPTANCE_FIXTURE_ENABLED=true`, an access token read from stdin,
   and `COMPANY_ADMINISTER` plus `IDENTITY_ONBOARDING_MANAGE`.
+- Persona tokens and attestations must exist only under the contract's `0700`
+  run directory as `0600` files. Pass token-file references, never token values,
+  to the acceptance tooling; revoke the bounded sessions after the run.
 - Fixture creation/reuse is audited. Do not invoke internal `record_reset`.
 - Migration generation/admission, Payroll execution, and Apple distribution stay
   separately owner-authorized.
@@ -435,16 +477,24 @@ is not a general UI qualification failure.
        '.status == "healthy" and .environment == "preview" and .database == "connected" and .redis == "connected" and .version == $sha'
    ```
 
-2. Scheduling: reproduce JOB-000306 and verify authoritative mutation recovery.
-3. Customer: exercise search, multiple Locations, Job/Appointment/Invoice return
+2. Enterprise/operator: enable the Preview-only fixture flag, create or reuse the
+   exact synthetic Company/Branch, provision CSR, EMPLOYEE, OFFICE, and QBO_READ
+   identities with the contract's exact permissions, and seal one attestation per
+   persona to the deployed SHA, Alembic head, frontend digest, expiry, and empty
+   default mutation allowlist. Run `authenticated_preview_acceptance.py` using
+   token-file and attestation-file references. Revoke all sessions after evidence
+   capture. CSR scheduling mutation requires a separately sealed allowlist entry;
+   all other personas remain GET-only.
+3. Scheduling: reproduce JOB-000306 and verify authoritative mutation recovery.
+4. Customer: exercise search, multiple Locations, Job/Appointment/Invoice return
    paths, open/history separation, source limitations, retry, and phone width.
-4. Employee/Identity: verify Payroll Setup navigation, authorization failure,
+5. Employee/Identity: verify Payroll Setup navigation, authorization failure,
    conflict-without-mutation, and actual password recovery delivery/reset.
-5. ECO: verify migration head, then create/read/update governed policy behavior
+6. ECO: verify migration head, then create/read/update governed policy behavior
    and immutable event audit evidence.
-6. QBO: validate read evidence without OAuth or provider mutation.
-7. Mobile: run distribution readiness; do not sign or upload without owner action.
-8. Migration: validate recovered artifacts and builder output; do not execute
+7. QBO: validate read evidence without OAuth or provider mutation.
+8. Mobile: run distribution readiness; do not sign or upload without owner action.
+9. Migration: validate recovered artifacts and builder output; do not execute
    guarded admission without separate authority.
 
 ### Acceptance evidence and rejection rules
@@ -458,6 +508,7 @@ links, Payroll values, provider payloads, Apple credentials, or Customer PII.
 
 | Lane | Minimum acceptance evidence | Reject and stop on |
 |---|---|---|
+| OM2-C persona harness | Contract SHA; deployed release/schema/frontend bindings; exact Company/Branch; persona permission digests; token/attestation file modes and expiry; sanitized audit/session revocation references | Any production target, raw credential exposure, identity or permission mismatch, stale binding, expired attestation, unauthorized mutation route, or session left active |
 | Scheduling | JOB-000306 before/after state; authoritative mutation outcome; repeated-idempotency result; Appointment count | Failure/unknown outcome, duplicate Appointment, changed arrival window, or non-idempotent retry |
 | Customer | Search and selected Customer IDs; Location count; Job/Appointment/Invoice return paths; open/history state; phone-width capture | Missing/foreign data, wrong source limitation, stale retry failure, or unusable phone layout |
 | Employee / Identity | Tested role and Branch; Payroll Setup route result; direct authorization denial; conflict-without-mutation result; delivery/reset audit IDs | Privilege expansion, cross-Branch visibility, mutation on conflict, delivery ambiguity, or reusable/expired reset success |
