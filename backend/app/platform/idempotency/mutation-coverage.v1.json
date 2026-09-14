@@ -1358,6 +1358,16 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     },
     {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "workforce",
+      "mechanism": "Existing profile, canonical technician capability, and exact Branch/time-window evidence converge",
+      "method": "PUT",
+      "operation_id": "prepare_field_readiness_api_v1_workforce_administration_employees__employee_id__field_readiness_put",
+      "path": "/api/v1/workforce/administration/employees/{employee_id}/field-readiness",
+      "reason": "Exact operator-confirmed field-readiness replay reuses all authoritative evidence rows.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
       "classification": "IMMUTABLE_APPEND_ONLY",
       "domain": "engineering",
       "mechanism": "domain-owned deterministic evidence/receipt identity",
@@ -2889,6 +2899,6 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "7f922200bb7de36a6be176203c0d53084cb959705e9ce523e673a0d81173f447",
+  "fingerprint": "f5705879847f13d73f90e440bb8f8094438bf59398c245b4e2498bcdc10f5727",
   "schema_version": "1"
 }

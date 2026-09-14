@@ -9,6 +9,7 @@ import type {
   DispatchExceptionCode,
   TechnicianEligibility,
 } from "../../types/dispatch";
+import { useAuth } from "../../auth";
 import {
   Alert,
   Button,
@@ -27,6 +28,7 @@ export function DispatchAssignmentPanel({
   readonly onClose: () => void;
 }) {
   const technicians = useEligibleTechnicians(item.appointment_id);
+  const { permissionCodes = [] } = useAuth();
   const mutations = useDispatchMutations();
   const [employeeId, setEmployeeId] = useState("");
   const [reason, setReason] = useState("Dispatcher assignment");
@@ -49,6 +51,7 @@ export function DispatchAssignmentPanel({
   );
   const assignment = item.assignment;
   const pending =
+    mutations.fieldReadiness.isPending ||
     mutations.assign.isPending ||
     mutations.release.isPending ||
     mutations.crew.isPending ||
@@ -223,6 +226,20 @@ export function DispatchAssignmentPanel({
             </Select>
           </label>
           {selected && <Eligibility item={selected} />}
+          {selected && !selected.eligible && permissionCodes.includes("COMPANY_WORKFORCE_CAPABILITY_MANAGE") && permissionCodes.includes("COMPANY_WORKFORCE_AVAILABILITY_MANAGE") && selected.reasons.every((reason) => ["missing_workforce_profile", "missing_required_capability", "availability_unknown"].includes(reason)) && (
+            <Button
+              variant="outline"
+              disabled={pending}
+              onClick={() => mutations.fieldReadiness.mutate({
+                employeeId: selected.employee_id,
+                branchId: item.branch_id,
+                windowStartAt: item.window_start_at,
+                windowEndAt: item.window_end_at,
+              })}
+            >
+              Confirm field-ready for this appointment
+            </Button>
+          )}
           <label className="block text-sm font-medium">
             Assignment reason
             <input

@@ -24,6 +24,34 @@ class WorkforceAdministrationConflict(ValueError):
 
 
 class WorkforceAdministrationService:
+    async def prepare_field_readiness(
+        self, session: AsyncSession, *, context: AuthorizationContext,
+        employee_id: UUID, branch_id: UUID, start_at: datetime, end_at: datetime,
+    ) -> tuple[UUID, UUID, UUID]:
+        if end_at <= start_at:
+            raise WorkforceAdministrationConflict("Assignment window is invalid.")
+        profile, _ = await self.ensure_profile(session, context=context, employee_id=employee_id)
+        capability = await session.scalar(
+            select(Capability).where(
+                Capability.company_id == context.company.id,
+                Capability.code == "technician",
+                Capability.status == "active",
+            )
+        )
+        await session.rollback()
+        if capability is None:
+            raise WorkforceAdministrationConflict("Active technician capability is not configured.")
+        capability_id, _ = await self.add_capability(
+            session, context=context, employee_id=employee_id,
+            capability_id=capability.id, proficiency="qualified",
+        )
+        availability_id, _ = await self.add_availability(
+            session, context=context, employee_id=employee_id, branch_id=branch_id,
+            start_at=start_at, end_at=end_at, status="available",
+            source="operator_confirmed_dispatch_window",
+        )
+        return profile.id, capability_id, availability_id
+
     async def ensure_profile(
         self,
         session: AsyncSession,
