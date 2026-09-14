@@ -126,6 +126,8 @@ describe("PayrollRoute authorization", () => {
     fireEvent.change(screen.getByLabelText("Pay date"), { target: { value: "2026-09-25" } });
     fireEvent.click(screen.getByRole("button", { name: "Create Pay Period" }));
     await waitFor(() => expect(mutateAsync).toHaveBeenCalledWith(expect.objectContaining({ pay_frequency: "weekly" })));
+    expect(usePayPeriods).toHaveBeenCalledWith(true);
+    expect(useCurrentPayPeriod).toHaveBeenCalledWith(true);
     expect(screen.queryByLabelText(/company|uuid/i)).not.toBeInTheDocument();
   });
 

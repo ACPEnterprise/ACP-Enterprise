@@ -57,6 +57,7 @@ COMPANY_ADMINISTRATOR_OWNER_READ_PERMISSIONS = frozenset(
         PaymentPermission.READ,
         AccountsPayablePermission.REPORT_READ,
         PayrollPermission.REPORTING_READ,
+        TimekeepingPermission.ADMIN_READ,
     }
 )
 

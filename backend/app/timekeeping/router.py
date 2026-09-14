@@ -12,6 +12,7 @@ from app.database.session import get_database_session
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.dependencies import (
     ResolvedAuthorization,
+    require_any_permission,
     require_permission,
 )
 from app.platform.reliability.correlation import current_correlation_id
@@ -78,6 +79,15 @@ Approve = Annotated[
 PayPeriodManage = Annotated[
     AuthorizationContext,
     Depends(require_permission(TimekeepingPermission.PAY_PERIOD_MANAGE)),
+]
+PayPeriodRead = Annotated[
+    AuthorizationContext,
+    Depends(
+        require_any_permission(
+            TimekeepingPermission.ADMIN_READ,
+            TimekeepingPermission.PAY_PERIOD_MANAGE,
+        )
+    ),
 ]
 AdminRead = Annotated[
     AuthorizationContext, Depends(require_permission(TimekeepingPermission.ADMIN_READ))
@@ -391,7 +401,7 @@ async def approve_entry(
 
 @router.get("/pay-periods/current", response_model=PayPeriodView | None)
 async def current_pay_period(
-    context: AdminRead, session: Session
+    context: PayPeriodRead, session: Session
 ) -> PayPeriodView | None:
     _, timezone_name = _branch_and_timezone(context)
     today = datetime.now(timezone.utc).astimezone(ZoneInfo(timezone_name)).date()
@@ -403,7 +413,7 @@ async def current_pay_period(
 
 @router.get("/pay-periods", response_model=tuple[PayPeriodView, ...])
 async def pay_periods(
-    context: AdminRead,
+    context: PayPeriodRead,
     session: Session,
     limit: Annotated[int, Query(ge=1, le=52)] = 26,
 ) -> tuple[PayPeriodView, ...]:
