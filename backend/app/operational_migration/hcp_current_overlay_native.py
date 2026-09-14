@@ -163,6 +163,21 @@ class HcpCurrentOverlayNativeServices(CurrentOverlayDomainServices):
             raise ValueError("bound source identity lacks base digest authority")
         return OverlaySourceState(digest, str(target[1].id), {})
 
+    async def persisted_source_state(
+        self, session: AsyncSession, key: OverlayKey
+    ) -> OverlaySourceState | None:
+        """Read an existing binding without invoking any bootstrap behavior."""
+        target = await self._target(session, key)
+        if target is None:
+            return None
+        digest = self.base_source_digests.get(key)
+        metadata = getattr(target[0], "external_metadata", None)
+        if isinstance(metadata, dict):
+            digest = str(metadata.get("current_overlay_source_digest") or digest or "")
+        if not digest:
+            raise ValueError("bound source identity lacks base digest authority")
+        return OverlaySourceState(digest, str(target[1].id), {})
+
     async def _bind_qualified_target(
         self, session: AsyncSession, key: OverlayKey
     ) -> None:
