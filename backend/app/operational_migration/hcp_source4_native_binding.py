@@ -35,7 +35,9 @@ class BindingDisposition(StrEnum):
     BINDING_ALREADY_PRESENT = "BINDING_ALREADY_PRESENT"
     PROVABLE_NATIVE_SUCCESSOR_BINDING = "PROVABLE_NATIVE_SUCCESSOR_BINDING"
     AMBIGUOUS_NATIVE_SUCCESSOR = "AMBIGUOUS_NATIVE_SUCCESSOR"
-    CONFLICTING_BINDING = "CONFLICTING_BINDING"
+    CONFLICTING_SOURCE4_BINDING = "CONFLICTING_SOURCE4_BINDING"
+    PARENT_GRAPH_MISMATCH = "PARENT_GRAPH_MISMATCH"
+    CROSS_SCOPE = "CROSS_SCOPE"
     NATIVE_SUCCESSOR_MISSING = "NATIVE_SUCCESSOR_MISSING"
     UNSUPPORTED = "UNSUPPORTED"
 
@@ -121,6 +123,15 @@ class HcpSource4NativeBindingBootstrap:
             result[domain] = dict(sorted(counts.items()))
         return result
 
+    async def classify_inventory(
+        self, session: AsyncSession, records: tuple[OverlayRecord, ...]
+    ) -> tuple[NativeBindingCandidate, ...]:
+        """Classify every UPDATE without mutation or first-error short circuiting."""
+        updates = tuple(
+            record for record in records if record.assertion.value == "update"
+        )
+        return tuple([await self._classify(session, record) for record in updates])
+
     async def bind_for_update(
         self, session: AsyncSession, record: OverlayRecord
     ) -> None:
@@ -200,7 +211,7 @@ class HcpSource4NativeBindingBootstrap:
             if legacy is not None and _native_id(source4) != _native_id(legacy):
                 return self._candidate(
                     record,
-                    BindingDisposition.CONFLICTING_BINDING,
+                    BindingDisposition.CONFLICTING_SOURCE4_BINDING,
                     _native_id(source4),
                     legacy.id,
                     "SOURCE.4 and exact legacy identities target different native records",
@@ -215,18 +226,29 @@ class HcpSource4NativeBindingBootstrap:
                 )
             return self._candidate(
                 record,
-                BindingDisposition.CONFLICTING_BINDING,
+                BindingDisposition.CONFLICTING_SOURCE4_BINDING,
                 _native_id(source4),
                 None,
                 "SOURCE.4 binding target is missing",
             )
         if legacy is None:
+            outside_scope = await self._identity_exists_outside_scope(
+                session, record.key, LEGACY_SOURCE
+            )
             return self._candidate(
                 record,
-                BindingDisposition.NATIVE_SUCCESSOR_MISSING,
+                (
+                    BindingDisposition.CROSS_SCOPE
+                    if outside_scope
+                    else BindingDisposition.NATIVE_SUCCESSOR_MISSING
+                ),
                 None,
                 None,
-                "exact legacy provider identity is absent",
+                (
+                    "exact legacy provider identity exists outside authorized scope"
+                    if outside_scope
+                    else "exact legacy provider identity is absent"
+                ),
             )
         native_id = _native_id(legacy)
         if not await self._native_exists(session, record.domain, native_id):
@@ -243,7 +265,7 @@ class HcpSource4NativeBindingBootstrap:
         if conflict is not None:
             return self._candidate(
                 record,
-                BindingDisposition.CONFLICTING_BINDING,
+                BindingDisposition.PARENT_GRAPH_MISMATCH,
                 native_id,
                 legacy.id,
                 "native target has a different SOURCE.4 identity",
@@ -251,7 +273,7 @@ class HcpSource4NativeBindingBootstrap:
         if not await self._graph_matches(session, record.domain, legacy):
             return self._candidate(
                 record,
-                BindingDisposition.CONFLICTING_BINDING,
+                BindingDisposition.CONFLICTING_SOURCE4_BINDING,
                 native_id,
                 legacy.id,
                 "legacy identity parent graph conflicts with native graph",
@@ -279,6 +301,22 @@ class HcpSource4NativeBindingBootstrap:
             legacy_id,
             record.prior_source_digest or record.source_digest,
             reason,
+        )
+
+    async def _identity_exists_outside_scope(
+        self, session: AsyncSession, key: OverlayKey, source: str
+    ) -> bool:
+        model, field = _model_and_source_field(key.domain)
+        return (
+            await session.scalar(
+                select(model.id).where(
+                    model.source_system == source,
+                    field == key.source_id,
+                    (model.company_id != self.company_id)
+                    | (model.branch_id != self.branch_id),
+                )
+            )
+            is not None
         )
 
     async def _identity(

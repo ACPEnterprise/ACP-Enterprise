@@ -18,6 +18,7 @@ from app.operational_migration.hcp_current_overlay_lineage import (
 from app.operational_migration.hcp_source4_native_binding import (
     BindingDisposition,
     HcpSource4NativeBindingBootstrap,
+    NativeBindingCandidate,
 )
 from app.operational_migration.models import HcpSource4NativeBindingEvidence
 from sqlalchemy import func, select
@@ -201,7 +202,7 @@ async def test_missing_and_conflicting_successors_fail_closed(
         package_digest=service.package_digest,
     )
     async with binding_database() as session:
-        with pytest.raises(ValueError, match="CONFLICTING_BINDING"):
+        with pytest.raises(ValueError, match="CONFLICTING_SOURCE4_BINDING"):
             await conflict.inventory(session, (record,))
 
 
@@ -239,3 +240,56 @@ async def test_binding_rolls_back_with_downstream_failure(
             )
             == 0
         )
+
+
+@pytest.mark.asyncio
+async def test_read_only_inventory_classifies_all_updates_without_short_circuit() -> None:
+    service = HcpSource4NativeBindingBootstrap(
+        company_id=uuid4(),
+        branch_id=uuid4(),
+        master_run_id=uuid4(),
+        customer_run_id=uuid4(),
+        operational_run_id=uuid4(),
+        package_digest="a" * 64,
+    )
+    first = OverlayRecord(
+        "customer",
+        "cus_missing",
+        OverlayAssertion.UPDATE,
+        "b" * 64,
+        "2026-09-12T17:00:00+00:00",
+        {},
+        prior_source_digest="c" * 64,
+    )
+    second = OverlayRecord(
+        "job",
+        "job_conflict",
+        OverlayAssertion.UPDATE,
+        "d" * 64,
+        first.acquired_at,
+        {},
+        prior_source_digest="e" * 64,
+    )
+
+    async def classify(_session, record):  # type: ignore[no-untyped-def]
+        disposition = (
+            BindingDisposition.NATIVE_SUCCESSOR_MISSING
+            if record is first
+            else BindingDisposition.CONFLICTING_SOURCE4_BINDING
+        )
+        return NativeBindingCandidate(
+            record.key,
+            disposition,
+            None,
+            None,
+            record.prior_source_digest,
+            "fixture",
+        )
+
+    service._classify = classify  # type: ignore[method-assign]
+    result = await service.classify_inventory(object(), (first, second))  # type: ignore[arg-type]
+
+    assert [item.disposition for item in result] == [
+        BindingDisposition.NATIVE_SUCCESSOR_MISSING,
+        BindingDisposition.CONFLICTING_SOURCE4_BINDING,
+    ]
