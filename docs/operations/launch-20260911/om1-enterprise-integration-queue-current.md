@@ -1,6 +1,6 @@
 # OM1 Enterprise integration queue
 
-Snapshot: 2026-09-14 13:44 America/New_York
+Snapshot: 2026-09-14 13:48 America/New_York
 
 ## Authority and deployed state
 
@@ -69,6 +69,7 @@ acceptance gates in this packet operationally; GitHub will not enforce them.
 | OM2-C persona contract and acceptance harness | `work/om2c-launch-20260911-e2e-acceptance-1` | `1fb0481a043caaca749ae5dd49dc6cdf6d994061` | None; prior #212 is merged | 1/46 | `773c94e0c3ba0aa7b0375ad53d762be0d2c5e6d7` | Stale but reconcilable; merge-clean; protected/schema bindings must advance; acceptance execution blocked on missing platform service principal |
 | SOURCE.4 artifact recovery | `work/migration-source4-accepted-artifact-recovery-1` | `a3cad3d389b9ed69300939d15c19e2d7b08da063` | None | 6/1 | `7efddd417afa5e90d4dcf960d9580fc61b8ce2d9` | Stale but reconcilable; merge-clean; documentation-only |
 | HCP historical safe-tranche builder | `work/hcp-historical-safe-tranche-1` | `b32f99ff80f447bf8140b73380d19191ccb8db59` | None | 16/1 | `fdfe51c3009a1b16a41e26f4b7540d09ddb76216` | Stale but reconcilable; merge-clean; metadata edit required |
+| SOURCE.4 runtime-successor inventory | `work/hcp-update-runtime-successor-reconciliation-1` | `cccd655bef62375f6c9ccae7080ccdfd3ed136d0` | #265 open/CLEAN | 0/2 | `a59ef47c69111e84061c40713397e12609654a0d` | Current and GitHub-mergeable, but not admissible: unsafe private-output creation, inverted rejection labels, and no command-level tests |
 | ECO reconciliation | `work/eco-migration-reconciliation-integration-watch-1` | `1c0e7b20db62b6a342548f2842ea1a3a45965386` | None | 8/13 | `07af954044527dd81f35bd48117c3eb300b106cc` | Blocked on schema reconciliation; duplicate protected revision ID; rebase and assign a new revision downstream of `h8j0l2n4p6r8` |
 | Payroll/QBO read UI | `work/om2b-payroll-accounting-continuation-1` | `724398348b566f655d2bc7127c20beeb6be52d6c` | #215 open/CLEAN | 27/1 | `872d0920b2a9caeccf237067c6fa18ff6e199dcb` | Stale but reconcilable; merge-clean; PR refresh required |
 | Mobile Apple release packet | `work/mobile-apple-owner-release-packet-1` | `0183eaec3e2825a79b683e9e684a761243c86ea7` | None | 13/15 | `964287ce6beae9008d883450fa7945e29806a954` | Stale but reconcilable; merge-clean; two manifest edits required |
@@ -90,17 +91,19 @@ acceptance gates in this packet operationally; GitHub will not enforce them.
 | Laptop1 Phone distribution readiness | `bf28a61c...` is an ancestor of the active Mobile owner-release packet; integrate only the successor packet. |
 | ECO named commits and persistence | `d7ef88d1...` and `37b32949...` are superseded by patch-evolved equivalents; `fe7a9623...`, `f587c271...`, and persistence `863cab13...` feed the active ECO watch. |
 | QBO `5fe11183...` | Superseded by protected real-company evidence #243. Preserve the OAuth owner gate. |
-| Migration executor / acceptance | `5b8b02de...` and `83bbeef0...` are superseded by protected guarded execution and acceptance #253. Lineage, parent ordering, and native binding are protected through #262-#264. Recovery and builder remain active preparation. Guarded execution remains owner-only and blocked pending exact #264 qualification evidence. |
+| Migration executor / acceptance | `5b8b02de...` and `83bbeef0...` are superseded by protected guarded execution and acceptance #253. Lineage, parent ordering, and native binding are protected through #262-#264. Recovery, builder, and runtime inventory remain active preparation. Guarded execution remains owner-only and blocked pending exact #264 evidence plus a repaired runtime-inventory successor. |
 | Price Book operator readiness | `c1c90a0a...` is superseded by the broader held review candidate `49e852aa...`; no candidate is admissible yet. |
 
 Zero-delta classifications above use a three-way composition with current
 protected authority, not a direct endpoint diff. Conflicting stale branches are
 not reconciliation inputs: use their named protected successors as authority.
 
-The six remaining effective deltas have zero pairwise file overlap. ECO is not
-admissible: its differently named migration still declares protected revision
-`g7i9k1m3o5q7` from `f6h8j0l2n4p6`. The five-candidate combined tree excluding
-ECO is `fc4b7f67e1af58b063cc8362360417e30f009c48`; it changes 51 files and passes
+The seven remaining effective deltas have zero pairwise file overlap. ECO and
+runtime inventory are not admissible: ECO's differently named migration still
+declares protected revision `g7i9k1m3o5q7` from `f6h8j0l2n4p6`; runtime inventory
+has unsafe private-output creation, inverted rejection labels, and missing command
+coverage. The five-candidate combined tree excluding
+both blocked lanes is `fc4b7f67e1af58b063cc8362360417e30f009c48`; it changes 51 files and passes
 `git diff --check`. Recompute all trees after protected movement or packet edits.
 
 ## Integration order and release waves
@@ -112,7 +115,8 @@ operational order:
    but do not attempt persona issuance until the missing platform primitive exists.
 2. SOURCE.4 artifact recovery and safe-tranche builder preparation.
 3. Preserve #264 as the Wave C schema/runtime checkpoint and attach its exact
-   qualification evidence before any guarded execution.
+   qualification evidence. Repair and qualify the read-only runtime inventory
+   after #264 and before any guarded execution.
 4. Reconcile ECO to a new revision downstream of protected `h8j0l2n4p6r8`, then
    integrate ECO as its own later database checkpoint.
 5. PR #215 in Wave B if QBO read-evidence acceptance is scheduled.
@@ -128,6 +132,7 @@ flowchart LR
     A[Protected b296cc6b with native binding] -->|reconcile| R[SOURCE.4 recovery]
     A --> C[OM2-C persona contract]
     A --> L[Protected #262/#263/#264 qualification]
+    A --> U[Runtime inventory repair and qualification]
     A -->|reconcile| B[Historical builder]
     A -->|reconcile| E[ECO watch]
     A -->|reconcile| P[PR 215]
@@ -139,6 +144,7 @@ flowchart LR
     P --> I
     M --> I
     C --> I
+    U --> I
     I --> D[Enterprise deployment]
     L --> D
     D --> H[Exact deployed-SHA health gate]
@@ -146,6 +152,7 @@ flowchart LR
     H --> QA[QBO read-only acceptance]
     H --> MA[Mobile readiness acceptance]
     H --> XA[Migration artifact acceptance]
+    U --> XA
     C --> PA[Sealed persona acceptance]
     H --> PA
     XA -.->|separate owner authority| MG[Guarded Migration admission]
@@ -163,7 +170,7 @@ integration path because it remains held.
 
 ## Batch boundaries and refresh checkpoints
 
-All six remaining lanes may be inspected concurrently from the guarded
+All seven remaining lanes may be inspected concurrently from the guarded
 authority above. Integration remains sequential because the first protected PR
 changes the authority for every remaining lane. ECO qualification cannot
 complete until its duplicate revision is replaced downstream of now-protected
@@ -173,7 +180,7 @@ complete until its duplicate revision is replaced downstream of now-protected
 |---|---|---|
 | Acceptance tooling | Reconcile `1fb0481a...` to `b296cc6b...`, update schema/release bindings, then open a fresh PR. Route the declared service-principal/activation/session/token-writer gaps to Enterprise/platform before persona issuance | Contract tests fail, protected SHA moves, platform primitive remains missing at execution time, persona permissions/digests differ, or secret material appears in arguments/evidence |
 | Current deployed acceptance | Preserve the recovered healthy exact-SHA result for `b296cc6b...` and the transient 502 evidence; attach or rerun missing #261-#264 qualification; do not mark accepted until evidence is retained | Focused test, zero-to-head migration, exactly-one-head/drift check fails, originating #264 evidence cannot be produced, or health/dependency state regresses |
-| Wave C preparation | Treat #264 as integrated and deployed; verify its claimed 698 regression/16 focused/database results, exact head `h8j0l2n4p6r8`, and prepare SOURCE.4 recovery and historical builder | Artifact digest/loader check, lineage/parent-order/native-binding tests, exactly-one-head check, zero-to-head migration, builder tests, or authority metadata fails |
+| Wave C preparation | Treat #264 as integrated and deployed; verify its claimed 698 regression/16 focused/database results and exact head `h8j0l2n4p6r8`; repair/qualify runtime inventory; prepare recovery and historical builder | Artifact digest/loader check, lineage/parent-order/native-binding/runtime-command tests, safe private-output check, exactly-one-head check, zero-to-head migration, builder tests, or authority metadata fails |
 | ECO checkpoint | Native binding is protected; assign ECO a unique revision with down-revision `h8j0l2n4p6r8`, requalify, then integrate/deploy independently | Duplicate/multiple Alembic head, drift, migration failure, or governed-policy acceptance failure |
 | Wave B | Integrate PR #215 independently | QBO/Payroll projection tests fail or any provider mutation appears |
 | Wave D | Integrate Mobile independently | Test/static/preflight failure or either manifest is stale |
@@ -232,6 +239,7 @@ packet if either SHA guard fails or the merge conflicts.
 | `work/om2c-launch-20260911-e2e-acceptance-1` | `1fb0481a043caaca749ae5dd49dc6cdf6d994061` |
 | `work/migration-source4-accepted-artifact-recovery-1` | `a3cad3d389b9ed69300939d15c19e2d7b08da063` |
 | `work/hcp-historical-safe-tranche-1` | `b32f99ff80f447bf8140b73380d19191ccb8db59` |
+| `work/hcp-update-runtime-successor-reconciliation-1` | `cccd655bef62375f6c9ccae7080ccdfd3ed136d0` |
 | `work/eco-migration-reconciliation-integration-watch-1` | `1c0e7b20db62b6a342548f2842ea1a3a45965386` |
 | `work/om2b-payroll-accounting-continuation-1` | `724398348b566f655d2bc7127c20beeb6be52d6c` |
 | `work/mobile-apple-owner-release-packet-1` | `0183eaec3e2825a79b683e9e684a761243c86ea7` |
@@ -380,6 +388,46 @@ and full transaction rollback on downstream failure. Runtime preflight must
 report database-derived counts for all 280 UPDATE assertions, including the eight
 current-calendar dependencies, before mutation. Do not invoke
 `--authorize-preview-execution` during qualification.
+
+### SOURCE.4 runtime-successor inventory
+
+Branch `work/hcp-update-runtime-successor-reconciliation-1` is current at
+`cccd655bef62375f6c9ccae7080ccdfd3ed136d0`; PR #265 is open/CLEAN, and the
+branch is 0 behind / 2 ahead,
+and composes merge-clean at tree
+`a59ef47c69111e84061c40713397e12609654a0d`. It has no schema migration and
+depends directly on protected #264. Its intended operation is read-only:
+validate the existing v2 authority and exact schema, classify every UPDATE under
+`SET TRANSACTION READ ONLY`, roll back, and write a private inventory with
+`mutation_authority: none`.
+
+Do not integrate PR #265 at current head. A bounded successor must:
+
+1. create a new output exclusively at mode `0600` using a descriptor opened with
+   `O_CREAT|O_EXCL` (and reject symlinks/non-regular targets), instead of
+   `Path.write_text()` followed by `chmod()`;
+2. require both authority and cohort inputs to be regular, non-symlink files with
+   the contract's exact private mode and reject missing/additional/duplicate or
+   unknown cohort rows;
+3. correct the inverted rejection labels: an existing different SOURCE.4
+   identity on the target is `CONFLICTING_SOURCE4_BINDING`; a failed native
+   parent graph is `PARENT_GRAPH_MISMATCH`;
+4. add command-level tests for environment boundaries, repository/schema
+   authority, exact 280-UPDATE coverage, every disposition/cohort aggregation,
+   read-only transaction plus rollback, current-graph blocker calculation,
+   private output creation, existing-path/symlink rejection, and no output on
+   failure.
+
+Current-head qualification passed `git diff --check` and Python 3.12 compilation
+of both application files and the affected test. GitHub reports no checks; the
+PR body claims one focused regression plus Ruff/compile/diff checks, but it does
+not claim command coverage. Its second commit changes lint only and leaves all
+three blockers intact. No pytest/Alembic environment is available on this host.
+After the repair, run the affected native-binding and
+new command tests under supported Python, then execute the command only as a
+separately authorized read-only Preview inventory using fresh mode-0600 authority
+and cohort files. It may create the named private output file; it must not invoke
+the guarded write executor or mutate application data.
 
 ### SOURCE.4 artifact recovery
 
@@ -618,6 +666,10 @@ is not a general UI qualification failure.
   bounded fixture orchestration interfaces, not a reusable owner credential or
   tenant Membership. No such principal exists at this snapshot; keep issuance
   blocked until Enterprise/platform supplies and qualifies it.
+- Runtime-successor inventory requires fresh exact-SHA/schema v2 authority and a
+  complete 280-row cohort artifact, both regular non-symlink private files. Its
+  output is private migration evidence, must be created exclusively at mode
+  `0600`, and must never contain credentials or grant mutation authority.
 - Fixture creation/reuse is audited. Do not invoke internal `record_reset`.
 - Migration generation/admission, Payroll execution, and Apple distribution stay
   separately owner-authorized.
@@ -656,7 +708,9 @@ is not a general UI qualification failure.
 8. Mobile: run distribution readiness; do not sign or upload without owner action.
 9. Migration: validate recovered artifacts and builder output. If native binding
    is deployed, confirm exact head `h8j0l2n4p6r8` and run read-only/preflight
-   inventory evidence; do not execute guarded admission without separate authority.
+   inventory evidence only after the runtime-inventory repair and separate
+   read-only authorization; do not execute guarded admission without separate
+   owner authority.
 
 ### Acceptance evidence and rejection rules
 
@@ -678,6 +732,7 @@ links, Payroll values, provider payloads, Apple credentials, or Customer PII.
 | Mobile | App/config version; Preview API target; permission-derived navigation; Job Clock recovery; offline/stale behavior; unsigned preflight result | Production target, stale authority enabling mutation, cross-Branch cache visibility, duplicate clock mutation, or any signing/upload attempt |
 | Migration lineage | Exactly one schema head; v2 authority SHA/file mode; SOURCE.4 package identity; 503 assertions; 1,389 canonical holds; deterministic master/child IDs; `completed_current_operational`; receipt/replay and rollback evidence | Duplicate/multiple revision, changed hold/scope/digest, canonical admission enabled, lineage conflict, partial rows/native graph, non-idempotent replay, missing backup/restore receipt, or execution without separate owner authority |
 | Migration native binding | Head `h8j0l2n4p6r8`; 280-UPDATE database inventory and disposition counts; eight current-calendar dependencies; exact immutable binding/evidence IDs; replay and transaction rollback results | Missing/ambiguous/conflicting/cross-scope/graph-inconsistent binding, count mismatch, partial evidence/native mutation, wrong head, or guarded execution without separate owner authority |
+| Migration runtime inventory | Candidate/merge/deployed SHAs; exact schema and input digests/modes; all 280 UPDATE rows exactly once by cohort/domain/disposition; current blocker count; output mode and `mutation_authority: none`; read-only transaction/rollback evidence | Unsafe output path/mode, incomplete/duplicate/unknown cohort, mislabeled disposition, schema/authority mismatch, database mutation, runtime hold authorization, or guarded executor invocation |
 | Migration preparation | Both input SHA-256 values; manifest digest and record count; hold counts; builder output SHA-256 and `execution_allowed` value | Digest/count mismatch, weakened HOLD, global blocker, `execution_allowed = true`, or any admission/executor invocation |
 
 Any rejection freezes that lane, preserves logs and immutable audit evidence,
@@ -703,6 +758,9 @@ authority and recomputing their compositions.
   SOURCE.4 binding or dependent overlay receipt exists.
 - Migration tooling rollback must retain recovered and generated immutable
   artifacts.
+- Runtime-inventory tooling has no application-state rollback. Disable/remove the
+  command in the next image if rejected and retain its private inventory and
+  qualification evidence; do not delete or reinterpret it as write authority.
 
 ## Superseded open PRs
 
