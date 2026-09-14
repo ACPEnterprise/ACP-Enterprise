@@ -18,8 +18,9 @@
     "permission_codes",
     "permission_digest",
     "mutation_allowlist",
+    "mutation_maximum",
     "fixture_references",
-    "release_sha",
+    "deployed_sha",
     "protected_authority_sha",
     "frontend_sha256",
     "schema_head",
@@ -28,6 +29,7 @@
     "session_expires_at",
     "authorized_by",
     "audit_event_id"
+    ,"audit_actor_identity"
   ],
   "properties": {
     "fixture_key": { "const": "acp-employee-beta-v1" },
@@ -36,8 +38,8 @@
     "synthetic_marker": { "const": "SYNTHETIC_BETA_ONLY" },
     "real_data_access": { "const": false },
     "persona": { "enum": ["csr", "employee", "office", "qbo"] },
-    "company_id": { "type": "string", "format": "uuid" },
-    "branch_id": { "type": "string", "format": "uuid" },
+    "company_id": { "const": "31ba6867-2d8a-55dd-9e34-d67c684ee41c" },
+    "branch_id": { "const": "95bf7a14-09b0-51b6-b3cb-7946523ec093" },
     "user_id": { "type": "string", "format": "uuid" },
     "session_id": { "type": "string", "format": "uuid" },
     "permission_codes": {
@@ -51,18 +53,50 @@
       "uniqueItems": true,
       "items": { "type": "string", "pattern": "^/api/v1/" }
     },
+    "mutation_maximum": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^/api/v1/" }
+    },
     "fixture_references": {
       "type": "object",
       "additionalProperties": { "type": "string", "format": "uuid" }
     },
-    "release_sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
-    "protected_authority_sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
-    "frontend_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
-    "schema_head": { "type": "string", "minLength": 1 },
+    "deployed_sha": { "const": "7cdfb183c1d07e064eba88cc547df4f090708ff6" },
+    "protected_authority_sha": { "const": "7cdfb183c1d07e064eba88cc547df4f090708ff6" },
+    "frontend_sha256": { "const": "0fe86ebb45767edfbffeaf6c80645bf60da1860ebf141369167895da7eea97e8" },
+    "schema_head": { "const": "g7i9k1m3o5q7" },
     "issued_at": { "type": "string", "format": "date-time" },
     "expires_at": { "type": "string", "format": "date-time" },
     "session_expires_at": { "type": "string", "format": "date-time" },
     "authorized_by": { "type": "string", "minLength": 1 },
-    "audit_event_id": { "type": "string", "format": "uuid" }
-  }
+    "audit_event_id": { "type": "string", "format": "uuid" },
+    "audit_actor_identity": { "const": "preview.synthetic.fixture.orchestrator.v1" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "persona": { "const": "csr" } } },
+      "then": {
+        "properties": {
+          "permission_codes": { "const": ["COMPANY_CUSTOMER_READ","COMPANY_JOB_READ","COMPANY_JOB_MANAGE","COMPANY_SCHEDULING_READ","COMPANY_SCHEDULING_MANAGE","COMPANY_DISPATCH_READ"] },
+          "permission_digest": { "const": "32a18b03a31c5527c0660c3314278047279da09761fc0542b3b7c80236c4f958" },
+          "mutation_allowlist": { "type": "array", "uniqueItems": true, "items": { "const": "/api/v1/operations/jobs/{job_id}/schedule" }, "maxItems": 1 },
+          "mutation_maximum": { "const": ["/api/v1/operations/jobs/{job_id}/schedule"] },
+          "fixture_references": { "type": "object", "required": ["customer_id","job_id","appointment_id"], "additionalProperties": false, "properties": { "customer_id":{"type":"string","format":"uuid"},"job_id":{"type":"string","format":"uuid"},"appointment_id":{"type":"string","format":"uuid"} } }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "persona": { "const": "employee" } } },
+      "then": { "properties": { "permission_codes": { "const": ["COMPANY_EMPLOYEE_OPERATIONS_OWN_DAY_READ","COMPANY_JOB_READ","COMPANY_TIMEKEEPING_OWN_READ","COMPANY_PAYROLL_STATEMENT_OWN_READ"] }, "permission_digest": { "const": "63ee2f416b4d8dacc1b1e19042b68276b7ebfbc18717540252745f8a8572b6c4" }, "mutation_allowlist": { "maxItems": 0 }, "mutation_maximum": { "const": [] }, "fixture_references": { "type":"object","required":["job_id"],"additionalProperties":false,"properties":{"job_id":{"type":"string","format":"uuid"}} } } }
+    },
+    {
+      "if": { "properties": { "persona": { "const": "office" } } },
+      "then": { "properties": { "permission_codes": { "const": ["COMPANY_WORKFORCE_READ","COMPANY_MEMBERSHIP_READ","COMPANY_PAYROLL_COMPENSATION_READ","COMPANY_PAYROLL_TAX_AUTHORITY_READ","COMPANY_PAYROLL_DEDUCTION_AUTHORITY_READ","COMPANY_TIMEKEEPING_ADMIN_READ","COMPANY_PAYROLL_REPORTING_READ"] }, "permission_digest": { "const": "941d91027ca29ad2433021deadd0d4c4ffcafe0213032cd88fe0cca219e2be28" }, "mutation_allowlist": { "maxItems": 0 }, "mutation_maximum": { "const": [] }, "fixture_references": { "type":"object","required":["employee_id"],"additionalProperties":false,"properties":{"employee_id":{"type":"string","format":"uuid"}} } } }
+    },
+    {
+      "if": { "properties": { "persona": { "const": "qbo" } } },
+      "then": { "properties": { "permission_codes": { "const": ["COMPANY_ACCOUNTING_REPORT_READ"] }, "permission_digest": { "const": "492135963deba634f9d1055643f8658faddb2c635a5369601ce35a3430c9e55f" }, "mutation_allowlist": { "maxItems": 0 }, "mutation_maximum": { "const": [] }, "fixture_references": { "const": {} } } }
+    }
+  ]
 }

@@ -15,15 +15,17 @@
     "permission_codes": ["COMPANY_ACCOUNTING_REPORT_READ"],
     "permission_digest": "492135963deba634f9d1055643f8658faddb2c635a5369601ce35a3430c9e55f",
     "mutation_allowlist": [],
+    "mutation_maximum": [],
     "fixture_references": {},
-    "release_sha": "0000000000000000000000000000000000000000",
-    "protected_authority_sha": "0000000000000000000000000000000000000000",
-    "frontend_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
-    "schema_head": "replace-with-deployed-head",
+    "deployed_sha": "7cdfb183c1d07e064eba88cc547df4f090708ff6",
+    "protected_authority_sha": "7cdfb183c1d07e064eba88cc547df4f090708ff6",
+    "frontend_sha256": "0fe86ebb45767edfbffeaf6c80645bf60da1860ebf141369167895da7eea97e8",
+    "schema_head": "g7i9k1m3o5q7",
     "issued_at": "2000-01-01T00:00:00+00:00",
     "expires_at": "2000-01-01T00:00:00+00:00",
     "session_expires_at": "2000-01-01T00:00:00+00:00",
     "authorized_by": "replace-with-enterprise-audit-reference",
-    "audit_event_id": "00000000-0000-0000-0000-000000000003"
+    "audit_event_id": "00000000-0000-0000-0000-000000000003",
+    "audit_actor_identity": "preview.synthetic.fixture.orchestrator.v1"
   }
 }

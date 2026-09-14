@@ -11,6 +11,7 @@ import pytest
 from scripts.acceptance_identity_provisioning_contract import (
     ProvisioningBlocked,
     attest,
+    attestation_output_path,
     plan,
 )
 from scripts.authenticated_preview_acceptance import (
@@ -27,7 +28,6 @@ from scripts.authenticated_preview_acceptance import (
     validate_short_lived_token,
 )
 
-CONTRACT_PATH = Path(__file__).parents[2] / "operations/preview-acceptance-identities.v1.json"
 MATRIX_PATH = Path(__file__).parents[2] / "operations/preview-authenticated-acceptance-matrix.v1.json"
 REPORT_PATH = Path(__file__).parents[2] / "operations/preview-authenticated-acceptance-report.v1.json"
 AUTHORITY_PATH = Path(__file__).parents[2] / "operations/preview-persona-contract-authority.v1.json"
@@ -109,15 +109,15 @@ def test_attestation_binds_synthetic_preview_scope(tmp_path: Path) -> None:
                 "environment": "preview",
                 "synthetic_marker": "SYNTHETIC_BETA_ONLY",
                 "real_data_access": False,
-                "company_id": "company",
-                "branch_id": "branch",
-                "user_id": "user",
-                "session_id": "session",
+                "company_id": "31ba6867-2d8a-55dd-9e34-d67c684ee41c",
+                "branch_id": "95bf7a14-09b0-51b6-b3cb-7946523ec093",
+                "user_id": "00000000-0000-0000-0000-000000000021",
+                "session_id": "00000000-0000-0000-0000-000000000022",
                 "persona": "csr",
-                "release_sha": "a" * 40,
-                "protected_authority_sha": "b" * 40,
-                "frontend_sha256": "c" * 64,
-                "schema_head": "d4f6h8j0l2n4",
+                "deployed_sha": "7cdfb183c1d07e064eba88cc547df4f090708ff6",
+                "protected_authority_sha": "7cdfb183c1d07e064eba88cc547df4f090708ff6",
+                "frontend_sha256": "0fe86ebb45767edfbffeaf6c80645bf60da1860ebf141369167895da7eea97e8",
+                "schema_head": "g7i9k1m3o5q7",
                 "permission_codes": sorted(
                     {
                         "COMPANY_CUSTOMER_READ",
@@ -144,6 +144,7 @@ def test_attestation_binds_synthetic_preview_scope(tmp_path: Path) -> None:
                     ).encode()
                 ).hexdigest(),
                 "mutation_allowlist": [],
+                "mutation_maximum": [SCHEDULE_ROUTE],
                 "fixture_references": {
                     "customer_id": "00000000-0000-0000-0000-000000000011",
                     "job_id": "00000000-0000-0000-0000-000000000012",
@@ -153,17 +154,14 @@ def test_attestation_binds_synthetic_preview_scope(tmp_path: Path) -> None:
                 "expires_at": (now + timedelta(hours=2)).isoformat(),
                 "session_expires_at": (now + timedelta(minutes=30)).isoformat(),
                 "authorized_by": "enterprise-release",
-                "audit_event_id": "audit",
+                "audit_event_id": "00000000-0000-0000-0000-000000000023",
+                "audit_actor_identity": "preview.synthetic.fixture.orchestrator.v1",
             }
         ),
         encoding="utf-8",
     )
     attestation.chmod(0o600)
-    assert read_attestation(attestation, now=now)["company_id"] == "company"
-    payload = json.loads(attestation.read_text(encoding="utf-8"))
-    payload["real_data_access"] = True
-    attestation.write_text(json.dumps(payload), encoding="utf-8")
-    with pytest.raises(AcceptanceBlocked):
+    with pytest.raises(AcceptanceBlocked, match="audit actor"):
         read_attestation(attestation, now=now)
 
 
@@ -179,23 +177,20 @@ def test_schedule_mutation_remains_blocked_until_registry_is_authoritative(tmp_p
 
 
 def test_provisioning_contract_matches_runner_personas() -> None:
-    contract = json.loads(CONTRACT_PATH.read_text(encoding="utf-8"))
+    contract = json.loads(AUTHORITY_PATH.read_text(encoding="utf-8"))
     assert contract["origin"] == PREVIEW_ORIGIN
     assert contract["environment"] == "preview"
-    assert contract["real_data_access"] is False
-    assert contract["access_token_maximum_seconds"] == 3600
-    assert contract["one_identity_per_persona"] is True
-    assert set(contract["personas"]) == set(REQUIRED_PERMISSIONS)
+    assert contract["production_access"] is False
+    assert contract["lifetimes"]["access_token_maximum_seconds"] == 3600
     assert frozenset(contract["prohibited_permissions"]) == PROHIBITED_PERMISSIONS
-    for name, persona in contract["personas"].items():
+    for persona in contract["personas"].values():
+        name = persona["consumer_id"]
         permissions = frozenset(persona["permissions"])
         assert permissions == REQUIRED_PERMISSIONS[name]
         assert not permissions & PROHIBITED_PERMISSIONS
-        assert all(path.startswith("/api/v1/") for path in persona["get_endpoints"])
 
 
 def test_authority_packet_matches_runner_and_permission_digests() -> None:
-    contract = json.loads(CONTRACT_PATH.read_text(encoding="utf-8"))
     authority = json.loads(AUTHORITY_PATH.read_text(encoding="utf-8"))
     assert authority["tenant"] == {
         "fixture_version": "preview.synthetic.tenant.v1",
@@ -214,12 +209,65 @@ def test_authority_packet_matches_runner_and_permission_digests() -> None:
         encoded = json.dumps(sorted(permissions), separators=(",", ":")).encode()
         assert persona["permission_digest"] == hashlib.sha256(encoded).hexdigest()
         assert persona["mutation_allowlist_default"] == []
-        assert persona["mutation_allowlist_maximum"] == contract["personas"][consumer_id][
-            "conditional_mutation_endpoints"
-        ]
+        assert set(persona["mutation_allowlist_maximum"]) <= {SCHEDULE_ROUTE}
     assert authority["personas"]["QBO_READ"]["permissions"] == [
         "COMPANY_ACCOUNTING_REPORT_READ"
     ]
+    assert authority["audit_actor"]["primitive_state"] == "MISSING"
+    assert authority["audit_actor"]["tenant_membership"] is False
+    assert authority["audit_actor"]["production_allowed"] is False
+    assert authority["audit_actor"]["acp_main_allowed"] is False
+
+
+def test_schema_security_constants_match_canonical_authority() -> None:
+    authority = json.loads(AUTHORITY_PATH.read_text(encoding="utf-8"))
+    schema = json.loads(
+        (Path(__file__).parents[2] / "operations/preview-acceptance-attestation.v1.schema.json")
+        .read_text(encoding="utf-8")
+    )
+    properties = schema["properties"]
+    assert properties["company_id"]["const"] == authority["tenant"]["company_id"]
+    assert properties["branch_id"]["const"] == authority["tenant"]["branch_id"]
+    assert properties["protected_authority_sha"]["const"] == authority[
+        "protected_authority"
+    ]
+    assert properties["deployed_sha"]["const"] == authority["release_contract"][
+        "deployed_sha_required"
+    ]
+    assert properties["schema_head"]["const"] == authority["release_contract"][
+        "schema_head_required"
+    ]
+    assert properties["frontend_sha256"]["const"] == authority["release_contract"][
+        "frontend_sha256_required"
+    ]
+    for conditional in schema["allOf"]:
+        persona_name = conditional["if"]["properties"]["persona"]["const"]
+        persona = next(
+            value
+            for value in authority["personas"].values()
+            if value["consumer_id"] == persona_name
+        )
+        constrained = conditional["then"]["properties"]
+        assert constrained["permission_codes"]["const"] == persona["permissions"]
+        assert constrained["permission_digest"]["const"] == persona["permission_digest"]
+
+
+def test_python_consumers_do_not_duplicate_permission_codes() -> None:
+    scripts = Path(__file__).parents[2] / "scripts"
+    for name in (
+        "authenticated_preview_acceptance.py",
+        "acceptance_identity_provisioning_contract.py",
+    ):
+        assert "COMPANY_" not in (scripts / name).read_text(encoding="utf-8")
+
+
+def test_attestation_output_path_is_canonical() -> None:
+    assert attestation_output_path(
+        Path("/run/secrets/acp-preview-acceptance/v1/run-1/csr/attestation.json"),
+        "csr",
+    ) == Path("/run/secrets/acp-preview-acceptance/v1/run-1/csr/attestation.json")
+    with pytest.raises(ProvisioningBlocked):
+        attestation_output_path(Path("/tmp/attestation.json"), "csr")
 
 
 def test_execution_matrix_and_report_use_exact_result_vocabulary() -> None:
@@ -273,30 +321,35 @@ def test_enterprise_plan_is_non_mutating_and_rejects_real_login() -> None:
         {
             "persona": "csr",
             "synthetic_login": "csr@acceptance.invalid",
-            "company_id": "00000000-0000-0000-0000-000000000001",
-            "branch_id": "00000000-0000-0000-0000-000000000002",
+            "company_id": "31ba6867-2d8a-55dd-9e34-d67c684ee41c",
+            "branch_id": "95bf7a14-09b0-51b6-b3cb-7946523ec093",
         },
     )()
-    assert plan(arguments)["mutation_performed"] is False
+    result = plan(arguments)
+    assert result["mutation_performed"] is False
+    assert result["classification"] == "BLOCKED_MISSING_PLATFORM_SERVICE_PRINCIPAL"
     arguments.synthetic_login = "person@example.com"
     with pytest.raises(ProvisioningBlocked):
         plan(arguments)
 
 
-def test_enterprise_attestation_is_restricted_and_contains_no_token(tmp_path: Path) -> None:
-    output = tmp_path / "attestation.json"
+def test_enterprise_attestation_is_restricted_and_contains_no_token() -> None:
+    output = Path(
+        "/run/secrets/acp-preview-acceptance/v1/test-run/employee/attestation.json"
+    )
     arguments = type(
         "Arguments",
         (),
         {
             "persona": "employee",
-            "company_id": "00000000-0000-0000-0000-000000000001",
-            "branch_id": "00000000-0000-0000-0000-000000000002",
+            "company_id": "31ba6867-2d8a-55dd-9e34-d67c684ee41c",
+            "branch_id": "95bf7a14-09b0-51b6-b3cb-7946523ec093",
             "user_id": "00000000-0000-0000-0000-000000000003",
             "session_id": "00000000-0000-0000-0000-000000000004",
             "audit_event_id": "00000000-0000-0000-0000-000000000005",
             "authorized_by": "enterprise-release",
-            "release_sha": "a" * 40,
+            "audit_actor_identity": "preview.synthetic.fixture.orchestrator.v1",
+            "deployed_sha": "a" * 40,
             "protected_authority_sha": "b" * 40,
             "frontend_sha256": "c" * 64,
             "schema_head": "d4f6h8j0l2n4",
@@ -309,38 +362,25 @@ def test_enterprise_attestation_is_restricted_and_contains_no_token(tmp_path: Pa
             "output": output,
         },
     )()
-    result = attest(arguments)
-    payload = json.loads(output.read_text(encoding="utf-8"))
-    assert result["credential_material_emitted"] is False
-    assert output.stat().st_mode & 0o077 == 0
-    assert "token" not in payload
-    assert payload["mutation_allowlist"] == []
-    assert len(payload["permission_digest"]) == 64
-    assert payload["fixture_version"] == "preview.synthetic.tenant.v1"
-    assert payload["fixture_references"] == {
-        "job_id": "00000000-0000-0000-0000-000000000006"
-    }
-    assert payload["permission_codes"] == [
-        "COMPANY_EMPLOYEE_OPERATIONS_OWN_DAY_READ",
-        "COMPANY_JOB_READ",
-        "COMPANY_TIMEKEEPING_OWN_READ",
-        "COMPANY_PAYROLL_STATEMENT_OWN_READ",
-    ]
+    with pytest.raises(ProvisioningBlocked, match="service principal"):
+        attest(arguments)
+    assert not output.exists()
 
 
-def test_attestation_rejects_mutation_outside_persona_contract(tmp_path: Path) -> None:
+def test_attestation_rejects_mutation_outside_persona_contract() -> None:
     arguments = type(
         "Arguments",
         (),
         {
             "persona": "employee",
-            "company_id": "00000000-0000-0000-0000-000000000001",
-            "branch_id": "00000000-0000-0000-0000-000000000002",
+            "company_id": "31ba6867-2d8a-55dd-9e34-d67c684ee41c",
+            "branch_id": "95bf7a14-09b0-51b6-b3cb-7946523ec093",
             "user_id": "00000000-0000-0000-0000-000000000003",
             "session_id": "00000000-0000-0000-0000-000000000004",
             "audit_event_id": "00000000-0000-0000-0000-000000000005",
             "authorized_by": "enterprise-release",
-            "release_sha": "a" * 40,
+            "audit_actor_identity": "preview.synthetic.fixture.orchestrator.v1",
+            "deployed_sha": "a" * 40,
             "protected_authority_sha": "b" * 40,
             "frontend_sha256": "c" * 64,
             "schema_head": "d4f6h8j0l2n4",
@@ -350,7 +390,9 @@ def test_attestation_rejects_mutation_outside_persona_contract(tmp_path: Path) -
                 "job_id=00000000-0000-0000-0000-000000000006"
             ],
             "ttl_seconds": 3600,
-            "output": tmp_path / "attestation.json",
+            "output": Path(
+                "/run/secrets/acp-preview-acceptance/v1/test-run/employee/attestation.json"
+            ),
         },
     )()
     with pytest.raises(ProvisioningBlocked):

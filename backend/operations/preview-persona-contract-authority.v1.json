@@ -1,14 +1,34 @@
 {
   "contract_version": "om2c.persona.contract.authority.v1",
   "environment": "preview",
+  "origin": "https://preview.allcountyhomeservices.com",
   "production_access": false,
-  "protected_authority": "e1015aada1daa5abf33bfa6968cd1eb1fe5da298",
+  "orchestration_state": "BLOCKED_MISSING_PLATFORM_SERVICE_PRINCIPAL",
+  "protected_authority": "7cdfb183c1d07e064eba88cc547df4f090708ff6",
+  "release_contract": {
+    "deployed_sha_required": "7cdfb183c1d07e064eba88cc547df4f090708ff6",
+    "schema_head_required": "g7i9k1m3o5q7",
+    "frontend_sha256_required": "0fe86ebb45767edfbffeaf6c80645bf60da1860ebf141369167895da7eea97e8"
+  },
   "tenant": {
     "fixture_version": "preview.synthetic.tenant.v1",
     "fixture_key": "acp-employee-beta-v1",
     "company_id": "31ba6867-2d8a-55dd-9e34-d67c684ee41c",
     "branch_id": "95bf7a14-09b0-51b6-b3cb-7946523ec093",
     "has_all_branch_access": false
+  },
+  "audit_actor": {
+    "identity": "preview.synthetic.fixture.orchestrator.v1",
+    "required_primitive": "platform_service_principal_with_operation_and_environment_scope",
+    "primitive_state": "MISSING",
+    "environment_scope": "preview",
+    "operation_scope": ["preview.synthetic.fixture.create_or_reuse","preview.synthetic.fixture.persona_create_or_reuse","preview.synthetic.fixture.activate","preview.synthetic.fixture.session_issue","preview.synthetic.fixture.reset","preview.synthetic.fixture.session_revoke"],
+    "tenant_membership": false,
+    "normal_authentication": false,
+    "production_allowed": false,
+    "acp_main_allowed": false,
+    "audit_identity_required": true,
+    "reason": "AuthorizationContext requires Membership; actor_user_id null has no durable identity; the credential-less migration actor creates a tenant Membership. None satisfies this contract."
   },
   "personas": {
     "CSR": {
@@ -51,6 +71,7 @@
     }
   },
   "lifetimes": {"access_token_maximum_seconds":3600,"attestation_maximum_seconds":14400},
+  "prohibited_permissions": ["COMPANY_ADMINISTER","COMPANY_COMMUNICATIONS_MANAGE","COMPANY_PAYMENT_COLLECT","COMPANY_PAYMENT_APPLY","COMPANY_PAYMENT_REFUND","COMPANY_ACCOUNTING_READ","COMPANY_ACCOUNTING_JOURNAL_PREPARE","COMPANY_ACCOUNTING_JOURNAL_POST","COMPANY_ACCOUNTING_JOURNAL_REVERSE","COMPANY_ACCOUNTING_RECONCILE","COMPANY_ACCOUNTING_FINANCE_APPROVE","COMPANY_PAYROLL_CALCULATION_EXECUTE","COMPANY_PAYROLL_PAYMENT_EXECUTION_AUTHORIZE","COMPANY_PAYROLL_REMITTANCE_EXECUTE","COMPANY_TIMEKEEPING_OWN_PUNCH"],
   "filesystem": {
     "root": "/run/secrets/acp-preview-acceptance/v1/{run_id}",
     "directory_mode": "0700",
@@ -60,13 +81,14 @@
     "token_content_in_contract_or_report": false
   },
   "handoff_reference_contract": {
-    "required_fields": ["persona","company_id","branch_id","token_file_reference","attestation_file_reference","release_sha","schema_head","frontend_sha256","expires_at","mutation_allowlist_reference","audit_reference"],
+    "required_fields": ["persona","company_id","branch_id","token_file_reference","attestation_file_reference","deployed_sha","protected_authority_sha","schema_head","frontend_sha256","expires_at","mutation_allowlist_reference","audit_reference"],
     "persona": "one_of:CSR,EMPLOYEE,OFFICE,QBO_READ",
     "company_id": "must_equal:31ba6867-2d8a-55dd-9e34-d67c684ee41c",
     "branch_id": "must_equal:95bf7a14-09b0-51b6-b3cb-7946523ec093",
     "token_file_reference": "{root}/{consumer_id}/access-token",
     "attestation_file_reference": "{root}/{consumer_id}/attestation.json",
-    "release_sha": "must_equal:attestation.release_sha",
+    "deployed_sha": "must_equal:attestation.deployed_sha_and_canonical.protected_authority",
+    "protected_authority_sha": "must_equal:canonical.protected_authority",
     "schema_head": "must_equal:attestation.schema_head",
     "frontend_sha256": "must_equal:attestation.frontend_sha256",
     "expires_at": "must_not_exceed:attestation.session_expires_at",
@@ -83,12 +105,15 @@
     "response_domain_data_emitted": false
   },
   "provisioning": {
-    "tenant_command": "python backend/scripts/preview_synthetic_tenant_fixture.py --authorizing-company-id {enterprise_company_id} --authorizing-branch-id {enterprise_branch_id}",
-    "tenant_token_transport": "stdin",
-    "identity_service": "PreviewIdentityFixtureService.provision_identity",
-    "session_service": "AuthenticationService.authenticate",
-    "revocation_service": "AuthenticationService.revoke_user_sessions",
-    "reset_service": "PreviewIdentityFixtureService.reset_identity"
+    "tenant_create_or_reuse": {"existing_interface":"PreviewSyntheticTenantFixtureService.create_or_reuse","state":"BLOCKED_NONCOMPLIANT_AUTHORIZATION_CONTEXT"},
+    "persona_create_or_reuse": {"existing_interface":"PreviewIdentityFixtureService.provision_identity","state":"PARTIAL_NO_DETERMINISTIC_FOUR_PERSONA_REUSE"},
+    "fixture_only_activation": {"existing_interface":null,"required_contract":"activate only a fixture-bound .invalid User/Membership under the service principal; reject any non-fixture identity","state":"MISSING"},
+    "one_hour_session_issuance": {"existing_interface":"AuthenticationService.authenticate","required_contract":"fixture-only service issuance without reusable owner credentials; exp <= 3600 seconds","state":"MISSING_SAFE_ORCHESTRATION_ADAPTER"},
+    "restricted_token_file_creation": {"existing_interface":null,"required_contract":"atomically create canonical token path mode 0600 without token in argv/stdout/logs","state":"MISSING"},
+    "attestation_creation": {"existing_interface":"backend/scripts/acceptance_identity_provisioning_contract.py attest","state":"AVAILABLE_AFTER_PLATFORM_PRIMITIVE"},
+    "deterministic_reset_reuse": {"existing_interface":"PreviewIdentityFixtureService.reset_identity","state":"PARTIAL_PERSONA_ORCHESTRATOR_REQUIRED"},
+    "session_revocation": {"existing_interface":"AuthenticationService.revoke_user_sessions","state":"AVAILABLE"},
+    "acceptance_consumption": {"existing_interface":"backend/scripts/authenticated_preview_acceptance.py","state":"AVAILABLE"}
   },
   "prohibited_capabilities": ["production","real_customer_communication","payment_or_refund","accounting_posting","payroll_execution","real_payable_time","qbo_or_hcp_mutation"]
 }

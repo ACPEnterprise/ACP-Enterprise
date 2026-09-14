@@ -17,69 +17,42 @@ from uuid import UUID
 
 import httpx
 
-PREVIEW_ORIGIN = "https://preview.allcountyhomeservices.com"
-SCHEDULE_ROUTE = "/api/v1/operations/jobs/{job_id}/schedule"
-FIXTURE_KEY = "acp-employee-beta-v1"
-
-REQUIRED_PERMISSIONS = {
-    "csr": frozenset(
-        {
-            "COMPANY_CUSTOMER_READ",
-            "COMPANY_JOB_READ",
-            "COMPANY_JOB_MANAGE",
-            "COMPANY_SCHEDULING_READ",
-            "COMPANY_SCHEDULING_MANAGE",
-            "COMPANY_DISPATCH_READ",
-        }
-    ),
-    "employee": frozenset(
-        {
-            "COMPANY_EMPLOYEE_OPERATIONS_OWN_DAY_READ",
-            "COMPANY_JOB_READ",
-            "COMPANY_TIMEKEEPING_OWN_READ",
-            "COMPANY_PAYROLL_STATEMENT_OWN_READ",
-        }
-    ),
-    "office": frozenset(
-        {
-            "COMPANY_WORKFORCE_READ",
-            "COMPANY_MEMBERSHIP_READ",
-            "COMPANY_PAYROLL_COMPENSATION_READ",
-            "COMPANY_PAYROLL_TAX_AUTHORITY_READ",
-            "COMPANY_PAYROLL_DEDUCTION_AUTHORITY_READ",
-            "COMPANY_TIMEKEEPING_ADMIN_READ",
-            "COMPANY_PAYROLL_REPORTING_READ",
-        }
-    ),
-    "qbo": frozenset({"COMPANY_ACCOUNTING_REPORT_READ"}),
-}
-
-PROHIBITED_PERMISSIONS = frozenset(
-    {
-        "COMPANY_ADMINISTER",
-        "COMPANY_COMMUNICATIONS_MANAGE",
-        "COMPANY_PAYMENT_COLLECT",
-        "COMPANY_PAYMENT_APPLY",
-        "COMPANY_PAYMENT_REFUND",
-        "COMPANY_ACCOUNTING_JOURNAL_PREPARE",
-        "COMPANY_ACCOUNTING_JOURNAL_POST",
-        "COMPANY_ACCOUNTING_JOURNAL_REVERSE",
-        "COMPANY_PAYROLL_CALCULATION_EXECUTE",
-        "COMPANY_PAYROLL_PAYMENT_EXECUTION_AUTHORIZE",
-        "COMPANY_PAYROLL_REMITTANCE_EXECUTE",
-        "COMPANY_TIMEKEEPING_OWN_PUNCH",
-    }
-)
-REQUIRED_FIXTURE_REFERENCES = {
-    "csr": frozenset({"customer_id", "job_id", "appointment_id"}),
-    "employee": frozenset({"job_id"}),
-    "office": frozenset({"employee_id"}),
-    "qbo": frozenset(),
-}
-
 
 class AcceptanceBlocked(RuntimeError):
     """A safety or authority precondition prevents acceptance."""
+
+
+AUTHORITY_PATH = Path(__file__).parents[1] / "operations/preview-persona-contract-authority.v1.json"
+
+
+def load_authority(path: Path = AUTHORITY_PATH) -> dict[str, Any]:
+    authority = json.loads(path.read_text(encoding="utf-8"))
+    if (
+        authority.get("contract_version") != "om2c.persona.contract.authority.v1"
+        or authority.get("environment") != "preview"
+        or authority.get("production_access") is not False
+    ):
+        raise AcceptanceBlocked("Canonical persona authority is invalid.")
+    return authority
+
+
+_AUTHORITY = load_authority()
+PREVIEW_ORIGIN = str(_AUTHORITY["origin"])
+SCHEDULE_ROUTE = "/api/v1/operations/jobs/{job_id}/schedule"
+FIXTURE_KEY = str(_AUTHORITY["tenant"]["fixture_key"])
+_PERSONAS = tuple(_AUTHORITY["personas"].values())
+REQUIRED_PERMISSIONS = {
+    str(value["consumer_id"]): frozenset(value["permissions"]) for value in _PERSONAS
+}
+PROHIBITED_PERMISSIONS = frozenset(_AUTHORITY["prohibited_permissions"])
+REQUIRED_FIXTURE_REFERENCES = {
+    str(value["consumer_id"]): frozenset(value["fixture_references"])
+    for value in _PERSONAS
+}
+MUTATION_MAXIMA = {
+    str(value["consumer_id"]): frozenset(value["mutation_allowlist_maximum"])
+    for value in _PERSONAS
+}
 
 
 @dataclass(frozen=True)
@@ -94,6 +67,24 @@ def validate_origin(origin: str) -> str:
     if origin.rstrip("/") != PREVIEW_ORIGIN or parsed.scheme != "https":
         raise AcceptanceBlocked("Only the fixed ACP Preview origin is permitted.")
     return PREVIEW_ORIGIN
+
+
+def validate_reference_path(path: Path, *, persona: str, filename: str) -> Path:
+    if path.is_symlink():
+        raise AcceptanceBlocked("Acceptance secret references cannot be symlinks.")
+    resolved = path.resolve(strict=True)
+    parts = resolved.parts
+    if (
+        len(parts) != 8
+        or parts[:5] != ("/", "run", "secrets", "acp-preview-acceptance", "v1")
+        or not parts[5]
+        or parts[6] != persona
+        or parts[7] != filename
+    ):
+        raise AcceptanceBlocked("Acceptance reference path is outside canonical scope.")
+    if stat.S_IMODE(resolved.parent.stat().st_mode) != 0o700:
+        raise AcceptanceBlocked("Acceptance persona directory must have mode 0700.")
+    return resolved
 
 
 def read_token(path: Path) -> str:
@@ -120,13 +111,27 @@ def read_attestation(path: Path, *, now: datetime | None = None) -> dict[str, An
     }
     if any(payload.get(key) != value for key, value in required.items()):
         raise AcceptanceBlocked("Fixture attestation does not match the Preview contract.")
+    tenant = _AUTHORITY["tenant"]
+    if (
+        payload.get("company_id") != tenant["company_id"]
+        or payload.get("branch_id") != tenant["branch_id"]
+    ):
+        raise AcceptanceBlocked("Fixture attestation is outside the canonical tenant.")
+    release = _AUTHORITY["release_contract"]
+    if (
+        payload.get("protected_authority_sha") != _AUTHORITY["protected_authority"]
+        or payload.get("deployed_sha") != release["deployed_sha_required"]
+        or payload.get("schema_head") != release["schema_head_required"]
+        or payload.get("frontend_sha256") != release["frontend_sha256_required"]
+    ):
+        raise AcceptanceBlocked("Release evidence does not match canonical authority.")
     for field in (
         "company_id",
         "branch_id",
         "user_id",
         "session_id",
         "persona",
-        "release_sha",
+        "deployed_sha",
         "protected_authority_sha",
         "frontend_sha256",
         "schema_head",
@@ -134,12 +139,29 @@ def read_attestation(path: Path, *, now: datetime | None = None) -> dict[str, An
         "session_expires_at",
         "audit_event_id",
         "authorized_by",
+        "audit_actor_identity",
     ):
         if not payload.get(field):
             raise AcceptanceBlocked(f"Fixture attestation must bind {field}.")
     mutation_allowlist = payload.get("mutation_allowlist")
     if not isinstance(mutation_allowlist, list):
         raise AcceptanceBlocked("Fixture attestation must bind a mutation allowlist.")
+    persona = str(payload.get("persona", ""))
+    mutation_maximum = payload.get("mutation_maximum")
+    if not isinstance(mutation_maximum, list) or frozenset(mutation_maximum) != (
+        MUTATION_MAXIMA.get(persona, frozenset())
+    ):
+        raise AcceptanceBlocked("Mutation maximum does not match canonical authority.")
+    if persona not in MUTATION_MAXIMA or not set(mutation_allowlist).issubset(
+        MUTATION_MAXIMA[persona]
+    ):
+        raise AcceptanceBlocked("Mutation allowlist exceeds canonical persona authority.")
+    audit_actor = _AUTHORITY["audit_actor"]
+    if (
+        audit_actor["primitive_state"] != "AVAILABLE"
+        or payload["audit_actor_identity"] != audit_actor["identity"]
+    ):
+        raise AcceptanceBlocked("Canonical fixture audit actor is unavailable or mismatched.")
     permissions = payload.get("permission_codes")
     if not isinstance(permissions, list) or not all(
         isinstance(value, str) for value in permissions
@@ -161,8 +183,10 @@ def read_attestation(path: Path, *, now: datetime | None = None) -> dict[str, An
     try:
         for value in fixture_ids.values():
             UUID(str(value))
+        for field in ("user_id", "session_id", "audit_event_id"):
+            UUID(str(payload[field]))
     except ValueError as error:
-        raise AcceptanceBlocked("Fixture references must be UUIDs.") from error
+        raise AcceptanceBlocked("Attestation identity references must be UUIDs.") from error
     try:
         expires_at = datetime.fromisoformat(str(payload["expires_at"]))
         session_expires_at = datetime.fromisoformat(str(payload["session_expires_at"]))
@@ -291,9 +315,15 @@ def mutation_registry_has_schedule_route(registry_path: Path) -> bool:
 
 def run(args: argparse.Namespace) -> dict[str, Any]:
     origin = validate_origin(args.origin)
-    token = read_token(args.token_file)
+    token_path = validate_reference_path(
+        args.token_file, persona=args.persona, filename="access-token"
+    )
+    attestation_path = validate_reference_path(
+        args.attestation_file, persona=args.persona, filename="attestation.json"
+    )
+    token = read_token(token_path)
     expires_at = validate_short_lived_token(token)
-    attestation = read_attestation(args.attestation_file)
+    attestation = read_attestation(attestation_path)
     if attestation["persona"] != args.persona:
         raise AcceptanceBlocked("Fixture attestation persona does not match invocation.")
     if frozenset(attestation.get("permission_codes", ())) != REQUIRED_PERMISSIONS[args.persona]:
@@ -308,7 +338,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     results: list[dict[str, str | int]] = []
     with httpx.Client(base_url=origin, headers=headers, timeout=20, follow_redirects=False) as client:
         health_response = client.get("/backend-health", headers={})
-        if health_response.status_code != 200 or health_response.json().get("version") != attestation["release_sha"]:
+        if health_response.status_code != 200 or health_response.json().get("version") != attestation["deployed_sha"]:
             raise AcceptanceBlocked("Preview release does not match the fixture attestation.")
         frontend_response = client.get("/", headers={})
         frontend_digest = hashlib.sha256(frontend_response.content).hexdigest()

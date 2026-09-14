@@ -1,4 +1,9 @@
-# OM2-C persona contract authority — OM1 Phone handoff
+# SUPERSEDED — OM2-C persona contract authority 1
+
+Do not consume this packet. It is superseded by
+`om2-c-persona-contract-authority-2.md` and
+`backend/operations/preview-persona-contract-authority.v1.json` as corrected by
+`OM2C.PERSONA.CONTRACT.AUTHORITY.2`.
 
 Authoritative machine contract:
 `backend/operations/preview-persona-contract-authority.v1.json` at protected authority

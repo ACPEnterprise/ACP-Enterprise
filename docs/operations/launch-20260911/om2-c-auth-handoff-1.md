@@ -1,4 +1,8 @@
-# OM2-C authenticated acceptance handoff
+# SUPERSEDED — OM2-C authenticated acceptance handoff
+
+Do not use this earlier orchestration description. The canonical corrected authority
+and blocking service-principal gap are published by
+`OM2C.PERSONA.CONTRACT.AUTHORITY.2`.
 
 State: `EXECUTION_READY_BLOCKED_AUTH`. Enterprise is the only issuer. OM2-C does not
 create identities, choose credentials, activate fixtures, or grant mutation authority.
