@@ -122,7 +122,7 @@ describe("Workforce timecard navigation", () => {
   it("opens the Employee requested by the Payroll register link", () => {
     render(
       <MemoryRouter
-        initialEntries={["/workforce?employee=employee-1#timecard-operations"]}
+        initialEntries={["/employees?employee=employee-1#timecard-operations"]}
       >
         <WorkforceRoute />
       </MemoryRouter>,

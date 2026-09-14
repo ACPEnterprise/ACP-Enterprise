@@ -123,7 +123,11 @@ export function PayrollRoute() {
                   </thead>
                   <tbody>
                     {periodOperations.data.employees.map((employee) => (
-                      <tr className="border-t border-stroke align-top" key={employee.employee_id}>
+                      <tr
+                        id={`payroll-employee-${employee.employee_id}`}
+                        className={`scroll-mt-4 border-t border-stroke align-top ${setupEmployeeId === employee.employee_id ? "bg-action-primary/5" : ""}`}
+                        key={employee.employee_id}
+                      >
                         <td className="py-3">
                           <strong>{employee.display_name}</strong>
                           <p className="text-xs text-content-muted">{employee.employee_number}</p>
@@ -147,7 +151,7 @@ export function PayrollRoute() {
                           )}
                         </td>
                         <td>
-                          <Link className="font-semibold text-action-primary underline" to={`/workforce?employee=${employee.employee_id}#timecard-${employee.employee_id}`}>
+                          <Link className="font-semibold text-action-primary underline" to={`/employees?employee=${employee.employee_id}#timecard-${employee.employee_id}`}>
                             View timecard
                           </Link>
                         </td>

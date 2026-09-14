@@ -32,6 +32,11 @@ vi.mock("../hooks/useWorkdayTime", () => ({
   })),
   usePayPeriods: vi.fn(() => ({ data: [], isLoading: false, isError: false })),
 }));
+vi.mock("../components/payroll/PayrollEmployeeSetup", () => ({
+  PayrollEmployeeSetup: ({ employeeId }: { employeeId: string }) => (
+    <div data-testid="payroll-employee-setup">Payroll setup for {employeeId}</div>
+  ),
+}));
 
 const query = (data: unknown) => ({
   data,
@@ -263,7 +268,7 @@ describe("PayrollRoute authorization", () => {
       }) as never,
     );
     render(
-      <MemoryRouter>
+      <MemoryRouter initialEntries={["/payroll?employee=employee-1#payroll-employee-employee-1"]}>
         <PayrollRoute />
       </MemoryRouter>,
     );
@@ -274,7 +279,17 @@ describe("PayrollRoute authorization", () => {
     ).toBeGreaterThan(0);
     expect(screen.getByRole("link", { name: "View timecard" })).toHaveAttribute(
       "href",
-      "/workforce?employee=employee-1#timecard-employee-1",
+      "/employees?employee=employee-1#timecard-employee-1",
+    );
+    expect(screen.getByText("Marisol Rivera").closest("tr")).toHaveAttribute(
+      "id",
+      "payroll-employee-employee-1",
+    );
+    expect(screen.getByText("Marisol Rivera").closest("tr")).toHaveClass(
+      "bg-action-primary/5",
+    );
+    expect(screen.getByTestId("payroll-employee-setup")).toHaveTextContent(
+      "Payroll setup for employee-1",
     );
   });
 });
