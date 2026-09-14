@@ -7,7 +7,6 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
-
 from app.operational_migration.hcp_current_overlay import (
     CurrentOverlayManifest,
     OverlayAssertion,
@@ -95,9 +94,8 @@ def _authority(tmp_path: Path) -> tuple[Path, CurrentOverlayExecutionAuthority]:
         company_id=company_id,
         branch_id=branch_id,
         actor_id=actor_id,
-        master_run_id=uuid4(),
-        customer_run_id=uuid4(),
-        operational_run_id=uuid4(),
+        source4_package_identity="SOURCE.4/sealed/2026-08-28",
+        canonical_hold_count=1389,
         overlay_path=overlay,
         overlay_file_digest=overlay_digest,
         overlay_manifest_digest=manifest.digest,
