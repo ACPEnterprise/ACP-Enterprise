@@ -1,14 +1,14 @@
 # OM1 Enterprise integration queue
 
-Snapshot: 2026-09-12 17:50 America/New_York
+Snapshot: 2026-09-14 12:14 America/New_York
 
 ## Authority and deployed state
 
-- Protected authority: `91dae4a52084daef42048e21b7754742e5e5eba9`
-- Protected tip: PR #260, Preview acceptance-fixture runtime wiring
+- Protected authority: `e1015aada1daa5abf33bfa6968cd1eb1fe5da298`
+- Protected tip: PR #261, Preview fixture authorization transaction fix
 - Deployed Preview: `52dc336766a67fc0c4698244b9894bab0fe65913`
 - Preview health: application healthy; PostgreSQL and Redis connected
-- Deployment gap: protected PRs #257, #258, #259, and #260
+- Deployment gap: protected PRs #257, #258, #259, #260, and #261
 - GitHub CI evidence: no check runs or commit statuses are reported for the
   protected SHA. Local qualification does not substitute for the tests below.
 
@@ -17,6 +17,19 @@ Independent qualification of that exact protected-but-undeployed tranche on
 affected frontend suites and 43 tests, full ESLint, and the production
 TypeScript/Vite build. Four SQLAlchemy transaction-deassociation warnings were
 emitted by Invoice tests and remain part of the evidence.
+
+PR #261 added an explicit rollback between read-only authorization resolution
+and fixture mutation plus one focused regression test. It has no GitHub checks.
+Composition and `git diff --check` were revalidated at the exact protected SHA
+on 2026-09-14. The focused test could not be rerun on this host: the installed
+pytest uses Python 3.9, which cannot import the repository's modern type syntax,
+while the available Python 3.12 environment has no pytest. Enterprise must run
+that test under the supported backend environment before deployment:
+
+```bash
+ENVIRONMENT=test PYTHONPATH=backend python -m pytest -q \
+  backend/tests/platform/test_preview_tenant_fixture_command.py
+```
 
 ## Protected integration policy
 
@@ -32,11 +45,11 @@ acceptance gates in this packet operationally; GitHub will not enforce them.
 
 | Candidate | Exact branch | Head | PR | Behind/ahead | Effective tree | Classification |
 |---|---|---|---|---:|---|---|
-| SOURCE.4 artifact recovery | `work/migration-source4-accepted-artifact-recovery-1` | `a3cad3d389b9ed69300939d15c19e2d7b08da063` | None | 2/1 | `e4bcdfdc5898ec62f6166d164b43d9416054d2f5` | Stale but reconcilable; merge-clean; documentation-only |
-| HCP historical safe-tranche builder | `work/hcp-historical-safe-tranche-1` | `b32f99ff80f447bf8140b73380d19191ccb8db59` | None | 12/1 | `9371c6ab231ae05a1feb2f3f38f3a90d8880145d` | Stale but reconcilable; merge-clean; metadata edit required |
-| ECO reconciliation | `work/eco-migration-reconciliation-integration-watch-1` | `1c0e7b20db62b6a342548f2842ea1a3a45965386` | None | 4/13 | `657821646f4fcfc3eda071fa2b285b3903f5dbbd` | Stale but reconcilable; merge-clean; metadata edit required |
-| Payroll/QBO read UI | `work/om2b-payroll-accounting-continuation-1` | `724398348b566f655d2bc7127c20beeb6be52d6c` | #215 open/CLEAN | 23/1 | `c964c398836e12ec16d398fbc81c246b66fec189` | Stale but reconcilable; merge-clean; PR refresh required |
-| Mobile Apple release packet | `work/mobile-apple-owner-release-packet-1` | `0183eaec3e2825a79b683e9e684a761243c86ea7` | None | 9/15 | `fad3ab879576b7bfb392c8e30e68ed6df63e2425` | Stale but reconcilable; merge-clean; two manifest edits required |
+| SOURCE.4 artifact recovery | `work/migration-source4-accepted-artifact-recovery-1` | `a3cad3d389b9ed69300939d15c19e2d7b08da063` | None | 3/1 | `721bab093cc46dea87f6ed2cf3772aff56b8d134` | Stale but reconcilable; merge-clean; documentation-only |
+| HCP historical safe-tranche builder | `work/hcp-historical-safe-tranche-1` | `b32f99ff80f447bf8140b73380d19191ccb8db59` | None | 13/1 | `e0b9ff5f9ec9f9b01bd0c92f76ba56d73cf38775` | Stale but reconcilable; merge-clean; metadata edit required |
+| ECO reconciliation | `work/eco-migration-reconciliation-integration-watch-1` | `1c0e7b20db62b6a342548f2842ea1a3a45965386` | None | 5/13 | `478c9401215f9c83f8abcd1c5eae55d3e98e904f` | Stale but reconcilable; merge-clean; metadata edit required |
+| Payroll/QBO read UI | `work/om2b-payroll-accounting-continuation-1` | `724398348b566f655d2bc7127c20beeb6be52d6c` | #215 open/CLEAN | 24/1 | `f31f869a5ca6feccf7aefcfb6dac7986c0514234` | Stale but reconcilable; merge-clean; PR refresh required |
+| Mobile Apple release packet | `work/mobile-apple-owner-release-packet-1` | `0183eaec3e2825a79b683e9e684a761243c86ea7` | None | 10/15 | `70c59d91bb3ea9e79544d83994d0a570c63aa4b8` | Stale but reconcilable; merge-clean; two manifest edits required |
 
 ## Named launch queue coverage
 
@@ -63,7 +76,7 @@ not reconciliation inputs: use their named protected successors as authority.
 
 All five effective deltas have zero pairwise file overlap and produce identical
 trees in either integration order. The combined pre-metadata tree is
-`7fe61501fb00d3d578d5b9eadec92d9eb412e5f1`; it changes 59 files and passes
+`34ab5a5511c00af1a5b08156b5a1df66831742d4`; it changes 59 files and passes
 `git diff --check`. Recompute all trees after protected movement or packet edits.
 
 ## Integration order and release waves
@@ -83,7 +96,7 @@ upload an Apple build as part of integration.
 
 ```mermaid
 flowchart LR
-    A[Protected 91dae4a5] -->|reconcile| R[SOURCE.4 recovery]
+    A[Protected e1015aad] -->|reconcile| R[SOURCE.4 recovery]
     A -->|reconcile| B[Historical builder]
     A -->|reconcile| E[ECO watch]
     A -->|reconcile| P[PR 215]
@@ -120,7 +133,7 @@ changes the authority for every remaining lane.
 
 | Checkpoint | Enterprise action | Required stop condition |
 |---|---|---|
-| Existing deployment gap | Deploy and accept protected #257-#260 before attributing runtime results to a later candidate | `/backend-health` does not report the exact deployed protected SHA or either dependency is disconnected |
+| Existing deployment gap | Deploy and accept protected #257-#261 before attributing runtime results to a later candidate | `/backend-health` does not report the exact deployed protected SHA or either dependency is disconnected |
 | Wave C preparation | Prepare SOURCE.4 recovery, then the historical builder | Artifact digest/loader check, builder tests, or authority metadata fails |
 | ECO checkpoint | Integrate and deploy ECO independently | More than one Alembic head, drift, migration failure, or governed-policy acceptance failure |
 | Wave B | Integrate PR #215 independently | QBO/Payroll projection tests fail or any provider mutation appears |
@@ -162,7 +175,7 @@ pushes, or merges the protected branch.
 ```bash
 git fetch origin --prune
 test "$(git rev-parse origin/customer-management-v1)" = \
-  91dae4a52084daef42048e21b7754742e5e5eba9
+  e1015aada1daa5abf33bfa6968cd1eb1fe5da298
 
 lane=work/REPLACE_WITH_LANE
 expected=REPLACE_WITH_FULL_HEAD
@@ -192,7 +205,7 @@ flow; direct protected updates are not an execution option.
 
 Merge current protected authority into
 `work/migration-source4-accepted-artifact-recovery-1`, require tree
-`e4bcdfdc5898ec62f6166d164b43d9416054d2f5`, run `git diff --check`, push the
+`721bab093cc46dea87f6ed2cf3772aff56b8d134`, run `git diff --check`, push the
 lane branch, and open a documentation PR. The packet contains no protected SHA
 that needs editing.
 
@@ -218,7 +231,7 @@ ENVIRONMENT=test PYTHONPATH=backend python -c 'from pathlib import Path; from ap
 
 ### HCP historical safe-tranche builder
 
-Update the packet authority from `9096a777...` to `91dae4a5...` and state that
+Update the packet authority from `9096a777...` to `e1015aad...` and state that
 the executor and post-admission acceptance are protected through PR #253 at
 `96d67cb73dbe4838e882e1551de5906eda598f4e`. Run:
 
@@ -233,16 +246,16 @@ python -m compileall -q \
 The builder is read-only with respect to application data, but writes the
 explicit `--output` artifact. It must not be treated as admission authority.
 
-Independent qualification on 2026-09-12 composed the exact head onto protected
-authority at tree `9371c6ab231ae05a1feb2f3f38f3a90d8880145d`: all three focused
-tests and Python compilation passed. The tests cover accepted-record selection,
+Composition was revalidated on 2026-09-14 at tree
+`e0b9ff5f9ec9f9b01bd0c92f76ba56d73cf38775`; lane qualification on 2026-09-12
+passed all three focused tests and Python compilation. The tests cover accepted-record selection,
 HOLD treatment for unbound updates, `execution_allowed = false`, acceptance-plan
 digest tampering, and conflicting cross-scope native bindings.
 
 ### ECO
 
 Update the current integration-watch authority from `52dc3367...` to
-`91dae4a5...`. Current composition qualification has passed:
+`e1015aad...`. Current composition qualification has passed:
 
 - PostgreSQL zero-to-head and current-head checks;
 - Alembic head `g7i9k1m3o5q7`, down revision `f6h8j0l2n4p6`;
@@ -280,11 +293,11 @@ continues to report `mutation_authority: none`. GitHub reports no checks on the
 candidate branch, so Enterprise must require and record these results before
 integration.
 
-Independent qualification on 2026-09-12 composed the exact head onto protected
-authority at tree `c964c398836e12ec16d398fbc81c246b66fec189`: three suites and
-nine tests passed, followed by clean full ESLint and production TypeScript/Vite
-builds. This evidence does not replace Enterprise's final rerun after branch
-reconciliation.
+Composition was revalidated on 2026-09-14 at tree
+`f31f869a5ca6feccf7aefcfb6dac7986c0514234`; lane qualification on 2026-09-12
+passed three suites and nine tests, followed by clean full ESLint and production
+TypeScript/Vite builds. This evidence does not replace Enterprise's final rerun
+after branch reconciliation.
 
 ```bash
 cd frontend
@@ -307,9 +320,9 @@ Retain the 138-test qualification count. Run Mobile tests, typecheck, lint,
 configuration validation, and Apple preflight. Signing/upload remains an owner
 operation.
 
-Independent qualification on 2026-09-12 composed the exact head onto protected
-authority at tree `fad3ab879576b7bfb392c8e30e68ed6df63e2425`: all 18 suites
-and 138 tests passed, followed by clean typecheck, lint, configuration
+Composition was revalidated on 2026-09-14 at tree
+`70c59d91bb3ea9e79544d83994d0a570c63aa4b8`; lane qualification on 2026-09-12
+passed all 18 suites and 138 tests, followed by clean typecheck, lint, configuration
 validation, and the non-mutating Apple distribution preflight. Jest emitted
 React `VirtualizedList` updates-not-wrapped-in-`act(...)` warnings; these did not
 fail the run but should remain visible in final qualification evidence.
@@ -373,9 +386,9 @@ back through this queue refresh before Enterprise integrates it.
 ## Held candidate
 
 Price Book branch `work/pricebook-allcounty-review-readiness-1` at
-`49e852aa8c931c8042de0634b68d993b0e02452e` is 4 behind / 13 ahead, has no PR,
+`49e852aa8c931c8042de0634b68d993b0e02452e` is 5 behind / 13 ahead, has no PR,
 and composes merge-clean at tree
-`34ef9d4e85b7e2f3937abe386a03c55078504b34`. It is stale and Git-reconcilable,
+`7cc8f6cba72d56d96f94e11eba645e5c14aa0582`. It is stale and Git-reconcilable,
 but not qualification-admissible. It supersedes the smaller `c1c90a0a...`
 candidate and remains held for:
 
@@ -383,9 +396,9 @@ candidate and remains held for:
 2. fail-closed `effective_catalog` multiple-match handling;
 3. review-route authorization matrix coverage.
 
-Independent PostgreSQL qualification on 2026-09-12 composed the exact candidate
-onto protected authority at tree `34ef9d4e85b7e2f3937abe386a03c55078504b34`:
-26 tests passed and one failed. In
+Composition was revalidated on 2026-09-14 at tree
+`7cc8f6cba72d56d96f94e11eba645e5c14aa0582`; PostgreSQL qualification on
+2026-09-12 produced 26 passing tests and one failure. In
 `test_operator_catalog_and_optimistic_metadata_management`, the expected stale
 tax conflict deassociated the enclosing fixture transaction and removed the
 seeded category; the following category update raised `PriceBookNotFound`.
@@ -460,7 +473,7 @@ authority and recomputing their compositions.
 
 ## Rollback
 
-- #257-#260, PR #215, and Mobile have no schema rollback. Rebuild the previous
+- #257-#261, PR #215, and Mobile have no schema rollback. Rebuild the previous
   approved application image and retain evidence.
 - Disable the Preview fixture flag rather than deleting its tenant or audit data.
 - ECO application rollback should retain additive migration `g7i9k1m3o5q7`.
