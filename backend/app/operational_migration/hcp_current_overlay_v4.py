@@ -234,6 +234,16 @@ async def preflight_v4(
                     }
                 )
         elif record.assertion in {OverlayAssertion.CREATE, OverlayAssertion.UPDATE}:
+            existing = await services.source_state(session, record.key)
+            if existing is not None:
+                if existing.source_digest != record.source_digest:
+                    failures.append(
+                        {
+                            "key": f"{record.domain}:{record.source_id}",
+                            "reason": "existing_source4_state_drift",
+                        }
+                    )
+                continue
             if await services.source_exists(session, record.key):
                 failures.append(
                     {
