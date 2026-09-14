@@ -1,17 +1,18 @@
 # OM1 Enterprise integration queue
 
-Snapshot: 2026-09-14 13:00 America/New_York
+Snapshot: 2026-09-14 13:09 America/New_York
 
 ## Authority and deployed state
 
-- Protected authority: `efbe85fa1b5a5213e334d55532f48ffc48e0d016`
-- Protected tip: PR #262, bounded SOURCE.4 overlay lineage bootstrap
-- Deployed Preview: `efbe85fa1b5a5213e334d55532f48ffc48e0d016`
+- Protected authority: `7cdfb183c1d07e064eba88cc547df4f090708ff6`
+- Protected tip: PR #263, current-overlay dependency ordering
+- Deployed Preview: `7cdfb183c1d07e064eba88cc547df4f090708ff6`
 - Preview health: application healthy; PostgreSQL and Redis connected
 - Deployment gap: none; deployed and protected SHAs match
-- Acceptance state: pending. Exact-SHA health passed at 2026-09-14 13:00
-  America/New_York, but required #261/#262 qualification and authenticated
-  persona evidence have not been supplied.
+- Acceptance state: pending. A transient HTTP 502 occurred during deployment;
+  exact-SHA health recovered by 2026-09-14 13:08 America/New_York. Required
+  #261/#262/#263 qualification and authenticated persona evidence have not been
+  supplied.
 - GitHub CI evidence: no check runs or commit statuses are reported for the
   protected SHA. Local qualification does not substitute for the tests below.
 
@@ -40,6 +41,10 @@ Its focused PostgreSQL tests and zero-to-head migration qualification remain
 mandatory before accepting this deployment or deploying another batch; exact
 commands appear in the lineage section.
 
+PR #263 integrated deterministic Customer-to-Location-to-Job-to-Appointment
+overlay ordering without GitHub checks or statuses. Its focused overlay test
+suite is mandatory before accepting this deployment or guarded execution.
+
 ## Protected integration policy
 
 GitHub ruleset `21781922` is active for exactly
@@ -54,12 +59,12 @@ acceptance gates in this packet operationally; GitHub will not enforce them.
 
 | Candidate | Exact branch | Head | PR | Behind/ahead | Effective tree | Classification |
 |---|---|---|---|---:|---|---|
-| OM2-C persona contract and acceptance harness | `work/om2c-launch-20260911-e2e-acceptance-1` | `2b749ff29d2f1c15210ed0bc22ac739eb5a46913` | None; prior #212 is merged | 1/44 | `2a36d19e366d1ecfaece30876fe8add1fda2d608` | Stale but reconcilable; merge-clean; authority metadata edit and fresh PR required |
-| SOURCE.4 artifact recovery | `work/migration-source4-accepted-artifact-recovery-1` | `a3cad3d389b9ed69300939d15c19e2d7b08da063` | None | 4/1 | `68ed2e3ac695259a26b5ede089760e0ad5f4d5b9` | Stale but reconcilable; merge-clean; documentation-only |
-| HCP historical safe-tranche builder | `work/hcp-historical-safe-tranche-1` | `b32f99ff80f447bf8140b73380d19191ccb8db59` | None | 14/1 | `ebe682e252cc73d9220f531930c2992aaa16a5e8` | Stale but reconcilable; merge-clean; metadata edit required |
-| ECO reconciliation | `work/eco-migration-reconciliation-integration-watch-1` | `1c0e7b20db62b6a342548f2842ea1a3a45965386` | None | 6/13 | `c0868088c562313c0a2abbb8d30f48004268667b` | Blocked on schema reconciliation; duplicate protected revision ID; do not integrate current head |
-| Payroll/QBO read UI | `work/om2b-payroll-accounting-continuation-1` | `724398348b566f655d2bc7127c20beeb6be52d6c` | #215 open/CLEAN | 25/1 | `9a5765a9761ea5a8fbd84261f7acb66a2ad047ad` | Stale but reconcilable; merge-clean; PR refresh required |
-| Mobile Apple release packet | `work/mobile-apple-owner-release-packet-1` | `0183eaec3e2825a79b683e9e684a761243c86ea7` | None | 11/15 | `b8059588145b27b271b0b21226978d60597153a4` | Stale but reconcilable; merge-clean; two manifest edits required |
+| OM2-C persona contract and acceptance harness | `work/om2c-launch-20260911-e2e-acceptance-1` | `2b749ff29d2f1c15210ed0bc22ac739eb5a46913` | None; prior #212 is merged | 2/44 | `24b59e6e1877f19652b6f75e2ad8e62248ddbbb8` | Stale but reconcilable; merge-clean; authority metadata edit and fresh PR required |
+| SOURCE.4 artifact recovery | `work/migration-source4-accepted-artifact-recovery-1` | `a3cad3d389b9ed69300939d15c19e2d7b08da063` | None | 5/1 | `e0f59598461a17e858a38d3ebb5e55bd5abb8f5a` | Stale but reconcilable; merge-clean; documentation-only |
+| HCP historical safe-tranche builder | `work/hcp-historical-safe-tranche-1` | `b32f99ff80f447bf8140b73380d19191ccb8db59` | None | 15/1 | `72a4cd1b0c5c5f5f735591945559f9944c44c6aa` | Stale but reconcilable; merge-clean; metadata edit required |
+| ECO reconciliation | `work/eco-migration-reconciliation-integration-watch-1` | `1c0e7b20db62b6a342548f2842ea1a3a45965386` | None | 7/13 | `6045a450b3013f7785c746d392cffd0e91c6e23f` | Blocked on schema reconciliation; duplicate protected revision ID; do not integrate current head |
+| Payroll/QBO read UI | `work/om2b-payroll-accounting-continuation-1` | `724398348b566f655d2bc7127c20beeb6be52d6c` | #215 open/CLEAN | 26/1 | `0c85fa8fea4302f432986d0f3cc1a356dffaa0f0` | Stale but reconcilable; merge-clean; PR refresh required |
+| Mobile Apple release packet | `work/mobile-apple-owner-release-packet-1` | `0183eaec3e2825a79b683e9e684a761243c86ea7` | None | 12/15 | `629471e756f243cb75ada33772e95f349e7ef4f6` | Stale but reconcilable; merge-clean; two manifest edits required |
 
 ## Named launch queue coverage
 
@@ -88,7 +93,7 @@ not reconciliation inputs: use their named protected successors as authority.
 The six remaining effective deltas have zero pairwise file overlap. ECO is not
 admissible: its differently named migration still declares protected revision
 `g7i9k1m3o5q7` from `f6h8j0l2n4p6`. The five-candidate combined tree excluding
-ECO is `fe0c148800001c168be4265dc343e71df8782fa4`; it changes 51 files and passes
+ECO is `45131ad133b06b15ec4e03c6fb92c1012db678c6`; it changes 51 files and passes
 `git diff --check`. Recompute all trees after protected movement or packet edits.
 
 ## Integration order and release waves
@@ -97,8 +102,9 @@ There is no Git-level dependency between active candidates. Prefer this
 operational order:
 
 1. OM2-C persona contract and acceptance harness, before deployed acceptance.
-2. SOURCE.4 artifact recovery and safe-tranche builder preparation; lineage is
-   already protected through #262 and requires pre-deployment qualification.
+2. SOURCE.4 artifact recovery and safe-tranche builder preparation; lineage and
+   parent ordering are protected through #262/#263 and require qualification
+   before acceptance or guarded execution.
 3. Reconcile ECO onto protected schema with a new unique revision
    ID/down-revision, then integrate ECO as its own database checkpoint.
 4. PR #215 in Wave B if QBO read-evidence acceptance is scheduled.
@@ -111,9 +117,9 @@ upload an Apple build as part of integration.
 
 ```mermaid
 flowchart LR
-    A[Protected efbe85fa] -->|reconcile| R[SOURCE.4 recovery]
+    A[Protected 7cdfb183] -->|reconcile| R[SOURCE.4 recovery]
     A --> C[OM2-C persona contract]
-    A --> L[Protected lineage #262 qualification]
+    A --> L[Protected lineage #262/#263 qualification]
     A -->|reconcile| B[Historical builder]
     A -->|reconcile| E[ECO watch]
     A -->|reconcile| P[PR 215]
@@ -158,9 +164,9 @@ complete until its duplicate Alembic revision is replaced downstream of #262.
 
 | Checkpoint | Enterprise action | Required stop condition |
 |---|---|---|
-| Acceptance tooling | Reconcile `2b749ff2...` to `efbe85fa...`, update its contract authority, open a fresh PR, integrate it, refetch, then deploy the resulting protected tip containing #257-#262 and this contract | Contract tests fail, protected SHA moves, persona permissions/digests differ, or secret material appears in arguments/evidence |
-| Current deployed acceptance | Preserve the healthy exact-SHA result for `efbe85fa...`; run the missing #261/#262 qualification; do not mark accepted until evidence is attached | Focused test, zero-to-head migration, exactly-one-head/drift check fails, or health/dependency state regresses |
-| Wave C preparation | Qualify protected #262 before acceptance; prepare SOURCE.4 recovery and retain the historical builder as preparation tooling | Artifact digest/loader check, lineage tests, exactly-one-head check, zero-to-head migration, builder tests, or authority metadata fails |
+| Acceptance tooling | Reconcile `2b749ff2...` to `7cdfb183...`, update its contract authority, open a fresh PR, integrate it, refetch, then deploy the resulting protected tip containing #257-#263 and this contract | Contract tests fail, protected SHA moves, persona permissions/digests differ, or secret material appears in arguments/evidence |
+| Current deployed acceptance | Preserve the recovered healthy exact-SHA result for `7cdfb183...` and the transient 502 evidence; run missing #261/#262/#263 qualification; do not mark accepted until evidence is attached | Focused test, zero-to-head migration, exactly-one-head/drift check fails, or health/dependency state regresses |
+| Wave C preparation | Qualify protected #262/#263 before acceptance; prepare SOURCE.4 recovery and retain the historical builder as preparation tooling | Artifact digest/loader check, lineage/parent-order tests, exactly-one-head check, zero-to-head migration, builder tests, or authority metadata fails |
 | ECO checkpoint | Assign ECO a new unique revision ID with down-revision `g7i9k1m3o5q7`; requalify, then integrate/deploy independently | Duplicate/multiple Alembic head, drift, migration failure, or governed-policy acceptance failure |
 | Wave B | Integrate PR #215 independently | QBO/Payroll projection tests fail or any provider mutation appears |
 | Wave D | Integrate Mobile independently | Test/static/preflight failure or either manifest is stale |
@@ -201,7 +207,7 @@ pushes, or merges the protected branch.
 ```bash
 git fetch origin --prune
 test "$(git rev-parse origin/customer-management-v1)" = \
-  efbe85fa1b5a5213e334d55532f48ffc48e0d016
+  7cdfb183c1d07e064eba88cc547df4f090708ff6
 
 lane=work/REPLACE_WITH_LANE
 expected=REPLACE_WITH_FULL_HEAD
@@ -250,7 +256,7 @@ python -m compileall -q \
   backend/scripts/authenticated_preview_acceptance.py
 ```
 
-Update the contract's protected authority from `e1015aad...` to `efbe85fa...`.
+Update the contract's protected authority from `e1015aad...` to `7cdfb183...`.
 Require that exact authority, exact synthetic Company/Branch IDs,
 exact permission digests, file references under
 `/run/secrets/acp-preview-acceptance/v1/{run_id}`, directory mode `0700`, file
@@ -261,18 +267,20 @@ authority unless Enterprise seals that route into the run attestation.
 
 ### SOURCE.4 bounded lineage bootstrap
 
-PR #262 integrated `9b9d3023...` as protected `efbe85fa...`. It closes the
+PR #262 integrated `9b9d3023...` as `efbe85fa...`; PR #263 then integrated
+deterministic parent ordering as protected `7cdfb183...`. Together they close the
 missing SOURCE.4 run-lineage dependency for bounded current-operational overlay
 admission without admitting the canonical population. It retains 1,389
 canonical holds and `canonical_admission_allowed: false`. Do not integrate the
 current ECO head because its migration reuses protected revision
 `g7i9k1m3o5q7`; ECO must receive a new revision downstream of that head.
 
-Static qualification on 2026-09-14 passed Python 3.12 compilation for all five
-affected application/model files, the migration, and both test modules. The
-candidate adds four lineage tests and updates two command tests. Full tests and
-database qualification remain required in a supported environment with a fresh
-disposable PostgreSQL database:
+Static qualification on 2026-09-14 passed Python 3.12 compilation for the
+affected #262 application/model files, migration, and tests, plus the #263
+executor and test. The protected tranche adds four lineage tests, updates two
+command tests, and adds the parent-order case to the seven-test executor module.
+Full tests and database qualification remain required in a supported environment
+with a fresh disposable PostgreSQL database:
 
 ```bash
 test -n "$QUALIFICATION_DATABASE_URL"
@@ -283,20 +291,27 @@ ENVIRONMENT=test DATABASE_URL="$QUALIFICATION_DATABASE_URL" alembic heads
 ENVIRONMENT=test DATABASE_URL="$QUALIFICATION_DATABASE_URL" alembic check
 ENVIRONMENT=test DATABASE_URL="$QUALIFICATION_DATABASE_URL" pytest -q \
   tests/operational_migration/test_hcp_current_overlay_lineage.py \
-  tests/operational_migration/test_hcp_current_overlay_command.py
+  tests/operational_migration/test_hcp_current_overlay_command.py \
+  tests/operational_migration/test_hcp_current_overlay.py
 python -m compileall -q \
+  app/operational_migration/hcp_current_overlay.py \
   app/operational_migration/hcp_current_overlay_adapter.py \
   app/operational_migration/hcp_current_overlay_command.py \
   app/operational_migration/hcp_current_overlay_lineage.py \
   app/operational_migration/hcp_current_overlay_native.py \
-  app/operational_migration/models.py
+  app/operational_migration/models.py \
+  tests/operational_migration/test_hcp_current_overlay.py \
+  tests/operational_migration/test_hcp_current_overlay_command.py \
+  tests/operational_migration/test_hcp_current_overlay_lineage.py
 ```
 
 Require exactly one current/head revision and no drift. Validate atomic master
 and child creation, deterministic replay, fail-closed conflicting bindings,
 rollback on failure, receipt persistence, the 503-assertion scope, canonical
-hold count 1,389, and terminal status `completed_current_operational`. These
-tests and integration do not authorize `--authorize-preview-execution`; guarded
+hold count 1,389, terminal status `completed_current_operational`, and ordered
+Customer-to-Location-to-Job-to-Appointment processing even when the packet is
+child-first. These tests and integration do not authorize
+`--authorize-preview-execution`; guarded
 Preview execution remains a separate owner action requiring a fresh backup,
 verified isolated-restore receipt, mode-0600 v2 authority, exact deployed SHA,
 and exact schema head.
@@ -305,7 +320,7 @@ and exact schema head.
 
 Merge current protected authority into
 `work/migration-source4-accepted-artifact-recovery-1`, require tree
-`68ed2e3ac695259a26b5ede089760e0ad5f4d5b9`, run `git diff --check`, push the
+`e0f59598461a17e858a38d3ebb5e55bd5abb8f5a`, run `git diff --check`, push the
 lane branch, and open a documentation PR. The packet contains no protected SHA
 that needs editing.
 
@@ -331,7 +346,7 @@ ENVIRONMENT=test PYTHONPATH=backend python -c 'from pathlib import Path; from ap
 
 ### HCP historical safe-tranche builder
 
-Update the packet authority from `9096a777...` to `efbe85fa...` and state that
+Update the packet authority from `9096a777...` to `7cdfb183...` and state that
 the executor and post-admission acceptance are protected through PR #253 at
 `96d67cb73dbe4838e882e1551de5906eda598f4e`. Run:
 
@@ -347,7 +362,7 @@ The builder is read-only with respect to application data, but writes the
 explicit `--output` artifact. It must not be treated as admission authority.
 
 Composition was revalidated on 2026-09-14 at tree
-`ebe682e252cc73d9220f531930c2992aaa16a5e8`; lane qualification on 2026-09-12
+`72a4cd1b0c5c5f5f735591945559f9944c44c6aa`; lane qualification on 2026-09-12
 passed all three focused tests and Python compilation. The tests cover accepted-record selection,
 HOLD treatment for unbound updates, `execution_allowed = false`, acceptance-plan
 digest tampering, and conflicting cross-scope native bindings.
@@ -407,7 +422,7 @@ candidate branch, so Enterprise must require and record these results before
 integration.
 
 Composition was revalidated on 2026-09-14 at tree
-`9a5765a9761ea5a8fbd84261f7acb66a2ad047ad`; lane qualification on 2026-09-12
+`0c85fa8fea4302f432986d0f3cc1a356dffaa0f0`; lane qualification on 2026-09-12
 passed three suites and nine tests, followed by clean full ESLint and production
 TypeScript/Vite builds. This evidence does not replace Enterprise's final rerun
 after branch reconciliation.
@@ -434,7 +449,7 @@ configuration validation, and Apple preflight. Signing/upload remains an owner
 operation.
 
 Composition was revalidated on 2026-09-14 at tree
-`b8059588145b27b271b0b21226978d60597153a4`; lane qualification on 2026-09-12
+`629471e756f243cb75ada33772e95f349e7ef4f6`; lane qualification on 2026-09-12
 passed all 18 suites and 138 tests, followed by clean typecheck, lint, configuration
 validation, and the non-mutating Apple distribution preflight. Jest emitted
 React `VirtualizedList` updates-not-wrapped-in-`act(...)` warnings; these did not
@@ -499,9 +514,9 @@ back through this queue refresh before Enterprise integrates it.
 ## Held candidate
 
 Price Book branch `work/pricebook-allcounty-review-readiness-1` at
-`49e852aa8c931c8042de0634b68d993b0e02452e` is 6 behind / 13 ahead, has no PR,
+`49e852aa8c931c8042de0634b68d993b0e02452e` is 7 behind / 13 ahead, has no PR,
 and composes merge-clean at tree
-`93fb5b6ec83eb1111efbb25b7ea6e446411c87ba`. It is stale and Git-reconcilable,
+`15afca73c3dada1417d0c1349ecff629245ab937`. It is stale and Git-reconcilable,
 but not qualification-admissible. It supersedes the smaller `c1c90a0a...`
 candidate and remains held for:
 
@@ -510,7 +525,7 @@ candidate and remains held for:
 3. review-route authorization matrix coverage.
 
 Composition was revalidated on 2026-09-14 at tree
-`93fb5b6ec83eb1111efbb25b7ea6e446411c87ba`; PostgreSQL qualification on
+`15afca73c3dada1417d0c1349ecff629245ab937`; PostgreSQL qualification on
 2026-09-12 produced 26 passing tests and one failure. In
 `test_operator_catalog_and_optimistic_metadata_management`, the expected stale
 tax conflict deassociated the enclosing fixture transaction and removed the
@@ -599,7 +614,7 @@ authority and recomputing their compositions.
 
 ## Rollback
 
-- #257-#262, PR #215, and Mobile have no application-state rollback. Rebuild the previous
+- #257-#263, PR #215, and Mobile have no application-state rollback. Rebuild the previous
   approved application image and retain evidence.
 - Disable the Preview fixture flag rather than deleting its tenant or audit data.
 - ECO application rollback should retain its additive migration under the
