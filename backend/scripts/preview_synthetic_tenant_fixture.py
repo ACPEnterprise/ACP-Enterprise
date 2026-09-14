@@ -39,6 +39,10 @@ async def execute(args: argparse.Namespace) -> dict[str, object]:
             company_id=UUID(args.authorizing_company_id),
             branch_id=UUID(args.authorizing_branch_id),
         )
+        # Authorization resolution is read-only but SQLAlchemy autobegins a
+        # transaction. End that boundary before the fixture service takes
+        # explicit ownership of its atomic mutation transaction.
+        await session.rollback()
         result = await preview_synthetic_tenant_fixture_service.create_or_reuse(
             session,
             context=context,
