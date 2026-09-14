@@ -6,7 +6,10 @@ import { WorkforceRoute } from "./WorkforceRoute";
 vi.mock("../auth", () => ({
   useAuth: () => ({
     activeCompany: { id: "company-1" },
-    permissionCodes: ["COMPANY_TIMEKEEPING_ADMIN_READ"],
+    permissionCodes: [
+      "COMPANY_TIMEKEEPING_ADMIN_READ",
+      "COMPANY_PAYROLL_REPORTING_READ",
+    ],
   }),
 }));
 vi.mock("../features/administration/hooks", () => ({
@@ -43,11 +46,7 @@ vi.mock("../hooks/useWorkforce", () => ({
 vi.mock("../hooks/useWorkdayTime", () => ({
   useAdminTimecardReview: () => ({
     data: {
-      pay_period: {
-        id: "period-1",
-        period_start: "2026-09-06",
-        period_end: "2026-09-12",
-      },
+      pay_period: null,
       items: [],
     },
     isLoading: false,
@@ -122,7 +121,7 @@ describe("Workforce timecard navigation", () => {
   it("opens the Employee requested by the Payroll register link", () => {
     render(
       <MemoryRouter
-        initialEntries={["/employees?employee=employee-1#timecard-operations"]}
+        initialEntries={["/employees?employee=employee-1&period=period-1#timecard-operations"]}
       >
         <WorkforceRoute />
       </MemoryRouter>,
@@ -134,6 +133,8 @@ describe("Workforce timecard navigation", () => {
     expect(screen.getByRole("heading", { name: "Weekly totals" })).toBeVisible();
     expect(screen.getByText("8.00 supported · 8.00 accepted hours")).toBeVisible();
     expect(screen.getByText("Revision 2 · verified")).toBeVisible();
+    expect(screen.queryByText("Pay period required")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Review Payroll period" })).toHaveAttribute("href", "/payroll?period=period-1");
     expect(screen.getByRole("navigation", { name: "Team workspace" })).toBeVisible();
     expect(screen.getByRole("link", { name: "Employees" })).toHaveAttribute("href", "#employee-roster");
     expect(screen.getByRole("link", { name: "Time & Attendance" })).toHaveAttribute("href", "#timecard-operations");

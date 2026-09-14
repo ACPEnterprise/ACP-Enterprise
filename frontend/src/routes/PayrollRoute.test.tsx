@@ -264,8 +264,18 @@ describe("PayrollRoute authorization", () => {
         adjustment_counts: {},
       }) as never,
     );
-    vi.mocked(useCurrentPayPeriod).mockReturnValue(
-      query({ id: "period-1" }) as never,
+    vi.mocked(useCurrentPayPeriod).mockReturnValue(query(null) as never);
+    vi.mocked(usePayPeriods).mockReturnValue(
+      query([
+        {
+          id: "period-1",
+          period_start: "2026-09-06",
+          period_end: "2026-09-12",
+          processing_date: "2026-09-14",
+          payday: "2026-09-18",
+          schedule_definition_id: "office.weekly.v1",
+        },
+      ]) as never,
     );
     vi.mocked(usePayrollPeriodOperations).mockReturnValue(
       query({
@@ -301,8 +311,9 @@ describe("PayrollRoute authorization", () => {
     ).toBeGreaterThan(0);
     expect(screen.getByRole("link", { name: "View timecard" })).toHaveAttribute(
       "href",
-      "/employees?employee=employee-1#timecard-employee-1",
+      "/employees?employee=employee-1&period=period-1#timecard-employee-1",
     );
+    expect(screen.queryByText("No current pay period")).not.toBeInTheDocument();
     expect(screen.getByText("Marisol Rivera").closest("tr")).toHaveAttribute(
       "id",
       "payroll-employee-employee-1",
