@@ -1,14 +1,14 @@
 # OM1 Enterprise integration queue
 
-Snapshot: 2026-09-14 17:03 America/New_York
+Snapshot: 2026-09-14 17:07 America/New_York
 
 ## Authority and deployed state
 
 - Protected authority: `a390c9d8fcbb16244ca141a09fa0acf9a34ec4cc`
 - Protected tip: PR #273, Dispatch field-readiness workflow
-- Deployed Preview: `cfebd1669c2d21402377391f3bfa2433f8d63da3`
+- Deployed Preview: `a390c9d8fcbb16244ca141a09fa0acf9a34ec4cc`
 - Preview health: application healthy; PostgreSQL and Redis connected
-- Deployment gap: PR #273 is not deployed; Preview still reports `cfebd166...`
+- Deployment gap: none; deployed and protected SHAs match
 - Acceptance state: pending. Preview initially remained at `b296cc6b...` after
   #265 merged, then by 2026-09-14 14:00 America/New_York returned HTTP 200 at
   exact SHA `b4bf00d3...` with healthy application and connected PostgreSQL and
@@ -35,8 +35,10 @@ Snapshot: 2026-09-14 17:03 America/New_York
   dependencies connected at 16:27, 16:28, and 16:30.
   After #273 merged, the 16:57 and 17:00 health attempts hit SSL connection
   timeouts; the intervening 16:58 response remained healthy at old SHA
-  `cfebd166...`, as did 17:01; the 17:02 and 17:03 requests returned HTTP 502. Do not accept
-  or exercise field readiness before exact-SHA recovery.
+  `cfebd166...`, as did 17:01; requests from 17:02 through 17:05 returned HTTP
+  502. Preview recovered healthy at exact `a390c9d8...` with both dependencies
+  connected at 17:06 and 17:07. Preserve the rollout incidents. Deployment does
+  not qualify the field-readiness mutation for use.
 - GitHub CI evidence: no check runs or commit statuses are reported for the
   protected SHA. PR #264's body reports 698 migration/job/scheduling regressions,
   16 focused tests, PostgreSQL zero-to-head/current=head, and zero drift, but no
@@ -285,7 +287,7 @@ complete until its duplicate revision is replaced downstream of now-protected
 | Checkpoint | Enterprise action | Required stop condition |
 |---|---|---|
 | Acceptance tooling | Reconcile `1fb0481a...` to `a390c9d8...`, update schema/release bindings, then open a fresh PR. Route the declared service-principal/activation/session/token-writer gaps to Enterprise/platform before persona issuance | Contract tests fail, protected SHA moves, platform primitive remains missing at execution time, persona permissions/digests differ, or secret material appears in arguments/evidence |
-| Current deployed acceptance | Wait for exact `a390c9d8...`; preserve both SSL timeouts, the 17:02-17:03 HTTP 502s, old-`cfebd166...` responses, and all earlier rollout evidence; attach or rerun missing #261-#273 qualification; keep the protected Migration commands/verifier and #273 field-readiness mutation disabled | Deployed SHA differs, focused test, zero-to-head migration, exactly-one-head/drift check fails, required evidence cannot be produced, defective tooling is exercised, or health/dependency state regresses |
+| Current deployed acceptance | Preserve exact-`a390c9d8...` healthy responses at 17:06-17:07, both SSL timeouts, the 17:02-17:05 HTTP 502s, old-`cfebd166...` responses, and all earlier rollout evidence; attach or rerun missing #261-#273 qualification; keep the protected Migration commands/verifier and #273 field-readiness mutation disabled | Deployed SHA differs, focused test, zero-to-head migration, exactly-one-head/drift check fails, required evidence cannot be produced, defective tooling is exercised, or health/dependency state regresses |
 | Wave C preparation | Treat #264-#272 as integrated, but #265/#266, the executor through #270, and verifier through #272 operationally rejected; repair cohort/runtime/v4/executor evidence in that order; prepare recovery and historical builder independently; repair #271/#272 only as post-execution verification tooling | Any unbound input, unsafe private-file path, missing or ambiguous execution authority, nondeterministic or overbroad replay evidence, test/digest/count failure, current graph other than 11/11/15/18 with zero holds, exactly-one-head/drift/migration failure, or authority mismatch |
 | ECO checkpoint | Native binding is protected; assign ECO a unique revision with down-revision `h8j0l2n4p6r8`, requalify, then integrate/deploy independently | Duplicate/multiple Alembic head, drift, migration failure, or governed-policy acceptance failure |
 | Wave B | Integrate PR #215 independently | QBO/Payroll projection tests fail or any provider mutation appears |
