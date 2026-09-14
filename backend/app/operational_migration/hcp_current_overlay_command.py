@@ -18,7 +18,6 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.config import settings
-from app.customer_migration.models import CustomerMigrationRun
 from app.database.session import AsyncSessionFactory
 from app.operational_migration.hcp_current_overlay import (
     CurrentOverlayExecutor,
@@ -28,18 +27,18 @@ from app.operational_migration.hcp_current_overlay import (
 from app.operational_migration.hcp_current_overlay_adapter import (
     SqlAlchemyCurrentOverlayRepository,
 )
+from app.operational_migration.hcp_current_overlay_lineage import (
+    CurrentOverlayLineageBinding,
+    CurrentOverlayLineageBootstrap,
+)
 from app.operational_migration.hcp_current_overlay_native import (
     HcpCurrentOverlayNativeServices,
 )
 from app.operational_migration.hcp_migration2_command import resolve_rehearsal_context
-from app.operational_migration.models import (
-    HcpMigrationMasterRun,
-    OperationalMigrationRun,
-)
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import MigrationPermission
 
-COMMAND_CONTRACT = "hcp-current-overlay-native-execution/v1"
+COMMAND_CONTRACT = "hcp-current-overlay-native-execution/v2"
 RESTORE_RECEIPT_CONTRACT = "preview-isolated-restore-receipt/v1"
 
 
@@ -65,9 +64,8 @@ class CurrentOverlayExecutionAuthority:
     company_id: UUID
     branch_id: UUID
     actor_id: UUID
-    master_run_id: UUID
-    customer_run_id: UUID
-    operational_run_id: UUID
+    source4_package_identity: str
+    canonical_hold_count: int
     overlay_path: Path
     overlay_file_digest: str
     overlay_manifest_digest: str
@@ -97,9 +95,6 @@ class CurrentOverlayExecutionAuthority:
             "company_id",
             "branch_id",
             "actor_id",
-            "master_run_id",
-            "customer_run_id",
-            "operational_run_id",
         ):
             value[key] = UUID(value[key])
         for key in (
@@ -152,6 +147,11 @@ class CurrentOverlayExecutionAuthority:
             raise ValueError("overlay canonical classification result mismatch")
         if not self.zero_migration_drift or not self.current_operational_admission_allowed:
             raise ValueError("overlay operational or migration-drift gate failed")
+        if (
+            self.canonical_hold_count != 1389
+            or not self.source4_package_identity.strip()
+        ):
+            raise ValueError("overlay canonical hold or SOURCE.4 package binding mismatch")
         expected_idempotency = hashlib.sha256(
             json.dumps(
                 {
@@ -206,35 +206,29 @@ async def execute_current_overlay(
         )
         if schemas != (authority.expected_schema_head,):
             raise ValueError("overlay schema is not current at exactly one head")
-        master = await session.get(HcpMigrationMasterRun, authority.master_run_id)
-        customer_run = await session.get(CustomerMigrationRun, authority.customer_run_id)
-        operational_run = await session.get(
-            OperationalMigrationRun, authority.operational_run_id
-        )
-        if (
-            master is None
-            or master.status != "completed"
-            or master.company_id != authority.company_id
-            or master.branch_id != authority.branch_id
-            or master.package_digest != authority.expected_base_source4_digest
-            or customer_run is None
-            or customer_run.master_run_id != master.id
-            or operational_run is None
-            or operational_run.master_run_id != master.id
-        ):
-            raise ValueError("overlay SOURCE.4 run lineage mismatch")
-        master_id = master.id
-        customer_run_id = customer_run.id
-        operational_run_id = operational_run.id
-        package_digest = master.package_digest
         await session.rollback()
+
+        binding = CurrentOverlayLineageBinding(
+            company_id=authority.company_id,
+            branch_id=authority.branch_id,
+            actor_id=authority.actor_id,
+            source4_package_identity=authority.source4_package_identity,
+            base_source4_digest=authority.expected_base_source4_digest,
+            overlay_manifest_digest=authority.overlay_manifest_digest,
+            overlay_file_digest=authority.overlay_file_digest,
+            hold_digest=authority.hold_digest,
+            canonical_hold_count=authority.canonical_hold_count,
+            authority_sha=repository_sha,
+            schema_head=authority.expected_schema_head,
+        )
+        bootstrap = CurrentOverlayLineageBootstrap(binding, manifest)
 
         services = HcpCurrentOverlayNativeServices(
             context=context,
-            master_run_id=master_id,
-            customer_run_id=customer_run_id,
-            operational_run_id=operational_run_id,
-            package_digest=package_digest,
+            master_run_id=binding.master_run_id,
+            customer_run_id=binding.master_run_id,  # rebound after bootstrap flush
+            operational_run_id=binding.master_run_id,  # rebound by service proxy below
+            package_digest=binding.base_source4_digest,
             base_source_digests={
                 record.key: record.prior_source_digest or record.source_digest
                 for record in manifest.records
@@ -242,8 +236,9 @@ async def execute_current_overlay(
         )
         repository = SqlAlchemyCurrentOverlayRepository(
             session,
-            master_run_id=master_id,
+            master_run_id=binding.master_run_id,
             services=services,
+            lineage_bootstrap=bootstrap,
             advisory_lock_identity=f"hcp-current-overlay:{authority.company_id}",
             execution_context={
                 "authority_sha": repository_sha,

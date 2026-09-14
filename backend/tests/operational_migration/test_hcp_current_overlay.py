@@ -72,13 +72,14 @@ def record(
     source_id: str,
     assertion: OverlayAssertion,
     *,
+    domain: str = "job",
     source_digest: str = DIGEST,
     prior: str | None = None,
     parents: tuple[OverlayKey, ...] = (),
     fingerprint: str | None = None,
 ) -> OverlayRecord:
     return OverlayRecord(
-        "job",
+        domain,
         source_id,
         assertion,
         source_digest,
@@ -210,6 +211,43 @@ async def test_requires_parent_closure_and_matching_authority() -> None:
             expected_base_source4_digest=DIGEST,
             rollback_backup_digest=BACKUP,
         )
+
+
+@pytest.mark.asyncio
+async def test_applies_parent_domains_before_children_when_packet_is_child_first() -> None:
+    repository = MemoryRepository()
+    customer = record("customer", OverlayAssertion.CREATE, domain="customer")
+    location = record(
+        "location",
+        OverlayAssertion.CREATE,
+        domain="service_location",
+        parents=(customer.key,),
+    )
+    job = record(
+        "job",
+        OverlayAssertion.CREATE,
+        parents=(customer.key, location.key),
+    )
+    appointment = record(
+        "appointment",
+        OverlayAssertion.CREATE,
+        domain="appointment",
+        parents=(job.key,),
+    )
+
+    receipt = await CurrentOverlayExecutor().execute(
+        repository,
+        manifest=manifest(appointment, job, location, customer),
+        expected_base_source4_digest=DIGEST,
+        rollback_backup_digest=BACKUP,
+    )
+
+    assert [item.key.domain for item in receipt.journal] == [
+        "customer",
+        "service_location",
+        "job",
+        "appointment",
+    ]
 
 
 def test_manifest_is_immutable_and_rejects_invalid_assertions() -> None:

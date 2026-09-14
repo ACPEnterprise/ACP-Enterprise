@@ -269,7 +269,17 @@ class CurrentOverlayExecutor:
             if item.assertion in {OverlayAssertion.HOLD, OverlayAssertion.REMOVE}
         }
         journal: list[OverlayJournalEntry] = []
-        for record in manifest.records:
+        domain_order = {
+            "customer": 0,
+            "service_location": 1,
+            "job": 2,
+            "appointment": 3,
+        }
+        ordered_records = sorted(
+            manifest.records,
+            key=lambda item: (domain_order.get(item.domain, 99), item.source_id),
+        )
+        for record in ordered_records:
             for parent in record.parent_keys:
                 if record.assertion in {
                     OverlayAssertion.CREATE,

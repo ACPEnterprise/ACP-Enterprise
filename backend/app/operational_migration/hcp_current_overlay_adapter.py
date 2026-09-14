@@ -26,6 +26,10 @@ from app.operational_migration.hcp_current_overlay import (
     OverlayRecord,
     OverlaySourceState,
 )
+from app.operational_migration.hcp_current_overlay_lineage import (
+    MASTER_STATUS,
+    CurrentOverlayLineageBootstrap,
+)
 from app.operational_migration.models import HcpMigrationMasterRun
 
 STATE_KEY = "hcp_current_overlay"
@@ -59,6 +63,10 @@ class CurrentOverlayDomainServices(Protocol):
         self, session: AsyncSession, record: OverlayRecord
     ) -> None: ...
 
+    def bind_lineage(
+        self, *, master_run_id: UUID, customer_run_id: UUID, operational_run_id: UUID
+    ) -> None: ...
+
 
 class SqlAlchemyCurrentOverlayRepository(CurrentOverlayRepository):
     """Durable, lock-protected adapter bound to one admitted SOURCE.4 master run."""
@@ -71,12 +79,14 @@ class SqlAlchemyCurrentOverlayRepository(CurrentOverlayRepository):
         services: CurrentOverlayDomainServices,
         advisory_lock_identity: str | None = None,
         execution_context: dict[str, object] | None = None,
+        lineage_bootstrap: CurrentOverlayLineageBootstrap | None = None,
     ) -> None:
         self._session = session
         self._master_run_id = master_run_id
         self._services = services
         self._advisory_lock_identity = advisory_lock_identity
         self._execution_context = dict(execution_context or {})
+        self._lineage_bootstrap = lineage_bootstrap
         self._master: HcpMigrationMasterRun | None = None
 
     @asynccontextmanager
@@ -91,13 +101,27 @@ class SqlAlchemyCurrentOverlayRepository(CurrentOverlayRepository):
                 )
                 if locked is not True:
                     raise ValueError("concurrent HCP overlay admission is active")
-            self._master = await self._session.scalar(
-                select(HcpMigrationMasterRun)
-                .where(HcpMigrationMasterRun.id == self._master_run_id)
-                .with_for_update()
-            )
-            if self._master is None or self._master.status != "completed":
-                raise ValueError("completed SOURCE.4 master run is required")
+            if self._lineage_bootstrap is not None:
+                self._master = await self._lineage_bootstrap.establish(self._session)
+                if self._master.id != self._master_run_id:
+                    raise ValueError("overlay bootstrap master identity mismatch")
+                assert self._lineage_bootstrap.customer_run is not None
+                assert self._lineage_bootstrap.operational_run is not None
+                self._services.bind_lineage(
+                    master_run_id=self._master.id,
+                    customer_run_id=self._lineage_bootstrap.customer_run.id,
+                    operational_run_id=self._lineage_bootstrap.operational_run.id,
+                )
+            else:
+                self._master = await self._session.scalar(
+                    select(HcpMigrationMasterRun)
+                    .where(HcpMigrationMasterRun.id == self._master_run_id)
+                    .with_for_update()
+                )
+                if self._master is None or self._master.status != "completed":
+                    raise ValueError("completed SOURCE.4 master run is required")
+            if self._master.status not in {"running", "completed", MASTER_STATUS}:
+                raise ValueError("admissible SOURCE.4 master run is required")
             yield
             self._master = None
 
@@ -167,6 +191,8 @@ class SqlAlchemyCurrentOverlayRepository(CurrentOverlayRepository):
             raise ValueError("overlay receipt replay conflict")
         receipts[receipt.manifest_digest] = value
         self._write_state()
+        if self._lineage_bootstrap is not None:
+            await self._lineage_bootstrap.finalize(receipt)
 
     def _record_state(
         self, record: OverlayRecord, state: OverlaySourceState
