@@ -152,8 +152,13 @@ class _Native:
 
 
 class _Services:
-    def __init__(self, targets: dict[OverlayKey, UUID]) -> None:
+    def __init__(
+        self,
+        targets: dict[OverlayKey, UUID],
+        source_states: dict[OverlayKey, object] | None = None,
+    ) -> None:
         self.targets = targets
+        self.source_states = source_states or {}
 
     async def qualified_native(self, _session, _domain: str, native_id: UUID):
         return _Native() if native_id in self.targets.values() else None
@@ -163,6 +168,9 @@ class _Services:
 
     async def source_exists(self, _session, _key: OverlayKey) -> bool:
         return False
+
+    async def source_state(self, _session, key: OverlayKey):
+        return self.source_states.get(key)
 
     async def fingerprint_owners(
         self, _session, _domain: str, _fingerprint: str
@@ -204,6 +212,33 @@ async def test_v4_preflight_aggregates_all_target_failures(tmp_path: Path) -> No
     report = json.loads(str(error.value))
     assert report["failure_count"] == 9
     assert len(report["failures"]) == 9
+
+
+@pytest.mark.asyncio
+async def test_v4_preflight_accepts_exact_persisted_state_on_replay(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "v4.json"
+    _write_packet(path, _packet())
+    overlay = V4ExecutableOverlay.load(path)
+    record = next(
+        item
+        for item in overlay.manifest.records
+        if item.key not in overlay.qualified_targets
+        and item.assertion.value != "hold"
+    )
+    state = SimpleNamespace(source_digest=record.source_digest)
+
+    report = await preflight_v4(  # type: ignore[arg-type]
+        object(),
+        overlay=overlay,
+        services=_Services(
+            overlay.qualified_targets,
+            source_states={record.key: state},
+        ),
+    )
+
+    assert report["ready"] is True
 
 
 @pytest.mark.asyncio
