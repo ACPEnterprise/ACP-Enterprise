@@ -1,0 +1,29 @@
+{
+  "example_only": true,
+  "credential_material": false,
+  "attestation": {
+    "fixture_key": "acp-employee-beta-v1",
+    "fixture_version": "preview.synthetic.tenant.v1",
+    "environment": "preview",
+    "synthetic_marker": "SYNTHETIC_BETA_ONLY",
+    "real_data_access": false,
+    "persona": "qbo",
+    "company_id": "31ba6867-2d8a-55dd-9e34-d67c684ee41c",
+    "branch_id": "95bf7a14-09b0-51b6-b3cb-7946523ec093",
+    "user_id": "00000000-0000-0000-0000-000000000001",
+    "session_id": "00000000-0000-0000-0000-000000000002",
+    "permission_codes": ["COMPANY_ACCOUNTING_REPORT_READ"],
+    "permission_digest": "492135963deba634f9d1055643f8658faddb2c635a5369601ce35a3430c9e55f",
+    "mutation_allowlist": [],
+    "fixture_references": {},
+    "release_sha": "0000000000000000000000000000000000000000",
+    "protected_authority_sha": "0000000000000000000000000000000000000000",
+    "frontend_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "schema_head": "replace-with-deployed-head",
+    "issued_at": "2000-01-01T00:00:00+00:00",
+    "expires_at": "2000-01-01T00:00:00+00:00",
+    "session_expires_at": "2000-01-01T00:00:00+00:00",
+    "authorized_by": "replace-with-enterprise-audit-reference",
+    "audit_event_id": "00000000-0000-0000-0000-000000000003"
+  }
+}

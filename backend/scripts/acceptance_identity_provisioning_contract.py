@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from uuid import UUID
+
+from app.platform.onboarding.preview_tenant_fixture import FIXTURE_VERSION
 
 CONTRACT_PATH = (
     Path(__file__).parents[1] / "operations/preview-acceptance-identities.v1.json"
@@ -71,6 +74,15 @@ def persona_contract(contract: dict[str, object], persona: str) -> dict[str, obj
     return selected
 
 
+def permission_digest(permissions: object) -> str:
+    if not isinstance(permissions, list) or not all(
+        isinstance(value, str) for value in permissions
+    ):
+        raise ProvisioningBlocked("Persona permissions are invalid.")
+    encoded = json.dumps(sorted(permissions), separators=(",", ":")).encode()
+    return hashlib.sha256(encoded).hexdigest()
+
+
 def plan(args: argparse.Namespace) -> dict[str, object]:
     contract = load_contract()
     selected = persona_contract(contract, args.persona)
@@ -110,6 +122,16 @@ def attest(args: argparse.Namespace) -> dict[str, object]:
         raise ProvisioningBlocked("Refusing to overwrite an existing attestation.")
     now = datetime.now(timezone.utc)
     expires_at = now + timedelta(seconds=args.ttl_seconds)
+    try:
+        session_expires_at = datetime.fromisoformat(args.session_expires_at)
+    except ValueError as error:
+        raise ProvisioningBlocked("session_expires_at must be an ISO date-time.") from error
+    if (
+        session_expires_at.tzinfo is None
+        or session_expires_at <= now
+        or session_expires_at > now + timedelta(seconds=3600)
+    ):
+        raise ProvisioningBlocked("Session must be unexpired and expire within one hour.")
     maximum_value = contract["attestation_maximum_seconds"]
     if not isinstance(maximum_value, int):
         raise ProvisioningBlocked("Attestation maximum is invalid.")
@@ -126,6 +148,7 @@ def attest(args: argparse.Namespace) -> dict[str, object]:
         )
     payload = {
         "fixture_key": contract["fixture_key"],
+        "fixture_version": FIXTURE_VERSION,
         "environment": "preview",
         "synthetic_marker": contract["synthetic_marker"],
         "real_data_access": False,
@@ -135,6 +158,7 @@ def attest(args: argparse.Namespace) -> dict[str, object]:
         "user_id": require_uuid(args.user_id, "user_id"),
         "session_id": require_uuid(args.session_id, "session_id"),
         "permission_codes": selected["permissions"],
+        "permission_digest": permission_digest(selected["permissions"]),
         "mutation_allowlist": requested_mutations,
         "fixture_references": fixture_references(args.fixture_reference, args.persona),
         "release_sha": args.release_sha,
@@ -143,6 +167,7 @@ def attest(args: argparse.Namespace) -> dict[str, object]:
         "schema_head": args.schema_head,
         "issued_at": now.isoformat(),
         "expires_at": expires_at.isoformat(),
+        "session_expires_at": session_expires_at.isoformat(),
         "authorized_by": args.authorized_by,
         "audit_event_id": require_uuid(args.audit_event_id, "audit_event_id"),
     }
@@ -191,6 +216,7 @@ def parser() -> argparse.ArgumentParser:
     seal.add_argument("--protected-authority-sha", required=True)
     seal.add_argument("--frontend-sha256", required=True)
     seal.add_argument("--schema-head", required=True)
+    seal.add_argument("--session-expires-at", required=True)
     seal.add_argument("--allow-mutation", action="append", default=[])
     seal.add_argument("--fixture-reference", action="append", default=[])
     seal.add_argument("--ttl-seconds", type=int, default=3600)

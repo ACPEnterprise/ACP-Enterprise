@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -29,6 +30,7 @@ from scripts.authenticated_preview_acceptance import (
 CONTRACT_PATH = Path(__file__).parents[2] / "operations/preview-acceptance-identities.v1.json"
 MATRIX_PATH = Path(__file__).parents[2] / "operations/preview-authenticated-acceptance-matrix.v1.json"
 REPORT_PATH = Path(__file__).parents[2] / "operations/preview-authenticated-acceptance-report.v1.json"
+AUTHORITY_PATH = Path(__file__).parents[2] / "operations/preview-persona-contract-authority.v1.json"
 MUTATION_REGISTRY_PATH = (
     Path(__file__).parents[2] / "app/platform/idempotency/mutation-coverage.v1.json"
 )
@@ -103,6 +105,7 @@ def test_attestation_binds_synthetic_preview_scope(tmp_path: Path) -> None:
         json.dumps(
             {
                 "fixture_key": "acp-employee-beta-v1",
+                "fixture_version": "preview.synthetic.tenant.v1",
                 "environment": "preview",
                 "synthetic_marker": "SYNTHETIC_BETA_ONLY",
                 "real_data_access": False,
@@ -125,6 +128,21 @@ def test_attestation_binds_synthetic_preview_scope(tmp_path: Path) -> None:
                         "COMPANY_DISPATCH_READ",
                     }
                 ),
+                "permission_digest": hashlib.sha256(
+                    json.dumps(
+                        sorted(
+                            {
+                                "COMPANY_CUSTOMER_READ",
+                                "COMPANY_JOB_READ",
+                                "COMPANY_JOB_MANAGE",
+                                "COMPANY_SCHEDULING_READ",
+                                "COMPANY_SCHEDULING_MANAGE",
+                                "COMPANY_DISPATCH_READ",
+                            }
+                        ),
+                        separators=(",", ":"),
+                    ).encode()
+                ).hexdigest(),
                 "mutation_allowlist": [],
                 "fixture_references": {
                     "customer_id": "00000000-0000-0000-0000-000000000011",
@@ -133,6 +151,7 @@ def test_attestation_binds_synthetic_preview_scope(tmp_path: Path) -> None:
                 },
                 "issued_at": now.isoformat(),
                 "expires_at": (now + timedelta(hours=2)).isoformat(),
+                "session_expires_at": (now + timedelta(minutes=30)).isoformat(),
                 "authorized_by": "enterprise-release",
                 "audit_event_id": "audit",
             }
@@ -173,6 +192,34 @@ def test_provisioning_contract_matches_runner_personas() -> None:
         assert permissions == REQUIRED_PERMISSIONS[name]
         assert not permissions & PROHIBITED_PERMISSIONS
         assert all(path.startswith("/api/v1/") for path in persona["get_endpoints"])
+
+
+def test_authority_packet_matches_runner_and_permission_digests() -> None:
+    contract = json.loads(CONTRACT_PATH.read_text(encoding="utf-8"))
+    authority = json.loads(AUTHORITY_PATH.read_text(encoding="utf-8"))
+    assert authority["tenant"] == {
+        "fixture_version": "preview.synthetic.tenant.v1",
+        "fixture_key": "acp-employee-beta-v1",
+        "company_id": "31ba6867-2d8a-55dd-9e34-d67c684ee41c",
+        "branch_id": "95bf7a14-09b0-51b6-b3cb-7946523ec093",
+        "has_all_branch_access": False,
+    }
+    for consumer_id, permissions in REQUIRED_PERMISSIONS.items():
+        persona = next(
+            value
+            for value in authority["personas"].values()
+            if value["consumer_id"] == consumer_id
+        )
+        assert frozenset(persona["permissions"]) == permissions
+        encoded = json.dumps(sorted(permissions), separators=(",", ":")).encode()
+        assert persona["permission_digest"] == hashlib.sha256(encoded).hexdigest()
+        assert persona["mutation_allowlist_default"] == []
+        assert persona["mutation_allowlist_maximum"] == contract["personas"][consumer_id][
+            "conditional_mutation_endpoints"
+        ]
+    assert authority["personas"]["QBO_READ"]["permissions"] == [
+        "COMPANY_ACCOUNTING_REPORT_READ"
+    ]
 
 
 def test_execution_matrix_and_report_use_exact_result_vocabulary() -> None:
@@ -253,6 +300,7 @@ def test_enterprise_attestation_is_restricted_and_contains_no_token(tmp_path: Pa
             "protected_authority_sha": "b" * 40,
             "frontend_sha256": "c" * 64,
             "schema_head": "d4f6h8j0l2n4",
+            "session_expires_at": (datetime.now(UTC) + timedelta(minutes=30)).isoformat(),
             "allow_mutation": [],
             "fixture_reference": [
                 "job_id=00000000-0000-0000-0000-000000000006"
@@ -267,6 +315,8 @@ def test_enterprise_attestation_is_restricted_and_contains_no_token(tmp_path: Pa
     assert output.stat().st_mode & 0o077 == 0
     assert "token" not in payload
     assert payload["mutation_allowlist"] == []
+    assert len(payload["permission_digest"]) == 64
+    assert payload["fixture_version"] == "preview.synthetic.tenant.v1"
     assert payload["fixture_references"] == {
         "job_id": "00000000-0000-0000-0000-000000000006"
     }
@@ -294,6 +344,7 @@ def test_attestation_rejects_mutation_outside_persona_contract(tmp_path: Path) -
             "protected_authority_sha": "b" * 40,
             "frontend_sha256": "c" * 64,
             "schema_head": "d4f6h8j0l2n4",
+            "session_expires_at": (datetime.now(UTC) + timedelta(minutes=30)).isoformat(),
             "allow_mutation": ["/api/v1/timekeeping/me/job-clock/start"],
             "fixture_reference": [
                 "job_id=00000000-0000-0000-0000-000000000006"

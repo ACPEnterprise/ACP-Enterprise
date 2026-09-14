@@ -113,6 +113,7 @@ def read_attestation(path: Path, *, now: datetime | None = None) -> dict[str, An
     payload = json.loads(path.read_text(encoding="utf-8"))
     required = {
         "fixture_key": FIXTURE_KEY,
+        "fixture_version": "preview.synthetic.tenant.v1",
         "environment": "preview",
         "synthetic_marker": "SYNTHETIC_BETA_ONLY",
         "real_data_access": False,
@@ -129,6 +130,8 @@ def read_attestation(path: Path, *, now: datetime | None = None) -> dict[str, An
         "protected_authority_sha",
         "frontend_sha256",
         "schema_head",
+        "permission_digest",
+        "session_expires_at",
         "audit_event_id",
         "authorized_by",
     ):
@@ -137,6 +140,16 @@ def read_attestation(path: Path, *, now: datetime | None = None) -> dict[str, An
     mutation_allowlist = payload.get("mutation_allowlist")
     if not isinstance(mutation_allowlist, list):
         raise AcceptanceBlocked("Fixture attestation must bind a mutation allowlist.")
+    permissions = payload.get("permission_codes")
+    if not isinstance(permissions, list) or not all(
+        isinstance(value, str) for value in permissions
+    ):
+        raise AcceptanceBlocked("Fixture attestation permissions are invalid.")
+    encoded_permissions = json.dumps(
+        sorted(permissions), separators=(",", ":")
+    ).encode()
+    if hashlib.sha256(encoded_permissions).hexdigest() != payload["permission_digest"]:
+        raise AcceptanceBlocked("Fixture permission digest does not match permissions.")
     fixture_ids = payload.get("fixture_references")
     if not isinstance(fixture_ids, dict):
         raise AcceptanceBlocked("Fixture attestation must bind fixture references.")
@@ -152,6 +165,7 @@ def read_attestation(path: Path, *, now: datetime | None = None) -> dict[str, An
         raise AcceptanceBlocked("Fixture references must be UUIDs.") from error
     try:
         expires_at = datetime.fromisoformat(str(payload["expires_at"]))
+        session_expires_at = datetime.fromisoformat(str(payload["session_expires_at"]))
     except (KeyError, ValueError) as error:
         raise AcceptanceBlocked("Fixture attestation expiry is invalid.") from error
     current = now or datetime.now(timezone.utc)
@@ -159,6 +173,9 @@ def read_attestation(path: Path, *, now: datetime | None = None) -> dict[str, An
         expires_at.tzinfo is None
         or expires_at <= current
         or expires_at > current + timedelta(hours=4)
+        or session_expires_at.tzinfo is None
+        or session_expires_at <= current
+        or session_expires_at > current + timedelta(hours=1)
     ):
         raise AcceptanceBlocked("Fixture attestation is expired or timezone-naive.")
     return payload

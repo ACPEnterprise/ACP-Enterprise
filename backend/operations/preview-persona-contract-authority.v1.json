@@ -1,0 +1,94 @@
+{
+  "contract_version": "om2c.persona.contract.authority.v1",
+  "environment": "preview",
+  "production_access": false,
+  "protected_authority": "e1015aada1daa5abf33bfa6968cd1eb1fe5da298",
+  "tenant": {
+    "fixture_version": "preview.synthetic.tenant.v1",
+    "fixture_key": "acp-employee-beta-v1",
+    "company_id": "31ba6867-2d8a-55dd-9e34-d67c684ee41c",
+    "branch_id": "95bf7a14-09b0-51b6-b3cb-7946523ec093",
+    "has_all_branch_access": false
+  },
+  "personas": {
+    "CSR": {
+      "consumer_id": "csr",
+      "role_contract": "dedicated_exact_permission_role",
+      "permissions": ["COMPANY_CUSTOMER_READ","COMPANY_JOB_READ","COMPANY_JOB_MANAGE","COMPANY_SCHEDULING_READ","COMPANY_SCHEDULING_MANAGE","COMPANY_DISPATCH_READ"],
+      "permission_digest": "32a18b03a31c5527c0660c3314278047279da09761fc0542b3b7c80236c4f958",
+      "fixture_references": ["customer_id","job_id","appointment_id"],
+      "mutation_allowlist_default": [],
+      "mutation_allowlist_maximum": ["/api/v1/operations/jobs/{job_id}/schedule"]
+    },
+    "EMPLOYEE": {
+      "consumer_id": "employee",
+      "role_contract": "dedicated_exact_permission_role",
+      "permissions": ["COMPANY_EMPLOYEE_OPERATIONS_OWN_DAY_READ","COMPANY_JOB_READ","COMPANY_TIMEKEEPING_OWN_READ","COMPANY_PAYROLL_STATEMENT_OWN_READ"],
+      "permission_digest": "63ee2f416b4d8dacc1b1e19042b68276b7ebfbc18717540252745f8a8572b6c4",
+      "fixture_references": ["job_id"],
+      "mutation_allowlist_default": [],
+      "mutation_allowlist_maximum": []
+    },
+    "OFFICE": {
+      "consumer_id": "office",
+      "role_contract": "dedicated_exact_permission_role",
+      "permissions": ["COMPANY_WORKFORCE_READ","COMPANY_MEMBERSHIP_READ","COMPANY_PAYROLL_COMPENSATION_READ","COMPANY_PAYROLL_TAX_AUTHORITY_READ","COMPANY_PAYROLL_DEDUCTION_AUTHORITY_READ","COMPANY_TIMEKEEPING_ADMIN_READ","COMPANY_PAYROLL_REPORTING_READ"],
+      "permission_digest": "941d91027ca29ad2433021deadd0d4c4ffcafe0213032cd88fe0cca219e2be28",
+      "fixture_references": ["employee_id"],
+      "mutation_allowlist_default": [],
+      "mutation_allowlist_maximum": []
+    },
+    "QBO_READ": {
+      "consumer_id": "qbo",
+      "role_contract": "dedicated_exact_permission_role",
+      "permissions": ["COMPANY_ACCOUNTING_REPORT_READ"],
+      "permission_digest": "492135963deba634f9d1055643f8658faddb2c635a5369601ce35a3430c9e55f",
+      "fixture_references": [],
+      "mutation_allowlist_default": [],
+      "mutation_allowlist_maximum": [],
+      "allowed_evidence_route": "/api/v1/accounting/source-evidence/qbo",
+      "explicitly_excluded": ["COMPANY_ACCOUNTING_READ","COMPANY_ACCOUNTING_JOURNAL_PREPARE","COMPANY_ACCOUNTING_JOURNAL_POST","COMPANY_ACCOUNTING_JOURNAL_REVERSE","COMPANY_ACCOUNTING_RECONCILE","COMPANY_ACCOUNTING_FINANCE_APPROVE"]
+    }
+  },
+  "lifetimes": {"access_token_maximum_seconds":3600,"attestation_maximum_seconds":14400},
+  "filesystem": {
+    "root": "/run/secrets/acp-preview-acceptance/v1/{run_id}",
+    "directory_mode": "0700",
+    "token": "{root}/{consumer_id}/access-token",
+    "attestation": "{root}/{consumer_id}/attestation.json",
+    "file_mode": "0600",
+    "token_content_in_contract_or_report": false
+  },
+  "handoff_reference_contract": {
+    "required_fields": ["persona","company_id","branch_id","token_file_reference","attestation_file_reference","release_sha","schema_head","frontend_sha256","expires_at","mutation_allowlist_reference","audit_reference"],
+    "persona": "one_of:CSR,EMPLOYEE,OFFICE,QBO_READ",
+    "company_id": "must_equal:31ba6867-2d8a-55dd-9e34-d67c684ee41c",
+    "branch_id": "must_equal:95bf7a14-09b0-51b6-b3cb-7946523ec093",
+    "token_file_reference": "{root}/{consumer_id}/access-token",
+    "attestation_file_reference": "{root}/{consumer_id}/attestation.json",
+    "release_sha": "must_equal:attestation.release_sha",
+    "schema_head": "must_equal:attestation.schema_head",
+    "frontend_sha256": "must_equal:attestation.frontend_sha256",
+    "expires_at": "must_not_exceed:attestation.session_expires_at",
+    "mutation_allowlist_reference": "attestation.json#/mutation_allowlist",
+    "audit_reference": "attestation.json#/audit_event_id",
+    "credential_material_allowed": false
+  },
+  "attestation_schema": "backend/operations/preview-acceptance-attestation.v1.schema.json",
+  "attestation_example": "backend/operations/preview-acceptance-attestation.example.v1.json",
+  "permission_digest_algorithm": "sha256(canonical-json(sorted(permission_codes),separators=(',',':')))",
+  "consumer": {
+    "command": "python backend/scripts/authenticated_preview_acceptance.py --persona {consumer_id} --token-file {token_path} --attestation-file {attestation_path}",
+    "secret_arguments": false,
+    "response_domain_data_emitted": false
+  },
+  "provisioning": {
+    "tenant_command": "python backend/scripts/preview_synthetic_tenant_fixture.py --authorizing-company-id {enterprise_company_id} --authorizing-branch-id {enterprise_branch_id}",
+    "tenant_token_transport": "stdin",
+    "identity_service": "PreviewIdentityFixtureService.provision_identity",
+    "session_service": "AuthenticationService.authenticate",
+    "revocation_service": "AuthenticationService.revoke_user_sessions",
+    "reset_service": "PreviewIdentityFixtureService.reset_identity"
+  },
+  "prohibited_capabilities": ["production","real_customer_communication","payment_or_refund","accounting_posting","payroll_execution","real_payable_time","qbo_or_hcp_mutation"]
+}
