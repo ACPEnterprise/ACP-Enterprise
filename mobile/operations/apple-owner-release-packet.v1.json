@@ -1,0 +1,36 @@
+{
+  "contractVersion": "1",
+  "program": "MOBILE.APPLE.OWNER.RELEASE.PACKET.1",
+  "sourceCandidate": "bf28a61cfe7d36d0b050e0118b21b234c8a555e3",
+  "bundleIdentifier": "com.acpenterprise.employee",
+  "environment": "preview",
+  "productionActivated": false,
+  "appleMutationAuthorized": false,
+  "dnsMutationAuthorized": false,
+  "signingAuthorized": false,
+  "uploadAuthorized": false,
+  "readyToUse": [
+    "app name and bundle identifier",
+    "AASA generation and exact-byte verification commands",
+    "Preview-only unsigned release qualification",
+    "internal tester technical acceptance scope"
+  ],
+  "ownerConfirmationRequired": [
+    "authoritative Team ID",
+    "support and privacy-policy URLs",
+    "final marketing copy and category",
+    "privacy questionnaire and legal interpretation",
+    "copyright legal entity/year",
+    "immutable SKU",
+    "age rating, content rights, regions, and review contact"
+  ],
+  "appleAccountRequired": [
+    "active Team",
+    "explicit App ID and Associated Domains capability",
+    "App Store Connect app record",
+    "Distribution certificate and App Store profile",
+    "next unused build reservation",
+    "signing and upload authorization",
+    "internal or external TestFlight group operations"
+  ]
+}
