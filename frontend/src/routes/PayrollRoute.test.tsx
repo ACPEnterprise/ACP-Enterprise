@@ -178,6 +178,10 @@ describe("PayrollRoute authorization", () => {
               deductions: null,
               net_pay: null,
               employer_liabilities: null,
+              withholdings_deductions_liabilities: [],
+              compensation_authority_id: null,
+              tax_rule_version: null,
+              job_labor_allocation: null,
             },
           ],
           liability_totals: {

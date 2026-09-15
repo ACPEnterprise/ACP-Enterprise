@@ -20,6 +20,13 @@ const value = {
   company_identity_sha256: "c".repeat(64),
   company_info_verified_at: "2026-09-10T11:59:00Z",
   source_manifest_sha256: "d".repeat(64),
+  source_company_label: "Synthetic historical company",
+  source_company_id_masked: "***1234",
+  provider_authorization: "unverified" as const,
+  evidence_mode: "historical_snapshot" as const,
+  entity_counts: {},
+  page_counts: {},
+  catalog_dispositions: [],
   completeness: "partial" as const,
   accounting_basis: "cash" as const,
   as_of: "2026-09-10T12:00:00Z",
@@ -27,6 +34,7 @@ const value = {
   refresh_state: "stale" as const,
   snapshot_id: "snapshot-1",
   snapshot_digest: "a".repeat(64),
+  is_live: false as const,
   limitations: ["HCP reconciliation remains separate."],
   accounts: [
     {

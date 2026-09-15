@@ -85,7 +85,15 @@ export interface PayrollRegisterMember {
   overtime_minutes: number | null;
   compensation_authority_id: string | null;
   earnings: Array<Record<string, unknown>>;
-  withholdings_deductions_liabilities: Array<Record<string, unknown>>;
+  withholdings_deductions_liabilities: Array<{
+    component_key: string;
+    kind: string;
+    responsibility: string;
+    amount: string;
+    currency: string;
+    jurisdiction_reference: string | null;
+    provider_version: string | null;
+  }>;
   gross: string | null;
   employee_taxes: string | null;
   deductions: string | null;

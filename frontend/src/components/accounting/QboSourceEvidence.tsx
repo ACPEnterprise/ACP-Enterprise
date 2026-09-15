@@ -58,7 +58,7 @@ function Workspace({ value }: { value: QboAccountingEvidenceWorkspace }) {
           <dt className="text-content-muted">Source company</dt>
           <dd>
             {value.company_identity_sha256
-              ? `${value.mode === "live" ? "Verified real company" : "Historical company evidence"} · ${value.company_identity_sha256.slice(0, 12)}`
+              ? `${value.mode === "live" ? value.source_company_label : "Historical company evidence"} · ${value.source_company_id_masked} · ${value.company_identity_sha256.slice(0, 12)}`
               : "Company identity unavailable"}
           </dd>
         </div>
@@ -380,8 +380,9 @@ export function QboSourceEvidence({ enabled }: { enabled: boolean }) {
         <div>
           <h2 className="text-xl font-semibold">QuickBooks source evidence</h2>
           <p className="text-sm text-content-muted">
-            Verified real-company, read-only snapshot evidence. Kept separate
-            from ACP native Accounting and HCP operational evidence.
+            Read-only QBO snapshot evidence with explicit authorization and
+            currentness state. Kept separate from ACP native Accounting and HCP
+            operational evidence.
           </p>
         </div>
         <Select
