@@ -38,6 +38,24 @@ def upgrade() -> None:
             """
         ).bindparams(at=datetime.now(timezone.utc))
     )
+    op.execute(
+        sa.text(
+            """
+            UPDATE users u
+            SET authorization_version = u.authorization_version + 1,
+                updated_at = :at
+            WHERE u.id IN (
+                SELECT DISTINCT m.user_id
+                FROM memberships m
+                JOIN membership_roles mr ON mr.membership_id = m.id
+                JOIN roles r ON r.id = mr.role_id
+                WHERE r.code IN ('OWNER', 'ADMIN', 'COMPANY_ADMINISTRATOR')
+                  AND r.archived_at IS NULL
+                  AND m.status = 'active'
+            )
+            """
+        ).bindparams(at=datetime.now(timezone.utc))
+    )
 
 
 def downgrade() -> None:
