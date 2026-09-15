@@ -1,0 +1,49 @@
+{
+  "contract": "LIA.OWNER.INTELLIGENCE.READONLY.1",
+  "authority_states": [
+    "ACP_AUTHORITATIVE",
+    "SOURCE_BACKED",
+    "PARTIAL",
+    "INSUFFICIENT_EVIDENCE"
+  ],
+  "context_revalidation": [
+    "authorization_version",
+    "evidence_digest",
+    "as_of"
+  ],
+  "domains": [
+    "accounting",
+    "audit",
+    "beacon",
+    "business-economics",
+    "customers",
+    "data-quality",
+    "dispatch",
+    "estimates",
+    "invoicing",
+    "jobs",
+    "launch-readiness",
+    "luminary",
+    "migration",
+    "payments",
+    "payroll",
+    "price-book",
+    "scheduling",
+    "timekeeping",
+    "workforce"
+  ],
+  "external_provider_called": false,
+  "no_operational_mutation": true,
+  "production_untouched": true,
+  "qualification": [
+    "bounded_question_planning",
+    "permission_before_retrieval",
+    "company_branch_scope",
+    "source_authority_not_promoted",
+    "stale_authorization_rejected",
+    "stale_evidence_rejected",
+    "protected_data_masking",
+    "no_mutation_primitive"
+  ],
+  "qualification_fingerprint": "f3cb1b37010f6084ca905b8d261f70f73e68d0b8bd149f2036a2dcf546bc4471"
+}
