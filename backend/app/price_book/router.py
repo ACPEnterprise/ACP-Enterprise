@@ -23,9 +23,12 @@ from .schemas import (
     AdjustmentProposalDecision,
     AdjustmentProposalItem,
     AuditItem,
+    BulkMaterializeItem,
+    BulkMaterializeRequest,
     CatalogPage,
     CategoryCreate,
     CategoryItem,
+    CategoryUpdate,
     LifecycleRequest,
     OptionCreate,
     OptionGroupCreate,
@@ -39,6 +42,7 @@ from .schemas import (
     ReviewBatchItem,
     ServiceItem,
     ServiceItemCreate,
+    ServiceItemUpdate,
     SnapshotItem,
     SnapshotRequest,
     TaxClassificationCreate,
@@ -98,10 +102,45 @@ async def catalog(
     context: ReadContext,
     session: DatabaseSession,
     branch_id: Annotated[UUID | None, Query()] = None,
+    search: Annotated[str | None, Query(max_length=200)] = None,
+    category_id: Annotated[UUID | None, Query()] = None,
+    item_status: Annotated[
+        str | None, Query(pattern=r"^(draft|active|inactive|archived)$")
+    ] = None,
+    version_status: Annotated[
+        str | None, Query(pattern=r"^(draft|active|inactive|superseded|archived)$")
+    ] = None,
+    limit: Annotated[int, Query(ge=1, le=500)] = 100,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> CatalogPage:
     try:
         return await price_book_service.catalog(
-            session, context=context, branch_id=branch_id
+            session,
+            context=context,
+            branch_id=branch_id,
+            search=search,
+            category_id=category_id,
+            item_status=item_status,
+            version_status=version_status,
+            limit=limit,
+            offset=offset,
+        )
+    except PriceBookError as error:
+        raise http_error(error) from error
+
+
+@router.put("/categories/{category_id}", response_model=CategoryItem)
+async def update_category(
+    category_id: UUID,
+    payload: CategoryUpdate,
+    context: ManageContext,
+    session: DatabaseSession,
+) -> CategoryItem:
+    try:
+        return CategoryItem.model_validate(
+            await price_book_service.update_category(
+                session, context=context, category_id=category_id, payload=payload
+            )
         )
     except PriceBookError as error:
         raise http_error(error) from error
@@ -190,6 +229,23 @@ async def create_item(
         return ServiceItem.model_validate(
             await price_book_service.create_item(
                 session, context=context, payload=payload
+            )
+        )
+    except PriceBookError as error:
+        raise http_error(error) from error
+
+
+@router.put("/service-items/{item_id}", response_model=ServiceItem)
+async def update_item(
+    item_id: UUID,
+    payload: ServiceItemUpdate,
+    context: ManageContext,
+    session: DatabaseSession,
+) -> ServiceItem:
+    try:
+        return ServiceItem.model_validate(
+            await price_book_service.update_item(
+                session, context=context, item_id=item_id, payload=payload
             )
         )
     except PriceBookError as error:
@@ -310,7 +366,7 @@ async def archive(
 async def snapshot(
     item_id: UUID,
     payload: SnapshotRequest,
-    context: ManageContext,
+    context: ReadContext,
     session: DatabaseSession,
 ) -> SnapshotItem:
     try:
@@ -426,6 +482,24 @@ async def decide_adjustment_proposal(
                 proposal_id=proposal_id,
                 payload=payload,
             )
+        )
+    except PriceBookError as error:
+        raise http_error(error) from error
+
+
+@router.post(
+    "/activation-readiness/adjustment-proposals/{proposal_id}/materialize",
+    response_model=BulkMaterializeItem,
+)
+async def materialize_adjustment_proposal(
+    proposal_id: UUID,
+    payload: BulkMaterializeRequest,
+    context: ManageContext,
+    session: DatabaseSession,
+) -> BulkMaterializeItem:
+    try:
+        return await price_book_service.materialize_adjustment_proposal(
+            session, context=context, proposal_id=proposal_id, payload=payload
         )
     except PriceBookError as error:
         raise http_error(error) from error

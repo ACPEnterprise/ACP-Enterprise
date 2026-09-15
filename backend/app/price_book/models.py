@@ -312,7 +312,7 @@ class PriceBookComponent(Base):
             ondelete="CASCADE",
         ),
         CheckConstraint(
-            "component_type IN ('labor','material')",
+            "component_type IN ('labor','material','other_direct')",
             name="ck_price_book_components_type",
         ),
         CheckConstraint("quantity > 0", name="ck_price_book_components_quantity"),
@@ -648,6 +648,11 @@ class PriceBookAdjustmentProposal(Base):
         PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT")
     )
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    materialization_key: Mapped[str | None] = mapped_column(String(128))
+    materialized_version_ids: Mapped[list[str]] = mapped_column(
+        JSONB, nullable=False, default=list
+    )
+    materialized_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, nullable=False
     )

@@ -2,7 +2,7 @@ from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_serializer
 
 
 class PriceBookSchema(BaseModel):
@@ -19,6 +19,11 @@ class CategoryCreate(PriceBookSchema):
     @classmethod
     def normalize_code(cls, value: str) -> str:
         return value.strip().upper()
+
+
+class CategoryUpdate(CategoryCreate):
+    expected_version: int = Field(ge=1)
+    status: str = Field(pattern=r"^(active|archived)$")
 
 
 class TaxClassificationCreate(PriceBookSchema):
@@ -46,8 +51,13 @@ class ServiceItemCreate(PriceBookSchema):
         return value.strip().upper()
 
 
+class ServiceItemUpdate(ServiceItemCreate):
+    expected_version: int = Field(ge=1)
+    status: str = Field(pattern=r"^(draft|active|inactive|archived)$")
+
+
 class ComponentCreate(PriceBookSchema):
-    component_type: str = Field(pattern=r"^(labor|material)$")
+    component_type: str = Field(pattern=r"^(labor|material|other_direct)$")
     code: str | None = Field(default=None, max_length=100)
     label: str = Field(min_length=1, max_length=240)
     quantity: Decimal = Field(gt=0)
@@ -248,7 +258,17 @@ class ComponentItem(PriceBookSchema):
     code: str | None
     label: str
     quantity: Decimal
+    unit_cost: Decimal | None = None
+    extended_cost: Decimal | None = None
     position: int
+
+    @model_serializer(mode="wrap")
+    def serialize_without_restricted_nulls(self, handler):
+        data = handler(self)
+        if self.unit_cost is None:
+            data.pop("unit_cost", None)
+            data.pop("extended_cost", None)
+        return data
 
 
 class PriceVersionItem(PriceBookSchema):
@@ -266,6 +286,9 @@ class PriceVersionItem(PriceBookSchema):
     rounding_mode: str
     version: int
     components: tuple[ComponentItem, ...] = ()
+    cost_readiness: str = "INSUFFICIENT_COST_EVIDENCE"
+    expected_direct_cost: Decimal | None = None
+    expected_direct_contribution: Decimal | None = None
 
 
 class SnapshotItem(PriceBookSchema):
@@ -325,3 +348,21 @@ class CatalogPage(PriceBookSchema):
     versions: tuple[PriceVersionItem, ...]
     option_groups: tuple[OptionGroupItem, ...]
     options: tuple[OptionItem, ...]
+    total_service_items: int = 0
+    limit: int = 100
+    offset: int = 0
+    costs_visible: bool = False
+
+
+class BulkMaterializeRequest(PriceBookSchema):
+    expected_version: int = Field(ge=1)
+    expected_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    idempotency_key: str = Field(pattern=r"^[A-Za-z0-9._:-]{8,128}$")
+
+
+class BulkMaterializeItem(PriceBookSchema):
+    proposal_id: UUID
+    proposal_digest: str
+    created_version_ids: tuple[UUID, ...]
+    created_count: int
+    replayed: bool

@@ -3,8 +3,9 @@
 from collections.abc import Sequence
 
 import sqlalchemy as sa
-from alembic import op
 from sqlalchemy.dialects import postgresql
+
+from alembic import op
 
 revision: str = "n0p8q16g3t9u"
 down_revision: str | None = "i9k1m3o5q7s9"
@@ -86,6 +87,14 @@ def upgrade() -> None:
         sa.Column("created_by_user_id", sa.UUID(), nullable=False),
         sa.Column("approved_by_user_id", sa.UUID()),
         sa.Column("approved_at", sa.DateTime(timezone=True)),
+        sa.Column("materialization_key", sa.String(128)),
+        sa.Column(
+            "materialized_version_ids",
+            postgresql.JSONB(),
+            nullable=False,
+            server_default=sa.text("'[]'::jsonb"),
+        ),
+        sa.Column("materialized_at", sa.DateTime(timezone=True)),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.CheckConstraint(
@@ -125,9 +134,25 @@ def upgrade() -> None:
         "price_book_adjustment_proposals",
         ["company_id", "status", "created_at"],
     )
+    op.drop_constraint(
+        "ck_price_book_components_type", "price_book_components", type_="check"
+    )
+    op.create_check_constraint(
+        "ck_price_book_components_type",
+        "price_book_components",
+        "component_type IN ('labor','material','other_direct')",
+    )
 
 
 def downgrade() -> None:
+    op.drop_constraint(
+        "ck_price_book_components_type", "price_book_components", type_="check"
+    )
+    op.create_check_constraint(
+        "ck_price_book_components_type",
+        "price_book_components",
+        "component_type IN ('labor','material')",
+    )
     op.drop_index(
         "ix_price_book_adjustment_proposals_queue",
         table_name="price_book_adjustment_proposals",

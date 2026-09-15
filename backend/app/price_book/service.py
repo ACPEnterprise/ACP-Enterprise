@@ -1,7 +1,7 @@
 import hashlib
 import json
 from datetime import datetime, timezone
-from decimal import ROUND_HALF_EVEN, Decimal
+from decimal import ROUND_HALF_EVEN, ROUND_HALF_UP, Decimal, InvalidOperation
 from uuid import UUID
 
 from sqlalchemy import and_, delete, func, or_, select
@@ -13,6 +13,7 @@ from app.events.service import BusinessEventService
 from app.events.types import EventType
 from app.platform.branch.models import Branch
 from app.platform.permissions.authorization import AuthorizationContext
+from app.platform.permissions.codes import PriceBookPermission
 
 from .errors import PriceBookConflict, PriceBookNotFound, PriceBookValidation
 from .models import (
@@ -32,9 +33,12 @@ from .schemas import (
     AdjustmentProposalCreate,
     AdjustmentProposalDecision,
     AuditItem,
+    BulkMaterializeItem,
+    BulkMaterializeRequest,
     CatalogPage,
     CategoryCreate,
     CategoryItem,
+    CategoryUpdate,
     ComponentItem,
     OptionCreate,
     OptionGroupCreate,
@@ -47,6 +51,7 @@ from .schemas import (
     ReviewBatchDecision,
     ServiceItem,
     ServiceItemCreate,
+    ServiceItemUpdate,
     SnapshotRequest,
     TaxClassificationCreate,
     TaxClassificationItem,
@@ -91,6 +96,12 @@ class PriceBookService:
         *,
         context: AuthorizationContext,
         branch_id: UUID | None = None,
+        search: str | None = None,
+        category_id: UUID | None = None,
+        item_status: str | None = None,
+        version_status: str | None = None,
+        limit: int = 100,
+        offset: int = 0,
     ) -> CatalogPage:
         if branch_id is not None and branch_id not in context.authorized_branch_ids:
             raise PriceBookNotFound("Branch was not found.")
@@ -128,9 +139,34 @@ class PriceBookService:
                     PriceBookServiceItem.branch_id == branch_id,
                 )
             )
+        if category_id is not None:
+            item_query = item_query.where(
+                PriceBookServiceItem.category_id == category_id
+            )
+        if item_status is not None:
+            item_query = item_query.where(PriceBookServiceItem.status == item_status)
+        if search:
+            term = f"%{search.strip()}%"
+            item_query = item_query.where(
+                or_(
+                    PriceBookServiceItem.code.ilike(term),
+                    PriceBookServiceItem.name.ilike(term),
+                    PriceBookServiceItem.customer_description.ilike(term),
+                )
+            )
+        total_items = int(
+            await session.scalar(
+                select(func.count()).select_from(item_query.subquery())
+            )
+            or 0
+        )
         items = tuple(
             (
-                await session.scalars(item_query.order_by(PriceBookServiceItem.name))
+                await session.scalars(
+                    item_query.order_by(PriceBookServiceItem.name, PriceBookServiceItem.id)
+                    .limit(limit)
+                    .offset(offset)
+                )
             ).all()
         )
         item_ids = [item.id for item in items]
@@ -142,6 +178,11 @@ class PriceBookService:
                         .where(
                             PriceBookPriceVersion.company_id == context.company.id,
                             PriceBookPriceVersion.service_item_id.in_(item_ids),
+                            *(
+                                (PriceBookPriceVersion.status == version_status,)
+                                if version_status
+                                else ()
+                            ),
                         )
                         .order_by(
                             PriceBookPriceVersion.service_item_id,
@@ -195,6 +236,7 @@ class PriceBookService:
                 )
             ).all()
         )
+        costs_visible = context.has_permission(PriceBookPermission.MANAGE)
         return CatalogPage(
             categories=tuple(
                 CategoryItem.model_validate(value) for value in categories
@@ -204,13 +246,10 @@ class PriceBookService:
             ),
             service_items=tuple(ServiceItem.model_validate(value) for value in items),
             versions=tuple(
-                PriceVersionItem.model_validate(version).model_copy(
-                    update={
-                        "components": tuple(
-                            ComponentItem.model_validate(c)
-                            for c in by_version.get(version.id, [])
-                        )
-                    }
+                self._version_item(
+                    version,
+                    by_version.get(version.id, []),
+                    costs_visible=costs_visible,
                 )
                 for version in versions
             ),
@@ -218,6 +257,46 @@ class PriceBookService:
                 OptionGroupItem.model_validate(value) for value in option_groups
             ),
             options=tuple(OptionItem.model_validate(value) for value in options),
+            total_service_items=total_items,
+            limit=limit,
+            offset=offset,
+            costs_visible=costs_visible,
+        )
+
+    @staticmethod
+    def _version_item(
+        version: PriceBookPriceVersion,
+        components: list[PriceBookComponent],
+        *,
+        costs_visible: bool,
+    ) -> PriceVersionItem:
+        complete = bool(components) and all(c.unit_cost is not None for c in components)
+        total = (
+            sum((c.quantity * c.unit_cost for c in components if c.unit_cost is not None), Decimal(0))
+            if complete
+            else None
+        )
+        return PriceVersionItem.model_validate(version).model_copy(
+            update={
+                "components": tuple(
+                    ComponentItem.model_validate(c).model_copy(
+                        update={
+                            "unit_cost": c.unit_cost if costs_visible else None,
+                            "extended_cost": c.quantity * c.unit_cost
+                            if costs_visible and c.unit_cost is not None
+                            else None,
+                        }
+                    )
+                    for c in components
+                ),
+                "cost_readiness": "COST_COMPLETE"
+                if complete
+                else "INSUFFICIENT_COST_EVIDENCE",
+                "expected_direct_cost": total if costs_visible else None,
+                "expected_direct_contribution": version.unit_price - total
+                if costs_visible and total is not None
+                else None,
+            }
         )
 
     async def create_option_group(
@@ -386,6 +465,66 @@ class PriceBookService:
             )
         return record
 
+    async def update_category(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        category_id: UUID,
+        payload: CategoryUpdate,
+    ) -> PriceBookCategory:
+        async with session.begin():
+            category = await session.scalar(
+                select(PriceBookCategory)
+                .where(
+                    PriceBookCategory.id == category_id,
+                    PriceBookCategory.company_id == context.company.id,
+                )
+                .with_for_update()
+            )
+            if category is None:
+                raise PriceBookNotFound("Category was not found.")
+            if category.version != payload.expected_version:
+                raise PriceBookConflict("Category authority is stale.")
+            if payload.parent_id == category.id:
+                raise PriceBookValidation("Category cannot be its own parent.")
+            if payload.parent_id is not None and not await session.scalar(
+                select(PriceBookCategory.id).where(
+                    PriceBookCategory.id == payload.parent_id,
+                    PriceBookCategory.company_id == context.company.id,
+                    PriceBookCategory.status == "active",
+                )
+            ):
+                raise PriceBookNotFound("Parent category was not found.")
+            prior: dict[str, object] = {
+                "code": category.code,
+                "name": category.name,
+                "status": category.status,
+            }
+            category.code = payload.code
+            category.name = payload.name.strip()
+            category.description = payload.description
+            category.parent_id = payload.parent_id
+            category.status = payload.status
+            category.version += 1
+            category.updated_at = utc_now()
+            try:
+                await session.flush()
+            except IntegrityError as error:
+                raise PriceBookConflict("Category code already exists.") from error
+            self._audit(
+                session,
+                context=context,
+                entity_type="price_book_category",
+                entity_id=category.id,
+                action="updated",
+                prior_state=prior,
+                state={"code": category.code, "name": category.name, "status": category.status},
+                reason="Category maintained by authorized operator.",
+                version=category.version,
+            )
+        return category
+
     async def create_item(
         self,
         session: AsyncSession,
@@ -532,6 +671,84 @@ class PriceBookService:
                 version=1,
             )
         return version
+
+    async def update_item(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        item_id: UUID,
+        payload: ServiceItemUpdate,
+    ) -> PriceBookServiceItem:
+        async with session.begin():
+            item = await session.scalar(
+                select(PriceBookServiceItem)
+                .where(
+                    PriceBookServiceItem.id == item_id,
+                    PriceBookServiceItem.company_id == context.company.id,
+                )
+                .with_for_update()
+            )
+            if item is None:
+                raise PriceBookNotFound("Service item was not found.")
+            if item.version != payload.expected_version:
+                raise PriceBookConflict("Service item authority is stale.")
+            if not await session.scalar(
+                select(PriceBookCategory.id).where(
+                    PriceBookCategory.id == payload.category_id,
+                    PriceBookCategory.company_id == context.company.id,
+                    PriceBookCategory.status == "active",
+                )
+            ):
+                raise PriceBookNotFound("Category was not found.")
+            if payload.branch_id is not None and (
+                payload.branch_id not in context.authorized_branch_ids
+                or not await session.scalar(
+                    select(Branch.id).where(
+                        Branch.id == payload.branch_id,
+                        Branch.company_id == context.company.id,
+                        Branch.status == "active",
+                    )
+                )
+            ):
+                raise PriceBookNotFound("Branch was not found.")
+            prior: dict[str, object] = {
+                "code": item.code,
+                "name": item.name,
+                "status": item.status,
+                "category_id": str(item.category_id),
+            }
+            item.branch_id = payload.branch_id
+            item.category_id = payload.category_id
+            item.code = payload.code
+            item.name = payload.name.strip()
+            item.customer_description = payload.customer_description.strip()
+            if "internal_description" in payload.model_fields_set:
+                item.internal_description = payload.internal_description
+            item.status = payload.status
+            item.version += 1
+            item.updated_at = utc_now()
+            try:
+                await session.flush()
+            except IntegrityError as error:
+                raise PriceBookConflict("Service item code already exists.") from error
+            self._audit(
+                session,
+                context=context,
+                entity_type="price_book_service_item",
+                entity_id=item.id,
+                action="updated",
+                prior_state=prior,
+                state={
+                    "code": item.code,
+                    "name": item.name,
+                    "status": item.status,
+                    "category_id": str(item.category_id),
+                },
+                reason="Service item maintained by authorized operator.",
+                version=item.version,
+            )
+        return item
 
     async def update_draft(
         self,
@@ -1320,6 +1537,201 @@ class PriceBookService:
                 ),
             )
         return proposal
+
+    async def materialize_adjustment_proposal(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        proposal_id: UUID,
+        payload: BulkMaterializeRequest,
+    ) -> BulkMaterializeItem:
+        """Create reviewable successor drafts from an approved proposal; never activate."""
+        async with session.begin():
+            proposal = await session.scalar(
+                select(PriceBookAdjustmentProposal)
+                .where(
+                    PriceBookAdjustmentProposal.id == proposal_id,
+                    PriceBookAdjustmentProposal.company_id == context.company.id,
+                )
+                .with_for_update()
+            )
+            if proposal is None:
+                raise PriceBookNotFound("Adjustment proposal was not found.")
+            if proposal.proposal_digest != payload.expected_digest:
+                raise PriceBookConflict("Adjustment proposal digest is stale.")
+            if proposal.materialization_key is not None:
+                if proposal.materialization_key != payload.idempotency_key:
+                    raise PriceBookConflict(
+                        "Adjustment proposal was materialized by another command."
+                    )
+                return BulkMaterializeItem(
+                    proposal_id=proposal.id,
+                    proposal_digest=proposal.proposal_digest,
+                    created_version_ids=tuple(
+                        UUID(value) for value in proposal.materialized_version_ids
+                    ),
+                    created_count=len(proposal.materialized_version_ids),
+                    replayed=True,
+                )
+            if proposal.status != "approved" or proposal.version != payload.expected_version:
+                raise PriceBookConflict("Only the current approved proposal may create drafts.")
+            if proposal.transformation_kind not in {"percentage", "fixed_amount"}:
+                raise PriceBookValidation(
+                    "This pricing transformation is not deterministically supported."
+                )
+            value_key = (
+                "percentage"
+                if proposal.transformation_kind == "percentage"
+                else "fixed_amount"
+            )
+            try:
+                transformation_value = Decimal(
+                    str(proposal.transformation[value_key])
+                )
+            except (InvalidOperation, KeyError) as error:
+                raise PriceBookValidation(
+                    "Adjustment transformation evidence is invalid."
+                ) from error
+            impact_by_code = {
+                str(impact.get("service_code")): impact for impact in proposal.impacts
+            }
+            included = tuple(
+                code
+                for code in proposal.affected_service_codes
+                if code not in set(proposal.owner_exclusions)
+            )
+            if set(impact_by_code) != set(included):
+                raise PriceBookConflict("Adjustment impact set is incomplete or stale.")
+            items = tuple(
+                (
+                    await session.scalars(
+                        select(PriceBookServiceItem)
+                        .where(
+                            PriceBookServiceItem.company_id == context.company.id,
+                            PriceBookServiceItem.code.in_(included),
+                        )
+                        .with_for_update()
+                    )
+                ).all()
+            )
+            if {item.code for item in items} != set(included):
+                raise PriceBookConflict("Adjustment service set changed.")
+            created: list[UUID] = []
+            for item in sorted(items, key=lambda value: value.code):
+                if item.current_version_id is None:
+                    raise PriceBookConflict("Adjustment requires one active source price.")
+                source = await session.scalar(
+                    select(PriceBookPriceVersion)
+                    .where(
+                        PriceBookPriceVersion.id == item.current_version_id,
+                        PriceBookPriceVersion.company_id == context.company.id,
+                        PriceBookPriceVersion.status == "active",
+                    )
+                    .with_for_update()
+                )
+                if source is None:
+                    raise PriceBookConflict("Adjustment source price is not active.")
+                impact = impact_by_code[item.code]
+                if Decimal(str(impact.get("current_price"))) != source.unit_price:
+                    raise PriceBookConflict("Adjustment source price changed.")
+                proposed = Decimal(str(impact.get("proposed_price")))
+                expected_proposed = (
+                    source.unit_price
+                    * (Decimal(1) + transformation_value / Decimal(100))
+                    if proposal.transformation_kind == "percentage"
+                    else source.unit_price + transformation_value
+                ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+                if proposed != expected_proposed:
+                    raise PriceBookConflict(
+                        "Adjustment preview does not match its transformation."
+                    )
+                if proposed < 0:
+                    raise PriceBookValidation("Proposed price cannot be negative.")
+                revision = int(
+                    await session.scalar(
+                        select(func.max(PriceBookPriceVersion.revision)).where(
+                            PriceBookPriceVersion.company_id == context.company.id,
+                            PriceBookPriceVersion.service_item_id == item.id,
+                        )
+                    )
+                    or 0
+                ) + 1
+                draft = PriceBookPriceVersion(
+                    company_id=context.company.id,
+                    service_item_id=item.id,
+                    branch_id=source.branch_id,
+                    tax_classification_id=source.tax_classification_id,
+                    revision=revision,
+                    currency=source.currency,
+                    unit_price=proposed,
+                    effective_at=proposal.effective_at,
+                    expires_at=None,
+                    created_by_user_id=context.user.id,
+                )
+                session.add(draft)
+                await session.flush()
+                components = tuple(
+                    (
+                        await session.scalars(
+                            select(PriceBookComponent)
+                            .where(
+                                PriceBookComponent.company_id == context.company.id,
+                                PriceBookComponent.price_version_id == source.id,
+                            )
+                            .order_by(PriceBookComponent.position)
+                        )
+                    ).all()
+                )
+                for component in components:
+                    session.add(
+                        PriceBookComponent(
+                            company_id=context.company.id,
+                            price_version_id=draft.id,
+                            component_type=component.component_type,
+                            code=component.code,
+                            label=component.label,
+                            quantity=component.quantity,
+                            unit_cost=component.unit_cost,
+                            position=component.position,
+                        )
+                    )
+                created.append(draft.id)
+                self._audit(
+                    session,
+                    context=context,
+                    entity_type="price_book_price_version",
+                    entity_id=draft.id,
+                    action="bulk_successor_draft_created",
+                    state={
+                        "source_version_id": str(source.id),
+                        "proposal_id": str(proposal.id),
+                        "unit_price": str(proposed),
+                    },
+                    reason="Approved bulk proposal materialized as draft; not activated.",
+                    version=1,
+                )
+            proposal.materialization_key = payload.idempotency_key
+            proposal.materialized_version_ids = [str(value) for value in created]
+            proposal.materialized_at = utc_now()
+            proposal.updated_at = proposal.materialized_at
+            self._audit(
+                session,
+                context=context,
+                entity_type="price_book_adjustment_proposal",
+                entity_id=proposal.id,
+                action="materialized_as_drafts",
+                state={"count": len(created), "proposal_digest": proposal.proposal_digest},
+                reason="Approved proposal created reviewable successor drafts only.",
+                version=proposal.version,
+            )
+        return BulkMaterializeItem(
+            proposal_id=proposal.id,
+            proposal_digest=proposal.proposal_digest,
+            created_version_ids=tuple(created),
+            created_count=len(created),
+            replayed=False,
+        )
 
 
 price_book_service = PriceBookService()

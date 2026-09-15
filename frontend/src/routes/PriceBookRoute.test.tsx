@@ -78,6 +78,12 @@ vi.mock("../hooks/usePriceBook", () => ({
       error: null,
       mutateAsync: vi.fn(),
     },
+    itemUpdate: {
+      isPending: false,
+      isError: false,
+      error: null,
+      mutateAsync: vi.fn(),
+    },
     version: {
       isPending: false,
       isError: false,
@@ -104,6 +110,24 @@ vi.mock("../hooks/usePriceBook", () => ({
       mutateAsync: vi.fn(),
     },
     reviewDecision: {
+      isPending: false,
+      isError: false,
+      error: null,
+      mutateAsync: vi.fn(),
+    },
+    adjustmentProposal: {
+      isPending: false,
+      isError: false,
+      error: null,
+      mutateAsync: vi.fn(),
+    },
+    adjustmentDecision: {
+      isPending: false,
+      isError: false,
+      error: null,
+      mutateAsync: vi.fn(),
+    },
+    adjustmentMaterialize: {
       isPending: false,
       isError: false,
       error: null,

@@ -3,6 +3,7 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
+
 from app.price_book.activation_readiness import (
     RecommendationProvenance,
     TransformationKind,

@@ -1,11 +1,14 @@
 import { apiClient } from "./client";
 import type {
   PriceBookCatalog,
+  PriceBookAdjustmentProposal,
+  PriceBookBulkMaterialization,
   PriceBookCategory,
   PriceBookOption,
   PriceBookOptionGroup,
   PriceBookReviewBatch,
   PriceBookServiceItem,
+  PriceBookSnapshot,
   PriceBookVersion,
   TaxClassification,
 } from "../types/priceBook";
@@ -16,8 +19,27 @@ export async function getPriceBook(
 ): Promise<PriceBookCatalog> {
   return (
     await apiClient.get<PriceBookCatalog>(path, {
-      params: branchId ? { branch_id: branchId } : undefined,
+      params: { ...(branchId ? { branch_id: branchId } : {}), limit: 500 },
     })
+  ).data;
+}
+export async function createCommercialSnapshot(
+  itemId: string,
+  data: {
+    branch_id: string;
+    quantity: string;
+    currency: string;
+    effective_at: string;
+    idempotency_key: string;
+    option_group_id?: string;
+    option_id?: string;
+  },
+): Promise<PriceBookSnapshot> {
+  return (
+    await apiClient.post<PriceBookSnapshot>(
+      `${path}/service-items/${itemId}/snapshots`,
+      data,
+    )
   ).data;
 }
 export async function createCategory(data: {
@@ -47,6 +69,22 @@ export async function createServiceItem(data: {
     await apiClient.post<PriceBookServiceItem>(`${path}/service-items`, data)
   ).data;
 }
+export async function updateServiceItem(
+  itemId: string,
+  data: {
+    branch_id?: string;
+    category_id: string;
+    code: string;
+    name: string;
+    customer_description: string;
+    status: "draft" | "active" | "inactive" | "archived";
+    expected_version: number;
+  },
+): Promise<PriceBookServiceItem> {
+  return (
+    await apiClient.put<PriceBookServiceItem>(`${path}/service-items/${itemId}`, data)
+  ).data;
+}
 export async function createPriceVersion(
   itemId: string,
   data: {
@@ -56,7 +94,7 @@ export async function createPriceVersion(
     unit_price: string;
     effective_at: string;
     components: Array<{
-      component_type: "labor" | "material";
+      component_type: "labor" | "material" | "other_direct";
       code?: string;
       label: string;
       quantity: string;
@@ -139,6 +177,47 @@ export async function decideReviewBatch(
   return (
     await apiClient.post<PriceBookReviewBatch>(
       `${path}/activation-readiness/review-batches/${batchId}/decision`,
+      data,
+    )
+  ).data;
+}
+export async function createAdjustmentProposal(data: {
+  source_price_book_version: string;
+  recommendation_identity: string;
+  affected_service_codes: string[];
+  owner_exclusions: string[];
+  transformation_kind: "percentage" | "fixed_amount";
+  transformation: Record<string, string>;
+  impacts: Array<Record<string, string>>;
+  limitations: string[];
+  effective_at: string;
+  proposal_digest: string;
+}): Promise<PriceBookAdjustmentProposal> {
+  return (
+    await apiClient.post<PriceBookAdjustmentProposal>(
+      `${path}/activation-readiness/adjustment-proposals`,
+      data,
+    )
+  ).data;
+}
+export async function decideAdjustmentProposal(
+  proposalId: string,
+  data: { expected_version: number; expected_digest: string; decision: "approved" | "returned" | "rejected"; reason: string },
+): Promise<PriceBookAdjustmentProposal> {
+  return (
+    await apiClient.post<PriceBookAdjustmentProposal>(
+      `${path}/activation-readiness/adjustment-proposals/${proposalId}/decision`,
+      data,
+    )
+  ).data;
+}
+export async function materializeAdjustmentProposal(
+  proposalId: string,
+  data: { expected_version: number; expected_digest: string; idempotency_key: string },
+): Promise<PriceBookBulkMaterialization> {
+  return (
+    await apiClient.post<PriceBookBulkMaterialization>(
+      `${path}/activation-readiness/adjustment-proposals/${proposalId}/materialize`,
       data,
     )
   ).data;

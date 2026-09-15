@@ -8,6 +8,10 @@ from uuid import uuid4
 import httpx
 import pytest
 import pytest_asyncio
+from fastapi import FastAPI
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
 from app.core.config import settings
 from app.database.session import get_database_session
 from app.events.models import BusinessEvent
@@ -25,6 +29,7 @@ from app.price_book.router import router as price_book_router
 from app.price_book.schemas import (
     AdjustmentProposalCreate,
     AdjustmentProposalDecision,
+    BulkMaterializeRequest,
     CategoryCreate,
     ComponentCreate,
     OptionCreate,
@@ -38,9 +43,6 @@ from app.price_book.schemas import (
     TaxClassificationCreate,
 )
 from app.price_book.service import PriceBookService
-from fastapi import FastAPI
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 
 @pytest_asyncio.fixture
@@ -257,6 +259,26 @@ async def test_activation_snapshot_idempotency_and_immutable_history(
         public_catalog = await service.catalog(session, context=context)
     serialized_catalog = public_catalog.model_dump(mode="json")
     assert "unit_cost" not in str(serialized_catalog)
+    manager_context = context_with_permissions(
+        context, frozenset({PriceBookPermission.MANAGE})
+    )
+    async with factory() as session:
+        manager_catalog = await service.catalog(
+            session,
+            context=manager_context,
+            search="DRAIN-CLEAR",
+            category_id=item.category_id,
+            item_status="active",
+            limit=1,
+            offset=0,
+        )
+    assert manager_catalog.total_service_items == 1
+    assert manager_catalog.costs_visible is True
+    assert manager_catalog.versions[0].cost_readiness == "COST_COMPLETE"
+    assert manager_catalog.versions[0].expected_direct_cost == Decimal("75.75")
+    assert manager_catalog.versions[0].expected_direct_contribution == Decimal(
+        "74.20"
+    )
     assert "internal_description" not in str(serialized_catalog)
     async with factory() as session:
         assert (
@@ -727,7 +749,7 @@ async def test_complete_authorization_matrix(
     assert (read.status_code == 200) is read_allowed
     assert (manage.status_code == 201) is manage_allowed
     assert (activate.status_code != 403) is activate_allowed
-    assert (snapshot.status_code != 403) is manage_allowed
+    assert (snapshot.status_code != 403) is read_allowed
 
 
 @pytest.mark.asyncio
@@ -936,6 +958,84 @@ async def test_activation_readiness_review_and_proposal_are_non_activating(
         )
         assert approved_proposal.status == "approved"
         assert snapshots == snapshots_before
+
+
+@pytest.mark.asyncio
+async def test_approved_bulk_adjustment_creates_idempotent_drafts_only(
+    price_book_fixture,
+) -> None:
+    factory, context, branch = price_book_fixture
+    service, item, version, _effective = await seed_draft(factory, context, branch)
+    async with factory() as session:
+        await service.activate(
+            session,
+            context=context,
+            version_id=version.id,
+            expected_version=1,
+            reason="Synthetic baseline",
+        )
+    digest = "e" * 64
+    async with factory() as session:
+        proposal = await service.create_adjustment_proposal(
+            session,
+            context=context,
+            payload=AdjustmentProposalCreate(
+                source_price_book_version="synthetic-v1",
+                recommendation_identity="synthetic-adjustment-materialization-1",
+                affected_service_codes=(item.code,),
+                transformation_kind="percentage",
+                transformation={"percentage": "5.00"},
+                impacts=(
+                    {
+                        "service_code": item.code,
+                        "current_price": "149.95",
+                        "proposed_price": "157.45",
+                    },
+                ),
+                effective_at=datetime.now(timezone.utc) + timedelta(days=30),
+                proposal_digest=digest,
+            ),
+        )
+    async with factory() as session:
+        approved = await service.decide_adjustment_proposal(
+            session,
+            context=context,
+            proposal_id=proposal.id,
+            payload=AdjustmentProposalDecision(
+                expected_version=1,
+                expected_digest=digest,
+                decision="approved",
+                reason="Synthetic owner approval",
+            ),
+        )
+    request = BulkMaterializeRequest(
+        expected_version=approved.version,
+        expected_digest=digest,
+        idempotency_key="bulk-adjustment-synthetic-1",
+    )
+    async with factory() as session:
+        result = await service.materialize_adjustment_proposal(
+            session,
+            context=context,
+            proposal_id=proposal.id,
+            payload=request,
+        )
+    async with factory() as session:
+        replay = await service.materialize_adjustment_proposal(
+            session,
+            context=context,
+            proposal_id=proposal.id,
+            payload=request,
+        )
+        catalog = await service.catalog(
+            session, context=context, version_status="draft"
+        )
+    assert result.created_count == 1
+    assert replay.replayed is True
+    assert replay.created_version_ids == result.created_version_ids
+    assert len(catalog.versions) == 1
+    assert catalog.versions[0].unit_price == Decimal("157.45")
+    assert catalog.service_items[0].current_version_id == version.id
 
 
 @pytest.mark.asyncio

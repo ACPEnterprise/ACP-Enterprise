@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as estimatesApi from "../api/estimates";
+import * as priceBookApi from "../api/priceBook";
 import { EstimatesRoute } from "./EstimatesRoute";
 
 let permissions = new Set<string>();
@@ -18,6 +19,19 @@ vi.mock("../api/estimates", () => ({
   }),
   createEstimate: vi.fn(), reviseEstimate: vi.fn(),
 }));
+vi.mock("../api/priceBook", () => ({
+  getPriceBook: vi.fn().mockResolvedValue({
+    categories: [], tax_classifications: [], option_groups: [], options: [],
+    service_items: [{ id: "service-1", code: "HEAT-1", name: "Heating service", customer_description: "Heating service", status: "active", current_version_id: "version-1" }],
+    versions: [], total_service_items: 1, limit: 500, offset: 0, costs_visible: false,
+  }),
+  createCommercialSnapshot: vi.fn().mockResolvedValue({ id: "snapshot-1" }),
+  createCategory: vi.fn(), createTax: vi.fn(), createServiceItem: vi.fn(), updateServiceItem: vi.fn(),
+  createPriceVersion: vi.fn(), activatePriceVersion: vi.fn(),
+  createOptionGroup: vi.fn(), addOption: vi.fn(), createReviewBatch: vi.fn(),
+  decideReviewBatch: vi.fn(), createAdjustmentProposal: vi.fn(),
+  decideAdjustmentProposal: vi.fn(), materializeAdjustmentProposal: vi.fn(),
+}));
 
 function renderRoute(path = "/estimates") {
   return render(<QueryClientProvider client={new QueryClient()}><MemoryRouter initialEntries={[path]}><EstimatesRoute /></MemoryRouter></QueryClientProvider>);
@@ -29,6 +43,8 @@ describe("EstimatesRoute", () => {
     vi.mocked(estimatesApi.createEstimate).mockReset();
     vi.mocked(estimatesApi.listEstimates).mockClear();
     vi.mocked(estimatesApi.getEstimate).mockClear();
+    vi.mocked(priceBookApi.getPriceBook).mockClear();
+    vi.mocked(priceBookApi.createCommercialSnapshot).mockClear();
   });
   it("fails closed without read permission", () => {
     renderRoute();
@@ -46,7 +62,7 @@ describe("EstimatesRoute", () => {
     expect(screen.getByText("EST-000001")).toBeVisible();
   });
   it("renders mobile-safe management controls with totals", async () => {
-    permissions = new Set(["COMPANY_ESTIMATE_READ", "COMPANY_ESTIMATE_MANAGE"]);
+    permissions = new Set(["COMPANY_ESTIMATE_READ", "COMPANY_ESTIMATE_MANAGE", "COMPANY_PRICE_BOOK_READ"]);
     renderRoute("/estimates?id=estimate-1");
     expect(await screen.findByText("Create proposal")).toBeVisible();
     expect((await screen.findAllByText("Heating proposal"))[0]).toBeVisible();
@@ -54,16 +70,17 @@ describe("EstimatesRoute", () => {
     expect(screen.getByLabelText("Discount type")).toBeVisible();
   });
   it("retains proposal evidence and hides backend details after rejection", async () => {
-    permissions = new Set(["COMPANY_ESTIMATE_READ", "COMPANY_ESTIMATE_MANAGE"]);
+    permissions = new Set(["COMPANY_ESTIMATE_READ", "COMPANY_ESTIMATE_MANAGE", "COMPANY_PRICE_BOOK_READ"]);
     vi.mocked(estimatesApi.createEstimate).mockRejectedValueOnce({
       isAxiosError: true,
       response: { data: { detail: { recovery: "USER_CORRECTION_REQUIRED", message: "sql-provider-secret-canary" } } },
     });
     renderRoute();
     await screen.findByText("Create proposal");
-    fireEvent.change(screen.getByLabelText("Branch ID"), { target: { value: "branch-1" } });
+    fireEvent.change(screen.getByLabelText("Branch ID"), { target: { value: "11111111-1111-4111-8111-111111111111" } });
     fireEvent.change(screen.getByLabelText("Customer ID"), { target: { value: "customer-1" } });
-    fireEvent.change(screen.getByLabelText("Commercial snapshot ID"), { target: { value: "snapshot-1" } });
+    await screen.findByRole("option", { name: "HEAT-1 · Heating service" });
+    fireEvent.change(await screen.findByLabelText("Price Book service"), { target: { value: "service-1" } });
     fireEvent.change(screen.getByLabelText("Proposal title"), { target: { value: "Heating proposal" } });
     fireEvent.click(screen.getByRole("button", { name: "Create immutable revision" }));
     await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent(/requires correction/i));

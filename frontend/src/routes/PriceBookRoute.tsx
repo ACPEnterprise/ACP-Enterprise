@@ -71,17 +71,23 @@ export function PriceBookRoute() {
     name: "",
     customer_description: "",
   });
+  const [editItem, setEditItem] = useState<{
+    id: string;
+    version: number;
+    status: "draft" | "active" | "inactive" | "archived";
+  } | null>(null);
   const [draft, setDraft] = useState({
     itemId: "",
     taxId: "",
     price: "",
     effective: "",
-    componentType: "labor" as "labor" | "material",
+    componentType: "labor" as "labor" | "material" | "other_direct",
     componentLabel: "",
     componentQuantity: "1",
     componentCost: "",
   });
   const [search, setSearch] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [reviewType, setReviewType] = useState<
     | "commercial_content"
@@ -95,6 +101,18 @@ export function PriceBookRoute() {
     digest: string;
     version: number;
     count: number;
+  } | null>(null);
+  const [adjustment, setAdjustment] = useState({
+    kind: "percentage" as "percentage" | "fixed_amount",
+    value: "",
+    effective: "",
+  });
+  const [savedAdjustment, setSavedAdjustment] = useState<{
+    id: string;
+    digest: string;
+    version: number;
+    count: number;
+    status: string;
   } | null>(null);
   if (!activeCompany)
     return (
@@ -164,14 +182,29 @@ export function PriceBookRoute() {
     event.preventDefault();
     await performMutation(
       () =>
-        mutations.item.mutateAsync({ ...item, branch_id: branch || undefined }),
-      () =>
+        editItem
+          ? mutations.itemUpdate.mutateAsync({
+              itemId: editItem.id,
+              data: {
+                ...item,
+                branch_id: branch || undefined,
+                status: editItem.status,
+                expected_version: editItem.version,
+              },
+            })
+          : mutations.item.mutateAsync({
+              ...item,
+              branch_id: branch || undefined,
+            }),
+      () => {
         setItem({
           category_id: "",
           code: "",
           name: "",
           customer_description: "",
-        }),
+        });
+        setEditItem(null);
+      },
     );
   };
   const submitDraft = async (event: FormEvent) => {
@@ -239,27 +272,136 @@ export function PriceBookRoute() {
       setSavedReview({ ...savedReview, version: decided.version });
     });
   };
+  const saveAdjustmentPreview = async () => {
+    const value = Number(adjustment.value);
+    if (!Number.isFinite(value) || !adjustment.effective) return;
+    const impacts = filteredServices.flatMap((service) => {
+      const active = versions.find(
+        (version) =>
+          version.id === service.current_version_id &&
+          version.status === "active",
+      );
+      if (!active) return [];
+      const current = Number(active.unit_price);
+      const proposed =
+        Math.round(
+          (adjustment.kind === "percentage"
+            ? current * (1 + value / 100)
+            : current + value) * 100,
+        ) / 100;
+      if (proposed < 0) return [];
+      return [
+        {
+          service_code: service.code,
+          current_price: current.toFixed(2),
+          proposed_price: proposed.toFixed(2),
+          absolute_change: (proposed - current).toFixed(2),
+        },
+      ];
+    });
+    if (impacts.length === 0) return;
+    const effectiveAt = new Date(adjustment.effective).toISOString();
+    const codes = impacts.map((impact) => impact.service_code).sort();
+    const digestBytes = await crypto.subtle.digest(
+      "SHA-256",
+      new TextEncoder().encode(
+        JSON.stringify({
+          codes,
+          kind: adjustment.kind,
+          value: adjustment.value,
+          effectiveAt,
+          impacts,
+        }),
+      ),
+    );
+    const digest = Array.from(new Uint8Array(digestBytes), (byte) =>
+      byte.toString(16).padStart(2, "0"),
+    ).join("");
+    await performMutation(async () => {
+      const saved = await mutations.adjustmentProposal.mutateAsync({
+        source_price_book_version: "current-active-selection",
+        recommendation_identity: `owner-bulk-${digest}`,
+        affected_service_codes: codes,
+        owner_exclusions: [],
+        transformation_kind: adjustment.kind,
+        transformation: { [adjustment.kind]: adjustment.value },
+        impacts,
+        limitations: [
+          "No profit effect is asserted where cost evidence is incomplete.",
+        ],
+        effective_at: effectiveAt,
+        proposal_digest: digest,
+      });
+      setSavedAdjustment({
+        id: saved.id,
+        digest,
+        version: saved.version,
+        count: impacts.length,
+        status: saved.status,
+      });
+    });
+  };
+  const approveAdjustment = async () => {
+    if (!savedAdjustment) return;
+    await performMutation(async () => {
+      const saved = await mutations.adjustmentDecision.mutateAsync({
+        proposalId: savedAdjustment.id,
+        data: {
+          expected_version: savedAdjustment.version,
+          expected_digest: savedAdjustment.digest,
+          decision: "approved",
+          reason: "Owner approved this exact bulk price preview.",
+        },
+      });
+      setSavedAdjustment({
+        ...savedAdjustment,
+        version: saved.version,
+        status: saved.status,
+      });
+    });
+  };
+  const createAdjustmentDrafts = async () => {
+    if (!savedAdjustment || savedAdjustment.status !== "approved") return;
+    await performMutation(async () => {
+      await mutations.adjustmentMaterialize.mutateAsync({
+        proposalId: savedAdjustment.id,
+        data: {
+          expected_version: savedAdjustment.version,
+          expected_digest: savedAdjustment.digest,
+          idempotency_key: `materialize-${savedAdjustment.digest.slice(0, 40)}`,
+        },
+      });
+      setSavedAdjustment(null);
+    });
+  };
   const failedMutation = [
     mutations.category,
     mutations.tax,
     mutations.item,
+    mutations.itemUpdate,
     mutations.version,
     mutations.activate,
     mutations.optionGroup,
     mutations.option,
     mutations.reviewBatch,
     mutations.reviewDecision,
+    mutations.adjustmentProposal,
+    mutations.adjustmentDecision,
+    mutations.adjustmentMaterialize,
   ].find((mutation) => mutation.isError);
   const services = catalog.data?.service_items ?? [];
   const versions = catalog.data?.versions ?? [];
   const normalizedSearch = search.trim().toLocaleLowerCase();
   const filteredServices = services.filter((service) => {
+    const matchesCategory =
+      categoryFilter === "all" || service.category_id === categoryFilter;
     const matchesSearch =
       !normalizedSearch ||
       [service.code, service.name, service.customer_description].some((value) =>
         value.toLocaleLowerCase().includes(normalizedSearch),
       );
     return (
+      matchesCategory &&
       matchesSearch &&
       (statusFilter === "all" || service.status === statusFilter)
     );
@@ -437,6 +579,94 @@ export function PriceBookRoute() {
             </CardContent>
           </Card>
           {canManage && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Bulk price adjustment</CardTitle>
+                <CardDescription>
+                  Preview the currently filtered active services. Approval creates
+                  successor drafts only; activation remains a separate action.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <Select
+                    aria-label="Bulk adjustment method"
+                    value={adjustment.kind}
+                    onChange={(event) =>
+                      setAdjustment({
+                        ...adjustment,
+                        kind: event.target.value as typeof adjustment.kind,
+                      })
+                    }
+                  >
+                    <option value="percentage">Percentage</option>
+                    <option value="fixed_amount">Fixed amount</option>
+                  </Select>
+                  <Input
+                    aria-label="Bulk adjustment value"
+                    type="number"
+                    step="0.01"
+                    value={adjustment.value}
+                    onChange={(event) =>
+                      setAdjustment({ ...adjustment, value: event.target.value })
+                    }
+                  />
+                  <Input
+                    aria-label="Bulk adjustment effective date"
+                    type="datetime-local"
+                    value={adjustment.effective}
+                    onChange={(event) =>
+                      setAdjustment({
+                        ...adjustment,
+                        effective: event.target.value,
+                      })
+                    }
+                  />
+                </div>
+                <p className="text-sm text-content-muted">
+                  Preview scope: {filteredServices.filter((service) => service.current_version_id).length} active-priced services. No historical version will be changed.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    onClick={() => void saveAdjustmentPreview()}
+                    disabled={!adjustment.value || !adjustment.effective}
+                    loading={mutations.adjustmentProposal.isPending}
+                  >
+                    Save exact preview
+                  </Button>
+                  {canActivate && (
+                    <Button
+                      onClick={() => void approveAdjustment()}
+                      disabled={!savedAdjustment || savedAdjustment.status !== "draft"}
+                      loading={mutations.adjustmentDecision.isPending}
+                    >
+                      Approve preview
+                    </Button>
+                  )}
+                  <Button
+                    onClick={() => void createAdjustmentDrafts()}
+                    disabled={!savedAdjustment || savedAdjustment.status !== "approved"}
+                    loading={mutations.adjustmentMaterialize.isPending}
+                  >
+                    Create successor drafts
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    onClick={() => setSavedAdjustment(null)}
+                    disabled={!savedAdjustment}
+                  >
+                    Cancel preview
+                  </Button>
+                </div>
+                {savedAdjustment && (
+                  <Alert variant="success" role="status">
+                    Exact preview saved for {savedAdjustment.count} services · {savedAdjustment.status}. No price is active.
+                  </Alert>
+                )}
+              </CardContent>
+            </Card>
+          )}
+          {canManage && (
             <section className="grid gap-4 lg:grid-cols-3">
               <Card>
                 <CardHeader>
@@ -477,7 +707,7 @@ export function PriceBookRoute() {
               </Card>
               <Card>
                 <CardHeader>
-                  <CardTitle>New service item</CardTitle>
+                  <CardTitle>{editItem ? "Edit service item" : "New service item"}</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <form
@@ -532,10 +762,23 @@ export function PriceBookRoute() {
                     <Button
                       fullWidth
                       type="submit"
-                      loading={mutations.item.isPending}
+                      loading={mutations.item.isPending || mutations.itemUpdate.isPending}
                     >
-                      Create service item
+                      {editItem ? "Save service item" : "Create service item"}
                     </Button>
+                    {editItem && (
+                      <Button
+                        fullWidth
+                        type="button"
+                        variant="ghost"
+                        onClick={() => {
+                          setEditItem(null);
+                          setItem({ category_id: "", code: "", name: "", customer_description: "" });
+                        }}
+                      >
+                        Cancel edit
+                      </Button>
+                    )}
                   </form>
                 </CardContent>
               </Card>
@@ -605,12 +848,13 @@ export function PriceBookRoute() {
                       onChange={(e) =>
                         setDraft({
                           ...draft,
-                          componentType: e.target.value as "labor" | "material",
+                          componentType: e.target.value as "labor" | "material" | "other_direct",
                         })
                       }
                     >
                       <option value="labor">Labor</option>
                       <option value="material">Material</option>
+                      <option value="other_direct">Other direct cost</option>
                     </Select>
                     <Input
                       aria-label="Component label"
@@ -826,13 +1070,25 @@ export function PriceBookRoute() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="mb-4 grid gap-3 sm:grid-cols-2">
+              <div className="mb-4 grid gap-3 sm:grid-cols-3">
                 <Input
                   aria-label="Search Price Book"
                   placeholder="Search services"
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
                 />
+                <Select
+                  aria-label="Filter Price Book category"
+                  value={categoryFilter}
+                  onChange={(event) => setCategoryFilter(event.target.value)}
+                >
+                  <option value="all">All categories</option>
+                  {catalog.data?.categories.map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.name}
+                    </option>
+                  ))}
+                </Select>
                 <Select
                   aria-label="Filter Price Book status"
                   value={statusFilter}
@@ -884,6 +1140,28 @@ export function PriceBookRoute() {
                           <p className="mt-1 text-sm text-content-muted">
                             {service.customer_description}
                           </p>
+                          {canManage && (
+                            <Button
+                              className="mt-2"
+                              type="button"
+                              variant="ghost"
+                              onClick={() => {
+                                setItem({
+                                  category_id: service.category_id,
+                                  code: service.code,
+                                  name: service.name,
+                                  customer_description: service.customer_description,
+                                });
+                                setEditItem({
+                                  id: service.id,
+                                  version: service.version,
+                                  status: service.status as "draft" | "active" | "inactive" | "archived",
+                                });
+                              }}
+                            >
+                              Edit service details
+                            </Button>
+                          )}
                         </div>
                       </div>
                       <div className="mt-3 grid gap-2">
@@ -892,10 +1170,25 @@ export function PriceBookRoute() {
                             key={version.id}
                             className="flex flex-col gap-2 rounded-md bg-surface-muted p-3 sm:flex-row sm:items-center sm:justify-between"
                           >
-                            <span>
-                              Revision {version.revision} · {version.currency}{" "}
-                              {version.unit_price} · {version.status}
-                            </span>
+                            <div>
+                              <span>
+                                Revision {version.revision} · {version.currency}{" "}
+                                {version.unit_price} · {version.status}
+                              </span>
+                              <p className="text-xs text-content-muted">
+                                Effective {new Date(version.effective_at).toLocaleString()} · {version.cost_readiness === "COST_COMPLETE" ? "Cost evidence complete" : "Insufficient cost evidence"}
+                              </p>
+                              {canManage && version.expected_direct_cost && (
+                                <p className="text-xs text-content-muted">
+                                  Expected direct cost {version.currency} {version.expected_direct_cost} · Expected direct contribution {version.currency} {version.expected_direct_contribution}
+                                </p>
+                              )}
+                              {version.status === "draft" && itemVersions.some((candidate) => candidate.status === "active") && (
+                                <p className="text-xs font-medium text-content-muted">
+                                  Change from active: {version.currency} {(Number(version.unit_price) - Number(itemVersions.find((candidate) => candidate.status === "active")?.unit_price ?? 0)).toFixed(2)}
+                                </p>
+                              )}
+                            </div>
                             {canActivate && version.status === "draft" && (
                               <Button
                                 onClick={() =>

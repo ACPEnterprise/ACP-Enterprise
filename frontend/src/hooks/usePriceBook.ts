@@ -26,6 +26,11 @@ export function usePriceBookMutations() {
       mutationFn: api.createServiceItem,
       onSuccess: refresh,
     }),
+    itemUpdate: useMutation({
+      mutationFn: ({ itemId, data }: { itemId: string; data: Parameters<typeof api.updateServiceItem>[1] }) =>
+        api.updateServiceItem(itemId, data),
+      onSuccess: refresh,
+    }),
     version: useMutation({
       mutationFn: ({
         itemId,
@@ -67,6 +72,29 @@ export function usePriceBookMutations() {
         batchId: string;
         data: Parameters<typeof api.decideReviewBatch>[1];
       }) => api.decideReviewBatch(batchId, data),
+      onSuccess: refresh,
+    }),
+    snapshot: useMutation({
+      mutationFn: ({
+        itemId,
+        data,
+      }: {
+        itemId: string;
+        data: Parameters<typeof api.createCommercialSnapshot>[1];
+      }) => api.createCommercialSnapshot(itemId, data),
+    }),
+    adjustmentProposal: useMutation({
+      mutationFn: api.createAdjustmentProposal,
+      onSuccess: refresh,
+    }),
+    adjustmentDecision: useMutation({
+      mutationFn: ({ proposalId, data }: { proposalId: string; data: Parameters<typeof api.decideAdjustmentProposal>[1] }) =>
+        api.decideAdjustmentProposal(proposalId, data),
+      onSuccess: refresh,
+    }),
+    adjustmentMaterialize: useMutation({
+      mutationFn: ({ proposalId, data }: { proposalId: string; data: Parameters<typeof api.materializeAdjustmentProposal>[1] }) =>
+        api.materializeAdjustmentProposal(proposalId, data),
       onSuccess: refresh,
     }),
   };
