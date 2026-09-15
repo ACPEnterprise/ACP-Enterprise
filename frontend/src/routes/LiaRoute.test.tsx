@@ -57,6 +57,7 @@ vi.mock("../hooks/useLia", () => ({
           request_id: "request",
           conversation_id: "conversation",
           classification: "KNOWN",
+          authority: "ACP_AUTHORITATIVE",
           answer: "Here is current authorized evidence.",
           evidence: [
             {
@@ -81,6 +82,14 @@ vi.mock("../hooks/useLia", () => ({
           policy_version: "v1",
           evidence_digest: "digest",
           authorization_version: 1,
+          company_id: "11111111-1111-4111-8111-111111111111",
+          branch_ids: ["22222222-2222-4222-8222-222222222222"],
+          subject_domain: null,
+          subject_id: null,
+          source_systems: ["jobs"],
+          missing_evidence: [],
+          safe_next_action: "Open Jobs",
+          as_of: "2026-08-30T00:00:00Z",
           generated_at: "2026-08-30T00:00:00Z",
         },
   }),

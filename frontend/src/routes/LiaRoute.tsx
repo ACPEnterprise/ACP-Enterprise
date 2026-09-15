@@ -50,6 +50,10 @@ function Answer({ result }: { result: LiaResponse }) {
         title={result.classification.replaceAll("_", " ")}
       >
         {result.answer}
+        <p className="mt-2 text-sm font-semibold">
+          Authority: {result.authority.replaceAll("_", " ")} · As of{" "}
+          {new Date(result.as_of).toLocaleString()}
+        </p>
       </Alert>
       {result.evidence.length ? (
         <Card>
@@ -94,6 +98,16 @@ function Answer({ result }: { result: LiaResponse }) {
             </ul>
           </CardContent>
         </Card>
+      ) : null}
+      {result.missing_evidence.length ? (
+        <Alert variant="warning" title="Missing evidence">
+          {result.missing_evidence.join(" · ")}
+        </Alert>
+      ) : null}
+      {result.safe_next_action ? (
+        <p className="text-sm text-content-muted">
+          Safe next step: {result.safe_next_action}
+        </p>
       ) : null}
       {result.navigation.length ? (
         <div className="flex flex-wrap gap-2">
@@ -158,20 +172,43 @@ export function LiaRoute() {
   const ask = useAskLia();
   const [question, setQuestion] = useState("");
   const [conversationId, setConversationId] = useState<string>();
+  const [continuation, setContinuation] = useState<{
+    authorization_version: number;
+    evidence_digest: string;
+    as_of: string;
+  }>();
+  const preserveContinuation = (result: LiaResponse) => {
+    setConversationId(result.conversation_id);
+    if (context) {
+      setContinuation({
+        authorization_version: result.authorization_version,
+        evidence_digest: result.evidence_digest,
+        as_of: result.as_of,
+      });
+    }
+  };
   const submit = (event: FormEvent) => {
     event.preventDefault();
     const value = question.trim();
     if (!value) return;
     ask.mutate(
-      { question: value, conversation_id: conversationId, context },
-      { onSuccess: (result) => setConversationId(result.conversation_id) },
+      {
+        question: value,
+        conversation_id: conversationId,
+        context: context ? { ...context, ...continuation } : undefined,
+      },
+      { onSuccess: preserveContinuation },
     );
   };
   const askPrompt = (value: string) => {
     setQuestion(value);
     ask.mutate(
-      { question: value, conversation_id: conversationId, context },
-      { onSuccess: (result) => setConversationId(result.conversation_id) },
+      {
+        question: value,
+        conversation_id: conversationId,
+        context: context ? { ...context, ...continuation } : undefined,
+      },
+      { onSuccess: preserveContinuation },
     );
   };
   return (

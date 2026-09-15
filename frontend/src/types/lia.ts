@@ -25,6 +25,7 @@ export interface LiaResponse {
   request_id: string;
   conversation_id: string;
   classification: LiaClassification;
+  authority: "ACP_AUTHORITATIVE" | "SOURCE_BACKED" | "PARTIAL" | "INSUFFICIENT_EVIDENCE";
   answer: string;
   evidence: LiaEvidence[];
   limitations: string[];
@@ -37,6 +38,14 @@ export interface LiaResponse {
   policy_version: string;
   evidence_digest: string;
   authorization_version: number;
+  company_id: string;
+  branch_ids: string[];
+  subject_domain: string | null;
+  subject_id: string | null;
+  source_systems: string[];
+  missing_evidence: string[];
+  safe_next_action: string | null;
+  as_of: string;
   generated_at: string;
 }
 

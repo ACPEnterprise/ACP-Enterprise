@@ -11,12 +11,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.platform.permissions.authorization import AuthorizationContext
 
 from .contracts import (
+    AnswerAuthority,
     EvidenceReference,
     LiaRequest,
     LiaResponse,
     NavigationSuggestion,
     TruthClassification,
 )
+from .planner import OWNER_BRIEFING_DOMAINS, QuestionIntent, plan_question
 from .retrieval import GovernedRetrievalService, permitted_domain_names
 from .security import (
     EXFILTRATION_PATTERNS,
@@ -28,75 +30,6 @@ from .security import (
 
 logger = logging.getLogger("app.lia.audit")
 POLICY_VERSION = "lia-governed-assistant/v1"
-
-DOMAIN_KEYWORDS = {
-    "customers": ("customer",),
-    "jobs": ("job", "work"),
-    "scheduling": ("schedule", "appointment", "dispatch"),
-    "estimates": ("estimate", "proposal"),
-    "invoicing": ("invoice", "outstanding", "revenue"),
-    "payments": ("payment", "settlement", "cash"),
-    "purchasing": ("purchasing", "purchase order", "vendor"),
-    "inventory": ("inventory", "stock", "material"),
-    "assets": ("asset", "equipment", "vehicle", "fleet", "warranty", "tracked tool"),
-    "workforce": (
-        "employee readiness",
-        "technician readiness",
-        "certification",
-        "language evidence",
-        "mobile-ready",
-        "employee permission",
-    ),
-    "communications": (
-        "communication",
-        "message delivery",
-        "email bounce",
-        "text failed",
-        "suppressed destination",
-    ),
-    "business-economics": (
-        "profit",
-        "margin",
-        "economics",
-        "labor cost",
-        "labor burden",
-        "material cost",
-        "financial evidence",
-        "strongest job",
-        "losing money",
-    ),
-    "beacon": ("beacon", "signal"),
-    "migration": ("migration", "cutover", "import blocker"),
-    "payroll": ("payroll", "pay statement", "remittance", "own pay"),
-    "luminary": (
-        "luminary",
-        "finding",
-        "briefing",
-        "how are we doing",
-        "what changed",
-        "why did",
-    ),
-}
-
-ENTERPRISE_SUMMARY_PHRASES = (
-    "how are we doing",
-    "what needs my attention",
-    "what changed",
-    "what don't you know",
-    "what information is incomplete",
-    "owner briefing",
-)
-
-INTELLIGENCE_BRIEFING_DOMAINS = {
-    "business-economics",
-    "luminary",
-    "beacon",
-    "migration",
-    "payroll",
-    "assets",
-    "workforce",
-    "communications",
-}
 
 ASSOCIATION_QUESTION_PHRASES = (
     "also showing",
@@ -116,6 +49,8 @@ ROUTES = {
     "customers": "/customers",
     "jobs": "/jobs",
     "scheduling": "/scheduling",
+    "dispatch": "/dispatch",
+    "locations": "/customers",
     "estimates": "/estimates",
     "invoicing": "/invoices",
     "payments": "/payments",
@@ -124,6 +59,12 @@ ROUTES = {
     "assets": "/assets",
     "workforce": "/employees",
     "communications": "/communications",
+    "accounting": "/reports",
+    "data-quality": "/data-quality",
+    "launch-readiness": "/administration",
+    "price-book": "/price-book",
+    "audit": "/audit",
+    "timekeeping": "/employees/time-attendance",
 }
 
 
@@ -141,9 +82,24 @@ class LiaService:
         request_id = uuid4()
         conversation_id = request.conversation_id or uuid4()
         question = request.question.strip()
+        if (
+            request.context is not None
+            and request.context.authorization_version is not None
+            and request.context.authorization_version != context.authorization_version
+        ):
+            return self._response(
+                context=context,
+                request=request,
+                request_id=request_id,
+                conversation_id=conversation_id,
+                classification=TruthClassification.STALE,
+                answer="Your authorization changed since this context was captured. Refresh before asking about the record again.",
+                limitations=("No stale context was retrieved.",),
+            )
         if matches_any(question, INJECTION_PATTERNS + EXFILTRATION_PATTERNS):
             return self._response(
                 context=context,
+                request=request,
                 request_id=request_id,
                 conversation_id=conversation_id,
                 classification=TruthClassification.UNAUTHORIZED,
@@ -155,6 +111,7 @@ class LiaService:
         if matches_any(question, FABRICATION_PATTERNS):
             return self._response(
                 context=context,
+                request=request,
                 request_id=request_id,
                 conversation_id=conversation_id,
                 classification=TruthClassification.POLICY_REQUIRED,
@@ -164,6 +121,7 @@ class LiaService:
         if matches_any(question, HIGH_IMPACT_PATTERNS):
             return self._response(
                 context=context,
+                request=request,
                 request_id=request_id,
                 conversation_id=conversation_id,
                 classification=TruthClassification.POLICY_REQUIRED,
@@ -174,20 +132,32 @@ class LiaService:
                 ),
             )
 
-        requested_domains = self._classify_domains(question, request)
-        allowed = permitted_domain_names(context)
-        selected = requested_domains & allowed if requested_domains else allowed
-        if (
-            requested_domains
-            and not selected
-            and any(
-                phrase in question.casefold() for phrase in ENTERPRISE_SUMMARY_PHRASES
+        plan = plan_question(
+            question, request.context.domain if request.context else None
+        )
+        requested_domains = set(plan.domains)
+        if plan.intent is QuestionIntent.UNSUPPORTED:
+            return self._response(
+                context=context,
+                request=request,
+                request_id=request_id,
+                conversation_id=conversation_id,
+                classification=TruthClassification.UNAVAILABLE,
+                answer="I can’t identify a bounded authoritative ACP source for that question yet.",
+                limitations=(
+                    "Ask about a Customer, Job, schedule, Employee, Payroll, Accounting, Beacon, Economics, Migration, or launch readiness.",
+                    "No broad database search or external AI provider was used.",
+                ),
             )
-        ):
+        allowed = permitted_domain_names(context)
+        selected = requested_domains & allowed
+        if requested_domains == OWNER_BRIEFING_DOMAINS and not selected:
+            # Briefings remain bounded to the principal's permitted source registry.
             selected = allowed
         if requested_domains and not selected:
             return self._response(
                 context=context,
+                request=request,
                 request_id=request_id,
                 conversation_id=conversation_id,
                 classification=TruthClassification.UNAUTHORIZED,
@@ -203,6 +173,7 @@ class LiaService:
         if not evidence:
             return self._response(
                 context=context,
+                request=request,
                 request_id=request_id,
                 conversation_id=conversation_id,
                 classification=TruthClassification.UNAVAILABLE,
@@ -213,11 +184,28 @@ class LiaService:
                 ),
             )
 
+        evidence_digest = _evidence_digest(evidence)
+        if (
+            request.context is not None
+            and request.context.evidence_digest is not None
+            and request.context.evidence_digest != evidence_digest
+        ):
+            return self._response(
+                context=context,
+                request=request,
+                request_id=request_id,
+                conversation_id=conversation_id,
+                classification=TruthClassification.STALE,
+                answer="The authoritative evidence changed since the prior answer. Review the refreshed evidence before relying on the earlier context.",
+                evidence=evidence,
+                limitations=("Prior evidence was not silently reused.",),
+            )
         if len(selected) > 1 and any(
             phrase in question.casefold() for phrase in ASSOCIATION_QUESTION_PHRASES
         ):
             response = self._response(
                 context=context,
+                request=request,
                 request_id=request_id,
                 conversation_id=conversation_id,
                 classification=TruthClassification.INCOMPLETE,
@@ -263,6 +251,7 @@ class LiaService:
         )
         response = self._response(
             context=context,
+            request=request,
             request_id=request_id,
             conversation_id=conversation_id,
             classification=TruthClassification.KNOWN,
@@ -273,22 +262,11 @@ class LiaService:
         )
         return response
 
-    def _classify_domains(self, question: str, request: LiaRequest) -> set[str]:
-        if request.context and request.context.domain:
-            return {request.context.domain}
-        normalized = question.casefold()
-        if any(phrase in normalized for phrase in ENTERPRISE_SUMMARY_PHRASES):
-            return set(INTELLIGENCE_BRIEFING_DOMAINS)
-        return {
-            domain
-            for domain, keywords in DOMAIN_KEYWORDS.items()
-            if any(keyword in normalized for keyword in keywords)
-        }
-
     def _response(
         self,
         *,
         context: AuthorizationContext,
+        request: LiaRequest,
         request_id: UUID,
         conversation_id: UUID,
         classification: TruthClassification,
@@ -298,14 +276,27 @@ class LiaService:
         navigation=(),
         proposals=(),
     ) -> LiaResponse:
-        canonical = [item.evidence_digest for item in evidence]
-        digest = hashlib.sha256(
-            json.dumps(canonical, sort_keys=True).encode()
-        ).hexdigest()
+        digest = _evidence_digest(evidence)
+        evidence_as_of = max(
+            (item.observed_at for item in evidence), default=datetime.now(timezone.utc)
+        )
+        branch_ids = tuple(
+            sorted(
+                {branch for item in evidence for branch in item.branch_ids}
+                or set(context.authorized_branch_ids),
+                key=str,
+            )
+        )
+        missing = tuple(
+            dict.fromkeys(
+                limitation for item in evidence for limitation in item.limitations
+            )
+        )
         response = LiaResponse(
             request_id=request_id,
             conversation_id=conversation_id,
             classification=classification,
+            authority=_answer_authority(classification, evidence),
             answer=answer,
             evidence=evidence,
             limitations=limitations,
@@ -320,6 +311,18 @@ class LiaService:
             policy_version=POLICY_VERSION,
             evidence_digest=digest,
             authorization_version=context.authorization_version,
+            company_id=context.company.id,
+            branch_ids=branch_ids,
+            subject_domain=request.context.domain if request.context else None,
+            subject_id=request.context.entity_id if request.context else None,
+            source_systems=tuple(sorted({item.domain for item in evidence})),
+            missing_evidence=missing,
+            safe_next_action=(
+                navigation[0].label
+                if navigation
+                else "Refresh authoritative ACP evidence"
+            ),
+            as_of=evidence_as_of,
             generated_at=datetime.now(timezone.utc),
         )
         logger.info(
@@ -343,3 +346,28 @@ def _evidence_route(item: EvidenceReference) -> str:
 
 
 lia_service = LiaService()
+
+
+def _evidence_digest(evidence: tuple[EvidenceReference, ...]) -> str:
+    canonical = [item.evidence_digest for item in evidence]
+    return hashlib.sha256(json.dumps(canonical, sort_keys=True).encode()).hexdigest()
+
+
+def _answer_authority(
+    classification: TruthClassification,
+    evidence: tuple[EvidenceReference, ...],
+) -> AnswerAuthority:
+    if not evidence:
+        return AnswerAuthority.INSUFFICIENT_EVIDENCE
+    if classification in {
+        TruthClassification.INCOMPLETE,
+        TruthClassification.STALE,
+        TruthClassification.CONFLICTING,
+        TruthClassification.UNAVAILABLE,
+    } or any(item.freshness == "NO_ACCEPTED_EVIDENCE" for item in evidence):
+        return AnswerAuthority.PARTIAL
+    if any(
+        "MIGRATION" in item.authority or "SOURCE" in item.authority for item in evidence
+    ):
+        return AnswerAuthority.SOURCE_BACKED
+    return AnswerAuthority.ACP_AUTHORITATIVE
