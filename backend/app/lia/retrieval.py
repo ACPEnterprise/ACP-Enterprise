@@ -27,6 +27,7 @@ from app.operational_assets.models import Asset
 from app.operational_migration.models import HcpMigrationMasterRun
 from app.payments.models import PaymentReceipt
 from app.payroll.models import PayrollPayStatementRecord, PayrollReportingSnapshotRecord
+from app.payroll.operations import PayrollOperationsService
 from app.payroll.permissions import PayrollPermission
 from app.platform.audit.models import AuditRecord
 from app.platform.employees.models import Employee
@@ -56,7 +57,7 @@ from app.platform.permissions.codes import (
 from app.price_book.models import PriceBookServiceItem
 from app.purchasing.models import PurchaseOrder
 from app.scheduling.models import Appointment
-from app.timekeeping.models import WorkdayTimeEntryRevision
+from app.timekeeping.models import PayPeriod, WorkdayTimeEntryRevision
 from app.timekeeping.permissions import TimekeepingPermission
 from app.workforce.lia_context import workforce_lia_context_service
 from app.workforce.service import workforce_operations_service
@@ -401,7 +402,9 @@ class GovernedRetrievalService:
             context.has_permission(PayrollPermission.REPORTING_READ)
             or context.has_permission(PayrollPermission.STATEMENT_OWN_READ)
         ) and (domains is None or "payroll" in domains):
-            evidence.extend(await self._payroll(session, context, observed_at))
+            evidence.extend(
+                await self._payroll(session, context, observed_at, entity_id=entity_id)
+            )
         if (
             context.has_permission(WorkforcePermission.READ)
             and (domains is None or "workforce" in domains)
@@ -582,9 +585,83 @@ class GovernedRetrievalService:
 
     @staticmethod
     async def _payroll(
-        session: AsyncSession, context: AuthorizationContext, observed_at: datetime
+        session: AsyncSession,
+        context: AuthorizationContext,
+        observed_at: datetime,
+        *,
+        entity_id: Any | None = None,
     ) -> tuple[EvidenceReference, ...]:
         if context.has_permission(PayrollPermission.REPORTING_READ):
+            if entity_id is not None and context.has_permission(
+                TimekeepingPermission.ADMIN_READ
+            ):
+                period = await session.scalar(
+                    select(PayPeriod)
+                    .where(PayPeriod.company_id == context.company.id)
+                    .order_by(PayPeriod.period_end.desc(), PayPeriod.id.desc())
+                    .limit(1)
+                )
+                if period is not None:
+                    operations = await PayrollOperationsService().period(
+                        session, context=context, pay_period_id=period.id
+                    )
+                    employee = next(
+                        (
+                            item
+                            for item in operations.employees
+                            if item.employee_id == entity_id
+                        ),
+                        None,
+                    )
+                    if employee is not None:
+                        states = {
+                            "payroll_review_status:"
+                            + employee.payroll_review_status: 1,
+                            "compensation:" + employee.compensation_readiness: 1,
+                            "withholding:" + employee.withholding_readiness: 1,
+                            "gross_pay:" + employee.gross_pay_readiness: 1,
+                            **{
+                                "blocker:" + code: 1
+                                for code in employee.exception_codes
+                            },
+                        }
+                        canonical = {
+                            "contract": operations.contract_version,
+                            "employee_id": str(employee.employee_id),
+                            "pay_period_id": str(period.id),
+                            "states": states,
+                            "time_snapshot_state": employee.time_snapshot_state,
+                        }
+                        digest = hashlib.sha256(
+                            json.dumps(
+                                canonical,
+                                sort_keys=True,
+                                separators=(",", ":"),
+                            ).encode()
+                        ).hexdigest()
+                        return (
+                            EvidenceReference(
+                                domain="payroll",
+                                label=f"Payroll readiness for {employee.display_name}",
+                                authority=operations.contract_version,
+                                observed_at=observed_at,
+                                freshness="CURRENT_QUERY",
+                                entity_id=employee.employee_id,
+                                evidence_digest=digest,
+                                count=len(employee.exception_codes),
+                                state=", ".join(sorted(states)),
+                                source_contract_version=operations.contract_version,
+                                company_id=context.company.id,
+                                branch_ids=(employee.home_branch_id,)
+                                if employee.home_branch_id is not None
+                                else (),
+                                authorization_version=context.authorization_version,
+                                limitations=(
+                                    "protected_payroll_values_excluded",
+                                    "owner_and_accountant_input_ownership_requires_explicit_source_evidence",
+                                ),
+                            ),
+                        )
             reporting_rows = tuple(
                 (
                     await session.scalars(

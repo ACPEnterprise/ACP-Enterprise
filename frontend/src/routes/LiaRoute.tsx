@@ -172,21 +172,32 @@ export function LiaRoute() {
   const ask = useAskLia();
   const [question, setQuestion] = useState("");
   const [conversationId, setConversationId] = useState<string>();
+  const [conversationContext, setConversationContext] = useState<{
+    domain: string;
+    entity_id: string;
+  }>();
   const [continuation, setContinuation] = useState<{
     authorization_version: number;
     evidence_digest: string;
     as_of: string;
+    topic_domains: string[];
   }>();
   const preserveContinuation = (result: LiaResponse) => {
     setConversationId(result.conversation_id);
-    if (context) {
+    if (result.subject_domain && result.subject_id) {
+      setConversationContext({
+        domain: result.subject_domain,
+        entity_id: result.subject_id,
+      });
       setContinuation({
         authorization_version: result.authorization_version,
         evidence_digest: result.evidence_digest,
         as_of: result.as_of,
+        topic_domains: result.source_systems,
       });
     }
   };
+  const activeContext = context ?? conversationContext;
   const submit = (event: FormEvent) => {
     event.preventDefault();
     const value = question.trim();
@@ -195,7 +206,7 @@ export function LiaRoute() {
       {
         question: value,
         conversation_id: conversationId,
-        context: context ? { ...context, ...continuation } : undefined,
+        context: activeContext ? { ...activeContext, ...continuation } : undefined,
       },
       { onSuccess: preserveContinuation },
     );
@@ -206,7 +217,7 @@ export function LiaRoute() {
       {
         question: value,
         conversation_id: conversationId,
-        context: context ? { ...context, ...continuation } : undefined,
+        context: activeContext ? { ...activeContext, ...continuation } : undefined,
       },
       { onSuccess: preserveContinuation },
     );

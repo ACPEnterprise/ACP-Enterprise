@@ -37,6 +37,9 @@ class WorkforceLiaContext(BaseModel):
     certification_states: dict[str, int]
     availability_states: dict[str, int]
     permission_explanations: tuple[str, ...] | None
+    membership_status: str | None
+    access_status: str | None
+    role_codes: tuple[str, ...]
     onboarding_state: str | None
     mobile_readiness: str | None
     mobile_readiness_blockers: tuple[str, ...]
@@ -45,9 +48,13 @@ class WorkforceLiaContext(BaseModel):
     evidence_digest: str
 
     def safe_summary(self) -> str:
+        membership = self.membership_status or "not authorized"
+        access = self.access_status or "not authorized"
+        roles = ", ".join(self.role_codes) if self.role_codes else "not authorized"
         return (
             f"Employee {self.display_name} is {self.employee_status}; operational readiness is "
-            f"{self.readiness_state}. Mobile readiness: {self.mobile_readiness or 'not authorized'}."
+            f"{self.readiness_state}. Membership: {membership}; account access: {access}; "
+            f"roles: {roles}. Mobile readiness: {self.mobile_readiness or 'not authorized'}."
         )
 
 
@@ -80,10 +87,12 @@ class WorkforceLiaContextService:
             )
         permission_explanations = None
         onboarding_state = None
+        membership_status = None
+        access_status = None
+        role_codes: tuple[str, ...] = ()
         mobile_readiness = None
         mobile_blockers: tuple[str, ...] = ()
         if {
-            WorkforcePermission.MANAGE,
             AdministrationPermission.MEMBERSHIP_READ,
             AdministrationPermission.ROLE_READ,
         }.issubset(context.permission_codes):
@@ -96,6 +105,9 @@ class WorkforceLiaContextService:
                     for item in administration.permissions
                 )
                 onboarding_state = administration.onboarding_status
+                membership_status = administration.membership_status
+                access_status = administration.access_status
+                role_codes = administration.role_codes
                 mobile_readiness = administration.mobile_readiness
                 mobile_blockers = administration.mobile_readiness_blockers
         limitations = (
@@ -122,6 +134,9 @@ class WorkforceLiaContextService:
             "availability_states": availability_states,
             "permission_explanations": permission_explanations,
             "onboarding_state": onboarding_state,
+            "membership_status": membership_status,
+            "access_status": access_status,
+            "role_codes": role_codes,
             "mobile_readiness": mobile_readiness,
             "mobile_readiness_blockers": mobile_blockers,
             "limitations": limitations,
@@ -145,6 +160,9 @@ class WorkforceLiaContextService:
             availability_states=availability_states,
             permission_explanations=permission_explanations,
             onboarding_state=onboarding_state,
+            membership_status=membership_status,
+            access_status=access_status,
+            role_codes=role_codes,
             mobile_readiness=mobile_readiness,
             mobile_readiness_blockers=mobile_blockers,
             limitations=limitations,

@@ -22,6 +22,7 @@ export async function askLia(input: {
     authorization_version?: number;
     evidence_digest?: string;
     as_of?: string;
+    topic_domains?: string[];
   };
 }): Promise<LiaResponse> {
   return (await apiClient.post<LiaResponse>("/api/v1/lia/ask", input)).data;

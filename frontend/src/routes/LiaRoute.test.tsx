@@ -189,4 +189,44 @@ describe("LIA workspace", () => {
       expect.any(Object),
     );
   });
+
+  it("preserves a server-resolved Employee referent for payroll follow-up", () => {
+    const employeeId = "33333333-3333-4333-8333-333333333333";
+    render(
+      <MemoryRouter>
+        <LiaRoute />
+      </MemoryRouter>,
+    );
+    const input = screen.getByRole("textbox", { name: "Ask LIA a question" });
+    fireEvent.change(input, { target: { value: "Show me Lianne Hernandez" } });
+    fireEvent.click(screen.getByRole("button", { name: "Ask" }));
+    state.askMutate.mock.calls.at(-1)?.[1].onSuccess({
+      conversation_id: "employee-conversation",
+      subject_domain: "workforce",
+      subject_id: employeeId,
+      authorization_version: 12,
+      evidence_digest: "a".repeat(64),
+      as_of: "2026-09-14T20:00:00Z",
+      source_systems: ["workforce"],
+    });
+    fireEvent.change(input, {
+      target: { value: "Why is she blocked for payroll?" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Ask" }));
+    expect(state.askMutate).toHaveBeenLastCalledWith(
+      {
+        question: "Why is she blocked for payroll?",
+        conversation_id: "employee-conversation",
+        context: {
+          domain: "workforce",
+          entity_id: employeeId,
+          authorization_version: 12,
+          evidence_digest: "a".repeat(64),
+          as_of: "2026-09-14T20:00:00Z",
+          topic_domains: ["workforce"],
+        },
+      },
+      expect.any(Object),
+    );
+  });
 });

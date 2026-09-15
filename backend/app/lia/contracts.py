@@ -36,6 +36,7 @@ class LiaContext(LiaSchema):
     authorization_version: int | None = Field(default=None, ge=0)
     evidence_digest: str | None = Field(default=None, pattern="^[a-f0-9]{64}$")
     as_of: datetime | None = None
+    topic_domains: tuple[str, ...] = Field(default=(), max_length=8)
 
 
 class LiaRequest(LiaSchema):
