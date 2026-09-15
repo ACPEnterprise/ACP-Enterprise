@@ -370,6 +370,7 @@ def project_owner_economics(
         "period": period,
         "readiness": readiness.value,
         "facts": facts,
+        "admitted_source_evidence": workspace.get("native_evidence"),
         "confidence": _confidence(workspace),
         "recommendation_candidates": recommendations,
         "scenario": _scenario(workspace, scenario),
