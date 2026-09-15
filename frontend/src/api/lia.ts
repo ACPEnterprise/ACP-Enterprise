@@ -16,7 +16,13 @@ export async function getOwnerBriefing(): Promise<LiaResponse> {
 export async function askLia(input: {
   question: string;
   conversation_id?: string;
-  context?: { domain?: string; entity_id?: string };
+  context?: {
+    domain?: string;
+    entity_id?: string;
+    authorization_version?: number;
+    evidence_digest?: string;
+    as_of?: string;
+  };
 }): Promise<LiaResponse> {
   return (await apiClient.post<LiaResponse>("/api/v1/lia/ask", input)).data;
 }

@@ -23,9 +23,19 @@ class TruthClassification(StrEnum):
     EXTERNAL_GATE = "EXTERNAL_GATE"
 
 
+class AnswerAuthority(StrEnum):
+    ACP_AUTHORITATIVE = "ACP_AUTHORITATIVE"
+    SOURCE_BACKED = "SOURCE_BACKED"
+    PARTIAL = "PARTIAL"
+    INSUFFICIENT_EVIDENCE = "INSUFFICIENT_EVIDENCE"
+
+
 class LiaContext(LiaSchema):
     domain: str | None = Field(default=None, max_length=64)
     entity_id: UUID | None = None
+    authorization_version: int | None = Field(default=None, ge=0)
+    evidence_digest: str | None = Field(default=None, pattern="^[a-f0-9]{64}$")
+    as_of: datetime | None = None
 
 
 class LiaRequest(LiaSchema):
@@ -69,6 +79,7 @@ class LiaResponse(LiaSchema):
     request_id: UUID
     conversation_id: UUID
     classification: TruthClassification
+    authority: AnswerAuthority
     answer: str
     evidence: tuple[EvidenceReference, ...] = ()
     limitations: tuple[str, ...] = ()
@@ -81,6 +92,14 @@ class LiaResponse(LiaSchema):
     policy_version: str
     evidence_digest: str
     authorization_version: int
+    company_id: UUID
+    branch_ids: tuple[UUID, ...] = ()
+    subject_domain: str | None = None
+    subject_id: UUID | None = None
+    source_systems: tuple[str, ...] = ()
+    missing_evidence: tuple[str, ...] = ()
+    safe_next_action: str | None = None
+    as_of: datetime
     generated_at: datetime
 
 
