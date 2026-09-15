@@ -2,11 +2,13 @@ from datetime import datetime, timezone
 from typing import Literal
 from uuid import UUID
 
-from sqlalchemy import and_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.platform.employees.models import Employee
 from app.platform.permissions.authorization import AuthorizationContext
+from app.platform.permissions.codes import WorkforcePermission
 from app.workforce.models import (
     WorkforceCapabilityProfile,
     WorkforceWorkingAvailability,
@@ -31,6 +33,41 @@ from app.workforce.schemas import (
 
 
 class WorkforceOperationsService:
+    async def resolve_display_name(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        display_name: str,
+    ) -> tuple[UUID, ...]:
+        """Resolve an exact authorized Employee name without existence leakage."""
+        if not context.has_permission(WorkforcePermission.READ):
+            return ()
+        branch_ids = (
+            frozenset({context.active_branch.id})
+            if context.active_branch is not None
+            else context.authorized_branch_ids
+        )
+        branch_scope: ColumnElement[bool] = Employee.home_branch_id.in_(branch_ids)
+        if context.active_branch is None:
+            branch_scope = or_(branch_scope, Employee.home_branch_id.is_(None))
+        return tuple(
+            (
+                await session.scalars(
+                    select(Employee.id)
+                    .where(
+                        Employee.company_id == context.company.id,
+                        Employee.archived_at.is_(None),
+                        func.lower(func.trim(Employee.display_name))
+                        == display_name.strip().casefold(),
+                        branch_scope,
+                    )
+                    .order_by(Employee.id)
+                    .limit(2)
+                )
+            ).all()
+        )
+
     @staticmethod
     def _readiness(
         employee: Employee, profile: WorkforceCapabilityProfileRecord | None

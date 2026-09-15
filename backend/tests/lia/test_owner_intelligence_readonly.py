@@ -5,8 +5,8 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
-from uuid import uuid4
+from unittest.mock import AsyncMock, MagicMock
+from uuid import UUID, uuid4
 
 import pytest
 
@@ -20,11 +20,14 @@ from app.lia.contracts import (
 from app.lia.planner import QuestionIntent, plan_question
 from app.lia.retrieval import GovernedRetrievalService
 from app.lia.service import LiaService
+from app.payroll.permissions import PayrollPermission
 from app.platform.permissions.codes import (
     AdministrationPermission,
     CustomerPermission,
     JobPermission,
+    WorkforcePermission,
 )
+from app.workforce.service import workforce_operations_service
 
 
 def _context(*permissions: str) -> SimpleNamespace:
@@ -68,6 +71,224 @@ def test_owner_question_planner_is_bounded(
     plan = plan_question(question)
     assert set(plan.domains) == domains
     assert plan.intent is intent
+
+
+def test_employee_name_and_payroll_follow_up_plans_preserve_subject() -> None:
+    initial = plan_question("Show me Lianne Hernandez")
+    assert initial.domains == frozenset({"workforce"})
+    assert initial.subject_query == "Lianne Hernandez"
+    follow_up = plan_question(
+        "Why is she blocked for payroll?",
+        context_domain="workforce",
+        topic_domains=("workforce",),
+    )
+    assert follow_up.domains == frozenset({"workforce", "payroll"})
+    for question in (
+        "What do I need to provide?",
+        "What does the accountant need to provide?",
+        "Is direct deposit ready?",
+    ):
+        follow_up = plan_question(
+            question,
+            context_domain="workforce",
+            topic_domains=("workforce", "payroll"),
+        )
+        assert follow_up.domains == frozenset({"workforce", "payroll"})
+
+
+@pytest.mark.asyncio
+async def test_authorized_employee_name_resolves_to_bounded_context(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    employee_id = uuid4()
+    resolver = AsyncMock(return_value=(employee_id,))
+    monkeypatch.setattr(workforce_operations_service, "resolve_display_name", resolver)
+    retrieval = AsyncMock(spec=GovernedRetrievalService)
+    retrieval.retrieve.return_value = (
+        EvidenceReference(
+            domain="workforce",
+            label="Minimum-necessary Workforce readiness context",
+            authority="WORKFORCE.LIA_CONTEXT.v1",
+            observed_at=datetime.now(timezone.utc),
+            freshness="CURRENT_QUERY",
+            entity_id=employee_id,
+            evidence_digest="d" * 64,
+            count=1,
+            state="Employee Lianne Hernandez is active",
+        ),
+    )
+    response = await LiaService(retrieval=retrieval).ask(
+        AsyncMock(),
+        context=_context(WorkforcePermission.READ),
+        request=LiaRequest(question="Show me Lianne Hernandez"),
+    )
+    resolver.assert_awaited_once()
+    assert retrieval.retrieve.await_args.kwargs == {
+        "context": resolver.await_args.kwargs["context"],
+        "domains": {"workforce"},
+        "entity_id": employee_id,
+    }
+    assert response.subject_domain == "workforce"
+    assert response.subject_id == employee_id
+    assert response.authority is AnswerAuthority.ACP_AUTHORITATIVE
+
+
+@pytest.mark.asyncio
+async def test_employee_name_is_not_resolved_without_workforce_read(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    resolver = AsyncMock()
+    monkeypatch.setattr(workforce_operations_service, "resolve_display_name", resolver)
+    retrieval = AsyncMock(spec=GovernedRetrievalService)
+    response = await LiaService(retrieval=retrieval).ask(
+        AsyncMock(),
+        context=_context(PayrollPermission.REPORTING_READ),
+        request=LiaRequest(question="Show me Lianne Hernandez"),
+    )
+    assert response.classification is TruthClassification.UNAUTHORIZED
+    resolver.assert_not_awaited()
+    retrieval.retrieve.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("matches", "classification", "answer_fragment"),
+    (
+        ((), TruthClassification.UNAVAILABLE, "No authorized Employee"),
+        (
+            (uuid4(), uuid4()),
+            TruthClassification.INCOMPLETE,
+            "More than one authorized Employee",
+        ),
+    ),
+)
+async def test_employee_name_resolution_is_fail_closed_for_no_or_ambiguous_match(
+    monkeypatch: pytest.MonkeyPatch,
+    matches: tuple[UUID, ...],
+    classification: TruthClassification,
+    answer_fragment: str,
+) -> None:
+    monkeypatch.setattr(
+        workforce_operations_service,
+        "resolve_display_name",
+        AsyncMock(return_value=matches),
+    )
+    retrieval = AsyncMock(spec=GovernedRetrievalService)
+    response = await LiaService(retrieval=retrieval).ask(
+        AsyncMock(),
+        context=_context(WorkforcePermission.READ),
+        request=LiaRequest(question="Show me Lianne Hernandez"),
+    )
+    assert response.classification is classification
+    assert answer_fragment in response.answer
+    assert response.evidence == ()
+    assert response.proposals == ()
+    retrieval.retrieve.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_employee_name_resolution_scopes_query_before_returning_identity() -> None:
+    employee_id = uuid4()
+    result = MagicMock()
+    result.all.return_value = [employee_id]
+    session = AsyncMock()
+    session.scalars.return_value = result
+    context = _context(WorkforcePermission.READ)
+
+    resolved = await workforce_operations_service.resolve_display_name(
+        session,
+        context=context,
+        display_name="  LIANNE HERNANDEZ  ",
+    )
+
+    statement = session.scalars.await_args.args[0]
+    rendered = str(statement)
+    assert "employees.company_id" in rendered
+    assert "employees.home_branch_id" in rendered
+    assert "employees.archived_at IS NULL" in rendered
+    assert "lower(trim(employees.display_name))" in rendered
+    assert context.company.id in statement.compile().params.values()
+    assert any(
+        context.active_branch.id in value
+        for value in statement.compile().params.values()
+        if isinstance(value, (list, tuple, set, frozenset))
+    )
+    assert "lianne hernandez" in statement.compile().params.values()
+    assert resolved == (employee_id,)
+
+
+@pytest.mark.asyncio
+async def test_employee_payroll_follow_up_chain_retains_subject_and_masks_values(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    employee_id = uuid4()
+    monkeypatch.setattr(
+        workforce_operations_service,
+        "resolve_display_name",
+        AsyncMock(return_value=(employee_id,)),
+    )
+    observed_at = datetime.now(timezone.utc)
+    workforce = EvidenceReference(
+        domain="workforce",
+        label="Minimum-necessary Workforce readiness context",
+        authority="WORKFORCE.LIA_CONTEXT.v1",
+        observed_at=observed_at,
+        freshness="CURRENT_QUERY",
+        entity_id=employee_id,
+        evidence_digest="d" * 64,
+        count=1,
+        state="Employee Lianne Hernandez is active",
+        limitations=("compensation_payroll_tax_and_banking_are_excluded",),
+    )
+    payroll = EvidenceReference(
+        domain="payroll",
+        label="Payroll readiness for Lianne Hernandez",
+        authority="PAYROLL.PERIOD.OPERATIONS.v1",
+        observed_at=observed_at,
+        freshness="CURRENT_QUERY",
+        entity_id=employee_id,
+        evidence_digest="e" * 64,
+        count=1,
+        state="withholding:BLOCKED",
+        limitations=("protected_payroll_values_excluded",),
+    )
+    retrieval = AsyncMock(spec=GovernedRetrievalService)
+    retrieval.retrieve.side_effect = ((workforce,), (workforce, payroll))
+    service = LiaService(retrieval=retrieval)
+    context = _context(
+        WorkforcePermission.READ,
+        PayrollPermission.REPORTING_READ,
+    )
+    first = await service.ask(
+        AsyncMock(),
+        context=context,
+        request=LiaRequest(question="Show me Lianne Hernandez"),
+    )
+    follow_up_context = LiaContext(
+        domain=first.subject_domain,
+        entity_id=first.subject_id,
+        authorization_version=first.authorization_version,
+        evidence_digest=first.evidence_digest,
+        as_of=first.as_of,
+        topic_domains=first.source_systems,
+    )
+    second = await service.ask(
+        AsyncMock(),
+        context=context,
+        request=LiaRequest(
+            question="Why is she blocked for payroll?",
+            conversation_id=first.conversation_id,
+            context=follow_up_context,
+        ),
+    )
+    assert second.subject_id == employee_id
+    assert second.source_systems == ("payroll", "workforce")
+    assert "protected_payroll_values_excluded" in second.missing_evidence
+    assert second.proposals == ()
+    assert all(
+        protected not in second.answer.casefold()
+        for protected in ("bank account", "routing number", "tax election")
+    )
 
 
 @pytest.mark.asyncio
