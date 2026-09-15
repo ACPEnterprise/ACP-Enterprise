@@ -48,6 +48,69 @@ class ProductionAcquisitionCommand:
     page_size: int = 1000
 
 
+@dataclass(frozen=True)
+class ProductionProfitAndLossRequest:
+    start_date: date
+    end_date: date
+    accounting_method: str
+
+
+async def read_production_profit_and_loss(
+    request: ProductionProfitAndLossRequest,
+    configuration: Settings = settings,
+) -> tuple[dict[str, object], dict[str, object]]:
+    """Run a bounded GET-only provider report read against the verified realm."""
+    if not configuration.qbo_production_enabled:
+        raise SandboxRuntimeError("production_report_read_disabled")
+    root = _production_runtime_root(configuration)
+    repository = Path(configuration.qbo_repository_root).resolve()
+    provider = ProtectedProductionSecretProvider(
+        root=root / "secrets", repository_root=repository
+    )
+    registry = SandboxConnectionRegistry(root / "connections", environment="production")
+    marker = _read_verified_marker(registry)
+    expected_name = ProtectedSandboxCompanyBinding(root / "configuration").read()
+    realm_id = marker.get("realm_id")
+    if (
+        not isinstance(realm_id, str)
+        or not realm_id
+        or marker.get("company_name") != expected_name
+        or marker.get("acquisition_eligible") is not True
+        or marker.get("api_minor_version")
+        != configuration.qbo_production_api_minor_version
+    ):
+        raise SandboxRuntimeError("production_company_not_verified")
+    transport = IntuitHttpTransport()
+    oauth = IntuitOAuthClient(
+        environment=IntuitEnvironment.PRODUCTION,
+        transport=transport,
+        secrets=provider,
+        credential_reference=provider.CLIENT_REFERENCE,
+    )
+    binding = RealmBinding(
+        environment=IntuitEnvironment.PRODUCTION,
+        realm_id=realm_id,
+        expected_company_name=expected_name,
+        credential_reference=provider.CLIENT_REFERENCE,
+        token_reference=provider.TOKEN_REFERENCE,
+    )
+    adapter = IntuitReadOnlyAdapter(
+        binding=binding,
+        token_manager=SerializedTokenManager(oauth=oauth, secrets=provider, binding=binding),
+        transport=transport,
+    )
+    try:
+        report = await adapter.read_profit_and_loss(
+            start_date=request.start_date,
+            end_date=request.end_date,
+            accounting_method=request.accounting_method,
+            minor_version=configuration.qbo_production_api_minor_version,
+        )
+        return report, marker
+    finally:
+        await transport.client.aclose()
+
+
 async def execute_production_acquisition(
     command: ProductionAcquisitionCommand,
     configuration: Settings = settings,

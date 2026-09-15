@@ -89,6 +89,33 @@ export interface QboAccountingEvidenceWorkspace {
   mutation_authority: "none";
 }
 
+export interface QboSourceBackedReportRow {
+  kind: string;
+  depth: number;
+  values: string[];
+}
+
+export interface QboSourceBackedProfitAndLoss {
+  contract_version: "qbo-source-backed-financial-report/v1";
+  report_type: "profit_and_loss";
+  authority: "QBO_SOURCE_BACKED";
+  provider_environment: "production";
+  source: "QuickBooks Online";
+  source_company: string;
+  realm_id: string;
+  start_date: string;
+  end_date: string;
+  accounting_basis: "cash" | "accrual";
+  currency: string | null;
+  source_as_of: string | null;
+  acquired_at: string;
+  columns: string[];
+  rows: QboSourceBackedReportRow[];
+  source_digest: string;
+  accepted_as_acp_accounting: false;
+  mutation_authority: "none";
+}
+
 export async function getQboAccountingEvidence(
   basis: "cash" | "accrual",
 ): Promise<QboAccountingEvidenceWorkspace> {
@@ -96,6 +123,25 @@ export async function getQboAccountingEvidence(
     await apiClient.get<QboAccountingEvidenceWorkspace>(
       "/api/v1/accounting/source-evidence/qbo",
       { params: { basis } },
+    )
+  ).data;
+}
+
+export async function getQboSourceBackedProfitAndLoss(request: {
+  startDate: string;
+  endDate: string;
+  basis: "cash" | "accrual";
+}): Promise<QboSourceBackedProfitAndLoss> {
+  return (
+    await apiClient.get<QboSourceBackedProfitAndLoss>(
+      "/api/v1/accounting/source-evidence/qbo/reports/profit-and-loss",
+      {
+        params: {
+          start_date: request.startDate,
+          end_date: request.endDate,
+          basis: request.basis,
+        },
+      },
     )
   ).data;
 }
