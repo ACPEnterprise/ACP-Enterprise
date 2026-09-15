@@ -64,6 +64,17 @@ describe("permission-driven field product contracts", () => {
     expect(JSON.stringify(request.mock.calls)).not.toMatch(/employee_id|customer_id|branch_id/i);
   });
 
+  it("uses assignment-scoped commercial/contact and Price Book projections", async () => {
+    const job = "40000000-0000-4000-8000-000000000001";
+    const request = jest.fn()
+      .mockResolvedValueOnce({ job_id: job, assignment_id: "50000000-0000-4000-8000-000000000001", assignment_version: 2, customer_id: "60000000-0000-4000-8000-000000000001", service_location_id: "70000000-0000-4000-8000-000000000001", contact: null, invoice: null, payment: { state: "not_due", invoice_id: null, open_amount: null, currency: null, receipt_status: null }, communications: [], completion: { job_id: job, assignment_id: "50000000-0000-4000-8000-000000000001", work_summary_recorded: false, customer_disposition: null, completion_ready: false, requirement_snapshot_version: null, missing_requirements: [], commercial_authorization: "missing", non_billable_reason: null, invoice_handoff_status: null, invoice_id: null } })
+      .mockResolvedValueOnce([]);
+    const service = createFieldService({ request } as unknown as ApiClient);
+    await service.sources!(job); await service.priceBook!(job);
+    expect(request.mock.calls.map((call) => call[0])).toEqual([`/api/v1/technician/jobs/${job}/sources`, `/api/v1/technician/jobs/${job}/price-book?limit=50`]);
+    expect(JSON.stringify(request.mock.calls)).not.toMatch(/employee_id|branch_id/);
+  });
+
   it("removes cached Job data when refreshed authority is revoked", async () => {
     const item = { appointment_id: "30000000-0000-4000-8000-000000000001", appointment_number: "APT-1", job_id: "40000000-0000-4000-8000-000000000001", job_number: "JOB-1", job_status: "ready", job_version: 1, customer_display_name: "Synthetic Customer", service_location_label: "Synthetic Site", window_start_at: "2026-09-02T12:00:00Z", window_end_at: "2026-09-02T13:00:00Z", assignment_status: "assigned", assignment_version: 1, arrival_state: "pending" as const, field_execution_enabled: true };
     let denied = false; let reconnect: ((connected: boolean) => void) | undefined;
