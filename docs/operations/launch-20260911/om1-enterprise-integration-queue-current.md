@@ -1,13 +1,13 @@
 # OM1 Enterprise integration queue
 
-Snapshot: 2026-09-15 16:33 America/New_York
+Snapshot: 2026-09-15 16:37 America/New_York
 
 ## Authority and deployed state
 
 - Protected authority: `cd92abf57ec4ffbe9f0801f14a2eda35cf7f7dea`
 - Protected tip: PR #294, bounded LIA named-Employee lookup and owner-role Workforce-read grant
 - Deployed Preview: `60035693a51ec66328625dfcc78e7cd2dfead824`
-- Preview health: unavailable. It was healthy on old #279 with PostgreSQL and Redis connected at 16:27:12, then the health request hit five consecutive SSL connection timeouts from 16:28:15 through 16:33:04. Treat this as an active runtime incident; deployed SHA and dependencies are unverified after 16:27.
+- Preview health: recovered on old #279. After health at 16:27:12, five consecutive SSL connection timeouts occurred from 16:28:15 through 16:33:04, followed by HTTP 502 at 16:34:16. Three consecutive responses at 16:35:18, 16:36:21, and 16:37:24 again reported `60035693...` healthy with PostgreSQL and Redis connected. Preserve the full incident sequence; it does not close the protected deployment gap.
 - Deployment gap: protected #280-#289, #291, and #294 are not yet observed in Preview; deployed remains old #279
 - Acceptance state: pending. Preview initially remained at `b296cc6b...` after
   #265 merged, then by 2026-09-14 14:00 America/New_York returned HTTP 200 at
