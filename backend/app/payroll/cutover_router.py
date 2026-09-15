@@ -305,6 +305,17 @@ async def get_review(context: Read, session: Session) -> dict[str, object]:
             for e in employees
         ],
         "facts": [_fact_projection(f) for f in facts],
+        "source_employees_awaiting_binding": [
+            {
+                "source": f.candidate_reference.get("source"),
+                "source_id": f.candidate_reference.get("source_id"),
+                "classification": "EMPLOYEE_ONBOARDING_REQUIRED",
+            }
+            for f in facts
+            if f.employee_id is None
+            and f.fact_key == "employee_identity"
+            and f.action != "not_applicable"
+        ],
         "bridge_periods": [
             {
                 "id": str(p.id),
@@ -865,6 +876,13 @@ async def _gates(
         not p.coverage_complete or p.certification_state != "certified" for p in periods
     ):
         blockers.append("MANUAL_BRIDGE_PERIOD_UNCERTIFIED")
+    if any(
+        value.employee_id is None
+        and value.fact_key == "employee_identity"
+        and value.action != "not_applicable"
+        for value in facts
+    ):
+        blockers.append("EMPLOYEE_ONBOARDING_REQUIRED")
     return {
         "status": "BLOCKED" if blockers else "READY_FOR_CUTOVER_APPROVAL",
         "blockers": blockers,
