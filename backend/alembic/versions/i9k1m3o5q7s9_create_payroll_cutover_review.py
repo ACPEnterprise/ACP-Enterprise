@@ -69,7 +69,7 @@ def upgrade() -> None:
             'COMPANY_PAYROLL_CUTOVER_OWNER_CERTIFY',
             'COMPANY_PAYROLL_CUTOVER_APPROVE'
         )
-        WHERE r.code IN ('OWNER', 'ADMIN') AND r.archived_at IS NULL
+        WHERE r.code IN ('OWNER', 'ADMIN', 'COMPANY_ADMINISTRATOR') AND r.archived_at IS NULL
         ON CONFLICT (role_id, permission_id) DO NOTHING
     """).bindparams(at=occurred_at)
     )
