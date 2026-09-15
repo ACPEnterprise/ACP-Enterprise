@@ -48,9 +48,7 @@ def test_cutover_schema_is_separate_from_operational_payroll() -> None:
         PayrollCutoverBridgeEmployeeFactRevision.__tablename__
         == "payroll_cutover_bridge_employee_fact_revisions"
     )
-    table_names = {
-        table.name for table in PayrollCutoverReviewRecord.metadata.sorted_tables
-    }
+    table_names = set(PayrollCutoverReviewRecord.metadata.tables)
     assert "payroll_runs" in table_names
     assert "payroll_cutover_bridge_periods" in table_names
 
