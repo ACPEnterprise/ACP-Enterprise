@@ -27,7 +27,9 @@ def test_cutover_permissions_are_distinct_from_execution_authority() -> None:
     }
     assert cutover.isdisjoint(execution)
     administrator = next(
-        item for item in LAUNCH_ROLE_MATRIX if item.code is LaunchRoleCode.ADMIN
+        item
+        for item in LAUNCH_ROLE_MATRIX
+        if item.code is LaunchRoleCode.COMPANY_ADMINISTRATOR
     )
     assert PayrollPermission.CUTOVER_READ in administrator.permission_codes
     assert PayrollPermission.CUTOVER_OWNER_CERTIFY in administrator.permission_codes
