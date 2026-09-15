@@ -4,8 +4,8 @@ Revision ID: j0l2n4p6r8t0
 Revises: i9k1m3o5q7s9
 """
 
+from collections.abc import Sequence
 from datetime import datetime, timezone
-from typing import Sequence
 
 import sqlalchemy as sa
 from alembic import op
