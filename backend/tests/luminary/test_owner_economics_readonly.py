@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 import pytest
+
 from app.luminary.owner_economics import (
     AnalysisReadiness,
     ScenarioAssumption,
