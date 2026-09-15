@@ -2,7 +2,7 @@ from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_serializer
 
 
 class PriceBookSchema(BaseModel):
@@ -19,6 +19,11 @@ class CategoryCreate(PriceBookSchema):
     @classmethod
     def normalize_code(cls, value: str) -> str:
         return value.strip().upper()
+
+
+class CategoryUpdate(CategoryCreate):
+    expected_version: int = Field(ge=1)
+    status: str = Field(pattern=r"^(active|archived)$")
 
 
 class TaxClassificationCreate(PriceBookSchema):
@@ -46,8 +51,13 @@ class ServiceItemCreate(PriceBookSchema):
         return value.strip().upper()
 
 
+class ServiceItemUpdate(ServiceItemCreate):
+    expected_version: int = Field(ge=1)
+    status: str = Field(pattern=r"^(draft|active|inactive|archived)$")
+
+
 class ComponentCreate(PriceBookSchema):
-    component_type: str = Field(pattern=r"^(labor|material)$")
+    component_type: str = Field(pattern=r"^(labor|material|other_direct)$")
     code: str | None = Field(default=None, max_length=100)
     label: str = Field(min_length=1, max_length=240)
     quantity: Decimal = Field(gt=0)
@@ -121,6 +131,93 @@ class OptionCreate(PriceBookSchema):
     position: int = Field(ge=1)
 
 
+class ReviewBatchCreate(PriceBookSchema):
+    configuration_version: str = Field(min_length=1, max_length=120)
+    review_type: str = Field(
+        pattern=r"^(commercial_content|candidate_prices|tax_classification|membership|source_conflict)$"
+    )
+    selector: dict[str, object]
+    service_codes: tuple[str, ...] = Field(min_length=1, max_length=500)
+    exclusions: tuple[str, ...] = Field(default=(), max_length=500)
+    candidate_set_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    idempotency_key: str = Field(pattern=r"^[A-Za-z0-9._:-]{8,128}$")
+
+
+class ReviewBatchDecision(PriceBookSchema):
+    expected_version: int = Field(ge=1)
+    expected_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    decision: str = Field(pattern=r"^(approved|returned|excluded)$")
+    reason: str = Field(min_length=1, max_length=500)
+
+
+class ReviewBatchItem(PriceBookSchema):
+    id: UUID
+    company_id: UUID
+    configuration_version: str
+    review_type: str
+    selector: dict[str, object]
+    service_codes: list[str]
+    exclusions: list[str]
+    candidate_set_digest: str
+    status: str
+    decision_reason: str | None
+    idempotency_key: str
+    version: int
+    created_by_user_id: UUID
+    decided_by_user_id: UUID | None
+    decided_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class AdjustmentProposalCreate(PriceBookSchema):
+    source_price_book_version: str = Field(min_length=1, max_length=120)
+    recommendation_identity: str = Field(min_length=1, max_length=160)
+    economics_evidence_version: str | None = Field(default=None, max_length=160)
+    model_version: str | None = Field(default=None, max_length=160)
+    affected_service_codes: tuple[str, ...] = Field(min_length=1, max_length=500)
+    owner_exclusions: tuple[str, ...] = Field(default=(), max_length=500)
+    transformation_kind: str = Field(
+        pattern=r"^(percentage|fixed_amount|markup_policy)$"
+    )
+    transformation: dict[str, object]
+    impacts: tuple[dict[str, object], ...] = Field(min_length=1, max_length=500)
+    limitations: tuple[str, ...] = Field(default=(), max_length=100)
+    effective_at: datetime
+    proposal_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
+class AdjustmentProposalDecision(PriceBookSchema):
+    expected_version: int = Field(ge=1)
+    expected_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    decision: str = Field(pattern=r"^(approved|returned|rejected)$")
+    reason: str = Field(min_length=1, max_length=500)
+
+
+class AdjustmentProposalItem(PriceBookSchema):
+    id: UUID
+    company_id: UUID
+    source_price_book_version: str
+    recommendation_identity: str
+    economics_evidence_version: str | None
+    model_version: str | None
+    affected_service_codes: list[str]
+    owner_exclusions: list[str]
+    transformation_kind: str
+    transformation: dict[str, object]
+    impacts: list[dict[str, object]]
+    limitations: list[str]
+    effective_at: datetime
+    proposal_digest: str
+    status: str
+    version: int
+    created_by_user_id: UUID
+    approved_by_user_id: UUID | None
+    approved_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+
 class CategoryItem(PriceBookSchema):
     id: UUID
     company_id: UUID
@@ -161,7 +258,17 @@ class ComponentItem(PriceBookSchema):
     code: str | None
     label: str
     quantity: Decimal
+    unit_cost: Decimal | None = None
+    extended_cost: Decimal | None = None
     position: int
+
+    @model_serializer(mode="wrap")
+    def serialize_without_restricted_nulls(self, handler):
+        data = handler(self)
+        if self.unit_cost is None:
+            data.pop("unit_cost", None)
+            data.pop("extended_cost", None)
+        return data
 
 
 class PriceVersionItem(PriceBookSchema):
@@ -179,6 +286,9 @@ class PriceVersionItem(PriceBookSchema):
     rounding_mode: str
     version: int
     components: tuple[ComponentItem, ...] = ()
+    cost_readiness: str = "INSUFFICIENT_COST_EVIDENCE"
+    expected_direct_cost: Decimal | None = None
+    expected_direct_contribution: Decimal | None = None
 
 
 class SnapshotItem(PriceBookSchema):
@@ -238,3 +348,21 @@ class CatalogPage(PriceBookSchema):
     versions: tuple[PriceVersionItem, ...]
     option_groups: tuple[OptionGroupItem, ...]
     options: tuple[OptionItem, ...]
+    total_service_items: int = 0
+    limit: int = 100
+    offset: int = 0
+    costs_visible: bool = False
+
+
+class BulkMaterializeRequest(PriceBookSchema):
+    expected_version: int = Field(ge=1)
+    expected_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    idempotency_key: str = Field(pattern=r"^[A-Za-z0-9._:-]{8,128}$")
+
+
+class BulkMaterializeItem(PriceBookSchema):
+    proposal_id: UUID
+    proposal_digest: str
+    created_version_ids: tuple[UUID, ...]
+    created_count: int
+    replayed: bool

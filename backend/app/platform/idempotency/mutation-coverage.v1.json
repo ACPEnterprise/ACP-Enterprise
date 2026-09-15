@@ -11,6 +11,36 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     },
     {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "price_book",
+      "mechanism": "Company-scoped row lock plus optimistic category version",
+      "method": "PUT",
+      "operation_id": "update_category_api_v1_price_book_categories__category_id__put",
+      "path": "/api/v1/price-book/categories/{category_id}",
+      "reason": "A stale maintenance command is rejected and one current category version is retained.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "price_book",
+      "mechanism": "Company-scoped row lock plus optimistic service-item version",
+      "method": "PUT",
+      "operation_id": "update_item_api_v1_price_book_service_items__item_id__put",
+      "path": "/api/v1/price-book/service-items/{item_id}",
+      "reason": "A stale maintenance command is rejected and one current service-item version is retained.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "price_book",
+      "mechanism": "Approved proposal digest plus Company-scoped materialization key and exact successor identities",
+      "method": "POST",
+      "operation_id": "materialize_adjustment_proposal_api_v1_price_book_activation_readiness_adjustment_proposals__proposal_id__materialize_post",
+      "path": "/api/v1/price-book/activation-readiness/adjustment-proposals/{proposal_id}/materialize",
+      "reason": "Exact replay returns the same successor drafts; changed or stale pricing evidence fails closed without activation.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
       "classification": "IDEMPOTENCY_REQUIRED",
       "domain": "service_agreements",
       "mechanism": "Company-scoped immutable agreement evidence and canonical request digest",
@@ -265,6 +295,46 @@
       "operation_id": "update_customer_status_api_v1_customers__customer_id__status_patch",
       "path": "/api/v1/customers/{customer_id}/status",
       "reason": "The accepted resource/state contract converges or rejects stale state without a second logical effect.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "IDEMPOTENCY_REQUIRED",
+      "domain": "price_book",
+      "mechanism": "Company-scoped idempotency key plus exact candidate-set digest",
+      "method": "POST",
+      "operation_id": "create_review_batch_api_v1_price_book_activation_readiness_review_batches_post",
+      "path": "/api/v1/price-book/activation-readiness/review-batches",
+      "reason": "Exact replay returns one draft review batch and contradictory evidence is rejected.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "price_book",
+      "mechanism": "row lock, optimistic version, evidence digest and convergent terminal decision",
+      "method": "POST",
+      "operation_id": "decide_review_batch_api_v1_price_book_activation_readiness_review_batches__batch_id__decision_post",
+      "path": "/api/v1/price-book/activation-readiness/review-batches/{batch_id}/decision",
+      "reason": "A reviewed candidate set converges on one evidence-bound decision or rejects stale/contradictory replay.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "price_book",
+      "mechanism": "Company-scoped recommendation identity plus immutable proposal digest",
+      "method": "POST",
+      "operation_id": "create_adjustment_proposal_api_v1_price_book_activation_readiness_adjustment_proposals_post",
+      "path": "/api/v1/price-book/activation-readiness/adjustment-proposals",
+      "reason": "Recommendation replay returns one non-activating proposal and contradictory evidence is rejected.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "NATURALLY_IDEMPOTENT",
+      "domain": "price_book",
+      "mechanism": "row lock, optimistic version, proposal digest and convergent terminal decision",
+      "method": "POST",
+      "operation_id": "decide_adjustment_proposal_api_v1_price_book_activation_readiness_adjustment_proposals__proposal_id__decision_post",
+      "path": "/api/v1/price-book/activation-readiness/adjustment-proposals/{proposal_id}/decision",
+      "reason": "Proposal review is evidence-bound and cannot activate or rewrite Price Book versions.",
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     },
     {
@@ -2836,6 +2906,76 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     },
     {
+      "classification": "EXPLICIT_EXEMPTION",
+      "domain": "payroll",
+      "mechanism": "Company-scoped singleton cutover review; endpoint predates canonical contradictory-replay binding",
+      "method": "POST",
+      "operation_id": "create_review_api_v1_payroll_cutover_review_post",
+      "path": "/api/v1/payroll/cutover-review",
+      "reason": "Truthful registry reconciliation only; strengthening this protected Payroll contract is outside the Price Book candidate.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "EXPLICIT_EXEMPTION",
+      "domain": "payroll",
+      "mechanism": "Role-specific certification converges operationally but the protected endpoint does not bind a command identity",
+      "method": "POST",
+      "operation_id": "approve_api_v1_payroll_cutover_review_approve_post",
+      "path": "/api/v1/payroll/cutover-review/approve",
+      "reason": "Truthful registry reconciliation only; strengthening this protected Payroll contract is outside the Price Book candidate.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "EXPLICIT_EXEMPTION",
+      "domain": "payroll",
+      "mechanism": "Company-scoped bridge-period idempotency key with source period evidence",
+      "method": "POST",
+      "operation_id": "create_bridge_period_api_v1_payroll_cutover_review_bridge_periods_post",
+      "path": "/api/v1/payroll/cutover-review/bridge-periods",
+      "reason": "Retry must recover one bridge period and contradictory period evidence must fail closed.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "EXPLICIT_EXEMPTION",
+      "domain": "payroll",
+      "mechanism": "Role-specific bridge certification has no caller-supplied command identity in the protected contract",
+      "method": "POST",
+      "operation_id": "certify_bridge_period_api_v1_payroll_cutover_review_bridge_periods__bridge_period_id__certify_post",
+      "path": "/api/v1/payroll/cutover-review/bridge-periods/{bridge_period_id}/certify",
+      "reason": "Truthful registry reconciliation only; strengthening this protected Payroll contract is outside the Price Book candidate.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "EXPLICIT_EXEMPTION",
+      "domain": "payroll",
+      "mechanism": "Company and bridge-period scoped idempotency key with exact Employee fact evidence",
+      "method": "POST",
+      "operation_id": "write_bridge_fact_api_v1_payroll_cutover_review_bridge_periods__bridge_period_id__facts_post",
+      "path": "/api/v1/payroll/cutover-review/bridge-periods/{bridge_period_id}/facts",
+      "reason": "Retry must recover one fact revision and contradictory protected evidence must fail closed.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "EXPLICIT_EXEMPTION",
+      "domain": "payroll",
+      "mechanism": "Company-scoped fact idempotency key and exact candidate/certified evidence",
+      "method": "POST",
+      "operation_id": "certify_fact_api_v1_payroll_cutover_review_certifications_post",
+      "path": "/api/v1/payroll/cutover-review/certifications",
+      "reason": "Retry must recover one certification and contradictory certification evidence must fail closed.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
+      "classification": "EXPLICIT_EXEMPTION",
+      "domain": "payroll",
+      "mechanism": "Company-scoped fact idempotency key and exact candidate evidence",
+      "method": "POST",
+      "operation_id": "save_fact_api_v1_payroll_cutover_review_facts_post",
+      "path": "/api/v1/payroll/cutover-review/facts",
+      "reason": "Retry must recover one fact revision and contradictory evidence must fail closed.",
+      "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
+    },
+    {
       "classification": "IDEMPOTENCY_REQUIRED",
       "domain": "operational_assets",
       "mechanism": "Company-scoped command identity, canonical request digest, and stable Asset identity",
@@ -2909,6 +3049,6 @@
       "tenant_scope": "COMPANY_WITH_BRANCH_CONTEXT"
     }
   ],
-  "fingerprint": "2959a05f7167ee4305f371c5a90b7c76e1ecceeae388eb4d6ca67fe7c89a9da7",
+  "fingerprint": "4cab3e7d3274e309b6f62e6fe29addf7b8759a19a73ee1f1b9acd1f5c2798af9",
   "schema_version": "1"
 }
