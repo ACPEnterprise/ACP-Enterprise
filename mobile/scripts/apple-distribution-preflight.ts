@@ -15,7 +15,7 @@ function assert(value: unknown, message: string): asserts value { if (!value) th
 assert(contract.appleMutationAuthorized === true && contract.uploadAuthorized === true, "Owner signing/upload authorization must be recorded");
 assert(app.ios.bundleIdentifier === contract.bundleIdentifier && project.includes(`PRODUCT_BUNDLE_IDENTIFIER = ${contract.bundleIdentifier}`), "Bundle identifier mismatch");
 assert(app.version === contract.currentLocalCandidate.version && app.ios.buildNumber === contract.currentLocalCandidate.build, "Version candidate mismatch");
-assert(contract.currentLocalCandidate.uploaded === true && contract.versionPolicy.reuseUploadedBuild === false, "Uploaded build reuse must fail closed");
+assert(contract.currentLocalCandidate.uploaded === false && Number(contract.currentLocalCandidate.build) > Number(contract.stableBaseline.build) && contract.stableBaseline.uploaded === true && contract.versionPolicy.reuseUploadedBuild === false, "Uploaded build reuse must fail closed");
 assert(eas.build.beta.channel === "preview" && eas.build.beta.env.EXPO_PUBLIC_API_BASE_URL === contract.previewDistribution.apiBaseUrl, "Beta is not Preview-pinned");
 assert(previewConfig.extra.environment === "preview" && previewConfig.extra.apiBaseUrl === contract.previewDistribution.apiBaseUrl && previewConfig.extra.productionActivated === false, "Resolved native Preview configuration mismatch");
 assert(eas.build.production.env.EXPO_PUBLIC_PRODUCTION_ACTIVATED === "false" && eas.build.production.env.EXPO_PUBLIC_API_BASE_URL.includes("example.invalid"), "Production must remain unusable");

@@ -2,7 +2,8 @@
   "contractVersion": "1",
   "product": "ACP Employee",
   "bundleIdentifier": "com.acpenterprise.employee",
-  "currentLocalCandidate": { "version": "0.2.0", "build": "2", "uploaded": true },
+  "stableBaseline": { "version": "0.2.0", "build": "2", "uploaded": true },
+  "currentLocalCandidate": { "version": "0.2.0", "build": "3", "uploaded": false },
   "versionPolicy": {
     "marketingVersion": "Owner-approved semantic product release train",
     "buildNumber": "Strictly increasing positive integer for every uploaded build within a train",

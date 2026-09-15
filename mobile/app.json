@@ -9,14 +9,14 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": false,
-      "buildNumber": "2",
+      "buildNumber": "3",
       "bundleIdentifier": "com.acpenterprise.employee",
       "associatedDomains": [
         "applinks:employee.acpenterprise.com"
       ]
     },
     "android": {
-      "versionCode": 2,
+      "versionCode": 3,
       "package": "com.acpenterprise.employee",
       "blockedPermissions": [
         "android.permission.READ_EXTERNAL_STORAGE",

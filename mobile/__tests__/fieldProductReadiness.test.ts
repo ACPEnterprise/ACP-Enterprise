@@ -4,11 +4,13 @@ describe("field product readiness boundary", () => {
   it("classifies accepted field operations independently from source-gated domains", () => {
     expect(FIELD_PRODUCT_READINESS.ON_MY_WAY).toBe("READY_FOR_DEVICE_ACCEPTANCE");
     expect(FIELD_PRODUCT_READINESS.JOB_COMPLETION).toBe("READY_FOR_DEVICE_ACCEPTANCE");
-    expect(FIELD_PRODUCT_READINESS.FIELD_PHOTOS).toBe("SOURCE_REQUIRED");
-    expect(FIELD_PRODUCT_READINESS.EQUIPMENT).toBe("SOURCE_REQUIRED");
-    expect(FIELD_PRODUCT_READINESS.ESTIMATE_PRESENTATION).toBe("SOURCE_REQUIRED");
+    expect(FIELD_PRODUCT_READINESS.FIELD_PHOTOS).toBe("PROVIDER_REQUIRED");
+    expect(FIELD_PRODUCT_READINESS.EQUIPMENT).toBe("ENGINEERING_READY");
+    expect(FIELD_PRODUCT_READINESS.ESTIMATE_PRESENTATION).toBe("ENGINEERING_READY");
+    expect(FIELD_PRODUCT_READINESS.PRICE_BOOK).toBe("ENGINEERING_READY");
+    expect(FIELD_PRODUCT_READINESS.PAYMENT_STATE).toBe("ENGINEERING_READY");
     expect(FIELD_PRODUCT_READINESS.APPLE_SIGNING).toBe("EXTERNAL_GATE");
-    expect(fieldReadinessSummary()).toEqual({ ready: 20, gated: 18 });
+    expect(fieldReadinessSummary()).toEqual({ ready: 29, gated: 11 });
   });
 
   it("never classifies an offline field mutation as immediate local success", () => {

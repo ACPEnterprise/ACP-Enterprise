@@ -10,7 +10,9 @@ describe("Apple distribution readiness contract", () => {
   });
 
   it("prohibits uploaded build-number reuse", () => {
-    expect(contract.currentLocalCandidate.uploaded).toBe(true);
+    expect(contract.stableBaseline.uploaded).toBe(true);
+    expect(contract.currentLocalCandidate.uploaded).toBe(false);
+    expect(Number(contract.currentLocalCandidate.build)).toBeGreaterThan(Number(contract.stableBaseline.build));
     expect(contract.versionPolicy.reuseUploadedBuild).toBe(false);
     expect(contract.versionPolicy.sourceOfTruthAfterFirstUpload).toContain("App Store Connect");
   });

@@ -41,4 +41,17 @@ describe("authorized employee field workflow", () => {
     expect(screen.getByText(/cannot edit pricing or accept the Estimate/)).toBeOnTheScreen();
     expect(screen.getByText(/Photos and documents aren't available yet/)).toBeOnTheScreen();
   });
+
+  it("renders permission-gated Job contact, commercial status, and active Price Book without mutation controls", async () => {
+    const h = harness();
+    h.field.sources = jest.fn(async () => ({ job_id: assignment.job_id!, assignment_id: "50000000-0000-4000-8000-000000000001", assignment_version: 3, customer_id: "60000000-0000-4000-8000-000000000001", service_location_id: "70000000-0000-4000-8000-000000000001", contact: { contact_id: "80000000-0000-4000-8000-000000000001", display_name: "Synthetic Contact", phone: "+15550100", email: "synthetic@example.invalid", can_approve_work: true }, invoice: { invoice_id: "90000000-0000-4000-8000-000000000001", invoice_number: "INV-SYNTH", status: "issued", version: 1, open_amount: 125, currency: "USD" }, payment: { state: "unpaid", invoice_id: "90000000-0000-4000-8000-000000000001", open_amount: 125, currency: "USD", receipt_status: null }, communications: [], completion: await h.field.state(assignment.job_id!) }));
+    h.field.priceBook = jest.fn(async () => [{ item_id: "a0000000-0000-4000-8000-000000000001", code: "SYN-1", name: "Synthetic Service", customer_description: "Synthetic customer-facing service", price_version_id: "b0000000-0000-4000-8000-000000000001", unit_price: 125, currency: "USD" }]);
+    render(<JobWorkspaceScreen appointmentId={assignment.appointment_id} initialAssignment={assignment} initialTimezone="America/New_York" businessDate="2026-08-28" service={h.employee} fieldService={h.field} network={h.network} canReadField canReadSources canReadPriceBook />);
+    expect(await screen.findByText("Synthetic Contact")).toBeOnTheScreen();
+    expect(screen.getByLabelText("Call Synthetic Contact")).toBeOnTheScreen();
+    expect(screen.getByText("Invoice INV-SYNTH · issued")).toBeOnTheScreen();
+    expect(screen.getByText(/Synthetic customer-facing service/)).toBeOnTheScreen();
+    expect(screen.getByText(/Estimate authoring and Price Book activation remain in ACP Enterprise/)).toBeOnTheScreen();
+    expect(screen.queryByText(/Collect payment|Send text|Activate Price Book/)).not.toBeOnTheScreen();
+  });
 });

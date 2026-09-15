@@ -3,6 +3,7 @@ import { createEmployeeOperationsService, dayAssignmentSchema } from "../src/api
 import type { DayAssignment, EmployeeDay, EmployeeOperationsService } from "../src/api/employeeOperations";
 import { ApiFailure } from "../src/api/types";
 import { MyDayScreen } from "../src/screens/MyDayScreen";
+import type { TimekeepingService } from "../src/api/timekeeping";
 
 const first: DayAssignment = {
   appointment_id: "10000000-0000-4000-8000-000000000001",
@@ -58,6 +59,15 @@ describe("native employee My Day", () => {
     expect(screen.getAllByText("Maintenance")).toHaveLength(2);
     expect(screen.getByText("Job JOB-SYNTH-01")).toBeOnTheScreen();
     expect(screen.getByText("Appointment APT-SYNTH-02")).toBeOnTheScreen();
+  });
+
+  it("composes the authoritative My Time state without changing assignment state", async () => {
+    const h = harness();
+    const timekeeping = { state: jest.fn(async () => ({ state: "clocked_in" as const, last_action: "clock_in" as const, occurred_at: "2026-08-28T12:00:00Z", server_observed_at: "2026-08-28T12:01:00Z", elapsed_seconds: 60 })) } as unknown as TimekeepingService;
+    render(<MyDayScreen service={h.service} timekeeping={timekeeping} network={h.network} />);
+    expect(await screen.findByLabelText("My Time status: Clocked in")).toBeOnTheScreen();
+    expect(screen.getByText("My Time and Job progress are separate.")).toBeOnTheScreen();
+    expect(screen.getAllByText("Job status: open")).toHaveLength(2);
   });
 
   it("renders a legitimate empty day distinctly", async () => {

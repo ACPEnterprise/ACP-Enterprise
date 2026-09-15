@@ -3,6 +3,8 @@ import type { DayAssignment, EmployeeOperationsService } from "../api/employeeOp
 import { colors, spacing } from "../design/tokens";
 import type { NetworkMonitor } from "../network/networkMonitor";
 import { useMyDay } from "../myDay/useMyDay";
+import type { TimekeepingService } from "../api/timekeeping";
+import { useWorkdaySummary } from "../timeclock/useWorkdaySummary";
 
 function formatWindow(value: string, timezone: string) {
   return new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit", timeZone: timezone }).format(new Date(value));
@@ -39,8 +41,11 @@ function AssignmentCard({ assignment, timezone, stale, onOpen }: { assignment: D
   </Pressable>;
 }
 
-export function MyDayScreen({ service, network, onOpenAssignment }: { service: EmployeeOperationsService; network: NetworkMonitor; onOpenAssignment?(assignment: DayAssignment, timezone: string, businessDate: string): void }) {
+const workdayLabel = { not_clocked_in: "Clocked out", clocked_in: "Clocked in", on_break: "On break" } as const;
+
+export function MyDayScreen({ service, timekeeping, network, onOpenAssignment }: { service: EmployeeOperationsService; timekeeping?: TimekeepingService; network: NetworkMonitor; onOpenAssignment?(assignment: DayAssignment, timezone: string, businessDate: string): void }) {
   const myDay = useMyDay(service, network);
+  const workday = useWorkdaySummary(timekeeping, network);
   const stale = (myDay.status === "offline" || myDay.status === "error") && myDay.day !== null;
   const message = myDay.status === "not_authorized" ? "My Day is not available for your account."
     : myDay.status === "identity_not_ready" ? "Your employee account is not ready for assigned work."
@@ -48,9 +53,11 @@ export function MyDayScreen({ service, network, onOpenAssignment }: { service: E
     : myDay.status === "offline" ? (stale ? "You're offline. These assignments are last confirmed and may be stale." : "You're offline. Connect to load your assigned work.")
     : myDay.status === "error" ? (stale ? "Unable to refresh My Day. These assignments are last confirmed and may be stale." : "Unable to load My Day. Check your connection and try again.")
     : null;
-  return <ScrollView testID="my-day-scroll" style={styles.safe} contentContainerStyle={styles.body} refreshControl={<RefreshControl testID="my-day-refresh" refreshing={myDay.status === "loading" || myDay.refreshing} onRefresh={() => void myDay.refresh()} accessibilityLabel="Refresh authoritative assigned work" />}>
+  const refresh = () => Promise.all([myDay.refresh(), workday.refresh()]);
+  return <ScrollView testID="my-day-scroll" style={styles.safe} contentContainerStyle={styles.body} refreshControl={<RefreshControl testID="my-day-refresh" refreshing={myDay.status === "loading" || myDay.refreshing || workday.status === "loading"} onRefresh={() => void refresh()} accessibilityLabel="Refresh authoritative assigned work" />}>
     <Text accessibilityRole="header" style={styles.title}>My Day</Text>
     {myDay.day && <><Text style={styles.date}>{formatDate(myDay.day.business_date)}</Text><Text style={styles.timezone}>Schedule times shown in {myDay.day.timezone}</Text></>}
+    {workday.state && <View accessible accessibilityLabel={`My Time status: ${workdayLabel[workday.state.state]}${workday.status === "offline" ? ", stale" : ""}`} style={styles.workday}><Text style={styles.kicker}>MY TIME</Text><Text style={styles.workdayState}>{workdayLabel[workday.state.state]}</Text><Text style={styles.separate}>My Time and Job progress are separate.</Text>{workday.status === "offline" && <Text style={styles.staleInline}>Last confirmed — reconnect to refresh</Text>}</View>}
     {message && <Text accessibilityRole="alert" style={stale ? styles.stale : styles.message}>{message}</Text>}
     {myDay.status === "loading" && !myDay.day && <Text accessibilityLabel="Loading authoritative assigned work">Loading assigned work…</Text>}
     {myDay.status === "empty" && <View accessible accessibilityLabel="No assigned work today" style={styles.empty}><Text style={styles.emptyTitle}>Your day is clear</Text><Text>No work is currently assigned to you today.</Text></View>}
@@ -63,6 +70,7 @@ const styles = StyleSheet.create({
   title: { fontSize: 30, fontWeight: "800", color: colors.text }, date: { fontSize: 20, fontWeight: "700", color: colors.text }, timezone: { fontSize: 14, color: colors.muted },
   message: { fontSize: 16, color: colors.text }, stale: { fontSize: 16, color: colors.warning, fontWeight: "700", backgroundColor: "#FFF7D6", padding: spacing.md, borderRadius: 12 },
   empty: { backgroundColor: colors.surface, borderRadius: 14, padding: spacing.lg, gap: spacing.sm, borderWidth: 1, borderColor: colors.border }, emptyTitle: { fontSize: 22, fontWeight: "700", color: colors.text },
+  workday: { backgroundColor: "#EAF4FF", borderRadius: 14, padding: spacing.md, gap: spacing.xs }, kicker: { color: colors.brandDark, fontSize: 13, fontWeight: "800" }, workdayState: { color: colors.text, fontSize: 22, fontWeight: "800" }, separate: { color: colors.muted, fontSize: 14 }, staleInline: { color: colors.warning, fontWeight: "700" },
   card: { backgroundColor: colors.surface, borderRadius: 14, padding: spacing.lg, gap: spacing.sm, borderWidth: 1, borderColor: colors.border, minHeight: 48 }, cardHeader: { gap: spacing.xs }, next: { color: colors.brandDark, fontSize: 15, fontWeight: "700" },
   window: { color: colors.brandDark, fontSize: 18, fontWeight: "800" }, customer: { color: colors.text, fontSize: 21, fontWeight: "700" }, address: { color: colors.text, fontSize: 16, lineHeight: 23 }, category: { color: colors.brandDark, fontSize: 16, fontWeight: "600" }, metadata: { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: spacing.sm, gap: spacing.xs },
 });
