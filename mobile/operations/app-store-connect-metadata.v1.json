@@ -3,7 +3,7 @@
   "appName": "ACP Employee",
   "bundleIdentifier": "com.acpenterprise.employee",
   "primaryLanguage": "en-US",
-  "localCandidate": { "version": "0.2.0", "build": "2", "uploaded": false },
+  "localCandidate": { "version": "0.2.0", "build": "2", "uploaded": true },
   "subtitleDraft": "Your ACP workday",
   "descriptionDraft": "ACP Employee gives authorized employees secure access to their assigned work, job details, timeclock, time history, and other own-data capabilities provided by ACP Enterprise. Available screens and actions are determined by current Company, Branch, Employee, and permission authority.",
   "betaDescription": "Validate secure sign-in and session restoration, My Day, assigned Job details, authoritative Timeclock and My Time, offline/stale recovery, and logout against synthetic ACP Preview data.",

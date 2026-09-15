@@ -9,7 +9,7 @@ describe("distribution package", () => {
     expect(metadata.appName).toBe("ACP Employee");
     expect(metadata.bundleIdentifier).toBe("com.acpenterprise.employee");
     expect(metadata.subtitleDraft.length).toBeLessThanOrEqual(30);
-    expect(metadata.localCandidate.uploaded).toBe(false);
+    expect(metadata.localCandidate.uploaded).toBe(true);
     expect(metadata.supportUrl).toMatch(/^OWNER_REQUIRED_/);
     expect(metadata.privacyPolicyUrl).toMatch(/^OWNER_REQUIRED_/);
     expect(metadata.ownerDecisionsRequired.length).toBeGreaterThan(0);
@@ -32,6 +32,7 @@ describe("distribution package", () => {
     expect(() => validateAasaDeployment("ABCDE12345", { ...evidence, responseUrl: "https://cdn.example/aasa" })).toThrow(/without redirect/);
     expect(() => validateAasaDeployment("ABCDE12345", { ...evidence, body: `${body} ` })).toThrow(/bytes/);
     expect(hosting.dnsMutationAuthorized).toBe(false);
-    expect(hosting.teamIdKnown).toBe(false);
+    expect(hosting.teamIdKnown).toBe(true);
+    expect(hosting.teamId).toBe("74R6X48GHA");
   });
 });

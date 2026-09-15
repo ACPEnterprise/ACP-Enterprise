@@ -2,6 +2,7 @@
   "expo": {
     "name": "ACP Employee",
     "slug": "acp-employee",
+    "icon": "./assets/app-icon.png",
     "scheme": "acpemployee",
     "version": "0.2.0",
     "orientation": "portrait",
