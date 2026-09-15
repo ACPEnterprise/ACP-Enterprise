@@ -6,13 +6,16 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.accounting.models import AccountingPeriod
 from app.beacon.service import beacon_query_service
 from app.business_economics.models import EconomicsProfitabilityResultRecord
 from app.customers.lia_context import customer_lia_context_service
 from app.customers.models import Customer
+from app.data_quality.catalog import QUALITY_CATALOG
+from app.dispatch.models import DispatchAssignment
 from app.estimates.models import Estimate
 from app.inventory.models import InventoryItem
 from app.invoicing.models import Invoice
@@ -25,28 +28,36 @@ from app.operational_migration.models import HcpMigrationMasterRun
 from app.payments.models import PaymentReceipt
 from app.payroll.models import PayrollPayStatementRecord, PayrollReportingSnapshotRecord
 from app.payroll.permissions import PayrollPermission
+from app.platform.audit.models import AuditRecord
 from app.platform.employees.models import Employee
 from app.platform.notifications.models import NotificationOutbox
 from app.platform.permissions.authorization import AuthorizationContext
 from app.platform.permissions.codes import (
+    AccountingPermission,
     AdministrationPermission,
     AnalyticsPermission,
     AssetPermission,
     CommunicationsPermission,
     CustomerPermission,
+    DispatchPermission,
     EconomicsPolicyPermission,
     EstimatePermission,
     InventoryPermission,
     InvoicePermission,
     JobPermission,
+    LaunchPlatformPermission,
     LuminaryPermission,
     PaymentPermission,
+    PriceBookPermission,
     PurchasingPermission,
     SchedulingPermission,
     WorkforcePermission,
 )
+from app.price_book.models import PriceBookServiceItem
 from app.purchasing.models import PurchaseOrder
 from app.scheduling.models import Appointment
+from app.timekeeping.models import WorkdayTimeEntryRevision
+from app.timekeeping.permissions import TimekeepingPermission
 from app.workforce.lia_context import workforce_lia_context_service
 from app.workforce.service import workforce_operations_service
 
@@ -79,6 +90,13 @@ ADAPTERS = (
         Appointment.status,
     ),
     AdapterSpec(
+        "dispatch",
+        "Dispatch assignments",
+        DispatchPermission.READ,
+        DispatchAssignment,
+        DispatchAssignment.status,
+    ),
+    AdapterSpec(
         "estimates", "Estimates", EstimatePermission.READ, Estimate, Estimate.status
     ),
     AdapterSpec(
@@ -107,6 +125,34 @@ ADAPTERS = (
     ),
     AdapterSpec(
         "assets", "Operational Assets", AssetPermission.READ, Asset, Asset.lifecycle
+    ),
+    AdapterSpec(
+        "timekeeping",
+        "Accepted timekeeping revisions",
+        TimekeepingPermission.ADMIN_READ,
+        WorkdayTimeEntryRevision,
+        WorkdayTimeEntryRevision.state,
+    ),
+    AdapterSpec(
+        "accounting",
+        "Accounting period readiness",
+        AccountingPermission.REPORT_READ,
+        AccountingPeriod,
+        AccountingPeriod.status,
+    ),
+    AdapterSpec(
+        "price-book",
+        "Price Book services",
+        PriceBookPermission.READ,
+        PriceBookServiceItem,
+        PriceBookServiceItem.status,
+    ),
+    AdapterSpec(
+        "audit",
+        "Scoped audit outcomes",
+        LaunchPlatformPermission.AUDIT_READ,
+        AuditRecord,
+        AuditRecord.outcome,
     ),
 )
 
@@ -231,7 +277,12 @@ class GovernedRetrievalService:
                     if context.active_branch is not None
                     else context.authorized_branch_ids
                 )
-                predicates.append(adapter.model.branch_id.in_(branch_ids))
+                branch_predicate = adapter.model.branch_id.in_(branch_ids)
+                if adapter.model.branch_id.property.columns[0].nullable:
+                    branch_predicate = or_(
+                        branch_predicate, adapter.model.branch_id.is_(None)
+                    )
+                predicates.append(branch_predicate)
                 evidence_branch_ids = tuple(sorted(branch_ids, key=str))
             if entity_id is not None:
                 predicates.append(adapter.model.id == entity_id)
@@ -276,6 +327,28 @@ class GovernedRetrievalService:
                     authorization_version=context.authorization_version,
                 )
             )
+        if context.has_permission(LaunchPlatformPermission.AUDIT_READ):
+            for domain, label in (
+                ("data-quality", "Data-quality readiness rules"),
+                ("launch-readiness", "Real-world launch readiness evidence"),
+            ):
+                if domains is not None and domain not in domains:
+                    continue
+                rules = tuple(QUALITY_CATALOG)
+                readiness_states: dict[str, int] = {}
+                for rule in rules:
+                    key = rule.state if domain == "data-quality" else rule.launch_impact
+                    readiness_states[key] = readiness_states.get(key, 0) + 1
+                evidence.append(
+                    _reference(
+                        domain=domain,
+                        label=label,
+                        authority="ACP_READINESS_POLICY_AND_EVIDENCE",
+                        observed_at=observed_at,
+                        rows=tuple((rule.rule_id, rule.digest) for rule in rules),
+                        states=readiness_states,
+                    )
+                )
         if context.has_permission(LuminaryPermission.READ) and (
             domains is None or "luminary" in domains
         ):
@@ -647,4 +720,14 @@ def permitted_domain_names(context: AuthorizationContext) -> set[str]:
         domains.add("payroll")
     if context.has_permission(LuminaryPermission.READ):
         domains.add("luminary")
+    if context.has_permission(LaunchPlatformPermission.AUDIT_READ):
+        domains.update({"audit", "data-quality", "launch-readiness"})
+    if context.has_permission(AccountingPermission.REPORT_READ):
+        domains.add("accounting")
+    if context.has_permission(TimekeepingPermission.ADMIN_READ):
+        domains.add("timekeeping")
+    if context.has_permission(DispatchPermission.READ):
+        domains.add("dispatch")
+    if context.has_permission(PriceBookPermission.READ):
+        domains.add("price-book")
     return domains
