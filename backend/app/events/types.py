@@ -44,6 +44,10 @@ class EventType(str, Enum):
     PAYROLL_INPUT_AUTHORITY_APPROVED = "payroll.input_authority_approved"
     PAYROLL_INPUT_AUTHORITY_SUPERSEDED = "payroll.input_authority_superseded"
     PAYROLL_INPUT_AUTHORITY_RETIRED = "payroll.input_authority_retired"
+    PAYROLL_CUTOVER_REVIEW_CREATED = "payroll.cutover_review_created"
+    PAYROLL_CUTOVER_FACT_REVISED = "payroll.cutover_fact_revised"
+    PAYROLL_CUTOVER_BRIDGE_REVISED = "payroll.cutover_bridge_revised"
+    PAYROLL_CUTOVER_REVIEW_APPROVED = "payroll.cutover_review_approved"
     PAYROLL_TAX_DEDUCTION_ADMISSION_EVALUATED = (
         "payroll.tax_deduction_admission_evaluated"
     )
