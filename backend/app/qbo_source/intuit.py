@@ -7,7 +7,7 @@ import json
 import logging
 from collections.abc import AsyncIterator, Callable, Mapping
 from dataclasses import dataclass, replace
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from enum import Enum
 from typing import ClassVar, Protocol
 from urllib.parse import urlencode
@@ -668,10 +668,49 @@ class IntuitReadOnlyAdapter(SourceAcquisitionProvider):
                     )
                 )
 
+    async def read_profit_and_loss(
+        self,
+        *,
+        start_date: date,
+        end_date: date,
+        accounting_method: str,
+        minor_version: int,
+    ) -> dict[str, object]:
+        """Read one provider-authored P&L; this adapter exposes no report writes."""
+        if start_date > end_date:
+            raise ValueError("report start date must not follow end date")
+        method = accounting_method.lower()
+        if method not in {"cash", "accrual"}:
+            raise ValueError("unsupported accounting method")
+        if minor_version < 1:
+            raise ValueError("minor version must be positive")
+        await self._verify_bound_company(minor_version)
+        url = (
+            f"{self.endpoints.api_base}/{self.binding.realm_id}/reports/ProfitAndLoss?"
+            + urlencode(
+                {
+                    "start_date": start_date.isoformat(),
+                    "end_date": end_date.isoformat(),
+                    "accounting_method": method,
+                    "minorversion": minor_version,
+                }
+            )
+        )
+        response = await self._get(
+            url,
+            request_identity=(
+                f"profit_and_loss:{start_date.isoformat()}:{end_date.isoformat()}:{method}"
+            ),
+        )
+        return response.json()
+
     async def _verify_company(self, request: AcquisitionRequest) -> dict[str, object]:
+        return await self._verify_bound_company(request.snapshot.api_minor_version)
+
+    async def _verify_bound_company(self, minor_version: int) -> dict[str, object]:
         url = (
             f"{self.endpoints.api_base}/{self.binding.realm_id}/companyinfo/"
-            f"{self.binding.realm_id}?minorversion={request.snapshot.api_minor_version}"
+            f"{self.binding.realm_id}?minorversion={minor_version}"
         )
         response = await self._get(url, request_identity="company_info")
         document = response.json()

@@ -35,6 +35,7 @@ x-backend-environment: &backend-environment
   QBO_SANDBOX_RUNTIME_ROOT: /var/lib/acp-qbo-sandbox
   QBO_REPOSITORY_ROOT: /app
   QBO_PRODUCTION_ENABLED: ${QBO_PRODUCTION_ENABLED:-false}
+  QBO_PRODUCTION_ACP_COMPANY_ID: ${QBO_PRODUCTION_ACP_COMPANY_ID:-}
   QBO_PRODUCTION_CALLBACK_URI: https://preview.allcountyhomeservices.com/api/v1/integrations/qbo/production/oauth/callback
   QBO_PRODUCTION_RUNTIME_ROOT: /var/lib/acp-qbo-production
   QBO_PRODUCTION_EVIDENCE_ROOT: /var/lib/acp-qbo-production-evidence
