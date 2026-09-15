@@ -1,13 +1,13 @@
 # OM1 Enterprise integration queue
 
-Snapshot: 2026-09-14 21:26 America/New_York
+Snapshot: 2026-09-14 21:27 America/New_York
 
 ## Authority and deployed state
 
 - Protected authority: `4be32635f4c9d8b684c8d97521f6e0092f666661`
 - Protected tip: PR #283, Payroll cutover review workflow
 - Deployed Preview: `60035693a51ec66328625dfcc78e7cd2dfead824`
-- Preview health: HTTP 502 at 21:24, 21:25, and 21:26 during the post-#283 rollout
+- Preview health: HTTP 502 at 21:24, 21:25, 21:26, and 21:27 during the post-#283 rollout
 - Deployment gap: protected #280-#283 are not yet observed in Preview; last confirmed deployed remains healthy #279
 - Acceptance state: pending. Preview initially remained at `b296cc6b...` after
   #265 merged, then by 2026-09-14 14:00 America/New_York returned HTTP 200 at
@@ -72,7 +72,7 @@ Snapshot: 2026-09-14 21:26 America/New_York
   `7f1d98dc...` healthy responses with both dependencies connected.
   Preview remained healthy on old `60035693...` through 21:23 after the #282 and
   #283 merges; none of #280-#283 was observed as deployed. It then returned HTTP
-  502 at 21:24, 21:25, and 21:26. Preserve the outage window, stop acceptance,
+  502 at 21:24, 21:25, 21:26, and 21:27. Preserve the outage window, stop acceptance,
   and require recovery plus consecutive healthy exact-`4be32635...` responses
   with both dependencies connected before any cutover review acceptance.
 - GitHub CI evidence: no check runs or commit statuses are reported for the
