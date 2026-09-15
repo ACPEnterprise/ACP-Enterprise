@@ -35,11 +35,13 @@ export function useLuminarySourceReadiness(
 export function useLuminaryOwnerEconomics(
   start: string,
   end: string,
+  scenarioKind: string | undefined,
+  changeBasisPoints: number | undefined,
   enabled = true,
 ) {
   return useQuery({
-    queryKey: ["luminary", "owner-economics-readonly", start, end],
-    queryFn: () => getLuminaryOwnerEconomics(start, end),
+    queryKey: ["luminary", "owner-economics-readonly", start, end, scenarioKind, changeBasisPoints],
+    queryFn: () => getLuminaryOwnerEconomics(start, end, scenarioKind, changeBasisPoints),
     enabled,
     retry: false,
   });
