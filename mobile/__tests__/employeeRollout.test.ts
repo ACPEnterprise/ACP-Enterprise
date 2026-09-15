@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 
 import rollout from "../operations/employee-rollout-3day.v1.json";
+import acceptance from "../operations/internal-testflight-acceptance.v1.json";
 import { generateAasa } from "../src/operations/betaContracts";
 
 describe("controlled employee rollout", () => {
@@ -29,5 +30,13 @@ describe("controlled employee rollout", () => {
     expect(aasa).toBe(generateAasa(rollout.teamId));
     expect(aasa).toContain(rollout.aasaAppId);
     expect(aasa).not.toMatch(/token|secret|password/i);
+  });
+
+  it("keeps the employee acceptance roster credential-free and Preview-only", () => {
+    expect(acceptance.environment).toBe("preview");
+    expect(acceptance.apiBaseUrl).toBe("https://preview.allcountyhomeservices.com");
+    expect(acceptance.testerSelection.credentialsInRepository).toBe(false);
+    expect(JSON.stringify(acceptance.testerSelection)).not.toMatch(/@/);
+    expect(acceptance.stopConditions).toContain("Production endpoint appears");
   });
 });

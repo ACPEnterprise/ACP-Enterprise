@@ -62,10 +62,30 @@ refresh/reconnect and verify the server-active interval, Clock Off once, verify 
 completed interval in My Time and office time evidence, then logout/login. Payroll
 calculation, payment, public App Store submission, and Production are excluded.
 
+### TestFlight operator sequence
+
+1. In App Store Connect, open **Apps → ACP Employee → TestFlight → iOS** and
+   confirm `0.2.0 (2)` is **Ready to Test** or **Testing**. Processing alone is not
+   an employee-install result.
+2. Create or select an internal group such as **ACP Employee — Controlled Rollout**.
+3. Add build 2 to the group. Answer any export-compliance question using the
+   owner/legal-approved classification; do not guess.
+4. Add only the owner's and explicitly authorized employees' Apple IDs. Do not
+   store those addresses in Git or this acceptance packet.
+5. Ask each tester to follow the Employee installation steps above and record only
+   build, device/iOS class, safe result classifications, and approximate times.
+6. For Lianne, rely on her existing canonical ACP identity and password. Do not
+   issue a Mobile password. Confirm MAIN and the exact effective Mobile permission
+   set before any Job or Timekeeping mutation.
+7. Run Clock On/Off only during the sanctioned non-payable acceptance window and
+   independently confirm the server interval and office readback.
+
+The machine-readable acceptance form is
+`mobile/operations/internal-testflight-acceptance.v1.json`.
+
 ## Rollback
 
 Remove a defective build from the internal TestFlight group, communicate the hold
 through the approved support channel, preserve server evidence, and issue a higher
 build number after repair. Do not reuse build 2 and do not represent an app removal
 as revoking an employee's ACP server session or permissions.
-
