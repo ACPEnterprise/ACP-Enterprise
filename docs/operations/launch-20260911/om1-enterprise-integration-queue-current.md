@@ -1,6 +1,6 @@
 # OM1 Enterprise integration queue
 
-Snapshot: 2026-09-14 20:04 America/New_York
+Snapshot: 2026-09-14 20:09 America/New_York
 
 ## Authority and deployed state
 
@@ -70,7 +70,7 @@ Snapshot: 2026-09-14 20:04 America/New_York
   HTTP 502 at 19:42, then recovered healthy on old `60035693...` from 19:43
   through 19:46. Preserve the transient and require consecutive exact
   `7f1d98dc...` healthy responses with both dependencies connected.
-  Preview remained healthy on old `60035693...` through 20:04; neither #280 nor
+  Preview remained healthy on old `60035693...` through 20:09; neither #280 nor
   #281 was observed as deployed.
 - GitHub CI evidence: no check runs or commit statuses are reported for the
   protected SHA. PR #264's body reports 698 migration/job/scheduling regressions,
@@ -254,6 +254,7 @@ acceptance gates in this packet operationally; GitHub will not enforce them.
 | ECO reconciliation | `work/eco-migration-reconciliation-integration-watch-1` | `1c0e7b20db62b6a342548f2842ea1a3a45965386` | None | 24/13 | `0b0261f51f44b166a879f4f446de20bfbccca880` | Blocked on schema reconciliation; duplicate protected revision ID; rebase and assign a new revision downstream of `h8j0l2n4p6r8` |
 | Payroll/QBO read UI | `work/om2b-payroll-accounting-continuation-1` | `724398348b566f655d2bc7127c20beeb6be52d6c` | #215 open/CLEAN | 43/1 | `85a435261dd1d7f265062fb3c2450b4e04de1f5e` | Stale but reconcilable; merge-clean after #281 despite shared Payroll route/tests; blocked behind authorization repairs, PR refresh, and combined rerun |
 | QBO Employee Payroll-input migration planner | `work/payroll-qbo-employee-input-migration-1` | `98610c7da9c0c19e6a5719fea8b726334af95970` | #282 open/MERGEABLE | 0/1 | `14c95174128d9c17cb628a6e61fb090fa1f77afa` | Current exact-base candidate; Git-clean, no schema; preparation only and blocked on source-authority binding, duplicate/conflict validation, approved-authority disposition, inventory selection/digest repair, and supported qualification evidence |
+| Accounting navigation grouping | `work/ux-accounting-navigation-1` | `1e0f53a7e01e6ef342b1551e3489fb332978a4c2` | None | 0/1 | `053f32045e8a17fa1d4448ffbe2230875dc52182` | Current exact-base frontend candidate; merge-clean with PR #215, #282, OM2-C, and Mobile; no schema/config; admissible after permission/deep-link/responsive/accessibility evidence and a fresh PR |
 | Mobile Apple release packet | `work/mobile-apple-owner-release-packet-1` | `0183eaec3e2825a79b683e9e684a761243c86ea7` | None | 29/15 | `93c1d338c957ad6f162efc3fe881e972c2d1e686` | Stale but reconcilable; merge-clean; blocked on visible-error/concurrency repair successor and two manifest edits |
 
 ## Named launch queue coverage
@@ -280,7 +281,7 @@ Zero-delta classifications above use a three-way composition with current
 protected authority, not a direct endpoint diff. Conflicting stale branches are
 not reconciliation inputs: use their named protected successors as authority.
 
-The eight remaining effective deltas are merge-clean. ECO, cohort authority,
+The nine remaining effective deltas are merge-clean. ECO, cohort authority,
 and PR #282 are not admissible. ECO and cohort authority
 are not admissible, and Mobile is blocked on a complete repair to protected #273-#276: ECO's
 differently named migration still declares protected revision `g7i9k1m3o5q7`
@@ -334,10 +335,13 @@ operational order:
 9. Hold PR #282 as QBO/Payroll preparation. Repair and requalify its sealed-source
    authority chain before integration; even a repaired planner may emit draft
    instructions only and remains downstream of exact deployed Payroll readiness.
-10. Preserve #274's selector fix, audit #275's role expansion, and preserve #276's
+10. Integrate the Accounting navigation grouping as an independent frontend
+   checkpoint after focused permission, deep-link, responsive, and accessibility
+   qualification; it need not wait for PR #282 or authorize QBO/Payroll behavior.
+11. Preserve #274's selector fix, audit #275's role expansion, and preserve #276's
    atomic transaction; surface mutation failure and qualify concurrent canonical
    creation with real PostgreSQL API/idempotency/rollback coverage.
-11. Reconcile Mobile manifests after the complete #273-#276 successor is protected, then
+12. Reconcile Mobile manifests after the complete #273-#276 successor is protected, then
    integrate Mobile in Wave D; authoritative Job Clock `d52d1178` is protected.
 
 Do not execute Migration admission, authorize QBO, execute Payroll, or sign or
@@ -359,6 +363,7 @@ flowchart LR
     A -->|reconcile| E[ECO watch]
     A -->|reconcile| P[PR 215]
     A --> Q[PR 282 QBO Employee planner repair]
+    A --> N[Accounting navigation grouping]
     A -->|reconcile| M[Mobile owner packet]
     A --> F[Protected PR 273-276 field-readiness repair]
     F --> M
@@ -368,6 +373,7 @@ flowchart LR
     E --> I
     P --> I
     Q --> I
+    N --> I
     M --> I
     C --> I
     U --> I
@@ -399,7 +405,7 @@ integration path because it remains held.
 
 ## Batch boundaries and refresh checkpoints
 
-All eight remaining active lanes may be inspected concurrently from the guarded
+All nine remaining active lanes may be inspected concurrently from the guarded
 authority above. Integration remains sequential because the first protected PR
 changes the authority for every remaining lane. ECO qualification cannot
 complete until its duplicate revision is replaced downstream of now-protected
@@ -412,6 +418,7 @@ complete until its duplicate revision is replaced downstream of now-protected
 | Wave C preparation | Treat #264-#272 as integrated, but #265/#266, the executor through #270, and verifier through #272 operationally rejected; repair cohort/runtime/v4/executor evidence in that order; prepare recovery and historical builder independently; repair #271/#272 only as post-execution verification tooling | Any unbound input, unsafe private-file path, missing or ambiguous execution authority, nondeterministic or overbroad replay evidence, test/digest/count failure, current graph other than 11/11/15/18 with zero holds, exactly-one-head/drift/migration failure, or authority mismatch |
 | ECO checkpoint | Native binding is protected; assign ECO a unique revision with down-revision `h8j0l2n4p6r8`, requalify, then integrate/deploy independently | Duplicate/multiple Alembic head, drift, migration failure, or governed-policy acceptance failure |
 | Wave B | Preserve #279 readback, audit its admin-role expansion, preserve #280 selected-period navigation and #281 metadata-only readiness UI; repair #278's projection mismatch and prove #281's intended role matrix, then accept #277-#281 without Payroll execution and reconcile PR #215. Keep #282 separate until its authority repairs pass; then rerun the combined Payroll/QBO suites | Either route/service permission contract is inconsistent, unexplained broad-suite failure remains, selected period is lost or warning/readiness is contradictory, protected Payroll values appear, PR #282 accepts unbound/duplicate evidence or weakens approved ACP authority, pay-period replay/readback/overlap/audit test fails, Payroll/provider mutation occurs, or QBO/shared-route behavior regresses |
+| Accounting navigation UI | Open a fresh exact-head PR; run permission filtering, direct/deep-link, active-state, keyboard, narrow/mobile, full frontend, lint, and build checks. It may join Wave B only as a separately reviewable frontend commit | Any route becomes broader than its existing permission, operational links disappear without an equivalent Accounting path, deep links/back-forward break, hidden unsupported feature appears, mobile/keyboard navigation regresses, or the candidate claims financial/QBO/Payroll behavior |
 | Wave D | Keep protected #273-#276 operator action disabled; audit administrator permissions, preserve #276 atomicity, surface mutation errors, and qualify concurrent/API behavior before Mobile | Unexpected role privilege, partial readiness persists on failure, mutation error is hidden, PostgreSQL/API/concurrency/idempotency/rollback test fails, or either Mobile manifest is stale |
 
 After every protected integration, stop before integrating another candidate and
@@ -474,6 +481,7 @@ packet if either SHA guard fails or the merge conflicts.
 | `work/eco-migration-reconciliation-integration-watch-1` | `1c0e7b20db62b6a342548f2842ea1a3a45965386` |
 | `work/om2b-payroll-accounting-continuation-1` | `724398348b566f655d2bc7127c20beeb6be52d6c` |
 | `work/payroll-qbo-employee-input-migration-1` | `98610c7da9c0c19e6a5719fea8b726334af95970` |
+| `work/ux-accounting-navigation-1` | `1e0f53a7e01e6ef342b1551e3489fb332978a4c2` |
 | `work/mobile-apple-owner-release-packet-1` | `0183eaec3e2825a79b683e9e684a761243c86ea7` |
 
 After the lane-specific edits and tests below, commit and push only that lane,
@@ -1126,6 +1134,47 @@ review. Any draft import remains a separately authorized action through existing
 encrypted setup services with drafter/approver separation; this packet does not
 authorize it.
 
+### Accounting navigation grouping
+
+Branch `work/ux-accounting-navigation-1` at exact head
+`1e0f53a7e01e6ef342b1551e3489fb332978a4c2` is based directly on protected
+`7f1d98dc...`, has no PR, changes ten frontend/docs files, and composes
+merge-clean at tree `053f32045e8a17fa1d4448ffbe2230875dc52182`.
+It has no schema, backend, secret, config, financial-authority, QBO, or Payroll
+behavior change. It has zero effective-file overlap and clean pairwise
+composition with PR #215 (`8171e03c...`), PR #282 (`2c211763...`), Mobile
+(`90749b21...`), and OM2-C (`42c31dd4...`).
+
+The candidate groups existing routes beneath a permission-filtered Accounting
+overview, preserves Revenue Cycle/Purchasing in Operations, and omits
+unimplemented accounting features. Before opening a fresh PR, verify every
+supported permission individually and in combinations, no-permission failure,
+direct and nested Invoice deep links, active states, breadcrumbs, browser
+back/forward, collapsed desktop and narrow mobile navigation, keyboard focus,
+screen-reader labels, and that all previous operational destinations remain
+reachable through their new Accounting entries. No screenshot evidence exists;
+capture desktop and phone-width views for this information-architecture change.
+
+```bash
+cd frontend
+npm run test:run -- \
+  src/layout/PrimaryNavigation.test.tsx \
+  src/layout/navigation.test.ts \
+  src/routes/AccountingRoute.test.tsx \
+  src/routing/router.test.tsx
+npm run test:run
+npm run lint
+npm run build
+```
+
+The branch runbook claims 11 focused and 479 full-suite tests across 126 files,
+plus ESLint, TypeScript, Vite build, and `git diff --check`, but there is no PR or
+GitHub check/log evidence. Preserve the originating output or rerun it. After
+exact-SHA deployment, acceptance is navigation-only: test one persona per
+destination permission and one no-permission persona at desktop and phone width.
+Do not authorize QBO, execute Payroll, or infer feature completion from the new
+grouping.
+
 ### Mobile
 
 PR #273 integrated `work/om1-phone-dispatch-assignability-1` head
@@ -1367,6 +1416,7 @@ links, Payroll values, provider payloads, Apple credentials, or Customer PII.
 | ECO | Alembic current/head output; governed policy create/read/update correlation IDs; immutable event IDs and ordering | Wrong/multiple head, drift, mutable/missing audit event, cross-Company visibility, or unexplained calculation variance |
 | PR #215 / QBO | Payroll evidence projection and QBO source-evidence response; role-negative result; before/after provider connection state | OAuth prompt/change, provider write, fabricated readiness, unauthorized financial visibility, or `mutation_authority` other than `none` |
 | PR #282 QBO/Payroll planner | Repaired candidate/merge/deployed SHA; expected sealed run/manifest/realm/cutoff; manifest and deterministic inventory digests; entity counts reconciled to bounded records; zero identifiers/values; crosswalk/fact authority chain; duplicate/tamper/foreign-scope negatives; approved ACP preservation; before/after QBO, Payroll, and provider state | Unbound/self-asserted authority, digest/count mismatch, unsafe evidence path, duplicate silently accepted, approved ACP value weakened, protected identifier/value disclosure, draft/approval/import/provider mutation, OAuth, or Payroll execution |
+| Accounting navigation | Candidate/merge/deployed SHA; permission-to-destination matrix; direct/deep-link and active/breadcrumb results; desktop/phone screenshots; keyboard/focus and no-permission evidence | Broadened access, missing prior destination, broken deep link/history, unsupported feature represented as available, inaccessible navigation, responsive regression, or implied financial mutation authority |
 | Pay-period office operations | Exact #277-#281 repair-successor candidate/merge/deployed SHA; policy-manager create/readback and reporting-only denial; projection route/service matrix; selected historical-period navigation/warning evidence; exact-period readiness intended/partial-role matrix and protected-value absence; admin time-evidence scope; created/replayed period ID; overlap rejection; single audit ID; before/after Payroll/provider state | Route/service mismatch, unexplained suite failure, selected-period loss or contradictory warning/readiness, protected input disclosure, unintended admin/cross-Company visibility, duplicate period/audit, unauthorized success, changed-overlap acceptance, stale readiness, or any Payroll/provider execution |
 | Mobile / Dispatch readiness | Complete #273-#276 successor API/transaction evidence; exact Employee/Appointment/Branch/window; before/after profile/capability/availability and audit IDs; App/config version; Preview API target; permission-derived navigation; Job Clock recovery; offline/stale behavior; unsigned preflight result | Unauthorized/cross-scope change, partial mutation, hidden failure, non-idempotent replay, Production target, stale authority enabling mutation, cross-Branch cache visibility, duplicate clock mutation, or any signing/upload attempt |
 | Migration lineage | Exactly one schema head; v2 authority SHA/file mode; SOURCE.4 package identity; 503 assertions; 1,389 canonical holds; deterministic master/child IDs; `completed_current_operational`; receipt/replay and rollback evidence | Duplicate/multiple revision, changed hold/scope/digest, canonical admission enabled, lineage conflict, partial rows/native graph, non-idempotent replay, missing backup/restore receipt, or execution without separate owner authority |
