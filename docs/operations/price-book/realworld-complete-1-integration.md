@@ -2,7 +2,7 @@
 
 ## Authority and scope
 
-- Starting protected authority: `4be32635f4c9d8b684c8d97521f6e0092f666661`.
+- Starting protected authority: `4be32635f4c9d8b684c8d97521f6e0092f666661`; reconciled protected authority: `6e5c86089b10ed2a442ced9a3344d2e940f1d4b8`.
 - Candidate branch: `work/pricebook-realworld-complete-1`.
 - This candidate composes the prior All County Build.1 and Activation Readiness evidence onto the protected lineage. It does not activate a real price.
 - Candidate configuration remains 218 services, 16 categories, 208 formula-derived prices, 10 explicit workbook overrides, 218 configured labor estimates, and 361 vendor-material candidates.
