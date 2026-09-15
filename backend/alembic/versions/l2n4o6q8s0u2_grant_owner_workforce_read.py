@@ -1,7 +1,7 @@
 """Grant explicit Workforce read authority to existing owner roles.
 
-Revision ID: k1m3o5q7s9u1
-Revises: j0l2n4p6r8t0
+Revision ID: l2n4o6q8s0u2
+Revises: k1m3o5q7s9u1
 """
 
 from collections.abc import Sequence
@@ -11,8 +11,8 @@ import sqlalchemy as sa
 
 from alembic import op
 
-revision: str = "k1m3o5q7s9u1"
-down_revision: str | Sequence[str] | None = "j0l2n4p6r8t0"
+revision: str = "l2n4o6q8s0u2"
+down_revision: str | Sequence[str] | None = "k1m3o5q7s9u1"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
