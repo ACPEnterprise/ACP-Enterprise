@@ -23,6 +23,7 @@ from .contracts import (
 )
 from .engine import LUMINARY_ENGINE_VERSION, LuminaryEngine, canonical_digest
 from .models import LuminaryBriefingRecord, LuminaryFindingRecord
+from .owner_economics import ScenarioAssumption, project_owner_economics
 
 
 class LuminaryNotFoundError(LookupError):
@@ -33,6 +34,31 @@ class LuminaryService:
     def __init__(self, *, audit: AuditService = audit_service) -> None:
         self.engine = LuminaryEngine()
         self.audit = audit
+
+    async def owner_economics_readonly(
+        self,
+        session: AsyncSession,
+        *,
+        context: AuthorizationContext,
+        period_start: date,
+        period_end: date,
+        scenario: ScenarioAssumption | None = None,
+        generated_at: datetime | None = None,
+    ) -> dict[str, object]:
+        """Project owner intelligence without persistence, events, audit, or commands."""
+        workspace = await EconomicsWorkspaceService().overview(
+            session,
+            context=context,
+            period_start=period_start,
+            period_end=period_end,
+        )
+        return project_owner_economics(
+            workspace,
+            company_id=context.company.id,
+            branch_id=context.active_branch.id if context.active_branch else None,
+            generated_at=generated_at or datetime.now(timezone.utc),
+            scenario=scenario,
+        )
 
     async def analyze(
         self,

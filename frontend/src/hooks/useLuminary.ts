@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   analyzeLuminary,
   getLuminaryBriefing,
+  getLuminaryOwnerEconomics,
   getLuminarySourceReadiness,
 } from "../api/luminary";
 
@@ -26,6 +27,19 @@ export function useLuminarySourceReadiness(
   return useQuery({
     queryKey: ["luminary", "source-readiness", start, end],
     queryFn: () => getLuminarySourceReadiness(start, end),
+    enabled,
+    retry: false,
+  });
+}
+
+export function useLuminaryOwnerEconomics(
+  start: string,
+  end: string,
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: ["luminary", "owner-economics-readonly", start, end],
+    queryFn: () => getLuminaryOwnerEconomics(start, end),
     enabled,
     retry: false,
   });

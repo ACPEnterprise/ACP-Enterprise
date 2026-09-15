@@ -1,22 +1,40 @@
+from datetime import date
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
+from fastapi import HTTPException
+from sqlalchemy import ForeignKeyConstraint
+
+from app.business_economics.workspace import EconomicsWorkspaceService
 from app.luminary.models import LuminaryBriefingRecord, LuminaryFindingRecord
 from app.luminary.router import _luminary_http_error, require_luminary_analyst
 from app.luminary.service import LuminaryNotFoundError, LuminaryService
 from app.platform.reliability.correlation import request_correlation_id
-from fastapi import HTTPException
-from sqlalchemy import ForeignKeyConstraint
 
 
 @pytest.mark.parametrize(
     ("error", "status_code", "code", "recovery"),
     [
-        (LuminaryNotFoundError("protected-source-canary"), 404, "not_found", "TERMINAL_FAILURE"),
-        (ValueError("protected-validation-canary"), 422, "validation", "USER_CORRECTION_REQUIRED"),
-        (RuntimeError("protected-internal-canary"), 500, "internal_failure", "TEMPORARILY_UNAVAILABLE"),
+        (
+            LuminaryNotFoundError("protected-source-canary"),
+            404,
+            "not_found",
+            "TERMINAL_FAILURE",
+        ),
+        (
+            ValueError("protected-validation-canary"),
+            422,
+            "validation",
+            "USER_CORRECTION_REQUIRED",
+        ),
+        (
+            RuntimeError("protected-internal-canary"),
+            500,
+            "internal_failure",
+            "TEMPORARILY_UNAVAILABLE",
+        ),
     ],
 )
 def test_luminary_failures_are_classified_correlated_and_non_reflective(
@@ -92,8 +110,47 @@ async def test_analyze_permission_does_not_imply_luminary_read() -> None:
     authorized = SimpleNamespace(
         **{
             **context.__dict__,
-            "has_permission": lambda code: code
-            in {"COMPANY_LUMINARY_READ", "COMPANY_LUMINARY_ANALYZE"},
+            "has_permission": lambda code: (
+                code in {"COMPANY_LUMINARY_READ", "COMPANY_LUMINARY_ANALYZE"}
+            ),
         }
     )
     assert await require_luminary_analyst(authorized) is authorized
+
+
+@pytest.mark.asyncio
+async def test_owner_economics_projection_has_no_persistence_or_event_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    company_id, branch_id = uuid4(), uuid4()
+    context = SimpleNamespace(
+        company=SimpleNamespace(id=company_id),
+        active_branch=SimpleNamespace(id=branch_id),
+    )
+    workspace = {
+        "period": {"start": "2026-08-01", "end": "2026-08-31"},
+        "quality_state": "unavailable",
+        "totals": None,
+        "jobs": [],
+        "branches": [],
+        "customers": [],
+        "service_categories": [],
+        "fully_allocated_available": False,
+        "readiness": {},
+    }
+    overview = AsyncMock(return_value=workspace)
+    monkeypatch.setattr(EconomicsWorkspaceService, "overview", overview)
+    session = AsyncMock()
+
+    result = await LuminaryService().owner_economics_readonly(
+        session,
+        context=context,
+        period_start=date(2026, 8, 1),
+        period_end=date(2026, 8, 31),
+    )
+
+    assert result["mutation_authority"] == "none"
+    overview.assert_awaited_once()
+    session.execute.assert_not_awaited()
+    session.flush.assert_not_awaited()
+    session.commit.assert_not_awaited()

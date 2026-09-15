@@ -17,6 +17,7 @@ from app.platform.permissions.dependencies import (
 from app.platform.reliability.correlation import current_correlation_id
 from app.platform.reliability.failures import ClientRecovery, FailureCode, SafeFailure
 
+from .owner_economics import ScenarioAssumption, ScenarioKind
 from .service import LuminaryNotFoundError, luminary_service
 
 router = APIRouter(prefix="/api/v1/luminary", tags=["Luminary"])
@@ -174,6 +175,35 @@ async def source_readiness(
             "Luminary treats work, obligations, settlement, deposit, and Accounting recognition as distinct events.",
         ],
     }
+
+
+@router.get("/owner-economics", response_model=dict[str, object])
+async def owner_economics_readonly(
+    session: Session,
+    context: Reader,
+    start: Annotated[date, Query()],
+    end: Annotated[date, Query()],
+    scenario_kind: Annotated[ScenarioKind | None, Query()] = None,
+    change_basis_points: Annotated[int | None, Query(ge=-10_000, le=10_000)] = None,
+) -> dict[str, object]:
+    """Pure owner Economics projection; this path has no mutation authority."""
+    try:
+        scenario = (
+            ScenarioAssumption(scenario_kind, change_basis_points)
+            if scenario_kind is not None
+            else None
+        )
+        if scenario_kind is None and change_basis_points is not None:
+            raise ValueError("scenario kind is required for a changed assumption")
+        return await luminary_service.owner_economics_readonly(
+            session,
+            context=context,
+            period_start=start,
+            period_end=end,
+            scenario=scenario,
+        )
+    except Exception as error:
+        raise _luminary_http_error(error) from error
 
 
 @router.get("/lia/briefing", response_model=dict[str, object])
