@@ -388,6 +388,300 @@ class PayrollInputAuthorityVersion(Base):
     )
 
 
+class PayrollCutoverReviewRecord(Base):
+    """Company-scoped review authority; never a Payroll execution record."""
+
+    __tablename__ = "payroll_cutover_reviews"
+    __table_args__ = (
+        CheckConstraint("version >= 1", name="ck_payroll_cutover_review_version"),
+        CheckConstraint(
+            "lifecycle IN ('draft','ready_for_certification','certification_in_progress',"
+            "'ready_for_cutover_approval','approved')",
+            name="ck_payroll_cutover_review_lifecycle",
+        ),
+        CheckConstraint(
+            "proposed_acp_period_start IS NULL OR proposed_legacy_period_end IS NULL OR "
+            "proposed_acp_period_start > proposed_legacy_period_end",
+            name="ck_payroll_cutover_review_boundary",
+        ),
+        UniqueConstraint(
+            "company_id", "version", name="uq_payroll_cutover_review_version"
+        ),
+        UniqueConstraint(
+            "company_id", "id", name="uq_payroll_cutover_review_company_id"
+        ),
+    )
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    lifecycle: Mapped[str] = mapped_column(String(40), nullable=False, default="draft")
+    proposed_legacy_period_end: Mapped[date | None] = mapped_column(Date)
+    proposed_acp_period_start: Mapped[date | None] = mapped_column(Date)
+    opening_ytd_effective_date: Mapped[date | None] = mapped_column(Date)
+    created_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    approved_by_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT")
+    )
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
+class PayrollCutoverFactRevision(Base):
+    __tablename__ = "payroll_cutover_fact_revisions"
+    __table_args__ = (
+        CheckConstraint("revision >= 1", name="ck_payroll_cutover_fact_revision"),
+        CheckConstraint(
+            "action IN ('confirm','correct','provide','not_applicable')",
+            name="ck_payroll_cutover_fact_action",
+        ),
+        CheckConstraint(
+            "certification_state IN ('draft','certified','superseded')",
+            name="ck_payroll_cutover_fact_state",
+        ),
+        CheckConstraint(
+            "certifier_role IN ('owner','accountant')",
+            name="ck_payroll_cutover_fact_role",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "review_id"],
+            ["payroll_cutover_reviews.company_id", "payroll_cutover_reviews.id"],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "employee_id"],
+            ["employees.company_id", "employees.id"],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "protected_envelope_id"],
+            [
+                "payroll_protected_input_envelopes.company_id",
+                "payroll_protected_input_envelopes.id",
+            ],
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "review_id",
+            "employee_id",
+            "fact_key",
+            "revision",
+            name="uq_payroll_cutover_fact_revision",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "actor_user_id",
+            "idempotency_key",
+            name="uq_payroll_cutover_fact_idempotency",
+        ),
+        UniqueConstraint(
+            "supersedes_revision_id", name="uq_payroll_cutover_fact_successor"
+        ),
+    )
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    review_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    employee_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    fact_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    candidate_reference: Mapped[dict[str, object]] = mapped_column(
+        JSONB, nullable=False, default=dict
+    )
+    candidate_classification: Mapped[str] = mapped_column(String(64), nullable=False)
+    protected_envelope_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    action: Mapped[str] = mapped_column(String(24), nullable=False)
+    certification_state: Mapped[str] = mapped_column(String(24), nullable=False)
+    certifier_role: Mapped[str] = mapped_column(String(16), nullable=False)
+    actor_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    certified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    supersedes_revision_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("payroll_cutover_fact_revisions.id", ondelete="RESTRICT"),
+    )
+    idempotency_key: Mapped[str] = mapped_column(String(160), nullable=False)
+    evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
+class PayrollCutoverBridgePeriodRecord(Base):
+    __tablename__ = "payroll_cutover_bridge_periods"
+    __table_args__ = (
+        CheckConstraint(
+            "period_end >= period_start", name="ck_payroll_cutover_bridge_dates"
+        ),
+        CheckConstraint(
+            "pay_date >= period_end", name="ck_payroll_cutover_bridge_paydate"
+        ),
+        CheckConstraint(
+            "source_type IN ('manual_paper_check','legacy_provider','other_certified_external')",
+            name="ck_payroll_cutover_bridge_source",
+        ),
+        CheckConstraint(
+            "certification_state IN ('draft','owner_certified','accountant_certified','certified','superseded')",
+            name="ck_payroll_cutover_bridge_state",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "review_id"],
+            ["payroll_cutover_reviews.company_id", "payroll_cutover_reviews.id"],
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "review_id",
+            "period_start",
+            "period_end",
+            "source_type",
+            name="uq_payroll_cutover_bridge_period",
+        ),
+        UniqueConstraint(
+            "company_id", "id", name="uq_payroll_cutover_bridge_company_id"
+        ),
+        UniqueConstraint(
+            "company_id",
+            "actor_user_id",
+            "idempotency_key",
+            name="uq_payroll_cutover_bridge_idempotency",
+        ),
+    )
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    review_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    period_start: Mapped[date] = mapped_column(Date, nullable=False)
+    period_end: Mapped[date] = mapped_column(Date, nullable=False)
+    pay_date: Mapped[date] = mapped_column(Date, nullable=False)
+    source_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    certification_state: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="draft"
+    )
+    source_reference: Mapped[str] = mapped_column(String(240), nullable=False)
+    coverage_complete: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    actor_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    owner_certified_by_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT")
+    )
+    owner_certified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    accountant_certified_by_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT")
+    )
+    accountant_certified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    idempotency_key: Mapped[str] = mapped_column(String(160), nullable=False)
+    evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
+class PayrollCutoverBridgeEmployeeFactRevision(Base):
+    __tablename__ = "payroll_cutover_bridge_employee_fact_revisions"
+    __table_args__ = (
+        CheckConstraint(
+            "revision >= 1", name="ck_payroll_cutover_bridge_fact_revision"
+        ),
+        CheckConstraint(
+            "certification_state IN ('draft','certified','superseded')",
+            name="ck_payroll_cutover_bridge_fact_state",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "employee_id"],
+            ["employees.company_id", "employees.id"],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "bridge_period_id"],
+            [
+                "payroll_cutover_bridge_periods.company_id",
+                "payroll_cutover_bridge_periods.id",
+            ],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "protected_envelope_id"],
+            [
+                "payroll_protected_input_envelopes.company_id",
+                "payroll_protected_input_envelopes.id",
+            ],
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "bridge_period_id",
+            "employee_id",
+            "source_employee_reference",
+            "fact_key",
+            "revision",
+            name="uq_payroll_cutover_bridge_fact_revision",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "actor_user_id",
+            "idempotency_key",
+            name="uq_payroll_cutover_bridge_fact_idempotency",
+        ),
+    )
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    company_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    bridge_period_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    employee_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    source_employee_reference: Mapped[str | None] = mapped_column(String(240))
+    fact_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    protected_envelope_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), nullable=False
+    )
+    certification_state: Mapped[str] = mapped_column(String(24), nullable=False)
+    certifier_role: Mapped[str] = mapped_column(String(16), nullable=False)
+    actor_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(160), nullable=False)
+    evidence_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
 class PayrollGrossCalculationResultRecord(Base):
     __tablename__ = "payroll_gross_calculation_results"
     __table_args__ = (

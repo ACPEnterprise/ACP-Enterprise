@@ -6,6 +6,7 @@ import { useComplianceSchemas, usePayrollOperatingRegisters, usePayrollOperation
 import { useCreatePayPeriod, useCurrentPayPeriod, usePayPeriods } from "../hooks/useWorkdayTime";
 import { Alert, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Spinner } from "../ui";
 import { PayrollEmployeeSetup } from "../components/payroll/PayrollEmployeeSetup";
+import { PayrollCutoverReview } from "../components/payroll/PayrollCutoverReview";
 
 const label = (value: string) => value.replaceAll("_", " ").replaceAll(":", " · ");
 
@@ -29,6 +30,7 @@ export function PayrollRoute() {
   const setupEmployeeId = searchParams.get("employee");
   const canReadReporting = useHasPermission("COMPANY_PAYROLL_REPORTING_READ");
   const canRead = canReadReporting;
+  const canReadCutover = useHasPermission("COMPANY_PAYROLL_CUTOVER_READ");
   const operations = usePayrollOperationsSummary(canRead);
   const reports = usePayrollReports(canRead);
   const schemas = useComplianceSchemas(canRead);
@@ -87,6 +89,7 @@ export function PayrollRoute() {
         <p className="mt-2 text-content-muted">Readiness, reconciliation, reporting, payment, remittance, statements, and correction evidence. Provider execution and filing remain disabled.</p>
       </header>
       {setupEmployeeId && <PayrollEmployeeSetup employeeId={setupEmployeeId} payPeriodId={effectivePayPeriodId} />}
+      {canReadCutover && <PayrollCutoverReview />}
       <Alert variant={value.blocker_count ? "warning" : "information"} title={value.blocker_count ? "Payroll attention required" : "Payroll evidence reconciled"}>
         {value.blocker_count ? `${value.blocker_count} Employee disposition blocker(s) remain explicit.` : "No unexplained Employee blocker is present in the admitted run population."} History: {value.history_ready ? "complete authority available" : "incomplete—YTD remains unavailable"}.
       </Alert>
