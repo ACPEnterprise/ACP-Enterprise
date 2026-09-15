@@ -12,6 +12,8 @@ from .bounded_evidence import (
     latest_bounded_evidence,
     load_bounded_raw_rows,
 )
+from .evidence import EvidenceStoreError
+from .may2026_report_evidence import project_may_2026_source_report
 
 Basis = Literal["cash", "accrual"]
 _MAX_ROWS_PER_FAMILY = 2000
@@ -79,9 +81,41 @@ def project_latest_qbo_workspace(
     except BoundedEvidenceError as error:
         raise QboEvidenceProjectionError(str(error)) from error
     if run is None:
-        return unavailable_qbo_workspace(
+        unavailable = unavailable_qbo_workspace(
             basis=basis, limitation="sealed_production_snapshot_unavailable"
         )
+        # The registered May projection is accrual-only. Never relabel it as the
+        # requested cash basis merely because the entity snapshot is absent.
+        try:
+            may_report = (
+                project_may_2026_source_report(root) if basis == "accrual" else None
+            )
+        except EvidenceStoreError as error:
+            raise QboEvidenceProjectionError(str(error)) from error
+        if may_report is None:
+            return unavailable
+        unavailable.update(
+            {
+                "mode": "historical",
+                "source_manifest_sha256": may_report["evidence_digest"],
+                "accounting_basis": basis,
+                "as_of": may_report["source_as_of"],
+                "evidence_mode": "registered_control_report_projection",
+                "completeness": "report_only",
+                "reports": [may_report],
+                "limitations": sorted(
+                    {
+                        "sealed_production_snapshot_unavailable",
+                        "missing_values_are_not_zero",
+                    }
+                    | {
+                        "registered_control_report_only",
+                        "entity_level_qbo_snapshot_unavailable",
+                    }
+                ),
+            }
+        )
+        return unavailable
     manifest_path, manifest = run.manifest_path, run.manifest
     snapshot = manifest.get("snapshot")
     if not isinstance(snapshot, Mapping) or snapshot.get("environment") != "production":
