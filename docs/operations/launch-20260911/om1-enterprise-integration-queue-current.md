@@ -1,6 +1,6 @@
 # OM1 Enterprise integration queue
 
-Snapshot: 2026-09-15 16:48 America/New_York
+Snapshot: 2026-09-15 19:18 America/New_York
 
 ## Authority and deployed state
 
@@ -330,7 +330,7 @@ acceptance gates in this packet operationally; GitHub will not enforce them.
 | ECO reconciliation | `work/eco-migration-reconciliation-integration-watch-1` | `1c0e7b20db62b6a342548f2842ea1a3a45965386` | None | 60/13 | `42a215e5baded103a36b915a8456d4e3d50b1cd4` | Merge-clean but schema-blocked; rebase and assign a unique revision downstream of protected `l2n4o6q8s0u2` |
 | Payroll/QBO read UI | `work/om2b-payroll-accounting-continuation-1` | `724398348b566f655d2bc7127c20beeb6be52d6c` | #215 open/MERGEABLE | 79/1 | conflict | Stale and conflicting in `frontend/src/api/qboAccountingEvidence.ts` after #295; reconcile its Payroll projection with protected QBO contracts, then rerun combined suites |
 | Accounting navigation grouping | `work/ux-accounting-navigation-1` | `1e0f53a7e01e6ef342b1551e3489fb332978a4c2` | None | 36/1 | `de6821dd4404efafdfe6ae6786b3cb444e14c239` | Thirty-six protected commits stale but reconcilable; merge-clean; no schema/config; qualify after rebase |
-| Mobile employee TestFlight rollout | `work/mobile-employee-rollout-3day-1` | `323f11214421898a6bed4a41698f3fd2e7fc672d` | None | 23/19 | `a187fcabba8ae8d52dc305c37c42637f99910161` | Twenty-three protected commits stale; merge-clean, but held on Apple authority, field-readiness repair, dependency/native qualification, and owner acceptance |
+| Mobile employee operations completion | `work/mobile-employee-operations-complete-1` | `bbd19b26fa33d2ea7aa48fc3b915e1de1e8768f4` | None | 23/20 | `8d7885c69d32ca3383e1303254b05a88d0daeb7e` | Stacked on and supersedes `323f1121...`; twenty-three protected commits stale and merge-clean. Local 19-suite/147-test, typecheck, lint, config, Apple-preflight, and diff-check pass, but Expo Doctor fails two native checks, audit reports 13 moderate findings, Apple authority remains self-asserted, and physical/owner acceptance is absent |
 | Price Book real-world completion | `work/pricebook-realworld-complete-1` | `de6fbb2106c62f09ef140e731aacb7c5d69d466f` | #290 open/MERGEABLE | 13/8 | `8bf3067d9bba353d7ddb56d427465a6e0650c56e` | Stale but merge-clean; held for evidence integrity, actor separation, PostgreSQL qualification, source-data review, safe rollback, and migration rebase downstream of `l2n4o6q8s0u2` |
 | Historical QBO activity UI | `work/financial-reports-realworld-activation-1` | `fe22277048cf3d7ddeb12801b67b30454f871523` | #292 open/MERGEABLE | 11/1 | conflict | Stale and conflicting in `QboSourceEvidence.test.tsx` after protected #295; reconcile its sealed-snapshot activity UI with the protected live-report UI and require one explicit authority model |
 | May 2026 registered QBO report projection | `work/om1-qbo-may2026-source-reporting-1` | `7fe4c7363b5729b7be2514e173f013a3f8cb8b37` | None | 11/1 | `52d84349fdd07ccc13a32995f549ecb99f9b1b49` | Eleven protected commits stale but merge-clean; independent registered-control fallback held for real-workbook/account-sign qualification and owner/accountant review |
@@ -350,7 +350,7 @@ acceptance gates in this packet operationally; GitHub will not enforce them.
 | Payroll tax rule | Reconciled `9a44f714...` composes to zero delta; superseded by protected #236. |
 | Identity #227 and #230 | Still open but superseded by protected #256 and #258; close, do not integrate. |
 | Identity recovery successor | `4cf7bdf4...` composes to zero delta; protected #256 is authoritative. |
-| Laptop1 Phone distribution readiness | `bf28a61c...`, owner packet `0183eaec...`, and rollout `a027b3e9...` are ancestors of active rollout `323f1121...`. PR #274 fixes #273's selector, #275 grants administrator authority, and #276 makes backend creation atomic. Dispatch assignability remains disabled pending visible-error and concurrent-create/API qualification. Apple upload/Team/processing claims require authenticated owner evidence. |
+| Laptop1 Phone distribution readiness | `bf28a61c...`, owner packet `0183eaec...`, rollout `a027b3e9...`, and three-day head `323f1121...` are ancestors of active operations-completion head `bbd19b26...`. PR #274 fixes #273's selector, #275 grants administrator authority, and #276 makes backend creation atomic. Dispatch assignability remains disabled pending visible-error and concurrent-create/API qualification. Apple upload/Team/processing claims require authenticated owner evidence. |
 | ECO named commits and persistence | `d7ef88d1...` and `37b32949...` are superseded by patch-evolved equivalents; `fe7a9623...`, `f587c271...`, and persistence `863cab13...` feed the active ECO watch. |
 | QBO `5fe11183...` | Superseded by protected #243. PR #295-#297 now protect the live provider P&L, Preview Company binding, and basis-casing fix without checks/reviews; this still does not authorize OAuth or acceptance. PR #292 conflicts while adding sealed-snapshot activity UI; `7fe4c736...` independently projects the May control; #293's QBO portion is superseded. PR #282 remains separate. |
 | Payroll cutover permission seed | PR #284 is a one-file successor to protected #283. Do not integrate its edit to already-protected revision `i9k1m3o5q7s9`; replace it with a new downstream repair migration and a separated role grant policy. |
@@ -384,7 +384,7 @@ serialization. Protected #273 adds independently defective Dispatch readiness;
 #274 fixes its selector, #275 expands administrator permissions, and #276 makes
 backend creation atomic but leaves visible-error and concurrency evidence gaps.
 Every candidate effective tree and behind/ahead count above was recomputed from
-protected `e9211fca...`. Mobile `323f1121...` and the May projection remain
+protected `e9211fca...`. Mobile `bbd19b26...` and the May projection remain
 merge-clean and diff-check clean. Recompute all trees after
 protected movement or packet edits.
 
@@ -463,7 +463,7 @@ operational order:
    the native-evidence portion, retain period/Company/Branch authority, prove
    truncation/completeness and real PostgreSQL query behavior, and stack only on a
    successor that first repairs #288/#289/#291's fail-open recommendation gates.
-19. Repair rollout `323f1121...`, reconcile its manifests after the complete
+19. Repair operations-completion head `bbd19b26...`, reconcile its manifests after the complete
    #273-#276 successor is protected, and independently verify every Apple action
    claim. Then integrate Mobile in Wave D; authoritative Job Clock `d52d1178` is protected.
 
@@ -491,7 +491,7 @@ flowchart LR
     A --> O[Luminary owner-economics and access repair]
     A --> Z2[Protected LIA acceptance and repair]
     A --> N[Accounting navigation grouping]
-    A --> M[Mobile three-day rollout packet]
+    A --> M[Mobile operations-completion packet]
     A --> PB[PR 290 Price Book repair and qualification]
     A --> Q292[PR 292 sealed QBO activity UI]
     A --> QM[May registered-control projection]
@@ -568,7 +568,7 @@ then-current sole protected schema head.
 | Wave B | Preserve #279 readback, audit its admin-role expansion, preserve #280 selected-period navigation and #281 metadata-only readiness UI; repair #278's projection mismatch and prove #281's intended role matrix, then accept #277-#281 without Payroll execution and reconcile PR #215. Keep protected #282 disabled until a repaired successor passes. #292 may join as a separately reviewable frontend commit after its gates; the May projection should follow only after accountant reconciliation. Split #293 and defer its Luminary-native portion behind the Luminary repair | Either route/service permission contract is inconsistent, unexplained broad-suite failure remains, selected period is lost or warning/readiness is contradictory, protected Payroll values appear, protected #282 or its successor accepts unbound/duplicate evidence or weakens approved ACP authority, QBO report signs/classification or Company/realm binding fail, pay-period replay/readback/overlap/audit test fails, Payroll/provider mutation occurs, OAuth is initiated, or QBO/shared-route behavior regresses |
 | Protected Payroll cutover checkpoint | Keep #283-#286 mutations disabled. Put permission repair downstream of `l2n4o6q8s0u2`; separate certify/approve actors and grants; define accountant provisioning; require exactly one head, zero drift, full PostgreSQL/API/concurrency/replay/rollback evidence, then deploy and accept synthetic certification only—never Payroll execution | Protected migration rewrite is relied upon, same actor can certify and approve, reader sees mutation controls/source IDs, a role can self-select authority, any Employee/fact/bridge coverage is omitted, changed replay succeeds, protected value leaks, partial/racy state, multiple heads/drift, or execution/ACH/provider action |
 | Accounting navigation UI | Open a fresh exact-head PR; run permission filtering, direct/deep-link, active-state, keyboard, narrow/mobile, full frontend, lint, and build checks. It may join Wave B only as a separately reviewable frontend commit | Any route becomes broader than its existing permission, operational links disappear without an equivalent Accounting path, deep links/back-forward break, hidden unsupported feature appears, mobile/keyboard navigation regresses, or the candidate claims financial/QBO/Payroll behavior |
-| Wave D | Keep protected #273-#276 operator action disabled; audit administrator permissions, preserve #276 atomicity, surface mutation errors, and qualify concurrent/API behavior before Mobile. Treat rollout `323f1121...` as held until authenticated Apple authority/processing evidence and dependency/native qualification reconcile | Unexpected role privilege, partial readiness persists on failure, mutation error is hidden, PostgreSQL/API/concurrency/idempotency/rollback test fails, Mobile manifests contradict, Apple action is self-authorized or only repository-asserted, runtime/dependency evidence is stale, or physical acceptance is claimed without owner evidence |
+| Wave D | Keep protected #273-#276 operator action disabled; audit administrator permissions, preserve #276 atomicity, surface mutation errors, and qualify concurrent/API behavior before Mobile. Treat operations-completion head `bbd19b26...` as held until authenticated Apple authority/processing evidence, Expo native-sync/tooling failures, dependency audit findings, clean exports/archive qualification, and physical acceptance reconcile | Unexpected role privilege, partial readiness persists on failure, mutation error is hidden, PostgreSQL/API/concurrency/idempotency/rollback test fails, Mobile manifests contradict, Apple action is self-authorized or only repository-asserted, native config is not synchronized, audit/export/archive fails, runtime/dependency evidence is stale, or physical acceptance is claimed without owner evidence |
 | Price Book checkpoint | Hold PR #290. Rebase it to `e9211fca...` and move `n0p8q16g3t9u` downstream of protected `l2n4o6q8s0u2`; require server-derived review/proposal digests, actor separation, supported-PostgreSQL replay/concurrency evidence, source review, and safe rollback. Deploy it as an isolated checkpoint; if it lands before ECO, rebase ECO downstream of it | Stale schema parent remains, caller-supplied digest is accepted without recomputation, actor separation fails, source classifications/prices are unapproved, PostgreSQL one-head/drift fails, or downgrade violates the restored constraint |
 
 After every protected integration, stop before integrating another candidate and
@@ -629,7 +629,7 @@ packet if either SHA guard fails or the merge conflicts.
 | `work/eco-migration-reconciliation-integration-watch-1` | `1c0e7b20db62b6a342548f2842ea1a3a45965386` |
 | `work/om2b-payroll-accounting-continuation-1` | `724398348b566f655d2bc7127c20beeb6be52d6c` |
 | `work/ux-accounting-navigation-1` | `1e0f53a7e01e6ef342b1551e3489fb332978a4c2` |
-| `work/mobile-employee-rollout-3day-1` | `323f11214421898a6bed4a41698f3fd2e7fc672d` |
+| `work/mobile-employee-operations-complete-1` | `bbd19b26fa33d2ea7aa48fc3b915e1de1e8768f4` |
 | `work/pricebook-realworld-complete-1` | `de6fbb2106c62f09ef140e731aacb7c5d69d466f` |
 | `work/financial-reports-realworld-activation-1` | `fe22277048cf3d7ddeb12801b67b30454f871523` |
 | `work/om1-qbo-may2026-source-reporting-1` | `7fe4c7363b5729b7be2514e173f013a3f8cb8b37` |
@@ -1771,26 +1771,28 @@ frontend to include `fieldReadiness.error` in visible recovery and prove two
 concurrent first-use requests cannot race on absent canonical rows, plus the
 permission/cross-scope/invalid-window/API failure matrix, before enabling use.
 
-The current successor is `work/mobile-employee-rollout-3day-1` at exact head
-`323f11214421898a6bed4a41698f3fd2e7fc672d`, twenty-three protected commits stale from
-`e9211fca...`. Its 19-commit effective delta changes 33 files and composes at tree
-`a187fcabba8ae8d52dc305c37c42637f99910161`. It supersedes
-`a027b3e9...`, stacks the earlier distribution
-and owner packets, adds native/dependency changes, an icon, AASA tooling, archive
-scripts, TestFlight evidence, a three-day Employee rollout packet, and an internal
-TestFlight operator/acceptance form. It has no PR, is merge-clean, and now passes
-`git diff --check`; the new JSON also parses successfully.
+The current successor is `work/mobile-employee-operations-complete-1` at exact
+head `bbd19b26fa33d2ea7aa48fc3b915e1de1e8768f4`, twenty-three protected commits
+stale from `e9211fca...`. It is one commit stacked directly on and supersedes
+three-day head `323f1121...`. Its 20-commit effective delta changes 51 files and
+composes merge-clean at tree `8d7885c69d32ca3383e1303254b05a88d0daeb7e`.
+The new commit adds assignment-scoped Customer/commercial status and active Price
+Book reads, workday summary and elapsed/period/Jobsite time displays, build 3
+metadata, and an operations-completion contract. The protected backend already
+contains the matching assignment-scoped routes and exact all-of permission
+dependencies, but protected is not deployed to Preview. It has no PR.
 
 Do not integrate or execute this head unchanged. Its evidence contradicts
 itself: `apple-owner-release-packet.v1.json` says Apple mutation, signing, and
 upload are unauthorized/false, while `apple-distribution-readiness.v1.json`
-sets Apple mutation and upload authorized and marks build 2 uploaded. The new
+sets Apple mutation and upload authorized. The successor now records uploaded
+build 2 as the stable baseline and unuploaded build 3 as the local candidate,
+which fixes build reuse but not the owner-authority contradiction. The earlier
 rollout JSON asserts Team ID `74R6X48GHA` and an App Store transport acceptance
 at 21:59, but repository assertions cannot prove owner authorization, signing,
 upload, processing, tester groups, or App Store state. `apple:preflight` now
-requires the self-asserted authorization/upload flags to be true, so it no longer
-serves as a pre-upload safety gate. Build 2 must not be reused if owner evidence
-confirms upload; otherwise the manifest must not claim it occurred.
+requires the self-asserted authorization/upload flags to be true, so its green
+result is not an authenticated pre-upload safety gate.
 
 The added operator packet correctly says an authenticated owner must verify
 `Ready to Test` or `Testing`, select the internal group/testers, and use a
@@ -1798,14 +1800,19 @@ sanctioned non-payable window. Those instructions are not evidence that any such
 owner action or physical acceptance occurred and do not resolve the contradictory
 authorization manifests above. Reconcile one authoritative Apple receipt/state record, preserve the owner OAuth,
 Apple-account, signing, upload, tester, DNS/AASA, legal/privacy, and support-URL
-gates, and separate repository qualification from owner execution. Review every
-Expo/React Native/CocoaPods/native project/lockfile change and rerun clean install,
-all Mobile tests, typecheck, lint, config, Expo doctor, unsigned archive, Hermes
-exports, dependency audit, and endpoint/secret scans. Repair diff-check and update
-all protected/manifests through #291 plus the eventual #273-#276 repair successor.
-The older packet's 18-suite/138-test result does not qualify the new dependency
-set or rollout commit. Signing/upload and TestFlight group changes remain owner
-actions and must not be repeated merely to create evidence.
+gates, and separate repository qualification from owner execution. Local clean
+install qualification at this exact head passed 19 suites/147 tests, typecheck,
+lint, config validation, Apple preflight, Preview-pinned iOS/Android Hermes
+exports with no prohibited endpoint found, and `git diff --check`; Jest emitted
+non-failing unwrapped `VirtualizedList` update warnings. Expo Doctor passed 19/21
+checks but failed the local CocoaPods tooling check and warned that native project
+folders prevent EAS from syncing app-config fields. `npm audit` reported 13
+moderate findings, including `decode-uri-component` denial of service and `uuid`
+buffer-bounds advisories. Resolve or explicitly risk-accept those findings, prove
+native/config parity, then run clean unsigned archive and Hermes exports plus
+endpoint/secret scans. Update all protected/manifests through #297 plus the
+eventual #273-#276 repair successor. Signing/upload and TestFlight group changes
+remain owner actions and must not be repeated merely to create evidence.
 
 ```bash
 cd mobile
@@ -1814,6 +1821,9 @@ npm run typecheck
 npm run lint
 npm run config:validate
 npm run apple:preflight
+EXPO_PUBLIC_APP_ENV=preview EXPO_PUBLIC_API_BASE_URL=https://preview.allcountyhomeservices.com npm run export
+npx expo-doctor
+npm audit
 ```
 
 Do not run `beta:aasa:verify`, `apple:release:qualify`, authenticated Apple/EAS
