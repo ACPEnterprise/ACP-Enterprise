@@ -22,6 +22,7 @@ vi.mock("../hooks/useFinancialReporting", () => ({
         currency: "USD",
         accounting_basis: "accrual",
         ledger_cutoff: "a".repeat(64),
+        generated_at: "2026-09-15T12:00:00Z",
         checksum: "b".repeat(64),
       },
       quality: {
@@ -70,7 +71,7 @@ describe("FinancialReportsRoute", () => {
     expect(screen.getByText("Reconciliation: reconciled")).toBeVisible();
     expect(screen.getByText(/Definition acc-rpt-1.0/)).toBeVisible();
     expect(
-      screen.getByRole("heading", { name: "QuickBooks source evidence" }),
+      screen.getByRole("heading", { name: "QUICKBOOKS SOURCE EVIDENCE" }),
     ).toBeVisible();
     expect(
       screen.getByText(/did not infer zeros or substitute native\/HCP data/i),

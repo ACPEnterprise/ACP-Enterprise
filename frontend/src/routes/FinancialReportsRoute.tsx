@@ -203,7 +203,7 @@ export function FinancialReportsRoute() {
       >
         <div>
           <h2 className="text-xl font-semibold">
-            ACP native financial statements
+            ACP NATIVE financial statements
           </h2>
           <p className="text-sm text-content-muted">
             Derived exclusively from posted ACP General Ledger entries.
@@ -278,10 +278,12 @@ export function FinancialReportsRoute() {
                 {report.data.manifest.report_name.replaceAll("_", " ")}
               </CardTitle>
               <CardDescription>
-                {report.data.scope.scope_label} ·{" "}
+                Authority: ACP NATIVE · {report.data.scope.scope_label} ·{" "}
                 {report.data.manifest.currency} ·{" "}
                 {report.data.manifest.accounting_basis} · cutoff{" "}
                 {report.data.manifest.ledger_cutoff.slice(0, 12)}
+                {" · generated "}
+                {new Date(report.data.manifest.generated_at).toLocaleString()}
               </CardDescription>
             </CardHeader>
             <CardContent>

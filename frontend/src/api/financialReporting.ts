@@ -11,6 +11,7 @@ export interface ReportManifest {
   period_status: string | null;
   ledger_cutoff: string;
   contributing_line_count: number;
+  generated_at: string;
   checksum: string;
 }
 
@@ -111,15 +112,9 @@ export interface GeneralLedger {
 }
 
 export type FinancialReport =
-  | TrialBalance
-  | BalanceSheet
-  | IncomeStatement
-  | GeneralLedger;
+  TrialBalance | BalanceSheet | IncomeStatement | GeneralLedger;
 export type ReportName =
-  | "trial-balance"
-  | "balance-sheet"
-  | "income-statement"
-  | "general-ledger";
+  "trial-balance" | "balance-sheet" | "income-statement" | "general-ledger";
 
 export interface ReportRequest {
   report: ReportName;
@@ -132,7 +127,8 @@ export async function getFinancialReport(
   request: ReportRequest,
 ): Promise<FinancialReport> {
   const rangeReport =
-    request.report === "income-statement" || request.report === "general-ledger";
+    request.report === "income-statement" ||
+    request.report === "general-ledger";
   const params = {
     ...(rangeReport
       ? { start_date: request.startDate, end_date: request.endDate }
